@@ -1,0 +1,72 @@
+import sys
+from enum import Enum
+from urllib.parse import urlparse
+
+from . camera.random_cam import RandomCam
+from . camera.playback_cam import PlaybackCam
+from . camera.opencv_cam import OpenCVCam
+
+_have_spin_cam = False
+
+if sys.version_info.major == 3 and sys.version_info.minor == 8:
+    from . camera.spinnaker_cam import SpinCam
+    _have_spin_cam = True
+
+
+class CameraKind(str, Enum):
+    Random = "random"
+    Playback = "playback"
+    Spinnaker = "spinnaker"
+    OpenCV = "opencv"
+
+
+class VideoManager:
+    @classmethod
+    def open(cls):
+        if _have_spin_cam:
+            SpinCam.start()
+
+    @classmethod
+    def close(cls):
+        if _have_spin_cam:
+            SpinCam.stop()
+
+    @classmethod
+    def list_spin_cameras(cls) -> list:
+        if _have_spin_cam:
+            return SpinCam.list()
+        else:
+            return list()
+
+    @classmethod
+    def get_spin_camera(cls, serial_number: str):
+        if _have_spin_cam:
+            return SpinCam.create(serial_number)
+        else:
+            return None
+
+    @classmethod
+    def create_camera(cls, camera_url: str):
+        parsed = urlparse(camera_url)
+
+        if parsed.scheme == CameraKind.Random:
+            camera = RandomCam()
+        elif parsed.scheme == CameraKind.Spinnaker:
+            camera = cls.get_spin_camera(parsed.hostname)
+        elif parsed.scheme == CameraKind.Playback:
+            camera = PlaybackCam(parsed.hostname)
+        elif parsed.scheme == CameraKind.OpenCV:
+            camera = OpenCVCam(int(parsed.hostname))
+        else:
+            return None
+
+        camera.init()
+
+        params = parsed.query.split("&")
+
+        for param in params:
+            values = param.split("=")
+            if len(values) == 2:
+                camera.set_property(values[0].lower(), values[1])
+
+        return camera

@@ -1,0 +1,72 @@
+from multiprocessing import Queue
+
+from tools.acquisition.model.head_fix_model import HeadFixModel
+from tools.acquisition.model.user_settings import UserSettings
+from tools.acquisition.model.video_capture_model import VideoCaptureModel
+from tools.acquisition.process.network_merge import NetworkMerge
+from tools.acquisition.process.pose_predict import PosePredict
+
+
+class AppModel:
+    def __init__(self):
+        self._user_settings = UserSettings()
+
+        self._network_input_queue_1 = Queue()
+        self._network_input_queue_2 = Queue()
+        self._network_output_queue = Queue()
+
+        self._left_camera = VideoCaptureModel("left", self._network_input_queue_1)
+        self._right_camera = VideoCaptureModel("right", self._network_input_queue_2)
+        self._top_camera = VideoCaptureModel("top")
+
+        self._network_merge = NetworkMerge(self._network_input_queue_1, self._network_input_queue_2,
+                                           self._network_output_queue)
+        # self._network_merge.start()
+
+        self._predict = PosePredict(self._network_output_queue, "D:\\rcp\\models\\RTDLC_SimClust-WRW-2019-09-11\\")
+        # self._predict.start()
+
+        self._cameras = list([self._left_camera, self._right_camera, self._top_camera])
+
+        self.head_fix = HeadFixModel(self._user_settings)
+
+    @property
+    def user_settings(self) -> UserSettings:
+        return self._user_settings
+
+    @property
+    def left_camera(self):
+        return self._left_camera
+
+    @property
+    def right_camera(self):
+        return self._right_camera
+
+    @property
+    def top_camera(self):
+        return self._top_camera
+
+    def on_capture_start(self):
+        self.head_fix.connect_to_device()
+
+        for camera in self._cameras:
+            camera.on_prepare_capture(self._user_settings.output_location)
+
+        for camera in self._cameras:
+            camera.on_capture_start()
+
+    def on_capture_stop(self):
+        self.head_fix.disconnect_from_device()
+
+        for camera in self._cameras:
+            camera.on_capture_stop()
+
+    def on_close(self):
+        if self._predict.is_alive():
+            self._predict.terminate()
+
+        self._network_merge.requestInterruption()
+        self._network_merge.wait()
+
+        for camera in self._cameras:
+            camera.on_close()
