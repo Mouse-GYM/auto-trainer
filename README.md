@@ -3,7 +3,7 @@
 *Work in Progress* - there may be out of date or missing information.
 
 ## Requirements
-Absent specific camera support, *Auto Trainer* is independent of platform and Python version.  Choice of cameras may 
+Absent specific camera support, *Auto Trainer* is independent of platform and Python version >= 3.8.  Choice of cameras may 
 place requirements on platform or Python version. 
 
 ### Teledyne/Blackfly Camera Support
@@ -37,8 +37,8 @@ To enable video recording
 
 The root path of the project must be added to your python path for most tools and scripts.  If using an IDE, this may be handled
 for you automatically, otherwise
-* Bash/Zsh: `export PYTHONPATH=$PYTHONPATH:$PWD`
-* Windows CMD: `set PYTHONPATH=%PYTHONPATH%;%CD%`
+* Bash/Zsh: `export PYTHONPATH=$PYTHONPATH:$PWD` or `export PYTHONPATH=$PWD`
+* Windows CMD: `set PYTHONPATH=%PYTHONPATH%;%CD%` or `set PYTHONPATH=%CD%`
 * Windows PowerShell: `$env:PYTHONPATH += Get-Location`
 
 
@@ -47,18 +47,38 @@ for you automatically, otherwise
 Most of the content in `scripts` are generally lightweight utilities to determine if various components of the system are working as expected.
 
 * acquire_images
+  * Captures a single image frame from the first available Spinnaker camera 
 * capture_camera
+  * Captures 150 frames from the camera specified by the `cameraurl` argument to the location specified by `output`
 * head_fix_console
+  * A command line interface to the head fix unit.  Will log data stream to a csv file.  Supports subset of device commands.
 * list_cameras
+  * List all cameras available in the system.  Currently only supports Spinnaker cameras
 * load_network
+  * Validates loading of a DLC model with the network module
 * pellet_delivery_console
+  * A command line interface to the pellet delivery unit.  Supports a subset of device commands
 * run_dlc
+  * Sends two saved files through a DLC model with the network module
 
 ## Tools
 The`tools` directory contains more full-featured applications.  It also includes software implementations of external 
 hardware devices (e.g., head fix unit) for development and testing.
 
 * acquisition\acquisition.py
+  * Currently the primary UI integrated camera, head fix, pellet delivery, and DLC model modules
 * device\head_fix\head_fix_ui.py
+  * Standalone UI for interfacing with the head fix unit
+* device\pellet_delivery\pellet_delivery_ui.py
+  * Standalone UI for interfacing with the pellet delivery unit
 * device\head_fix_server.py
+  * Mock server for the head fix unit for testing w/o the physical device
 * device\pellet_server.py
+  * Mock server for the pellet delivery unit for testing w/o the physical device
+
+
+## Known Issues (partial)
+* Most implementations do provide any or minimal error checking.
+* Only a subset of settings are remembered between settings and configuration files are not yet supported
+* Cameras do not implement the offset params of the camera url
+* Spinnaker cameras are hard-coded to a number of values until supported as params in the camera url
