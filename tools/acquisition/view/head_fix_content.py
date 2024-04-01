@@ -11,14 +11,11 @@ class HeadFixContent(QGridLayout):
 
         self._model = model
 
-        self.setContentsMargins(10, 10, 10, 10)
+        self.setContentsMargins(8, 8, 8, 8)
 
         self.addWidget(QLabel("Port:"))
 
         self._port_combobox = QComboBox()
-
-        self._refresh_ports()
-
         self._port_combobox.currentIndexChanged.connect(self._port_selection_changed)
         self.addWidget(self._port_combobox, 0, 1)
 
@@ -44,6 +41,8 @@ class HeadFixContent(QGridLayout):
         self._plot1.setMaximumHeight(160)
         self._model.measurements.weight_ready.connect(self._plot1.update_plot)
         self.addWidget(self._plot1, 1, 0, 1, 7)
+
+        self._refresh_ports()
 
     def setCaptureEnabled(self, enabled: bool):
         self._port_combobox.setEnabled(enabled)

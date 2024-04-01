@@ -11,7 +11,7 @@ from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.camera_model import CameraModel
 from tools.acquisition.view.analysis_content import AnalysisContent
 from tools.acquisition.view.camera_content import CameraContent
-from tools.acquisition.view.food_delivery_content import FoodDeliveryContent
+from tools.acquisition.view.pellet_delivery_content import PelletDeliveryContent
 from tools.acquisition.view.head_fix_content import HeadFixContent
 from tools.acquisition.view.output_content import OutputContent
 
@@ -72,9 +72,10 @@ class MainContent(QWidget):
 
         layout.addWidget(ATSeparator("#b9b9b9"), 3, 0, 1, 4)
 
-        # layout.addLayout(FoodDeliveryContent(), 4, 0, 1, 4)
+        self._pellet_delivery_content = PelletDeliveryContent(self._app_view_model.pellet_delivery)
+        layout.addWidget(self._pellet_delivery_content, 4, 0, 1, 4)
 
-        # layout.addWidget(ATSeparator("#b9b9b9"), 5, 0, 1, 4)
+        layout.addWidget(ATSeparator("#b9b9b9"), 5, 0, 1, 4)
 
         # layout.addLayout(AnalysisContent(), 6, 0, 1, 4)
 
@@ -112,6 +113,7 @@ class MainContent(QWidget):
         self._right_camera_content.setCaptureEnabled(enabled)
         self._top_camera_content.setCaptureEnabled(enabled)
         self._head_fix_content.setCaptureEnabled(enabled)
+        self._pellet_delivery_content.setCaptureEnabled(enabled)
 
     def on_activated(self):
         self._app_view_model.left_camera.set_display_fcn(self._left_camera_content.refresh_image)

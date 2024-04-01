@@ -1,6 +1,7 @@
 from multiprocessing import Queue
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
+from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
 from tools.acquisition.model.user_settings import UserSettings
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 from tools.acquisition.process.network_merge import NetworkMerge
@@ -30,6 +31,8 @@ class AppModel:
 
         self.head_fix = HeadFixModel(self._user_settings)
 
+        self.pellet_delivery = PelletDeliveryModel(self._user_settings)
+
     @property
     def user_settings(self) -> UserSettings:
         return self._user_settings
@@ -48,6 +51,7 @@ class AppModel:
 
     def on_capture_start(self):
         self.head_fix.connect_to_device()
+        self.pellet_delivery.connect_to_device()
 
         for camera in self._cameras:
             camera.on_prepare_capture(self._user_settings.output_location)
@@ -57,6 +61,7 @@ class AppModel:
 
     def on_capture_stop(self):
         self.head_fix.disconnect_from_device()
+        self.pellet_delivery.disconnect_from_device()
 
         for camera in self._cameras:
             camera.on_capture_stop()
