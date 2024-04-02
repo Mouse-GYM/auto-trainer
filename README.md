@@ -85,3 +85,6 @@ hardware devices (e.g., head fix unit) for development and testing.
 * There is no configuration option for the second FLIR camera to be hardware triggered
 * There is no indication in the UI a camera is recording when in triggered mode
 * FLIR cameras are not always properly released if a script/UI crashes or is hard-killed
+* Acquisition UI uses a hardcoded list of cameras in `cameras.txt` in the root directory
+  * Entries are of the form `name, camera-url` *e.g.,* `Spinnaker 23199895, spinnaker://23199895?width=300&height=200`
+* There is no feedback during the long pause to start up and tear down camera capture processes; the UI appears blocked
