@@ -53,7 +53,7 @@ Most of the content in `scripts` are generally lightweight utilities to determin
 * head_fix_console
   * A command line interface to the head fix unit.  Will log data stream to a csv file.  Supports subset of device commands.
 * list_cameras
-  * List all cameras available in the system.  Currently only supports Spinnaker cameras
+  * List all cameras available in the system.
 * load_network
   * Validates loading of a DLC model with the network module
 * pellet_delivery_console

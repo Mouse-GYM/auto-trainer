@@ -2,6 +2,8 @@ import sys
 from enum import Enum
 from urllib.parse import urlparse
 
+import cv2
+
 from . camera.random_cam import RandomCam
 from . camera.playback_cam import PlaybackCam
 from . camera.opencv_cam import OpenCVCam
@@ -30,6 +32,19 @@ class VideoManager:
     def close(cls):
         if _have_spin_cam:
             SpinCam.stop()
+
+    @classmethod
+    def list_usb_cameras(cls) -> list:
+        cameras = list()
+
+        for idx in range(6):
+            capture = cv2.VideoCapture(idx)
+            if capture.isOpened():
+                ret, frame = capture.read()
+                if ret and frame is not None:
+                    cameras.append(idx)
+
+        return cameras
 
     @classmethod
     def list_spin_cameras(cls) -> list:
