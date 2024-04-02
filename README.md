@@ -31,7 +31,7 @@ To enable video recording
 
 #### Jetson
 
-* Add user to dialout group to access UART.  Requires reboot.
+* Add user to `dialout` group to access UART.  Requires reboot.
 
 ## Getting Started
 
@@ -46,19 +46,19 @@ for you automatically, otherwise
 
 Most of the content in `scripts` are generally lightweight utilities to determine if various components of the system are working as expected.
 
-* acquire_image
+* acquire_image.py
   * Captures a single image frame from the camera specified by the `cameraurl`
-* capture_camera
+* capture_camera.py
   * Captures 150 frames from the camera specified by the `cameraurl` argument to the location specified by `output`
-* head_fix_console
+* head_fix_console.py
   * A command line interface to the head fix unit.  Will log data stream to a csv file.  Supports subset of device commands.
-* list_cameras
+* list_cameras.py
   * List all cameras available in the system.
-* load_network
+* load_network.py
   * Validates loading of a DLC model with the network module
-* pellet_delivery_console
+* pellet_delivery_console.py
   * A command line interface to the pellet delivery unit.  Supports a subset of device commands
-* run_dlc
+* run_dlc.py
   * Sends two saved files through a DLC model with the network module
 
 ## Tools
@@ -66,7 +66,7 @@ The`tools` directory contains more full-featured applications.  It also includes
 hardware devices (e.g., head fix unit) for development and testing.
 
 * acquisition\acquisition.py
-  * Currently the primary UI integrated camera, head fix, pellet delivery, and DLC model modules
+  * Currently, the primary UI integrated camera, head fix, pellet delivery, and DLC model modules
 * device\head_fix\head_fix_ui.py
   * Standalone UI for interfacing with the head fix unit
 * device\pellet_delivery\pellet_delivery_ui.py
@@ -78,7 +78,10 @@ hardware devices (e.g., head fix unit) for development and testing.
 
 
 ## Known Issues (partial)
-* Most implementations do provide any or minimal error checking.
-* Only a subset of settings are remembered between settings and configuration files are not yet supported
+* Most implementations do provide any or minimal error checking
+* Only a subset of settings is remembered between settings and configuration files are not yet supported
 * Cameras do not implement the offset params of the camera url
-* Spinnaker cameras are hard-coded to a number of values until supported as params in the camera url
+* FLIR cameras are hard-coded to a number of values until supported as params in the camera url
+* There is no configuration option for the second FLIR camera to be hardware triggered
+* There is no indication in the UI a camera is recording when in triggered mode
+* FLIR cameras are not always properly released if a script/UI crashes or is hard-killed
