@@ -19,7 +19,7 @@ def capture_video(camera_url: str, video_path: str):
     camera.prepare_capture()
 
     record_queue = Queue()
-    record = VideoRecord(video_path, (camera.width, camera.height), 30, record_queue)
+    record = VideoRecord(video_path, "camera", 3600, (camera.width, camera.height), 30, record_queue)
     record.start()
 
     for idx in range(150):
