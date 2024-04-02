@@ -46,8 +46,8 @@ for you automatically, otherwise
 
 Most of the content in `scripts` are generally lightweight utilities to determine if various components of the system are working as expected.
 
-* acquire_images
-  * Captures a single image frame from the first available Spinnaker camera 
+* acquire_image
+  * Captures a single image frame from the camera specified by the `cameraurl`
 * capture_camera
   * Captures 150 frames from the camera specified by the `cameraurl` argument to the location specified by `output`
 * head_fix_console
