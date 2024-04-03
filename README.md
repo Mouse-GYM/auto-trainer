@@ -4,7 +4,9 @@
 
 ## Requirements
 Absent specific camera support, *Auto Trainer* is independent of platform and Python version >= 3.8.  Choice of cameras may 
-place requirements on platform or Python version. 
+place requirements on platform or Python version.
+
+Anaconda is required for full feature support, although most functionality will work in a vanilla venv.
 
 ### Teledyne/Blackfly Camera Support
 
@@ -31,7 +33,10 @@ To enable video recording
 
 #### Jetson
 
+* Ubuntu 20 and JetPack 5.1.2 install from the SDK manager
+  * Later 5.1.x JetPack if that is all that is available may be ok, but is untested
 * Add user to `dialout` group to access UART.  Requires reboot.
+* Access to two UARTs for full feature support requires at least additional port via USB->serial interface
 
 ## Getting Started
 
@@ -44,7 +49,7 @@ for you automatically, otherwise
 
 ## Scripts
 
-Most of the content in `scripts` are generally lightweight utilities to determine if various components of the system are working as expected.
+Most of the content in `scripts` are lightweight utilities to determine if various components of the system are working as expected.
 
 * acquire_image.py
   * Captures a single image frame from the camera specified by the `cameraurl`
@@ -78,7 +83,7 @@ hardware devices (e.g., head fix unit) for development and testing.
 
 
 ## Known Issues (partial)
-* Most implementations do provide any or minimal error checking
+* Most implementations do not provide any or minimal error checking
 * Only a subset of settings is remembered between settings and configuration files are not yet supported
 * Cameras do not implement the offset params of the camera url
 * FLIR cameras are hard-coded to a number of values until supported as params in the camera url
