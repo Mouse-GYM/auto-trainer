@@ -61,6 +61,21 @@ class VideoManager:
             return None
 
     @classmethod
+    def parse_params(cls, camera_url: str) -> dict:
+        parameters = dict()
+
+        parsed = urlparse(camera_url)
+
+        params = parsed.query.split("&")
+
+        for param in params:
+            values = param.split("=")
+            if len(values) == 2:
+                parameters[values[0].lower()] = values[1]
+
+        return parameters
+
+    @classmethod
     def create_camera(cls, camera_url: str):
         parsed = urlparse(camera_url)
 

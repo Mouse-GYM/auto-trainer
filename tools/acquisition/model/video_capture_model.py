@@ -6,6 +6,7 @@ from numpy import ndarray
 
 from autotrainer.video_capture import VideoCapture, CaptureMessageKind
 from autotrainer.video_record_properties import VideoRecordProperties, VideoRecordMode
+from autotrainer.video_manager import VideoManager
 from autotrainer.trigger_manager import TriggerManager
 
 from tools.acquisition.process.video_reader import VideoReader
@@ -44,6 +45,8 @@ class VideoCaptureModel:
 
         self._camera_source = None
 
+        self._is_primary = False
+
         TriggerManager.instance().register(self._on_trigger, CAPTURE_TRIGGER_ID)
 
     @property
@@ -69,6 +72,10 @@ class VideoCaptureModel:
     @record_mode.setter
     def record_mode(self, value: VideoRecordMode):
         self._record_mode = value
+
+    @property
+    def is_primary(self) -> bool:
+        return self._is_primary
 
     def set_display_fcn(self, display_fcn):
         if self.video_reader is None:
@@ -115,6 +122,15 @@ class VideoCaptureModel:
                                                url, record_properties)
             self._video_capture.start()
             self._video_status_message_queue.get()
+
+            properties = VideoManager.parse_params(url)
+            if "primary" in properties and bool(properties["primary"]) is True:
+                self._is_primary = True
+            else:
+                self._is_primary = False
+
+        else:
+            self._is_primary = False
 
     def on_capture_start(self):
         self._video_cmd_message_queue.put(CaptureMessageKind.CAPTURE)

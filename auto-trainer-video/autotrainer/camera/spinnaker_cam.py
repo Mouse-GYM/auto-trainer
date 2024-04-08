@@ -4,7 +4,7 @@ from enum import Enum
 import PySpin
 import numpy
 
-from . camera_base import CameraBase
+from .camera_base import CameraBase
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,8 @@ class SpinCam(CameraBase):
         super().__init__()
         self._width = 1440
         self._height = 1080
+
+        self._is_secondary = False
 
     def __create(self, camera):
         self._camera = camera
@@ -143,10 +145,24 @@ class SpinCam(CameraBase):
         self._height = self._camera.Height.GetValue()
 
     def prepare_capture(self):
+        if self._is_primary:
+            self._configure_as_primary()
+            logger.info(f"{self.name} configured as primary")
+        elif self._is_secondary:
+            self._configure_as_secondary()
+            logger.info(f"{self.name} configured as secondary")
+
         self._camera.BeginAcquisition()
 
     def end_capture(self):
         self._camera.EndAcquisition()
+
+        if self._is_primary:
+            self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
+            self._camera.LineSource.SetValue(PySpin.LineSource_FrameTriggerWait)
+            self._camera.LineInverter.SetValue(True)
+        elif self._is_secondary:
+            self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
 
     def capture(self):
         image_result = self._camera.GetNextImage()
@@ -160,3 +176,39 @@ class SpinCam(CameraBase):
         image_result.Release()
 
         return frame
+
+    def set_property(self, name: str, value: str) -> bool:
+        if name == "primary":
+            self._is_primary = bool(value)
+        if name == "secondary":
+            self._is_secondary = bool(value)
+        else:
+            return super().set_property(name, value)
+
+        return True
+
+    def _configure_as_primary(self):
+        self._camera.CounterSelector.SetValue(PySpin.CounterSelector_Counter0)
+        self._camera.CounterEventSource.SetValue(PySpin.CounterEventSource_ExposureStart)
+        self._camera.CounterEventActivation.SetValue(PySpin.CounterEventActivation_RisingEdge)
+        self._camera.CounterTriggerSource.SetValue(PySpin.CounterTriggerSource_ExposureStart)
+        self._camera.CounterTriggerActivation.SetValue(PySpin.CounterTriggerActivation_RisingEdge)
+        self._camera.LineSelector.SetValue(PySpin.LineSelector_Line2)
+        self._camera.V3_3Enable.SetValue(True)
+        self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
+        self._camera.LineSource.SetValue(PySpin.LineSource_Counter0Active)
+        self._camera.LineInverter.SetValue(False)
+        self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
+        self._camera.TriggerSource.SetValue(PySpin.TriggerSource_Software)
+        self._camera.TriggerOverlap.SetValue(PySpin.TriggerOverlap_Off)
+        self._camera.TriggerMode.SetValue(PySpin.TriggerMode_On)
+
+        self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
+        self._camera.LineSource.SetValue(PySpin.LineSource_Counter0Active)
+        self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
+
+    def _configure_as_secondary(self):
+        self._camera.TriggerSource.SetValue(PySpin.TriggerSource_Line3)
+        self._camera.TriggerOverlap.SetValue(PySpin.TriggerOverlap_ReadOut)
+        self._camera.TriggerActivation.SetValue(PySpin.TriggerActivation_AnyEdge)
+        self._camera.TriggerMode.SetValue(PySpin.TriggerMode_On)

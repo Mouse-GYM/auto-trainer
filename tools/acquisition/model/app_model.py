@@ -57,14 +57,24 @@ class AppModel:
             camera.on_prepare_capture(self._user_settings.output_location)
 
         for camera in self._cameras:
-            camera.on_capture_start()
+            if camera.is_primary:
+                camera.on_capture_start()
+
+        for camera in self._cameras:
+            if not camera.is_primary:
+                camera.on_capture_start()
 
     def on_capture_stop(self):
         self.head_fix.disconnect_from_device()
         self.pellet_delivery.disconnect_from_device()
 
         for camera in self._cameras:
-            camera.on_capture_stop()
+            if not camera.is_primary:
+                camera.on_capture_stop()
+
+        for camera in self._cameras:
+            if camera.is_primary:
+                camera.on_capture_stop()
 
     def on_close(self):
         if self._predict.is_alive():

@@ -81,13 +81,38 @@ hardware devices (e.g., head fix unit) for development and testing.
 * device\pellet_server.py
   * Mock server for the pellet delivery unit for testing w/o the physical device
 
+## Camera URLs
+Several scripts and tools use camera URLs to specify the camera and camera properties.  The URLs have the form
+
+`<cameratype>://<cameraid>?<properties>`
+
+`cameratype` is one of `opencv`, `spinnaker`, `playback`, or `random`.
+
+`cameraid` depends on the camera type.
+* Spinnaker - camera serial number
+* OpenCV - camera index
+* Playback - file name
+* Random Image - n/a, enter anything
+
+`properties` are URL query string parameters in the form `prop=value`.  Multiple properties are separated by `&`.
+
+Supported properties:
+* `width` - width in pixels
+* `height` - height in pixels
+* `offsetx` - x offset in pixels (not implemented)
+* `offsety` - y offset in pixels (not implemented)
+* `fps` - frame rate
+* `primary` - marks as primary for hardware configuration (true/false)
+* `secondary` - marks as secondary for hardware configuration (true/false)
+
+All properties are optional and only applicable on cameras that support the property.  Spinnaker is currently the only
+camera type that supports primary/secondary where it is used to configure hardware triggering.
 
 ## Known Issues (partial)
 * Most implementations do not provide any or minimal error checking
 * Only a subset of settings is remembered between settings and configuration files are not yet supported
 * Cameras do not implement the offset params of the camera url
 * FLIR cameras are hard-coded to a number of values until supported as params in the camera url
-* There is no configuration option for the second FLIR camera to be hardware triggered
 * There is no indication in the UI a camera is recording when in triggered mode
 * FLIR cameras are not always properly released if a script/UI crashes or is hard-killed
 * Acquisition UI uses a hardcoded list of cameras in `cameras.txt` in the root directory

@@ -11,6 +11,7 @@ class CameraBase:
         self._width = 300
         self._height = 200
         self._fps = 30
+        self._is_primary = False
 
     @property
     def name(self) -> str:
@@ -46,6 +47,10 @@ class CameraBase:
     def fps(self, value: float) -> None:
         self._fps = value
         logger.debug(f"<{self._name}> fps: {self._fps}")
+
+    @property
+    def is_primary(self) -> bool:
+        return self._is_primary
 
     def init(self) -> None:
         pass
