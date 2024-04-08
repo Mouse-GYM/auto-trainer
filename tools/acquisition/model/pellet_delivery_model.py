@@ -65,6 +65,12 @@ class PelletDeliveryModel:
         self._cmd_queue.put((PelletDeliveryMessageKind.SET_Z, value))
 
     def connect_to_device(self):
+        if len(self.port) == 0:
+            return
+
+        with self._cmd_queue.mutex:
+            self._cmd_queue.queue.clear()
+
         device_interface = SerialInterface(self.port)
 
         pellet_delivery = PelletDelivery(device_interface)
@@ -76,6 +82,9 @@ class PelletDeliveryModel:
         self._is_connected = True
 
     def disconnect_from_device(self):
+        if not self._is_connected:
+            return
+
         self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
         self._is_connected = False

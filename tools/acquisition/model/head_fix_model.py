@@ -75,6 +75,12 @@ class HeadFixModel:
         self._cmd_queue.put((HeadFixMessageKind.SERVO, "A" + str(value) + "x"))
 
     def connect_to_device(self):
+        if len(self.port) == 0:
+            return
+
+        with self._cmd_queue.mutex:
+            self._cmd_queue.queue.clear()
+
         device_interface = SerialInterface(self.port)
 
         head_fix = HeadFix(device_interface)
@@ -88,6 +94,9 @@ class HeadFixModel:
         self._is_connected = True
 
     def disconnect_from_device(self):
+        if not self._is_connected:
+            return
+
         self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
         self._is_connected = False
