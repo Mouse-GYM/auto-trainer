@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 class CameraBase:
-    def __init__(self, name: str = ""):
+    def __init__(self, name: str = "camera"):
         self._name = name
         self._width = 300
         self._height = 200

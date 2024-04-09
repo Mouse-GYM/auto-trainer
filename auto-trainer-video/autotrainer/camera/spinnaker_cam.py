@@ -73,6 +73,12 @@ class SpinCam(CameraBase):
         self._width = 1440
         self._height = 1080
 
+        self._horizontal_binning = 1
+        self._vertical_binning = 1
+        self._exposure = 5000
+        self._offset_x = 0
+        self._offset_y = 0
+
         self._is_secondary = False
 
     def __create(self, camera):
@@ -87,20 +93,24 @@ class SpinCam(CameraBase):
         del self._camera
 
     @property
+    def fps(self) -> float:
+        return self._fps
+
+    @fps.setter
+    def fps(self, value: float) -> None:
+        self._camera.AcquisitionFrameRateEnable.SetValue(True)
+        self._camera.AcquisitionFrameRate.SetValue(value)
+        self._fps = value
+
+        logger.debug(f"<{self._name}> fps: {self._fps}")
+
+    @property
     def width(self):
         return self._width
 
     @width.setter
     def width(self, value):
-        node_width = PySpin.CIntegerPtr(self._node_map.GetNode('Width'))
-
-        if PySpin.IsAvailable(node_width) and PySpin.IsWritable(node_width):
-            max_width = node_width.GetMax()
-            node_width.SetValue(min(max_width, value))
-            self._width = min(max_width, value)
-            logger.debug(f"width set to {self._width}")
-        else:
-            logger.warning("width node not available")
+        self._width = self._set_bounded_int_property("Width", value)
 
     @property
     def height(self):
@@ -108,15 +118,47 @@ class SpinCam(CameraBase):
 
     @height.setter
     def height(self, value):
-        node_height = PySpin.CIntegerPtr(self._node_map.GetNode('Height'))
+        self._height = self._set_bounded_int_property("Height", value)
 
-        if PySpin.IsAvailable(node_height) and PySpin.IsWritable(node_height):
-            max_height = node_height.GetMax()
-            node_height.SetValue(min(max_height, value))
-            self._height = min(max_height, value)
-            logger.debug(f"height set to {self._height}")
-        else:
-            logger.warning("height node not available")
+    @property
+    def offset_x(self):
+        return self._offset_x
+
+    @offset_x.setter
+    def offset_x(self, value):
+        self._offset_x = self._set_bounded_int_property("OffsetX", value)
+
+    @property
+    def offset_y(self):
+        return self._offset_y
+
+    @offset_y.setter
+    def offset_y(self, value):
+        self._offset_y = self._set_bounded_int_property("OffsetY", value)
+
+    @property
+    def horizontal_binning(self) -> int:
+        return self._horizontal_binning
+
+    @horizontal_binning.setter
+    def horizontal_binning(self, value: int) -> None:
+        self._horizontal_binning = self._set_bounded_int_property("BinningHorizontal", value)
+
+    @property
+    def vertical_binning(self) -> int:
+        return self._vertical_binning
+
+    @vertical_binning.setter
+    def vertical_binning(self, value: int) -> None:
+        self._vertical_binning = self._set_bounded_int_property("BinningVertical", value)
+
+    @property
+    def exposure(self) -> int:
+        return self._exposure
+
+    @exposure.setter
+    def exposure(self, value: int) -> None:
+        self._exposure = self._set_bounded_int_property_node(self._camera.ExposureTime, value)
 
     def init(self):
         self._camera.Init()
@@ -127,19 +169,16 @@ class SpinCam(CameraBase):
 
         node_acquisition_mode.SetIntValue(AcquisitionMode.Continuous.value)
 
-        if self._camera.BinningHorizontal.GetAccessMode() == PySpin.RW:
-            self._camera.BinningHorizontal.SetValue(4)
-
-        if self._camera.BinningVertical.GetAccessMode() == PySpin.RW:
-            self._camera.BinningVertical.SetValue(4)
-
         if self._camera.ExposureAuto.GetAccessMode() == PySpin.RW:
             self._camera.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)
-            self._camera.ExposureTime.SetValue(5000)
 
-        self._camera.AcquisitionFrameRateEnable.SetValue(True)
-        self._camera.AcquisitionFrameRate.SetValue(150)
-        self.fps = 150.00
+        # Set to class defaults.  Camera URL may override later.
+        self.offset_x = self._offset_x
+        self.offset_y = self._offset_y
+        self.horizontal_binning = self._horizontal_binning
+        self.vertical_binning = self._vertical_binning
+        self.exposure = self._exposure
+        self.fps = self._fps
 
         self._width = self._camera.Width.GetValue()
         self._height = self._camera.Height.GetValue()
@@ -180,8 +219,18 @@ class SpinCam(CameraBase):
     def set_property(self, name: str, value: str) -> bool:
         if name == "primary":
             self._is_primary = bool(value)
-        if name == "secondary":
+        elif name == "secondary":
             self._is_secondary = bool(value)
+        elif name == "offsetx":
+            self.offset_x = int(value)
+        elif name == "offsety":
+            self.offset_y = int(value)
+        elif name == "hbin":
+            self.horizontal_binning = int(value)
+        elif name == "vbin":
+            self.vertical_binning = int(value)
+        elif name == "exposure":
+            self.exposure = int(value)
         else:
             return super().set_property(name, value)
 
@@ -212,3 +261,40 @@ class SpinCam(CameraBase):
         self._camera.TriggerOverlap.SetValue(PySpin.TriggerOverlap_ReadOut)
         self._camera.TriggerActivation.SetValue(PySpin.TriggerActivation_AnyEdge)
         self._camera.TriggerMode.SetValue(PySpin.TriggerMode_On)
+
+    def _set_bounded_int_property(self, prop_name: str, value: int) -> int:
+        node = PySpin.CIntegerPtr(self._node_map.GetNode(prop_name))
+
+        set_value = value
+
+        if PySpin.IsAvailable(node):
+            if PySpin.IsWritable(node):
+                max_width = node.GetMax()
+                set_value = min(max_width, value)
+                node.SetValue(set_value)
+                logger.debug(f"<{self._name}> {prop_name} set to {set_value}")
+            elif PySpin.IsReadable(node):
+                set_value = node.GetValue()
+                logger.warning(f"<{self._name}> {prop_name} node is not writeable - current value is {set_value}")
+            else:
+                logger.warning(f"<{self._name}> {prop_name} node is not readable or writeable")
+        else:
+            logger.warning(f"<{self._name}> {prop_name} node is not available")
+
+        return set_value
+
+    def _set_bounded_int_property_node(self, prop_node, value: int) -> int:
+        set_value = value
+
+        if prop_node.GetAccessMode() == PySpin.RW:
+            max_width = prop_node.GetMax()
+            set_value = min(max_width, value)
+            prop_node.SetValue(value)
+            logger.debug(f"<{self._name}> {prop_node.GetDisplayName()} set to {value}")
+        elif prop_node.GetAccessMode() == PySpin.RO:
+            set_value = prop_node.GetValue()
+            logger.warning(f"<{self._name}> {prop_node.GetDisplayName()} node is not writeable - current value is {set_value}")
+        else:
+            logger.warning(f"<{self._name}> {prop_node.GetDisplayName()} node is not readable or writeable")
+
+        return set_value

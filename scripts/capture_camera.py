@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import sys
 from queue import Queue
@@ -6,6 +7,10 @@ from queue import Queue
 import cv2
 from autotrainer.video_manager import VideoManager
 from autotrainer.video_record import VideoRecord
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger('autotrainer').setLevel(logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 def capture_video(camera_url: str, video_path: str):

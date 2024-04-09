@@ -49,19 +49,19 @@ class MainContent(QWidget):
 
         self._left_camera_content = CameraContent(self._app_view_model.left_camera, self._camera_list)
         self._left_camera_content.camera_view.setTitle("Left Camera")
-        self._left_camera_content.camera_view.set_size(300, 200)
+        self._left_camera_content.camera_view.set_size(450, 300)
 
         layout.addLayout(self._left_camera_content, 0, 0)
 
         self._right_camera_content = CameraContent(self._app_view_model.right_camera, self._camera_list)
         self._right_camera_content.camera_view.setTitle("Right Camera")
-        self._right_camera_content.camera_view.set_size(300, 200)
+        self._right_camera_content.camera_view.set_size(450, 300)
 
         layout.addLayout(self._right_camera_content, 0, 1)
 
         self._top_camera_content = CameraContent(self._app_view_model.top_camera, self._camera_list)
         self._top_camera_content.camera_view.setTitle("Top Camera")
-        self._top_camera_content.camera_view.set_size(300, 200)
+        self._top_camera_content.camera_view.set_size(450, 300)
 
         layout.addLayout(self._top_camera_content, 0, 2)
 

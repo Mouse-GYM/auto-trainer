@@ -35,7 +35,7 @@ To enable video recording
 
 * Ubuntu 20 and JetPack 5.1.2 install from the SDK manager
   * Later 5.1.x JetPack if that is all that is available may be ok, but is untested
-* Add user to `dialout` group to access UART.  Requires reboot.
+* Add user to `dialout` group to access UART `sudo usermod -a -G dialout [username]`.  Requires logout or reboot.
 * Access to two UARTs for full feature support requires at least additional port via USB->serial interface
 
 ## Getting Started
@@ -97,13 +97,16 @@ Several scripts and tools use camera URLs to specify the camera and camera prope
 `properties` are URL query string parameters in the form `prop=value`.  Multiple properties are separated by `&`.
 
 Supported properties:
+* `fps` - frame rate
 * `width` - width in pixels
 * `height` - height in pixels
-* `offsetx` - x offset in pixels (not implemented)
-* `offsety` - y offset in pixels (not implemented)
-* `fps` - frame rate
-* `primary` - marks as primary for hardware configuration (true/false)
-* `secondary` - marks as secondary for hardware configuration (true/false)
+* `offsetx` - x offset in pixels (FLIR only)
+* `offsety` - y offset in pixels (FLIR only)
+* `exposure` - exposure time (FLIR only)
+* `hbin` - horizontal binning (FLIR only)
+* `vbin` - vertical binning (FLIR only)
+* `primary` - marks as primary for hardware configuration (true/false) (FLIR only)
+* `secondary` - marks as secondary for hardware configuration (true/false) (FLIR only)
 
 All properties are optional and only applicable on cameras that support the property.  Spinnaker is currently the only
 camera type that supports primary/secondary where it is used to configure hardware triggering.
@@ -111,8 +114,6 @@ camera type that supports primary/secondary where it is used to configure hardwa
 ## Known Issues (partial)
 * Most implementations do not provide any or minimal error checking
 * Only a subset of settings is remembered between settings and configuration files are not yet supported
-* Cameras do not implement the offset params of the camera url
-* FLIR cameras are hard-coded to a number of values until supported as params in the camera url
 * There is no indication in the UI a camera is recording when in triggered mode
 * FLIR cameras are not always properly released if a script/UI crashes or is hard-killed
 * Acquisition UI uses a hardcoded list of cameras in `cameras.txt` in the root directory
