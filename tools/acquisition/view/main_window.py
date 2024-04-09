@@ -22,8 +22,6 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Auto Trainer - Acquisition")
 
-        self.setMinimumSize(QSize(640, 1000))
-
         self.main_content = MainContent(app_view_model)
 
         self.setCentralWidget(self.main_content)

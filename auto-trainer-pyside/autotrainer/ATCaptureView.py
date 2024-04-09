@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QWidget, QLabel, QCheckBox, QComboBox, QHBoxLayout, QGridLayout
 from numpy import ndarray
@@ -37,6 +37,7 @@ class ATCaptureView(QWidget):
         self._triggerSource.currentIndexChanged.connect(self._trigger_source_index_changed)
 
         self._image = ATImageView(bytearray(image_width * image_height), image_width, image_height)
+        self._image.setFixedSize(QSize(self._image_width, self._image_height))
 
         self._next_data = None
         self._is_dirty = False
@@ -97,6 +98,7 @@ class ATCaptureView(QWidget):
     def set_size(self, width: int, height: int):
         self._image_width = width
         self._image_height = height
+        self._image.setFixedSize(QSize(self._image_width, self._image_height))
         image = QImage(bytearray(width * height), width, height, QImage.Format_Grayscale8)
         self._image.set_data(image)
 
