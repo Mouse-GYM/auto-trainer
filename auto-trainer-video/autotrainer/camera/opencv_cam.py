@@ -18,9 +18,13 @@ class OpenCVCam(CameraBase):
         self.fps = self._video_capture.get(cv2.CAP_PROP_FPS)
 
     def end_capture(self):
+        super().end_capture()
+        
         self._video_capture.release()
 
     def capture(self):
+        super().capture()
+
         ret, frame = self._video_capture.read()
 
         frame = frame[:, :, 0]

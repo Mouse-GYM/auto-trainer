@@ -73,6 +73,7 @@ class SpinCam(CameraBase):
         self._width = 1440
         self._height = 1080
 
+        self._fps = 150
         self._horizontal_binning = 1
         self._vertical_binning = 1
         self._exposure = 5000
@@ -180,10 +181,14 @@ class SpinCam(CameraBase):
         self.exposure = self._exposure
         self.fps = self._fps
 
-        self._width = self._camera.Width.GetValue()
-        self._height = self._camera.Height.GetValue()
+        # self._width = self._camera.Width.GetValue()
+        # self._height = self._camera.Height.GetValue()
+        self.width = self.width
+        self.height = self.height
 
     def prepare_capture(self):
+        super().prepare_capture()
+
         if self._is_primary:
             self._configure_as_primary()
             logger.info(f"{self.name} configured as primary")
@@ -194,6 +199,8 @@ class SpinCam(CameraBase):
         self._camera.BeginAcquisition()
 
     def end_capture(self):
+        super().end_capture()
+
         self._camera.EndAcquisition()
 
         if self._is_primary:
@@ -204,6 +211,8 @@ class SpinCam(CameraBase):
             self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
 
     def capture(self):
+        super().capture()
+
         image_result = self._camera.GetNextImage()
 
         image_converted = self._image_processor.Convert(image_result, PySpin.PixelFormat_Mono8)

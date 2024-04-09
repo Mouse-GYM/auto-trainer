@@ -1,4 +1,5 @@
 import logging
+import time
 
 import numpy
 
@@ -12,6 +13,8 @@ class CameraBase:
         self._height = 200
         self._fps = 30
         self._is_primary = False
+        self._frame_count = 0
+        self._acquisition_start = 0
 
     @property
     def name(self) -> str:
@@ -56,13 +59,17 @@ class CameraBase:
         pass
 
     def prepare_capture(self) -> None:
-        pass
+        self._frame_count = 0
 
     def end_capture(self) -> None:
-        pass
+        acq_end = time.perf_counter_ns()
+        logger.info(f"<{self._name}> internal fps: ~{int(self._frame_count * 1e9 /(acq_end - self._acquisition_start))}")
 
     def capture(self) -> numpy.ndarray:
-        pass
+        if self._frame_count == 0:
+            self._acquisition_start = time.perf_counter_ns()
+
+        self._frame_count += 1
 
     def set_property(self, name: str, value: str) -> bool:
         if name == "width":

@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal, Slot, QTimer
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QWidget, QLabel, QCheckBox, QComboBox, QHBoxLayout, QGridLayout
 from numpy import ndarray
@@ -39,10 +39,7 @@ class ATCaptureView(QWidget):
         self._image = ATImageView(bytearray(image_width * image_height), image_width, image_height)
 
         self._next_data = None
-
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self.update_image)
-        self._timer.start(150)
+        self._is_dirty = False
 
         layout = QGridLayout()
 
@@ -66,7 +63,7 @@ class ATCaptureView(QWidget):
         layout.addLayout(self._trigger_layout, 4, 0)
 
         fps_layout = QHBoxLayout()
-        fps_layout.addWidget(QLabel("FPS:"))
+        fps_layout.addWidget(QLabel("FPS (approx):"))
         self._fps_label = QLabel("0")
         self._fps_label.setAlignment(Qt.AlignLeft)
         fps_layout.addWidget(self._fps_label)
@@ -78,9 +75,9 @@ class ATCaptureView(QWidget):
         # queue_layout.addWidget(self._queue_label)
 
         bottom_layout = QHBoxLayout()
-        # bottom_layout.addLayout(fps_layout)
+        bottom_layout.addLayout(fps_layout)
         bottom_layout.addLayout(queue_layout)
-        layout.addLayout(bottom_layout, 5, 0)
+        # layout.addLayout(bottom_layout, 5, 0)
 
         self.setLayout(layout)
 
@@ -123,7 +120,7 @@ class ATCaptureView(QWidget):
         self.trigger_source_changed.emit(self._isRecordEnabled.isChecked())
 
     def update_image(self):
-        if self._next_data is None:
+        if self._next_data is None or not self._is_dirty:
             return
 
         x, y = self._next_data.shape
@@ -135,11 +132,15 @@ class ATCaptureView(QWidget):
 
         self._image.set_data(image)
 
+        self._is_dirty = False
+
         self._fps_label.setText(f"{self._fps:.1f}")
 
     @Slot(ndarray, float)
     def refresh_image(self, data: ndarray, fps: float):
         self._next_data = data
+
+        self._is_dirty = True
 
         if fps != self._fps:
             self._fps = fps

@@ -50,8 +50,8 @@ class AppModel:
         return self._top_camera
 
     def on_capture_start(self):
-        self.head_fix.connect_to_device()
-        self.pellet_delivery.connect_to_device()
+        # self.head_fix.connect_to_device()
+        # self.pellet_delivery.connect_to_device()
 
         for camera in self._cameras:
             camera.on_prepare_capture(self._user_settings.output_location)
@@ -65,8 +65,8 @@ class AppModel:
                 camera.on_capture_start()
 
     def on_capture_stop(self):
-        self.head_fix.disconnect_from_device()
-        self.pellet_delivery.disconnect_from_device()
+        # self.head_fix.disconnect_from_device()
+        # self.pellet_delivery.disconnect_from_device()
 
         for camera in self._cameras:
             if not camera.is_primary:

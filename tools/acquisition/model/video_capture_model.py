@@ -1,4 +1,5 @@
 import time
+import logging
 from multiprocessing import Queue
 
 from PySide6.QtCore import QThread, QTimer
@@ -10,6 +11,8 @@ from autotrainer.video_manager import VideoManager
 from autotrainer.trigger_manager import TriggerManager
 
 from tools.acquisition.process.video_reader import VideoReader
+
+logger = logging.getLogger(__name__)
 
 CAPTURE_TRIGGER_ID = "CaptureTrigger"
 
@@ -95,8 +98,9 @@ class VideoCaptureModel:
 
         self._frame_count += 1
 
-        if self._frame_count % 100 == 0:
-            self._fps = self._frame_count / (time.perf_counter() - self._start)
+        # if self._frame_count % 1000 == 0:
+        #    self._fps = self._frame_count / (time.perf_counter() - self._start)
+        #    logger.info(f"<{self._name}> fps: {int(self._fps)}")
 
         if self._display_update_fcn is not None:
             self._display_update_fcn(data, self._fps)
@@ -115,19 +119,28 @@ class VideoCaptureModel:
         self._frame_count = 0
 
         if self._camera_source is not None:
-            url = self._camera_source + f"&name={self._name}"
+            if "?" in self._camera_source:
+                url = self._camera_source + f"&name={self._name}"
+            else:
+                url = self._camera_source + f"?name={self._name}"
+
             record_properties = VideoRecordProperties(self.record_mode, output_location, 60)
             self._video_capture = VideoCapture(self._name, self._video_cmd_message_queue,
                                                self._video_status_message_queue, self._video_queue, self._network_queue,
                                                url, record_properties)
             self._video_capture.start()
             self._video_status_message_queue.get()
+            
 
             properties = VideoManager.parse_params(url)
+
             if "primary" in properties and bool(properties["primary"]) is True:
                 self._is_primary = True
             else:
                 self._is_primary = False
+
+            if "fps" in properties:
+                self.video_reader.decimation = int(properties["fps"]) / 30.0
 
         else:
             self._is_primary = False

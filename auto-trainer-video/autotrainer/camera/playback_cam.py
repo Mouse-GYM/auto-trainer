@@ -28,6 +28,8 @@ class PlaybackCam(CameraBase):
 
         if delta < self._frame_interval:
             time.sleep(self._frame_interval - delta)
+            
+        super().capture()
 
         self._last_capture = now
 

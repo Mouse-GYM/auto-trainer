@@ -13,6 +13,8 @@ class RandomCam(CameraBase):
         self._frame_interval = 1/30.0
 
     def prepare_capture(self) -> None:
+        super().prepare_capture()
+
         self._frame_interval = 1 / self._fps
 
     def capture(self) -> numpy.ndarray:
@@ -21,6 +23,8 @@ class RandomCam(CameraBase):
 
         if delta < self._frame_interval:
             time.sleep(self._frame_interval - delta)
+
+        super().capture()
 
         self._last_capture = now
 

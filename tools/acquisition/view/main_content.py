@@ -68,7 +68,7 @@ class MainContent(QWidget):
         layout.addWidget(ATSeparator("#b9b9b9"), 1, 0, 1, 4)
 
         self._head_fix_content = HeadFixContent(self._app_view_model.head_fix)
-        # layout.addLayout(self._head_fix_content, 2, 0, 1, 4)
+        layout.addLayout(self._head_fix_content, 2, 0, 1, 4)
 
         layout.addWidget(ATSeparator("#b9b9b9"), 3, 0, 1, 4)
 
