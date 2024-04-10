@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import sys
+from pathlib import Path
 from queue import Queue
 
 import cv2
@@ -13,9 +14,12 @@ logging.getLogger('autotrainer').setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def capture_video(camera_url: str, video_path: str):
+def capture_video(camera_url: str, video_path: str, frame_count: int):
     print("Camera URL:", camera_url)
     print("Video Path:", video_path)
+
+    path = Path(video_path)
+    path.mkdir(parents=True, exist_ok=True)
 
     VideoManager.open()
 
@@ -24,17 +28,15 @@ def capture_video(camera_url: str, video_path: str):
     camera.prepare_capture()
 
     record_queue = Queue()
-    record = VideoRecord(video_path, "camera", 3600, (camera.width, camera.height), 30, record_queue)
+    record = VideoRecord(video_path, "camera", 3600, (camera.width, camera.height), camera.fps, record_queue)
     record.start()
 
-    for idx in range(150):
-        image = camera.capture()
+    for idx in range(frame_count):
+        image, when = camera.capture()
+
         cv2.imshow("window", image)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-        record_queue.put(image)
+        record_queue.put((image, when))
 
     camera.end_capture()
 
@@ -48,10 +50,11 @@ def main():
 
     parser.add_argument("cameraurl", help="the camera to use")
     parser.add_argument("output", help="the video file output location")
+    parser.add_argument("-f", "--framecount", help="the number of frames to capture (default 150)", type=int, default=150)
 
     args = parser.parse_args()
-    print(os.environ.get('PATH'))
-    capture_video(args.cameraurl, args.output)
+
+    capture_video(args.cameraurl, args.output, args.framecount)
 
     return True
 

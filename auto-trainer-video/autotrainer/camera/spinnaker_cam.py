@@ -82,6 +82,8 @@ class SpinCam(CameraBase):
 
         self._is_secondary = False
 
+        self._pause_log = False
+
     def __create(self, camera):
         self._camera = camera
 
@@ -103,7 +105,8 @@ class SpinCam(CameraBase):
         self._camera.AcquisitionFrameRate.SetValue(value)
         self._fps = value
 
-        logger.debug(f"<{self._name}> fps: {self._fps}")
+        if not self._pause_log:
+            logger.debug(f"<{self._name}> fps: {self._fps}")
 
     @property
     def width(self):
@@ -173,6 +176,8 @@ class SpinCam(CameraBase):
         if self._camera.ExposureAuto.GetAccessMode() == PySpin.RW:
             self._camera.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)
 
+        self._pause_log = True
+
         # Set to class defaults.  Camera URL may override later.
         self.offset_x = self._offset_x
         self.offset_y = self._offset_y
@@ -181,10 +186,10 @@ class SpinCam(CameraBase):
         self.exposure = self._exposure
         self.fps = self._fps
 
-        # self._width = self._camera.Width.GetValue()
-        # self._height = self._camera.Height.GetValue()
         self.width = self.width
         self.height = self.height
+
+        self._pause_log = False
 
     def prepare_capture(self):
         super().prepare_capture()
@@ -210,7 +215,7 @@ class SpinCam(CameraBase):
         elif self._is_secondary:
             self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
 
-    def capture(self):
+    def capture(self) -> (numpy.ndarray, int):
         super().capture()
 
         image_result = self._camera.GetNextImage()
@@ -221,9 +226,11 @@ class SpinCam(CameraBase):
 
         frame[:, :] = image_converted.GetNDArray()
 
+        when = image_result.GetTimeStamp()
+
         image_result.Release()
 
-        return frame
+        return frame, when
 
     def set_property(self, name: str, value: str) -> bool:
         if name == "primary":
@@ -281,7 +288,8 @@ class SpinCam(CameraBase):
                 max_width = node.GetMax()
                 set_value = min(max_width, value)
                 node.SetValue(set_value)
-                logger.debug(f"<{self._name}> {prop_name} set to {set_value}")
+                if not self._pause_log:
+                    logger.debug(f"<{self._name}> {prop_name} set to {set_value}")
             elif PySpin.IsReadable(node):
                 set_value = node.GetValue()
                 logger.warning(f"<{self._name}> {prop_name} node is not writeable - current value is {set_value}")

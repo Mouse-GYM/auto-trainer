@@ -2,6 +2,7 @@ import time
 import urllib.parse
 
 import cv2
+import numpy
 
 from . camera_base import CameraBase
 
@@ -22,17 +23,18 @@ class PlaybackCam(CameraBase):
         self.width = self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH)
         self.height = self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
-    def capture(self):
-        now = time.perf_counter()
-        delta = now - self._last_capture
+    def capture(self) -> (numpy.ndarray, int):
+        now = time.perf_counter_ns()
+
+        delta = 1e-9 * (now - self._last_capture)
 
         if delta < self._frame_interval:
             time.sleep(self._frame_interval - delta)
             
         super().capture()
 
-        self._last_capture = now
+        self._last_capture = time.perf_counter_ns()
 
         ret, frame = self._video_capture.read()
 
-        return frame[:, :, 1]
+        return frame[:, :, 1], self._last_capture

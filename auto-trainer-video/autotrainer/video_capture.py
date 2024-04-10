@@ -81,12 +81,12 @@ class VideoCapture(Process):
             if not self._is_capturing:
                 continue
 
-            frame = self._camera.capture()
+            frame, when = self._camera.capture()
 
             self._image_queue.put(frame)
 
             if self._is_record_enabled and self._is_record_triggered:
-                self._record_queue.put(frame)
+                self._record_queue.put((frame, when))
 
             if self._network_queue is not None:
                 self._network_queue.put(frame)
@@ -97,6 +97,7 @@ class VideoCapture(Process):
 
         if record is not None:
             record.cancel()
+            record.join()
 
         self._status_message_queue.put(CaptureMessageKind.TERMINATED)
 

@@ -65,11 +65,13 @@ class CameraBase:
         acq_end = time.perf_counter_ns()
         logger.info(f"<{self._name}> internal fps: ~{int(self._frame_count * 1e9 /(acq_end - self._acquisition_start))}")
 
-    def capture(self) -> numpy.ndarray:
+    def capture(self) -> (numpy.ndarray, int):
         if self._frame_count == 0:
             self._acquisition_start = time.perf_counter_ns()
 
         self._frame_count += 1
+
+        return None, None
 
     def set_property(self, name: str, value: str) -> bool:
         if name == "width":

@@ -27,6 +27,7 @@ class VideoRecord(Thread):
         self._ext = ".mp4" if sys.platform.startswith("linux") else "mkv"
 
         self._writer = None
+        self._timestamp = None
 
     def run(self) -> None:
         path = Path(self._output_location)
@@ -36,19 +37,25 @@ class VideoRecord(Thread):
 
         while self._is_running:
             try:
-                frame = self._input_queue.get_nowait()
+                (frame, when) = self._input_queue.get_nowait()
 
                 if len(numpy.shape(frame)) < 3 or numpy.shape(frame)[2] == 1:
                     self._writer.write(numpy.tile(frame[:, :, numpy.newaxis], (1, 1, 3)))
                 else:
                     self._writer.write(frame)
+
+                if self._timestamp is not None:
+                    self._timestamp.write(str(when) + "\n")
             except Empty:
-                time.sleep(0.001)
+                time.sleep(0.0001)
 
             if time.time() - self._record_start > self._interval:
                 self._update_writer()
 
-        self._writer.release()
+        if self._writer is not None:
+            self._writer.release()
+        if self._timestamp is not None:
+            self._timestamp.close()
 
     def cancel(self):
         self._is_running = False
@@ -56,11 +63,18 @@ class VideoRecord(Thread):
     def _update_writer(self):
         if self._writer is not None:
             self._writer.release()
+        if self._timestamp is not None:
+            self._timestamp.close()
 
         self._record_start = time.time()
 
+        file_timestamp = datetime.now()
+
         location = os.path.join(self._output_location,
-                                f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{self._name}.{self._ext}")
+                                f"{file_timestamp.strftime('%Y-%m-%d_%H-%M-%S')}_{self._name}.{self._ext}")
+
+        self._timestamp = open(os.path.join(self._output_location,
+                                            f"{file_timestamp.strftime('%Y-%m-%d_%H-%M-%S')}_timestamps.txt"), "w")
 
         self._writer = cv2.VideoWriter(location, cv2.VideoWriter_fourcc(*'mp4v'), self._fps,
                                        (self._width, self._height))

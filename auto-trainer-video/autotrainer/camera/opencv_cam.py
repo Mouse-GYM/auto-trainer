@@ -1,5 +1,7 @@
-import cv2
+import time
 
+import cv2
+import numpy
 
 from . camera_base import CameraBase
 
@@ -22,11 +24,11 @@ class OpenCVCam(CameraBase):
         
         self._video_capture.release()
 
-    def capture(self):
+    def capture(self) -> (numpy.ndarray, int):
         super().capture()
 
         ret, frame = self._video_capture.read()
 
         frame = frame[:, :, 0]
 
-        return frame
+        return frame, time.perf_counter_ns()
