@@ -225,8 +225,6 @@ class SpinCam(CameraBase):
             self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
 
     def capture(self) -> (numpy.ndarray, int):
-        super().capture()
-
         image_result = self._camera.GetNextImage()
 
         image_converted = self._image_processor.Convert(image_result, PySpin.PixelFormat_Mono8)
@@ -235,11 +233,16 @@ class SpinCam(CameraBase):
 
         frame[:, :] = image_converted.GetNDArray()
 
-        when = image_result.GetTimeStamp()
+        self._last_when = image_result.GetTimeStamp()
+
+        if self._frame_count == 0:
+            self._acquisition_start = self._last_when
+
+        self._frame_count += 1
 
         image_result.Release()
 
-        return frame, when
+        return frame, self._last_when
 
     def set_property(self, name: str, value: str) -> bool:
         if name == "primary":
@@ -293,12 +296,13 @@ class SpinCam(CameraBase):
         if prop_node.GetAccessMode() == PySpin.RW:
             max_width = prop_node.GetMax()
             set_value = min(max_width, value)
-            prop_node.SetValue(value)            
+            prop_node.SetValue(value)
             if not self._pause_log:
                 logger.debug(f"<{self._name}> {prop_node.GetDisplayName()} set to {value}")
         elif prop_node.GetAccessMode() == PySpin.RO:
             set_value = prop_node.GetValue()
-            logger.warning(f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not writeable - current value is {set_value}")
+            logger.warning(
+                f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not writeable - current value is {set_value}")
         else:
             logger.warning(f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not readable or writeable")
 

@@ -14,7 +14,6 @@ class PlaybackCam(CameraBase):
         self._file_name = urllib.parse.unquote(file_name)
         self._frame_interval = 1 / 30
         self._video_capture = None
-        self._last_capture = time.perf_counter()
 
     def init(self):
         self._video_capture = cv2.VideoCapture(self._file_name)
@@ -26,15 +25,15 @@ class PlaybackCam(CameraBase):
     def capture(self) -> (numpy.ndarray, int):
         now = time.perf_counter_ns()
 
-        delta = 1e-9 * (now - self._last_capture)
+        delta = 1e-9 * (now - self._last_when)
 
         if delta < self._frame_interval:
             time.sleep(self._frame_interval - delta)
             
         super().capture()
 
-        self._last_capture = time.perf_counter_ns()
+        self._last_when = time.perf_counter_ns()
 
         ret, frame = self._video_capture.read()
 
-        return frame[:, :, 1], self._last_capture
+        return frame[:, :, 1], self._last_when

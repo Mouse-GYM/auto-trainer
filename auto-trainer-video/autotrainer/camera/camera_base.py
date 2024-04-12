@@ -15,6 +15,7 @@ class CameraBase:
         self._is_primary = False
         self._frame_count = 0
         self._acquisition_start = 0
+        self._last_when = 0
 
     @property
     def name(self) -> str:
@@ -59,15 +60,17 @@ class CameraBase:
         pass
 
     def prepare_capture(self) -> None:
+        self._last_when = 0
         self._frame_count = 0
 
     def end_capture(self) -> None:
-        acq_end = time.perf_counter_ns()
-        logger.info(f"<{self._name}> internal fps: ~{int(self._frame_count * 1e9 /(acq_end - self._acquisition_start))}")
+        logger.info(f"<{self._name}> internal fps: ~{int(self._frame_count * 1e9 /(self._last_when - self._acquisition_start))}")
 
     def capture(self) -> (numpy.ndarray, int):
         if self._frame_count == 0:
             self._acquisition_start = time.perf_counter_ns()
+
+        self._last_when = time.perf_counter_ns()
 
         self._frame_count += 1
 

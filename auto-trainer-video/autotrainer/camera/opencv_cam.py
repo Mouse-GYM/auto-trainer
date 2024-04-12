@@ -19,6 +19,9 @@ class OpenCVCam(CameraBase):
         self.height = int(self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = self._video_capture.get(cv2.CAP_PROP_FPS)
 
+    def prepare_capture(self):
+        super().prepare_capture()
+
     def end_capture(self):
         super().end_capture()
         
@@ -29,6 +32,8 @@ class OpenCVCam(CameraBase):
 
         ret, frame = self._video_capture.read()
 
+        self._last_when = time.perf_counter_ns()
+
         frame = frame[:, :, 0]
 
-        return frame, time.perf_counter_ns()
+        return frame, self._last_when

@@ -9,7 +9,6 @@ class RandomCam(CameraBase):
     def __init__(self, name: str = ""):
         super().__init__(name)
         self._rng = numpy.random.default_rng()
-        self._last_capture = time.perf_counter()
         self._frame_interval = 1/30.0
 
     def prepare_capture(self) -> None:
@@ -20,13 +19,13 @@ class RandomCam(CameraBase):
     def capture(self) -> (numpy.ndarray, int):
         now = time.perf_counter_ns()
 
-        delta = 1e-9 * (now - self._last_capture)
+        delta = 1e-9 * (now - self._last_when)
 
         if delta < self._frame_interval:
             time.sleep(self._frame_interval - delta)
 
         super().capture()
 
-        self._last_capture = time.perf_counter_ns()
+        self._last_when = time.perf_counter_ns()
 
-        return self._rng.integers(low=0, high=255, size=(self._height, self._width), dtype="uint8"), self._last_capture
+        return self._rng.integers(low=0, high=255, size=(self._height, self._width), dtype="uint8"), self._last_when
