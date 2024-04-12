@@ -58,7 +58,7 @@ class VideoCapture(Process):
         }
 
     def run(self):
-        logger.debug(f"<{self._name}> run")
+        logger.debug(f"<{self._name}> process started")
 
         if self._camera_url is None:
             return

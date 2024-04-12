@@ -33,7 +33,7 @@ def main(camera_url: str, iterations: int, duration: int):
                 break
             except:
                 retry_count += 1
-                logger.warning(f"ready acknowledgement not received ({retry_count} attempts)")
+                logger.error(f"ready acknowledgement not received ({retry_count} attempts)")
 
         cmd_queue.put(CaptureMessageKind.BEGIN_CAPTURE)
 

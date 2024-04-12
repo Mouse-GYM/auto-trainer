@@ -111,11 +111,11 @@ class VideoCaptureModel:
 
     def on_prepare_capture(self, output_location: str) -> bool:
         if not self._is_enabled:
-            return
+            return True
 
         self._frame_count = 0
 
-        if self._video_reader_thread is None and self.refresh_image is not None:
+        if self._video_reader_thread is None and self._display_update_fcn is not None:
             self._video_reader_event = Event()
             self._video_reader_thread = QThread()
             self._video_reader = VideoReader(self._video_queue, self._video_reader_event)
@@ -164,7 +164,7 @@ class VideoCaptureModel:
 
             if "fps" in properties:
                 self._video_reader.decimation = int(properties["fps"]) / 30
-            else:
+            elif self._video_reader is not None:
                 # Assume 30fps
                 self._video_reader.decimation = 30 / 30
         else:
