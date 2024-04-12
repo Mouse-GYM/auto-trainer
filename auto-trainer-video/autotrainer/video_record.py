@@ -74,7 +74,7 @@ class VideoRecord(Thread):
                                 f"{file_timestamp.strftime('%Y-%m-%d_%H-%M-%S')}_{self._name}.{self._ext}")
 
         self._timestamp = open(os.path.join(self._output_location,
-                                            f"{file_timestamp.strftime('%Y-%m-%d_%H-%M-%S')}_timestamps.txt"), "w")
+                                            f"{file_timestamp.strftime('%Y-%m-%d_%H-%M-%S')}_{self._name}_timestamps.txt"), "w")
 
         self._writer = cv2.VideoWriter(location, cv2.VideoWriter_fourcc(*'mp4v'), self._fps,
                                        (self._width, self._height))
