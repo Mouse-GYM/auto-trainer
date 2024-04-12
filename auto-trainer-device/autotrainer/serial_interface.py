@@ -3,7 +3,7 @@ import sys
 import serial
 import serial.tools.list_ports
 
-from . device_interface import IDeviceInterface
+from .device_interface import IDeviceInterface
 
 
 class SerialInterface(IDeviceInterface):
@@ -25,21 +25,34 @@ class SerialInterface(IDeviceInterface):
         super().__init__()
         self._port = port
         self._serial = None
+        self._is_open = False
 
     def open(self):
-        self._serial = serial.Serial(self._port)
+        try:
+            self._serial = serial.Serial(self._port)
+            self._is_open = True
+        except:
+            self._is_open = False
 
     def close(self):
-        self._serial.close()
+        if self._is_open:
+            self._serial.close()
 
     def can_read(self) -> bool:
-        return self._serial.in_waiting > 0
+        return self._is_open and self._serial.in_waiting > 0
 
     def read(self) -> bytes:
-        return self._serial.read(1)
+        if self._is_open:
+            return self._serial.read(1)
 
     def write(self, value: bytes) -> int:
-        return self._serial.write(value)
+        if self._is_open:
+            return self._serial.write(value)
+
+        return 0
 
     def write_str(self, value: str) -> int:
-        return self._serial.write(value.encode())
+        if self._is_open:
+            return self._serial.write(value.encode())
+
+        return 0

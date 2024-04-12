@@ -23,12 +23,12 @@ def handle_info(buffer: str):
 
 
 class HeadFix(IDeviceListener):
-    def __init__(self, api: DeviceApi = None):
+    def __init__(self, api: DeviceApi = None, buffer_size: int = 50):
         self._api = api
 
         self._buffer = ""
 
-        self._measurement_buffer_count = 10
+        self._measurement_buffer_count = buffer_size
 
         self._measurements = list()
 

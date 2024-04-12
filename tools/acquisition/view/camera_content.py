@@ -30,7 +30,7 @@ class CameraContent(QGridLayout):
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.update_image)
-        self._timer.start(200)
+        self._timer.start(1000/30)
 
     @Slot(ndarray, float)
     def refresh_image(self, data: ndarray, fps: float):

@@ -47,7 +47,7 @@ class SpinCam(CameraBase):
         return serial_numbers
 
     @classmethod
-    def create(cls, serial_number: str):
+    def create(cls, serial_number: str, name: str = ""):
         if serial_number in cls._cameras:
             return cls._cameras[serial_number]
         else:
@@ -55,7 +55,7 @@ class SpinCam(CameraBase):
 
             camera = cam_list.GetBySerial(serial_number)
 
-            obj = SpinCam()
+            obj = SpinCam(name)
             obj.__create(camera)
 
             cls._cameras[serial_number] = obj
@@ -68,8 +68,8 @@ class SpinCam(CameraBase):
     _node_map = None
     _node_map_tl_device = None
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, name: str = ""):
+        super().__init__(name)
         self._width = 1440
         self._height = 1080
 

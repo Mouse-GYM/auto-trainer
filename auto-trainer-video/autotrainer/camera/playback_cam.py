@@ -8,8 +8,8 @@ from . camera_base import CameraBase
 
 
 class PlaybackCam(CameraBase):
-    def __init__(self, file_name):
-        super().__init__()
+    def __init__(self, file_name, name: str = ""):
+        super().__init__(name)
         self._file_name = file_name
         self._file_name = urllib.parse.unquote(file_name)
         self._frame_interval = 1 / 30

@@ -83,7 +83,7 @@ class HeadFixModel:
 
         device_interface = SerialInterface(self.port)
 
-        head_fix = HeadFix(device_interface)
+        head_fix = HeadFix(device_interface, 100)
 
         self._device_thread = DeviceThread(head_fix, device_interface, self._cmd_queue, self._msg_queue)
 

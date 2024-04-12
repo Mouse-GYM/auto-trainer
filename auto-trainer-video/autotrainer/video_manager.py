@@ -54,9 +54,9 @@ class VideoManager:
             return list()
 
     @classmethod
-    def get_spin_camera(cls, serial_number: str):
+    def get_spin_camera(cls, serial_number: str, name: str = ""):
         if _have_spin_cam:
-            return SpinCam.create(serial_number)
+            return SpinCam.create(serial_number, name)
         else:
             return None
 
@@ -76,17 +76,17 @@ class VideoManager:
         return parameters
 
     @classmethod
-    def create_camera(cls, camera_url: str):
+    def create_camera(cls, camera_url: str, name: str = ""):
         parsed = urlparse(camera_url)
 
         if parsed.scheme == CameraKind.Random:
-            camera = RandomCam()
+            camera = RandomCam(name)
         elif parsed.scheme == CameraKind.Spinnaker:
-            camera = cls.get_spin_camera(parsed.hostname)
+            camera = cls.get_spin_camera(parsed.hostname, name)
         elif parsed.scheme == CameraKind.Playback:
-            camera = PlaybackCam(parsed.hostname)
+            camera = PlaybackCam(parsed.hostname, name)
         elif parsed.scheme == CameraKind.OpenCV:
-            camera = OpenCVCam(int(parsed.hostname))
+            camera = OpenCVCam(int(parsed.hostname), name)
         else:
             return None
 

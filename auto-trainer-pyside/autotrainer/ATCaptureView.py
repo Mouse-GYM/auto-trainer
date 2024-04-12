@@ -136,7 +136,7 @@ class ATCaptureView(QWidget):
 
         self._is_dirty = False
 
-        self._fps_label.setText(f"{self._fps:.1f}")
+        # self._fps_label.setText(f"{self._fps:.1f}")
 
     @Slot(ndarray, float)
     def refresh_image(self, data: ndarray, fps: float):

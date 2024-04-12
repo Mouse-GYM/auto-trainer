@@ -1,5 +1,6 @@
 import logging
 import queue
+import sys
 from queue import Queue
 from enum import Enum
 from multiprocessing import Process
@@ -12,8 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 class CaptureMessageKind(Enum):
-    READY = -5,
-    CAPTURE = -4,
+    END_CAPTURE_ACKNOWLEDGE = -7,
+    END_CAPTURE = -6,
+    BEGIN_CAPTURE_ACKNOWLEDGE = -5,
+    BEGIN_CAPTURE = -4,
     TRIGGER = -3,
     TERMINATE = -2,
     TERMINATED = -1
@@ -22,7 +25,7 @@ class CaptureMessageKind(Enum):
 class VideoCapture(Process):
     def __init__(self, name, cmd_message_queue, status_message_queue, image_queue, network_queue, camera_url: str,
                  record_properties: VideoRecordProperties = None):
-        super().__init__()
+        super().__init__(name=name)
 
         self._name = name
         self._cmd_message_queue = cmd_message_queue
@@ -49,17 +52,21 @@ class VideoCapture(Process):
 
         self.message_handler = {
             CaptureMessageKind.TERMINATE: self._user_terminate,
-            CaptureMessageKind.CAPTURE: self._capture_start,
+            CaptureMessageKind.BEGIN_CAPTURE: self._begin_capture,
+            CaptureMessageKind.END_CAPTURE: self._end_capture,
             CaptureMessageKind.TRIGGER: self._record_trigger
         }
 
     def run(self):
+        logger.debug(f"<{self._name}> run")
+
+        if self._camera_url is None:
+            return
+        
         VideoManager.open()
 
         self.create_camera()
         self._camera.prepare_capture()
-
-        self._status_message_queue.put(CaptureMessageKind.READY)
 
         record = None
 
@@ -69,16 +76,18 @@ class VideoCapture(Process):
                                  (self._camera.width, self._camera.height), self._camera.fps, self._record_queue)
             record.start()
 
-        logger.debug(f"{self._name}: process ready")
+        if self._status_message_queue is not None:
+            self._status_message_queue.put(CaptureMessageKind.BEGIN_CAPTURE_ACKNOWLEDGE)
 
         while self._is_running:
-            try:
-                msg = self._cmd_message_queue.get(False)
-                self._handle_message(msg)
-            except queue.Empty:
-                pass
+            if self._cmd_message_queue is not None:
+                try:
+                    msg = self._cmd_message_queue.get(False)
+                    self._handle_message(msg)
+                except queue.Empty:
+                    pass
 
-            if not self._is_capturing:
+            if not self._is_capturing or self._image_queue is None:
                 continue
 
             frame, when = self._camera.capture()
@@ -91,6 +100,8 @@ class VideoCapture(Process):
             if self._network_queue is not None:
                 self._network_queue.put(frame)
 
+        logger.debug(f"<{self._name}> capture loop ended")
+
         self._camera.end_capture()
 
         VideoManager.close()
@@ -99,22 +110,26 @@ class VideoCapture(Process):
             record.cancel()
             record.join()
 
-        self._status_message_queue.put(CaptureMessageKind.TERMINATED)
+        if self._status_message_queue is not None:
+            self._status_message_queue.put(CaptureMessageKind.TERMINATED)
 
-        logger.debug(f"{self._name}: terminated")
+        logger.debug(f"<{self._name}> terminated")
 
     def create_camera(self):
-        self._camera = VideoManager.create_camera(self._camera_url)
+        self._camera = VideoManager.create_camera(self._camera_url, self._name)
 
     def _handle_message(self, message):
-        logger.debug(f"{self._name}: cmd message {message}")
+        logger.debug(f"<{self._name}> cmd message {message}")
         self.message_handler.get(message)()
 
     def _user_terminate(self):
         self._is_running = False
 
-    def _capture_start(self):
+    def _begin_capture(self):
         self._is_capturing = True
+
+    def _end_capture(self):
+        self._is_capturing = False
 
     def _record_trigger(self):
         self._is_record_triggered = not self._is_record_triggered

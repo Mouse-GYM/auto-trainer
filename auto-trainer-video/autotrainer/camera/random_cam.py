@@ -6,8 +6,8 @@ from . camera_base import CameraBase
 
 
 class RandomCam(CameraBase):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, name: str = ""):
+        super().__init__(name)
         self._rng = numpy.random.default_rng()
         self._last_capture = time.perf_counter()
         self._frame_interval = 1/30.0

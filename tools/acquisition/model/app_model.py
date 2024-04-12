@@ -1,3 +1,6 @@
+import logging
+import time
+
 from multiprocessing import Queue
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -6,6 +9,8 @@ from tools.acquisition.model.user_settings import UserSettings
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 from tools.acquisition.process.network_merge import NetworkMerge
 from tools.acquisition.process.pose_predict import PosePredict
+
+logger = logging.getLogger(__name__)
 
 
 class AppModel:
@@ -16,8 +21,8 @@ class AppModel:
         self._network_input_queue_2 = Queue()
         self._network_output_queue = Queue()
 
-        self._left_camera = VideoCaptureModel("left", self._network_input_queue_1)
-        self._right_camera = VideoCaptureModel("right", self._network_input_queue_2)
+        self._left_camera = VideoCaptureModel("left", None)  # self._network_input_queue_1)
+        self._right_camera = VideoCaptureModel("right", None)  # self._network_input_queue_2)
         self._top_camera = VideoCaptureModel("top")
 
         self._network_merge = NetworkMerge(self._network_input_queue_1, self._network_input_queue_2,
@@ -49,12 +54,21 @@ class AppModel:
     def top_camera(self):
         return self._top_camera
 
-    def on_capture_start(self):
-        # self.head_fix.connect_to_device()
-        # self.pellet_delivery.connect_to_device()
-
+    def on_capture_start(self) -> bool:
+        didStart = True
         for camera in self._cameras:
-            camera.on_prepare_capture(self._user_settings.output_location)
+            res = camera.on_prepare_capture(self._user_settings.output_location)
+            didStart = didStart and res
+            if not res:
+                break
+
+        if not didStart:
+            logger.error("failed to start all subprocesses")
+            self.on_capture_stop()
+            return False
+
+        self.head_fix.connect_to_device()
+        self.pellet_delivery.connect_to_device()
 
         for camera in self._cameras:
             if camera.is_primary:
@@ -64,9 +78,21 @@ class AppModel:
             if not camera.is_primary:
                 camera.on_capture_start()
 
+        return True
+
     def on_capture_stop(self):
-        # self.head_fix.disconnect_from_device()
-        # self.pellet_delivery.disconnect_from_device()
+        self.head_fix.disconnect_from_device()
+        self.pellet_delivery.disconnect_from_device()
+
+        for camera in self._cameras:
+            if not camera.is_primary:
+                camera.on_capture_notify_end()
+
+        time.sleep(0.01)
+
+        for camera in self._cameras:
+            if camera.is_primary:
+                camera.on_capture_notify_end()
 
         for camera in self._cameras:
             if not camera.is_primary:

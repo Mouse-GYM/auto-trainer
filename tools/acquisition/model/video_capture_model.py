@@ -1,14 +1,16 @@
 import time
 import logging
 from multiprocessing import Queue
+from threading import Event
 
-from PySide6.QtCore import QThread, QTimer
+from PySide6.QtCore import QThread
 from numpy import ndarray
 
 from autotrainer.video_capture import VideoCapture, CaptureMessageKind
 from autotrainer.video_record_properties import VideoRecordProperties, VideoRecordMode
 from autotrainer.video_manager import VideoManager
 from autotrainer.trigger_manager import TriggerManager
+from autotrainer.queue_util import clear_queue
 
 from tools.acquisition.process.video_reader import VideoReader
 
@@ -23,7 +25,8 @@ class VideoCaptureModel:
 
         self._name = name
 
-        self.video_reader = None
+        self._video_reader = None
+        self._video_reader_event = None
         self._video_reader_thread = None
         self._video_capture = None
 
@@ -49,6 +52,8 @@ class VideoCaptureModel:
         self._camera_source = None
 
         self._is_primary = False
+
+        self._is_trace_enabled = False
 
         TriggerManager.instance().register(self._on_trigger, CAPTURE_TRIGGER_ID)
 
@@ -79,44 +84,47 @@ class VideoCaptureModel:
     @property
     def is_primary(self) -> bool:
         return self._is_primary
+    
+    @property
+    def is_trace_enabled(self) -> bool:
+        return self._is_trace_enabled
+    
+    @is_trace_enabled.setter
+    def is_trace_enabled(self, value: bool):
+        self._is_trace_enabled = value
 
     def set_display_fcn(self, display_fcn):
-        if self.video_reader is None:
-            self._video_reader_thread = QThread()
-            self.video_reader = VideoReader(self._video_queue, 1)
-            self.video_reader.moveToThread(self._video_reader_thread)
-            self._video_reader_thread.started.connect(self.video_reader.process)
-            self._video_reader_thread.start()
-
         self._display_update_fcn = display_fcn
-
-        self.video_reader.image_ready.connect(self.refresh_image)
 
     def refresh_image(self, data: ndarray):
         if self._frame_count == 0:
-            self._start = time.perf_counter()
+            self._start = time.perf_counter_ns()
 
         self._frame_count += 1
 
-        # if self._frame_count % 1000 == 0:
-        #    self._fps = self._frame_count / (time.perf_counter() - self._start)
-        #    logger.info(f"<{self._name}> fps: {int(self._fps)}")
+        if self._frame_count % 30 == 0:
+            self._fps = 1e9 * self._frame_count / (time.perf_counter_ns() - self._start)
+            self._trace(f"<{self._name}> fps: {int(self._fps)}")
 
-        if self._display_update_fcn is not None:
+        if self._display_update_fcn is not None and self._video_capture is not None:
             self._display_update_fcn(data, self._fps)
 
-    def on_prepare_capture(self, output_location: str):
+    def on_prepare_capture(self, output_location: str) -> bool:
         if not self._is_enabled:
             return
 
-        if self.video_reader is None:
-            self._video_reader_thread = QThread()
-            self.video_reader = VideoReader(self._video_queue, 1)
-            self.video_reader.moveToThread(self._video_reader_thread)
-            self._video_reader_thread.started.connect(self.video_reader.process)
-            self._video_reader_thread.start()
-
         self._frame_count = 0
+
+        if self._video_reader_thread is None and self.refresh_image is not None:
+            self._video_reader_event = Event()
+            self._video_reader_thread = QThread()
+            self._video_reader = VideoReader(self._video_queue, self._video_reader_event)
+            self._video_reader.image_ready.connect(self.refresh_image)
+            self._video_reader.moveToThread(self._video_reader_thread)
+            self._video_reader_thread.started.connect(self._video_reader.process)
+            self._video_reader_thread.start()
+        elif self._video_reader_event is not None:
+            self._video_reader_event.set()
 
         if self._camera_source is not None:
             if "?" in self._camera_source:
@@ -124,13 +132,28 @@ class VideoCaptureModel:
             else:
                 url = self._camera_source + f"?name={self._name}"
 
-            record_properties = VideoRecordProperties(self.record_mode, output_location, 60)
+            record_properties = VideoRecordProperties(self.record_mode, output_location, 3600)
+
             self._video_capture = VideoCapture(self._name, self._video_cmd_message_queue,
                                                self._video_status_message_queue, self._video_queue, self._network_queue,
                                                url, record_properties)
+
             self._video_capture.start()
-            self._video_status_message_queue.get()
-            
+
+            logger.info(f"<{self._name}> waiting for start acknowledgement")
+
+            try:
+                message = self._video_status_message_queue.get(timeout=5)
+            except:                
+                logger.error(f"<{self._name}> failed to receive start acknowledgement")
+                self._video_capture.terminate()
+                self._video_capture = None
+                return False
+
+            if message == CaptureMessageKind.BEGIN_CAPTURE_ACKNOWLEDGE:
+                logger.info(f"<{self._name}> video capture start acknowledged")
+            else:
+                logger.error(f"<{self._name}> unexpected start response")
 
             properties = VideoManager.parse_params(url)
 
@@ -140,28 +163,71 @@ class VideoCaptureModel:
                 self._is_primary = False
 
             if "fps" in properties:
-                self.video_reader.decimation = int(properties["fps"]) / 30.0
-
+                self._video_reader.decimation = int(properties["fps"]) / 30
+            else:
+                # Assume 30fps
+                self._video_reader.decimation = 30 / 30
         else:
             self._is_primary = False
 
+        return True
+
     def on_capture_start(self):
-        self._video_cmd_message_queue.put(CaptureMessageKind.CAPTURE)
+        if not self._is_enabled:
+            return
+
+        self._video_cmd_message_queue.put(CaptureMessageKind.BEGIN_CAPTURE)
+
+    def on_capture_notify_end(self):
+        self._video_cmd_message_queue.put(CaptureMessageKind.END_CAPTURE)
 
     def on_capture_stop(self):
+        if not self._is_enabled:
+            return
+
         if self._video_capture is not None:
             self._video_cmd_message_queue.put(CaptureMessageKind.TERMINATE)
-            self._video_status_message_queue.get()
-            self._video_capture.terminate()
+
+            message = self._video_status_message_queue.get()
+
+            if message == CaptureMessageKind.TERMINATED:
+                logger.info(f"<{self._name}> video capture terminate acknowledged")
+            else:
+                logger.error(f"<{self._name}> unexpected terminate response")
+
+        self._trace(f"<{self._name}> clearing command queue {self._video_cmd_message_queue.qsize()}")
+        clear_queue(self._video_cmd_message_queue)
+        self._trace(f"<{self._name}> clearing status queue {self._video_status_message_queue.qsize()}")
+        clear_queue(self._video_status_message_queue)
+        self._trace(f"<{self._name}> clearing image queue {self._video_queue.qsize()}")
+        clear_queue(self._video_queue)
+        if self._network_queue is not None:
+            self._trace(f"<{self._name}> clearing network queue {self._network_queue.qsize()}")
+            clear_queue(self._network_queue)
+
+        if self._video_capture is not None:
+            self._trace(f"<{self._name}> checking process status")
+
+            while self._video_capture.is_alive():
+                logger.debug(f"<{self._name}> waiting for process termination")
+                time.sleep(0.5)
+
+            self._trace(f"<{self._name}> is_alive() {self._video_capture.is_alive()}")
+
             self._video_capture = None
 
     def on_close(self):
         if self._video_capture is not None:
             self._video_capture.terminate()
 
-        if self.video_reader is not None:
+        if self._video_reader_thread is not None:
+            self._video_reader_event.set()
             self._video_reader_thread.quit()
 
     def _on_trigger(self, sink, trigger_id, context):
         if self._video_capture is not None:
             self._video_cmd_message_queue.put(CaptureMessageKind.TRIGGER)
+
+    def _trace(self, message: str):
+        if self._is_trace_enabled:
+            logger.debug(message)

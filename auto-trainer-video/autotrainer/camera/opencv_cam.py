@@ -7,8 +7,8 @@ from . camera_base import CameraBase
 
 
 class OpenCVCam(CameraBase):
-    def __init__(self, device_idx: int):
-        super().__init__()
+    def __init__(self, device_idx: int, name: str = ""):
+        super().__init__(name)
         self._device_idx = device_idx
         self._video_capture = None
 

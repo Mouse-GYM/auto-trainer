@@ -1,6 +1,7 @@
 import queue
 import time
 import logging
+from threading import Event
 
 import numpy
 from PySide6.QtCore import Signal, QObject
@@ -15,34 +16,40 @@ class VideoReader(QObject):
 
     image_ready = Signal(numpy.ndarray)
 
-    def __init__(self, image_queue : queue.Queue, decimation: int = 10):
+    def __init__(self, image_queue: queue.Queue, reset_event: Event = None, decimation: int = 10):
         super().__init__()
         self._image_queue = image_queue
+        self._reset_event = reset_event if reset_event is not None else Event()
         self._decimation = decimation
 
     @property
     def decimation(self) -> int:
         return self._decimation
-    
+
     @decimation.setter
-    def decimation(self, value: int)-> None:
+    def decimation(self, value: int) -> None:
         self._decimation = max(1, value)
+        logger.debug(f"decimation set to {self._decimation}")
 
     def process(self):
         count = 0
         acq_start = 0
 
         while True:
+            if self._reset_event.is_set():
+                count = 0
+                self._reset_event.clear()
+                logger.debug("reader frame count reset")
+
             try:
-                data = self._image_queue.get_nowait()
+                data = self._image_queue.get(block=False, timeout=0.01)
                 if count == 0:
                     acq_start = time.perf_counter_ns()
                 if count % self._decimation == 0:
                     self.image_ready.emit(data)
                 count += 1
-                # if count % 1000 == 0:    
-                #    acq_end = time.perf_counter_ns()
-                #    logger.info(f"reader fps: {int(count * 1e9 /(acq_end - acq_start))}")
+                # if count % 150 == 0:
+                #     acq_end = time.perf_counter_ns()
+                #     logger.debug(f"reader fps: ~{int(count * 1e9 / (acq_end - acq_start))}")
             except queue.Empty:
                 pass
-
