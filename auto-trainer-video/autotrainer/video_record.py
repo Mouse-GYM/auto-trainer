@@ -35,6 +35,8 @@ class VideoRecord(Thread):
 
         self._update_writer()
 
+        last_when = 0
+
         while self._is_running:
             try:
                 (frame, when) = self._input_queue.get_nowait()
@@ -45,7 +47,8 @@ class VideoRecord(Thread):
                     self._writer.write(frame)
 
                 if self._timestamp is not None:
-                    self._timestamp.write(str(when) + "\n")
+                    self._timestamp.write(f"{when}, {1e9/(when - last_when)}\n")
+                    last_when = when
             except Empty:
                 time.sleep(0.0001)
 
