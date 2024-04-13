@@ -143,7 +143,7 @@ class VideoCaptureModel:
             logger.info(f"<{self._name}> waiting for start acknowledgement")
 
             try:
-                message = self._video_status_message_queue.get(timeout=5)
+                message = self._video_status_message_queue.get(timeout=10)
             except:                
                 logger.error(f"<{self._name}> failed to receive start acknowledgement")
                 self._video_capture.terminate()
