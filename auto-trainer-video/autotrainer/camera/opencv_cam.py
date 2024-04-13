@@ -1,9 +1,12 @@
+import logging
 import time
 
 import cv2
 import numpy
 
-from . camera_base import CameraBase
+from .camera_base import CameraBase
+
+logger = logging.getLogger(__name__)
 
 
 class OpenCVCam(CameraBase):
@@ -15,16 +18,46 @@ class OpenCVCam(CameraBase):
     def init(self):
         self._video_capture = cv2.VideoCapture(self._device_idx)
 
-        self.width = int(self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.fps = self._video_capture.get(cv2.CAP_PROP_FPS)
+        self._width = int(self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self._height = int(self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self._fps = self._video_capture.get(cv2.CAP_PROP_FPS)
+
+    @property
+    def fps(self) -> float:
+        return self._fps
+
+    @fps.setter
+    def fps(self, value: float) -> None:
+        self._video_capture.set(cv2.CAP_PROP_FPS, value)
+        self._fps = int(self._video_capture.get(cv2.CAP_PROP_FPS))
+        logger.debug(f"<{self._name}> fps: {self._fps}")
+
+    @property
+    def width(self):
+        return self._width
+
+    @width.setter
+    def width(self, value):
+        self._video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, value)
+        self._width = int(self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        logger.debug(f"<{self._name}> width: {self._width}")
+
+    @property
+    def height(self):
+        return self._height
+
+    @height.setter
+    def height(self, value):
+        self._video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, value)
+        self._height = int(self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        logger.debug(f"<{self._name}> height: {self._height}")
 
     def prepare_capture(self):
         super().prepare_capture()
 
     def end_capture(self):
         super().end_capture()
-        
+
         self._video_capture.release()
 
     def capture(self) -> (numpy.ndarray, int):
