@@ -226,7 +226,7 @@ class VideoCaptureModel:
         if self._video_reader is None and self._display_update_fcn is not None:
             self._video_reader_stop_event = Event()
             self._video_reader_reset_event = Event()
-            self._video_reader = VideoReader(self._video_queue, self.refresh_image,
+            self._video_reader = VideoReader(self._name, self._video_queue, self.refresh_image,
                                                  self._video_reader_stop_event)
             self._video_reader.start()
 
