@@ -64,7 +64,8 @@ class CameraBase:
         self._frame_count = 0
 
     def end_capture(self) -> None:
-        logger.info(f"<{self._name}> internal fps: ~{int(self._frame_count * 1e9 /(self._last_when - self._acquisition_start))}")
+        if self._frame_count > 0:
+            logger.info(f"<{self._name}> internal fps: ~{int(self._frame_count * 1e9 /(self._last_when - self._acquisition_start))}")
 
     def capture(self) -> (numpy.ndarray, int):
         if self._frame_count == 0:

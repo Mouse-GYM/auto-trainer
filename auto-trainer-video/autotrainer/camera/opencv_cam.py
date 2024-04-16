@@ -40,7 +40,11 @@ class OpenCVCam(CameraBase):
     def width(self, value):
         self._video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, value)
         self._width = int(self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self._height = int(self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        logger.debug(f"<{self._name}> try setting width to {value}.  Result:")
         logger.debug(f"<{self._name}> width: {self._width}")
+        logger.debug(f"<{self._name}> height: {self._height}")
+
 
     @property
     def height(self):
@@ -49,7 +53,10 @@ class OpenCVCam(CameraBase):
     @height.setter
     def height(self, value):
         self._video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, value)
+        self._width = int(self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         self._height = int(self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        logger.debug(f"<{self._name}> try setting height to {value}.  Result:")
+        logger.debug(f"<{self._name}> width: {self._width}")
         logger.debug(f"<{self._name}> height: {self._height}")
 
     def prepare_capture(self):
