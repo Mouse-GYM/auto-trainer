@@ -10,7 +10,7 @@ from . camera.opencv_cam import OpenCVCam
 
 _have_spin_cam = False
 
-if sys.version_info.major == 3 and sys.version_info.minor == 8:
+if sys.version_info.major == 3 and sys.version_info.minor == 8 and not sys.platform.startswith("darwin"):
     from . camera.spinnaker_cam import SpinCam
     _have_spin_cam = True
 
