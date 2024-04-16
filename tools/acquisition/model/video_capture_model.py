@@ -3,17 +3,16 @@ import logging
 from multiprocessing import Queue
 from threading import Event
 
-from PySide6.QtCore import QThread
 from numpy import ndarray
 
 from autotrainer.video_capture import VideoCapture, CaptureMessageKind
 from autotrainer.video_record_properties import VideoRecordProperties, VideoRecordMode
 from autotrainer.video_manager import VideoManager
+from autotrainer.video_reader import VideoReader
 from autotrainer.trigger_manager import TriggerManager
 from autotrainer.queue_util import clear_queue
 
 from tools.acquisition.model.user_settings import UserSettings
-from tools.acquisition.process.video_reader import VideoReader
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +27,8 @@ class VideoCaptureModel:
         self._user_settings = user_settings
 
         self._video_reader = None
-        self._video_reader_event = None
-        self._video_reader_thread = None
+        self._video_reader_reset_event = None
+        self._video_reader_stop_event = None
         self._video_capture = None
 
         self._video_cmd_message_queue = Queue()
@@ -55,7 +54,7 @@ class VideoCaptureModel:
 
         self._is_primary = False
 
-        self._is_trace_enabled = False
+        self._is_trace_enabled = True
 
         TriggerManager.instance().register(self._on_trigger, CAPTURE_TRIGGER_ID)
 
@@ -104,9 +103,9 @@ class VideoCaptureModel:
 
         self._frame_count += 1
 
-        if self._frame_count % 30 == 0:
+        if self._frame_count % 150 == 0:
             self._fps = 1e9 * self._frame_count / (time.perf_counter_ns() - self._start)
-            self._trace(f"<{self._name}> fps: {int(self._fps)}")
+            self._trace(f"<{self._name}> display fps: {int(self._fps)}")
 
         if self._display_update_fcn is not None and self._video_capture is not None:
             self._display_update_fcn(data, self._fps)
@@ -117,16 +116,7 @@ class VideoCaptureModel:
 
         self._frame_count = 0
 
-        if self._video_reader_thread is None and self._display_update_fcn is not None:
-            self._video_reader_event = Event()
-            self._video_reader_thread = QThread()
-            self._video_reader = VideoReader(self._video_queue, self._video_reader_event)
-            self._video_reader.image_ready.connect(self.refresh_image)
-            self._video_reader.moveToThread(self._video_reader_thread)
-            self._video_reader_thread.started.connect(self._video_reader.process)
-            self._video_reader_thread.start()
-        elif self._video_reader_event is not None:
-            self._video_reader_event.set()
+        self._video_reader_initialize()
 
         if self._camera_source is not None:
             if "?" in self._camera_source:
@@ -189,6 +179,8 @@ class VideoCaptureModel:
         if not self._is_enabled:
             return
 
+        self._video_reader_teardown()
+
         if self._video_capture is not None:
             self._video_cmd_message_queue.put(CaptureMessageKind.TERMINATE)
 
@@ -224,13 +216,25 @@ class VideoCaptureModel:
         if self._video_capture is not None:
             self._video_capture.terminate()
 
-        if self._video_reader_thread is not None:
-            self._video_reader_event.set()
-            self._video_reader_thread.quit()
+        self._video_reader_teardown()
 
     def _on_trigger(self, sink, trigger_id, context):
         if self._video_capture is not None:
             self._video_cmd_message_queue.put(CaptureMessageKind.TRIGGER)
+
+    def _video_reader_initialize(self):
+        if self._video_reader is None and self._display_update_fcn is not None:
+            self._video_reader_stop_event = Event()
+            self._video_reader_reset_event = Event()
+            self._video_reader = VideoReader(self._video_queue, self.refresh_image,
+                                                 self._video_reader_stop_event)
+            self._video_reader.start()
+
+    def _video_reader_teardown(self):
+        if self._video_reader is not None:
+            self._video_reader_stop_event.set()
+            self._video_reader.join()
+            self._video_reader = None
 
     def _trace(self, message: str):
         if self._is_trace_enabled:

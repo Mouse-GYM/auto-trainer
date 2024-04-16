@@ -115,9 +115,12 @@ class MainContent(QWidget):
 
     @Slot()
     def update_image(self):
-        self._left_camera_content.update_image()
-        self._right_camera_content.update_image()
-        self._top_camera_content.update_image()
+        if self._app_view_model.left_camera.is_enabled:
+            self._left_camera_content.update_image()
+        if self._app_view_model.right_camera.is_enabled:
+            self._right_camera_content.update_image()
+        if self._app_view_model.top_camera.is_enabled:
+            self._top_camera_content.update_image()
 
     def setCaptureEnabled(self, enabled: bool):
         self._left_camera_content.setCaptureEnabled(enabled)
