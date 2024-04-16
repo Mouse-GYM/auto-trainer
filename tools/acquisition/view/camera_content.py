@@ -1,6 +1,6 @@
 from numpy import ndarray
 
-from PySide6.QtCore import Slot, QTimer
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QGridLayout
 
 from autotrainer.ATCaptureView import ATCaptureView
@@ -28,15 +28,10 @@ class CameraContent(QGridLayout):
         self._view_model.is_enabled = True
         self._view_model.camera_source = camera_list[0].url
 
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self.update_image)
-        self._timer.start(1000/30)
-
     @Slot(ndarray, float)
     def refresh_image(self, data: ndarray, fps: float):
         self._camera_view.refresh_image(data, fps)
 
-    @Slot()
     def update_image(self):
         self._camera_view.update_image()
 

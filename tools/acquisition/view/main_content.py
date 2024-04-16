@@ -2,6 +2,7 @@ import logging
 import os
 import pathlib
 
+from PySide6.QtCore import QTimer, Slot
 from PySide6.QtWidgets import QWidget, QGridLayout, QPlainTextEdit
 
 from autotrainer.ATSeparator import ATSeparator
@@ -107,6 +108,16 @@ class MainContent(QWidget):
         self._frame_count = 0
 
         self._start = 0
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self.update_image)
+        self._timer.start(int(1000 / app_view_model.user_settings.live_feed_refresh_rate))
+
+    @Slot()
+    def update_image(self):
+        self._left_camera_content.update_image()
+        self._right_camera_content.update_image()
+        self._top_camera_content.update_image()
 
     def setCaptureEnabled(self, enabled: bool):
         self._left_camera_content.setCaptureEnabled(enabled)

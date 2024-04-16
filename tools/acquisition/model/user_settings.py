@@ -19,6 +19,14 @@ class UserSettings:
         self._settings.sync()
 
     @property
+    def live_feed_refresh_rate(self) -> int:
+        return self._settings.value("display/refresh_rate", 15, int)
+
+    @live_feed_refresh_rate.setter
+    def live_feed_refresh_rate(self, value: int):
+        self._settings.setValue("display/refresh_rate", value)
+
+    @property
     def output_location(self) -> str:
         return self._settings.value("output/location", "")
 

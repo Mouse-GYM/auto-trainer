@@ -48,8 +48,8 @@ class VideoReader(QObject):
                 if count % self._decimation == 0:
                     self.image_ready.emit(data)
                 count += 1
-                # if count % 150 == 0:
-                #     acq_end = time.perf_counter_ns()
-                #     logger.debug(f"reader fps: ~{int(count * 1e9 / (acq_end - acq_start))}")
+                if count % 750 == 0:
+                    acq_end = time.perf_counter_ns()
+                    logger.debug(f"reader fps: ~{int(count * 1e9 / (acq_end - acq_start))}")
             except queue.Empty:
                 pass

@@ -12,6 +12,7 @@ from autotrainer.video_manager import VideoManager
 from autotrainer.trigger_manager import TriggerManager
 from autotrainer.queue_util import clear_queue
 
+from tools.acquisition.model.user_settings import UserSettings
 from tools.acquisition.process.video_reader import VideoReader
 
 logger = logging.getLogger(__name__)
@@ -20,10 +21,11 @@ CAPTURE_TRIGGER_ID = "CaptureTrigger"
 
 
 class VideoCaptureModel:
-    def __init__(self, name, network_queue=None):
+    def __init__(self, name, user_settings: UserSettings = None, network_queue=None):
         super().__init__()
 
         self._name = name
+        self._user_settings = user_settings
 
         self._video_reader = None
         self._video_reader_event = None
@@ -84,11 +86,11 @@ class VideoCaptureModel:
     @property
     def is_primary(self) -> bool:
         return self._is_primary
-    
+
     @property
     def is_trace_enabled(self) -> bool:
         return self._is_trace_enabled
-    
+
     @is_trace_enabled.setter
     def is_trace_enabled(self, value: bool):
         self._is_trace_enabled = value
@@ -144,7 +146,7 @@ class VideoCaptureModel:
 
             try:
                 message = self._video_status_message_queue.get(timeout=10)
-            except:                
+            except:
                 logger.error(f"<{self._name}> failed to receive start acknowledgement")
                 self._video_capture.terminate()
                 self._video_capture = None
@@ -162,11 +164,13 @@ class VideoCaptureModel:
             else:
                 self._is_primary = False
 
+            decimation = 1 if self._user_settings is None else self._user_settings.live_feed_refresh_rate
+
             if "fps" in properties:
-                self._video_reader.decimation = int(properties["fps"]) / 30
+                self._video_reader.decimation = max(int(int(properties["fps"]) / decimation), 1)
             elif self._video_reader is not None:
                 # Assume 30fps
-                self._video_reader.decimation = 30 / 30
+                self._video_reader.decimation = max(int(30 / decimation), 1)
         else:
             self._is_primary = False
 

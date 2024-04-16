@@ -21,9 +21,9 @@ class AppModel:
         self._network_input_queue_2 = Queue()
         self._network_output_queue = Queue()
 
-        self._left_camera = VideoCaptureModel("left", None)  # self._network_input_queue_1)
-        self._right_camera = VideoCaptureModel("right", None)  # self._network_input_queue_2)
-        self._top_camera = VideoCaptureModel("top")
+        self._left_camera = VideoCaptureModel("left", self._user_settings, None)  # self._network_input_queue_1)
+        self._right_camera = VideoCaptureModel("right", self._user_settings, None)  # self._network_input_queue_2)
+        self._top_camera = VideoCaptureModel("top", self._user_settings)
 
         self._network_merge = NetworkMerge(self._network_input_queue_1, self._network_input_queue_2,
                                            self._network_output_queue)
