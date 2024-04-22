@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QLabel, QLineEdit, QGridLayout, QSpinBox, QWidget, QComboBox
 
-from autotrainer.pg_widget import PGWidget
+from autotrainer.PGWidget import PGWidget
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
 

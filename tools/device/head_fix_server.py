@@ -6,12 +6,16 @@ from threading import Thread
 
 import serial
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 weight = 0
 switch_pin = 0
 pressure_pin = 0
+temperature = 0
+humidity = 0
+
+fw_version = "0.0.0"
 
 
 def get_value(input_val: str):
@@ -25,7 +29,7 @@ def get_value(input_val: str):
 
 
 def accept_commands():
-    global weight, switch_pin, pressure_pin
+    global weight, switch_pin, pressure_pin, temperature, humidity
 
     while True:
         cmd = input("")
@@ -42,11 +46,25 @@ def accept_commands():
             val = get_value(cmd)
             if val is not None:
                 pressure_pin = val
+        elif cmd.lower().startswith("t"):
+            val = get_value(cmd)
+            if val is not None:
+                temperature = val
+        elif cmd.lower().startswith("h"):
+            val = get_value(cmd)
+            if val is not None:
+                humidity = val
 
 
 def handle_command(s, cmd: str, msg: str):
+    global fw_version
+
+    s.write(cmd.encode())
+
     if cmd == "A":
         logger.info(f"servo: {int(msg)}")
+    elif cmd == "F":
+        s.write(f"H{fw_version}\n".encode())
     elif cmd == "L":
         pass
     elif cmd == "M":
@@ -66,22 +84,25 @@ def handle_command(s, cmd: str, msg: str):
         logger.info(f"{cmd}: {msg}")
 
 
-def run_server(port: str, frequency: int, use_random: bool = False):
-    global weight, switch_pin, pressure_pin
+def run_server(port: str, frequency: int, use_random: bool):
+    global weight, switch_pin, pressure_pin, temperature, humidity, fw_version
 
     logger.info(f"starting server on port {port} with update frequency {frequency}Hz")
+    logger.info(f"head fix device firmware version {fw_version}")
 
     if use_random:
-        logger.info("\tusing random data")
+        logger.info("using random data")
         mon_thread = None
         weight = 100
         switch_pin = 1
         pressure_pin = 512
+        temperature = 22
+        humidity = 50
     else:
         mon_thread = Thread(target=accept_commands)
         mon_thread.start()
 
-    s = serial.Serial(port)
+    s = serial.Serial(port, baudrate=115200)
 
     ref_time = time.perf_counter_ns()
 
@@ -90,19 +111,35 @@ def run_server(port: str, frequency: int, use_random: bool = False):
 
     msg = ""
 
+    start_time = time.perf_counter_ns()
+
+    samples_sent = 0
+
     while True:
-        if time.perf_counter_ns() - ref_time >= interval_ns:
-            ref_time = time.perf_counter_ns()
+        while time.perf_counter_ns() - start_time >= interval_ns * samples_sent:
+            time.perf_counter_ns()
             s.write(f"s{weight}".encode())
             s.write(f"d{switch_pin}".encode())
-            s.write(f"a{pressure_pin}n".encode())
+            s.write(f"a{pressure_pin}".encode())
+            s.write(f"t{temperature}".encode())
+            s.write(f"h{humidity}n".encode())
+            s.write("n".encode())
+            samples_sent += 1
+
+            if samples_sent % 500 == 0:
+                logger.debug(f"{(1.0e9 * samples_sent) /(time.perf_counter_ns() -start_time) }")
 
             if use_random:
                 next_val = random()
                 weight += int((next_val - 0.5) * 10)
+                next_val = random()
                 if next_val < 0.05:
                     switch_pin = 0 if switch_pin == 1 else 1
                 pressure_pin += int((next_val - 0.5) * 5)
+                next_val = random() - 0.5
+                temperature += round(next_val * 2)
+                next_val = random() - 0.5
+                humidity += round(next_val * 2)
 
         while s.in_waiting > 0:
             data = s.read(1).decode()
@@ -124,7 +161,10 @@ if __name__ == '__main__':
     parser.add_argument("port", help="the serial port to use")
     parser.add_argument("-f", "--frequency", help="the frequency for updates (Hz)", default=10, type=int)
     parser.add_argument('-r', "--random", action="store_true", help="randomly modify data")
+    parser.add_argument('-v', "--version", help="firmware version to report", default="2", type=str)
 
     args = parser.parse_args()
+
+    fw_version = args.version
 
     run_server(args.port, args.frequency, args.random)

@@ -29,7 +29,7 @@ class SerialInterface(IDeviceInterface):
 
     def open(self):
         try:
-            self._serial = serial.Serial(self._port)
+            self._serial = serial.Serial(self._port, baudrate=115200)
             self._is_open = True
         except:
             self._is_open = False

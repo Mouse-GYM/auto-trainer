@@ -67,6 +67,8 @@ class DeviceState:
                 logger.info(f"allow_button_delivery: {self.allow_button_delivery}")
             except Exception as e:
                 logger.error(f"allow_button_delivery: {e}")
+        elif cmd == "F":
+            self.print("FP1.1.1")
         elif cmd == "H":
             self.send_home()
         elif cmd == "I":

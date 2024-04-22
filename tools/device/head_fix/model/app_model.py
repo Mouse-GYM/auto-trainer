@@ -1,7 +1,5 @@
 import queue
-import sys
 
-import serial.tools.list_ports
 from PySide6.QtCore import QThread
 
 from autotrainer.serial_interface import SerialInterface
@@ -48,15 +46,7 @@ class AppModel:
         return self._is_connected
 
     def refresh_ports(self):
-        self._ports = list()
-
-        for port in serial.tools.list_ports.comports():
-            self._ports.append(port.device)
-
-        if sys.platform.startswith("linux"):
-            self._ports.append("/dev/ttyTHS0")
-
-        self._ports.sort()
+        self._ports = SerialInterface.list_ports()
 
     def update_position(self, value: int):
         self._cmd_queue.put((HeadFixMessageKind.SERVO, "A" + str(value) + "x"))
@@ -64,7 +54,7 @@ class AppModel:
     def connect_to_device(self):
         device_interface = SerialInterface(self._user_settings.port)
 
-        head_fix = HeadFix(device_interface)
+        head_fix = HeadFix(device_interface, 10)
 
         self._device_thread = DeviceThread(head_fix, device_interface, self._cmd_queue, self._msg_queue)
 

@@ -37,6 +37,8 @@ class DeviceThread(Thread):
 
         logger.debug("interface open")
 
+        self._listener.connect()
+
         while True:
             while self._interface.can_read():
                 self._listener.notify_data(self._interface.read())
@@ -54,6 +56,8 @@ class DeviceThread(Thread):
                 pass
 
             time.sleep(0.001)
+
+        self._listener.disconnect()
 
         self._interface.close()
 
