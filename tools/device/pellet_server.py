@@ -68,25 +68,22 @@ class DeviceState:
             except Exception as e:
                 logger.error(f"allow_button_delivery: {e}")
         elif cmd == "F":
-            self.print("FP1.1.1")
+            self.print("FP2")
         elif cmd == "H":
             self.send_home()
         elif cmd == "I":
             try:
                 self.mouse_x = clamp(int(msg), 0, 10)
-                self.deliver_pellet()
             except Exception as e:
                 logger.error(f"mouse_x: {e}")
         elif cmd == "J":
             try:
                 self.mouse_y = clamp(int(msg), 0, 10)
-                self.deliver_pellet()
             except Exception as e:
                 logger.error(f"mouse_y: {e}")
         elif cmd == "K":
             try:
                 self.mouse_z = clamp(int(msg), 0, 10)
-                self.deliver_pellet()
             except Exception as e:
                 logger.error(f"mouse_z: {e}")
         elif cmd == "L":
@@ -165,7 +162,7 @@ class DeviceState:
 
 
 def run_server(port: str):
-    s = serial.Serial(port)
+    s = serial.Serial(port, baudrate=115200)
 
     cmd = ""
     msg = ""

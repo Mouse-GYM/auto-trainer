@@ -16,7 +16,8 @@ class PelletDeliveryMessageKind(IntEnum):
     RELEASE_PELLET = 4,
     SET_X = 5,
     SET_Y = 6,
-    SET_Z = 7
+    SET_Z = 7,
+    VERSION = 8
 
 
 class PelletDelivery(IDeviceListener):
@@ -28,6 +29,8 @@ class PelletDelivery(IDeviceListener):
         self._is_busy = False
         self._last_command = ""
 
+        self._firmware_version = ""
+
     @property
     def api(self):
         return self._api
@@ -36,8 +39,12 @@ class PelletDelivery(IDeviceListener):
     def api(self, value: DeviceApi):
         self._api = value
 
+    @property
+    def firmware_version(self):
+        return self._firmware_version
+
     def connect(self):
-        pass
+        self._api.send_data_str("Fx")
 
     def disconnect(self):
         pass
@@ -87,7 +94,7 @@ class PelletDelivery(IDeviceListener):
         elif kind == PelletDeliveryMessageKind.SET_Y:
             self.send_data(f"J{typing.cast(int, context) + 25}x")
         elif kind == PelletDeliveryMessageKind.SET_Z:
-            self.send_data(f"K{typing.cast(int, context) * (-1) +  5}x")
+            self.send_data(f"K{typing.cast(int, context) * (-1) + 5}x")
         else:
             logger.warning(f"unknown message kind: {kind}")
 
@@ -97,5 +104,17 @@ class PelletDelivery(IDeviceListener):
         self._last_command = data[0:-1]
         self._api.send_data_str(data)
 
+    def _set_firmware_version(self, value: str):
+        self._firmware_version = value
+        self._api.send_message(PelletDeliveryMessageKind.VERSION, self._firmware_version)
+
     def handle_response(self, cmd: str, data: str):
         logger.debug(f"handle response: {cmd} [{data}]")
+        if data.startswith("F"):
+            if len(data) > 2:
+                if data[1] == "P":
+                    self._set_firmware_version(data[2:])
+                else:
+                    self._set_firmware_version("unknown device")
+            else:
+                self._set_firmware_version("unknown device id response")

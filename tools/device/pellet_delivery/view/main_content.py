@@ -1,6 +1,6 @@
 import logging
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QWidget, QGridLayout, QComboBox, QHBoxLayout, QPushButton, QLabel, QVBoxLayout, QSpinBox, \
     QPlainTextEdit
@@ -12,6 +12,9 @@ from tools.device.pellet_delivery.view.pellet_control import PelletControl
 
 
 class MainContent(QWidget):
+    connecting = Signal()
+    disconnected = Signal()
+
     def __init__(self, app_view_model):
         super().__init__()
 
@@ -101,7 +104,9 @@ class MainContent(QWidget):
         if self._app_view_model.is_connected:
             self._app_view_model.disconnect_from_device()
             self._connect_button.setText("Connect")
+            self.disconnected.emit()
         else:
+            self.connecting.emit()
             self._app_view_model.connect_to_device()
             self._connect_button.setText("Disconnect")
 

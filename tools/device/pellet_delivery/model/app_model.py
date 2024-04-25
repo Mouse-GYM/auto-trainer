@@ -2,10 +2,12 @@ import queue
 import sys
 
 import serial.tools.list_ports
+from PySide6.QtCore import QThread
 
 from autotrainer.serial_interface import SerialInterface
 from autotrainer.pellet_delivery import PelletDelivery, PelletDeliveryMessageKind
 from autotrainer.device_thread import DeviceThread, DeviceThreadMessageKind
+from autotrainer.pellet_reader import PelletReader
 
 from tools.device.pellet_delivery.model.user_settings import UserSettings
 
@@ -17,6 +19,11 @@ class AppModel:
         self._cmd_queue = queue.Queue()
         self._msg_queue = queue.Queue()
         self._device_thread = None
+
+        self._measurement_thread = QThread()
+        self._measurement_worker = PelletReader(self._msg_queue)
+        self._measurement_worker.moveToThread(self._measurement_thread)
+        self._measurement_thread.started.connect(self._measurement_worker.process)
 
         self._is_connected = False
 
@@ -36,16 +43,12 @@ class AppModel:
     def is_connected(self):
         return self._is_connected
 
+    @property
+    def reader(self) -> PelletReader:
+        return self._measurement_worker
+
     def refresh_ports(self):
-        self._ports = list()
-
-        for port in serial.tools.list_ports.comports():
-            self._ports.append(port.device)
-
-        if sys.platform.startswith("linux"):
-            self._ports.append("/dev/ttyTHS0")
-
-        self._ports.sort()
+        self._ports = SerialInterface.list_ports()
 
     def send_home(self):
         self._cmd_queue.put((PelletDeliveryMessageKind.SEND_HOME, ""))
@@ -77,13 +80,15 @@ class AppModel:
 
         self._device_thread.start()
 
+        self._measurement_thread.start()
+
         self._is_connected = True
 
     def disconnect_from_device(self):
         self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None))
-        self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
         self._is_connected = False
 
     def on_close(self):
         self.disconnect_from_device()
+        self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
