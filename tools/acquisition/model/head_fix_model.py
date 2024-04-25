@@ -83,6 +83,9 @@ class HeadFixModel:
 
         device_interface = SerialInterface(self.port)
 
+        if self._measurement_worker is not None:
+            self._measurement_worker.record_location = self._user_settings.output_location
+
         head_fix = HeadFix(device_interface, 100)
 
         self._device_thread = DeviceThread(head_fix, device_interface, self._cmd_queue, self._msg_queue)
@@ -96,6 +99,9 @@ class HeadFixModel:
     def disconnect_from_device(self):
         if not self._is_connected:
             return
+        
+        if self._measurement_worker is not None:
+            self._measurement_worker.record_location = None
 
         self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
