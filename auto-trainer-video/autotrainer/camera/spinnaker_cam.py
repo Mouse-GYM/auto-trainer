@@ -185,6 +185,11 @@ class SpinCam(CameraBase):
         else:
             logger.warning(f"<{self._name} ExposureAuto is not writeable")
 
+        if self._camera.GainAuto.GetAccessMode() == PySpin.RW:
+            self._camera.GainAuto.SetValue(PySpin.GainAuto_Off)
+        else:
+            logger.warning(f"<{self._name} GainAuto is not writeable")
+
         self._pause_log = True
 
         # Set to class defaults.  Camera URL may override later.
