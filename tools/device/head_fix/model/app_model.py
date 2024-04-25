@@ -49,7 +49,10 @@ class AppModel:
         self._ports = SerialInterface.list_ports()
 
     def update_position(self, value: int):
-        self._cmd_queue.put((HeadFixMessageKind.SERVO, "A" + str(value) + "x"))
+        self._cmd_queue.put((HeadFixMessageKind.SERVO, str(value)))
+
+    def tare(self):
+        self._cmd_queue.put((HeadFixMessageKind.UPDATE_TARE, ""))
 
     def connect_to_device(self):
         device_interface = SerialInterface(self._user_settings.port)

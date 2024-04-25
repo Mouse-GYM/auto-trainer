@@ -68,7 +68,7 @@ def handle_command(s, cmd: str, msg: str):
     elif cmd == "L":
         pass
     elif cmd == "M":
-        pass
+        logger.info("tare scale")
     elif cmd == "N":
         pass
     elif cmd == "O":

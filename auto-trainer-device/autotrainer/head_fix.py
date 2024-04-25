@@ -13,10 +13,12 @@ HeadFixMeasurement = namedtuple('HeadFixMeasurement', ["weight", "switch", "pres
 
 
 class HeadFixMessageKind(IntEnum):
-    MEASUREMENT = 1,
-    SERVO = 2,
-    SETTINGS = 3,
-    VERSION = 4
+    RAW_COMMAND = 1,
+    MEASUREMENT = 2,
+    SERVO = 3,
+    SETTINGS = 4,
+    VERSION = 5,
+    UPDATE_TARE = 6
 
 
 class HeadFix(IDeviceListener):
@@ -63,7 +65,18 @@ class HeadFix(IDeviceListener):
             pass
 
     def notify_message(self, kind: int, context: object):
-        self._api.send_data_str(typing.cast(str, context))
+        if kind == HeadFixMessageKind.RAW_COMMAND:
+            self._api.send_data_str(typing.cast(str, context))
+        elif kind == HeadFixMessageKind.VERSION:
+            self._api.send_data_str("Fx")
+        elif kind == HeadFixMessageKind.SERVO:
+            self._api.send_data_str(f"A{typing.cast(str, context)}x")
+        elif kind == HeadFixMessageKind.SETTINGS:
+            self._api.send_data_str("Ox")
+        elif kind == HeadFixMessageKind.UPDATE_TARE:
+            self._api.send_data_str("Mx")
+        else:
+            logger.warning(f"unknown message kind: {kind}")
 
     def _set_firmware_version(self, value: str):
         self._firmware_version = value

@@ -72,7 +72,15 @@ class HeadFixModel:
         self._ports = SerialInterface.list_ports()
 
     def update_position(self, value: int):
-        self._cmd_queue.put((HeadFixMessageKind.SERVO, "A" + str(value) + "x"))
+        if not self._is_connected:
+            return
+        self._cmd_queue.put((HeadFixMessageKind.SERVO, str(value)))
+
+    def tare(self):
+        if not self._is_connected:
+            return
+
+        self._cmd_queue.put((HeadFixMessageKind.UPDATE_TARE, ""))
 
     def connect_to_device(self):
         if len(self.port) == 0:

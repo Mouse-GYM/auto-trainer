@@ -87,11 +87,13 @@ def run_monitor(port: str):
                 msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
                 break
             elif cmd.startswith("A"):
-                cmd_queue.put((HeadFixMessageKind.SERVO, cmd + "x"))
+                cmd_queue.put((HeadFixMessageKind.RAW_COMMAND, cmd + "x"))
             elif cmd.startswith("O"):
-                cmd_queue.put((HeadFixMessageKind.SETTINGS, "Ox"))
+                cmd_queue.put((HeadFixMessageKind.SETTINGS, ""))
             elif cmd.startswith("F"):
-                cmd_queue.put((HeadFixMessageKind.VERSION, "Fx"))
+                cmd_queue.put((HeadFixMessageKind.VERSION, ""))
+            elif cmd.startswith("M"):
+                cmd_queue.put((HeadFixMessageKind.UPDATE_TARE, ""))
         else:
             if not mon_thread.is_alive():
                 cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None))

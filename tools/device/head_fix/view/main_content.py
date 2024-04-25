@@ -72,6 +72,11 @@ class MainContent(QWidget):
         self._position.setEnabled(False)
         position_layout.addWidget(self._position, 0, Qt.AlignLeft)
 
+        self._tare_button = QPushButton("Tare")
+        self._tare_button.setEnabled(False)
+        self._tare_button.clicked.connect(self._app_view_model.tare)
+        position_layout.addWidget(self._tare_button, 0)
+
         position_layout.addStretch(1)
 
         layout.addLayout(position_layout, 2, 0)
@@ -187,6 +192,7 @@ class MainContent(QWidget):
             self._connect_button.setText("Disconnect")
 
         self._position.setEnabled(self._app_view_model.is_connected)
+        self._tare_button.setEnabled(self._app_view_model.is_connected)
         self._plot1.setEnabled(self._app_view_model.is_connected)
         self._plot2.setEnabled(self._app_view_model.is_connected)
         self._plot3.setEnabled(self._app_view_model.is_connected)

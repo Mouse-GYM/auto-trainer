@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QLabel, QLineEdit, QGridLayout, QSpinBox, QWidget, QComboBox
+from PySide6.QtWidgets import QLabel, QLineEdit, QGridLayout, QSpinBox, QWidget, QComboBox, QPushButton
 
 from autotrainer.PGWidget import PGWidget
 
@@ -36,6 +36,11 @@ class HeadFixContent(QGridLayout):
         self.addWidget(QWidget(), 0, 6)
         self.setColumnStretch(6, 1)
 
+        self._tare_button = QPushButton("Tare")
+        self._tare_button.setEnabled(False)
+        self._tare_button.clicked.connect(self._model.tare)
+        self.addWidget(self._tare_button, 0, 7)
+
         self._plot1 = PGWidget()
         self._plot1.setBackground(None)
         self._plot1.setMaximumHeight(160)
@@ -46,6 +51,7 @@ class HeadFixContent(QGridLayout):
 
     def setCaptureEnabled(self, enabled: bool):
         self._port_combobox.setEnabled(enabled)
+        self._tare_button.setEnabled(not enabled)
 
     def _refresh_ports(self):
         self._model.refresh_ports()
