@@ -1,5 +1,8 @@
 import logging
+import os
 import queue
+from datetime import datetime
+from pathlib import Path
 
 from PySide6.QtCore import QThread
 
@@ -24,7 +27,7 @@ class HeadFixModel:
         self._device_thread = None
 
         self._measurement_thread = QThread()
-        self._measurement_worker = HeadFixMeasurementReader(self._msg_queue)
+        self._measurement_worker = HeadFixMeasurementReader(self._msg_queue, self._user_settings.serial_number)
         self._measurement_worker.moveToThread(self._measurement_thread)
         self._measurement_thread.started.connect(self._measurement_worker.process)
         self._measurement_worker.weight_ready.connect(self._monitor_trigger)
@@ -92,7 +95,11 @@ class HeadFixModel:
         device_interface = SerialInterface(self.port)
 
         if self._measurement_worker is not None:
-            self._measurement_worker.record_location = self._user_settings.output_location
+            file_timestamp = datetime.now()
+            location = os.path.join(self._user_settings.output_location, file_timestamp.strftime("%Y%m%d"), self._user_settings.serial_number)
+            path = Path(location)
+            path.mkdir(parents=True, exist_ok=True)
+            self._measurement_worker.record_location = location
 
         head_fix = HeadFix(device_interface, 100)
 

@@ -19,10 +19,11 @@ class HeadFixMeasurementReader(QObject):
     humidity_ready = Signal(list)
     version_ready = Signal(str)
 
-    def __init__(self, msg_queue):
+    def __init__(self, msg_queue, serial_number: str = "00000"):
         super().__init__()
 
         self._msg_queue = msg_queue
+        self._serial_number = serial_number
 
         self._record_location: TextIOWrapper | None = None
 
@@ -42,7 +43,7 @@ class HeadFixMeasurementReader(QObject):
         if value is not None and os.path.isdir(value):
             try:
                 file_timestamp = datetime.now()
-                file_name = os.path.join(value, f"{file_timestamp.strftime('%Y%m%d')}_00000_monitor_hr{file_timestamp.strftime('%H')}.csv")
+                file_name = os.path.join(value, f"{file_timestamp.strftime('%Y%m%d')}_{self._serial_number}_monitor_hr{file_timestamp.strftime('%H')}.csv")
                 file_existed = os.path.exists(file_name)
                 location = open(file_name, "a")
                 if not file_existed:

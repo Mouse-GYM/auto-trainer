@@ -31,3 +31,13 @@
 
 ### Log
 Logs from any module that is not a subprocess.  Additional subprocess log messages can be seen at the command line.
+
+### Temporary Tricks (april-cleanup branch only)
+* The three cameras will be set to the first three entries in cameras.txt (if there are enough entries)
+* If the serial ports for head/pellet were set in a previous run and still available, connections will begin at startup
+* The unit number for the output directory structure/file names can be set by editing `~/.config/Colorado/Auto Trainer.conf`
+ and adding 
+```
+[system]
+serial_number=12345
+```

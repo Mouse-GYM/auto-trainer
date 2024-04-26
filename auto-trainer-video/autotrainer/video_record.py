@@ -30,8 +30,8 @@ class VideoRecord(Thread):
         self._timestamp = None
 
     def run(self) -> None:
-        path = Path(self._output_location)
-        path.mkdir(parents=True, exist_ok=True)
+        # path = Path(self._output_location)
+        # path.mkdir(parents=True, exist_ok=True)
 
         self._update_writer()
 
@@ -47,7 +47,7 @@ class VideoRecord(Thread):
                     self._writer.write(frame)
 
                 if self._timestamp is not None:
-                    self._timestamp.write(f"{when}, {1e9/(when - last_when)}\n")
+                    self._timestamp.write(f"{when}, {1e9 / (when - last_when)}\n")
                     last_when = when
             except Empty:
                 time.sleep(0.0001)
@@ -73,11 +73,10 @@ class VideoRecord(Thread):
 
         file_timestamp = datetime.now()
 
-        location = os.path.join(self._output_location,
-                                f"{file_timestamp.strftime('%Y-%m-%d_%H-%M-%S')}_{self._name}.{self._ext}")
+        location = self._output_location + f"_{file_timestamp.strftime('%H%M%S')}_{self._name}.{self._ext}"
 
-        self._timestamp = open(os.path.join(self._output_location,
-                                            f"{file_timestamp.strftime('%Y-%m-%d_%H-%M-%S')}_{self._name}_timestamps.txt"), "w")
+        self._timestamp = open(
+            self._output_location + f"_{file_timestamp.strftime('%H%M%S')}_{self._name}_timestamps.txt", "w")
 
         self._writer = cv2.VideoWriter(location, cv2.VideoWriter_fourcc(*'mp4v'), self._fps,
                                        (self._width, self._height))

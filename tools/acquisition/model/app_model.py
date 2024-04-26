@@ -1,7 +1,12 @@
 import logging
+import os
 import time
+from datetime import datetime
 
 from multiprocessing import Queue
+from pathlib import Path
+
+from dateutil import parser
 
 from autotrainer.trigger_manager import TriggerManager
 
@@ -25,7 +30,7 @@ class AppModel:
 
         self._left_camera = VideoCaptureModel("left", self._user_settings, None)  # self._network_input_queue_1)
         self._right_camera = VideoCaptureModel("right", self._user_settings, None)  # self._network_input_queue_2)
-        self._top_camera = VideoCaptureModel("top", self._user_settings)
+        self._top_camera = VideoCaptureModel("web", self._user_settings)
 
         self._network_merge = NetworkMerge(self._network_input_queue_1, self._network_input_queue_2,
                                            self._network_output_queue)
@@ -61,18 +66,40 @@ class AppModel:
         return self._top_camera
 
     def on_capture_start(self) -> bool:
-        didStart = True
+        file_timestamp = datetime.now()
+        session_index = 1
+        try:
+            last = parser.parse(self._user_settings.session_date)
+            if last is not None and last.year == file_timestamp.year and last.month == file_timestamp.month and last.day == file_timestamp.day:
+                session_index = self._user_settings.session_index
+            else:
+                self._user_settings.session_date = file_timestamp.strftime("%Y%m%d")
+                self._user_settings.session_index = 0
+        except:
+            self._user_settings.session_date = file_timestamp.strftime("%Y%m%d")
+            self._user_settings.session_index = 0
+
+        prefix = os.path.join(self._user_settings.output_location, file_timestamp.strftime("%Y%m%d"),
+                                self._user_settings.serial_number, f"session{session_index:03}")
+        path = Path(prefix)
+        path.mkdir(parents=True, exist_ok=True)
+
+        location = os.path.join(prefix, f"{file_timestamp.strftime('%Y%m%d')}_{self._user_settings.serial_number}_session{session_index:03}")
+
+        did_start = True
         for camera in self._cameras:
-            res = camera.on_prepare_capture(self._user_settings.output_location)
-            didStart = didStart and res
+            res = camera.on_prepare_capture(location)
+            did_start = did_start and res
             if not res:
                 break
 
-        if not didStart:
+        if not did_start:
             logger.error("failed to start all subprocesses")
             self.on_capture_stop()
             return False
 
+        self._user_settings.session_index = session_index + 1
+        
         self.head_fix.connect_to_device()
         self.pellet_delivery.connect_to_device()
 
