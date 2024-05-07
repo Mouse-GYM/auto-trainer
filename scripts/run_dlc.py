@@ -33,13 +33,15 @@ def process_video(network, front_source, side_source, user_max_frames: int, repo
 
     max_frames = int(min(front_frame_count, side_frame_count))
 
+    batch_size = 5
+
     configuration = DLCConfiguration()
 
-    configuration.load_configuration(os.path.join(network, "config.yaml"), 1, 0, 10)
+    configuration.load_configuration(os.path.join(network, "config.yaml"), 1, 0, batch_size * 2)
 
     idx = 0
 
-    frames = numpy.ndarray((10, 200, 300, 3))
+    frames = numpy.ndarray((batch_size * 2, 200, 300, 3))
 
     frame_count = 0
 
@@ -49,7 +51,7 @@ def process_video(network, front_source, side_source, user_max_frames: int, repo
 
     with Profile() as profile:
         while True:
-            for fdx in range(5):
+            for fdx in range(batch_size):
                 if idx >= max_frames:
                     break
 
@@ -63,7 +65,7 @@ def process_video(network, front_source, side_source, user_max_frames: int, repo
 
             pose = configuration.predict(frames)
 
-            frame_count += 5
+            frame_count += batch_size
 
             if frame_count % 100 == 0:
                 print(f"{(frame_count / (time.perf_counter() - start_time)):.1f} Network FPS")
