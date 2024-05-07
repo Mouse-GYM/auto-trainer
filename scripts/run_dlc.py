@@ -1,3 +1,4 @@
+import logging
 import sys
 import os
 import argparse
@@ -11,6 +12,10 @@ import numpy
 
 from autotrainer.dlc.dlc_configuration import DLCConfiguration
 
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("root").setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
+
 
 def prepare_video_capture(file_name):
     if os.path.isfile(file_name):
@@ -21,7 +26,7 @@ def prepare_video_capture(file_name):
     return None, 0
 
 
-def process_video(network, front_source, side_source):
+def process_video(network, front_source, side_source, user_max_frames: int, report_profile: bool):
     front_capture, front_frame_count = prepare_video_capture(front_source)
 
     side_capture, side_frame_count = prepare_video_capture(side_source)
@@ -40,7 +45,7 @@ def process_video(network, front_source, side_source):
 
     start_time = time.perf_counter()
 
-    max_frames = min(max_frames, 200)
+    max_frames = min(max_frames, user_max_frames)
 
     with Profile() as profile:
         while True:
@@ -61,12 +66,13 @@ def process_video(network, front_source, side_source):
             frame_count += 5
 
             if frame_count % 100 == 0:
-                print(f"{(frame_count / (time.perf_counter() - start_time)):.1f}")
+                print(f"{(frame_count / (time.perf_counter() - start_time)):.1f} Network FPS")
 
             if idx >= max_frames:
                 break
 
-        Stats(profile).strip_dirs().sort_stats(SortKey.TIME).print_stats()
+        if report_profile:
+            Stats(profile).strip_dirs().sort_stats(SortKey.TIME).print_stats()
 
 
 def main():
@@ -75,10 +81,18 @@ def main():
     parser.add_argument("network", help="the DeepLabCut network to use")
     parser.add_argument("front", help="the front camera video source file")
     parser.add_argument("side", help="the side camera video source file")
+    parser.add_argument("-f", "--frames", help="the number of frames to toggle", type=int, default=20000)
+    parser.add_argument("-p", "--profile", help="report profiling data", type=bool, default=False)
 
     args = parser.parse_args()
 
-    process_video(args.network, args.front, args.side)
+    if not os.path.exists(args.front):
+        logger.error("The front/left camera video file does not exist")
+
+    if not os.path.exists(args.side):
+        logger.error("The side/right camera video file does not exist")
+
+    process_video(args.network, args.front, args.side, args.frames, args.profile)
 
     return True
 
