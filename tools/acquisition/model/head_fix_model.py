@@ -126,9 +126,9 @@ class HeadFixModel:
                 if value > self._load_trigger:
                     self._is_triggered = True
                     logger.info("trigger enabled")
-                    TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID)
+                    TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, True)
             else:
                 if value < self._load_trigger:
                     self._is_triggered = False
                     logger.info("trigger disabled")
-                    TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID)
+                    TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, False)

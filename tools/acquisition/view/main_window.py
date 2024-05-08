@@ -1,14 +1,11 @@
 import logging
 
-from PySide6.QtCore import QSize, Qt, QCoreApplication
+from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel
 import qtawesome as qta
 
-from autotrainer.trigger_manager import TriggerManager
-
 from tools.acquisition.model.app_model import AppModel
-from tools.acquisition.model.video_capture_model import CAPTURE_TRIGGER_ID
 from tools.acquisition.view.main_content import MainContent
 
 logger = logging.getLogger(__name__)
@@ -47,7 +44,7 @@ class MainWindow(QMainWindow):
         self.trigger_action.setCheckable(False)
         self.trigger_action.setEnabled(False)
         self.trigger_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_T))
-        self.trigger_action.triggered.connect(lambda: TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID))
+        self.trigger_action.triggered.connect(lambda: self._app_view_model.toggle_trigger_state())
         toolbar.addAction(self.trigger_action)
 
         self.preferences_action = QAction(QIcon(qta.icon('fa5s.cog')), "Preferences", self)

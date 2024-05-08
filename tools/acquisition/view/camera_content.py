@@ -5,8 +5,11 @@ from PySide6.QtWidgets import QGridLayout
 
 from autotrainer.ATCaptureView import ATCaptureView
 from autotrainer.video_record_properties import VideoRecordMode
+from autotrainer.trigger_manager import TriggerManager
 
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
+
+CAPTURE_TRIGGER_ID = "CaptureTrigger"
 
 
 class CameraContent(QGridLayout):
@@ -27,6 +30,8 @@ class CameraContent(QGridLayout):
 
         self._view_model.is_enabled = True
         self._view_model.camera_source = camera_list[0].url
+
+        TriggerManager.instance().register(self._trigger_received, CAPTURE_TRIGGER_ID)
 
     @Slot(ndarray, float)
     def refresh_image(self, data: ndarray, fps: float):
@@ -53,3 +58,7 @@ class CameraContent(QGridLayout):
             self._view_model.record_mode = VideoRecordMode.TRIGGER if self._camera_view.is_trigger_record() else VideoRecordMode.CONTINUOUS
         else:
             self._view_model.record_mode = VideoRecordMode.NONE
+
+    def _trigger_received(self, sender, trigger_id, context):
+        if self._view_model.is_enabled and self._view_model.record_mode == VideoRecordMode.TRIGGER:
+            self._camera_view.setRecordingEnabledIndicator(context)

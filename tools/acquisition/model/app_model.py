@@ -3,10 +3,12 @@ import time
 
 from multiprocessing import Queue
 
+from autotrainer.trigger_manager import TriggerManager
+
 from tools.acquisition.model.head_fix_model import HeadFixModel
 from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
 from tools.acquisition.model.user_settings import UserSettings
-from tools.acquisition.model.video_capture_model import VideoCaptureModel
+from tools.acquisition.model.video_capture_model import VideoCaptureModel, CAPTURE_TRIGGER_ID
 from tools.acquisition.process.network_merge import NetworkMerge
 from tools.acquisition.process.pose_predict import PosePredict
 
@@ -37,6 +39,10 @@ class AppModel:
         self.head_fix = HeadFixModel(self._user_settings)
 
         self.pellet_delivery = PelletDeliveryModel(self._user_settings)
+
+        self._is_recording_trigger = False
+
+        TriggerManager.instance().register(self._trigger_received, CAPTURE_TRIGGER_ID)
 
     @property
     def user_settings(self) -> UserSettings:
@@ -102,6 +108,9 @@ class AppModel:
             if camera.is_primary:
                 camera.on_capture_stop()
 
+    def toggle_trigger_state(self):
+        TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, not self._is_recording_trigger)
+
     def on_close(self):
         if self._predict.is_alive():
             self._predict.terminate()
@@ -111,3 +120,6 @@ class AppModel:
 
         for camera in self._cameras:
             camera.on_close()
+
+    def _trigger_received(self, sender, trigger_id, context):
+        self._is_recording_trigger = context

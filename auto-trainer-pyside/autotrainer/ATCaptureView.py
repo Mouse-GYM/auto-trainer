@@ -3,7 +3,7 @@ from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QWidget, QLabel, QCheckBox, QComboBox, QHBoxLayout, QGridLayout
 from numpy import ndarray
 
-from .ATImageView import ATImageView
+from .ATGLImageView import ATGLImageView
 
 
 class ATCaptureView(QWidget):
@@ -12,7 +12,7 @@ class ATCaptureView(QWidget):
     record_enabled_changed = Signal(bool)
     trigger_source_changed = Signal(bool)
 
-    def __init__(self, title: str = "Capture", image_width: int = 256, image_height: int = 256):
+    def __init__(self, title: str = "Capture", image_width: int = 450, image_height: int = 300):
         super().__init__()
 
         self._image_width = image_width
@@ -31,12 +31,17 @@ class ATCaptureView(QWidget):
         self._isRecordEnabled = QCheckBox("Record")
         self._isRecordEnabled.toggled.connect(lambda b: self.record_enabled_changed.emit(b))
 
+        self._is_recording = QLabel("")
+        self._is_recording.setStyleSheet("border: 1px solid gray; border-radius: 8; background-color: green;")
+        self._is_recording.setFixedSize(16, 16)
+        self._is_recording.setVisible(False)
+
         self._triggerSource = QComboBox()
         self._triggerSource.addItem("Continuous")
         self._triggerSource.addItem("Trigger")
         self._triggerSource.currentIndexChanged.connect(self._trigger_source_index_changed)
 
-        self._image = ATImageView(bytearray(image_width * image_height), image_width, image_height)
+        self._image = ATGLImageView(bytearray(image_width * image_height), image_width, image_height)
         self._image.setFixedSize(QSize(self._image_width, self._image_height))
 
         self._next_data = None
@@ -55,7 +60,10 @@ class ATCaptureView(QWidget):
 
         enabled_layout = QHBoxLayout()
         enabled_layout.addWidget(self._isEnabled)
-        enabled_layout.addWidget(self._isRecordEnabled)
+        recording_layout = QHBoxLayout()
+        recording_layout.addWidget(self._isRecordEnabled)
+        recording_layout.addWidget(self._is_recording)
+        enabled_layout.addLayout(recording_layout)
         layout.addLayout(enabled_layout, 3, 0)
 
         self._trigger_layout = QHBoxLayout()
@@ -89,8 +97,14 @@ class ATCaptureView(QWidget):
 
         if enabled:
             self._isRecordEnabled.setEnabled(self._isEnabled.isChecked())
+            self._is_recording.setVisible(False)
         else:
             self._isRecordEnabled.setEnabled(False)
+            self._is_recording.setVisible(
+                self._isEnabled.isChecked() and self._isRecordEnabled.isChecked() and not self.is_trigger_record())
+
+    def setRecordingEnabledIndicator(self, b: bool):
+        self._is_recording.setVisible(b)
 
     def setTitle(self, title: str):
         self._title.setText(title)
