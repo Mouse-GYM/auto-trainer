@@ -16,19 +16,19 @@ def main(camera_url_1: str, camera_url_2: str, camera_url_3: str, iterations: in
     if camera_url_1 != "":
         model_1 = VideoCaptureModel("1")
         model_1.camera_source = camera_url_1
-        model_1.set_display_fcn(lambda x: None)
+        model_1.set_display_fcn(lambda x, y: None)
         models.append(model_1)
 
     if camera_url_2 != "":
         model_2 = VideoCaptureModel("2")
         model_2.camera_source = camera_url_2
-        model_2.set_display_fcn(lambda x: None)
+        model_2.set_display_fcn(lambda x, y: None)
         models.append(model_2)
 
     if camera_url_3 != "":
         model_3 = VideoCaptureModel("3")
         model_3.camera_source = camera_url_3
-        model_3.set_display_fcn(lambda x: None)
+        model_3.set_display_fcn(lambda x, y: None)
         models.append(model_3)
 
     count = 0
