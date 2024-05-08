@@ -26,14 +26,12 @@ def prepare_video_capture(file_name):
     return None, 0
 
 
-def process_video(network, front_source, side_source, user_max_frames: int, report_profile: bool):
+def process_video(network, front_source, side_source, batch_size: int, user_max_frames: int, report_profile: bool):
     front_capture, front_frame_count = prepare_video_capture(front_source)
 
     side_capture, side_frame_count = prepare_video_capture(side_source)
 
     max_frames = int(min(front_frame_count, side_frame_count))
-
-    batch_size = 5
 
     configuration = DLCConfiguration()
 
@@ -47,7 +45,8 @@ def process_video(network, front_source, side_source, user_max_frames: int, repo
 
     start_time = time.perf_counter()
 
-    max_frames = min(max_frames, user_max_frames)
+    if user_max_frames > 0:
+        max_frames = min(max_frames, user_max_frames)
 
     with Profile() as profile:
         while True:
@@ -83,7 +82,8 @@ def main():
     parser.add_argument("network", help="the DeepLabCut network to use")
     parser.add_argument("front", help="the front camera video source file")
     parser.add_argument("side", help="the side camera video source file")
-    parser.add_argument("-f", "--frames", help="the number of frames to toggle", type=int, default=20000)
+    parser.add_argument("-b", "--batchsize", help="the number of frames to toggle", type=int, default=5)
+    parser.add_argument("-f", "--frames", help="the number of frames to toggle", type=int, default=-1)
     parser.add_argument("-p", "--profile", help="report profiling data", type=bool, default=False)
 
     args = parser.parse_args()
@@ -94,7 +94,7 @@ def main():
     if not os.path.exists(args.side):
         logger.error("The side/right camera video file does not exist")
 
-    process_video(args.network, args.front, args.side, args.frames, args.profile)
+    process_video(args.network, args.front, args.side, args.batchsize, args.frames, args.profile)
 
     return True
 
