@@ -45,7 +45,6 @@ class OpenCVCam(CameraBase):
         logger.debug(f"<{self._name}> width: {self._width}")
         logger.debug(f"<{self._name}> height: {self._height}")
 
-
     @property
     def height(self):
         return self._height
@@ -58,6 +57,15 @@ class OpenCVCam(CameraBase):
         logger.debug(f"<{self._name}> try setting height to {value}.  Result:")
         logger.debug(f"<{self._name}> width: {self._width}")
         logger.debug(f"<{self._name}> height: {self._height}")
+
+    def set_property(self, name: str, value: str) -> bool:
+        if name == "mjpeg":
+            if self._video_capture is not None:
+                self._video_capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+        else:
+            return super().set_property(name, value)
+
+        return True
 
     def prepare_capture(self):
         super().prepare_capture()

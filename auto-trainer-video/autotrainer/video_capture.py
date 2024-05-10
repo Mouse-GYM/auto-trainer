@@ -5,6 +5,8 @@ from queue import Queue
 from enum import Enum
 from multiprocessing import Process
 
+import cv2
+
 from .video_manager import VideoManager
 from .video_record import VideoRecord
 from .video_record_properties import VideoRecordProperties, VideoRecordMode
@@ -24,7 +26,7 @@ class CaptureMessageKind(Enum):
 
 class VideoCapture(Process):
     def __init__(self, name, cmd_message_queue, status_message_queue, image_queue, network_queue, camera_url: str,
-                 record_properties: VideoRecordProperties = None):
+                 cam_idx: int, record_properties: VideoRecordProperties = None):
         super().__init__(name=name)
 
         self._name = name
@@ -33,6 +35,7 @@ class VideoCapture(Process):
         self._image_queue = image_queue
         self._network_queue = network_queue
         self._camera_url = camera_url
+        self._camera_idx = cam_idx
 
         if record_properties is None:
             self._is_record_enabled = False
@@ -62,7 +65,7 @@ class VideoCapture(Process):
 
         if self._camera_url is None:
             return
-        
+
         VideoManager.open()
 
         self.create_camera()
@@ -92,13 +95,18 @@ class VideoCapture(Process):
 
             frame, when = self._camera.capture()
 
-            self._image_queue.put(frame)
+            if self._camera_idx < 0:
+                if self._image_queue.qsize() < 4:
+                    shape = frame.shape
+                    self._image_queue.put(cv2.resize(frame, (int(shape[1]/4), int(shape[0]/4))))
+            else:
+                self._image_queue.put(frame)
 
             if self._is_record_enabled and self._is_record_triggered:
                 self._record_queue.put((frame, when))
 
             if self._network_queue is not None:
-                self._network_queue.put(frame)
+                self._network_queue.put(frame, self._camera_idx)
 
         logger.debug(f"<{self._name}> capture loop ended")
 

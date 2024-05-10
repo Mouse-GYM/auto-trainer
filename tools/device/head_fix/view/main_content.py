@@ -108,6 +108,7 @@ class MainContent(QWidget):
         self._plot1.setBackground(None)
         self._plot1.setMaximumHeight(150)
         self._plot1.setTitle("Weight")
+        self._plot1.getViewBox().setRange(yRange=[0, 50])
         self._app_view_model.measurements.weight_ready.connect(self._plot1.update_plot)
         layout.addWidget(self._plot1, 4, 0)
 

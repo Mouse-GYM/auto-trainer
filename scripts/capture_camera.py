@@ -4,6 +4,7 @@ import os
 import sys
 from pathlib import Path
 from queue import Queue
+from datetime import datetime
 
 import cv2
 from autotrainer.video_manager import VideoManager
@@ -21,6 +22,8 @@ def capture_video(camera_url: str, video_path: str, frame_count: int):
     path = Path(video_path)
     path.mkdir(parents=True, exist_ok=True)
 
+    file_timestamp = datetime.now()
+
     VideoManager.open()
 
     camera = VideoManager.create_camera(camera_url)
@@ -28,7 +31,7 @@ def capture_video(camera_url: str, video_path: str, frame_count: int):
     camera.prepare_capture()
 
     record_queue = Queue()
-    record = VideoRecord(video_path, "camera", 3600, (camera.width, camera.height), camera.fps, record_queue)
+    record = VideoRecord(os.path.join(video_path, file_timestamp.strftime("%Y%m%d")), "camera", 3600, (camera.width, camera.height), camera.fps, record_queue)
     record.start()
 
     for idx in range(frame_count):

@@ -5,12 +5,14 @@ from threading import Event
 
 from numpy import ndarray
 
+from autotrainer.queue_util import clear_queue
+from autotrainer.circular_single_image_buffer import CircularSingleImageBuffer
+from autotrainer.circular_image_buffer import CircularImageBuffer
 from autotrainer.video_capture import VideoCapture, CaptureMessageKind
 from autotrainer.video_record_properties import VideoRecordProperties, VideoRecordMode
 from autotrainer.video_manager import VideoManager
 from autotrainer.video_reader import VideoReader
 from autotrainer.trigger_manager import TriggerManager
-from autotrainer.queue_util import clear_queue
 
 from tools.acquisition.model.user_settings import UserSettings
 
@@ -20,11 +22,12 @@ CAPTURE_TRIGGER_ID = "CaptureTrigger"
 
 
 class VideoCaptureModel:
-    def __init__(self, name, user_settings: UserSettings = None, network_queue=None):
+    def __init__(self, name, user_settings: UserSettings = None, idx: int = 0):
         super().__init__()
 
         self._name = name
         self._user_settings = user_settings
+        self._index = idx
 
         self._video_reader = None
         self._video_reader_reset_event = None
@@ -33,8 +36,11 @@ class VideoCaptureModel:
 
         self._video_cmd_message_queue = Queue()
         self._video_status_message_queue = Queue()
-        self._video_queue = Queue()
-        self._network_queue = network_queue
+        # self._video_queue = Queue()
+        if idx >= 0:
+            self._video_queue = CircularSingleImageBuffer(3, (200, 300))
+        else:
+            self._video_queue = Queue()
 
         self._display_update_fcn = None
 
@@ -54,7 +60,7 @@ class VideoCaptureModel:
 
         self._is_primary = False
 
-        self._is_trace_enabled = True
+        self._is_trace_enabled = False
 
         TriggerManager.instance().register(self._on_trigger, CAPTURE_TRIGGER_ID)
 
@@ -110,7 +116,7 @@ class VideoCaptureModel:
         if self._display_update_fcn is not None and self._video_capture is not None:
             self._display_update_fcn(data, self._fps)
 
-    def on_prepare_capture(self, output_location: str) -> bool:
+    def on_prepare_capture(self, output_location: str, network_queue: CircularImageBuffer) -> bool:
         if not self._is_enabled:
             return True
 
@@ -127,8 +133,8 @@ class VideoCaptureModel:
             record_properties = VideoRecordProperties(self.record_mode, output_location, 3600)
 
             self._video_capture = VideoCapture(self._name, self._video_cmd_message_queue,
-                                               self._video_status_message_queue, self._video_queue, self._network_queue,
-                                               url, record_properties)
+                                               self._video_status_message_queue, self._video_queue,
+                                               network_queue, url, self._index, record_properties)
 
             self._video_capture.start()
 
@@ -156,11 +162,14 @@ class VideoCaptureModel:
 
             decimation = 1 if self._user_settings is None else self._user_settings.live_feed_refresh_rate
 
-            if "fps" in properties:
-                self._video_reader.decimation = max(int(int(properties["fps"]) / decimation), 1)
-            elif self._video_reader is not None:
-                # Assume 30fps
-                self._video_reader.decimation = max(int(30 / decimation), 1)
+            if self._index == -1:
+                if "fps" in properties:
+                    self._video_reader.decimation = max(int(int(properties["fps"]) / decimation), 1)
+                elif self._video_reader is not None:
+                    # Assume 30fps
+                    self._video_reader.decimation = max(int(30 / decimation), 1)
+            else:
+                self._video_reader.decimation = 1
         else:
             self._is_primary = False
 
@@ -197,9 +206,6 @@ class VideoCaptureModel:
         clear_queue(self._video_status_message_queue)
         self._trace(f"<{self._name}> clearing image queue {self._video_queue.qsize()}")
         clear_queue(self._video_queue)
-        if self._network_queue is not None:
-            self._trace(f"<{self._name}> clearing network queue {self._network_queue.qsize()}")
-            clear_queue(self._network_queue)
 
         if self._video_capture is not None:
             self._trace(f"<{self._name}> checking process status")
@@ -227,7 +233,7 @@ class VideoCaptureModel:
             self._video_reader_stop_event = Event()
             self._video_reader_reset_event = Event()
             self._video_reader = VideoReader(self._name, self._video_queue, self.refresh_image,
-                                                 self._video_reader_stop_event)
+                                             self._video_reader_stop_event)
             self._video_reader.start()
 
     def _video_reader_teardown(self):

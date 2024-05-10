@@ -93,11 +93,11 @@ def run_server(port: str, frequency: int, use_random: bool):
     if use_random:
         logger.info("using random data")
         mon_thread = None
-        weight = 100
+        weight = 150
         switch_pin = 1
         pressure_pin = 512
-        temperature = 22
-        humidity = 50
+        temperature = 220
+        humidity = 500
     else:
         mon_thread = Thread(target=accept_commands)
         mon_thread.start()
@@ -115,6 +115,8 @@ def run_server(port: str, frequency: int, use_random: bool):
 
     samples_sent = 0
 
+    report_interval = frequency * 10
+
     while True:
         while time.perf_counter_ns() - start_time >= interval_ns * samples_sent:
             time.perf_counter_ns()
@@ -122,20 +124,25 @@ def run_server(port: str, frequency: int, use_random: bool):
             s.write(f"d{switch_pin}".encode())
             s.write(f"a{pressure_pin}".encode())
             s.write(f"t{temperature}".encode())
-            s.write(f"h{humidity}n".encode())
+            s.write(f"h{humidity}".encode())
             s.write("n".encode())
             samples_sent += 1
 
-            if samples_sent % 500 == 0:
-                logger.debug(f"{(1.0e9 * samples_sent) /(time.perf_counter_ns() -start_time) }")
+            if samples_sent % report_interval == 0:
+                logger.debug(f"{((1.0e9 * samples_sent) / (time.perf_counter_ns() - start_time)):.1f}Hz")
 
             if use_random:
-                next_val = random()
-                weight += int((next_val - 0.5) * 10)
+                next_val = random() - 0.5
+                weight += round(next_val * 2)
+                if weight > 30:
+                    weight -= 5
+                if weight < 0:
+                    weight += 5
                 next_val = random()
                 if next_val < 0.05:
                     switch_pin = 0 if switch_pin == 1 else 1
-                pressure_pin += int((next_val - 0.5) * 5)
+                next_val = next_val - 0.5
+                pressure_pin += round(next_val * 5)
                 next_val = random() - 0.5
                 temperature += round(next_val * 2)
                 next_val = random() - 0.5

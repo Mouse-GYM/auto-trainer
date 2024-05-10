@@ -30,6 +30,6 @@ else:
         print(f"\tCamera {i}: spinnaker://{sn}")
 
 print("File Playback")
-print("\tCamera X: playback://<path_to_file>")
+print("\tCamera X: playback:///<path_to_file>")
 
 VideoManager.close()

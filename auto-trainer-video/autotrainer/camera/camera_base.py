@@ -87,6 +87,7 @@ class CameraBase:
         elif name == "name":
             self.name = value
         else:
+            logger.warning(f"<{self._name}> unknown property {name}")
             return False
 
         return True

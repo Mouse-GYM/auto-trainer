@@ -61,7 +61,7 @@ class MainContent(QWidget):
         layout.addLayout(self._right_camera_content, 0, 1)
 
         self._top_camera_content = CameraContent(self._app_view_model.top_camera, self._camera_list)
-        self._top_camera_content.camera_view.setTitle("Top Camera")
+        self._top_camera_content.camera_view.setTitle("Web Camera")
         self._top_camera_content.camera_view.set_size(450, 300)
 
         layout.addLayout(self._top_camera_content, 0, 2)
@@ -78,9 +78,9 @@ class MainContent(QWidget):
 
         layout.addWidget(ATSeparator("#b9b9b9"), 5, 0, 1, 4)
 
-        # layout.addLayout(AnalysisContent(), 6, 0, 1, 4)
+        layout.addWidget(AnalysisContent(self._app_view_model.analysis), 6, 0, 1, 4)
 
-        # layout.addWidget(ATSeparator("#b9b9b9"), 7, 0, 1, 4)
+        layout.addWidget(ATSeparator("#b9b9b9"), 7, 0, 1, 4)
 
         layout.addLayout(OutputContent(app_view_model.user_settings), 8, 0, 1, 4)
 
@@ -113,6 +113,8 @@ class MainContent(QWidget):
         self._timer.timeout.connect(self.update_image)
         self._timer.start(int(1000 / app_view_model.user_settings.live_feed_refresh_rate))
 
+        self._app_view_model.analysis.pose_ready.connect(self.update_pose)
+
     @Slot()
     def update_image(self):
         if self._app_view_model.left_camera.is_enabled:
@@ -121,6 +123,12 @@ class MainContent(QWidget):
             self._right_camera_content.update_image()
         if self._app_view_model.top_camera.is_enabled:
             self._top_camera_content.update_image()
+        self._head_fix_content.use_cache()
+
+    @Slot()
+    def update_pose(self, points):
+        self._left_camera_content.update_pose(points[0])
+        self._right_camera_content.update_pose(points[1])
 
     def setCaptureEnabled(self, enabled: bool):
         self._left_camera_content.setCaptureEnabled(enabled)

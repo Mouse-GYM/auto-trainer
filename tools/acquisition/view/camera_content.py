@@ -40,6 +40,9 @@ class CameraContent(QGridLayout):
     def update_image(self):
         self._camera_view.update_image()
 
+    def update_pose(self, points):
+        self._camera_view.update_pose(points)
+
     @property
     def camera_view(self) -> ATCaptureView:
         return self._camera_view

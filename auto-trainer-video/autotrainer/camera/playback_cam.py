@@ -18,6 +18,8 @@ class PlaybackCam(CameraBase):
     def init(self):
         self._video_capture = cv2.VideoCapture(self._file_name)
         self.fps = self._video_capture.get(cv2.CAP_PROP_FPS)
+        if self.fps == 0:
+            self.fps = 30
         self._frame_interval = 1 / self.fps
         self.width = self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH)
         self.height = self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT)

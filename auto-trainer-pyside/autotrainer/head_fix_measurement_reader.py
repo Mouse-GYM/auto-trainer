@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import time
 from datetime import datetime
 from io import TextIOWrapper
@@ -9,6 +10,8 @@ from PySide6.QtCore import QObject, Signal
 
 from autotrainer.device_thread import DeviceThreadMessageKind
 from autotrainer.head_fix import HeadFixMessageKind
+
+logger = logging.getLogger(__name__)
 
 
 class HeadFixMeasurementReader(QObject):
@@ -26,6 +29,9 @@ class HeadFixMeasurementReader(QObject):
         self._serial_number = serial_number
 
         self._record_location: TextIOWrapper | None = None
+
+        self._measurement_count = 0
+        self._start = None
 
     @property
     def record_location(self):
@@ -51,6 +57,9 @@ class HeadFixMeasurementReader(QObject):
                 self._record_location = location
             except:
                 pass
+        
+        self._measurement_count = 0
+        self._start = time.perf_counter_ns()
 
     def process(self):
         while True:
@@ -76,6 +85,15 @@ class HeadFixMeasurementReader(QObject):
                             self._record_location.write(f"{time.perf_counter_ns()}, {m.weight}, {m.switch}, {m.pressure}," f"{m.temperature}, {m.humidity}\n")
                         except:
                             pass
+                        
+                self._measurement_count += len(msg[1])
+
+                if self._measurement_count % 1000 == 0:
+                    logger.info(f"<head fix reader>{(1e9 * self._measurement_count/ (time.perf_counter_ns() - self._start)):.1f} mps")
+
+                if self._msg_queue.qsize() > 3:
+                    continue
+
                 self.weight_ready.emit(weights)
                 self.switch_ready.emit(switch)
                 self.pressure_ready.emit(pressure)
@@ -83,3 +101,5 @@ class HeadFixMeasurementReader(QObject):
                 self.humidity_ready.emit(humidity)
             elif msg[0] == HeadFixMessageKind.VERSION:
                 self.version_ready.emit(msg[1])
+
+            time.sleep(0.001)

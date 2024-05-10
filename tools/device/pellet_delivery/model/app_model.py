@@ -1,7 +1,7 @@
+import logging
 import queue
-import sys
+import uuid
 
-import serial.tools.list_ports
 from PySide6.QtCore import QThread
 
 from autotrainer.serial_interface import SerialInterface
@@ -10,6 +10,8 @@ from autotrainer.device_thread import DeviceThread, DeviceThreadMessageKind
 from autotrainer.pellet_reader import PelletReader
 
 from tools.device.pellet_delivery.model.user_settings import UserSettings
+
+logger = logging.getLogger(__name__)
 
 
 class AppModel:
@@ -26,6 +28,8 @@ class AppModel:
         self._measurement_thread.started.connect(self._measurement_worker.process)
 
         self._is_connected = False
+
+        self._command_token = None
 
         self._ports = list()
 
@@ -51,25 +55,27 @@ class AppModel:
         self._ports = SerialInterface.list_ports()
 
     def send_home(self):
-        self._cmd_queue.put((PelletDeliveryMessageKind.SEND_HOME, ""))
+        self._command_token = uuid.uuid4()
+        logger.debug(f"sending home with token {self._command_token}")
+        self._send_command(PelletDeliveryMessageKind.SEND_HOME, None, self._command_token)
 
     def load_pellet(self):
-        self._cmd_queue.put((PelletDeliveryMessageKind.LOAD_PELLET, ""))
+        self._send_command(PelletDeliveryMessageKind.LOAD_PELLET)
 
     def send_pellet(self):
-        self._cmd_queue.put((PelletDeliveryMessageKind.SEND_PELLET, ""))
+        self._send_command(PelletDeliveryMessageKind.SEND_PELLET)
 
     def release_pellet(self):
-        self._cmd_queue.put((PelletDeliveryMessageKind.RELEASE_PELLET, ""))
+        self._send_command(PelletDeliveryMessageKind.RELEASE_PELLET)
 
     def set_x(self, value: int):
-        self._cmd_queue.put((PelletDeliveryMessageKind.SET_X, value))
+        self._send_command(PelletDeliveryMessageKind.SET_X, value)
 
     def set_y(self, value: int):
-        self._cmd_queue.put((PelletDeliveryMessageKind.SET_Y, value))
+        self._send_command(PelletDeliveryMessageKind.SET_Y, value)
 
     def set_z(self, value: int):
-        self._cmd_queue.put((PelletDeliveryMessageKind.SET_Z, value))
+        self._send_command(PelletDeliveryMessageKind.SET_Z, value)
 
     def connect_to_device(self):
         device_interface = SerialInterface(self._user_settings.port)
@@ -85,10 +91,13 @@ class AppModel:
         self._is_connected = True
 
     def disconnect_from_device(self):
-        self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+        self._send_command(DeviceThreadMessageKind.TERMINATE)
 
         self._is_connected = False
 
     def on_close(self):
         self.disconnect_from_device()
-        self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+        self._send_command(DeviceThreadMessageKind.TERMINATE)
+
+    def _send_command(self, message, data=None, context=None):
+        self._cmd_queue.put((message, data, context))

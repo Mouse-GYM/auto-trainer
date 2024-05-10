@@ -14,9 +14,6 @@ class SerialInterface(IDeviceInterface):
         for port in serial.tools.list_ports.comports():
             ports.append(port.device)
 
-        if sys.platform.startswith("linux"):
-            ports.append("/dev/ttyTHS0")
-
         ports.sort()
 
         return ports
@@ -43,7 +40,7 @@ class SerialInterface(IDeviceInterface):
 
     def read(self) -> bytes:
         if self._is_open:
-            return self._serial.read(1)
+            return self._serial.read(self._serial.in_waiting)
 
     def write(self, value: bytes) -> int:
         if self._is_open:

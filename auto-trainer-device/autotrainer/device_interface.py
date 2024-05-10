@@ -1,4 +1,5 @@
 class IDeviceInterface:
+    """ Defines the required methods for a class that provides low-level communication with a device, such as serial"""
     def open(self):
         pass
 

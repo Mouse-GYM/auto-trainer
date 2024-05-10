@@ -1,8 +1,13 @@
+import time
+import logging
+
 from PySide6.QtWidgets import QLabel, QLineEdit, QGridLayout, QSpinBox, QWidget, QComboBox, QPushButton
 
 from autotrainer.PGWidget import PGWidget
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
+
+logger = logging.getLogger(__name__)
 
 
 class HeadFixContent(QGridLayout):
@@ -27,7 +32,7 @@ class HeadFixContent(QGridLayout):
         self._position.valueChanged.connect(self._update_position)
         self.addWidget(self._position, 0, 3)
 
-        self.addWidget(QLabel("Load Cell Trigger (mg):"), 0, 4)
+        self.addWidget(QLabel("Load Cell Trigger (g):"), 0, 4)
         self._load_cell = QLineEdit()
         self._load_cell.editingFinished.connect(self._update_trigger)
         self._load_cell.setText(str(self._model.load_trigger))
@@ -44,14 +49,35 @@ class HeadFixContent(QGridLayout):
         self._plot1 = PGWidget()
         self._plot1.setBackground(None)
         self._plot1.setMaximumHeight(160)
-        self._model.measurements.weight_ready.connect(self._plot1.update_plot)
+        self._plot1.getViewBox().setRange(yRange=[0, 50])
+        self._model.measurements.weight_ready.connect(self._weight_received)
         self.addWidget(self._plot1, 1, 0, 1, 7)
 
+        self._measurement_count = 0
+        self._start = None
+
         self._refresh_ports()
+
+    def use_cache(self):
+        self._plot1.use_cache()
 
     def setCaptureEnabled(self, enabled: bool):
         self._port_combobox.setEnabled(enabled)
         self._tare_button.setEnabled(not enabled)
+
+        if not enabled:            
+            self._measurement_count = 0
+
+    def _weight_received(self, values):
+        if self._measurement_count == 0:
+            self._start = time.perf_counter_ns()
+            
+        self._measurement_count += len(values)
+
+        if self._measurement_count % 1000 == 0:
+            logger.info(f"<head fix content>{(1e9 * self._measurement_count/ (time.perf_counter_ns() - self._start)):.1f} mps")
+
+        self._plot1.cache_data(values)
 
     def _refresh_ports(self):
         self._model.refresh_ports()

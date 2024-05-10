@@ -8,6 +8,7 @@ from autotrainer.pellet_delivery import PelletDeliveryMessageKind
 
 class PelletReader(QObject):
     version_ready = Signal(str)
+    command_ack = Signal(object)
 
     def __init__(self, msg_queue):
         super().__init__()
@@ -21,8 +22,9 @@ class PelletReader(QObject):
 
                 if msg[0] == DeviceThreadMessageKind.TERMINATE:
                     break
-
+                elif msg[0] == PelletDeliveryMessageKind.ACK:
+                    self.command_ack.emit(msg[1])
                 elif msg[0] == PelletDeliveryMessageKind.VERSION:
                     self.version_ready.emit(msg[1])
             except:
-                time.sleep(0.1)
+                time.sleep(0.05)

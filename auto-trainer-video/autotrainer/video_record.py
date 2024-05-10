@@ -24,7 +24,7 @@ class VideoRecord(Thread):
         self._is_running = True
         self._record_start = None
 
-        self._ext = ".mp4" if sys.platform.startswith("linux") else "mkv"
+        self._ext = "mp4" if sys.platform.startswith("linux") else "mkv"
 
         self._writer = None
         self._timestamp = None

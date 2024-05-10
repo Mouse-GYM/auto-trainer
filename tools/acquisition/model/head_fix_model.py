@@ -77,13 +77,13 @@ class HeadFixModel:
     def update_position(self, value: int):
         if not self._is_connected:
             return
-        self._cmd_queue.put((HeadFixMessageKind.SERVO, str(value)))
+        self._cmd_queue.put((HeadFixMessageKind.SERVO, str(value), None))
 
     def tare(self):
         if not self._is_connected:
             return
 
-        self._cmd_queue.put((HeadFixMessageKind.UPDATE_TARE, ""))
+        self._cmd_queue.put((HeadFixMessageKind.UPDATE_TARE, None, None))
 
     def connect_to_device(self):
         if len(self.port) == 0:
@@ -118,12 +118,13 @@ class HeadFixModel:
         if self._measurement_worker is not None:
             self._measurement_worker.record_location = None
 
-        self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+        self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None, None))
 
         self._is_connected = False
 
     def on_close(self):
         self.disconnect_from_device()
+        self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None, None))
         self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
     def _monitor_trigger(self, values: list):

@@ -152,6 +152,9 @@ class ATCaptureView(QWidget):
 
         # self._fps_label.setText(f"{self._fps:.1f}")
 
+    def update_pose(self, points):
+        self._image.set_points(points)
+
     @Slot(ndarray, float)
     def refresh_image(self, data: ndarray, fps: float):
         self._next_data = data

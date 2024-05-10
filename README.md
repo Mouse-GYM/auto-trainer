@@ -6,13 +6,32 @@
 Absent specific camera support, *Auto Trainer* is independent of platform and Python version >= 3.8.  Choice of cameras may 
 place requirements on platform or Python version.
 
-Anaconda is required for full feature support, although most functionality will work in a vanilla venv.
+### System Installs/Requirements
+#### Anaconda
+Anaconda is required for full feature support, although most functionality will work in a vanilla venv.  Tested with `Anaconda3-2023.09-0-Linux-aarch64.sh`.
+
+#### HDF5
+`sudo apt-get install libhdf5-serial-dev`
+
+#### xcb-cursor
+`sudo apt-get install libxcb-cursor0 `
 
 ### Teledyne/Blackfly Camera Support
 
 * These cameras require installation of version 3 of the Spinnaker SDK/runtime for your platform.
 * Platforms are limited to Windows and Ubuntu 20.04
 * Python version is limited to 3.8
+
+#### arm64 example
+
+```
+gunzip spinnaker-3.2.0.57-arm64-pkg-20.04.tar.gz 
+tar -xvf spinnaker-3.2.0.57-arm64-pkg-20.04.tar 
+cd spinnaker-3.2.0.57-arm64/
+sudo apt-get install libusb-1.0-0 (no-op was already the most recent)
+sudo apt-get --fix-broken install
+sudo sh install_spinnaker_arm.sh
+```
 
 ## Installation
 Create a default installation without specific camera support:
@@ -21,7 +40,7 @@ Create a default installation without specific camera support:
 
 To include support for Teledyne/Blackfly cameras, install the appropriate wheel for your platform, *e.g.,* 
 
-`pip install .\library\spinnaker_python-3.2.0.57-cp38-cp38-linux_aarch64.whl`
+`pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_aarch64.whl`
 
 Wheels for supported platforms are included in `library/`.
 
@@ -35,7 +54,7 @@ To enable video recording
 
 * Ubuntu 20 and JetPack 5.1.2 install from the SDK manager
   * Later 5.1.x JetPack if that is all that is available may be ok, but is untested
-* Add user to `dialout` group to access UART `sudo usermod -a -G dialout [username]`.  Requires logout or reboot.
+* Add user to `dialout` group `sudo usermod -a -G dialout [username]`.  Requires logout or reboot depending on UART.
 * Access to two UARTs for full feature support requires at least additional port via USB->serial interface
 
 ## Getting Started

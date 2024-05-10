@@ -1,4 +1,8 @@
 import sys
+import os
+from pathlib import Path
+from datetime import datetime
+from dateutil import parser
 
 from PySide6.QtCore import QCoreApplication, QSettings
 
@@ -68,7 +72,7 @@ class UserSettings:
 
     @property
     def head_trigger(self) -> int:
-        return self._settings.value("head_fix/trigger", 5000, int)
+        return self._settings.value("head_fix/trigger", 15, int)
 
     @head_trigger.setter
     def head_trigger(self, value: int):
@@ -81,3 +85,51 @@ class UserSettings:
     @pellet_port.setter
     def pellet_port(self, value: str):
         self._settings.setValue("pellet_delivery/port", value)
+
+    @property
+    def analysis_enabled(self) -> bool:
+        return self._settings.value("analysis/enabled", False, bool)
+
+    @analysis_enabled.setter
+    def analysis_enabled(self, value: bool):
+        self._settings.setValue("analysis/enabled", value)
+
+    @property
+    def analysis_model(self) -> str:
+        return self._settings.value("analysis/model", "")
+
+    @analysis_model.setter
+    def analysis_model(self, value: str):
+        self._settings.setValue("analysis/model", value)
+
+    @property
+    def analysis_algorithm(self) -> str:
+        return self._settings.value("analysis/algorithm", "")
+
+    @analysis_algorithm.setter
+    def analysis_algorithm(self, value: str):
+        self._settings.setValue("analysis/algorithm", value)
+
+    def get_next_session_path(self) -> (str, int):
+        file_timestamp = datetime.now()
+        session_index = 1
+        try:
+            last = parser.parse(self.session_date)
+            if last is not None and last.year == file_timestamp.year and last.month == file_timestamp.month and last.day == file_timestamp.day:
+                session_index = self.session_index
+            else:
+                self.session_date = file_timestamp.strftime("%Y%m%d")
+                self.session_index = 0
+        except:
+            self.session_date = file_timestamp.strftime("%Y%m%d")
+            self.session_index = 0
+
+        prefix = os.path.join(self.output_location, file_timestamp.strftime("%Y%m%d"),
+                              self.serial_number, f"session{session_index:03}")
+        path = Path(prefix)
+        path.mkdir(parents=True, exist_ok=True)
+
+        location = os.path.join(prefix,
+                                f"{file_timestamp.strftime('%Y%m%d')}_{self.serial_number}_session{session_index:03}")
+
+        return location, session_index

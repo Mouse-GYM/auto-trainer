@@ -12,6 +12,8 @@ class PGWidget(PlotWidget):
         pen = pg.mkPen(color=(0, 0, 255), width=1)
         self._data_line = self.plot(self.x, self.y, pen=pen)
 
+        self._cache = list()
+
     def update_plot(self, values):
         add_len = len(values)
 
@@ -25,3 +27,12 @@ class PGWidget(PlotWidget):
         self.y.extend(values)
 
         self._data_line.setData(self.x, self.y)
+
+    def cache_data(self, values):
+        self._cache += values
+
+    def use_cache(self):
+        if len(self._cache) > 0:
+            values = self._cache
+            self._cache = list()
+            self.update_plot(values)

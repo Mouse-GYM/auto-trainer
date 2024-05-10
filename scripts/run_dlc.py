@@ -54,12 +54,12 @@ def process_video(network, front_source, side_source, batch_size: int, user_max_
         output_file = open(output_file_name, "wb")
 
     reference = None
+    reference_index = 0
 
     if input_file_name is not None:
         input_file = open(input_file_name, "rb")
         reference = fromfile(input_file, dtype=numpy.float64)
         reference = numpy.array_split(reference, len(reference) / (batch_size * 2 * 30))
-        reference_index = 0
 
     start_time = time.perf_counter()
 
@@ -85,11 +85,12 @@ def process_video(network, front_source, side_source, batch_size: int, user_max_
             if reference is not None:
                 current = reference[reference_index].reshape(batch_size * 2, 30)
                 if not numpy.array_equal(pose, current):
-                    for pdx in range(10):
-                        if not numpy.array_equal(pose[pdx, :], current[pdx, :]):
-                            diff = numpy.abs(numpy.max((pose[pdx, :] - current[pdx, :]) / current[pdx, :]))
-                            if diff > 1e-4:
-                                logger.error(f"batch {reference_index} frame {pdx} diff: {diff:0.4f}%")
+                    for pdx in range(batch_size * 2):
+                        pose_p = pose[pdx, :].reshape(10, 3)
+                        current_p = current[pdx, :].reshape(10, 3)
+                        dist_p = numpy.round(numpy.linalg.norm(pose_p[0, 0:1] - current_p[0, 0:1]))
+                        if dist_p > 0:
+                            logger.error(f"batch {reference_index} frame {pdx} dist: {dist_p}")
                 reference_index += 1
 
             frame_count += batch_size
@@ -113,8 +114,8 @@ def main():
     parser.add_argument("network", help="the DeepLabCut network to use")
     parser.add_argument("front", help="the front camera video source file")
     parser.add_argument("side", help="the side camera video source file")
-    parser.add_argument("-b", "--batchsize", help="the number of frames to toggle", type=int, default=5)
-    parser.add_argument("-f", "--frames", help="the number of frames to toggle", type=int, default=-1)
+    parser.add_argument("-b", "--batchsize", help="the batch size for DLC", type=int, default=5)
+    parser.add_argument("-f", "--frames", help="the number of frames to process", type=int, default=-1)
     parser.add_argument("-p", "--profile", help="report profiling data", type=bool, default=False)
     parser.add_argument("-o", "--output", help="save pose output to specified file")
     parser.add_argument("-i", "--input", help="read pose output from specified file for comparison")

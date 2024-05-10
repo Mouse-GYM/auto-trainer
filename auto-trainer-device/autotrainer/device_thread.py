@@ -13,10 +13,23 @@ logger = logging.getLogger(__name__)
 
 # Thread message kind should be negative. Specific devices can use any positive value.
 class DeviceThreadMessageKind(IntEnum):
-    TERMINATE = -1
+    TERMINATE = -1,
+    COMMAND_ACK = -2
 
 
 class DeviceThread(Thread):
+    """ Convenience class to merges a device listener, device interface, and queues for a client to control the device.
+
+    This class defines a Thread for managing communication between a device and a client script or application.
+
+    The device listener is responsible for interpreting data from the device to message the client and interpreting
+    messages from the client to send data to the device.
+
+    The device interface is responsible for low-level communication with the device over a specific protocol.
+
+    Command and message queues are the interfaces for the client script or application to exchange data with the device.
+
+    """
     def __init__(self, listener: IDeviceListener, interface: IDeviceInterface, cmd_queue=None, msg_queue=None):
         super().__init__()
 
@@ -29,6 +42,7 @@ class DeviceThread(Thread):
         self._listener.api = self._api
 
     def send_message(self, kind: int, context: object):
+        # Messages from the device listener to the client
         if self._msg_queue is not None:
             self._msg_queue.put((kind, context))
 
@@ -40,18 +54,20 @@ class DeviceThread(Thread):
         self._listener.connect()
 
         while True:
+            # Data from the device for the device listener to process.
             while self._interface.can_read():
                 self._listener.notify_data(self._interface.read())
 
+            # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
             try:
-                msg = self._cmd_queue.get(False)
+                cmd, data, context = self._cmd_queue.get(False)
 
-                logger.debug(f"message: {msg[0]}")
+                logger.debug(f"message: {cmd}")
 
-                if msg[0] == DeviceThreadMessageKind.TERMINATE:
+                if cmd == DeviceThreadMessageKind.TERMINATE:
                     break
 
-                self._listener.notify_message(msg[0], msg[1])
+                self._listener.notify_message(cmd, data, context)
             except queue.Empty:
                 pass
 

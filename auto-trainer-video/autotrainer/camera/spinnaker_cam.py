@@ -182,15 +182,24 @@ class SpinCam(CameraBase):
 
         if self._camera.ExposureAuto.GetAccessMode() == PySpin.RW:
             self._camera.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)
+            logger.debug(f"<{self._name}> ExposureAuto set to {self._camera.ExposureAuto.GetValue()}")
         else:
             logger.warning(f"<{self._name} ExposureAuto is not writeable")
 
         if self._camera.GainAuto.GetAccessMode() == PySpin.RW:
             self._camera.GainAuto.SetValue(PySpin.GainAuto_Off)
+            logger.debug(f"<{self._name}> GainAuto set to {self._camera.GainAuto.GetValue()}")
         else:
             logger.warning(f"<{self._name} GainAuto is not writeable")
 
+        if self._camera.Gain.GetAccessMode() == PySpin.RW:
+            self._camera.Gain.SetValue(0)
+            logger.debug(f"<{self._name}> Gain set to {self._camera.Gain.GetValue()}")
+        else:
+            logger.warning(f"<{self._name} Gain is not writeable")
+
         self._pause_log = True
+
 
         # Set to class defaults.  Camera URL may override later.
         self.offset_x = self._offset_x
@@ -210,10 +219,10 @@ class SpinCam(CameraBase):
 
         if self._is_primary:
             self._configure_as_primary()
-            logger.info(f"{self.name} configured as primary")
+            logger.info(f"<{self.name}> configured as primary")
         elif self._is_secondary:
             self._configure_as_secondary()
-            logger.info(f"{self.name} configured as secondary")
+            logger.info(f"<{self.name}> configured as secondary")
 
         self._camera.BeginAcquisition()
 
@@ -298,17 +307,21 @@ class SpinCam(CameraBase):
     def _set_bounded_int_property_node(self, prop_node, value: int) -> int:
         set_value = value
 
-        if prop_node.GetAccessMode() == PySpin.RW:
-            max_width = prop_node.GetMax()
-            set_value = min(max_width, value)
-            prop_node.SetValue(value)
-            if not self._pause_log:
-                logger.debug(f"<{self._name}> {prop_node.GetDisplayName()} set to {value}")
-        elif prop_node.GetAccessMode() == PySpin.RO:
-            set_value = prop_node.GetValue()
-            logger.warning(
-                f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not writeable - current value is {set_value}")
-        else:
-            logger.warning(f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not readable or writeable")
+        try:
+            if prop_node.GetAccessMode() == PySpin.RW:
+                max_width = prop_node.GetMax()
+                set_value = min(max_width, value)
+                prop_node.SetValue(value)
+                set_value = prop_node.GetValue()
+                if not self._pause_log:
+                    logger.debug(f"<{self._name}> {prop_node.GetDisplayName()} set to {set_value}")
+            elif prop_node.GetAccessMode() == PySpin.RO:
+                set_value = prop_node.GetValue()
+                logger.warning(
+                    f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not writeable - current value is {set_value}")
+            else:
+                logger.warning(f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not readable or writeable")
+        except Exception as ex:
+            logger.error(f"<{self._name}> {prop_node.GetDisplayName()} Exception during set {ex}")
 
         return set_value

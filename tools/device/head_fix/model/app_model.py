@@ -49,10 +49,10 @@ class AppModel:
         self._ports = SerialInterface.list_ports()
 
     def update_position(self, value: int):
-        self._cmd_queue.put((HeadFixMessageKind.SERVO, str(value)))
+        self._cmd_queue.put((HeadFixMessageKind.SERVO, str(value), None))
 
     def tare(self):
-        self._cmd_queue.put((HeadFixMessageKind.UPDATE_TARE, ""))
+        self._cmd_queue.put((HeadFixMessageKind.UPDATE_TARE, None, None))
 
     def connect_to_device(self):
         device_interface = SerialInterface(self._user_settings.port)
@@ -68,10 +68,10 @@ class AppModel:
         self._is_connected = True
 
     def disconnect_from_device(self):
-        self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+        self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None, None))
 
         self._is_connected = False
 
     def on_close(self):
         self.disconnect_from_device()
-        self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+        self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None, None))

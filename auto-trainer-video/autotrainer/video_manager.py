@@ -84,7 +84,7 @@ class VideoManager:
         elif parsed.scheme == CameraKind.Spinnaker:
             camera = cls.get_spin_camera(parsed.hostname, name)
         elif parsed.scheme == CameraKind.Playback:
-            camera = PlaybackCam(parsed.hostname, name)
+            camera = PlaybackCam(parsed.path, name)
         elif parsed.scheme == CameraKind.OpenCV:
             camera = OpenCVCam(int(parsed.hostname), name)
         else:
