@@ -11,6 +11,7 @@ import cv2
 import numpy
 
 from autotrainer.dlc.dlc_configuration import DLCConfiguration
+from numpy import fromfile
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("root").setLevel(logging.WARNING)
@@ -26,7 +27,8 @@ def prepare_video_capture(file_name):
     return None, 0
 
 
-def process_video(network, front_source, side_source, batch_size: int, user_max_frames: int, report_profile: bool):
+def process_video(network, front_source, side_source, batch_size: int, user_max_frames: int, report_profile: bool,
+                  output_file_name: str, input_file_name: str):
     front_capture, front_frame_count = prepare_video_capture(front_source)
 
     side_capture, side_frame_count = prepare_video_capture(side_source)
@@ -43,10 +45,23 @@ def process_video(network, front_source, side_source, batch_size: int, user_max_
 
     frame_count = 0
 
-    start_time = time.perf_counter()
-
     if user_max_frames > 0:
         max_frames = min(max_frames, user_max_frames)
+
+    output_file = None
+
+    if output_file_name is not None and len(output_file_name) > 0:
+        output_file = open(output_file_name, "wb")
+
+    reference = None
+
+    if input_file_name is not None:
+        input_file = open(input_file_name, "rb")
+        reference = fromfile(input_file, dtype=numpy.float64)
+        reference = numpy.array_split(reference, len(reference) / (batch_size * 2 * 30))
+        reference_index = 0
+
+    start_time = time.perf_counter()
 
     with Profile() as profile:
         while True:
@@ -64,6 +79,19 @@ def process_video(network, front_source, side_source, batch_size: int, user_max_
 
             pose = configuration.predict(frames)
 
+            if output_file is not None:
+                output_file.write(pose.tostring())
+
+            if reference is not None:
+                current = reference[reference_index].reshape(batch_size * 2, 30)
+                if not numpy.array_equal(pose, current):
+                    for pdx in range(10):
+                        if not numpy.array_equal(pose[pdx, :], current[pdx, :]):
+                            diff = numpy.abs(numpy.max((pose[pdx, :] - current[pdx, :]) / current[pdx, :]))
+                            if diff > 1e-4:
+                                logger.error(f"batch {reference_index} frame {pdx} diff: {diff:0.4f}%")
+                reference_index += 1
+
             frame_count += batch_size
 
             if frame_count % 100 == 0:
@@ -71,6 +99,9 @@ def process_video(network, front_source, side_source, batch_size: int, user_max_
 
             if idx >= max_frames:
                 break
+
+        if output_file is not None:
+            output_file.close()
 
         if report_profile:
             Stats(profile).strip_dirs().sort_stats(SortKey.TIME).print_stats()
@@ -85,6 +116,8 @@ def main():
     parser.add_argument("-b", "--batchsize", help="the number of frames to toggle", type=int, default=5)
     parser.add_argument("-f", "--frames", help="the number of frames to toggle", type=int, default=-1)
     parser.add_argument("-p", "--profile", help="report profiling data", type=bool, default=False)
+    parser.add_argument("-o", "--output", help="save pose output to specified file")
+    parser.add_argument("-i", "--input", help="read pose output from specified file for comparison")
 
     args = parser.parse_args()
 
@@ -94,7 +127,11 @@ def main():
     if not os.path.exists(args.side):
         logger.error("The side/right camera video file does not exist")
 
-    process_video(args.network, args.front, args.side, args.batchsize, args.frames, args.profile)
+    if args.output is not None:
+        logger.info("Saving pose output.  Performance values less accurate than usual")
+
+    process_video(args.network, args.front, args.side, args.batchsize, args.frames, args.profile, args.output,
+                  args.input)
 
     return True
 
