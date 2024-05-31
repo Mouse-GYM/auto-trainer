@@ -93,6 +93,7 @@ class MainWindow(QMainWindow):
 
     def on_activated(self):
         self.main_content.on_activated()
+        self._app_view_model.on_activated()
 
     def closeEvent(self, event):
         self._app_view_model.on_close()

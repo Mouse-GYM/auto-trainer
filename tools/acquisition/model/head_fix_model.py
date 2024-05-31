@@ -4,13 +4,10 @@ import queue
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QThread
-
-from autotrainer.serial_interface import SerialInterface
-from autotrainer.head_fix import HeadFix, HeadFixMessageKind
-from autotrainer.device_thread import DeviceThread, DeviceThreadMessageKind
-from autotrainer.head_fix_measurement_reader import HeadFixMeasurementReader
-from autotrainer.trigger_manager import TriggerManager
+from autotrainer.device import SerialInterface, HeadFixReader
+from autotrainer.device import HeadFix, HeadFixMessageKind
+from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.video import TriggerManager
 
 from tools.acquisition.model.user_settings import UserSettings
 from tools.acquisition.model.video_capture_model import CAPTURE_TRIGGER_ID
@@ -22,15 +19,11 @@ class HeadFixModel:
     def __init__(self, user_settings: UserSettings):
         self._user_settings = user_settings
 
-        self._cmd_queue = queue.Queue()
         self._msg_queue = queue.Queue()
+
         self._device_thread = None
 
-        self._measurement_thread = QThread()
-        self._measurement_worker = HeadFixMeasurementReader(self._msg_queue, self._user_settings.serial_number)
-        self._measurement_worker.moveToThread(self._measurement_thread)
-        self._measurement_thread.started.connect(self._measurement_worker.process)
-        self._measurement_worker.weight_ready.connect(self._monitor_trigger)
+        self._head_fix_reader = None
 
         self._is_connected = False
 
@@ -43,8 +36,8 @@ class HeadFixModel:
         self.refresh_ports()
 
     @property
-    def measurements(self) -> HeadFixMeasurementReader:
-        return self._measurement_worker
+    def head_fix_reader(self) -> HeadFixReader:
+        return self._head_fix_reader
 
     @property
     def ports(self) -> list:
@@ -72,62 +65,64 @@ class HeadFixModel:
         return self._is_connected
 
     def refresh_ports(self):
-        self._ports = SerialInterface.list_ports()
+        self._ports = SerialInterface.refresh_ports()
 
     def update_position(self, value: int):
         if not self._is_connected:
             return
-        self._cmd_queue.put((HeadFixMessageKind.SERVO, str(value), None))
+        self._device_thread.send_message(HeadFixMessageKind.SERVO, str(value))
 
     def tare(self):
         if not self._is_connected:
             return
 
-        self._cmd_queue.put((HeadFixMessageKind.UPDATE_TARE, None, None))
+        self._device_thread.send_message(HeadFixMessageKind.UPDATE_TARE)
 
     def connect_to_device(self):
         if len(self.port) == 0:
             return
 
-        with self._cmd_queue.mutex:
-            self._cmd_queue.queue.clear()
-
         device_interface = SerialInterface(self.port)
 
-        if self._measurement_worker is not None:
-            file_timestamp = datetime.now()
-            location = os.path.join(self._user_settings.output_location, file_timestamp.strftime("%Y%m%d"), self._user_settings.serial_number)
-            path = Path(location)
-            path.mkdir(parents=True, exist_ok=True)
-            self._measurement_worker.record_location = location
+        file_timestamp = datetime.now()
+        location = os.path.join(self._user_settings.output_location, file_timestamp.strftime("%Y%m%d"),
+                                self._user_settings.serial_number)
+        path = Path(location)
+        path.mkdir(parents=True, exist_ok=True)
+        self._head_fix_reader.record_location = location
 
-        head_fix = HeadFix(device_interface, 100)
+        head_fix = HeadFix(buffer_size=20)
 
-        self._device_thread = DeviceThread(head_fix, device_interface, self._cmd_queue, self._msg_queue)
+        self._device_thread = DeviceThread(head_fix, device_interface, self._msg_queue)
+        self._device_thread.name = "head-fix"
 
         self._device_thread.start()
 
-        self._measurement_thread.start()
+        self._device_thread.send_message(DeviceThreadMessageKind.CONNECT)
 
         self._is_connected = True
 
     def disconnect_from_device(self):
         if not self._is_connected:
             return
-        
-        if self._measurement_worker is not None:
-            self._measurement_worker.record_location = None
 
-        self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None, None))
+        if self._head_fix_reader is not None:
+            self._head_fix_reader.record_location = None
+
+        self._device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
 
         self._is_connected = False
 
+    def on_activated(self):
+        self._head_fix_reader = HeadFixReader(self._msg_queue)
+        self._head_fix_reader.start()
+
     def on_close(self):
         self.disconnect_from_device()
-        self._cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None, None))
+        # self._device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
         self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
-    def _monitor_trigger(self, values: list):
+    def monitor_trigger(self, values: list):
         # TODO debounce?
         for value in values:
             if not self._is_triggered:

@@ -3,7 +3,7 @@ import os
 # Must precede import cv2
 os.environ["OPENCV_LOG_LEVEL"] = "SILENT"
 
-from autotrainer.video_manager import VideoManager
+from autotrainer.video import VideoManager
 
 VideoManager.open()
 

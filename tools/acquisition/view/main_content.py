@@ -5,8 +5,8 @@ import pathlib
 from PySide6.QtCore import QTimer, Slot
 from PySide6.QtWidgets import QWidget, QGridLayout, QPlainTextEdit
 
-from autotrainer.ATSeparator import ATSeparator
-from autotrainer.TextBoxHandler import TextBoxHandler
+from autotrainer.pyside import ATSeparator
+from autotrainer.pyside import TextBoxHandler
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.camera_model import CameraModel
@@ -141,3 +141,6 @@ class MainContent(QWidget):
         self._app_view_model.left_camera.set_display_fcn(self._left_camera_content.refresh_image)
         self._app_view_model.right_camera.set_display_fcn(self._right_camera_content.refresh_image)
         self._app_view_model.top_camera.set_display_fcn(self._top_camera_content.refresh_image)
+
+        self._head_fix_content.on_activated()
+        self._pellet_delivery_content.on_activated()

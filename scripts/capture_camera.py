@@ -7,8 +7,8 @@ from queue import Queue
 from datetime import datetime
 
 import cv2
-from autotrainer.video_manager import VideoManager
-from autotrainer.video_record import VideoRecord
+from autotrainer.video import VideoManager
+from autotrainer.video import VideoRecord
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('autotrainer').setLevel(logging.DEBUG)
@@ -37,9 +37,10 @@ def capture_video(camera_url: str, video_path: str, frame_count: int):
     for idx in range(frame_count):
         image, when = camera.capture()
 
-        cv2.imshow("window", image)
+        if image is not None:
+            cv2.imshow("window", image)
 
-        record_queue.put((image, when))
+            record_queue.put((image, when))
 
     camera.end_capture()
 

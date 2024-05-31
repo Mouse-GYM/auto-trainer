@@ -1,8 +1,8 @@
 import logging
 import time
 
-from autotrainer.trigger_manager import TriggerManager
-from autotrainer.circular_image_buffer import CircularImageBuffer
+from autotrainer.video import TriggerManager
+from autotrainer.core import FixedArrayMultiQueue
 
 from tools.acquisition.model.analysis_model import AnalysisModel
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -59,13 +59,19 @@ class AppModel:
     def head_fix(self):
         return self._head_fix
 
+    def on_activated(self):
+        self._analysis.on_activated()
+
     def on_capture_start(self) -> bool:
         location, session_index = self._user_settings.get_next_session_path()
 
+        self._network_buffer = None
+
         if self._analysis.is_enabled:
-            self._network_buffer = CircularImageBuffer(3, 2, 3, (200, 300))
-        else:
-            self._network_buffer = None
+            shape_1 = self.left_camera.shape
+            shape_2 = self.right_camera.shape
+            if shape_1 == shape_2:
+                self._network_buffer = FixedArrayMultiQueue(3, 2, 3, shape_1)
 
         did_start = self.left_camera.on_prepare_capture(location, self._network_buffer)
 
@@ -73,7 +79,7 @@ class AppModel:
             did_start = did_start and self.right_camera.on_prepare_capture(location, self._network_buffer)
 
         if did_start:
-            did_start = did_start and self.top_camera.on_prepare_capture(location, None)
+            did_start = did_start and self.top_camera.on_prepare_capture(location)
 
         if not did_start:
             logger.error("failed to start all subprocesses")
@@ -99,6 +105,8 @@ class AppModel:
         return True
 
     def on_capture_stop(self):
+        self._analysis.stop()
+
         self.head_fix.disconnect_from_device()
         self.pellet_delivery.disconnect_from_device()
 
@@ -129,6 +137,9 @@ class AppModel:
 
         for camera in self._cameras:
             camera.on_close()
+
+        self.head_fix.on_close()
+        self.pellet_delivery.on_close()
 
     def _trigger_received(self, sender, trigger_id, context):
         self._is_recording_trigger = context

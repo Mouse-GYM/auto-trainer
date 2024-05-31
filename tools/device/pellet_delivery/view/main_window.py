@@ -21,9 +21,8 @@ class MainWindow(QMainWindow):
 
         self.setStatusBar(QStatusBar(self))
 
-        self._app_view_model.reader.version_ready.connect(lambda x: self.update_status(f"Pellet Delivery Version: {x}"))
-
-        self.main_content.connecting.connect(lambda: self.update_status("Pellet Delivery Version: Waiting for response..."))
+        self.main_content.connecting.connect(
+            lambda: self.update_status("Pellet Delivery Version: Waiting for response..."))
 
         self.main_content.disconnected.connect(lambda: self.update_status("Not connected"))
 
@@ -33,6 +32,8 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(value)
 
     def on_activated(self):
+        self._app_view_model.on_activated()
+        self._app_view_model.reader.version_callback = lambda x: self.update_status(f"Pellet Delivery Version: {x}")
         self.main_content.on_activated()
 
     def closeEvent(self, event):

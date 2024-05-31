@@ -3,9 +3,9 @@ from numpy import ndarray
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QGridLayout
 
-from autotrainer.ATCaptureView import ATCaptureView
-from autotrainer.video_record_properties import VideoRecordMode
-from autotrainer.trigger_manager import TriggerManager
+from autotrainer.pyside import ATCaptureView
+from autotrainer.video import VideoRecordMode
+from autotrainer.video import TriggerManager
 
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 

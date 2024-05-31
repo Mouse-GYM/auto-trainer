@@ -1,59 +1,42 @@
 import argparse
 import logging
-import queue
-from threading import Thread
 
-from autotrainer.serial_interface import SerialInterface
-from autotrainer.pellet_delivery import PelletDelivery, PelletDeliveryMessageKind
-from autotrainer.device_thread import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import SerialInterface
+from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
+from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('autotrainer').setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-msg_queue = queue.Queue()
 
-
-def monitor_message_queue():
-    logger.info("starting message queue thread")
-
-    while True:
-        msg = msg_queue.get()
-
-        if msg[0] == DeviceThreadMessageKind.TERMINATE:
-            break
-
-        print(msg[1])
+def message_queue_callback(kind, context):
+    logger.info(f"device-message {PelletDeliveryMessageKind(kind).name}: {context}")
 
 
 def run_monitor(port: str):
-    cmd_queue = queue.Queue()
-
     device_interface = SerialInterface(port)
 
-    pellet_delivery = PelletDelivery(device_interface)
+    pellet_delivery = PelletDelivery()
 
-    thread = DeviceThread(pellet_delivery, device_interface, cmd_queue, msg_queue)
+    device_thread = DeviceThread(pellet_delivery, device_interface, message_callback=message_queue_callback)
 
-    thread.start()
+    device_thread.start()
 
-    mon_thread = Thread(target=monitor_message_queue)
-
-    mon_thread.start()
+    device_thread.send_message(DeviceThreadMessageKind.CONNECT)
 
     while True:
         cmd = input("Enter command: ")
 
         if cmd.startswith("q"):
-            cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None))
-            msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+            device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
             break
         else:
-            cmd_queue.put((PelletDeliveryMessageKind.RAW_COMMAND, cmd + "x"))
+            device_thread.send_message(PelletDeliveryMessageKind.RAW_COMMAND, cmd + "x")
 
     logger.info("waiting for device thread to terminate")
 
-    thread.join()
+    device_thread.join()
 
     logger.info("done")
 

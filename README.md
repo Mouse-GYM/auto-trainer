@@ -8,13 +8,7 @@ place requirements on platform or Python version.
 
 ### System Installs/Requirements
 #### Anaconda
-Anaconda is required for full feature support, although most functionality will work in a vanilla venv.  Tested with `Anaconda3-2023.09-0-Linux-aarch64.sh`.
-
-#### HDF5
-`sudo apt-get install libhdf5-serial-dev`
-
-#### xcb-cursor
-`sudo apt-get install libxcb-cursor0 `
+Anaconda is required for full feature support.  Tested with `Anaconda3-2023.09-0-Linux-aarch64.sh`.
 
 ### Teledyne/Blackfly Camera Support
 
@@ -32,39 +26,84 @@ sudo apt-get install libusb-1.0-0 (no-op was already the most recent)
 sudo apt-get --fix-broken install
 sudo sh install_spinnaker_arm.sh
 ```
+## Platform Specific Requirements 
 
-## Installation
-Create a default installation without specific camera support:
+### Jetson
+
+* Ubuntu 20 and JetPack 5.1.2 installed from the SDK manager
+  * Later 5.1.x JetPack if that is all that is available may be ok, but is untested
+* Add user to `dialout` group `sudo usermod -a -G dialout [username]`.  Requires logout or reboot depending on UART.
+* Access to two UARTs for full feature support requires at least additional port via USB->serial interface
+* HDF5
+* xcb-cursor
+
+*HDF5*
+
+`sudo apt-get install libhdf5-serial-dev`
+
+ *xcb-cursor*
+
+`sudo apt-get install libxcb-cursor0 `
+
+
+## Package Installation
+
+Create a Conda environment if needed or activate an existing one:
+
+`conda create -n "auto-trainer-1" python=3.8`
+
+Clone https://github.com/Mouse-GYM/auto-trainer.
+
+`git clone https://github.com/Mouse-GYM/auto-trainer.git .`
+
+Activate an appropriate branch, *e.g.,*
+
+`git checkout develop`
+
+From the repository directory perform the following Python package installation steps.
 
 `pip install -r requirements.txt`
+
+`conda install --channel=conda-forge ffmpeg=6.0.0`
+
+### Tensorflow
+Fix the tensorflow install depending on the platform:
+
+`pip uininstall tensorflow`
+
+*Jetson*
+
+`pip install --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v512 tensorflow==2.12.0+nv23.06`
+
+*Other*
+
+`pip install tensorflow==2.10.1`
+
+### FLIR
 
 To include support for Teledyne/Blackfly cameras, install the appropriate wheel for your platform, *e.g.,* 
 
 `pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_aarch64.whl`
 
-Wheels for supported platforms are included in `library/`.
+or 
 
-To enable video recording
+`pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_x86_64.whl`
 
-`conda install --channel=conda-forge ffmpeg=6.0.0`
+or
 
-### Platform Specific Installation 
+`pip install .\library\spinnaker_python-3.2.0.57-cp38-cp38-win_amd64.whl`
 
-#### Jetson
+## Applications
 
-* Ubuntu 20 and JetPack 5.1.2 install from the SDK manager
-  * Later 5.1.x JetPack if that is all that is available may be ok, but is untested
-* Add user to `dialout` group `sudo usermod -a -G dialout [username]`.  Requires logout or reboot depending on UART.
-* Access to two UARTs for full feature support requires at least additional port via USB->serial interface
-
-## Getting Started
-
-The root path of the project must be added to your python path for most tools and scripts.  If using an IDE, this may be handled
-for you automatically, otherwise
-* Bash/Zsh: `export PYTHONPATH=$PYTHONPATH:$PWD` or `export PYTHONPATH=$PWD`
-* Windows CMD: `set PYTHONPATH=%PYTHONPATH%;%CD%` or `set PYTHONPATH=%CD%`
-* Windows PowerShell: `$env:PYTHONPATH += Get-Location`
-
+* Auto Trainer
+  *  The local user interface for integrated camera, head fix, pellet delivery, and pose inference modules 
+  * `python auto-trainer-local.py`
+* Head Fix
+  * Standalone UI for interfacing with the head fix system
+  * `python head_fix.py`
+* Pellet Delivery
+  * Standalone UI for interfacing with the pellet delivery system
+  * `python pellet_delivery.py`
 
 ## Scripts
 
@@ -78,27 +117,23 @@ Most of the content in `scripts` are lightweight utilities to determine if vario
   * A command line interface to the head fix unit.  Will log data stream to a csv file.  Supports subset of device commands.
 * list_cameras.py
   * List all cameras available in the system.
-* load_network.py
+* load_dlc_model.py
   * Validates loading of a DLC model with the network module
 * pellet_delivery_console.py
   * A command line interface to the pellet delivery unit.  Supports a subset of device commands
-* run_dlc.py
+* run_dlc_model.py
   * Sends two saved files through a DLC model with the network module
 
 ## Tools
-The`tools` directory contains more full-featured applications.  It also includes software implementations of external 
-hardware devices (e.g., head fix unit) for development and testing.
+The`tools` directory contains implementations for the above applications.  It also includes software implementations of external 
+hardware devices (e.g., head fix unit) for development and testing without the hardware modules.
 
-* acquisition\acquisition.py
-  * Currently, the primary UI integrated camera, head fix, pellet delivery, and DLC model modules
-* device\head_fix\head_fix_ui.py
-  * Standalone UI for interfacing with the head fix unit
-* device\pellet_delivery\pellet_delivery_ui.py
-  * Standalone UI for interfacing with the pellet delivery unit
 * device\head_fix_server.py
   * Mock server for the head fix unit for testing w/o the physical device
+  * `python tools\device\head_fix_server.py`
 * device\pellet_server.py
   * Mock server for the pellet delivery unit for testing w/o the physical device
+  * `python tools\device\pellet_server.py`
 
 ## Camera URLs
 Several scripts and tools use camera URLs to specify the camera and camera properties.  The URLs have the form
@@ -131,9 +166,8 @@ All properties are optional and only applicable on cameras that support the prop
 camera type that supports primary/secondary where it is used to configure hardware triggering.
 
 ## Known Issues (partial)
-* Most implementations do not provide any or minimal error checking
+* Most implementations do not provide any or provide only minimal error checking
 * Only a subset of settings is remembered between settings and configuration files are not yet supported
-* There is no indication in the UI a camera is recording when in triggered mode
 * FLIR cameras are not always properly released if a script/UI crashes or is hard-killed
 * Acquisition UI uses a hardcoded list of cameras in `cameras.txt` in the root directory
   * Entries are of the form `name, camera-url` *e.g.,* `Spinnaker 23199895, spinnaker://23199895?width=300&height=200`

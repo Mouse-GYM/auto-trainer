@@ -1,14 +1,17 @@
-import os
+import logging
+import time
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QWidget, QGridLayout, QComboBox, QHBoxLayout, QPushButton, QLabel, QVBoxLayout, QSpinBox, \
     QCheckBox, QLineEdit, QFileDialog
 
 import qtawesome as qta
 
-from autotrainer.PGWidget import PGWidget
-from autotrainer.ATSeparator import ATSeparator
+from autotrainer.pyside import PGWidget
+from autotrainer.pyside import ATSeparator
+
+logger = logging.getLogger(__name__)
 
 
 class MainContent(QWidget):
@@ -109,35 +112,30 @@ class MainContent(QWidget):
         self._plot1.setMaximumHeight(150)
         self._plot1.setTitle("Weight")
         self._plot1.getViewBox().setRange(yRange=[0, 50])
-        self._app_view_model.measurements.weight_ready.connect(self._plot1.update_plot)
         layout.addWidget(self._plot1, 4, 0)
 
         self._plot2 = PGWidget()
         self._plot2.setBackground(None)
         self._plot2.setMaximumHeight(150)
         self._plot2.setTitle("Switch")
-        self._app_view_model.measurements.switch_ready.connect(self._plot2.update_plot)
         layout.addWidget(self._plot2, 5, 0)
 
         self._plot3 = PGWidget()
         self._plot3.setBackground(None)
         self._plot3.setMaximumHeight(150)
         self._plot3.setTitle("Pressure")
-        self._app_view_model.measurements.pressure_ready.connect(self._plot3.update_plot)
         layout.addWidget(self._plot3, 6, 0)
 
         self._plot4 = PGWidget()
         self._plot4.setBackground(None)
         self._plot4.setMaximumHeight(150)
         self._plot4.setTitle("Temperature")
-        self._app_view_model.measurements.temperature_ready.connect(self._plot4.update_plot)
         layout.addWidget(self._plot4, 5, 1)
 
         self._plot5 = PGWidget()
         self._plot5.setBackground(None)
         self._plot5.setMaximumHeight(150)
         self._plot5.setTitle("Humidity")
-        self._app_view_model.measurements.humidity_ready.connect(self._plot5.update_plot)
         layout.addWidget(self._plot5, 6, 1)
 
         layout.setRowStretch(7, 1)
@@ -146,8 +144,35 @@ class MainContent(QWidget):
 
         self.setLayout(layout)
 
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self.refresh_data)
+        self._timer.start(100)
+
+        self._measurement_count = 0
+        self._start = None
+
+    @Slot()
+    def refresh_data(self):
+        self._plot1.use_cache()
+        self._plot2.use_cache()
+        self._plot3.use_cache()
+        self._plot4.use_cache()
+        self._plot5.use_cache()
+
     def on_activated(self):
-        pass
+        self._app_view_model.head_fix_reader.measurement_callback = self._measurements_received
+
+    def _measurements_received(self, measurements):
+        self._plot1.cache_data(measurements[0])
+        self._plot2.cache_data(measurements[1])
+        self._plot3.cache_data(measurements[2])
+        self._plot4.cache_data(measurements[3])
+        self._plot5.cache_data(measurements[4])
+
+        self._measurement_count += len(measurements[0])
+
+        if self._measurement_count % 1000 == 0:
+            logger.info(f"{(1e9 * self._measurement_count / (time.perf_counter_ns() - self._start)):.1f} mps")
 
     def _refresh_ports(self):
         self._app_view_model.refresh_ports()
@@ -180,16 +205,18 @@ class MainContent(QWidget):
     def _connect(self):
         if self._app_view_model.is_connected:
             self._app_view_model.disconnect_from_device()
-            self._app_view_model.measurements.record_location = None
+            self._app_view_model.head_fix_reader.record_location = None
             self._connect_button.setText("Connect")
             self.disconnected.emit()
         else:
             self.connecting.emit()
             if self._record.isChecked():
-                self._app_view_model.measurements.record_location = self._record_location.text()
+                self._app_view_model.head_fix_reader.record_location = self._record_location.text()
             else:
-                self._app_view_model.measurements.record_location = None
+                self._app_view_model.head_fix_reader.record_location = None
             self._app_view_model.connect_to_device()
+            self._start = time.perf_counter_ns()
+            self._measurement_count = 0
             self._connect_button.setText("Disconnect")
 
         self._position.setEnabled(self._app_view_model.is_connected)

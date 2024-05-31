@@ -33,7 +33,7 @@ class PelletDeliveryContent(QWidget):
         self.setLayout(layout)
 
     def on_activated(self):
-        pass
+        self._model.on_activated()
 
     def _refresh_ports(self):
         self._model.refresh_ports()

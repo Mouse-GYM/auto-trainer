@@ -2,12 +2,10 @@ import logging
 import queue
 import uuid
 
-from PySide6.QtCore import QThread
-
-from autotrainer.serial_interface import SerialInterface
-from autotrainer.pellet_delivery import PelletDelivery, PelletDeliveryMessageKind
-from autotrainer.device_thread import DeviceThread, DeviceThreadMessageKind
-from autotrainer.pellet_reader import PelletReader
+from autotrainer.device import SerialInterface
+from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
+from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import PelletReader
 
 from tools.device.pellet_delivery.model.user_settings import UserSettings
 
@@ -18,18 +16,13 @@ class AppModel:
     def __init__(self):
         self._user_settings = UserSettings()
 
-        self._cmd_queue = queue.Queue()
         self._msg_queue = queue.Queue()
+
         self._device_thread = None
 
-        self._measurement_thread = QThread()
-        self._measurement_worker = PelletReader(self._msg_queue)
-        self._measurement_worker.moveToThread(self._measurement_thread)
-        self._measurement_thread.started.connect(self._measurement_worker.process)
+        self._pellet_reader = None
 
         self._is_connected = False
-
-        self._command_token = None
 
         self._ports = list()
 
@@ -49,55 +42,67 @@ class AppModel:
 
     @property
     def reader(self) -> PelletReader:
-        return self._measurement_worker
+        return self._pellet_reader
 
     def refresh_ports(self):
-        self._ports = SerialInterface.list_ports()
+        self._ports = SerialInterface.refresh_ports()
 
     def send_home(self):
-        self._command_token = uuid.uuid4()
-        logger.debug(f"sending home with token {self._command_token}")
-        self._send_command(PelletDeliveryMessageKind.SEND_HOME, None, self._command_token)
+        self._send_command(PelletDeliveryMessageKind.SEND_HOME, context=uuid.uuid4())
 
     def load_pellet(self):
-        self._send_command(PelletDeliveryMessageKind.LOAD_PELLET)
+        self._send_command(PelletDeliveryMessageKind.LOAD_PELLET, context=uuid.uuid4())
 
     def send_pellet(self):
-        self._send_command(PelletDeliveryMessageKind.SEND_PELLET)
+        self._send_command(PelletDeliveryMessageKind.SEND_PELLET, context=uuid.uuid4())
 
     def release_pellet(self):
-        self._send_command(PelletDeliveryMessageKind.RELEASE_PELLET)
+        self._send_command(PelletDeliveryMessageKind.RELEASE_PELLET, context=uuid.uuid4())
 
     def set_x(self, value: int):
-        self._send_command(PelletDeliveryMessageKind.SET_X, value)
+        self._send_command(PelletDeliveryMessageKind.SET_X, value, context=uuid.uuid4())
 
     def set_y(self, value: int):
-        self._send_command(PelletDeliveryMessageKind.SET_Y, value)
+        self._send_command(PelletDeliveryMessageKind.SET_Y, value, context=uuid.uuid4())
 
     def set_z(self, value: int):
-        self._send_command(PelletDeliveryMessageKind.SET_Z, value)
+        self._send_command(PelletDeliveryMessageKind.SET_Z, value, context=uuid.uuid4())
 
     def connect_to_device(self):
-        device_interface = SerialInterface(self._user_settings.port)
+        self._send_command(DeviceThreadMessageKind.CONNECT)
 
-        pellet_delivery = PelletDelivery(device_interface)
-
-        self._device_thread = DeviceThread(pellet_delivery, device_interface, self._cmd_queue, self._msg_queue)
-
-        self._device_thread.start()
-
-        self._measurement_thread.start()
+        self._send_command(PelletDeliveryMessageKind.VERSION)
 
         self._is_connected = True
 
     def disconnect_from_device(self):
-        self._send_command(DeviceThreadMessageKind.TERMINATE)
+        if self._is_connected:
+            self._send_command(DeviceThreadMessageKind.DISCONNECT)
 
-        self._is_connected = False
+            self._is_connected = False
+
+    def on_activated(self):
+        device_interface = SerialInterface(self._user_settings.port)
+
+        pellet_delivery = PelletDelivery()
+
+        self._device_thread = DeviceThread(pellet_delivery, device_interface, self._msg_queue)
+        self._device_thread.name = "pellet"
+
+        self._device_thread.start()
+
+        self._pellet_reader = PelletReader(self._msg_queue)
+
+        self._pellet_reader.ack_callback = lambda x: logger.debug(f"ack received with context: {x}")
+
+        self._pellet_reader.start()
 
     def on_close(self):
         self.disconnect_from_device()
         self._send_command(DeviceThreadMessageKind.TERMINATE)
+        self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
     def _send_command(self, message, data=None, context=None):
-        self._cmd_queue.put((message, data, context))
+        if context is not None:
+            logger.debug(f"sending message with context: {context}")
+        self._device_thread.send_message(message, data, context)

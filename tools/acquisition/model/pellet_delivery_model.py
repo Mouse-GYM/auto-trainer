@@ -2,11 +2,10 @@ import logging
 import queue
 import uuid
 
-from PySide6.QtCore import QThread
-from autotrainer.serial_interface import SerialInterface
-from autotrainer.pellet_delivery import PelletDelivery, PelletDeliveryMessageKind
-from autotrainer.device_thread import DeviceThread, DeviceThreadMessageKind
-from autotrainer.pellet_reader import PelletReader
+from autotrainer.device import SerialInterface
+from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
+from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import PelletReader
 
 from tools.acquisition.model.user_settings import UserSettings
 
@@ -17,14 +16,11 @@ class PelletDeliveryModel:
     def __init__(self, user_settings: UserSettings):
         self._user_settings = user_settings
 
-        self._cmd_queue = queue.Queue()
         self._msg_queue = queue.Queue()
+
         self._device_thread = None
 
-        self._measurement_thread = QThread()
-        self._pellet_reader = PelletReader(self._msg_queue)
-        self._pellet_reader.moveToThread(self._measurement_thread)
-        self._measurement_thread.started.connect(self._pellet_reader.process)
+        self._pellet_reader = None
 
         self._is_connected = False
 
@@ -49,11 +45,11 @@ class PelletDeliveryModel:
         return self._is_connected
 
     @property
-    def pellet_reader(self):
+    def pellet_reader(self) -> PelletReader:
         return self._pellet_reader
 
     def refresh_ports(self):
-        self._ports = SerialInterface.list_ports()
+        self._ports = SerialInterface.refresh_ports()
 
     def send_home(self) -> object:
         token = uuid.uuid4()
@@ -94,18 +90,16 @@ class PelletDeliveryModel:
         if len(self.port) == 0:
             return
 
-        with self._cmd_queue.mutex:
-            self._cmd_queue.queue.clear()
-
         device_interface = SerialInterface(self.port)
 
-        pellet_delivery = PelletDelivery(device_interface)
+        pellet_delivery = PelletDelivery()
 
-        self._device_thread = DeviceThread(pellet_delivery, device_interface, self._cmd_queue, self._msg_queue)
+        self._device_thread = DeviceThread(pellet_delivery, device_interface, self._msg_queue)
+        self._device_thread.name = "pellet"
 
         self._device_thread.start()
 
-        self._measurement_thread.start()
+        self._device_thread.send_message(DeviceThreadMessageKind.CONNECT)
 
         self._is_connected = True
 
@@ -117,10 +111,14 @@ class PelletDeliveryModel:
 
         self._is_connected = False
 
+    def on_activated(self):
+        self._pellet_reader = PelletReader(self._msg_queue)
+        self._pellet_reader.start()
+
     def on_close(self):
         self.disconnect_from_device()
         self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
-        self._send_command(DeviceThreadMessageKind.TERMINATE)
+        # self._send_command(DeviceThreadMessageKind.TERMINATE)
 
     def _send_command(self, message, data=None, context=None):
-        self._cmd_queue.put((message, data, context))
+        self._device_thread.send_message(message, data, context)

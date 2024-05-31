@@ -12,3 +12,10 @@ name = "auto-trainer-pyside"
 version = "1.0.0"
 description = "Pyside6 extensions for autotrainer"
 license = { text = "MIT" }
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "PySide6",
+    "pyqtgraph"
+]
+

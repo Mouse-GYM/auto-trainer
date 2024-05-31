@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from autotrainer.video_manager import VideoManager
+from autotrainer.video import VideoManager
 
 
 def acquire_image(camera_url: str):

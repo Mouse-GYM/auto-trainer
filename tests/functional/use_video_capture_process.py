@@ -3,8 +3,8 @@ import logging
 import time
 from multiprocessing import Queue
 
-from autotrainer.video_capture import VideoCapture, CaptureMessageKind
-from autotrainer.queue_util import clear_queue
+from autotrainer.video import VideoCapture, CaptureMessageKind
+from autotrainer.core import clear_queue
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('autotrainer').setLevel(logging.WARNING)
@@ -21,7 +21,7 @@ def main(camera_url: str, iterations: int, duration: int):
     while count < iterations:
         logger.info("video capture process starting")
 
-        process = VideoCapture("A", cmd_queue, status_queue, image_queue, None, camera_url, None)
+        process = VideoCapture("A", cmd_queue, status_queue, image_queue, None, camera_url)
 
         process.start()
 

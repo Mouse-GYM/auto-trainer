@@ -4,9 +4,9 @@ import queue
 import time
 from threading import Thread
 
-from autotrainer.serial_interface import SerialInterface
-from autotrainer.head_fix import HeadFix, HeadFixMessageKind
-from autotrainer.device_thread import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import SerialInterface
+from autotrainer.device import HeadFix, HeadFixMessageKind
+from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('autotrainer').setLevel(logging.DEBUG)
@@ -64,46 +64,46 @@ def monitor_message_queue():
 def run_monitor(port: str):
     global perf_count
 
-    cmd_queue = queue.Queue()
-
     device_interface = SerialInterface(port)
 
-    head_fix = HeadFix(device_interface)
+    head_fix = HeadFix()
 
-    thread = DeviceThread(head_fix, device_interface, cmd_queue, msg_queue)
+    device_thread = DeviceThread(head_fix, device_interface, msg_queue)
 
-    thread.start()
+    device_thread.start()
 
     mon_thread = Thread(target=monitor_message_queue)
 
     mon_thread.start()
+
+    device_thread.send_message(DeviceThreadMessageKind.CONNECT)
 
     while True:
         if perf_count <= 0:
             cmd = input("Enter command: ")
 
             if cmd.startswith("q"):
-                cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+                device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
                 msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
                 break
             elif cmd.startswith("A"):
-                cmd_queue.put((HeadFixMessageKind.RAW_COMMAND, cmd + "x"))
+                device_thread.send_message(HeadFixMessageKind.RAW_COMMAND, cmd + "x")
             elif cmd.startswith("O"):
-                cmd_queue.put((HeadFixMessageKind.SETTINGS, ""))
+                device_thread.send_message(HeadFixMessageKind.SETTINGS)
             elif cmd.startswith("F"):
-                cmd_queue.put((HeadFixMessageKind.VERSION, ""))
+                device_thread.send_message(HeadFixMessageKind.VERSION)
             elif cmd.startswith("M"):
-                cmd_queue.put((HeadFixMessageKind.UPDATE_TARE, ""))
+                device_thread.send_message(HeadFixMessageKind.UPDATE_TARE)
         else:
             if not mon_thread.is_alive():
-                cmd_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+                device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
                 break
             else:
                 time.sleep(0.1)
 
     logger.info("waiting for device thread to terminate")
 
-    thread.join()
+    device_thread.join()
 
     logger.info("done")
 

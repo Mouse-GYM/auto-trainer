@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QWidget, QGridLayout, QComboBox, QHBoxLayout, QPus
 
 import qtawesome as qta
 
-from autotrainer.TextBoxHandler import TextBoxHandler
+from autotrainer.pyside import TextBoxHandler
 from tools.device.pellet_delivery.view.pellet_control import PelletControl
 
 

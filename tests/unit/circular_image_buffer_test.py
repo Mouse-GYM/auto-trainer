@@ -1,9 +1,9 @@
 import numpy
 
-from autotrainer.circular_image_buffer import CircularImageBuffer
+from autotrainer.core import FixedArrayMultiQueue
 
 
-def increase_buffer(buffer: CircularImageBuffer, shape: (int, int), frames_per_camera: int, offset: int):
+def increase_buffer(buffer: FixedArrayMultiQueue, shape: (int, int), frames_per_camera: int, offset: int):
     content = numpy.zeros(shape, dtype=numpy.uint8)
 
     for idx in range(frames_per_camera):
@@ -11,7 +11,7 @@ def increase_buffer(buffer: CircularImageBuffer, shape: (int, int), frames_per_c
         buffer.put(content + idx + offset, 0)
 
 
-def check_buffer(buffer: CircularImageBuffer, shape: (int, int), frames_per_camera: int, expected_index: int):
+def check_buffer(buffer: FixedArrayMultiQueue, shape: (int, int), frames_per_camera: int, expected_index: int):
     output = numpy.zeros((frames_per_camera * 2, *shape, 3), dtype=numpy.uint8)
 
     result = buffer.get_output(output)
@@ -28,7 +28,7 @@ def test_buffer():
 
     frames_per_camera = 5
 
-    buffer = CircularImageBuffer(3, 2, frames_per_camera, shape)
+    buffer = FixedArrayMultiQueue(3, 2, frames_per_camera, shape)
 
     assert buffer.buffer_index == 0
 

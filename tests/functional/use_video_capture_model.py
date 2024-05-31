@@ -39,7 +39,7 @@ def main(camera_url_1: str, camera_url_2: str, camera_url_3: str, iterations: in
         success = True
 
         for model in models:
-            res = model.on_prepare_capture(output_location)
+            res = model.on_prepare_capture(output_location, None)
 
             if not res:
                 success = False

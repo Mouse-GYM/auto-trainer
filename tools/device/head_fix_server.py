@@ -104,8 +104,6 @@ def run_server(port: str, frequency: int, use_random: bool):
 
     s = serial.Serial(port, baudrate=115200)
 
-    ref_time = time.perf_counter_ns()
-
     interval_s = 1.0 / frequency
     interval_ns = interval_s * 1e9
 

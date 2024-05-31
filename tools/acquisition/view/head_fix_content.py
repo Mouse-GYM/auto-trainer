@@ -3,7 +3,7 @@ import logging
 
 from PySide6.QtWidgets import QLabel, QLineEdit, QGridLayout, QSpinBox, QWidget, QComboBox, QPushButton
 
-from autotrainer.PGWidget import PGWidget
+from autotrainer.pyside import PGWidget
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
 
@@ -50,13 +50,16 @@ class HeadFixContent(QGridLayout):
         self._plot1.setBackground(None)
         self._plot1.setMaximumHeight(160)
         self._plot1.getViewBox().setRange(yRange=[0, 50])
-        self._model.measurements.weight_ready.connect(self._weight_received)
         self.addWidget(self._plot1, 1, 0, 1, 7)
 
         self._measurement_count = 0
         self._start = None
 
         self._refresh_ports()
+
+    def on_activated(self):
+        self._model.on_activated()
+        self._model.head_fix_reader.measurement_callback = self._weight_received
 
     def use_cache(self):
         self._plot1.use_cache()
@@ -65,17 +68,21 @@ class HeadFixContent(QGridLayout):
         self._port_combobox.setEnabled(enabled)
         self._tare_button.setEnabled(not enabled)
 
-        if not enabled:            
+        if not enabled:
             self._measurement_count = 0
 
-    def _weight_received(self, values):
+    def _weight_received(self, value):
+        values = value[0]
+
+        self._model.monitor_trigger(values)
+
         if self._measurement_count == 0:
             self._start = time.perf_counter_ns()
-            
+
         self._measurement_count += len(values)
 
         if self._measurement_count % 1000 == 0:
-            logger.info(f"<head fix content>{(1e9 * self._measurement_count/ (time.perf_counter_ns() - self._start)):.1f} mps")
+            logger.info(f"{(1e9 * self._measurement_count / (time.perf_counter_ns() - self._start)):.1f} mps")
 
         self._plot1.cache_data(values)
 

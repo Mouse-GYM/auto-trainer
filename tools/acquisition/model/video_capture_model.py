@@ -5,14 +5,9 @@ from threading import Event
 
 from numpy import ndarray
 
-from autotrainer.queue_util import clear_queue
-from autotrainer.circular_single_image_buffer import CircularSingleImageBuffer
-from autotrainer.circular_image_buffer import CircularImageBuffer
-from autotrainer.video_capture import VideoCapture, CaptureMessageKind
-from autotrainer.video_record_properties import VideoRecordProperties, VideoRecordMode
-from autotrainer.video_manager import VideoManager
-from autotrainer.video_reader import VideoReader
-from autotrainer.trigger_manager import TriggerManager
+from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue
+from autotrainer.video import VideoCapture, CaptureMessageKind, VideoRecordProperties, VideoRecordMode, VideoManager, \
+    VideoReader, TriggerManager
 
 from tools.acquisition.model.user_settings import UserSettings
 
@@ -29,38 +24,31 @@ class VideoCaptureModel:
         self._user_settings = user_settings
         self._index = idx
 
+        self._camera_source = None
+        self._camera_properties = dict()
+
+        self._video_capture = None
         self._video_reader = None
         self._video_reader_reset_event = None
         self._video_reader_stop_event = None
-        self._video_capture = None
 
         self._video_cmd_message_queue = Queue()
         self._video_status_message_queue = Queue()
-        # self._video_queue = Queue()
-        if idx >= 0:
-            self._video_queue = CircularSingleImageBuffer(3, (200, 300))
-        else:
-            self._video_queue = Queue()
+        self._video_queue = None
+        self._shape = None
+
+        self._is_enabled = True
+        self._is_primary = False
+        self._record_mode = VideoRecordMode.NONE
+        self._is_recording_enabled = False
 
         self._display_update_fcn = None
 
         self._frame_count = 0
-
         self._start = 0
-
         self._fps = 0
 
-        self._is_enabled = True
-
-        self._record_mode = VideoRecordMode.NONE
-
-        self._is_recording_enabled = False
-
-        self._camera_source = None
-
-        self._is_primary = False
-
-        self._is_trace_enabled = False
+        self._is_trace_enabled = True
 
         TriggerManager.instance().register(self._on_trigger, CAPTURE_TRIGGER_ID)
 
@@ -70,7 +58,8 @@ class VideoCaptureModel:
 
     @camera_source.setter
     def camera_source(self, value: str):
-        self._camera_source = value
+        if value != self._camera_source:
+            self._update_camera_source(value)
 
     @property
     def is_enabled(self):
@@ -93,6 +82,14 @@ class VideoCaptureModel:
         return self._is_primary
 
     @property
+    def shape(self) -> (int, int):
+        if "height" in self._camera_properties and "width" in self._camera_properties:
+            width = int(self._camera_properties["height"])
+            height = int(self._camera_properties["width"])
+            if width > 0 and height > 0:
+                return width, height
+
+    @property
     def is_trace_enabled(self) -> bool:
         return self._is_trace_enabled
 
@@ -111,12 +108,12 @@ class VideoCaptureModel:
 
         if self._frame_count % 150 == 0:
             self._fps = 1e9 * self._frame_count / (time.perf_counter_ns() - self._start)
-            self._trace(f"<{self._name}> display fps: {int(self._fps)}")
+            self._trace(f"display fps: {int(self._fps)}")
 
         if self._display_update_fcn is not None and self._video_capture is not None:
             self._display_update_fcn(data, self._fps)
 
-    def on_prepare_capture(self, output_location: str, network_queue: CircularImageBuffer) -> bool:
+    def on_prepare_capture(self, output_location: str, network_queue: FixedArrayMultiQueue = None) -> bool:
         if not self._is_enabled:
             return True
 
@@ -200,21 +197,20 @@ class VideoCaptureModel:
             else:
                 logger.error(f"<{self._name}> unexpected terminate response")
 
-        self._trace(f"<{self._name}> clearing command queue {self._video_cmd_message_queue.qsize()}")
+        if self._video_cmd_message_queue.qsize() > 0:
+            self._trace(f"clearing command queue {self._video_cmd_message_queue.qsize()}")
         clear_queue(self._video_cmd_message_queue)
-        self._trace(f"<{self._name}> clearing status queue {self._video_status_message_queue.qsize()}")
+        if self._video_status_message_queue.qsize() > 0:
+            self._trace(f"clearing status queue {self._video_status_message_queue.qsize()}")
         clear_queue(self._video_status_message_queue)
-        self._trace(f"<{self._name}> clearing image queue {self._video_queue.qsize()}")
-        clear_queue(self._video_queue)
 
         if self._video_capture is not None:
-            self._trace(f"<{self._name}> checking process status")
+            self._trace("waiting for process termination")
 
             while self._video_capture.is_alive():
-                logger.debug(f"<{self._name}> waiting for process termination")
-                time.sleep(0.5)
+                time.sleep(0.1)
 
-            self._trace(f"<{self._name}> is_alive() {self._video_capture.is_alive()}")
+            self._trace("process terminated")
 
             self._video_capture = None
 
@@ -227,6 +223,37 @@ class VideoCaptureModel:
     def _on_trigger(self, sink, trigger_id, context):
         if self._video_capture is not None:
             self._video_cmd_message_queue.put(CaptureMessageKind.TRIGGER)
+
+    def _update_camera_source(self, value: str):
+        if value is None or len(value) == 0:
+            self._camera_source = None
+            self._camera_properties = dict()
+            self._video_queue = None
+            return
+
+        if "&name" not in value:
+            if "?" in value:
+                value = value + f"&name={self._name}"
+            else:
+                value = value + f"?name={self._name}"
+
+        properties = VideoManager.parse_params(value)
+
+        self._shape = None
+
+        if "height" in properties and "width" in properties:
+            width = int(properties["height"])
+            height = int(properties["width"])
+            if width > 0 and height > 0:
+                self._shape = (width, height)
+
+        self._video_queue = None if self._shape is None else FixedArrayQueue(3, self._shape)
+
+        self._camera_source = value
+
+        self._camera_properties = properties
+
+        self._trace(str(self._camera_properties))
 
     def _video_reader_initialize(self):
         if self._video_reader is None and self._display_update_fcn is not None:
@@ -244,4 +271,4 @@ class VideoCaptureModel:
 
     def _trace(self, message: str):
         if self._is_trace_enabled:
-            logger.debug(message)
+            logger.debug(f"<{self._name}> {message}")

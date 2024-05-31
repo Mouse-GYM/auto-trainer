@@ -7,6 +7,7 @@ logging.basicConfig(level=logging.WARNING)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+
 # TODO NOT READY
 
 def prepare_video_capture(file_name):
@@ -21,17 +22,15 @@ def prepare_video_capture(file_name):
 
 
 def main(network, left_source, right_source, batch_size):
-    from autotrainer.dlc.dlc_configuration import DLCConfiguration
+    from autotrainer.inference import DlcPoseModel
 
     left_capture, front_frame_count = prepare_video_capture(left_source)
 
     right_capture, side_frame_count = prepare_video_capture(right_source)
 
-    max_frames = int(min(front_frame_count, side_frame_count))
+    configuration = DlcPoseModel(network, 1, 0, batch_size * 2)
 
-    configuration = DLCConfiguration()
-
-    configuration.load_configuration(os.path.join(network, "config.yaml"), 1, 0, batch_size * 2)
+    configuration.load()
 
 
 if __name__ == '__main__':
@@ -39,7 +38,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("network", help="the DeepLabCut network to use")
+    parser.add_argument("inference", help="the DeepLabCut inference to use")
     parser.add_argument("left", help="the left camera video source file")
     parser.add_argument("right", help="the right camera video source file")
     parser.add_argument("-b", "--batchsize", help="the batch size for DLC", type=int, default=5)
@@ -47,7 +46,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if not os.path.exists(os.path.join(args.network, "config.yaml")):
-        logger.error("The network configuration does not exist")
+        logger.error("The inference configuration does not exist")
 
     if not os.path.exists(args.left):
         logger.error("The left camera video file does not exist")

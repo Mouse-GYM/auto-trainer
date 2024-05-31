@@ -1,17 +1,18 @@
 import logging
-import os
 import queue
+import time
 from multiprocessing import Queue
 from threading import Thread
 
 from PySide6.QtCore import QObject, Signal
-from autotrainer.circular_image_buffer import CircularImageBuffer
-from autotrainer.dlc.pose_predict import PosePredict, AnalysisMessageKind
+from autotrainer.core import FixedArrayMultiQueue
+from autotrainer.inference import PosePredict, AnalysisMessageKind
+from autotrainer.inference.dlc.dlc_pose_model import DlcPoseModel
 
-from tools.acquisition.default_dlc_algorithm import DefaultDLCAlgorithm
+from tools.acquisition.inference.pellet_pose_algorithm import PelletPoseAlgorithm
 from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
 from tools.acquisition.model.user_settings import UserSettings
-from tools.acquisition.pellet_device_response_api import PelletDeviceResponseApi
+from tools.acquisition.inference.pellet_device_response_api import PelletDeviceResponseApi
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +33,9 @@ class AnalysisModel(QObject):
         self._model_location = self._settings.analysis_model
         self._algorithm_location = self._settings.analysis_algorithm
         self._response_api = PelletDeviceResponseApi(pellet)
-        self._algorithm = DefaultDLCAlgorithm()
+        self._algorithm = PelletPoseAlgorithm()
         self._algorithm.api = self._response_api
-        pellet.pellet_reader.command_ack.connect(lambda x: self._algorithm.api_response(x, True))
+        self._pellet_model = pellet
 
         self._msg_thread = None
         self._data_thread = None
@@ -70,34 +71,47 @@ class AnalysisModel(QObject):
         self._algorithm_location = value
         self._settings.analysis_algorithm = value
 
-    def start(self, network_queue: CircularImageBuffer) -> bool:
+    def on_activated(self):
+        self._pellet_model.pellet_reader.ack_callback = lambda x: self._algorithm.api_response(x, True)
+
+    def start(self, network_queue: FixedArrayMultiQueue) -> bool:
         if self._msg_thread is None:
             self._msg_thread = Thread(target=self._monitor_msg_queue)
-            self._msg_thread .start()
+            self._msg_thread.start()
 
         if self._data_thread is None:
             self._data_thread = Thread(target=self._monitor_data_queue)
             self._data_thread.start()
 
         if network_queue is None:
-            logger.warning("analysis not started because there is no network image queue")
+            logger.warning("analysis not started because there is no inference image queue")
             return False
 
         if self._model_location is None or len(self._model_location) == 0:
             logger.warning("analysis not started because the model not specified")
             return False
 
-        model_location = os.path.join(self._model_location, "config.yaml")
-        if not os.path.isfile(model_location):
+        model = DlcPoseModel(self._model_location, 1, 0, network_queue.batch_size)
+
+        if not model.is_valid():
             logger.warning("analysis not started because the model does not exist at the specified location")
             return False
 
-        self._process = PosePredict(self._model_location, network_queue, self._data_queue, self._cmd_queue, self._msg_queue)
+        self._process = PosePredict(model, network_queue, self._data_queue, self._cmd_queue, self._msg_queue)
+
         self._process.start()
 
     def stop(self):
         if self._process is not None:
             self._cmd_queue.put(AnalysisMessageKind.Terminate)
+
+            logger.debug(f"<analysis> waiting for process termination")
+
+            while self._process.is_alive():
+                time.sleep(0.1)
+
+            logger.debug(f"<analysis> process terminated")
+
             self._process = None
 
     def terminate(self):
@@ -115,7 +129,7 @@ class AnalysisModel(QObject):
                     self._algorithm.initialize()
                     self._cmd_queue.put(AnalysisMessageKind.Start)
             except queue.Empty:
-                pass
+                time.sleep(0.001)
             except Exception as ex:
                 logger.error(ex)
 
@@ -126,6 +140,6 @@ class AnalysisModel(QObject):
                 vis_data = self._algorithm.process(pose_data)
                 self.pose_ready.emit(vis_data)
             except queue.Empty:
-                pass
+                time.sleep(0.001)
             except Exception as ex:
                 logger.error(ex)
