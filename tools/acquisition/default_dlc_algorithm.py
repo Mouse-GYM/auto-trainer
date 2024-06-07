@@ -40,7 +40,7 @@ class DefaultDLCAlgorithm(DLCAlgorithm):
             if pellet_seen:
                 break
 
-        if self._api_complete_token is None:
+        if self._api_status_token is None:
             if pellet_seen:
                 self._pellet_history = 0
             else:
