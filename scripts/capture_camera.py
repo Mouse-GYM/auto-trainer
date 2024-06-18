@@ -31,7 +31,8 @@ def capture_video(camera_url: str, video_path: str, frame_count: int):
     camera.prepare_capture()
 
     record_queue = Queue()
-    record = VideoRecord(os.path.join(video_path, file_timestamp.strftime("%Y%m%d")), "camera", 3600, (camera.width, camera.height), camera.fps, record_queue)
+    record = VideoRecord(os.path.join(video_path, file_timestamp.strftime("%Y%m%d")), "camera", 3600,
+                         (camera.width, camera.height), camera.fps, record_queue)
     record.start()
 
     for idx in range(frame_count):
@@ -54,7 +55,8 @@ def main():
 
     parser.add_argument("cameraurl", help="the camera to use")
     parser.add_argument("output", help="the video file output location")
-    parser.add_argument("-f", "--framecount", help="the number of frames to capture (default 150)", type=int, default=150)
+    parser.add_argument("-f", "--framecount", help="the number of frames to capture (default 150)",
+                        type=int, default=150)
 
     args = parser.parse_args()
 

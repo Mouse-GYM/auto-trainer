@@ -2,21 +2,22 @@ import logging
 import queue
 import uuid
 
+from autotrainer.core import ObservableObject
 from autotrainer.device import SerialInterface
 from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 from autotrainer.device import PelletReader
 
-from tools.acquisition.model.user_settings import UserSettings
-
 logger = logging.getLogger(__name__)
 
 
-class PelletDeliveryModel:
-    def __init__(self, user_settings: UserSettings):
-        self._user_settings = user_settings
+class PelletDeliveryModel(ObservableObject):
+    def __init__(self):
+        super().__init__()
 
-        self._msg_queue = queue.Queue()
+        self._message_queue = queue.Queue()
+
+        self._port = None
 
         self._device_thread = None
 
@@ -24,77 +25,76 @@ class PelletDeliveryModel:
 
         self._is_connected = False
 
-        self._ports = list()
+        self._x = 0
 
-        self.refresh_ports()
+        self._y = 0
 
-    @property
-    def ports(self):
-        return self._ports
+        self._z = 0
 
     @property
     def port(self) -> str:
-        return self._user_settings.pellet_port
+        return self._port
 
     @port.setter
-    def port(self, port: str):
-        self._user_settings.pellet_port = port
+    def port(self, value: str):
+        self._port = self._on_property_changed("port", value, self._port)
 
     @property
     def is_connected(self):
         return self._is_connected
 
     @property
+    def x(self) -> int:
+        return self._x
+
+    @property
+    def y(self) -> int:
+        return self._y
+
+    @property
+    def z(self) -> int:
+        return self._z
+
+    @property
     def pellet_reader(self) -> PelletReader:
         return self._pellet_reader
 
-    def refresh_ports(self):
-        self._ports = SerialInterface.refresh_ports()
-
-    def send_home(self) -> object:
-        token = uuid.uuid4()
-        self._send_command(PelletDeliveryMessageKind.SEND_HOME, None, token)
-        return token
-
-    def load_pellet(self) -> object:
-        token = uuid.uuid4()
-        self._send_command(PelletDeliveryMessageKind.LOAD_PELLET, None, token)
-        return token
-
-    def send_pellet(self) -> object:
-        token = uuid.uuid4()
-        self._send_command(PelletDeliveryMessageKind.SEND_PELLET, None, token)
-        return token
-
-    def release_pellet(self) -> object:
-        token = uuid.uuid4()
-        self._send_command(PelletDeliveryMessageKind.RELEASE_PELLET, None, token)
-        return token
-
     def set_x(self, value: int) -> object:
-        token = uuid.uuid4()
-        self._send_command(PelletDeliveryMessageKind.SET_X, value, token)
-        return token
+        self._x = self._on_property_changed("x", value, self._x)
+
+        return self._send_with_token(PelletDeliveryMessageKind.SET_X, value)
 
     def set_y(self, value: int) -> object:
-        token = uuid.uuid4()
-        self._send_command(PelletDeliveryMessageKind.SET_Y, value, token)
-        return token
+        self._y = self._on_property_changed("y", value, self._y)
+
+        return self._send_with_token(PelletDeliveryMessageKind.SET_Y, value)
 
     def set_z(self, value: int) -> object:
-        token = uuid.uuid4()
-        self._send_command(PelletDeliveryMessageKind.SET_Z, value, token)
-        return token
+        self._z = self._on_property_changed("z", value, self._z)
+
+        return self._send_with_token(PelletDeliveryMessageKind.SET_Z, value)
+
+    def send_home(self) -> object:
+        return self._send_command(PelletDeliveryMessageKind.SEND_HOME)
+
+    def load_pellet(self) -> object:
+        return self._send_command(PelletDeliveryMessageKind.LOAD_PELLET)
+
+    def send_pellet(self) -> object:
+        return self._send_command(PelletDeliveryMessageKind.SEND_PELLET)
+
+    def release_pellet(self) -> object:
+        return self._send_with_token(PelletDeliveryMessageKind.RELEASE_PELLET)
 
     def connect_to_device(self):
-        if len(self.port) == 0:
+        if not self.port or len(self.port) == 0:
             return
 
         device_interface = SerialInterface(self.port)
 
         pellet_delivery = PelletDelivery()
 
-        self._device_thread = DeviceThread(pellet_delivery, device_interface, self._msg_queue)
+        self._device_thread = DeviceThread(pellet_delivery, device_interface, self._message_queue)
         self._device_thread.name = "pellet"
 
         self._device_thread.start()
@@ -112,13 +112,37 @@ class PelletDeliveryModel:
         self._is_connected = False
 
     def on_activated(self):
-        self._pellet_reader = PelletReader(self._msg_queue)
+        self._pellet_reader = PelletReader(self._message_queue)
         self._pellet_reader.start()
 
     def on_close(self):
         self.disconnect_from_device()
-        self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
-        # self._send_command(DeviceThreadMessageKind.TERMINATE)
+        self._message_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
-    def _send_command(self, message, data=None, context=None):
-        self._device_thread.send_message(message, data, context)
+    def load_configuration(self, conf):
+        if "port" in conf:
+            self.port = conf["port"]
+        if "x" in conf:
+            self.set_x(conf["x"])
+        if "y" in conf:
+            self.set_y(conf["y"])
+        if "z" in conf:
+            self.set_z(conf["z"])
+
+    def write_configuration(self):
+        return {"port": self.port, "x": self._x, "y": self._y, "z": self._z}
+
+    def _send_with_token(self, cmd, data=None):
+        token = uuid.uuid4()
+
+        if self._send_command(cmd, data, token):
+            return token
+        else:
+            return None
+
+    def _send_command(self, message, data=None, context=None) -> bool:
+        if self._device_thread is not None:
+            self._device_thread.send_message(message, data, context)
+            return True
+
+        return False

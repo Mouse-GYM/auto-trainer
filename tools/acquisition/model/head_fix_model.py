@@ -1,55 +1,59 @@
 import logging
 import os
 import queue
+import uuid
 from datetime import datetime
 from pathlib import Path
 
 from autotrainer.device import SerialInterface, HeadFixReader
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
-from autotrainer.video import TriggerManager
+from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID, ObservableObject
 
 from tools.acquisition.model.user_settings import UserSettings
-from tools.acquisition.model.video_capture_model import CAPTURE_TRIGGER_ID
 
 logger = logging.getLogger(__name__)
 
 
-class HeadFixModel:
+class HeadFixModel(ObservableObject):
     def __init__(self, user_settings: UserSettings):
-        self._user_settings = user_settings
+        super().__init__()
+        # TODO Remove dependency
+        self._settings = user_settings
 
-        self._msg_queue = queue.Queue()
+        self._port = None
 
         self._device_thread = None
 
         self._head_fix_reader = None
 
+        self._reader_queue = queue.Queue()
+
         self._is_connected = False
 
-        self._load_trigger = self._user_settings.head_trigger
+        self._position = 0
+
+        self._load_trigger = 15
+
+        self._output_location = ""
 
         self._is_triggered = False
 
-        self._ports = list()
-
-        self.refresh_ports()
+    @property
+    def is_connected(self):
+        return self._is_connected
 
     @property
     def head_fix_reader(self) -> HeadFixReader:
         return self._head_fix_reader
 
     @property
-    def ports(self) -> list:
-        return self._ports
-
-    @property
     def port(self) -> str:
-        return self._user_settings.head_port
+        return self._port
 
     @port.setter
-    def port(self, port: str):
-        self._user_settings.head_port = port
+    def port(self, value: str):
+        self._port = self._on_property_changed("port", value, self._port)
 
     @property
     def load_trigger(self):
@@ -57,48 +61,56 @@ class HeadFixModel:
 
     @load_trigger.setter
     def load_trigger(self, value: int):
-        self._load_trigger = value
-        self._user_settings.head_trigger = value
+        self._load_trigger = self._on_property_changed("load_trigger", value, self._load_trigger)
 
     @property
-    def is_connected(self):
-        return self._is_connected
+    def output_location(self) -> str:
+        return self._output_location
 
-    def refresh_ports(self):
-        self._ports = SerialInterface.refresh_ports()
+    @output_location.setter
+    def output_location(self, value: str):
+        self._output_location = self._on_property_changed("output_location", value, self._output_location)
+
+    @property
+    def position(self) -> int:
+        return self._position
 
     def update_position(self, value: int):
-        if not self._is_connected:
-            return
-        self._device_thread.send_message(HeadFixMessageKind.SERVO, str(value))
+        self._position = self._on_property_changed("position", value, self._position)
+
+        return self._send_with_token(HeadFixMessageKind.SERVO, str(value))
 
     def tare(self):
         if not self._is_connected:
             return
 
-        self._device_thread.send_message(HeadFixMessageKind.UPDATE_TARE)
+        return self._send_with_token(HeadFixMessageKind.UPDATE_TARE)
 
     def connect_to_device(self):
-        if len(self.port) == 0:
+        if not self.port or len(self.port) == 0:
             return
 
         device_interface = SerialInterface(self.port)
 
         file_timestamp = datetime.now()
-        location = os.path.join(self._user_settings.output_location, file_timestamp.strftime("%Y%m%d"),
-                                self._user_settings.serial_number)
+
+        location = os.path.join(self.output_location, file_timestamp.strftime("%Y%m%d"), self._settings.serial_number)
         path = Path(location)
         path.mkdir(parents=True, exist_ok=True)
         self._head_fix_reader.record_location = location
 
         head_fix = HeadFix(buffer_size=20)
 
-        self._device_thread = DeviceThread(head_fix, device_interface, self._msg_queue)
+        self._device_thread = DeviceThread(head_fix, device_interface, self._reader_queue)
         self._device_thread.name = "head-fix"
 
         self._device_thread.start()
 
-        self._device_thread.send_message(DeviceThreadMessageKind.CONNECT)
+        self._send_command(DeviceThreadMessageKind.CONNECT)
+
+        self._send_command(HeadFixMessageKind.SERVO, str(self._position))
+
+        self._send_command(HeadFixMessageKind.STREAM_START)
 
         self._is_connected = True
 
@@ -109,18 +121,19 @@ class HeadFixModel:
         if self._head_fix_reader is not None:
             self._head_fix_reader.record_location = None
 
-        self._device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
+        self._send_command(DeviceThreadMessageKind.TERMINATE)
+
+        self._device_thread = None
 
         self._is_connected = False
 
     def on_activated(self):
-        self._head_fix_reader = HeadFixReader(self._msg_queue)
+        self._head_fix_reader = HeadFixReader(self._reader_queue, serial_number=self._settings.serial_number)
         self._head_fix_reader.start()
 
     def on_close(self):
         self.disconnect_from_device()
-        # self._device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
-        self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+        self._reader_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
     def monitor_trigger(self, values: list):
         # TODO debounce?
@@ -135,3 +148,29 @@ class HeadFixModel:
                     self._is_triggered = False
                     logger.info("trigger disabled")
                     TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, False)
+
+    def load_configuration(self, conf):
+        if "port" in conf:
+            self.port = conf["port"]
+        if "position" in conf:
+            self.update_position(conf["position"])
+        if "loadTrigger" in conf:
+            self.load_trigger = conf["loadTrigger"]
+
+    def write_configuration(self):
+        return {"port": self.port, "position": self._position, "loadTrigger": self._load_trigger}
+
+    def _send_with_token(self, cmd, value=None):
+        token = uuid.uuid4()
+
+        if self._send_command(cmd, value, token):
+            return token
+        else:
+            return None
+
+    def _send_command(self, message, data=None, context=None) -> bool:
+        if self._device_thread is not None:
+            self._device_thread.send_message(message, data, context)
+            return True
+
+        return False

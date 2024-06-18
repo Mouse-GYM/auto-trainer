@@ -3,6 +3,9 @@ class CameraModel:
         self._name = name
         self._url = url
 
+    def __repr__(self):
+        return f"({self._name}: {self._url})"
+
     @property
     def name(self):
         return self._name

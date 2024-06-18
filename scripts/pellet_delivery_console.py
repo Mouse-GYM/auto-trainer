@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from autotrainer.device import SerialInterface
+from autotrainer.device import SerialInterface, GymDeviceMessageKind
 from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 
@@ -11,7 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 def message_queue_callback(kind, context):
-    logger.info(f"device-message {PelletDeliveryMessageKind(kind).name}: {context}")
+    if PelletDeliveryMessageKind.is_member(kind):
+        logger.info(f"device-message {PelletDeliveryMessageKind(kind).name}: {context}")
+    elif GymDeviceMessageKind.is_member(kind):
+        logger.info(f"device-message {GymDeviceMessageKind(kind).name}: {context}")
+    else:
+        logger.info(f"device-message {kind}: {context}")
 
 
 def run_monitor(port: str):

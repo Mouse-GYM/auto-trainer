@@ -1,19 +1,38 @@
+import os
 import sys
 
+from PySide6 import QtGui
 
-def run_acquisition():
+missing_file = "The configuration file {0} does not exist.  A default configuration will be loaded."
+
+
+def verify_configuration(configuration: str):
+    from PySide6.QtWidgets import QMessageBox
+
+    if configuration and not os.path.exists(configuration):
+        # noinspection PyTypeChecker
+        result = QMessageBox.warning(None, "Configuration File not Found", missing_file.format(configuration),
+                                     QMessageBox.StandardButton.Ok, QMessageBox.StandardButton.Close)
+        return result == QMessageBox.StandardButton.Ok
+
+    return True
+
+
+def run_acquisition(configuration: str = None):
     from PySide6.QtWidgets import QApplication
 
-    from tools.acquisition.model.app_model import AppModel
     from tools.acquisition.view.main_window import MainWindow
 
     app = QApplication(sys.argv)
 
-    model = AppModel()
+    if not verify_configuration(configuration):
+        return -1
 
-    window = MainWindow(model)
+    window = MainWindow(app, configuration)
 
     window.show()
+
+    window.move(QtGui.QGuiApplication.primaryScreen().availableGeometry().center() - window.rect().center())
 
     window.on_activated()
 

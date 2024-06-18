@@ -5,13 +5,14 @@ from multiprocessing import Queue
 from threading import Thread
 
 from PySide6.QtCore import QObject, Signal
+from events import Events
+
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.inference import PosePredict, AnalysisMessageKind
 from autotrainer.inference.dlc.dlc_pose_model import DlcPoseModel
+from inference_algorithms import PelletOnlyPoseAlgorithm
 
-from tools.acquisition.inference.pellet_pose_algorithm import PelletPoseAlgorithm
 from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
-from tools.acquisition.model.user_settings import UserSettings
 from tools.acquisition.inference.pellet_device_response_api import PelletDeviceResponseApi
 
 logger = logging.getLogger(__name__)
@@ -20,20 +21,20 @@ logger = logging.getLogger(__name__)
 class AnalysisModel(QObject):
     pose_ready = Signal(object)
 
-    def __init__(self, settings: UserSettings, pellet: PelletDeliveryModel):
+    def __init__(self, pellet: PelletDeliveryModel):
         super().__init__()
 
-        self._settings = settings
+        # TODO remove Qt dependency, inherit from Events
+        self.events = Events(("property_changed",))
 
         self._data_queue = Queue()
         self._cmd_queue = Queue()
         self._msg_queue = Queue()
 
-        self._is_enabled = self._settings.analysis_enabled
-        self._model_location = self._settings.analysis_model
-        self._algorithm_location = self._settings.analysis_algorithm
+        self._is_enabled = False
+        self._model_location = ""
         self._response_api = PelletDeviceResponseApi(pellet)
-        self._algorithm = PelletPoseAlgorithm()
+        self._algorithm = PelletOnlyPoseAlgorithm()
         self._algorithm.api = self._response_api
         self._pellet_model = pellet
 
@@ -50,8 +51,14 @@ class AnalysisModel(QObject):
 
     @is_enabled.setter
     def is_enabled(self, value: bool):
+        if self._is_enabled == value:
+            return
+
+        old_value = self._is_enabled
+
         self._is_enabled = value
-        self._settings.analysis_enabled = value
+
+        self.events.property_changed("is_enabled", value, old_value)
 
     @property
     def model_location(self) -> str:
@@ -59,17 +66,14 @@ class AnalysisModel(QObject):
 
     @model_location.setter
     def model_location(self, value: str):
+        if self._model_location == value:
+            return
+
+        old_value = self._model_location
+
         self._model_location = value
-        self._settings.analysis_model = value
 
-    @property
-    def algorithm_location(self) -> str:
-        return self._algorithm_location
-
-    @algorithm_location.setter
-    def algorithm_location(self, value: str):
-        self._algorithm_location = value
-        self._settings.analysis_algorithm = value
+        self.events.property_changed("model_location", value, old_value)
 
     def on_activated(self):
         self._pellet_model.pellet_reader.ack_callback = lambda x: self._algorithm.api_response(x, True)
@@ -118,6 +122,15 @@ class AnalysisModel(QObject):
         self.stop()
 
         self._is_running = False
+
+    def load_configuration(self, conf):
+        if "model" in conf:
+            self.model_location = conf["model"]
+        if "isEnabled" in conf:
+            self.is_enabled = conf["isEnabled"]
+
+    def write_configuration(self):
+        return {"model": self.model_location, "isEnabled": self._is_enabled}
 
     def _monitor_msg_queue(self):
         while self._is_running:

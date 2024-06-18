@@ -1,13 +1,18 @@
+from __future__ import annotations
+
+import os
+import pathlib
 import time
 import logging
-from multiprocessing import Queue
+import typing
+from multiprocessing import Queue, Value, Array
 from threading import Event
 
 from numpy import ndarray
 
-from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue
-from autotrainer.video import VideoCapture, CaptureMessageKind, VideoRecordProperties, VideoRecordMode, VideoManager, \
-    VideoReader, TriggerManager
+from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, TriggerManager, ObservableObject
+from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
+    VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
 
 from tools.acquisition.model.user_settings import UserSettings
 
@@ -16,7 +21,26 @@ logger = logging.getLogger(__name__)
 CAPTURE_TRIGGER_ID = "CaptureTrigger"
 
 
-class VideoCaptureModel:
+def create_camera_list():
+    cameras = list()
+
+    cameras.append(CaptureCameraAttrs(name="Random Image", url="random://0?width=300&height=200"))
+
+    loc = pathlib.Path(__file__).parent.resolve().parents[2].joinpath("cameras.txt")
+
+    if os.path.isfile(loc):
+        file = open(loc, "r")
+        lines = file.readlines()
+        file.close()
+        for line in lines:
+            parts = line.split(",")
+            if len(parts) == 2:
+                cameras.append(CaptureCameraAttrs(name=parts[0].strip(), url=parts[1].strip()))
+
+    return cameras
+
+
+class VideoCaptureModel(ObservableObject):
     def __init__(self, name, user_settings: UserSettings = None, idx: int = 0):
         super().__init__()
 
@@ -24,7 +48,7 @@ class VideoCaptureModel:
         self._user_settings = user_settings
         self._index = idx
 
-        self._camera_source = None
+        self._camera_source: CaptureCameraAttrs | None = None
         self._camera_properties = dict()
 
         self._video_capture = None
@@ -32,14 +56,16 @@ class VideoCaptureModel:
         self._video_reader_reset_event = None
         self._video_reader_stop_event = None
 
-        self._video_cmd_message_queue = Queue()
-        self._video_status_message_queue = Queue()
-        self._video_queue = None
+        self._video_command_queue = Queue()
+        self._video_status = Value("i", CaptureProcessStatus.UNKNOWN)
+        self._video_frame_index = Value("i", 0)
+        self._video_image_queue = None
+        self._errors = Array("c", bytes(512))
         self._shape = None
 
         self._is_enabled = True
         self._is_primary = False
-        self._record_mode = VideoRecordMode.NONE
+        self._record_mode = VideoRecordMode.CONTINUOUS
         self._is_recording_enabled = False
 
         self._display_update_fcn = None
@@ -48,26 +74,55 @@ class VideoCaptureModel:
         self._start = 0
         self._fps = 0
 
+        self._last_error = None
+
+        self._camera_list = create_camera_list()
+
         self._is_trace_enabled = True
 
         TriggerManager.instance().register(self._on_trigger, CAPTURE_TRIGGER_ID)
 
+        self._update_camera_source(self._camera_list[0])
+
     @property
-    def camera_source(self) -> str:
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def camera_list(self) -> typing.List[CaptureCameraAttrs]:
+        return self._camera_list
+
+    @property
+    def camera_source(self) -> CaptureCameraAttrs:
         return self._camera_source
 
     @camera_source.setter
-    def camera_source(self, value: str):
-        if value != self._camera_source:
-            self._update_camera_source(value)
+    def camera_source(self, value: CaptureCameraAttrs):
+        if self._camera_source == value:
+            return
+
+        old_value = self._camera_source
+
+        self._update_camera_source(value)
+
+        self.property_changed("camera", value, old_value)
 
     @property
-    def is_enabled(self):
+    def is_enabled(self) -> bool:
         return self._is_enabled
 
     @is_enabled.setter
-    def is_enabled(self, value):
-        self._is_enabled = value
+    def is_enabled(self, value: bool):
+        self._is_enabled = self._on_property_changed("is_enabled", value, self._is_enabled)
+
+    @property
+    def is_recording_enabled(self) -> bool:
+        return self._is_recording_enabled
+
+    @is_recording_enabled.setter
+    def is_recording_enabled(self, value: bool):
+        self._is_recording_enabled = self._on_property_changed("is_recording_enabled", value,
+                                                               self._is_recording_enabled)
 
     @property
     def record_mode(self) -> VideoRecordMode:
@@ -75,7 +130,7 @@ class VideoCaptureModel:
 
     @record_mode.setter
     def record_mode(self, value: VideoRecordMode):
-        self._record_mode = value
+        self._record_mode = self._on_property_changed("record_mode", value, self._record_mode)
 
     @property
     def is_primary(self) -> bool:
@@ -88,6 +143,10 @@ class VideoCaptureModel:
             height = int(self._camera_properties["width"])
             if width > 0 and height > 0:
                 return width, height
+
+    @property
+    def last_error(self) -> str:
+        return self._last_error
 
     @property
     def is_trace_enabled(self) -> bool:
@@ -114,6 +173,8 @@ class VideoCaptureModel:
             self._display_update_fcn(data, self._fps)
 
     def on_prepare_capture(self, output_location: str, network_queue: FixedArrayMultiQueue = None) -> bool:
+        self._last_error = None
+
         if not self._is_enabled:
             return True
 
@@ -122,33 +183,33 @@ class VideoCaptureModel:
         self._video_reader_initialize()
 
         if self._camera_source is not None:
-            if "?" in self._camera_source:
-                url = self._camera_source + f"&name={self._name}"
+            if "?" in self._camera_source.url:
+                url = self._camera_source.url + f"&name={self._name}"
             else:
-                url = self._camera_source + f"?name={self._name}"
+                url = self._camera_source.url + f"?name={self._name}"
+
+            camera = CaptureCameraAttrs(name=self._name, url=url)
+
+            inference = CaptureInferenceAttrs(queue=network_queue, index=self._index)
+
+            capture_attrs = CaptureAttrs(command_queue=self._video_command_queue, status=self._video_status,
+                                         image_queue=self._video_image_queue, frame=self._video_frame_index,
+                                         camera=camera, inference=inference, errors=self._errors)
 
             record_properties = VideoRecordProperties(self.record_mode, output_location, 3600)
 
-            self._video_capture = VideoCapture(self._name, self._video_cmd_message_queue,
-                                               self._video_status_message_queue, self._video_queue,
-                                               network_queue, url, self._index, record_properties)
+            self._video_capture = VideoCapture(capture_attrs, record_properties)
 
             self._video_capture.start()
 
-            logger.info(f"<{self._name}> waiting for start acknowledgement")
+            logger.debug(f"<{self._name}> waiting for start acknowledgement")
 
-            try:
-                message = self._video_status_message_queue.get(timeout=10)
-            except:
+            if not self._wait_for_capture_status(CaptureProcessStatus.RUNNING, 5):
                 logger.error(f"<{self._name}> failed to receive start acknowledgement")
+                self._last_error = self._errors.value.decode()
                 self._video_capture.terminate()
                 self._video_capture = None
                 return False
-
-            if message == CaptureMessageKind.BEGIN_CAPTURE_ACKNOWLEDGE:
-                logger.info(f"<{self._name}> video capture start acknowledged")
-            else:
-                logger.error(f"<{self._name}> unexpected start response")
 
             properties = VideoManager.parse_params(url)
 
@@ -176,10 +237,10 @@ class VideoCaptureModel:
         if not self._is_enabled:
             return
 
-        self._video_cmd_message_queue.put(CaptureMessageKind.BEGIN_CAPTURE)
+        self._send_command(CaptureCommandKind.ENABLE_CAPTURE)
 
     def on_capture_notify_end(self):
-        self._video_cmd_message_queue.put(CaptureMessageKind.END_CAPTURE)
+        self._send_command(CaptureCommandKind.DISABLE_CAPTURE)
 
     def on_capture_stop(self):
         if not self._is_enabled:
@@ -188,21 +249,16 @@ class VideoCaptureModel:
         self._video_reader_teardown()
 
         if self._video_capture is not None:
-            self._video_cmd_message_queue.put(CaptureMessageKind.TERMINATE)
+            self._send_command(CaptureCommandKind.TERMINATE)
 
-            message = self._video_status_message_queue.get()
-
-            if message == CaptureMessageKind.TERMINATED:
-                logger.info(f"<{self._name}> video capture terminate acknowledged")
+            if self._wait_for_capture_status(CaptureProcessStatus.TERMINATED, 5):
+                logger.debug(f"<{self._name}> video capture terminate acknowledged")
             else:
-                logger.error(f"<{self._name}> unexpected terminate response")
+                logger.error(f"<{self._name}> did not receive process terminates status")
 
-        if self._video_cmd_message_queue.qsize() > 0:
-            self._trace(f"clearing command queue {self._video_cmd_message_queue.qsize()}")
-        clear_queue(self._video_cmd_message_queue)
-        if self._video_status_message_queue.qsize() > 0:
-            self._trace(f"clearing status queue {self._video_status_message_queue.qsize()}")
-        clear_queue(self._video_status_message_queue)
+        if self._video_command_queue.qsize() > 0:
+            self._trace(f"clearing command queue {self._video_command_queue.qsize()}")
+        clear_queue(self._video_command_queue)
 
         if self._video_capture is not None:
             self._trace("waiting for process termination")
@@ -220,16 +276,64 @@ class VideoCaptureModel:
 
         self._video_reader_teardown()
 
-    def _on_trigger(self, sink, trigger_id, context):
-        if self._video_capture is not None:
-            self._video_cmd_message_queue.put(CaptureMessageKind.TRIGGER)
+    def load_configuration(self, conf):
+        if "id" in conf:
+            self._name = conf["id"]
+        if "isEnabled" in conf:
+            self.is_enabled = conf["isEnabled"]
+        if "isRecordEnabled" in conf:
+            self.is_recording_enabled = conf["isRecordEnabled"]
+        if "recordMode" in conf:
+            self.record_mode = VideoRecordMode(conf["recordMode"])
 
-    def _update_camera_source(self, value: str):
-        if value is None or len(value) == 0:
+        if "url" in conf:
+            if "name" in conf:
+                name = conf["name"]
+            else:
+                name = "<unnamed>"
+
+            url = conf["url"]
+
+            existing = list(filter(lambda m: m.url == url, self._camera_list))
+
+            if len(existing) == 0:
+                source = CaptureCameraAttrs(name=name, url=url)
+                self._camera_list.insert(0, source)
+            else:
+                source = existing[0]
+
+            self.camera_source = source
+
+    def write_configuration(self):
+        return {"id": self._name, "name": self._camera_source.name, "url": self._camera_source.url,
+                "isEnabled": self._is_enabled, "isRecordEnabled": self._is_recording_enabled,
+                "recordMode": int(self._record_mode)}
+
+    def _wait_for_capture_status(self, expected: CaptureProcessStatus, timeout: int):
+        start_ns = time.perf_counter_ns()
+        elapsed = 0
+
+        while self._video_status.value != expected and elapsed < timeout:
+            time.sleep(0.001)
+            elapsed = (time.perf_counter_ns() - start_ns) / 1e9
+
+        return elapsed <= timeout
+
+    def _on_trigger(self, _sink, _trigger_id, context):
+        if self._video_capture is not None:
+            if context:
+                self._send_command(CaptureCommandKind.ENABLE_RECORDING)
+            else:
+                self._send_command(CaptureCommandKind.DISABLE_RECORDING)
+
+    def _update_camera_source(self, cam: CaptureCameraAttrs):
+        if cam is None or len(cam.url) == 0:
             self._camera_source = None
             self._camera_properties = dict()
-            self._video_queue = None
+            self._video_image_queue = None
             return
+
+        value = cam.url
 
         if "&name" not in value:
             if "?" in value:
@@ -246,10 +350,12 @@ class VideoCaptureModel:
             height = int(properties["width"])
             if width > 0 and height > 0:
                 self._shape = (width, height)
+        else:
+            self._shape = (300, 200)
 
-        self._video_queue = None if self._shape is None else FixedArrayQueue(3, self._shape)
+        self._video_image_queue = None if self._shape is None else FixedArrayQueue(3, self._shape)
 
-        self._camera_source = value
+        self._camera_source = cam
 
         self._camera_properties = properties
 
@@ -259,7 +365,7 @@ class VideoCaptureModel:
         if self._video_reader is None and self._display_update_fcn is not None:
             self._video_reader_stop_event = Event()
             self._video_reader_reset_event = Event()
-            self._video_reader = VideoReader(self._name, self._video_queue, self.refresh_image,
+            self._video_reader = VideoReader(self._name, self._video_image_queue, self.refresh_image,
                                              self._video_reader_stop_event)
             self._video_reader.start()
 
@@ -268,6 +374,10 @@ class VideoCaptureModel:
             self._video_reader_stop_event.set()
             self._video_reader.join()
             self._video_reader = None
+
+    def _send_command(self, cmd: CaptureCommandKind, context: object = None):
+        if self._video_command_queue is not None:
+            self._video_command_queue.put((cmd, context))
 
     def _trace(self, message: str):
         if self._is_trace_enabled:

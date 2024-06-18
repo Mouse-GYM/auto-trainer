@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from tools.device.head_fix.run_head_fix_ui import run_head_fix_ui
+from tools.head_fix.run_head_fix_ui import run_head_fix_ui
 
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger('autotrainer').setLevel(logging.DEBUG)

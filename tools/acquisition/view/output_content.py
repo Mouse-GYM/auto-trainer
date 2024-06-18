@@ -1,26 +1,81 @@
-from PySide6.QtWidgets import QGridLayout, QLabel, QLineEdit
+from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QHBoxLayout, QVBoxLayout, QStackedLayout
 
-from tools.acquisition.model.user_settings import UserSettings
+from autotrainer.pyside import CardWidget
+from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.view.ContentWidget import ContentWidget
 
 
-class OutputContent(QGridLayout):
-
-    def __init__(self, user_settings: UserSettings = None):
+class OutputContent(ContentWidget):
+    def __init__(self, model: AppModel):
         super().__init__()
 
-        self._user_settings = user_settings
+        self._model = model
 
-        self.setContentsMargins(10, 10, 10, 10)
+        self._card_widget = CardWidget()
 
-        self.setColumnStretch(1, 1)
+        layout = QHBoxLayout()
 
-        self.addWidget(QLabel("Output Location:"), 0, 0)
+        layout.addWidget(QLabel("Top-Level Location:"))
 
-        location = QLineEdit()
-        location.setText(self._user_settings.output_location)
-        location.textChanged.connect(self.location_changed)
-        self.addWidget(location, 0, 1)
+        self._location = QLineEdit()
+        self._location.setText(self._model.output_location)
+        self._location.textChanged.connect(self.location_changed)
+        layout.addWidget(self._location)
+
+        self._content = QWidget()
+        self._content.setLayout(layout)
+
+        self._no_content = QWidget()
+        self._no_content.setLayout(QHBoxLayout())
+        self._no_content.layout().addWidget(QLabel("Edit configuration to modify output settings"))
+
+        self._stacked_layout = QStackedLayout()
+        self._stacked_layout.addWidget(self._no_content)
+        self._stacked_layout.addWidget(self._content)
+
+        widget = QWidget()
+        widget.setLayout(self._stacked_layout)
+
+        self._card_widget.setContentWidget(widget)
+
+        # Header
+        self._header = QWidget()
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        title = QLabel("Output")
+        title.setStyleSheet("font-weight: bold")
+        layout.addWidget(title)
+
+        layout.addStretch(1)
+
+        self._output_location_header = QLabel("")
+
+        layout.addWidget(self._output_location_header)
+
+        self._header.setLayout(layout)
+
+        self._card_widget.header.setContent(self._header)
+
+        # Final layout
+        layout = QVBoxLayout()
+        layout.addWidget(self._card_widget)
+        self.setLayout(layout)
+
+        self._model.property_changed += self._model_property_changed
+
+        self.set_is_editable(False)
+
+    def set_is_editable(self, is_editable: bool):
+        self._stacked_layout.setCurrentIndex(1 if is_editable else 0)
+
+    def set_is_capture_active(self, is_active: bool):
+        self._location.setEnabled(not is_active)
 
     def location_changed(self, value: str):
-        if self._user_settings is not None and value:
-            self._user_settings.output_location = value
+        self._model.output_location = value
+
+    def _model_property_changed(self, name, value, _):
+        if name == "output_location":
+            self._location.setText(value)
+            self._output_location_header.setText(value)

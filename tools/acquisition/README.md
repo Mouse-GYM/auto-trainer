@@ -1,9 +1,24 @@
-## Acquisition UI
+# Acquisition UI
 
-### Toolbar Buttons
+## Using Configurations
+Configuration files load preset values for the settings of each module (cameras, devices, analysis, output).  When 
+the application starts it will load the most recent configuration file, if available and be in non-edit mode.
+
+To make changes to module settings use the Edit Configuration toolbar button.  This will change the controls in 
+each module view area to be editable where applicable.  Make the desired changes, exit edit mode (using the same
+toolbar button), and then use the Save or Save As... File menu items to save the configuration to a new or
+existing file.
+
+## Reference
+
+### Menus/Toolbar Buttons
 
 * Run/stop - start and stop acquisition and device interaction
 * Manual Trigger - manually trigger recording to start or stop for triggered recording mode
+* Edit Configuration - change the window to edit mode to change settings
+* File -> Open Configuration - open an existing configuration file
+* File -> Save Configuration (As) - save the current configuration file or as a new file
+* View -> Diagnostics - show or hide the diagnostics panel
 
 ### Camera Control
 * Enabled - will not start the camera subprocess when not enabled
@@ -26,15 +41,17 @@
 * Y - device `Jxx` command
 * Z - device `Kxx` command
 
+### Analysis
+* Enable - enable or disable pose analysis
+* Model - the folder containing the DLC model to use
+
 ### Output
 * Output Location - location for recorded video files
 
 ### Log
 Logs from any module that is not a subprocess.  Additional subprocess log messages can be seen at the command line.
 
-### Temporary Tricks (april-cleanup branch only)
-* The three cameras will be set to the first three entries in cameras.txt (if there are enough entries)
-* If the serial ports for head/pellet were set in a previous run and still available, connections will begin at startup
+## System Configuration
 * The unit number for the output directory structure/file names can be set by editing `~/.config/Colorado/Auto Trainer.conf`
  and adding 
 ```

@@ -4,7 +4,7 @@ import queue
 import time
 from threading import Thread
 
-from autotrainer.device import SerialInterface
+from autotrainer.device import SerialInterface, GymDeviceMessageKind
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 
@@ -91,9 +91,13 @@ def run_monitor(port: str):
             elif cmd.startswith("O"):
                 device_thread.send_message(HeadFixMessageKind.SETTINGS)
             elif cmd.startswith("F"):
-                device_thread.send_message(HeadFixMessageKind.VERSION)
+                device_thread.send_message(GymDeviceMessageKind.VERSION)
             elif cmd.startswith("M"):
                 device_thread.send_message(HeadFixMessageKind.UPDATE_TARE)
+            elif cmd.startswith("S"):
+                device_thread.send_message(HeadFixMessageKind.STREAM_START)
+            elif cmd.startswith("T"):
+                device_thread.send_message(HeadFixMessageKind.STREAM_STOP)
         else:
             if not mon_thread.is_alive():
                 device_thread.send_message(DeviceThreadMessageKind.TERMINATE)

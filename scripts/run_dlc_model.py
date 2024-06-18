@@ -80,7 +80,7 @@ def process_video(network, front_source, side_source, batch_size: int, user_max_
             pose = configuration.predict(frames)
 
             if output_file is not None:
-                output_file.write(pose.tostring())
+                output_file.write(pose.tobytes())
 
             if reference is not None:
                 current = reference[reference_index].reshape(batch_size * 2, 30)

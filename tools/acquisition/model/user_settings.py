@@ -1,14 +1,14 @@
 import sys
-import os
-from pathlib import Path
-from datetime import datetime
-from dateutil import parser
 
 from PySide6.QtCore import QCoreApplication, QSettings
 
+from autotrainer.core import ObservableObject
 
-class UserSettings:
+
+class UserSettings(ObservableObject):
     def __init__(self):
+        super().__init__()
+
         if sys.platform.startswith('win'):
             self._settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "Colorado", "Auto Trainer")
         else:
@@ -17,10 +17,33 @@ class UserSettings:
             QCoreApplication.setApplicationName("Auto Trainer")
             self._settings = QSettings()
 
-        self._cameras = None
-
     def save(self):
         self._settings.sync()
+
+    @property
+    def last_window_x(self) -> int:
+        return self._settings.value("system/last_window_x", 0, int)
+
+    @last_window_x.setter
+    def last_window_x(self, value: int):
+        self._settings.setValue("system/last_window_x", value)
+
+    @property
+    def last_window_y(self) -> int:
+        return self._settings.value("system/last_window_y", 0, int)
+
+    @last_window_y.setter
+    def last_window_y(self, value: int):
+        self._settings.setValue("system/last_window_y", value)
+
+    @property
+    def last_configuration(self) -> str:
+        return self._settings.value("system/last_configuration", "")
+
+    @last_configuration.setter
+    def last_configuration(self, value: str) -> None:
+        value = self._on_property_changed("last_configuration", value, self.last_configuration)
+        self._settings.setValue("system/last_configuration", value)
 
     @property
     def serial_number(self) -> str:
@@ -53,83 +76,3 @@ class UserSettings:
     @live_feed_refresh_rate.setter
     def live_feed_refresh_rate(self, value: int):
         self._settings.setValue("display/refresh_rate", value)
-
-    @property
-    def output_location(self) -> str:
-        return self._settings.value("output/location", "")
-
-    @output_location.setter
-    def output_location(self, value: str):
-        self._settings.setValue("output/location", value)
-
-    @property
-    def head_port(self) -> str:
-        return self._settings.value("head_fix/port", "")
-
-    @head_port.setter
-    def head_port(self, value: str):
-        self._settings.setValue("head_fix/port", value)
-
-    @property
-    def head_trigger(self) -> int:
-        return self._settings.value("head_fix/trigger", 15, int)
-
-    @head_trigger.setter
-    def head_trigger(self, value: int):
-        self._settings.setValue("head_fix/trigger", value)
-
-    @property
-    def pellet_port(self) -> str:
-        return self._settings.value("pellet_delivery/port", "")
-
-    @pellet_port.setter
-    def pellet_port(self, value: str):
-        self._settings.setValue("pellet_delivery/port", value)
-
-    @property
-    def analysis_enabled(self) -> bool:
-        return self._settings.value("analysis/enabled", False, bool)
-
-    @analysis_enabled.setter
-    def analysis_enabled(self, value: bool):
-        self._settings.setValue("analysis/enabled", value)
-
-    @property
-    def analysis_model(self) -> str:
-        return self._settings.value("analysis/model", "")
-
-    @analysis_model.setter
-    def analysis_model(self, value: str):
-        self._settings.setValue("analysis/model", value)
-
-    @property
-    def analysis_algorithm(self) -> str:
-        return self._settings.value("analysis/algorithm", "")
-
-    @analysis_algorithm.setter
-    def analysis_algorithm(self, value: str):
-        self._settings.setValue("analysis/algorithm", value)
-
-    def get_next_session_path(self) -> (str, int):
-        file_timestamp = datetime.now()
-        session_index = 1
-        try:
-            last = parser.parse(self.session_date)
-            if last is not None and last.year == file_timestamp.year and last.month == file_timestamp.month and last.day == file_timestamp.day:
-                session_index = self.session_index
-            else:
-                self.session_date = file_timestamp.strftime("%Y%m%d")
-                self.session_index = 0
-        except:
-            self.session_date = file_timestamp.strftime("%Y%m%d")
-            self.session_index = 0
-
-        prefix = os.path.join(self.output_location, file_timestamp.strftime("%Y%m%d"),
-                              self.serial_number, f"session{session_index:03}")
-        path = Path(prefix)
-        path.mkdir(parents=True, exist_ok=True)
-
-        location = os.path.join(prefix,
-                                f"{file_timestamp.strftime('%Y%m%d')}_{self.serial_number}_session{session_index:03}")
-
-        return location, session_index

@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from tools.device.pellet_delivery.run_pellet_delivery_ui import run_pellet_delivery_ui
+from tools.pellet_delivery.run_pellet_delivery_ui import run_pellet_delivery_ui
 
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger('autotrainer').setLevel(logging.DEBUG)
