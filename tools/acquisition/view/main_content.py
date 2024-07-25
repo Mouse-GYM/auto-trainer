@@ -53,17 +53,17 @@ class MainContent(ContentWidget):
         self._layout.addWidget(self._top_camera_content, 0, 4, 1, 2)
         self._content_widgets.append(self._top_camera_content)
 
-        self._head_fix_content = HeadFixContent(self._model.head_fix)
-        self._layout.addWidget(self._head_fix_content, 1, 0, 1, 6)
-        self._content_widgets.append(self._head_fix_content)
-
         self._pellet_delivery_content = PelletDeliveryContent(self._model.pellet_delivery)
-        self._layout.addWidget(self._pellet_delivery_content, 2, 0, 1, 3)
+        self._layout.addWidget(self._pellet_delivery_content, 1, 0, 1, 3)
         self._content_widgets.append(self._pellet_delivery_content)
 
         analysis_content = AnalysisContent(self._model.analysis)
-        self._layout.addWidget(analysis_content, 2, 3, 1, 3)
+        self._layout.addWidget(analysis_content, 2, 0, 1, 3)
         self._content_widgets.append(analysis_content)
+
+        self._head_fix_content = HeadFixContent(self._model.head_fix)
+        self._layout.addWidget(self._head_fix_content, 1, 3, 2, 3)
+        self._content_widgets.append(self._head_fix_content)
 
         output_content = OutputContent(self._model)
         self._layout.addWidget(output_content, 3, 0, 1, 6)
