@@ -1,5 +1,6 @@
 import logging
 import os
+import typing
 
 import numpy
 
@@ -34,6 +35,7 @@ class DlcPoseModel(PoseModel):
         self._model_session = None
         self._model_inputs = None
         self._model_outputs = None
+        self._body_parts_count = 1
 
         self._predict = None
 
@@ -75,7 +77,9 @@ class DlcPoseModel(PoseModel):
                 self._body_parts.append(part)
                 self._body_parts_by_category[self.DEFAULT_BODY_PART_CATEGORY].append(part)
 
-        logger.debug(f"loaded {len(self._body_parts)} body parts")
+        self._body_parts_count = len(self._body_parts)
+
+        logger.debug(f"loaded {self._body_parts_count} body parts")
 
         self._training_fraction = self._sys_configuration[self.TRAINING_FRACTION_KEY][self._training_index]
 
@@ -116,6 +120,13 @@ class DlcPoseModel(PoseModel):
         self._model_session, self._model_inputs, self._model_outputs = predict.setup_pose_prediction(
             self._model_configuration)
 
-    def predict(self, frames):
-        return self._predict.getposeNP(frames, self._model_configuration, self._model_session, self._model_inputs,
-                                       self._model_outputs)
+    def predict(self, frames) -> typing.List[numpy.ndarray]:
+        pose_data = self._predict.getposeNP(frames, self._model_configuration, self._model_session, self._model_inputs,
+                                            self._model_outputs)
+
+        all_frames = list()
+
+        for frame in range(pose_data.shape[0]):
+            all_frames.append(pose_data[frame, :].reshape(self._body_parts_count, 3))
+
+        return all_frames

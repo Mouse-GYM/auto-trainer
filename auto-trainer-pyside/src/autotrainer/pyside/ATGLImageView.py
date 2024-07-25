@@ -9,6 +9,9 @@ class ATGLImageView(QWidget):
     def __init__(self, data: bytearray = None, width: int = 450, height: int = 300):
         super().__init__()
 
+        self._width = width
+        self._height = height
+
         self._scene = QGraphicsScene(0, 0, width, height)
 
         brush = QBrush(Qt.GlobalColor.white)
@@ -68,5 +71,5 @@ class ATGLImageView(QWidget):
             self._pixmap.setPixmap(QPixmap.fromImage(image))
 
     def set_points(self, point):
-        self._pellet_point.setPos(point[0] * 1.5, point[1] * 1.5)
-        self._star_point.setPos(point[2] * 1.5, point[3] * 1.5)
+        self._pellet_point.setPos(point[0] * self._width, point[1] * self._height)
+        self._star_point.setPos(point[2] * self._width, point[3] * self._height)

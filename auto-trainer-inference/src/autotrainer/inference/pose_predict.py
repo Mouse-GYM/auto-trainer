@@ -34,6 +34,8 @@ class PosePredict(Process):
         self._cmd_queue = cmd_queue
         self._msg_queue = msg_queue
         self._data_queue = data_queue
+        self._width = 1
+        self._height = 1
 
         self._start_time = 0
 
@@ -49,6 +51,8 @@ class PosePredict(Process):
         self._send_message(AnalysisMessageKind.Created)
 
         self._frame_buffer = numpy.ndarray((self._image_queue.batch_size, *self._image_queue.shape, 3))
+
+        self._height, self._width = self._image_queue.shape
 
         self._send_message(AnalysisMessageKind.Loading)
 
@@ -105,6 +109,10 @@ class PosePredict(Process):
                     self._start_time = time.perf_counter()
 
                 pose = self._model.predict(self._frame_buffer)
+
+                for frame in pose:
+                    frame[:, 0] /= self._width
+                    frame[:, 1] /= self._height
 
                 if self._data_queue is not None:
                     self._data_queue.put(pose)

@@ -1,3 +1,5 @@
+import typing
+
 import numpy
 
 from .pose_response_api import PoseResponseApi
@@ -40,12 +42,7 @@ class PoseAlgorithm:
     def initialize(self):
         pass
 
-    def process(self, pose_data: numpy.ndarray):
-        all_frames = list()
-
-        for frame in range(pose_data.shape[0]):
-            all_frames.append(pose_data[frame, :].reshape(self._expected_num_parts, 3))
-
+    def process(self, all_frames: typing.List[numpy.ndarray]):
         left_frames = list()
         right_frames = list()
 

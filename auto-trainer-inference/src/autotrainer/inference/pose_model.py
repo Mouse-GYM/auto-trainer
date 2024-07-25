@@ -1,3 +1,5 @@
+import typing
+
 import numpy
 
 
@@ -21,5 +23,5 @@ class PoseModel:
     def load(self):
         pass
 
-    def predict(self, frames: numpy.ndarray) -> numpy.ndarray:
+    def predict(self, frames: numpy.ndarray) -> typing.List[numpy.ndarray]:
         return numpy.empty((0, 3), dtype="float")
