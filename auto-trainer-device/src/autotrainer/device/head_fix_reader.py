@@ -24,7 +24,9 @@ class HeadFixReader(Thread):
         self._measurement_callback = measurement_callback
         self._serial_number = serial_number
 
+        self._record_base = None
         self._record_location = None
+        self._current_record_hour = -1
 
         self._measurement_count = 0
         self._start = None
@@ -62,6 +64,7 @@ class HeadFixReader(Thread):
         if self._record_location is not None:
             self._record_location.close()
 
+        self._record_base = value
         self._record_location = self._validate_file(value)
 
         self._measurement_count = 0
@@ -96,6 +99,12 @@ class HeadFixReader(Thread):
                     humidity.append(m.humidity)
                     if self._record_location is not None:
                         try:
+                            file_timestamp = datetime.now()
+                            if file_timestamp.hour != self._current_record_hour:
+                                if self._record_location is not None:
+                                    self._record_location.close()
+                                self._record_location = self._validate_file(self._record_base)
+
                             self._record_location.write(
                                 f"{time.perf_counter_ns()}, {m.weight}, {m.switch}, {m.pressure}," f"{m.temperature}, {m.humidity}\n")
                         except:
@@ -126,6 +135,7 @@ class HeadFixReader(Thread):
                 location = open(file_name, "a")
                 if not file_existed:
                     location.write("Index, Weight, Switch, Pressure, Temperature, Humidity\n")
+                self._current_record_hour = file_timestamp.hour
                 logger.debug(f"saving to {file_name}")
                 return location
             except:
