@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QCheckBox, QFileDialog, QWidget, QVBoxLayout, \
     QHBoxLayout, QFormLayout, QStackedLayout
 
-from autotrainer.pyside import CardWidget
+from autotrainer.pyside import CardWidget, QtSwitch
 from tools.acquisition.model.analysis_model import AnalysisModel
 from tools.acquisition.view.ContentWidget import ContentWidget
 
@@ -15,7 +15,13 @@ class AnalysisContent(ContentWidget):
         self._card_widget = CardWidget()
 
         content = QWidget()
-        layout = QFormLayout()
+        layout = QHBoxLayout()
+
+        layout.addWidget(QLabel("Enable Pose Response:"))
+        self._toggle = QtSwitch()
+        self._toggle.stateChanged.connect(self._is_pose_response_state_changed)
+        layout.addWidget(self._toggle)
+        layout.addStretch(1)
 
         content.setLayout(layout)
         self._card_widget.setContentWidget(content)
@@ -50,7 +56,7 @@ class AnalysisContent(ContentWidget):
 
         layout.addWidget(QLabel("Model:"))
 
-        self._location = QLineEdit(self._model.model_location)
+        self._location = QLineEdit()
         self._location.editingFinished.connect(self._location_changed)
         layout.addWidget(self._location, 1)
 
@@ -64,13 +70,12 @@ class AnalysisContent(ContentWidget):
 
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        self._location_label = QLabel(self._model.model_location)
+        self._location_label = QLabel()
         layout.addWidget(self._location_label)
 
         self._basic_footer.setLayout(layout)
 
         self._stack_layout = QStackedLayout()
-        # self._stack_layout.setContentsMargins(0, 0, 0, 0)
         self._stack_layout.addWidget(self._basic_footer)
         self._stack_layout.addWidget(self._editable_footer)
 
@@ -84,7 +89,10 @@ class AnalysisContent(ContentWidget):
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
 
+        self._model_property_changed("model_location", self._model.model_location, None)
         self._model.events.property_changed += self._model_property_changed
+
+        self._toggle.setChecked(self._model.is_pose_predict_enabled)
 
         self.set_is_editable(False)
 
@@ -102,6 +110,9 @@ class AnalysisContent(ContentWidget):
         self._model.is_enabled = x != 0
         self._enabled_label.setText("Enabled" if self._model.is_enabled else "Disabled")
 
+    def _is_pose_response_state_changed(self, x: int):
+        self._model.is_pose_predict_enabled = x != 0
+
     def _location_changed(self):
         self._model.model_location = self._location.text()
 
@@ -115,6 +126,12 @@ class AnalysisContent(ContentWidget):
     def _model_property_changed(self, name, value, _):
         if name == "is_enabled":
             self._is_enabled.setChecked(value)
+        if name == "is_pose_predict_enabled":
+            self._toggle.setChecked(value)
         elif name == "model_location":
-            self._location.setText(value)
-            self._location_label.setText(value)
+            if value is not None and len(value) > 0:
+                self._location.setText(value)
+                self._location_label.setText(value)
+            else:
+                self._location.setText("Model not specified")
+                self._location_label.setText("Model not specified")

@@ -9,3 +9,4 @@ from .CardHeader import CardHeader
 from .CardFooter import CardFooter
 from .PGWidget import PGWidget
 from .TextBoxHandler import TextBoxHandler
+from .QtSwitch import QtSwitch

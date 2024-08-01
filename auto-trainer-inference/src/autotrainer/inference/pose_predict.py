@@ -127,5 +127,3 @@ class PosePredict(Process):
                     fps = self._frame_count / (now - self._start_time)
                     if self._msg_queue is not None:
                         self._msg_queue.put((AnalysisMessageKind.Performance, (pps, fps)))
-                    logger.info(f"{pps :.1f} predict/s")
-                    logger.info(f"{fps :.1f} frames/camera/s ({(fps * 2):.1f} total images/s)")

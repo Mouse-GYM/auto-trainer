@@ -45,6 +45,8 @@ class AnalysisModel(QObject):
 
         self._is_running = True
 
+        self._is_pose_predict_enabled = True
+
     @property
     def is_enabled(self) -> bool:
         return self._is_enabled
@@ -59,6 +61,21 @@ class AnalysisModel(QObject):
         self._is_enabled = value
 
         self.events.property_changed("is_enabled", value, old_value)
+
+    @property
+    def is_pose_predict_enabled(self) -> bool:
+        return self._is_pose_predict_enabled
+
+    @is_pose_predict_enabled.setter
+    def is_pose_predict_enabled(self, value: bool):
+        if self._is_pose_predict_enabled == value:
+            return
+
+        old_value = self._is_pose_predict_enabled
+
+        self._is_pose_predict_enabled = value
+
+        self.events.property_changed("is_pose_predict_enabled", value, old_value)
 
     @property
     def model_location(self) -> str:
@@ -141,6 +158,9 @@ class AnalysisModel(QObject):
                     self._algorithm.set_parts(context)
                     self._algorithm.initialize()
                     self._cmd_queue.put(AnalysisMessageKind.Start)
+                elif msg == AnalysisMessageKind.Performance:
+                    logger.info(f"{context[0] :.1f} predict/s")
+                    logger.info(f"{context[1] :.1f} frames/camera/s ({(context[1] * 2):.1f} total images/s)")
             except queue.Empty:
                 time.sleep(0.001)
             except Exception as ex:
@@ -150,8 +170,9 @@ class AnalysisModel(QObject):
         while self._is_running:
             try:
                 pose_data = self._data_queue.get(block=False, timeout=0.5)
-                vis_data = self._algorithm.process(pose_data)
-                self.pose_ready.emit(vis_data)
+                if self._is_pose_predict_enabled:
+                    vis_data = self._algorithm.process(pose_data)
+                    self.pose_ready.emit(vis_data)
             except queue.Empty:
                 time.sleep(0.001)
             except Exception as ex:

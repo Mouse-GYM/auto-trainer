@@ -1,4 +1,7 @@
 class PoseResponseApi:
+    def set_state_enabled(self, b):
+        pass
+
     def move_home(self) -> object:
         print("Moving home: Not implemented")
         return None
