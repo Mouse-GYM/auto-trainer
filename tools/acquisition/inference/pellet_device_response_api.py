@@ -1,11 +1,10 @@
 from autotrainer.inference import PoseResponseApi
 
-from tools.acquisition.model.analysis_model import AnalysisModel
 from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
 
 
 class PelletDeviceResponseApi(PoseResponseApi):
-    def __init__(self, model: AnalysisModel, device: PelletDeliveryModel):
+    def __init__(self, model, device: PelletDeliveryModel):
         super(PoseResponseApi, self).__init__()
         self._analysis_model = model
         self._pellet_device = device

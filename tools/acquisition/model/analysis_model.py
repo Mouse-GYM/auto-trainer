@@ -33,7 +33,7 @@ class AnalysisModel(QObject):
 
         self._is_enabled = False
         self._model_location = ""
-        self._response_api = PelletDeviceResponseApi(pellet)
+        self._response_api = PelletDeviceResponseApi(self, pellet)
         self._algorithm = PelletOnlyPoseAlgorithm()
         self._algorithm.api = self._response_api
         self._pellet_model = pellet
