@@ -47,6 +47,10 @@ class AppModel(ObservableObject):
 
         self._is_recording_trigger = False
 
+        self._animal_name = ""
+
+        self._notes = ""
+
         TriggerManager.instance().register(self._trigger_received, CAPTURE_TRIGGER_ID)
 
     @property
@@ -89,6 +93,22 @@ class AppModel(ObservableObject):
         self.property_changed("output_location", value, old_value)
 
         self._head_fix.output_location = value
+
+    @property
+    def animal_name(self) -> str:
+        return self._animal_name
+
+    @animal_name.setter
+    def animal_name(self, value: str):
+        self._animal_name = self.property_changed("animal_name", value, self._animal_name)
+
+    @property
+    def notes(self) -> str:
+        return self._notes
+
+    @notes.setter
+    def notes(self, value: str):
+        self._notes = self.property_changed("notes", value, self._notes)
 
     def on_activated(self):
         self._analysis.on_activated()

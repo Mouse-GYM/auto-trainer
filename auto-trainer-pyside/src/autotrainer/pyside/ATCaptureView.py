@@ -17,6 +17,7 @@ class ATCaptureView(QWidget):
     enabled_changed = Signal(bool)
     record_enabled_changed = Signal(bool)
     trigger_source_changed = Signal(bool)
+    recording_indicator_changed = Signal(bool)
 
     def __init__(self, image_width: int = 450, image_height: int = 300):
         super().__init__()
@@ -117,6 +118,8 @@ class ATCaptureView(QWidget):
 
         self.set_is_editable(False)
 
+        self.recording_indicator_changed.connect(lambda b: self._setRecordingEnabledIndicator(b))
+
     def set_is_capture_active(self, is_active: bool):
         self._triggerSource.setEnabled(not is_active)
         self._isEnabled.setEnabled(not is_active)
@@ -150,7 +153,7 @@ class ATCaptureView(QWidget):
         for camera in cameras:
             self._camera.addItem(camera.name, camera)
 
-    def setRecordingEnabledIndicator(self, b: bool):
+    def _setRecordingEnabledIndicator(self, b: bool):
         self._is_recording.setVisible(b)
 
     def setTitle(self, title: str):

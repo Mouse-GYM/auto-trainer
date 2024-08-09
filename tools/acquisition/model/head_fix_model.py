@@ -1,9 +1,13 @@
 import logging
 import os
 import queue
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
+from threading import Timer
+
+import numpy
 
 from autotrainer.device import SerialInterface, HeadFixReader
 from autotrainer.device import HeadFix, HeadFixMessageKind
@@ -38,6 +42,12 @@ class HeadFixModel(ObservableObject):
         self._output_location = ""
 
         self._is_triggered = False
+
+        self._min_rec_time = 0
+        self._last_trigger_start = 0
+        self._trigger_was_high = False
+        self._enable_trigger_debounce = Timer(1.0, lambda: None)
+        self._disable_trigger_debounce = Timer(1.0, lambda: None)
 
     @property
     def is_connected(self):
@@ -136,18 +146,35 @@ class HeadFixModel(ObservableObject):
         self._reader_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
     def monitor_trigger(self, values: list):
-        # TODO debounce?
-        for value in values:
-            if not self._is_triggered:
-                if value > self._load_trigger:
-                    self._is_triggered = True
-                    logger.info("trigger enabled")
-                    TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, True)
-            else:
-                if value < self._load_trigger:
-                    self._is_triggered = False
-                    logger.info("trigger disabled")
-                    TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, False)
+        self._trigger_response(numpy.mean(values))
+        # for value in values:
+        #    self._trigger_response(value)
+
+    def _trigger_response(self, value):
+        if value > self._load_trigger:
+            self._disable_trigger_debounce.cancel()
+            if not self._trigger_was_high:
+                self._trigger_was_high = True
+                self._enable_trigger_debounce = Timer(1.0, self._trigger_enable)
+                self._enable_trigger_debounce.start()
+        else:
+            self._enable_trigger_debounce.cancel()
+            if self._trigger_was_high:
+                self._trigger_was_high = False
+                rec_time = time.perf_counter() - self._last_trigger_start
+                self._disable_trigger_debounce = Timer(1.0 if rec_time >= 5 else 5 - rec_time, self._trigger_disable)
+                self._disable_trigger_debounce.start()
+
+    def _trigger_enable(self):
+        if not self._is_triggered:
+            self._is_triggered = True
+            TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, True)
+            self._last_trigger_start = time.perf_counter()
+
+    def _trigger_disable(self):
+        if self._is_triggered:
+            self._is_triggered = False
+            TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, False)
 
     def load_configuration(self, conf):
         if "port" in conf:

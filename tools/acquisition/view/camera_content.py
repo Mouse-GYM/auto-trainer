@@ -78,7 +78,7 @@ class CameraContent(ContentWidget):
 
     def _trigger_received(self, _, __, context):
         if self._model.is_enabled and self._model.record_mode == VideoRecordMode.TRIGGER:
-            self._capture_view.setRecordingEnabledIndicator(context)
+            self._capture_view.recording_indicator_changed.emit(context)
 
     def _model_property_changed(self, name, value, _):
         if name == "camera":

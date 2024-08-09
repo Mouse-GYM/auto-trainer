@@ -7,8 +7,11 @@ logging.getLogger("autotrainer").setLevel(logging.DEBUG)
 if __name__ == '__main__':
     import sys
     import argparse
+    import faulthandler
     from multiprocessing import set_start_method
     from tools.acquisition.run_acquisition import run_acquisition
+
+    faulthandler.enable()
 
     set_start_method("spawn")
 
