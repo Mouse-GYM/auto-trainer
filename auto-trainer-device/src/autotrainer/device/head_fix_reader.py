@@ -106,7 +106,7 @@ class HeadFixReader(Thread):
                                 self._record_location = self._validate_file(self._record_base)
 
                             self._record_location.write(
-                                f"{time.perf_counter_ns()}, {m.weight}, {m.switch}, {m.pressure}," f"{m.temperature}, {m.humidity}\n")
+                                f"{time.time()}, {time.perf_counter_ns()}, {m.weight}, {m.switch}, {m.pressure}, {m.temperature}, {m.humidity}\n")
                         except:
                             pass
 
@@ -134,7 +134,7 @@ class HeadFixReader(Thread):
                 file_existed = os.path.exists(file_name)
                 location = open(file_name, "a")
                 if not file_existed:
-                    location.write("Index, Weight, Switch, Pressure, Temperature, Humidity\n")
+                    location.write("Time, Index, Weight, Switch, Pressure, Temperature, Humidity\n")
                 self._current_record_hour = file_timestamp.hour
                 logger.debug(f"saving to {file_name}")
                 return location
