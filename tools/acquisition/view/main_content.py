@@ -11,6 +11,7 @@ from tools.acquisition.view.ContentWidget import ContentWidget
 from tools.acquisition.view.analysis_content import AnalysisContent
 from tools.acquisition.view.camera_content import CameraContent
 from tools.acquisition.view.diagnostics_content import DiagnosticsContent
+from tools.acquisition.view.metadata_content import MetadataContent
 from tools.acquisition.view.pellet_delivery_content import PelletDeliveryContent
 from tools.acquisition.view.head_fix_content import HeadFixContent
 from tools.acquisition.view.output_content import OutputContent
@@ -65,8 +66,12 @@ class MainContent(ContentWidget):
         self._layout.addWidget(self._head_fix_content, 1, 3, 2, 3)
         self._content_widgets.append(self._head_fix_content)
 
+        metadata_content = MetadataContent(self._model)
+        self._layout.addWidget(metadata_content, 3, 0, 1, 3)
+        self._content_widgets.append(metadata_content)
+
         output_content = OutputContent(self._model)
-        self._layout.addWidget(output_content, 3, 0, 1, 6)
+        self._layout.addWidget(output_content, 3, 3, 1, 3)
         self._content_widgets.append(output_content)
 
         self._diagnostics = DiagnosticsContent(self._model)

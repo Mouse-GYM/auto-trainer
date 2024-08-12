@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import time
@@ -100,7 +101,7 @@ class AppModel(ObservableObject):
 
     @animal_name.setter
     def animal_name(self, value: str):
-        self._animal_name = self.property_changed("animal_name", value, self._animal_name)
+        self._animal_name = self._on_property_changed("animal_name", value, self._animal_name)
 
     @property
     def notes(self) -> str:
@@ -108,7 +109,7 @@ class AppModel(ObservableObject):
 
     @notes.setter
     def notes(self, value: str):
-        self._notes = self.property_changed("notes", value, self._notes)
+        self._notes = self._on_property_changed("notes", value, self._notes)
 
     def on_activated(self):
         self._analysis.on_activated()
@@ -146,6 +147,8 @@ class AppModel(ObservableObject):
             logger.error("failed to start all subprocesses")
             self.on_capture_stop()
             return False
+
+        self._save_metadata()
 
         if self._analysis.is_enabled:
             self._analysis.start(self._network_buffer)
@@ -255,6 +258,21 @@ class AppModel(ObservableObject):
 
     def _trigger_received(self, _sender, _trigger_id, context):
         self._is_recording_trigger = context
+
+    def _save_metadata(self):
+        file_timestamp = datetime.now()
+
+        info = {
+            "date":  file_timestamp.strftime("%Y%m%d_%H%M%S"),
+            "serialNumber": self._user_settings.serial_number or "",
+            "animalName": self.animal_name or "",
+            "notes": self.notes or ""
+        }
+
+        loc = os.path.join(self.output_location, file_timestamp.strftime("%Y%m%d"), self._user_settings.serial_number, f"experiment_{file_timestamp.strftime('%H%M%S')}.json")
+
+        with open(loc, "w") as file:
+            json.dump(info, file)
 
     def get_next_session_path(self) -> (str, int):
         file_timestamp = datetime.now()
