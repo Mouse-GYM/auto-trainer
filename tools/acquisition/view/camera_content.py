@@ -89,3 +89,6 @@ class CameraContent(ContentWidget):
             self._capture_view.setIsRecordingEnabled(value)
         elif name == "record_mode":
             self._capture_view.setRecordMode(value)
+        elif name == "shape":
+            if value is not None and value[0] != 0 and value[1] != 0:
+                self._capture_view.setShape(value[0], value[1])

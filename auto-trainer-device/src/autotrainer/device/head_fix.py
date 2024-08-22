@@ -78,7 +78,7 @@ class HeadFix(GymDevice):
 
                 self._measurement_count += 1
 
-                if self._measurement_count % 1000 == 0:
+                if self._measurement_count % 3000 == 0:
                     logger.info(
                         f"{(1e9 * self._measurement_count / (time.perf_counter_ns() - self._start)):.1f} mps")
 

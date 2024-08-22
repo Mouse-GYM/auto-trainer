@@ -136,7 +136,7 @@ class HeadFixContent(ContentWidget):
 
         self._measurement_count += len(values)
 
-        if self._measurement_count % 1000 == 0:
+        if self._measurement_count % 3000 == 0:
             logger.info(f"{(1e9 * self._measurement_count / (time.perf_counter_ns() - self._start)):.1f} mps")
 
         self._plot1.cache_data(values)

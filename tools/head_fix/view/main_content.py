@@ -194,7 +194,7 @@ class MainContent(QWidget):
         if self._start is None:
             self._start = time.perf_counter_ns()
 
-        if self._measurement_count % 1000 == 0:
+        if self._measurement_count % 3000 == 0:
             logger.info(f"{(1e9 * self._measurement_count / (time.perf_counter_ns() - self._start)):.1f} mps")
 
     def _refresh_ports(self):

@@ -143,6 +143,12 @@ class VideoCaptureModel(ObservableObject):
             height = int(self._camera_properties["width"])
             if width > 0 and height > 0:
                 return width, height
+        
+        return (0, 0)
+    
+    @shape.setter
+    def shape(self, value):
+        self._shape = self._on_property_changed("shape", value, self._shape)
 
     @property
     def last_error(self) -> str:
@@ -165,7 +171,7 @@ class VideoCaptureModel(ObservableObject):
 
         self._frame_count += 1
 
-        if self._frame_count % 150 == 0:
+        if self._frame_count % 1500 == 0:
             self._fps = 1e9 * self._frame_count / (time.perf_counter_ns() - self._start)
             self._trace(f"display fps: {int(self._fps)}")
 
@@ -343,15 +349,15 @@ class VideoCaptureModel(ObservableObject):
 
         properties = VideoManager.parse_params(value)
 
-        self._shape = None
+        self.shape = None
 
         if "height" in properties and "width" in properties:
             width = int(properties["height"])
             height = int(properties["width"])
             if width > 0 and height > 0:
-                self._shape = (width, height)
+                self.shape = (width, height)
         else:
-            self._shape = (300, 200)
+            self.shape = (300, 200)
 
         self._video_image_queue = None if self._shape is None else FixedArrayQueue(3, self._shape)
 

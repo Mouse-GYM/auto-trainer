@@ -54,7 +54,7 @@ class ATCaptureView(QWidget):
 
         self._status_label = QLabel("")
 
-        self._image = ATGLImageView(bytearray(image_width * image_height), image_width, image_height)
+        self._image = ATGLImageView(image_width, image_height)
         self._image.setFixedSize(QSize(self._image_width, self._image_height))
 
         self._next_data: image_data | None = None
@@ -178,8 +178,9 @@ class ATCaptureView(QWidget):
         self._image_width = width
         self._image_height = height
         self._image.setFixedSize(QSize(self._image_width, self._image_height))
-        image = QImage(bytearray(width * height), width, height, QImage.Format_Grayscale8)
-        self._image.set_data(image)
+
+    def setShape(self, width: int, height: int):
+        self._image.set_data_size(width, height)
 
     def is_trigger_record(self):
         return self._triggerSource.currentIndex() == 1

@@ -4,13 +4,15 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QHBoxLayout, QGraphicsPixmapItem, \
     QGraphicsEllipseItem
 
-
 class ATGLImageView(QWidget):
-    def __init__(self, data: bytearray = None, width: int = 450, height: int = 300):
+    def __init__(self, width: int = 450, height: int = 300):
         super().__init__()
 
-        self._width = width
-        self._height = height
+        self._width = float(width)
+        self._height = float(height)
+
+        self._width_factor = 1
+        self._height_factor = 1
 
         self._scene = QGraphicsScene(0, 0, width, height)
 
@@ -57,9 +59,14 @@ class ATGLImageView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(layout)
 
-        if data is not None:
-            image = QImage(data, width, height, QImage.Format_Grayscale8)
-            self.set_data(image)
+        self._count = 0
+
+    def set_data_size(self, width, height):
+        scale = self._height / height
+        self._width_factor = width * scale
+        self._height_factor = height * scale
+
+        self._pixmap = None
 
     def set_data(self, image: QImage):
         if self._pixmap is None:
@@ -71,5 +78,5 @@ class ATGLImageView(QWidget):
             self._pixmap.setPixmap(QPixmap.fromImage(image))
 
     def set_points(self, point):
-        self._pellet_point.setPos(point[0] * self._width, point[1] * self._height)
-        self._star_point.setPos(point[2] * self._width, point[3] * self._height)
+        self._pellet_point.setPos(point[0] * self._width_factor, point[1] * self._height_factor)
+        self._star_point.setPos(point[2] * self._width_factor, point[3] * self._height_factor)
