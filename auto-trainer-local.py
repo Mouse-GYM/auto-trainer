@@ -3,6 +3,7 @@ import logging
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("tools").setLevel(logging.DEBUG)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
+logging.getLogger("inference_algorithms").setLevel(logging.DEBUG)
 
 if __name__ == '__main__':
     import sys

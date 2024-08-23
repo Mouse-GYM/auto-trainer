@@ -75,13 +75,13 @@ class PelletDeliveryModel(ObservableObject):
         return self._send_with_token(PelletDeliveryMessageKind.SET_Z, value)
 
     def send_home(self) -> object:
-        return self._send_command(PelletDeliveryMessageKind.SEND_HOME)
+        return self._send_with_token(PelletDeliveryMessageKind.SEND_HOME)
 
     def load_pellet(self) -> object:
-        return self._send_command(PelletDeliveryMessageKind.LOAD_PELLET)
+        return self._send_with_token(PelletDeliveryMessageKind.LOAD_PELLET)
 
     def send_pellet(self) -> object:
-        return self._send_command(PelletDeliveryMessageKind.SEND_PELLET)
+        return self._send_with_token(PelletDeliveryMessageKind.SEND_PELLET)
 
     def release_pellet(self) -> object:
         return self._send_with_token(PelletDeliveryMessageKind.RELEASE_PELLET)
