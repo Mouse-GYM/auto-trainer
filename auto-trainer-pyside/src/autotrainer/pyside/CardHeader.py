@@ -8,7 +8,7 @@ class CardHeader(QWidget):
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("CardHeader")
-        self.setStyleSheet("#CardHeader {background-color: #d9d9d9; padding: 8px; border-top-left-radius: 6px; border-top-right-radius: 6px}")
+        self.setStyleSheet("#CardHeader {background-color: #cfb87c; padding: 8px; border-top-left-radius: 6px; border-top-right-radius: 6px}")
 
         self._layout = None
 

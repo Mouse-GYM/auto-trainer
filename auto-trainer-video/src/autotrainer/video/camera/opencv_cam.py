@@ -75,7 +75,7 @@ class OpenCVCam(CameraBase):
         ret, frame = self._video_capture.read()
 
         if ret:
-            self._last_when = time.perf_counter_ns()
+            self._last_when = time.time_ns()
 
             frame = frame[:, :, 0]
 

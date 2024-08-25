@@ -4,9 +4,9 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QGridLayout
 
 from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID
-from autotrainer.pyside.ATCaptureView import image_data
+from autotrainer.pyside.capture.QtCaptureView import image_data
 from autotrainer.video import VideoRecordMode
-from autotrainer.pyside import ATCaptureView
+from autotrainer.pyside import QCaptureView
 
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 from tools.acquisition.view.ContentWidget import ContentWidget
@@ -22,18 +22,23 @@ class CameraContent(ContentWidget):
 
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._capture_view = ATCaptureView()
-        self._capture_view.setIsCaptureEnabled(self._model.is_enabled)
-        self._capture_view.setIsRecordingEnabled(self._model.is_recording_enabled)
-        self._capture_view.setRecordMode(self._model.record_mode)
+        self._capture_view = QCaptureView()
+        self._settings = self._capture_view.settings
+        self._settings.setIsVideoCaptureEnabled(self._model.is_enabled)
+        self._settings.setIsVideoRecordEnabled(self._model.is_recording_enabled)
+        self._settings.setRecordMode(self._model.record_mode)
+        self._settings.setStillImageCaptureEnabled(self._model.is_still_capture_enabled)
+        self._settings.setStillImageCaptureInterval(self._model.still_image_capture_interval)
 
         self._capture_view.setCameras(self._model.camera_list)
         self._capture_view.setCamera(self._model.camera_source)
 
         self._capture_view.camera_changed.connect(self._camera_source_changed)
-        self._capture_view.enabled_changed.connect(self._camera_enabled_changed)
-        self._capture_view.record_enabled_changed.connect(self._recording_enabled_changed)
-        self._capture_view.trigger_source_changed.connect(self._recording_enabled_changed)
+        self._settings.capture_enabled_changed.connect(self._camera_enabled_changed)
+        self._settings.record_enabled_changed.connect(self._recording_enabled_changed)
+        self._settings.record_mode_changed.connect(self._recording_enabled_changed)
+        self._settings.image_capture_enabled_changed.connect(self._is_still_image_capture_enabled_changed)
+        self._settings.image_capture_interval_changed.connect(self._still_image_capture_interval_changed)
 
         layout.addWidget(self._capture_view)
 
@@ -44,7 +49,7 @@ class CameraContent(ContentWidget):
         self._model.property_changed += self._model_property_changed
 
     @property
-    def camera_view(self) -> ATCaptureView:
+    def camera_view(self) -> QCaptureView:
         return self._capture_view
 
     @Slot(ndarray, float)
@@ -74,7 +79,13 @@ class CameraContent(ContentWidget):
         self._model.is_recording_enabled = is_enabled
 
         self._model.record_mode = VideoRecordMode.TRIGGER if \
-            self._capture_view.is_trigger_record() else VideoRecordMode.CONTINUOUS
+            self._settings.isTriggerRecordMode else VideoRecordMode.CONTINUOUS
+
+    def _is_still_image_capture_enabled_changed(self, is_enabled):
+        self._model.is_still_capture_enabled = is_enabled
+
+    def _still_image_capture_interval_changed(self, interval: int):
+        self._model.still_image_capture_interval = interval
 
     def _trigger_received(self, _, __, context):
         if self._model.is_enabled and self._model.record_mode == VideoRecordMode.TRIGGER:
@@ -84,11 +95,15 @@ class CameraContent(ContentWidget):
         if name == "camera":
             self._capture_view.setCamera(value)
         elif name == "is_enabled":
-            self._capture_view.setIsCaptureEnabled(value)
+            self._settings.setIsVideoCaptureEnabled(value)
         elif name == "is_recording_enabled":
-            self._capture_view.setIsRecordingEnabled(value)
+            self._settings.setIsVideoRecordEnabled(value)
         elif name == "record_mode":
-            self._capture_view.setRecordMode(value)
+            self._settings.setRecordMode(value)
+        elif name == "is_still_capture_enabled":
+            self._settings.setStillImageCaptureEnabled(value)
+        elif name == "still_image_capture_interval":
+            self._settings.setStillImageCaptureInterval(value)
         elif name == "shape":
             if value is not None and value[0] != 0 and value[1] != 0:
                 self._capture_view.setShape(value[0], value[1])

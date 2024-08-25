@@ -1,6 +1,5 @@
-from .ATCaptureView import ATCaptureView
-from .ATGLImageView import ATGLImageView
-from .ATImageView import ATImageView
+from .capture.QtCaptureView import QCaptureView
+from .capture.QtGLImageView import QGLImageView
 from .ATProgressIndicator import ATProgressIndicator
 from .ATSeparator import ATSeparator
 from .ATSerialPortComboBox import ATSerialPortComboBox
@@ -9,4 +8,5 @@ from .CardHeader import CardHeader
 from .CardFooter import CardFooter
 from .PGWidget import PGWidget
 from .TextBoxHandler import TextBoxHandler
-from .QtSwitch import QtSwitch
+from .QtSwitch import QSwitch
+from .QtLabeledSwitch import QLabeledSwitch

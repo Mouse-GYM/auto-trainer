@@ -14,7 +14,7 @@ class RandomCam(CameraBase):
         super().prepare_capture()
 
     def capture(self) -> (numpy.ndarray, int):
-        now = time.perf_counter_ns()
+        now = time.time_ns()
 
         delta = self._frame_count / self._fps - 1e-9 * (now - self._capture_start)
 

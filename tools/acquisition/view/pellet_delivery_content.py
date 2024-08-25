@@ -88,7 +88,7 @@ class PelletDeliveryContent(ContentWidget):
     def set_is_editable(self, is_editable: bool):
         self._port_combobox.setVisible(is_editable)
         self._port_label.setVisible(not is_editable)
-        self._footer.setVisible(not is_editable)
+        self._footer.setEnabled(not is_editable)
 
     def set_is_capture_active(self, is_active: bool):
         self._pellet_control.setEnabled(is_active)

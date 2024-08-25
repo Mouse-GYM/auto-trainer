@@ -65,8 +65,12 @@ class VideoCaptureModel(ObservableObject):
 
         self._is_enabled = True
         self._is_primary = False
+
         self._record_mode = VideoRecordMode.CONTINUOUS
         self._is_recording_enabled = False
+        self._record_rotate_interval = 3600
+        self._is_still_capture_enabled = False
+        self._still_image_capture_interval = 0
 
         self._display_update_fcn = None
 
@@ -131,6 +135,24 @@ class VideoCaptureModel(ObservableObject):
     @record_mode.setter
     def record_mode(self, value: VideoRecordMode):
         self._record_mode = self._on_property_changed("record_mode", value, self._record_mode)
+
+    @property
+    def is_still_capture_enabled(self) -> bool:
+        return self._is_still_capture_enabled
+
+    @is_still_capture_enabled.setter
+    def is_still_capture_enabled(self, value: bool):
+        self._is_still_capture_enabled = self._on_property_changed("is_still_capture_enabled", value,
+                                                                   self._is_still_capture_enabled)
+
+    @property
+    def still_image_capture_interval(self) -> int:
+        return self._still_image_capture_interval
+
+    @still_image_capture_interval.setter
+    def still_image_capture_interval(self, value: int):
+        self._still_image_capture_interval = self._on_property_changed("still_image_capture_interval", value,
+                                                                       self._still_image_capture_interval)
 
     @property
     def is_primary(self) -> bool:
@@ -203,7 +225,9 @@ class VideoCaptureModel(ObservableObject):
                                          camera=camera, inference=inference, errors=self._errors)
 
             mode = self._record_mode if self._is_recording_enabled else VideoRecordMode.NONE
-            record_properties = VideoRecordProperties(record_mode=mode, rotate_interval=3600,
+            image_interval = self._still_image_capture_interval if self._is_still_capture_enabled else 0
+            record_properties = VideoRecordProperties(record_mode=mode, rotate_interval=self._record_rotate_interval,
+                                                      image_interval=image_interval,
                                                       base_output_location=output_location)
 
             self._video_capture = VideoCapture(capture_attrs, record_properties)
@@ -293,6 +317,10 @@ class VideoCaptureModel(ObservableObject):
             self.is_recording_enabled = conf["isRecordEnabled"]
         if "recordMode" in conf:
             self.record_mode = VideoRecordMode(conf["recordMode"])
+        if "isStillImageCaptureEnabled" in conf:
+            self.is_still_capture_enabled = conf["isStillImageCaptureEnabled"]
+        if "stillImageCaptureInterval" in conf:
+            self.still_image_capture_interval = conf["stillImageCaptureInterval"]
 
         if "url" in conf:
             if "name" in conf:
@@ -315,7 +343,8 @@ class VideoCaptureModel(ObservableObject):
     def write_configuration(self):
         return {"id": self._name, "name": self._camera_source.name, "url": self._camera_source.url,
                 "isEnabled": self._is_enabled, "isRecordEnabled": self._is_recording_enabled,
-                "recordMode": int(self._record_mode)}
+                "recordMode": int(self._record_mode), "isStillImageCaptureEnabled": self._is_still_capture_enabled,
+                "stillImageCaptureInterval": self._still_image_capture_interval}
 
     def _wait_for_capture_status(self, expected: CaptureProcessStatus, timeout: int):
         start_ns = time.perf_counter_ns()

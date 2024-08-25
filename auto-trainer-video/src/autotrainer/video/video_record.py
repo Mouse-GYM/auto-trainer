@@ -1,9 +1,11 @@
 import logging
+import os
 import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
+from pathlib import Path
 from queue import Queue, Empty
 from threading import Thread
 
@@ -40,7 +42,8 @@ class VideoRecord(Thread):
         self._width = properties.size[0]
         self._height = properties.size[1]
         self._fps = properties.fps
-        self._image_interval = properties.image_interval
+        self._image_interval = properties.image_interval * 1e9
+        self._image_location = None
         self._input_queue = input_queue
 
         self._is_running = True
@@ -51,12 +54,17 @@ class VideoRecord(Thread):
         self._writer = None
         self._timestamp = None
 
+        self._when_last_still_image = time.perf_counter()
+
     def run(self) -> None:
         last_when = 0
 
         while self._is_running:
             try:
                 (frame, when) = self._input_queue.get_nowait()
+
+                if frame is None or when is None:
+                    continue
 
                 if self._writer is None:
                     self._update_writer()
@@ -68,6 +76,10 @@ class VideoRecord(Thread):
                     self._writer.write(numpy.tile(frame[:, :, numpy.newaxis], (1, 1, 3)))
                 else:
                     self._writer.write(frame)
+
+                if 0 < self._image_interval <= when - self._when_last_still_image:
+                    self._when_last_still_image = when
+                    cv2.imwrite(os.path.join(self._image_location, f"{when}.png"), frame)
 
                 if self._timestamp is not None:
                     self._timestamp.write(f"{when}, {1e9 / (when - last_when)}\n")
@@ -96,6 +108,11 @@ class VideoRecord(Thread):
 
         if self._output_location is None:
             return
+
+        if self._image_interval > 0 and self._image_location is None:
+            self._image_location = os.path.join(f"{Path(self._output_location).parent}", f"{self._name}_still")
+            path = Path(self._image_location)
+            path.mkdir(parents=True, exist_ok=True)
 
         self._record_start = time.time()
 

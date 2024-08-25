@@ -4,7 +4,8 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QHBoxLayout, QGraphicsPixmapItem, \
     QGraphicsEllipseItem
 
-class ATGLImageView(QWidget):
+
+class QGLImageView(QWidget):
     def __init__(self, width: int = 450, height: int = 300):
         super().__init__()
 
@@ -16,7 +17,7 @@ class ATGLImageView(QWidget):
 
         self._scene = QGraphicsScene(0, 0, width, height)
 
-        brush = QBrush(Qt.GlobalColor.white)
+        brush = QBrush(Qt.GlobalColor.black)
         self._scene.setBackgroundBrush(brush)
 
         self._widget = QOpenGLWidget()

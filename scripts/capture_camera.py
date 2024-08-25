@@ -34,7 +34,7 @@ def capture_video(camera_url: str, video_path: str, frame_count: int):
 
     record_queue = Queue()
     record_properties = VideoRecordProperties(base_output_location=base_location, name="camera", rotate_interval=3600,
-                                              size=(camera.width, camera.height), fps=camera.fps)
+                                              size=(camera.width, camera.height), image_interval=1, fps=camera.fps)
     record = VideoRecord(record_properties, record_queue)
 
     record.start()

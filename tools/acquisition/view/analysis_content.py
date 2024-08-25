@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QCheckBox, QFileDialog, QWidget, QVBoxLayout, \
     QHBoxLayout, QFormLayout, QStackedLayout
 
-from autotrainer.pyside import CardWidget, QtSwitch
+from autotrainer.pyside import CardWidget, QSwitch
 from tools.acquisition.model.analysis_model import AnalysisModel
 from tools.acquisition.view.ContentWidget import ContentWidget
 
@@ -18,7 +18,7 @@ class AnalysisContent(ContentWidget):
         layout = QHBoxLayout()
 
         layout.addWidget(QLabel("Enable Pose Response:"))
-        self._toggle = QtSwitch()
+        self._toggle = QSwitch()
         self._toggle.stateChanged.connect(self._is_pose_response_state_changed)
         layout.addWidget(self._toggle)
         layout.addStretch(1)
