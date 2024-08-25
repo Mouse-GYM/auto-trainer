@@ -124,15 +124,12 @@ class VideoCapture(Process):
             self._camera_idx = -1
 
         if record_properties is not None:
-            self._record_mode = record_properties.record_mode
-            self._is_record_enabled = record_properties.record_mode == VideoRecordMode.CONTINUOUS and record_properties.output_location is not None
-            self._record_location = record_properties.output_location
-            self._record_interval = record_properties.interval
+            self._record_properties = record_properties
+            self._is_record_enabled = (record_properties.record_mode == VideoRecordMode.CONTINUOUS
+                                       and record_properties.base_output_location is not None)
         else:
-            self._record_mode = VideoRecordMode.CONTINUOUS
+            self._record_properties = VideoRecordProperties(record_mode=VideoRecordMode.NONE)
             self._is_record_enabled = False
-            self._record_location = ""
-            self._record_interval = 60
 
         self._errors = attrs.errors
 
@@ -185,9 +182,12 @@ class VideoCapture(Process):
             self._camera.prepare_capture()
 
             self._record_queue = Queue()
-            self._record = VideoRecord(self._record_location, self._name, self._record_interval,
-                                       (self._camera.width, self._camera.height), self._camera.fps,
-                                       self._record_queue)
+            self._record_properties.name = self._name
+            self._record_properties.size = (self._camera.width, self._camera.height)
+            self._record_properties.fps = self._camera.fps
+
+            self._record = VideoRecord(self._record_properties, self._record_queue)
+
             self._record.start()
 
             self._set_status(CaptureProcessStatus.RUNNING)
@@ -266,9 +266,9 @@ class VideoCapture(Process):
         self._is_capturing = False
 
     def _enable_trigger(self, _: object):
-        if self._record_mode is VideoRecordMode.TRIGGER:
+        if self._record_properties.record_mode is VideoRecordMode.TRIGGER:
             self._is_record_enabled = True
 
     def _disable_trigger(self, _: object):
-        if self._record_mode is VideoRecordMode.TRIGGER:
+        if self._record_properties.record_mode is VideoRecordMode.TRIGGER:
             self._is_record_enabled = False

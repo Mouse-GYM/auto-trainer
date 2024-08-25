@@ -91,15 +91,18 @@ class DeviceThread(Thread):
 
         if not self._interface.is_open:
             try:
-                self._interface.open()
+                success = self._interface.open()
 
-                logger.debug(f"<{self._name}> interface open")
-
-                self._device.connect()
-
-                logger.debug(f"<{self._name}> device connected")
+                if success:
+                    logger.debug(f"<{self._name}> interface open")
+                    self._device.connect()
+                    logger.debug(f"<{self._name}> device connected")
+                else:
+                    logger.warning(f"<{self._name}> failed to open device")
+                    return False
             except Exception as ex:
                 logger.error(f"<{self._name}> {ex}")
+                return False
         else:
             logger.warning(f"<{self._name}>CONNECT cmd while device already open")
 

@@ -7,7 +7,7 @@ from queue import Queue
 from datetime import datetime
 
 import cv2
-from autotrainer.video import VideoManager
+from autotrainer.video import VideoManager, VideoRecordProperties
 from autotrainer.video import VideoRecord
 
 logging.basicConfig(level=logging.INFO)
@@ -26,13 +26,17 @@ def capture_video(camera_url: str, video_path: str, frame_count: int):
 
     VideoManager.open()
 
-    camera = VideoManager.create_camera(camera_url)
+    camera = VideoManager.create_camera(camera_url, "capture_camera")
 
     camera.prepare_capture()
 
+    base_location = os.path.join(video_path, file_timestamp.strftime("%Y%m%d"))
+
     record_queue = Queue()
-    record = VideoRecord(os.path.join(video_path, file_timestamp.strftime("%Y%m%d")), "camera", 3600,
-                         (camera.width, camera.height), camera.fps, record_queue)
+    record_properties = VideoRecordProperties(base_output_location=base_location, name="camera", rotate_interval=3600,
+                                              size=(camera.width, camera.height), fps=camera.fps)
+    record = VideoRecord(record_properties, record_queue)
+
     record.start()
 
     for idx in range(frame_count):
@@ -40,6 +44,7 @@ def capture_video(camera_url: str, video_path: str, frame_count: int):
 
         if image is not None:
             cv2.imshow("window", image)
+            cv2.waitKey(1)
 
             record_queue.put((image, when))
 
@@ -55,8 +60,8 @@ def main():
 
     parser.add_argument("cameraurl", help="the camera to use")
     parser.add_argument("output", help="the video file output location")
-    parser.add_argument("-f", "--framecount", help="the number of frames to capture (default 150)",
-                        type=int, default=150)
+    parser.add_argument("-f", "--framecount", help="the number of frames to capture (default 30)",
+                        type=int, default=30)
 
     args = parser.parse_args()
 

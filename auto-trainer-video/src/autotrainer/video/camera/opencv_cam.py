@@ -38,9 +38,9 @@ class OpenCVCam(CameraBase):
 
     @width.setter
     def width(self, value):
-        logger.debug(f"<{self._name}> try setting width to {value}.  Result:")
         self._video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, value)
         self._refresh_height_width()
+        logger.debug(f"<{self._name}> try setting width to {value} - response: ({self._width}x{self._height})")
 
     @property
     def height(self):
@@ -48,9 +48,9 @@ class OpenCVCam(CameraBase):
 
     @height.setter
     def height(self, value):
-        logger.debug(f"<{self._name}> try setting height to {value}.  Result:")
         self._video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, value)
         self._refresh_height_width()
+        logger.debug(f"<{self._name}> try setting height to {value} - response: ({self._width}x{self._height})")
 
     def set_property(self, name: str, value: str) -> bool:
         if name == "mjpeg":
@@ -84,5 +84,3 @@ class OpenCVCam(CameraBase):
     def _refresh_height_width(self):
         self._width = int(self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         self._height = int(self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        logger.debug(f"<{self._name}> width: {self._width}")
-        logger.debug(f"<{self._name}> height: {self._height}")

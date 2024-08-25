@@ -143,9 +143,9 @@ class VideoCaptureModel(ObservableObject):
             height = int(self._camera_properties["width"])
             if width > 0 and height > 0:
                 return width, height
-        
-        return (0, 0)
-    
+
+        return 0, 0
+
     @shape.setter
     def shape(self, value):
         self._shape = self._on_property_changed("shape", value, self._shape)
@@ -202,7 +202,9 @@ class VideoCaptureModel(ObservableObject):
                                          image_queue=self._video_image_queue, frame=self._video_frame_index,
                                          camera=camera, inference=inference, errors=self._errors)
 
-            record_properties = VideoRecordProperties(self.record_mode, output_location, 3600)
+            mode = self._record_mode if self._is_recording_enabled else VideoRecordMode.NONE
+            record_properties = VideoRecordProperties(record_mode=mode, rotate_interval=3600,
+                                                      base_output_location=output_location)
 
             self._video_capture = VideoCapture(capture_attrs, record_properties)
 

@@ -76,7 +76,10 @@ class SerialInterface(DeviceInterface):
         try:
             self._serial = serial.Serial(self._port, self._baudrate)
         except Exception as e:
-            logger.exception(e)
+            if "FileNotFoundError" not in f"{e}":
+                logger.exception(e)
+            else:
+                logger.error(f"{self._port} is not available")
 
         return self.is_open
 

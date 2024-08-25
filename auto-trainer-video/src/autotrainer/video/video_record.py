@@ -1,3 +1,4 @@
+import logging
 import sys
 import time
 from dataclasses import dataclass
@@ -9,30 +10,39 @@ from threading import Thread
 import cv2
 import numpy
 
+logger = logging.getLogger(__name__)
+
 
 class VideoRecordMode(IntEnum):
+    NONE = -1,
     CONTINUOUS = 0,
     TRIGGER = 1
 
 
 @dataclass
 class VideoRecordProperties:
-    record_mode: VideoRecordMode
-    output_location: str
-    interval: int
+    base_output_location: str = ""
+    name: str = "camera"
+    size: (int, int) = (0, 0)
+    fps: int = 30
+    record_mode: VideoRecordMode = VideoRecordMode.CONTINUOUS
+    rotate_interval: int = 3600
+    image_interval: int = 0
 
 
 class VideoRecord(Thread):
-    def __init__(self, output_location: str, name: str, interval: int, size: (int, int), fps: int, input_queue: Queue):
+    def __init__(self, properties: VideoRecordProperties, input_queue: Queue):
         Thread.__init__(self)
 
-        self._output_location = output_location
-        self._name = name
-        self._interval = interval
-        self._width = size[0]
-        self._height = size[1]
-        self._fps = fps
+        self._output_location = properties.base_output_location
+        self._name = properties.name
+        self._rotate_interval = properties.rotate_interval
+        self._width = properties.size[0]
+        self._height = properties.size[1]
+        self._fps = properties.fps
+        self._image_interval = properties.image_interval
         self._input_queue = input_queue
+
         self._is_running = True
         self._record_start = None
 
@@ -42,9 +52,6 @@ class VideoRecord(Thread):
         self._timestamp = None
 
     def run(self) -> None:
-        # path = Path(self._output_location)
-        # path.mkdir(parents=True, exist_ok=True)
-
         last_when = 0
 
         while self._is_running:
@@ -68,7 +75,7 @@ class VideoRecord(Thread):
             except Empty:
                 time.sleep(0.0001)
 
-            if self._writer is not None and time.time() - self._record_start > self._interval:
+            if self._writer is not None and time.time() - self._record_start > self._rotate_interval:
                 self._update_writer()
 
         self._close_writer()
@@ -95,6 +102,8 @@ class VideoRecord(Thread):
         file_timestamp = datetime.now()
 
         location = self._output_location + f"_{file_timestamp.strftime('%H%M%S')}_{self._name}.{self._ext}"
+
+        logger.debug(f"<{self.name}> using next output file: {location}")
 
         self._timestamp = open(
             self._output_location + f"_{file_timestamp.strftime('%H%M%S')}_{self._name}_timestamps.txt", "w")
