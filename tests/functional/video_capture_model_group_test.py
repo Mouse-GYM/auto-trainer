@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from autotrainer.core.project import ProjectInfo
 from autotrainer.video import CaptureCameraAttrs
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
@@ -69,13 +70,15 @@ def test_video_capture_model(camera_url_1: CaptureCameraAttrs, camera_url_2: Cap
 
     count = 0
 
+    project_info = ProjectInfo(output_location)
+
     while count < iterations:
         logger.info(f"video capture process starting (iteration {count + 1})")
 
         success = True
 
         for model in models:
-            res = model.on_prepare_capture(output_location, None)
+            res = model.on_prepare_capture(project_info, None)
 
             if not res:
                 success = False

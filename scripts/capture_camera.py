@@ -7,6 +7,8 @@ from queue import Queue
 from datetime import datetime
 
 import cv2
+
+from autotrainer.core.project import ProjectInfo
 from autotrainer.video import VideoManager, VideoRecordProperties
 from autotrainer.video import VideoRecord
 
@@ -30,11 +32,13 @@ def capture_video(camera_url: str, video_path: str, frame_count: int):
 
     camera.prepare_capture()
 
-    base_location = os.path.join(video_path, file_timestamp.strftime("%Y%m%d"))
+    base_location = os.path.join(video_path)
 
     record_queue = Queue()
-    record_properties = VideoRecordProperties(base_output_location=base_location, name="camera", rotate_interval=3600,
-                                              size=(camera.width, camera.height), image_interval=1, fps=camera.fps)
+    record_project = ProjectInfo(base_location, "")
+    record_properties = VideoRecordProperties(project_info=record_project, name="camera",
+                                              video_rotate_interval=3600, frame_size=(camera.width, camera.height),
+                                              image_interval=1, fps=camera.fps)
     record = VideoRecord(record_properties, record_queue)
 
     record.start()

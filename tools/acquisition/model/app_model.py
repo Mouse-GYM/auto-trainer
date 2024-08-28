@@ -4,12 +4,12 @@ import os
 import time
 from pathlib import Path
 from datetime import datetime
-from dateutil import parser
 
 import yaml
 
 from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID
 from autotrainer.core import FixedArrayMultiQueue
+from autotrainer.core.project import ProjectInfo
 
 from tools.acquisition.model.analysis_model import AnalysisModel
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -115,7 +115,7 @@ class AppModel(ObservableObject):
         self._analysis.on_activated()
 
     def on_capture_start(self) -> bool:
-        location, session_index = self.get_next_session_path()
+        project_info = self.get_project_info()
 
         self._network_buffer = None
 
@@ -125,20 +125,20 @@ class AppModel(ObservableObject):
             if shape_1 == shape_2:
                 self._network_buffer = FixedArrayMultiQueue(3, 2, 3, shape_1)
 
-        did_start = self.left_camera.on_prepare_capture(location, self._network_buffer)
+        did_start = self.left_camera.on_prepare_capture(project_info, self._network_buffer)
 
         if not did_start:
             self.on_error("Camera Process Failed",
                           _failed_camera_template(self.left_camera.name, self.left_camera.last_error))
 
         if did_start:
-            did_start = did_start and self.right_camera.on_prepare_capture(location, self._network_buffer)
+            did_start = did_start and self.right_camera.on_prepare_capture(project_info, self._network_buffer)
             if not did_start:
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(self.right_camera.name, self.right_camera.last_error))
 
         if did_start:
-            did_start = did_start and self.top_camera.on_prepare_capture(location)
+            did_start = did_start and self.top_camera.on_prepare_capture(project_info)
             if not did_start:
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(self.top_camera.name, self.top_camera.last_error))
@@ -148,14 +148,12 @@ class AppModel(ObservableObject):
             self.on_capture_stop()
             return False
 
-        self._save_metadata()
+        self._save_metadata(project_info)
 
         if self._analysis.is_enabled:
             self._analysis.start(self._network_buffer)
 
-        self._user_settings.session_index = session_index + 1
-
-        self.head_fix.connect_to_device()
+        self.head_fix.connect_to_device(project_info)
         self.pellet_delivery.connect_to_device()
 
         for camera in self._cameras:
@@ -259,41 +257,28 @@ class AppModel(ObservableObject):
     def _trigger_received(self, _sender, _trigger_id, context):
         self._is_recording_trigger = context
 
-    def _save_metadata(self):
-        file_timestamp = datetime.now()
+    def _save_metadata(self, project_info: ProjectInfo):
+        now = datetime.now()
 
         info = {
-            "date":  file_timestamp.strftime("%Y%m%d_%H%M%S"),
+            "date": now.strftime("%Y%m%d_%H%M%S"),
+            "created": now.timestamp(),
+            "created_utc": datetime.utcnow().timestamp(),
             "serialNumber": self._user_settings.serial_number or "",
             "animalName": self.animal_name or "",
             "notes": self.notes or ""
         }
 
-        loc = os.path.join(self.output_location, file_timestamp.strftime("%Y%m%d"), self._user_settings.serial_number, f"experiment_{file_timestamp.strftime('%H%M%S')}.json")
-
-        with open(loc, "w") as file:
+        with open(project_info.get_metadata_file(), "w") as file:
             json.dump(info, file)
 
-    def get_next_session_path(self) -> (str, int):
-        file_timestamp = datetime.now()
-        session_index = 1
-        try:
-            last = parser.parse(self._user_settings.session_date)
-            if last is not None and last.year == file_timestamp.year and last.month == file_timestamp.month and last.day == file_timestamp.day:
-                session_index = self.session_index
-            else:
-                self._user_settings.session_date = file_timestamp.strftime("%Y%m%d")
-                self._user_settings.session_index = 0
-        except:
-            self._user_settings.session_date = file_timestamp.strftime("%Y%m%d")
-            self._user_settings.session_index = 0
+    def get_project_info(self) -> ProjectInfo:
+        project_info = ProjectInfo(root=self.output_location, device_id=self._user_settings.serial_number)
+        project_info.calculate_next_session_index()
 
-        prefix = os.path.join(self.output_location, file_timestamp.strftime("%Y%m%d"),
-                              self._user_settings.serial_number, f"session{session_index:03}")
-        path = Path(prefix)
+        location, _ = project_info.get_day_path()
+
+        path = Path(location)
         path.mkdir(parents=True, exist_ok=True)
 
-        location = os.path.join(prefix,
-                                f"{file_timestamp.strftime('%Y%m%d')}_{self._user_settings.serial_number}_session{session_index:03}")
-
-        return location, session_index
+        return project_info

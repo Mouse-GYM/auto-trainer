@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QL
 
 import qtawesome as qta
 
+from autotrainer.core.project import ProjectInfo
 from autotrainer.device import SerialInterface
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox
 from autotrainer.pyside import ATSeparator
@@ -218,7 +219,7 @@ class MainContent(QWidget):
     def _connect(self):
         if self._app_view_model.is_connected:
             self._app_view_model.disconnect_from_device()
-            self._app_view_model.head_fix_reader.record_location = None
+            self._app_view_model.head_fix_reader.project_info = None
             self._connect_button.setText("Connect")
             self.disconnected.emit()
         else:
@@ -229,9 +230,9 @@ class MainContent(QWidget):
             self._plot4.reset()
             self._plot5.reset()
             if self._record.isChecked():
-                self._app_view_model.head_fix_reader.record_location = self._record_location.text()
+                self._app_view_model.head_fix_reader.project_info = ProjectInfo(self._record_location.text(), "")
             else:
-                self._app_view_model.head_fix_reader.record_location = None
+                self._app_view_model.head_fix_reader.project_info = None
             self._app_view_model.connect_to_device()
             self._start = time.perf_counter_ns()
             self._measurement_count = 0

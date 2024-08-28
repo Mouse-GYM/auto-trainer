@@ -54,22 +54,6 @@ class UserSettings(ObservableObject):
         self._settings.setValue("system/serial_number", value)
 
     @property
-    def session_date(self) -> str:
-        return self._settings.value("system/session_date", "")
-
-    @session_date.setter
-    def session_date(self, value: str):
-        self._settings.setValue("system/session_date", value)
-
-    @property
-    def session_index(self) -> int:
-        return self._settings.value("system/session_index", 0, int)
-
-    @session_index.setter
-    def session_index(self, value: int):
-        self._settings.setValue("system/session_index", value)
-
-    @property
     def live_feed_refresh_rate(self) -> int:
         return self._settings.value("display/refresh_rate", 15, int)
 

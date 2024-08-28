@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from autotrainer.core.project import ProjectInfo
 from autotrainer.video import CaptureCameraAttrs
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
@@ -33,7 +34,7 @@ def output_location():
     return None
 
 
-def test_video_capture_model(camera_url: str, iterations: int, capture_duration: int, output_location: str):
+def test_video_capture_model(camera_url: CaptureCameraAttrs, iterations: int, capture_duration: int, output_location: str):
     assert camera_url != ""
 
     model = VideoCaptureModel("camera-1")
@@ -45,7 +46,9 @@ def test_video_capture_model(camera_url: str, iterations: int, capture_duration:
     while count < iterations:
         logger.info(f"video capture model test iteration {count + 1} of {iterations}")
 
-        assert model.on_prepare_capture(output_location, None)
+        project_info = ProjectInfo(output_location)
+
+        assert model.on_prepare_capture(project_info, None)
 
         model.on_capture_start()
 
@@ -70,4 +73,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    test_video_capture_model(args.camera, args.iterations, args.duration, args.output)
+    source = CaptureCameraAttrs("camera-1", args.camera)
+
+    test_video_capture_model(source, args.iterations, args.duration, args.output)

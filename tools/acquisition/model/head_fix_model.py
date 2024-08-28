@@ -9,6 +9,7 @@ from threading import Timer
 
 import numpy
 
+from autotrainer.core.project import ProjectInfo
 from autotrainer.device import SerialInterface, HeadFixReader
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
@@ -96,18 +97,13 @@ class HeadFixModel(ObservableObject):
 
         return self._send_with_token(HeadFixMessageKind.UPDATE_TARE)
 
-    def connect_to_device(self):
+    def connect_to_device(self, project_info: ProjectInfo):
         if not self.port or len(self.port) == 0:
             return
 
         device_interface = SerialInterface(self.port)
 
-        file_timestamp = datetime.now()
-
-        location = os.path.join(self.output_location, file_timestamp.strftime("%Y%m%d"), self._settings.serial_number)
-        path = Path(location)
-        path.mkdir(parents=True, exist_ok=True)
-        self._head_fix_reader.record_location = location
+        self._head_fix_reader.project_info = project_info
 
         head_fix = HeadFix(buffer_size=20)
 
@@ -129,7 +125,7 @@ class HeadFixModel(ObservableObject):
             return
 
         if self._head_fix_reader is not None:
-            self._head_fix_reader.record_location = None
+            self._head_fix_reader.project_info = None
 
         self._send_command(DeviceThreadMessageKind.TERMINATE)
 

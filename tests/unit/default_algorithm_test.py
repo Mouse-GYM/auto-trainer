@@ -69,7 +69,10 @@ def test_algorithm_output():
 
     rng = numpy.random.default_rng()
 
-    data = rng.standard_normal((6, 30), dtype=numpy.float32)
+    data = list()
+
+    for idx in range(6):
+        data.append(rng.standard_normal((10, 3), dtype=numpy.float32))
 
     parts = ["Pellet", "Star", "Other3", "Other4", "Other5", "Other6", "Other7", "Other8", "Other9", "Other10"]
 

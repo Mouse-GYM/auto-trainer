@@ -126,7 +126,7 @@ class VideoCapture(Process):
         if record_properties is not None:
             self._record_properties = record_properties
             self._is_record_enabled = (record_properties.record_mode == VideoRecordMode.CONTINUOUS
-                                       and record_properties.base_output_location is not None)
+                                       and record_properties.project_info is not None)
         else:
             self._record_properties = VideoRecordProperties(record_mode=VideoRecordMode.NONE)
             self._is_record_enabled = False
@@ -183,7 +183,7 @@ class VideoCapture(Process):
 
             self._record_queue = Queue()
             self._record_properties.name = self._name
-            self._record_properties.size = (self._camera.width, self._camera.height)
+            self._record_properties.frame_size = (self._camera.width, self._camera.height)
             self._record_properties.fps = self._camera.fps
 
             self._record = VideoRecord(self._record_properties, self._record_queue)
@@ -272,3 +272,4 @@ class VideoCapture(Process):
     def _disable_trigger(self, _: object):
         if self._record_properties.record_mode is VideoRecordMode.TRIGGER:
             self._is_record_enabled = False
+            self._record_queue.put((None, None))

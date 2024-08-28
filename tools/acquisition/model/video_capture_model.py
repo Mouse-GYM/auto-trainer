@@ -11,6 +11,7 @@ from threading import Event
 from numpy import ndarray
 
 from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, TriggerManager, ObservableObject
+from autotrainer.core.project import ProjectInfo
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
 
@@ -200,7 +201,7 @@ class VideoCaptureModel(ObservableObject):
         if self._display_update_fcn is not None and self._video_capture is not None:
             self._display_update_fcn(data, self._fps)
 
-    def on_prepare_capture(self, output_location: str, network_queue: FixedArrayMultiQueue = None) -> bool:
+    def on_prepare_capture(self, project_info: ProjectInfo, network_queue: FixedArrayMultiQueue = None) -> bool:
         self._last_error = None
 
         if not self._is_enabled:
@@ -224,11 +225,11 @@ class VideoCaptureModel(ObservableObject):
                                          image_queue=self._video_image_queue, frame=self._video_frame_index,
                                          camera=camera, inference=inference, errors=self._errors)
 
-            mode = self._record_mode if self._is_recording_enabled else VideoRecordMode.NONE
+            record_mode = self._record_mode if self._is_recording_enabled else VideoRecordMode.NONE
             image_interval = self._still_image_capture_interval if self._is_still_capture_enabled else 0
-            record_properties = VideoRecordProperties(record_mode=mode, rotate_interval=self._record_rotate_interval,
-                                                      image_interval=image_interval,
-                                                      base_output_location=output_location)
+            record_properties = VideoRecordProperties(project_info=project_info, record_mode=record_mode,
+                                                      video_rotate_interval=self._record_rotate_interval,
+                                                      image_interval=image_interval)
 
             self._video_capture = VideoCapture(capture_attrs, record_properties)
 
