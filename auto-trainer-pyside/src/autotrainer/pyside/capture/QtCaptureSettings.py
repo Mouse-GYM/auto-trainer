@@ -22,27 +22,27 @@ class QCaptureSettings(QWidget):
         self._isCaptureEnabled.stateChanged.connect(self._is_capture_enabled_changed)
         layout.addWidget(self._isCaptureEnabled, 0, 1)
 
-        layout.addWidget(QLabel("Video Recording:"), 1, 0)
-        self._isRecordEnabled = QLabeledSwitch()
-        self._isRecordEnabled.stateChanged.connect(self._is_record_enabled_changed)
-        layout.addWidget(self._isRecordEnabled, 1, 1)
-
-        layout.addWidget(QLabel("Video Record Mode:"), 3, 0)
+        layout.addWidget(QLabel("Record Mode:"), 1, 0)
         self._record_mode = QComboBox()
         self._record_mode.setMaximumWidth(140)
         self._record_mode.addItem("Continuous")
         self._record_mode.addItem("Trigger")
         self._record_mode.currentIndexChanged.connect(lambda x:
                                                       self.record_mode_changed.emit(self.isRecordEnabled))
-        layout.addWidget(self._record_mode, 3, 1, alignment=Qt.AlignRight)
+        layout.addWidget(self._record_mode, 1, 1, alignment=Qt.AlignRight)
 
-        layout.addWidget(QLabel("Still Image Capture:"), 4, 0)
+        layout.addWidget(QLabel("Video Recording:"), 2, 0)
+        self._isRecordEnabled = QLabeledSwitch()
+        self._isRecordEnabled.stateChanged.connect(self._is_record_enabled_changed)
+        layout.addWidget(self._isRecordEnabled, 2, 1)
+
+        layout.addWidget(QLabel("Image Capture:"), 3, 0)
 
         self._isStillImageCaptureEnabled = QLabeledSwitch()
         self._isStillImageCaptureEnabled.stateChanged.connect(self._is_still_image_capture_enabled_changed)
-        layout.addWidget(self._isStillImageCaptureEnabled, 4, 1)
+        layout.addWidget(self._isStillImageCaptureEnabled, 3, 1)
 
-        layout.addWidget(QLabel("Still Image Capture Interval:"), 5, 0)
+        layout.addWidget(QLabel("Image Capture Interval:"), 4, 0)
 
         sell_interval_layout = QHBoxLayout()
         sell_interval_layout.setContentsMargins(0, 0, 0, 0)
@@ -53,9 +53,9 @@ class QCaptureSettings(QWidget):
         sell_interval_layout.addStretch(1)
         sell_interval_layout.addWidget(self._stillImageCaptureInterval)
         sell_interval_layout.addWidget(QLabel("seconds"))
-        layout.addLayout(sell_interval_layout, 5, 1)
+        layout.addLayout(sell_interval_layout, 4, 1)
 
-        layout.setRowStretch(6, 1)
+        layout.setRowStretch(5, 1)
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("QCaptureSettings")
@@ -112,18 +112,14 @@ class QCaptureSettings(QWidget):
         self.capture_enabled_changed.emit(is_enabled)
 
         self._isRecordEnabled.setEnabled(is_enabled)
-        self._record_mode.setEnabled(is_enabled and self._isRecordEnabled.isChecked())
+        self._record_mode.setEnabled(is_enabled)
 
-        self._isStillImageCaptureEnabled.setEnabled(is_enabled and self._isRecordEnabled.isChecked())
+        self._isStillImageCaptureEnabled.setEnabled(is_enabled)
         self._stillImageCaptureInterval.setEnabled(is_enabled and self._isStillImageCaptureEnabled.isChecked())
 
     def _is_record_enabled_changed(self, x: int) -> None:
         is_enabled = x != 0
         self.record_enabled_changed.emit(is_enabled)
-        self._record_mode.setEnabled(is_enabled)
-
-        self._isStillImageCaptureEnabled.setEnabled(is_enabled)
-        self._stillImageCaptureInterval.setEnabled(is_enabled and self._isStillImageCaptureEnabled.isChecked())
 
     def _is_still_image_capture_enabled_changed(self, x: int) -> None:
         is_enabled = x != 0

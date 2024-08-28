@@ -31,14 +31,24 @@ class VideoRecordProperties:
     """Name used as part of video file names and image capture directory."""
     frame_size: (int, int) = (0, 0)
     """Expected shape of video frames.  Not required for image-only capture."""
-    record_mode: VideoRecordMode = VideoRecordMode.CONTINUOUS
-    """Continuous or triggered mode for video and image capture. NONE to disabled video recording."""
     fps: int = 30
     """Expected FPS of video feed.  Not required for image-only capture."""
-    video_rotate_interval: int = 3600
-    """Interval in seconds to rotate the video file.  0 to never rotate."""
+    record_mode: VideoRecordMode = VideoRecordMode.NONE
+    """Continuous or triggered mode for video and image capture. NONE to disabled video recording."""
+    video_rotate_interval: int = -1
+    """Interval in seconds to rotate the video file.  0 to never rotate. Negative to disabled video recording."""
     image_interval: int = 0
     """Interval in seconds to capture images.  Values <= 0 disable image capture."""
+
+    def should_record(self, is_triggered: bool) -> bool:
+        any_active = self.project_info is not None and (self.video_rotate_interval >= 0 or self.image_interval > 0)
+
+        if self.record_mode == VideoRecordMode.CONTINUOUS:
+            return any_active
+        elif self.record_mode == VideoRecordMode.TRIGGER:
+            return is_triggered and any_active
+
+        return False
 
 
 class VideoRecord(Thread):
@@ -58,7 +68,7 @@ class VideoRecord(Thread):
 
         self._is_running = True
         self._record_start = None
-        self._is_video_enabled = self._record_mode != VideoRecordMode.NONE
+        self._is_video_enabled = self._video_rotate_interval >= 0
 
         # Windows does not like .mp4 extension when opencv is technically saving to an mkv container.
         self._ext = "mp4" if sys.platform.startswith("linux") else "mkv"

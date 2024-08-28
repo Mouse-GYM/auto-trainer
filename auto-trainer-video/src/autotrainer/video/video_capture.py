@@ -123,13 +123,13 @@ class VideoCapture(Process):
             self._network_queue = None
             self._camera_idx = -1
 
+        self._is_record_active = False
+
         if record_properties is not None:
             self._record_properties = record_properties
-            self._is_record_enabled = (record_properties.record_mode == VideoRecordMode.CONTINUOUS
-                                       and record_properties.project_info is not None)
+            self._is_record_active = record_properties.should_record(False)
         else:
             self._record_properties = VideoRecordProperties(record_mode=VideoRecordMode.NONE)
-            self._is_record_enabled = False
 
         self._errors = attrs.errors
 
@@ -218,7 +218,7 @@ class VideoCapture(Process):
                 if self._image_queue is not None:
                     self._image_queue.put(frame)
 
-                if self._is_record_enabled:
+                if self._is_record_active:
                     self._record_queue.put((frame, when))
 
                 if self._network_queue is not None:
@@ -266,10 +266,8 @@ class VideoCapture(Process):
         self._is_capturing = False
 
     def _enable_trigger(self, _: object):
-        if self._record_properties.record_mode is VideoRecordMode.TRIGGER:
-            self._is_record_enabled = True
+        self._is_record_active = self._record_properties.should_record(True)
 
     def _disable_trigger(self, _: object):
-        if self._record_properties.record_mode is VideoRecordMode.TRIGGER:
-            self._is_record_enabled = False
-            self._record_queue.put((None, None))
+        self._is_record_active = self._record_properties.should_record(False)
+        self._record_queue.put((None, None))

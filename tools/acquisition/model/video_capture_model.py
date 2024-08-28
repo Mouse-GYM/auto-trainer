@@ -225,10 +225,10 @@ class VideoCaptureModel(ObservableObject):
                                          image_queue=self._video_image_queue, frame=self._video_frame_index,
                                          camera=camera, inference=inference, errors=self._errors)
 
-            record_mode = self._record_mode if self._is_recording_enabled else VideoRecordMode.NONE
+            rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
             image_interval = self._still_image_capture_interval if self._is_still_capture_enabled else 0
-            record_properties = VideoRecordProperties(project_info=project_info, record_mode=record_mode,
-                                                      video_rotate_interval=self._record_rotate_interval,
+            record_properties = VideoRecordProperties(project_info=project_info, record_mode=self.record_mode,
+                                                      video_rotate_interval=rotate_interval,
                                                       image_interval=image_interval)
 
             self._video_capture = VideoCapture(capture_attrs, record_properties)

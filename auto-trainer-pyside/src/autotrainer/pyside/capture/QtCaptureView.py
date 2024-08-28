@@ -178,20 +178,32 @@ class QCaptureView(QWidget):
         self._is_recording.setVisible(b)
 
     def _update_summary(self):
+
         if self._settings.isCaptureEnabled:
+            recording = ""
             image_capture = ""
+
             if self._settings.isRecordEnabled:
                 recording = "triggered" if self._settings.isTriggerRecordMode else "continuous"
-                recording += " recording enabled"
+                recording += " video"
 
-                if self._settings.isImageCaptureEnabled:
-                    interval = self._settings.imageCaptureInterval
-                    if interval > 0:
-                        image_capture = f"  Image capture every {interval} {'seconds' if interval != 1 else 'second'}."
+            if self._settings.isImageCaptureEnabled:
+                interval = self._settings.imageCaptureInterval
+                if interval > 0:
+                    image_capture = f"  Image capture every {interval} {'seconds' if interval != 1 else 'second'}."
+                    if len(recording) > 0:
+                        recording += " and image"
                     else:
-                        image_capture = "  Image capture disabled pending valid interval."
+                        recording = "triggered" if self._settings.isTriggerRecordMode else "continuous"
+                        recording += " image"
+                else:
+                    image_capture = "  Image capture disabled pending valid interval."
+
+            if len(recording) > 0:
+                recording += " recording"
             else:
-                recording = "recording disabled"
+                recording = "all recording disabled"
+
             text = f"Capture enabled with {recording}.{image_capture}"
         else:
             text = "Capture disabled."
