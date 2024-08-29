@@ -51,6 +51,7 @@ class UserSettings(ObservableObject):
 
     @serial_number.setter
     def serial_number(self, value: str):
+        value = self._on_property_changed("serial_number", value, self.serial_number)
         self._settings.setValue("system/serial_number", value)
 
     @property

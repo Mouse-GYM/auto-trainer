@@ -10,6 +10,7 @@ import qtawesome as qta
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_settings import UserSettings
 from tools.acquisition.view.main_content import MainContent
+from tools.acquisition.view.preferences_dialog import PreferencesDialog
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,10 @@ class MainWindow(QMainWindow):
             self.trigger_action.setEnabled(False)
             self.run_action.setEnabled(False)
 
+    def _show_preferences(self):
+        dialog = PreferencesDialog(self._user_settings)
+        dialog.exec()
+
     def _create_actions(self):
         self.open_configuration_action = QAction(QIcon(qta.icon("fa5s.folder-open")), "Open Configuration...", self)
         self.open_configuration_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_O))
@@ -183,6 +188,7 @@ class MainWindow(QMainWindow):
         self.view_diagnostics_action.triggered.connect(lambda: self._toggle_diagnostics_view())
 
         self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
+        self.preferences_action.triggered.connect(lambda: self._show_preferences())
 
         self.quit_action = QAction("Quit")
         self.quit_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_Q))
@@ -220,6 +226,10 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
 
         toolbar.addAction(self.edit_configuration_action)
+
+        toolbar.addSeparator()
+
+        toolbar.addAction(self.preferences_action)
 
     def _configure_statusbar(self):
         self._status_label = QLabel("")
