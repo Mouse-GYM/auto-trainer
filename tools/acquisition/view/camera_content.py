@@ -84,7 +84,7 @@ class CameraContent(ContentWidget):
     def _is_still_image_capture_enabled_changed(self, is_enabled):
         self._model.is_still_capture_enabled = is_enabled
 
-    def _still_image_capture_interval_changed(self, interval: int):
+    def _still_image_capture_interval_changed(self, interval: float):
         self._model.still_image_capture_interval = interval
 
     def _trigger_received(self, _, __, context):

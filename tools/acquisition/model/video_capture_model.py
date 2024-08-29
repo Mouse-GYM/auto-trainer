@@ -71,7 +71,7 @@ class VideoCaptureModel(ObservableObject):
         self._is_recording_enabled = False
         self._record_rotate_interval = 3600
         self._is_still_capture_enabled = False
-        self._still_image_capture_interval = 0
+        self._still_image_capture_interval = 0.0
 
         self._display_update_fcn = None
 
@@ -147,11 +147,11 @@ class VideoCaptureModel(ObservableObject):
                                                                    self._is_still_capture_enabled)
 
     @property
-    def still_image_capture_interval(self) -> int:
+    def still_image_capture_interval(self) -> float:
         return self._still_image_capture_interval
 
     @still_image_capture_interval.setter
-    def still_image_capture_interval(self, value: int):
+    def still_image_capture_interval(self, value: float):
         self._still_image_capture_interval = self._on_property_changed("still_image_capture_interval", value,
                                                                        self._still_image_capture_interval)
 

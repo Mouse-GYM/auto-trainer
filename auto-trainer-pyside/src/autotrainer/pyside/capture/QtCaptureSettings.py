@@ -10,7 +10,7 @@ class QCaptureSettings(QWidget):
     record_enabled_changed = Signal(bool)
     record_mode_changed = Signal(bool)
     image_capture_enabled_changed = Signal(bool)
-    image_capture_interval_changed = Signal(int)
+    image_capture_interval_changed = Signal(float)
 
     def __init__(self, parent=None):
         super(QCaptureSettings, self).__init__(parent)
@@ -81,13 +81,13 @@ class QCaptureSettings(QWidget):
         return self._isStillImageCaptureEnabled.isChecked()
 
     @property
-    def imageCaptureInterval(self) -> int:
+    def imageCaptureInterval(self) -> float:
         try:
-            return int(self._stillImageCaptureInterval.text())
+            return float(self._stillImageCaptureInterval.text())
         except:
             pass
 
-        return 0
+        return 0.0
 
     def setIsVideoCaptureEnabled(self, b: bool) -> None:
         self._isCaptureEnabled.setChecked(b)
@@ -104,7 +104,7 @@ class QCaptureSettings(QWidget):
     def setStillImageCaptureEnabled(self, b: bool) -> None:
         self._isStillImageCaptureEnabled.setChecked(b)
 
-    def setStillImageCaptureInterval(self, seconds: int) -> None:
+    def setStillImageCaptureInterval(self, seconds: float) -> None:
         self._stillImageCaptureInterval.setText(str(seconds))
 
     def _is_capture_enabled_changed(self, x: int) -> None:
@@ -128,7 +128,7 @@ class QCaptureSettings(QWidget):
 
     def _still_image_capture_interval_changed(self, value: str) -> None:
         try:
-            interval = int(value)
+            interval = float(value)
             self.image_capture_interval_changed.emit(interval)
         except:
             pass
