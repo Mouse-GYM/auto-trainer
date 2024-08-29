@@ -48,7 +48,12 @@ class ProjectInfo:
     def get_day_path(self) -> Tuple[str, str]:
         today = (self.when if self.when is not None else datetime.now()).strftime(DATE_FORMAT)
 
-        return os.path.join(self.get_path(), today), today
+        path = os.path.join(self.root, today)
+
+        if self.device_id:
+            path = os.path.join(path, self.device_id)
+
+        return path, today
 
     def get_hourly_source_path(self, source: str = "") -> HourlySource:
         when = self.when if self.when is not None else datetime.now()
@@ -71,9 +76,11 @@ class ProjectInfo:
 
         d = f"_{self.device_id}" if self.device_id else ""
 
-        prefix = f"{today}{d}_session{s:03}"
+        session = f"session{s:03}"
 
-        location = os.path.join(location, prefix)
+        location = os.path.join(location, session)
+
+        prefix = f"{today}{d}_{session}"
 
         s = f"_{source}" if source else ""
 

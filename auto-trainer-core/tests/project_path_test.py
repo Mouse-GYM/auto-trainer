@@ -9,14 +9,6 @@ root = os.path.join(base, "auto-trainer", "output")
 device_id = "A1357"
 
 
-def test_root():
-    info = ProjectInfo(root=root, device_id=device_id)
-
-    loc = info.get_path()
-
-    assert loc == os.path.join(root, "A1357")
-
-
 def test_today():
     when = datetime(2023, 6, 8)
 
@@ -26,7 +18,7 @@ def test_today():
 
     assert today == "20230608"
 
-    assert location == os.path.join(root, "A1357", "20230608")
+    assert location == os.path.join(root, "20230608", "A1357")
 
 
 def test_hourly():
@@ -36,7 +28,7 @@ def test_hourly():
 
     hourly_source = info.get_hourly_source_path("camera-1")
 
-    assert hourly_source.location == os.path.join(root, "A1357", "20230608")
+    assert hourly_source.location == os.path.join(root, "20230608", "A1357")
 
     assert hourly_source.prefix == f"20230608_A1357_h08_camera-1"
 
@@ -50,7 +42,7 @@ def test_session():
 
     session_source = info.get_session_source_path("camera-1")
 
-    assert session_source.location == os.path.join(root, "A1357", "20230608", "20230608_A1357_session012")
+    assert session_source.location == os.path.join(root, "20230608", "A1357", "session012")
 
     assert session_source.prefix == f"20230608_A1357_session012_camera-1"
 
