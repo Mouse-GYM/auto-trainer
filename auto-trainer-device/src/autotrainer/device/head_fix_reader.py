@@ -31,6 +31,8 @@ class HeadFixReader(Thread):
         self._record_location = None
         self._current_record_hour = -1
 
+        self._had_write_error = False
+
         self._measurement_count = 0
         self._start = None
 
@@ -112,8 +114,11 @@ class HeadFixReader(Thread):
                                 self._record_location.write(
                                     f"{time.time()}, {time.perf_counter_ns()}, {m.weight}, {m.switch}, {m.pressure},"
                                     f"{m.temperature}, {m.humidity}\n")
-                        except:
-                            pass
+                        except Exception as e:
+                            # This could be too much if something major is wrong.  Just output once per file rotation.
+                            if not self._had_write_error:
+                                logger.error(f"unable to write: {e}")
+                                self._had_write_error = True
 
                 if self._measurement_count == 0:
                     self._start = time.perf_counter_ns()
@@ -133,7 +138,7 @@ class HeadFixReader(Thread):
 
         logger.debug("exiting HeadFixReader")
 
-    def _validate_file(self):
+    def _validate_file(self) -> None:
         if self._project_info is not None:
             path = self._project_info.get_hourly_source_path("monitor")
             file_name = os.path.join(path.location, f"{path.prefix}.csv")
@@ -147,8 +152,9 @@ class HeadFixReader(Thread):
                 if not file_existed:
                     location.write("Time, Index, Weight, Switch, Pressure, Temperature, Humidity\n")
                 self._current_record_hour = path.hour
+                self._record_location = location
                 logger.debug(f"saving to {file_name}")
-                return location
+                self._had_write_error = False
             except:
                 logger.error(f"unable to write to {file_name}")
 
