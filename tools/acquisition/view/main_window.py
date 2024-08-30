@@ -4,7 +4,8 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QAction, QIcon, QKeySequence
-from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication, QFileDialog
+from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication, QFileDialog, \
+    QSizePolicy, QWidget
 import qtawesome as qta
 
 from tools.acquisition.model.app_model import AppModel
@@ -227,7 +228,9 @@ class MainWindow(QMainWindow):
 
         toolbar.addAction(self.edit_configuration_action)
 
-        toolbar.addSeparator()
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        toolbar.addWidget(spacer)
 
         toolbar.addAction(self.preferences_action)
 
