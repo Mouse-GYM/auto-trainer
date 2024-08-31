@@ -1,8 +1,9 @@
+import ctypes
 import json
 import logging
 import os
 import time
-from pathlib import Path
+from multiprocessing import Value
 from datetime import datetime
 
 import yaml
@@ -47,6 +48,10 @@ class AppModel(ObservableObject):
         self._output_location = ""
 
         self._is_recording_trigger = False
+
+        self._project_info = None
+
+        self._next_session = Value(ctypes.c_uint32, 0)
 
         self._animal_name = ""
 
@@ -115,7 +120,7 @@ class AppModel(ObservableObject):
         self._analysis.on_activated()
 
     def on_capture_start(self) -> bool:
-        project_info = self.get_project_info()
+        self.create_project_info()
 
         self._network_buffer = None
 
@@ -125,20 +130,21 @@ class AppModel(ObservableObject):
             if shape_1 == shape_2:
                 self._network_buffer = FixedArrayMultiQueue(3, 2, 3, shape_1)
 
-        did_start = self.left_camera.on_prepare_capture(project_info, self._network_buffer)
+        did_start = self.left_camera.on_prepare_capture(self._project_info, self._next_session, self._network_buffer)
 
         if not did_start:
             self.on_error("Camera Process Failed",
                           _failed_camera_template(self.left_camera.name, self.left_camera.last_error))
 
         if did_start:
-            did_start = did_start and self.right_camera.on_prepare_capture(project_info, self._network_buffer)
+            did_start = did_start and self.right_camera.on_prepare_capture(self._project_info, self._next_session,
+                                                                           self._network_buffer)
             if not did_start:
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(self.right_camera.name, self.right_camera.last_error))
 
         if did_start:
-            did_start = did_start and self.top_camera.on_prepare_capture(project_info)
+            did_start = did_start and self.top_camera.on_prepare_capture(self._project_info, self._next_session)
             if not did_start:
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(self.top_camera.name, self.top_camera.last_error))
@@ -148,12 +154,12 @@ class AppModel(ObservableObject):
             self.on_capture_stop()
             return False
 
-        self._save_metadata(project_info)
+        self._save_project_metadata(self._project_info)
 
         if self._analysis.is_enabled:
             self._analysis.start(self._network_buffer)
 
-        self.head_fix.connect_to_device(project_info)
+        self.head_fix.connect_to_device(self._project_info)
         self.pellet_delivery.connect_to_device()
 
         for camera in self._cameras:
@@ -259,7 +265,18 @@ class AppModel(ObservableObject):
     def _trigger_received(self, _sender, _trigger_id, context):
         self._is_recording_trigger = context
 
-    def _save_metadata(self, project_info: ProjectInfo):
+        # Wait until the end of the trigger to increment.
+        if not context:
+            self._next_session.value += 1
+        else:
+            self._save_metadata(self._project_info.get_metadata_file(self._next_session.value),
+                                self._next_session.value)
+
+    def _save_project_metadata(self, project_info: ProjectInfo):
+        file_name = project_info.get_metadata_file()
+        self._save_metadata(file_name, -1)
+
+    def _save_metadata(self, file_name: str, session: int = None):
         now = datetime.now()
 
         info = {
@@ -268,18 +285,17 @@ class AppModel(ObservableObject):
             "created_utc": datetime.utcnow().timestamp(),
             "serialNumber": self._user_settings.serial_number or "",
             "animalName": self.animal_name or "",
-            "notes": self.notes or ""
+            "notes": self.notes or "",
+            "session": session
         }
 
-        with open(project_info.get_metadata_file(), "w") as file:
+        with open(file_name, "w") as file:
             json.dump(info, file)
 
-    def get_project_info(self) -> ProjectInfo:
-        project_info = ProjectInfo(root=self.output_location, device_id=self._user_settings.serial_number,
-                                   ensure_exists=True)
+    def create_project_info(self) -> None:
+        self._project_info = ProjectInfo(root=self.output_location, device_id=self._user_settings.serial_number,
+                                         ensure_exists=True)
 
-        project_info.calculate_next_session_index()
+        self._next_session.value = self._project_info.calculate_next_session_index()
 
-        location, _ = project_info.get_day_path()
-
-        return project_info
+        location, _ = self._project_info.get_day_path()

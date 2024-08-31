@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
+from multiprocessing import Value
 from queue import Queue, Empty
 from threading import Thread
 
@@ -37,6 +38,8 @@ class VideoRecordProperties:
     """Interval in seconds to rotate the video file.  0 to never rotate. Negative to disabled video recording."""
     image_interval: int = 0
     """Interval in seconds to capture images.  Values <= 0 disable image capture."""
+    next_session_index: Value = None
+    """Value to use for next session index, if applicable."""
 
     def should_record(self, is_triggered: bool) -> bool:
         any_active = self.project_info is not None and (self.video_rotate_interval >= 0 or self.image_interval > 0)
@@ -61,6 +64,7 @@ class VideoRecord(Thread):
         self._record_mode = properties.record_mode
         self._video_rotate_interval = properties.video_rotate_interval
         self._image_interval = properties.image_interval * 1e9
+        self._next_session_index = properties.next_session_index
 
         self._input_queue = input_queue
 
@@ -103,7 +107,7 @@ class VideoRecord(Thread):
                 if self._is_video_enabled:
                     if self._video_writer is None:
                         # If triggered, may not be configured yet for this batch
-                        self._prepare_video_writer()
+                        self._prepare_writers()
 
                     if len(numpy.shape(frame)) < 3 or numpy.shape(frame)[2] == 1:
                         self._video_writer.write(numpy.tile(frame[:, :, numpy.newaxis], (1, 1, 3)))
@@ -116,7 +120,7 @@ class VideoRecord(Thread):
 
                 if 0 < self._image_interval <= when - self._last_image_timestamp:
                     if self._image_location is None:
-                        self._prepare_image_capture()
+                        self._prepare_writers()
                     self._last_image_timestamp = when
                     when_str = datetime.fromtimestamp(when / 1e9).strftime("%Y%m%d_%H%M%S_%f")[:-3]
                     cv2.imwrite(os.path.join(self._image_location, self._image_name.format(when=when_str)), frame)
@@ -150,29 +154,28 @@ class VideoRecord(Thread):
 
     def _prepare_writers(self):
         self._interval_reference = self._project_info.get_interval(self._interval_mode)
-        self._prepare_video_writer()
-        self._prepare_image_capture()
+        session = 0 if self._next_session_index is None else self._next_session_index.value
+
+        self._prepare_video_writer(session)
+        self._prepare_image_capture(session)
 
     def _close_writers(self):
         self._close_image_writer()
         self._close_video_writer()
 
-        if self._record_mode == VideoRecordMode.TRIGGER:
-            self._project_info.current_session += 1
-
-    def _prepare_image_capture(self):
+    def _prepare_image_capture(self, session: int):
         self._close_image_writer()
 
         if self._image_interval > 0:
-            self._image_location, self._image_name = self._project_info.get_image_capture_path(self._name,
-                                                                                               self._interval_mode)
+            self._image_location, self._image_name = (
+                self._project_info.get_image_capture_path(self._name, interval=self._interval_mode, session=session))
 
             logger.debug(f"<{self.name}>: image capture to {self._image_location}")
 
     def _close_image_writer(self):
         self._image_location = None
 
-    def _prepare_video_writer(self):
+    def _prepare_video_writer(self, session: int):
         self._close_video_writer()
 
         if not self._is_video_enabled:
@@ -180,7 +183,8 @@ class VideoRecord(Thread):
 
         self._record_start = time.time()
 
-        video_file, timestamp_file = self._project_info.get_video_path(self._name, self._interval_mode)
+        video_file, timestamp_file = self._project_info.get_video_path(self._name, interval=self._interval_mode,
+                                                                       session=session)
 
         logger.debug(f"<{self.name}>: video record to {video_file}")
 

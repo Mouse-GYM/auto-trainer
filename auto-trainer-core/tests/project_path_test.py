@@ -38,9 +38,9 @@ def test_hourly():
 def test_session():
     when = datetime(2023, 6, 8, 8, 45, 23)
 
-    info = ProjectInfo(root=root, device_id=device_id, when=when, current_session=12)
+    info = ProjectInfo(root=root, device_id=device_id, when=when)
 
-    session_source = info.get_session_path("camera-1")
+    session_source = info.get_session_path("camera-1", session=12)
 
     assert session_source.location == os.path.join(root, "20230608", "A1357", "session012")
 

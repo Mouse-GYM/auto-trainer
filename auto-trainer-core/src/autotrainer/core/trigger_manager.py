@@ -1,5 +1,7 @@
 CAPTURE_TRIGGER_ID = "CaptureTrigger"
 
+_ALL_TRIGGERS = ""
+
 
 class TriggerManager:
     _instance = None
@@ -16,9 +18,10 @@ class TriggerManager:
             raise Exception("Use TriggerManager.instance()")
 
         self._triggers_by_id = dict()
-        self._triggers_by_id[""] = list()
 
-    def register(self, sink, trigger_id: str = ""):
+        self._triggers_by_id[_ALL_TRIGGERS] = list()
+
+    def register(self, sink, trigger_id: str = _ALL_TRIGGERS):
         funcs = self._triggers_by_id.get(trigger_id)
 
         if funcs is None:
@@ -27,7 +30,7 @@ class TriggerManager:
 
         funcs.append(sink)
 
-    def unregister(self, sink, trigger_id: str = ""):
+    def unregister(self, sink, trigger_id: str = _ALL_TRIGGERS):
         funcs = self._triggers_by_id.get(trigger_id)
 
         if funcs is None:
@@ -39,7 +42,7 @@ class TriggerManager:
             pass
 
     def trigger(self, sender: object, trigger_id: str, context: object = None):
-        funcs = self._triggers_by_id.get("")
+        funcs = self._triggers_by_id.get(_ALL_TRIGGERS)
 
         for f in funcs:
             f(sender, trigger_id, context)

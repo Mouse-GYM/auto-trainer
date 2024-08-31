@@ -67,7 +67,6 @@ class ProjectInfo:
     root: str = ""
     device_id: str = ""
     when: datetime = None
-    current_session: int = 0
     ensure_exists: bool = False
 
     def is_valid(self):
@@ -115,14 +114,12 @@ class ProjectInfo:
 
         return IntervalSource(location, prefix, when.hour if interval == ProjectInterval.HOUR else when.minute)
 
-    def get_session_path(self, name: str = "", session: int = None, skip_ensure: bool = False) -> SessionSource | None:
+    def get_session_path(self, name: str = "", session: int = 0, skip_ensure: bool = False) -> SessionSource | None:
         (location, today) = self.get_day_path(True)
 
-        s = self.current_session if session is None else session
+        session_str = f"session{session:03}"
 
-        session = f"session{s:03}"
-
-        location = os.path.join(location, session)
+        location = os.path.join(location, session_str)
 
         if not skip_ensure and self.ensure_exists:
             if not _safe_ensure_location(location):
@@ -130,32 +127,37 @@ class ProjectInfo:
 
         d = f"_{self.device_id}" if self.device_id else ""
 
-        prefix = f"{today}{d}_{session}"
+        prefix = f"{today}{d}_{session_str}"
 
         s = f"_{name}" if name else ""
 
         prefix = f"{prefix}{s}"
 
-        return SessionSource(location, prefix, self.current_session)
+        return SessionSource(location, prefix, session)
 
-    def get_source_path(self, name: str = "", interval: ProjectInterval = ProjectInterval.NONE,
+    def get_source_path(self, name: str = "", interval: ProjectInterval = ProjectInterval.NONE, session: int = 0,
                         skip_ensure: bool = False) -> ProjectPath | None:
-        if not interval or interval == ProjectInterval.NONE:
-            path = self.get_session_path(name, skip_ensure=skip_ensure)
+        if interval is None or interval == ProjectInterval.NONE:
+            path = self.get_session_path(name, session=session, skip_ensure=skip_ensure)
         else:
             path = self.get_interval_path(name, interval=interval, skip_ensure=skip_ensure)
 
         return None if path is None else ProjectPath(path.location, path.prefix,
                                                      os.path.join(path.location, path.prefix))
 
-    def get_metadata_file(self) -> str:
+    def get_metadata_file(self, session: int = None) -> str:
         timestamp = (self.when if self.when is not None else datetime.now()).strftime(TIME_FORMAT)
 
-        location, prefix = self.get_day_path()
+        if session is None:
+            location, prefix = self.get_day_path()
 
-        d = f"_{self.device_id}" if self.device_id else ""
+            d = f"_{self.device_id}" if self.device_id else ""
 
-        return os.path.join(location, f"{prefix}{d}_{timestamp}_metadata.json")
+            return os.path.join(location, f"{prefix}{d}_{timestamp}_metadata.json")
+        else:
+            source = self.get_session_path("metadata", session=session)
+
+            return os.path.join(source.location, f"{source.prefix}.json")
 
     def get_monitor_file(self, name: str = "monitor", ext: str = "csv",
                          interval: ProjectInterval = ProjectInterval.HOUR) -> IntervalFileInfo | None:
@@ -166,9 +168,9 @@ class ProjectInfo:
                                                           path.interval)
 
     def get_video_path(self, name: str = "",
-                       interval: ProjectInterval = ProjectInterval.NONE,
+                       interval: ProjectInterval = ProjectInterval.NONE, session: int = 0,
                        allow_overwrite: bool = False) -> Tuple[str | None, str | None]:
-        path = self.get_source_path(name, interval)
+        path = self.get_source_path(name, interval=interval, session=session)
 
         if path is None:
             return None, None
@@ -188,9 +190,9 @@ class ProjectInfo:
 
         return file_name, ts_file
 
-    def get_image_capture_path(self, name: str = "",
-                               interval: ProjectInterval = ProjectInterval.NONE) -> Tuple[str | None, str | None]:
-        base = self.get_source_path(name, interval, True)
+    def get_image_capture_path(self, name: str = "", interval: ProjectInterval = ProjectInterval.NONE,
+                               session: int = 0) -> Tuple[str | None, str | None]:
+        base = self.get_source_path(name, interval=interval, session=session, skip_ensure=True)
 
         image_location = os.path.join(base.location, f"{base.prefix}{IMAGE_CAPTURE_SUFFIX}")
 
@@ -202,14 +204,13 @@ class ProjectInfo:
 
         return image_location, image_file_format_str
 
-    def calculate_next_session_index(self):
+    def calculate_next_session_index(self) -> int:
         location, _ = self.get_day_path()
 
         path = Path(location)
 
         if not path.exists() or not path.is_dir():
-            self.current_session = 1
-            return
+            return 1
 
         session_dirs = [x.name[-3:] for x in path.iterdir() if x.is_dir() and "session" in x.name]
 
@@ -222,9 +223,8 @@ class ProjectInfo:
         session_vals = [int(x) for x in session_dirs if int_map_fcn(x) is not None]
 
         if len(session_vals) == 0:
-            self.current_session = 1
-            return
+            return 1
 
         session_vals.sort(reverse=True)
 
-        self.current_session = session_vals[0] + 1
+        return session_vals[0] + 1

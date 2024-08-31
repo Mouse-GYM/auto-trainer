@@ -201,7 +201,8 @@ class VideoCaptureModel(ObservableObject):
         if self._display_update_fcn is not None and self._video_capture is not None:
             self._display_update_fcn(data, self._fps)
 
-    def on_prepare_capture(self, project_info: ProjectInfo, network_queue: FixedArrayMultiQueue = None) -> bool:
+    def on_prepare_capture(self, project_info: ProjectInfo, next_session_idx: Value,
+                           network_queue: FixedArrayMultiQueue = None) -> bool:
         self._last_error = None
 
         if not self._is_enabled:
@@ -229,7 +230,8 @@ class VideoCaptureModel(ObservableObject):
             image_interval = self._still_image_capture_interval if self._is_still_capture_enabled else 0
             record_properties = VideoRecordProperties(project_info=project_info, record_mode=self.record_mode,
                                                       video_rotate_interval=rotate_interval,
-                                                      image_interval=image_interval)
+                                                      image_interval=image_interval,
+                                                      next_session_index=next_session_idx)
 
             self._video_capture = VideoCapture(capture_attrs, record_properties)
 
