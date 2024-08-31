@@ -230,7 +230,9 @@ class MainContent(QWidget):
             self._plot4.reset()
             self._plot5.reset()
             if self._record.isChecked():
-                self._app_view_model.head_fix_reader.project_info = ProjectInfo(self._record_location.text(), "")
+                self._app_view_model.head_fix_reader.project_info = ProjectInfo(root=self._record_location.text(),
+                                                                                device_id="HeadFixUI",
+                                                                                ensure_exists=True)
             else:
                 self._app_view_model.head_fix_reader.project_info = None
             self._app_view_model.connect_to_device()

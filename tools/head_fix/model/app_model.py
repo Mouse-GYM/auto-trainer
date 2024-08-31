@@ -1,5 +1,6 @@
 import queue
 
+from autotrainer.core.project import ProjectInterval
 from autotrainer.device import SerialInterface, HeadFixReader, GymDeviceMessageKind
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
@@ -87,6 +88,7 @@ class AppModel:
 
     def on_activated(self):
         self._head_fix_reader = HeadFixReader(self._msg_queue)
+        self._head_fix_reader.interval = ProjectInterval.HOUR
         self._head_fix_reader.start()
 
     def on_close(self):

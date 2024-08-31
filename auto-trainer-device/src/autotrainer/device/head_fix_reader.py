@@ -1,13 +1,14 @@
+from __future__ import annotations
+
 import os
 import logging
 import time
 from datetime import datetime
-from pathlib import Path
 from queue import Queue
 from threading import Thread
 from typing import Callable
 
-from autotrainer.core.project import ProjectInfo
+from autotrainer.core.project import ProjectInfo, ProjectInterval
 
 from . import GymDeviceMessageKind
 from .device_thread import DeviceThreadMessageKind
@@ -21,15 +22,18 @@ class HeadFixReader(Thread):
                  version_callback: Callable[[str], None] = None, serial_number: str = "00000"):
         super().__init__()
 
+        self._name = "HeadFixReader"
+
         self._input_queue = input_queue
         self._ack_callback = None
         self._version_callback = version_callback
         self._measurement_callback = measurement_callback
         self._serial_number = serial_number
 
-        self._project_info = None
-        self._record_location = None
-        self._current_record_hour = -1
+        self._project_info: ProjectInfo | None = None
+        self._interval = ProjectInterval.HOUR
+        self._record_file = None
+        self._current_record_interval = -1
 
         self._had_write_error = False
 
@@ -66,16 +70,24 @@ class HeadFixReader(Thread):
 
     @project_info.setter
     def project_info(self, value: ProjectInfo) -> None:
-        if self._record_location is not None:
-            self._record_location.close()
+        if self._record_file is not None:
+            self._record_file.close()
 
         self._project_info = value
-        self._validate_file()
+        self._update_record_file()
 
         self._measurement_count = 0
 
+    @property
+    def interval(self) -> ProjectInterval:
+        return self._interval
+
+    @interval.setter
+    def interval(self, value: ProjectInterval) -> None:
+        self._interval = value
+
     def run(self):
-        logger.debug("entering HeadFixReader")
+        logger.debug(f"<{self._name}>: entering run loop")
 
         while True:
             msg, data = self._input_queue.get()
@@ -95,29 +107,33 @@ class HeadFixReader(Thread):
                 pressure = list()
                 temperature = list()
                 humidity = list()
+
+                if self._record_file is not None:
+                    file_timestamp = datetime.now()
+
+                    needs_update = file_timestamp.hour != self._current_record_interval \
+                        if self._interval == ProjectInterval.HOUR \
+                        else file_timestamp.minute != self._current_record_interval
+
+                    if needs_update:
+                        self._update_record_file()
+
                 for m in data:
                     weights.append(m.weight)
                     switch.append(m.switch)
                     pressure.append(m.pressure)
                     temperature.append(m.temperature)
                     humidity.append(m.humidity)
-                    if self._record_location is not None:
+
+                    if self._record_file is not None:
                         try:
-                            file_timestamp = datetime.now()
-
-                            if file_timestamp.hour != self._current_record_hour:
-                                if self._record_location is not None:
-                                    self._record_location.close()
-                                self._validate_file()
-
-                            if self._record_location is not None:
-                                self._record_location.write(
-                                    f"{time.time()}, {time.perf_counter_ns()}, {m.weight}, {m.switch}, {m.pressure},"
-                                    f"{m.temperature}, {m.humidity}\n")
+                            self._record_file.write(
+                                f"{time.time()}, {time.perf_counter_ns()}, {m.weight}, {m.switch}, {m.pressure},"
+                                f"{m.temperature}, {m.humidity}\n")
                         except Exception as e:
                             # This could be too much if something major is wrong.  Just output once per file rotation.
                             if not self._had_write_error:
-                                logger.error(f"unable to write: {e}")
+                                logger.error(f"<{self._name}>: unable to write: {e}")
                                 self._had_write_error = True
 
                 if self._measurement_count == 0:
@@ -136,26 +152,37 @@ class HeadFixReader(Thread):
 
             time.sleep(0.0001)
 
-        logger.debug("exiting HeadFixReader")
+        logger.debug(f"<{self._name}>: exiting run loop")
 
-    def _validate_file(self) -> None:
+    def _update_record_file(self) -> None:
+        if self._record_file is not None:
+            try:
+                self._record_file.close()
+            except:
+                pass
+
+            self._record_file = None
+
         if self._project_info is not None:
-            path = self._project_info.get_hourly_source_path("monitor")
-            file_name = os.path.join(path.location, f"{path.prefix}.csv")
+            interval_file_info = self._project_info.get_monitor_file(interval=self._interval)
+
+            if interval_file_info is None:
+                logger.error(f"<{self._name}>: unable to write to expected monitor file location")
+                return
 
             try:
-                p = Path(path.location)
-                p.mkdir(parents=True, exist_ok=True)
+                file_existed = os.path.exists(interval_file_info.file)
 
-                file_existed = os.path.exists(file_name)
-                location = open(file_name, "a")
+                location = open(interval_file_info.file, "a")
+
                 if not file_existed:
                     location.write("Time, Index, Weight, Switch, Pressure, Temperature, Humidity\n")
-                self._current_record_hour = path.hour
-                self._record_location = location
-                logger.debug(f"saving to {file_name}")
+
+                self._current_record_interval = interval_file_info.current_interval
+                self._record_file = location
+                logger.info(f"<{self._name}>: saving to {interval_file_info.file}")
                 self._had_write_error = False
             except:
-                logger.error(f"unable to write to {file_name}")
+                logger.error(f"<{self._name}>: unable to write to {interval_file_info.file}")
 
         return None

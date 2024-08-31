@@ -190,6 +190,8 @@ class AppModel(ObservableObject):
             if camera.is_primary:
                 camera.on_capture_stop()
 
+        self._is_recording_trigger = False
+
     def load_configuration(self, location: str):
         if not location or not os.path.isfile(location):
             return False
@@ -273,12 +275,11 @@ class AppModel(ObservableObject):
             json.dump(info, file)
 
     def get_project_info(self) -> ProjectInfo:
-        project_info = ProjectInfo(root=self.output_location, device_id=self._user_settings.serial_number)
+        project_info = ProjectInfo(root=self.output_location, device_id=self._user_settings.serial_number,
+                                   ensure_exists=True)
+
         project_info.calculate_next_session_index()
 
         location, _ = project_info.get_day_path()
-
-        path = Path(location)
-        path.mkdir(parents=True, exist_ok=True)
 
         return project_info

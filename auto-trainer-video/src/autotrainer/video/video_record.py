@@ -1,18 +1,16 @@
 import logging
 import os
-import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
-from pathlib import Path
 from queue import Queue, Empty
 from threading import Thread
 
 import cv2
 import numpy
 
-from autotrainer.core.project import ProjectInfo
+from autotrainer.core.project import ProjectInfo, ProjectInterval
 
 logger = logging.getLogger(__name__)
 
@@ -67,24 +65,31 @@ class VideoRecord(Thread):
         self._input_queue = input_queue
 
         self._is_running = True
-        self._record_start = None
+
         self._is_video_enabled = self._video_rotate_interval >= 0
-
-        # Windows does not like .mp4 extension when opencv is technically saving to an mkv container.
-        self._ext = "mp4" if sys.platform.startswith("linux") else "mkv"
-
         self._video_writer = None
         self._video_timestamp_file = None
 
         self._image_location = None
         self._last_image_timestamp = time.perf_counter()
 
+        self._interval_mode = ProjectInterval.NONE
+        self._interval_reference = -1
+
     def run(self) -> None:
+        if self._project_info is None or not self._project_info.is_valid():
+            logger.error("video recording and image capture can not proceed without value project information")
+            return
+
         if self._record_mode == VideoRecordMode.CONTINUOUS:
-            self._prepare_video_writer()
-            self._prepare_image_capture()
+            self._interval_mode = ProjectInterval.HOUR
+            self._prepare_writers()
 
         last_when = 0
+
+        check_count = 0
+
+        frame_skip = 1.0 / self._fps
 
         while self._is_running:
             try:
@@ -92,8 +97,7 @@ class VideoRecord(Thread):
 
                 if frame is None or when is None:
                     # Indicator for trigger disabled
-                    self._close_video_writer()
-                    self._image_location = None
+                    self._close_writers()
                     continue
 
                 if self._is_video_enabled:
@@ -116,75 +120,79 @@ class VideoRecord(Thread):
                     self._last_image_timestamp = when
                     when_str = datetime.fromtimestamp(when / 1e9).strftime("%Y%m%d_%H%M%S_%f")[:-3]
                     cv2.imwrite(os.path.join(self._image_location, self._image_name.format(when=when_str)), frame)
+
+                check_count += 1
+
+                if check_count > self._fps:
+                    check_count = 0
+                    self._check_writers()
+
             except Empty:
-                time.sleep(0.00001)
+                time.sleep(frame_skip)
 
-            # TODO rotate if is hourly and hour changed, not based on one hour from record start.
-            if self._record_start and 0 < self._video_rotate_interval < time.time() - self._record_start:
-                self._prepare_video_writer()
+            self._check_writers()
 
-        self._close_video_writer()
+        self._close_writers()
 
     def cancel(self):
         self._is_running = False
 
+    def _check_writers(self):
+        if self._interval_mode != ProjectInterval.NONE:
+            timestamp = datetime.now()
+
+            needs_update = timestamp.hour != self._interval_reference \
+                if self._interval_mode == ProjectInterval.HOUR \
+                else timestamp.minute != self._interval_reference
+
+            if needs_update:
+                self._prepare_writers()
+
+    def _prepare_writers(self):
+        self._interval_reference = self._project_info.get_interval(self._interval_mode)
+        self._prepare_video_writer()
+        self._prepare_image_capture()
+
+    def _close_writers(self):
+        self._close_image_writer()
+        self._close_video_writer()
+
+        if self._record_mode == VideoRecordMode.TRIGGER:
+            self._project_info.current_session += 1
+
     def _prepare_image_capture(self):
-        if self._project_info is None or not self._project_info.is_valid():
-            return
+        self._close_image_writer()
 
-        if self._image_interval > 0 and self._image_location is None:
-            path = self._project_info.get_source_path(self._name, self._record_mode != VideoRecordMode.TRIGGER)
+        if self._image_interval > 0:
+            self._image_location, self._image_name = self._project_info.get_image_capture_path(self._name,
+                                                                                               self._interval_mode)
 
-            self._image_location = os.path.join(path.location, f"{path.prefix}_images")
-            self._image_name = path.prefix + "_{when}" + ".png"
+            logger.debug(f"<{self.name}>: image capture to {self._image_location}")
 
-            path = Path(self._image_location)
-            path.mkdir(parents=True, exist_ok=True)
-
-            logger.debug(f"<{self.name}> image capture to: {self._image_location}")
+    def _close_image_writer(self):
+        self._image_location = None
 
     def _prepare_video_writer(self):
         self._close_video_writer()
-
-        if self._project_info is None or not self._project_info.is_valid():
-            return
 
         if not self._is_video_enabled:
             return
 
         self._record_start = time.time()
 
-        is_hourly = self._record_mode != VideoRecordMode.TRIGGER
+        video_file, timestamp_file = self._project_info.get_video_path(self._name, self._interval_mode)
 
-        video_path = self._project_info.get_source_path(self._name, is_hourly)
+        logger.debug(f"<{self.name}>: video record to {video_file}")
 
-        path = Path(video_path.location)
-        path.mkdir(parents=True, exist_ok=True)
-
-        location = f"{video_path.full_path}.{self._ext}"
-
-        index = 0
-
-        while os.path.exists(location):
-            index += 1
-            location = f"{video_path.full_path}_{index}.{self._ext}"
-
-        logger.debug(f"<{self.name}> using next video file: {location}")
-
-        ts_file = self._project_info.get_video_timestamp_file(self._name, is_hourly,
-                                                              "" if index == 0 else "_" + str(index))
-
-        self._video_timestamp_file = open(ts_file, "a")
-
-        self._video_writer = cv2.VideoWriter(location, cv2.VideoWriter_fourcc(*'mp4v'), self._fps,
+        self._video_writer = cv2.VideoWriter(video_file, cv2.VideoWriter_fourcc(*'mp4v'), self._fps,
                                              (self._width, self._height))
+
+        self._video_timestamp_file = open(timestamp_file, "a")
 
     def _close_video_writer(self):
         if self._video_writer is not None:
             self._video_writer.release()
             self._video_writer = None
-            if self._record_mode == VideoRecordMode.TRIGGER:
-                self._project_info.current_session += 1
 
         if self._video_timestamp_file is not None:
             self._video_timestamp_file.close()

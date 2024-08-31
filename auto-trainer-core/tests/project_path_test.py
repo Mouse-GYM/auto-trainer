@@ -26,13 +26,13 @@ def test_hourly():
 
     info = ProjectInfo(root=root, device_id=device_id, when=when)
 
-    hourly_source = info.get_hourly_source_path("camera-1")
+    hourly_source = info.get_interval_path("camera-1")
 
     assert hourly_source.location == os.path.join(root, "20230608", "A1357")
 
     assert hourly_source.prefix == f"20230608_A1357_h08_camera-1"
 
-    assert hourly_source.hour == 8
+    assert hourly_source.interval == 8
 
 
 def test_session():
@@ -40,7 +40,7 @@ def test_session():
 
     info = ProjectInfo(root=root, device_id=device_id, when=when, current_session=12)
 
-    session_source = info.get_session_source_path("camera-1")
+    session_source = info.get_session_path("camera-1")
 
     assert session_source.location == os.path.join(root, "20230608", "A1357", "session012")
 
