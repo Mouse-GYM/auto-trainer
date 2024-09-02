@@ -9,7 +9,7 @@ from datetime import datetime
 import cv2
 
 from autotrainer.core.project import ProjectInfo
-from autotrainer.video import VideoManager, VideoRecordProperties
+from autotrainer.video import VideoManager, VideoRecordProperties, VideoRecordMode
 from autotrainer.video import VideoRecord
 
 logging.basicConfig(level=logging.INFO)
@@ -35,9 +35,10 @@ def capture_video(camera_url: str, video_path: str, frame_count: int):
     base_location = os.path.join(video_path)
 
     record_queue = Queue()
-    record_project = ProjectInfo(base_location, "")
+    record_project = ProjectInfo(root=base_location, device_id="CameraCapture", ensure_exists=True)
     record_properties = VideoRecordProperties(project_info=record_project, name="camera",
-                                              video_rotate_interval=3600, frame_size=(camera.width, camera.height),
+                                              record_mode=VideoRecordMode.CONTINUOUS, video_rotate_interval=3600,
+                                              frame_size=(camera.width, camera.height),
                                               image_interval=1, fps=camera.fps)
     record = VideoRecord(record_properties, record_queue)
 
