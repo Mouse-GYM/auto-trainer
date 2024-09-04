@@ -11,6 +11,7 @@ from threading import Thread
 import cv2
 import numpy
 
+from autotrainer.core import trim_queue
 from autotrainer.core.project import ProjectInfo, ProjectInterval
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,8 @@ class VideoRecordProperties:
     """Interval in seconds to capture images.  Values <= 0 disable image capture."""
     next_session_index: Value = None
     """Value to use for next session index, if applicable."""
+    queue_batch_size = 60
+    """Number of frames to batch for passing between capture and record queues."""
 
     def should_record(self, is_triggered: bool) -> bool:
         any_active = self.project_info is not None and (self.video_rotate_interval >= 0 or self.image_interval > 0)
@@ -97,44 +100,53 @@ class VideoRecord(Thread):
 
         while self._is_running:
             try:
-                (frame, when) = self._input_queue.get_nowait()
+                queue_list = self._input_queue.get_nowait()
 
-                if frame is None or when is None:
+                # if frame is None or when is None:
+                if len(queue_list) == 0:
                     # Indicator for trigger disabled
                     self._close_writers()
                     continue
 
-                if self._is_video_enabled:
-                    if self._video_writer is None:
-                        # If triggered, may not be configured yet for this batch
-                        self._prepare_writers()
+                for frame, when in queue_list:
+                    if self._is_video_enabled:
+                        if self._video_writer is None:
+                            # If triggered, may not be configured yet for this batch
+                            self._prepare_writers()
 
-                    if len(numpy.shape(frame)) < 3 or numpy.shape(frame)[2] == 1:
-                        self._video_writer.write(numpy.tile(frame[:, :, numpy.newaxis], (1, 1, 3)))
-                    else:
-                        self._video_writer.write(frame)
+                        if len(numpy.shape(frame)) < 3 or numpy.shape(frame)[2] == 1:
+                            self._video_writer.write(numpy.tile(frame[:, :, numpy.newaxis], (1, 1, 3)))
+                        else:
+                            self._video_writer.write(frame)
 
-                    if self._video_timestamp_file is not None:
-                        self._video_timestamp_file.write(f"{when}, {1e9 / (when - last_when)}\n")
-                        last_when = when
+                        if self._video_timestamp_file is not None:
+                            self._video_timestamp_file.write(f"{when}, {1e9 / (when - last_when)}\n")
+                            last_when = when
 
-                if 0 < self._image_interval <= when - self._last_image_timestamp:
-                    if self._image_location is None:
-                        self._prepare_writers()
-                    self._last_image_timestamp = when
-                    when_str = datetime.fromtimestamp(when / 1e9).strftime("%Y%m%d_%H%M%S_%f")[:-3]
-                    cv2.imwrite(os.path.join(self._image_location, self._image_name.format(when=when_str)), frame)
+                    if 0 < self._image_interval <= when - self._last_image_timestamp:
+                        if self._image_location is None:
+                            self._prepare_writers()
+                        self._last_image_timestamp = when
+                        when_str = datetime.fromtimestamp(when / 1e9).strftime("%Y%m%d_%H%M%S_%f")[:-3]
+                        cv2.imwrite(os.path.join(self._image_location, self._image_name.format(when=when_str)), frame)
 
-                check_count += 1
+                    check_count += 1
 
-                if check_count > self._fps:
-                    check_count = 0
-                    self._check_writers()
+                    if check_count > self._fps:
+                        if trim_queue(self._input_queue, 5):
+                            logger.debug(f"<{self.name}>: queue trimmed")
+                        check_count = 0
+                        self._check_writers()
 
             except Empty:
                 time.sleep(frame_skip)
+            except Exception as ex:
+                logger.error(f"loop {ex}", exc_info=True, stack_info=True)
 
-            self._check_writers()
+            try:
+                self._check_writers()
+            except Exception as ex:
+                logger.error(f"check{ex}", exc_info=True, stack_info=True)
 
         self._close_writers()
 

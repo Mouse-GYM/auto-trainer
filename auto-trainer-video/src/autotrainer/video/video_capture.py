@@ -9,6 +9,8 @@ from enum import Enum, IntEnum
 from multiprocessing import Process, Value, Array
 from typing import Callable, Dict
 
+import numpy
+
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue
 
 from .video_manager import VideoManager
@@ -128,8 +130,10 @@ class VideoCapture(Process):
         if record_properties is not None:
             self._record_properties = record_properties
             self._is_record_active = record_properties.should_record(False)
+            self._record_batch_size = record_properties.queue_batch_size
         else:
             self._record_properties = VideoRecordProperties(record_mode=VideoRecordMode.NONE)
+            self._record_batch_size = 30
 
         self._errors = attrs.errors
 
@@ -200,6 +204,9 @@ class VideoCapture(Process):
     def _run_capture_loop(self) -> None:
         fault_count = 0
 
+        queue_list = list()
+        queue_list_count = 0
+
         while self._is_running:
             try:
                 if self._command_queue is not None:
@@ -216,10 +223,18 @@ class VideoCapture(Process):
                 frame, when = self._camera.capture()
 
                 if self._image_queue is not None:
-                    self._image_queue.put(frame)
+                    if len(numpy.shape(frame)) < 3:
+                        self._image_queue.put(frame)
+                    else:
+                        self._image_queue.put(frame[:, :, 0])
 
                 if self._is_record_active:
-                    self._record_queue.put((frame, when))
+                    queue_list.append((frame, when))
+                    queue_list_count += 1
+                    if queue_list_count >= self._record_batch_size:
+                        self._record_queue.put(queue_list)
+                        queue_list = list()
+                        queue_list_count = 0
 
                 if self._network_queue is not None:
                     self._network_queue.put(frame, self._camera_idx)
@@ -270,4 +285,5 @@ class VideoCapture(Process):
 
     def _disable_trigger(self, _: object):
         self._is_record_active = self._record_properties.should_record(False)
-        self._record_queue.put((None, None))
+        # self._record_queue.put((None, None))
+        self._record_queue.put(list())

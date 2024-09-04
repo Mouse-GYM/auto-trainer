@@ -77,8 +77,6 @@ class OpenCVCam(CameraBase):
         if ret:
             self._last_when = time.time_ns()
 
-            frame = frame[:, :, 0]
-
         return frame, self._last_when
 
     def _refresh_height_width(self):
