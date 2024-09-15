@@ -48,15 +48,15 @@ class PelletControl(QWidget):
 
         layout.addLayout(b_layout, 0, 0, 1, 3)
 
-        p_layout, self._x_pos = add_position("X (mm):", -5, 5)
+        p_layout, self._x_pos = add_position("X (mm):", -10, 10)
         self._x_pos.valueChanged.connect(self._update_x)
         layout.addLayout(p_layout, 1, 0)
 
-        p_layout, self._y_pos = add_position("Y (mm):", -5, 5)
+        p_layout, self._y_pos = add_position("Y (mm):", -10, 10)
         self._y_pos.valueChanged.connect(self._update_y)
         layout.addLayout(p_layout, 1, 1)
 
-        p_layout, self._z_pos = add_position("Z (mm):", -5, 5)
+        p_layout, self._z_pos = add_position("Z (mm):", -10, 10)
         self._z_pos.valueChanged.connect(self._update_z)
         layout.addLayout(p_layout, 1, 2)
 

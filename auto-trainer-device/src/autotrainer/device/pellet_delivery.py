@@ -43,11 +43,11 @@ class PelletDelivery(GymDevice):
         elif kind == PelletDeliveryMessageKind.RELEASE_PELLET:
             self._send_data("R0x", context)
         elif kind == PelletDeliveryMessageKind.SET_X:
-            self._send_data(f"I{typing.cast(int, data) + 5}x", context)
+            self._send_data(f"I{typing.cast(int, data) + 10}x", context)
         elif kind == PelletDeliveryMessageKind.SET_Y:
-            self._send_data(f"J{typing.cast(int, data) + 25}x", context)
+            self._send_data(f"J{typing.cast(int, data) + 20}x", context)
         elif kind == PelletDeliveryMessageKind.SET_Z:
-            self._send_data(f"K{typing.cast(int, data) * (-1) + 5}x", context)
+            self._send_data(f"K{typing.cast(int, data) + 10}x", context)
         else:
             logger.warning(f"unknown message kind: {kind}")
 
