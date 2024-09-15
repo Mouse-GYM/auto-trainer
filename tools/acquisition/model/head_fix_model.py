@@ -1,10 +1,7 @@
 import logging
-import os
 import queue
 import time
 import uuid
-from datetime import datetime
-from pathlib import Path
 from threading import Timer
 
 import numpy
@@ -18,6 +15,9 @@ from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID, ObservableObjec
 from tools.acquisition.model.user_settings import UserSettings
 
 logger = logging.getLogger(__name__)
+
+TRIGGER_THRESHOLD_TIME = 0.5  # seconds
+TRIGGER_MINIMUM_HOLD_TIME = 5.0  # seconds
 
 
 class HeadFixModel(ObservableObject):
@@ -143,22 +143,22 @@ class HeadFixModel(ObservableObject):
 
     def monitor_trigger(self, values: list):
         self._trigger_response(numpy.mean(values))
-        # for value in values:
-        #    self._trigger_response(value)
 
     def _trigger_response(self, value):
         if value > self._load_trigger:
             self._disable_trigger_debounce.cancel()
             if not self._trigger_was_high:
                 self._trigger_was_high = True
-                self._enable_trigger_debounce = Timer(1.0, self._trigger_enable)
+                self._enable_trigger_debounce = Timer(TRIGGER_THRESHOLD_TIME, self._trigger_enable)
                 self._enable_trigger_debounce.start()
         else:
             self._enable_trigger_debounce.cancel()
             if self._trigger_was_high:
                 self._trigger_was_high = False
                 rec_time = time.perf_counter() - self._last_trigger_start
-                self._disable_trigger_debounce = Timer(1.0 if rec_time >= 5 else 5 - rec_time, self._trigger_disable)
+                self._disable_trigger_debounce = Timer(
+                    1.0 if rec_time >= TRIGGER_MINIMUM_HOLD_TIME else TRIGGER_MINIMUM_HOLD_TIME - rec_time,
+                    self._trigger_disable)
                 self._disable_trigger_debounce.start()
 
     def _trigger_enable(self):
