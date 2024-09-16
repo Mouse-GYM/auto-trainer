@@ -1,8 +1,8 @@
-import time
 import logging
 
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
 
+from autotrainer.core import PerfMonitor
 from autotrainer.device import SerialInterface
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget
 
@@ -10,6 +10,9 @@ from tools.acquisition.model.head_fix_model import HeadFixModel
 from tools.acquisition.view.ContentWidget import ContentWidget
 
 logger = logging.getLogger(__name__)
+
+_ACTIVE_LOAD_CELL_COLOR = (0, 250, 154)
+_INACTIVE_LOAD_CELL_COLOR = (240, 240, 240)
 
 
 class HeadFixContent(ContentWidget):
@@ -25,6 +28,7 @@ class HeadFixContent(ContentWidget):
 
         self._plot1 = PGWidget()
         self._plot1.setBackground("w")
+        self._plot1.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
         self._plot1.setMinimumHeight(180)
         self._plot1.getViewBox().setRange(yRange=[0, 50])
         self._plot1.scale_x = 100.0
@@ -42,12 +46,22 @@ class HeadFixContent(ContentWidget):
         self._header = QWidget()
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
 
         title = QLabel("Head Fix")
         title.setStyleSheet("font-weight: bold")
         layout.addWidget(title)
 
         layout.addStretch(1)
+
+        self._headbar_engaged = QLabel("Headbar: Disengaged")
+        layout.addWidget(self._headbar_engaged)
+
+        self._load_cell_engaged = QLabel("Load Cell: Disengaged")
+        layout.addWidget(self._load_cell_engaged)
+
+        self._force_detector_engaged = QLabel("Force Detector: Disengaged")
+        layout.addWidget(self._force_detector_engaged)
 
         layout.addWidget(QLabel("Port:"))
 
@@ -99,8 +113,7 @@ class HeadFixContent(ContentWidget):
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
 
-        self._measurement_count = 0
-        self._start = None
+        self._perf_monitor = PerfMonitor(name="headFixContent", units="mps", report_count=3000)
 
         self._refresh_ports()
 
@@ -121,23 +134,27 @@ class HeadFixContent(ContentWidget):
         self._tare_button.setEnabled(is_active)
 
         if is_active:
-            self._measurement_count = 0
+            self._perf_monitor.reset()
 
     def use_cache(self):
         self._plot1.use_cache()
+        if self._model.is_load_cell_engaged:
+            self._load_cell_engaged.setText("Load Cell: Engaged")
+        else:
+            self._load_cell_engaged.setText("Load Cell: Disengaged")
+        if self._model.is_headbar_engaged:
+            self._headbar_engaged.setText("Headbar: Engaged")
+        else:
+            self._headbar_engaged.setText("Headbar: Disengaged")
+        if self._model.is_force_detector_engaged:
+            self._force_detector_engaged.setText("Force Detector: Engaged")
+        else:
+            self._force_detector_engaged.setText("Force Detector: Disengaged")
 
     def _weight_received(self, value):
         values = value[0]
 
-        self._model.monitor_trigger(values)
-
-        if self._measurement_count == 0:
-            self._start = time.perf_counter_ns()
-
-        self._measurement_count += len(values)
-
-        if self._measurement_count % 3000 == 0:
-            logger.info(f"{(1e9 * self._measurement_count / (time.perf_counter_ns() - self._start)):.1f} mps")
+        self._perf_monitor.add_cycles(len(values))
 
         self._plot1.cache_data(values)
 
@@ -165,7 +182,12 @@ class HeadFixContent(ContentWidget):
         if name == "port":
             self._port_combobox.select_port(value)
             self._port_label.setText(value)
-        if name == "load_trigger":
+        elif name == "load_trigger":
             self._load_cell.setText(str(value))
-        if name == "position":
+        elif name == "position":
             self._position.setValue(value)
+        elif name == "is_load_cell_engaged":
+            if value:
+                self._plot1.getPlotItem().getViewBox().setBackgroundColor(_ACTIVE_LOAD_CELL_COLOR)
+            else:
+                self._plot1.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)

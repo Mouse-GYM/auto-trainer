@@ -37,7 +37,7 @@ class AppModel(ObservableObject):
 
         self._cameras = list([self._left_camera, self._right_camera, self._top_camera])
 
-        self._head_fix = HeadFixModel(self._user_settings)
+        self._head_fix = HeadFixModel()
 
         self.pellet_delivery = PelletDeliveryModel()
 

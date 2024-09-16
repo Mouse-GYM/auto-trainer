@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QL
 
 import qtawesome as qta
 
+from autotrainer.core import PerfMonitor
 from autotrainer.core.project import ProjectInfo
 from autotrainer.device import SerialInterface
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox
@@ -20,10 +21,10 @@ class MainContent(QWidget):
     connecting = Signal()
     disconnected = Signal()
 
-    def __init__(self, app_view_model):
+    def __init__(self, model):
         super().__init__()
 
-        self._app_view_model = app_view_model
+        self._model = model
 
         self._ignore_port_changes = False
 
@@ -41,7 +42,7 @@ class MainContent(QWidget):
 
         port_layout.addWidget(QLabel("Port:"))
 
-        self._port_combobox = ATSerialPortComboBox(port=self._app_view_model.user_settings.port)
+        self._port_combobox = ATSerialPortComboBox(port=self._model.user_settings.port)
         self._port_combobox.currentIndexChanged.connect(self._port_selection_changed)
 
         port_layout.addWidget(self._port_combobox, 0)
@@ -60,11 +61,11 @@ class MainContent(QWidget):
 
         layout.addLayout(port_layout, 0, 0, 1, 2)
 
-        # Row 2
+        # Row 1
 
         layout.addWidget(ATSeparator("#b9b9b9"), 1, 0, 1, 2)
 
-        # Row 3
+        # Row 2
 
         row_layout = QHBoxLayout()
         row_layout.setContentsMargins(0, 0, 0, 0)
@@ -86,7 +87,7 @@ class MainContent(QWidget):
 
         self._tare_button = QPushButton("Tare")
         self._tare_button.setEnabled(False)
-        self._tare_button.clicked.connect(self._app_view_model.tare)
+        self._tare_button.clicked.connect(self._model.tare)
         position_layout.addWidget(self._tare_button, 0)
 
         position_layout.addStretch(1)
@@ -99,16 +100,16 @@ class MainContent(QWidget):
 
         self._enable_streaming = QCheckBox("Stream measurements")
         self._enable_streaming.setEnabled(True)
-        self._enable_streaming.setChecked(self._app_view_model.user_settings.stream_enabled)
+        self._enable_streaming.setChecked(self._model.user_settings.stream_enabled)
         self._enable_streaming.stateChanged.connect(lambda x: self._update_stream_enabled(x))
         record_layout.addWidget(self._enable_streaming)
 
         self._record = QCheckBox("Save measurements")
-        self._record.setChecked(self._app_view_model.user_settings.record_enabled)
+        self._record.setChecked(self._model.user_settings.record_enabled)
         self._record.stateChanged.connect(lambda x: self._update_record_enabled(x))
         record_layout.addWidget(self._record)
 
-        self._record_location = QLineEdit(self._app_view_model.user_settings.record_location)
+        self._record_location = QLineEdit(self._model.user_settings.record_location)
         self._record_location.setMinimumWidth(100)
         record_layout.addWidget(self._record_location, 1)
 
@@ -120,46 +121,56 @@ class MainContent(QWidget):
 
         layout.addLayout(row_layout, 2, 0, 1, 2)
 
-        # Row 4
+        # Row 3
 
         layout.addWidget(ATSeparator("#b9b9b9"), 3, 0, 1, 2)
 
-        # Row 5 and beyond
+        # Row 4
+
+        plot_layout = QGridLayout()
+        plot_layout.setContentsMargins(8, 0, 8, 0)
 
         self._plot1 = PGWidget()
         self._plot1.setBackground(None)
+        self._plot1.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
         self._plot1.setMaximumHeight(150)
         self._plot1.setTitle("Weight")
         self._plot1.getViewBox().setRange(yRange=[0, 50])
-        layout.addWidget(self._plot1, 4, 0)
+        plot_layout.addWidget(self._plot1, 4, 0, 1, 2)
 
         self._plot2 = PGWidget()
         self._plot2.setBackground(None)
+        self._plot2.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
         self._plot2.setMaximumHeight(150)
         self._plot2.setTitle("Switch")
-        layout.addWidget(self._plot2, 5, 0)
+        plot_layout.addWidget(self._plot2, 5, 0)
 
         self._plot3 = PGWidget()
         self._plot3.setBackground(None)
+        self._plot3.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
         self._plot3.setMaximumHeight(150)
         self._plot3.setTitle("Pressure")
-        layout.addWidget(self._plot3, 6, 0)
+        plot_layout.addWidget(self._plot3, 6, 0)
 
         self._plot4 = PGWidget()
         self._plot4.setBackground(None)
+        self._plot4.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
         self._plot4.setMaximumHeight(150)
         self._plot4.setTitle("Temperature")
-        layout.addWidget(self._plot4, 5, 1)
+        plot_layout.addWidget(self._plot4, 5, 1)
 
         self._plot5 = PGWidget()
         self._plot5.setBackground(None)
+        self._plot5.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
         self._plot5.setMaximumHeight(150)
         self._plot5.setTitle("Humidity")
-        layout.addWidget(self._plot5, 6, 1)
+        plot_layout.addWidget(self._plot5, 6, 1)
 
-        layout.setRowStretch(7, 1)
+        layout.addLayout(plot_layout, 4, 0, 1, 2)
 
-        layout.addWidget(ATSeparator("#b9b9b9"), 8, 0, 1, 2)
+        layout.setRowStretch(5, 1)
+
+        layout.addWidget(ATSeparator("#b9b9b9"), 6, 0, 1, 2)
 
         self.setLayout(layout)
 
@@ -169,8 +180,7 @@ class MainContent(QWidget):
         self._timer.timeout.connect(self.refresh_data)
         self._timer.start(100)
 
-        self._measurement_count = 0
-        self._start = None
+        self._perf_monitor = PerfMonitor(name="<HeadFixUI>", units="mps", report_count=3000)
 
     @Slot()
     def refresh_data(self):
@@ -181,7 +191,25 @@ class MainContent(QWidget):
         self._plot5.use_cache()
 
     def on_activated(self):
-        self._app_view_model.head_fix_reader.measurement_callback = self._measurements_received
+        self._model.head_fix_reader.measurement_callback = self._measurements_received
+        self._model.head_fix_reader.property_changed += self._model_property_changed
+
+    def _model_property_changed(self, name, value, _):
+        if name == "is_load_cell_engaged":
+            if value:
+                self._plot1.getPlotItem().getViewBox().setBackgroundColor((0, 250, 154))
+            else:
+                self._plot1.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
+        elif name == "is_headbar_engaged":
+            if value:
+                self._plot2.getPlotItem().getViewBox().setBackgroundColor((0, 250, 154))
+            else:
+                self._plot2.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
+        elif name == "is_force_detector_engaged":
+            if value:
+                self._plot3.getPlotItem().getViewBox().setBackgroundColor((0, 250, 154))
+            else:
+                self._plot3.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
 
     def _measurements_received(self, measurements):
         self._plot1.cache_data(measurements[0])
@@ -190,13 +218,7 @@ class MainContent(QWidget):
         self._plot4.cache_data(measurements[3])
         self._plot5.cache_data(measurements[4])
 
-        self._measurement_count += len(measurements[0])
-
-        if self._start is None:
-            self._start = time.perf_counter_ns()
-
-        if self._measurement_count % 3000 == 0:
-            logger.info(f"{(1e9 * self._measurement_count / (time.perf_counter_ns() - self._start)):.1f} mps")
+        self._perf_monitor.add_cycles(len(measurements[0]))
 
     def _refresh_ports(self):
         ports = SerialInterface.refresh_ports()
@@ -205,21 +227,21 @@ class MainContent(QWidget):
 
     def _port_selection_changed(self, _index: int):
         if not self._ignore_port_changes and len(self._port_combobox.currentText()) > 0:
-            self._app_view_model.user_settings.set_port(self._port_combobox.currentText())
+            self._model.user_settings.set_port(self._port_combobox.currentText())
 
     def _update_position(self):
-        self._app_view_model.update_position(self._position.value())
+        self._model.update_position(self._position.value())
 
     def _update_record_enabled(self, b: bool):
-        self._app_view_model.user_settings.record_enabled = b
+        self._model.user_settings.record_enabled = b
 
     def _update_stream_enabled(self, b: bool):
-        self._app_view_model.set_stream_enabled(b)
+        self._model.set_stream_enabled(b)
 
     def _connect(self):
-        if self._app_view_model.is_connected:
-            self._app_view_model.disconnect_from_device()
-            self._app_view_model.head_fix_reader.project_info = None
+        if self._model.is_connected:
+            self._model.disconnect_from_device()
+            self._model.head_fix_reader.project_info = None
             self._connect_button.setText("Connect")
             self.disconnected.emit()
         else:
@@ -229,33 +251,34 @@ class MainContent(QWidget):
             self._plot3.reset()
             self._plot4.reset()
             self._plot5.reset()
+
             if self._record.isChecked():
-                self._app_view_model.head_fix_reader.project_info = ProjectInfo(root=self._record_location.text(),
-                                                                                device_id="HeadFixUI",
-                                                                                ensure_exists=True)
+                self._model.head_fix_reader.project_info = ProjectInfo(root=self._record_location.text(),
+                                                                       device_id="HeadFixUI",
+                                                                       ensure_exists=True)
             else:
-                self._app_view_model.head_fix_reader.project_info = None
-            self._app_view_model.connect_to_device()
-            self._start = time.perf_counter_ns()
-            self._measurement_count = 0
+                self._model.head_fix_reader.project_info = None
+
+            self._model.connect_to_device()
+            self._perf_monitor.reset()
             self._connect_button.setText("Disconnect")
 
-        self._position.setEnabled(self._app_view_model.is_connected)
-        self._tare_button.setEnabled(self._app_view_model.is_connected)
-        self._plot1.setEnabled(self._app_view_model.is_connected)
-        self._plot2.setEnabled(self._app_view_model.is_connected)
-        self._plot3.setEnabled(self._app_view_model.is_connected)
-        self._plot4.setEnabled(self._app_view_model.is_connected)
-        self._plot5.setEnabled(self._app_view_model.is_connected)
-        self._port_combobox.setEnabled(not self._app_view_model.is_connected)
-        self._refresh_button.setEnabled(not self._app_view_model.is_connected)
-        self._record.setEnabled(not self._app_view_model.is_connected)
-        self._record_location.setEnabled(not self._app_view_model.is_connected)
-        self._browse_button.setEnabled(not self._app_view_model.is_connected)
+        self._position.setEnabled(self._model.is_connected)
+        self._tare_button.setEnabled(self._model.is_connected)
+        self._plot1.setEnabled(self._model.is_connected)
+        self._plot2.setEnabled(self._model.is_connected)
+        self._plot3.setEnabled(self._model.is_connected)
+        self._plot4.setEnabled(self._model.is_connected)
+        self._plot5.setEnabled(self._model.is_connected)
+        self._port_combobox.setEnabled(not self._model.is_connected)
+        self._refresh_button.setEnabled(not self._model.is_connected)
+        self._record.setEnabled(not self._model.is_connected)
+        self._record_location.setEnabled(not self._model.is_connected)
+        self._browse_button.setEnabled(not self._model.is_connected)
 
     def _browse_for_location(self):
         dirname = QFileDialog.getExistingDirectory(self, "Select Directory", self._record_location.text())
 
         if len(dirname) > 0:
             self._record_location.setText(dirname)
-            self._app_view_model.user_settings.record_location = dirname
+            self._model.user_settings.record_location = dirname

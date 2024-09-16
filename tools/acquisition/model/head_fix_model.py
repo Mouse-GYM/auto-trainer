@@ -1,10 +1,6 @@
 import logging
 import queue
-import time
 import uuid
-from threading import Timer
-
-import numpy
 
 from autotrainer.core.project import ProjectInfo
 from autotrainer.device import SerialInterface, HeadFixReader
@@ -12,19 +8,12 @@ from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID, ObservableObject
 
-from tools.acquisition.model.user_settings import UserSettings
-
 logger = logging.getLogger(__name__)
-
-TRIGGER_THRESHOLD_TIME = 0.5  # seconds
-TRIGGER_MINIMUM_HOLD_TIME = 5.0  # seconds
 
 
 class HeadFixModel(ObservableObject):
-    def __init__(self, user_settings: UserSettings):
+    def __init__(self):
         super().__init__()
-        # TODO Remove dependency
-        self._settings = user_settings
 
         self._port = None
 
@@ -38,17 +27,15 @@ class HeadFixModel(ObservableObject):
 
         self._position = 0
 
+        self._is_headbar_engaged = False
+
         self._load_trigger = 15
 
+        self._is_load_cell_engaged = False
+
+        self._is_force_detector_engaged = False
+
         self._output_location = ""
-
-        self._is_triggered = False
-
-        self._min_rec_time = 0
-        self._last_trigger_start = 0
-        self._trigger_was_high = False
-        self._enable_trigger_debounce = Timer(1.0, lambda: None)
-        self._disable_trigger_debounce = Timer(1.0, lambda: None)
 
     @property
     def is_connected(self):
@@ -81,6 +68,18 @@ class HeadFixModel(ObservableObject):
     @output_location.setter
     def output_location(self, value: str):
         self._output_location = self._on_property_changed("output_location", value, self._output_location)
+
+    @property
+    def is_headbar_engaged(self) -> bool:
+        return self._is_headbar_engaged
+
+    @property
+    def is_load_cell_engaged(self) -> bool:
+        return self._is_load_cell_engaged
+
+    @property
+    def is_force_detector_engaged(self) -> bool:
+        return self._is_force_detector_engaged
 
     @property
     def position(self) -> int:
@@ -134,43 +133,26 @@ class HeadFixModel(ObservableObject):
         self._is_connected = False
 
     def on_activated(self):
-        self._head_fix_reader = HeadFixReader(self._reader_queue, serial_number=self._settings.serial_number)
+        self._head_fix_reader = HeadFixReader(self._reader_queue)
+        self._head_fix_reader.load_cell_monitor.threshold = self._load_trigger
+        self._head_fix_reader.property_changed += self._header_fix_property_changed
         self._head_fix_reader.start()
 
     def on_close(self):
         self.disconnect_from_device()
         self._reader_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
-    def monitor_trigger(self, values: list):
-        self._trigger_response(numpy.mean(values))
-
-    def _trigger_response(self, value):
-        if value > self._load_trigger:
-            self._disable_trigger_debounce.cancel()
-            if not self._trigger_was_high:
-                self._trigger_was_high = True
-                self._enable_trigger_debounce = Timer(TRIGGER_THRESHOLD_TIME, self._trigger_enable)
-                self._enable_trigger_debounce.start()
-        else:
-            self._enable_trigger_debounce.cancel()
-            if self._trigger_was_high:
-                self._trigger_was_high = False
-                rec_time = time.perf_counter() - self._last_trigger_start
-                self._disable_trigger_debounce = Timer(
-                    1.0 if rec_time >= TRIGGER_MINIMUM_HOLD_TIME else TRIGGER_MINIMUM_HOLD_TIME - rec_time,
-                    self._trigger_disable)
-                self._disable_trigger_debounce.start()
-
-    def _trigger_enable(self):
-        if not self._is_triggered:
-            self._is_triggered = True
-            TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, True)
-            self._last_trigger_start = time.perf_counter()
-
-    def _trigger_disable(self):
-        if self._is_triggered:
-            self._is_triggered = False
-            TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, False)
+    def _header_fix_property_changed(self, name: str, value, _):
+        if name == "is_headbar_engaged":
+            self._is_headbar_engaged = self._on_property_changed("is_headbar_engaged", value,
+                                                                 self._is_headbar_engaged)
+        elif name == "is_load_cell_engaged":
+            TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, value)
+            self._is_load_cell_engaged = self._on_property_changed("is_load_cell_engaged", value,
+                                                                   self._is_load_cell_engaged)
+        if name == "is_force_detector_engaged":
+            self._is_force_detector_engaged = self._on_property_changed("is_force_detector_engaged", value,
+                                                                        self._is_force_detector_engaged)
 
     def load_configuration(self, conf):
         if "port" in conf:

@@ -5,6 +5,7 @@ import typing
 from collections import namedtuple
 from enum import IntEnum
 
+from autotrainer.core import PerfMonitor
 from .gym_device import GymDevice, GymDeviceMessageKind
 from .device_api import DeviceApi
 
@@ -33,8 +34,7 @@ class HeadFix(GymDevice):
 
         self._measurements = list()
 
-        self._measurement_count = 0
-        self._start = None
+        self._perf_monitor = PerfMonitor(name="<head-fix>", units="mps", report_count=3000)
 
     @property
     def measurements(self) -> typing.List[HeadFixMeasurement]:
@@ -56,9 +56,8 @@ class HeadFix(GymDevice):
         elif kind == HeadFixMessageKind.UPDATE_TARE:
             self._send_data("Mx", context)
         elif kind == HeadFixMessageKind.STREAM_START:
-            self._measurement_count = 0
+            self._perf_monitor.reset()
             self._send_data("Sx", context)
-            self._start = time.perf_counter_ns()
         elif kind == HeadFixMessageKind.STREAM_STOP:
             self._send_data("Tx", context)
         else:
@@ -76,15 +75,11 @@ class HeadFix(GymDevice):
             for measurement in measurements:
                 self._measurements.append(measurement)
 
-                self._measurement_count += 1
-
-                if self._measurement_count % 3000 == 0:
-                    logger.info(
-                        f"{(1e9 * self._measurement_count / (time.perf_counter_ns() - self._start)):.1f} mps")
-
                 if len(self._measurements) >= self._measurement_buffer_count:
                     self._api.send_message(HeadFixMessageKind.MEASUREMENT, self._measurements.copy())
                     self._measurements = list()
+
+            self._perf_monitor.add_cycles(len(measurements))
 
             # Don't let unhandled/expected data overflow the read buffer.
             if len(residual) > 1000:
