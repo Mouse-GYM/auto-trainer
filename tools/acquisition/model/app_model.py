@@ -11,6 +11,7 @@ import yaml
 from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core.project import ProjectInfo
+from tools.acquisition.behavior.behavior_model import BehaviorModel
 
 from tools.acquisition.model.analysis_model import AnalysisModel
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -41,9 +42,11 @@ class AppModel(ObservableObject):
 
         self.pellet_delivery = PelletDeliveryModel()
 
-        self._network_buffer = None
+        self._inference_queue = None
 
         self._analysis = AnalysisModel(self.pellet_delivery)
+
+        self._behavioral = BehaviorModel(self._head_fix)
 
         self._output_location = ""
 
@@ -122,15 +125,15 @@ class AppModel(ObservableObject):
     def on_capture_start(self) -> bool:
         self.create_project_info()
 
-        self._network_buffer = None
+        self._inference_queue = None
 
         if self._analysis.is_enabled:
             shape_1 = self.left_camera.shape
             shape_2 = self.right_camera.shape
             if shape_1 == shape_2:
-                self._network_buffer = FixedArrayMultiQueue(3, 2, 3, shape_1)
+                self._inference_queue = FixedArrayMultiQueue(3, 2, 3, shape_1)
 
-        did_start = self.left_camera.on_prepare_capture(self._project_info, self._next_session, self._network_buffer)
+        did_start = self.left_camera.on_prepare_capture(self._project_info, self._next_session, self._inference_queue)
 
         if not did_start:
             self.on_error("Camera Process Failed",
@@ -138,7 +141,7 @@ class AppModel(ObservableObject):
 
         if did_start:
             did_start = did_start and self.right_camera.on_prepare_capture(self._project_info, self._next_session,
-                                                                           self._network_buffer)
+                                                                           self._inference_queue)
             if not did_start:
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(self.right_camera.name, self.right_camera.last_error))
@@ -157,7 +160,7 @@ class AppModel(ObservableObject):
         self._save_project_metadata(self._project_info)
 
         if self._analysis.is_enabled:
-            self._analysis.start(self._network_buffer)
+            self._analysis.start(self._inference_queue)
 
         self.head_fix.connect_to_device(self._project_info)
         self.pellet_delivery.connect_to_device()
@@ -248,9 +251,6 @@ class AppModel(ObservableObject):
             return False
 
         return True
-
-    def toggle_trigger_state(self):
-        TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, not self._is_recording_trigger)
 
     def on_close(self):
         if self._analysis is not None:

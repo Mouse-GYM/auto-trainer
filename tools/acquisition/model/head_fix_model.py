@@ -29,7 +29,7 @@ class HeadFixModel(ObservableObject):
 
         self._is_headbar_engaged = False
 
-        self._load_trigger = 15
+        self._load_cell_threshold = 15
 
         self._is_load_cell_engaged = False
 
@@ -55,11 +55,11 @@ class HeadFixModel(ObservableObject):
 
     @property
     def load_trigger(self):
-        return self._load_trigger
+        return self._load_cell_threshold
 
     @load_trigger.setter
     def load_trigger(self, value: int):
-        self._load_trigger = self._on_property_changed("load_trigger", value, self._load_trigger)
+        self._load_cell_threshold = self._on_property_changed("load_trigger", value, self._load_cell_threshold)
 
     @property
     def output_location(self) -> str:
@@ -73,13 +73,28 @@ class HeadFixModel(ObservableObject):
     def is_headbar_engaged(self) -> bool:
         return self._is_headbar_engaged
 
+    @is_headbar_engaged.setter
+    def is_headbar_engaged(self, value: bool):
+        self._is_headbar_engaged = self._on_property_changed("is_headbar_engaged", value,
+                                                             self._is_headbar_engaged)
+
     @property
     def is_load_cell_engaged(self) -> bool:
         return self._is_load_cell_engaged
 
+    @is_load_cell_engaged.setter
+    def is_load_cell_engaged(self, value: bool):
+        self._is_load_cell_engaged = self._on_property_changed("is_load_cell_engaged", value,
+                                                               self._is_load_cell_engaged)
+
     @property
     def is_force_detector_engaged(self) -> bool:
         return self._is_force_detector_engaged
+
+    @is_force_detector_engaged.setter
+    def is_force_detector_engaged(self, value: bool):
+        self._is_force_detector_engaged = self._on_property_changed("is_force_detector_engaged", value,
+                                                                    self._is_force_detector_engaged)
 
     @property
     def position(self) -> int:
@@ -134,25 +149,21 @@ class HeadFixModel(ObservableObject):
 
     def on_activated(self):
         self._head_fix_reader = HeadFixReader(self._reader_queue)
-        self._head_fix_reader.load_cell_monitor.threshold = self._load_trigger
-        self._head_fix_reader.property_changed += self._header_fix_property_changed
+        self._head_fix_reader.load_cell_monitor.threshold = self._load_cell_threshold
+        self._head_fix_reader.property_changed += self._head_fix_reader_property_changed
         self._head_fix_reader.start()
 
     def on_close(self):
         self.disconnect_from_device()
         self._reader_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
-    def _header_fix_property_changed(self, name: str, value, _):
+    def _head_fix_reader_property_changed(self, name: str, value, _):
         if name == "is_headbar_engaged":
-            self._is_headbar_engaged = self._on_property_changed("is_headbar_engaged", value,
-                                                                 self._is_headbar_engaged)
+            self.is_headbar_engaged = value
         elif name == "is_load_cell_engaged":
-            TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, value)
-            self._is_load_cell_engaged = self._on_property_changed("is_load_cell_engaged", value,
-                                                                   self._is_load_cell_engaged)
+            self.is_load_cell_engaged = value
         if name == "is_force_detector_engaged":
-            self._is_force_detector_engaged = self._on_property_changed("is_force_detector_engaged", value,
-                                                                        self._is_force_detector_engaged)
+            self.is_force_detector_engaged = value
 
     def load_configuration(self, conf):
         if "port" in conf:
@@ -163,7 +174,7 @@ class HeadFixModel(ObservableObject):
             self.load_trigger = conf["loadTrigger"]
 
     def write_configuration(self):
-        return {"port": self.port, "position": self._position, "loadTrigger": self._load_trigger}
+        return {"port": self.port, "position": self._position, "loadTrigger": self._load_cell_threshold}
 
     def _send_with_token(self, cmd, value=None):
         token = uuid.uuid4()

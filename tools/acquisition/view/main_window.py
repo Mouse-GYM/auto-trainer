@@ -67,7 +67,6 @@ class MainWindow(QMainWindow):
                 self.run_action.setText("Stop")
                 self.run_action.setIcon(icon)
                 self.run_action.setEnabled(True)
-                self.trigger_action.setEnabled(True)
             else:
                 self._status_label.setText("Startup failed")
                 self.main_content.set_is_capture_active(False)
@@ -77,10 +76,8 @@ class MainWindow(QMainWindow):
                 self.run_action.setText("Start")
                 self.run_action.setIcon(icon)
                 self.run_action.setEnabled(True)
-                self.trigger_action.setEnabled(False)
         else:
             self.run_action.setEnabled(False)
-            self.trigger_action.setEnabled(False)
             self._status_label.setText("Stopping subprocesses...")
             logger.info("stopping subprocesses")
             QCoreApplication.processEvents()
@@ -141,11 +138,9 @@ class MainWindow(QMainWindow):
         # isChecked() has already swapped to the new value by the time this is called
         if not self.edit_configuration_action.isChecked():
             self.main_content.set_is_editable(False)
-            self.trigger_action.setEnabled(True)
             self.run_action.setEnabled(True)
         else:
             self.main_content.set_is_editable(True)
-            self.trigger_action.setEnabled(False)
             self.run_action.setEnabled(False)
 
     def _show_preferences(self):
@@ -174,13 +169,6 @@ class MainWindow(QMainWindow):
         self.run_action.setCheckable(True)
         self.run_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
         self.run_action.triggered.connect(self.on_capture_start_stop)
-
-        self.trigger_action = QAction(QIcon(qta.icon("fa5s.wave-square")), "Trigger", self)
-        self.trigger_action.setToolTip("Send simulated recording trigger")
-        self.trigger_action.setCheckable(False)
-        self.trigger_action.setEnabled(False)
-        self.trigger_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_T))
-        self.trigger_action.triggered.connect(lambda: self._app_view_model.toggle_trigger_state())
 
         self.view_diagnostics_action = QAction("Diagnostics", self)
         self.view_diagnostics_action.setToolTip("Show or hide diagnostics panel")
@@ -219,10 +207,6 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar)
 
         toolbar.addAction(self.run_action)
-
-        toolbar.addSeparator()
-
-        toolbar.addAction(self.trigger_action)
 
         toolbar.addSeparator()
 
