@@ -8,5 +8,6 @@ from .CardHeader import CardHeader
 from .CardFooter import CardFooter
 from .PGWidget import PGWidget
 from .TextBoxHandler import TextBoxHandler
+from .QtSimpleGroupBox import QSimpleGroupBox
 from .QtSwitch import QSwitch
 from .QtLabeledSwitch import QLabeledSwitch
