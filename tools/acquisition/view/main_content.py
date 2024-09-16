@@ -91,7 +91,7 @@ class MainContent(ContentWidget):
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.update_image)
-        self._timer.start(int(1000 / self._model.user_settings.live_feed_refresh_rate))
+        self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
 
         self._model.analysis.pose_ready.connect(self.update_pose)
 

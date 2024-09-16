@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel, QMessag
 import qtawesome as qta
 
 from tools.acquisition.model.app_model import AppModel
-from tools.acquisition.model.user_settings import UserSettings
+from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
 from tools.acquisition.view.preferences_dialog import PreferencesDialog
 
@@ -22,9 +22,10 @@ class MainWindow(QMainWindow):
 
         self._app = app
 
-        self._user_settings = UserSettings()
+        self._preferences = UserPreferences()
+        self._update_log_level(self._preferences.log_level)
 
-        self._app_view_model = AppModel(self._user_settings)
+        self._app_view_model = AppModel(self._preferences)
 
         self.setWindowTitle("Auto Trainer - Acquisition")
 
@@ -46,12 +47,12 @@ class MainWindow(QMainWindow):
 
         self._app_view_model.on_error += self._show_error
 
-        self._user_settings.property_changed += self._user_settings_property_changed
+        self._preferences.property_changed += self._preferences_property_changed
 
-        if self._app_view_model.load_configuration(configuration or self._user_settings.last_configuration):
+        if self._app_view_model.load_configuration(configuration or self._preferences.last_configuration):
             if configuration:
-                self._user_settings.last_configuration = configuration
-            self._status_configuration.setText(self._user_settings.last_configuration)
+                self._preferences.last_configuration = configuration
+            self._status_configuration.setText(self._preferences.last_configuration)
 
     def on_capture_start_stop(self, is_toggled):
         if is_toggled:
@@ -100,24 +101,24 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def moveEvent(self, e):
-        self._user_settings.last_window_x = self.pos().x()
-        self._user_settings.last_window_y = self.pos().y()
+        self._preferences.last_window_x = self.pos().x()
+        self._preferences.last_window_y = self.pos().y()
 
         super(MainWindow, self).moveEvent(e)
 
     def open_configuration(self):
-        if self._user_settings.last_configuration:
-            location = os.path.dirname(os.path.realpath(self._user_settings.last_configuration))
+        if self._preferences.last_configuration:
+            location = os.path.dirname(os.path.realpath(self._preferences.last_configuration))
         else:
             location = str(Path.home())
 
         file_name, _ = QFileDialog.getOpenFileName(self, "Open Configuration", location, "Configuration Files (*.yaml)")
 
         if file_name and self._app_view_model.load_configuration(file_name):
-            self._user_settings.last_configuration = file_name
+            self._preferences.last_configuration = file_name
 
     def _save_configuration(self):
-        file_name = self._user_settings.last_configuration
+        file_name = self._preferences.last_configuration
 
         if not file_name:
             return self._save_configuration_as()
@@ -132,7 +133,7 @@ class MainWindow(QMainWindow):
                 file_name += ".yaml"
 
         if file_name and self._app_view_model.save_configuration(file_name):
-            self._user_settings.last_configuration = file_name
+            self._preferences.last_configuration = file_name
 
     def _edit_configuration(self):
         # isChecked() has already swapped to the new value by the time this is called
@@ -144,7 +145,7 @@ class MainWindow(QMainWindow):
             self.run_action.setEnabled(False)
 
     def _show_preferences(self):
-        dialog = PreferencesDialog(self._user_settings)
+        dialog = PreferencesDialog(self._preferences)
         dialog.exec()
 
     def _create_actions(self):
@@ -239,6 +240,13 @@ class MainWindow(QMainWindow):
         dlg.setText(message)
         dlg.exec()
 
-    def _user_settings_property_changed(self, name, value, _):
+    def _preferences_property_changed(self, name, value, _):
         if name == "last_configuration":
             self._status_configuration.setText(value)
+        elif name == "log_level":
+            self._update_log_level(value)
+
+    def _update_log_level(self, value: int):
+        logging.getLogger("tools").setLevel(value)
+        logging.getLogger("autotrainer").setLevel(value)
+        logging.getLogger("inference_algorithms").setLevel(value)

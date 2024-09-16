@@ -15,7 +15,7 @@ from autotrainer.core.project import ProjectInfo
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
 
-from tools.acquisition.model.user_settings import UserSettings
+from tools.acquisition.model.user_preferences import UserPreferences
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +42,11 @@ def create_camera_list():
 
 
 class VideoCaptureModel(ObservableObject):
-    def __init__(self, name, user_settings: UserSettings = None, idx: int = 0):
+    def __init__(self, name, preferences: UserPreferences = None, idx: int = 0):
         super().__init__()
 
         self._name = name
-        self._user_settings = user_settings
+        self._preferences = preferences
         self._index = idx
 
         self._camera_source: CaptureCameraAttrs | None = None
@@ -253,7 +253,7 @@ class VideoCaptureModel(ObservableObject):
             else:
                 self._is_primary = False
 
-            decimation = 1 if self._user_settings is None else self._user_settings.live_feed_refresh_rate
+            decimation = 1 if self._preferences is None else self._preferences.live_feed_refresh_rate
 
             if self._index == -1:
                 if "fps" in properties:

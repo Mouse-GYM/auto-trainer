@@ -1,15 +1,15 @@
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
 
-from tools.acquisition.model.user_settings import UserSettings
+from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.preferences_content import PreferencesContent
 
 
 class PreferencesDialog(QDialog):
-    def __init__(self, preferences: UserSettings, parent=None):
+    def __init__(self, preferences: UserPreferences, parent=None):
         super(PreferencesDialog, self).__init__(parent)
 
         self.setWindowTitle("Preferences")
-        self.setMinimumWidth(600)
+        self.setMinimumWidth(500)
         self.setMinimumHeight(400)
 
         buttons = QDialogButtonBox.StandardButton.Ok

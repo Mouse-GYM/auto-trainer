@@ -16,7 +16,7 @@ from tools.acquisition.behavior.behavior_model import BehaviorModel
 from tools.acquisition.model.analysis_model import AnalysisModel
 from tools.acquisition.model.head_fix_model import HeadFixModel
 from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
-from tools.acquisition.model.user_settings import UserSettings
+from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = logging.getLogger(__name__)
@@ -27,14 +27,14 @@ def _failed_camera_template(name: str, error: str):
 
 
 class AppModel(ObservableObject):
-    def __init__(self, user_settings: UserSettings):
+    def __init__(self, preferences: UserPreferences):
         super().__init__(("on_error",))
 
-        self._user_settings = user_settings
+        self._preferences = preferences
 
-        self._left_camera = VideoCaptureModel("left", self._user_settings, 0)
-        self._right_camera = VideoCaptureModel("right", self._user_settings, 1)
-        self._top_camera = VideoCaptureModel("web", self._user_settings, -1)
+        self._left_camera = VideoCaptureModel("left", self._preferences, 0)
+        self._right_camera = VideoCaptureModel("right", self._preferences, 1)
+        self._top_camera = VideoCaptureModel("web", self._preferences, -1)
 
         self._cameras = list([self._left_camera, self._right_camera, self._top_camera])
 
@@ -63,8 +63,8 @@ class AppModel(ObservableObject):
         TriggerManager.instance().register(self._trigger_received, CAPTURE_TRIGGER_ID)
 
     @property
-    def user_settings(self) -> UserSettings:
-        return self._user_settings
+    def preferences(self) -> UserPreferences:
+        return self._preferences
 
     @property
     def left_camera(self):
@@ -283,7 +283,7 @@ class AppModel(ObservableObject):
             "date": now.strftime("%Y%m%d_%H%M%S"),
             "created": now.timestamp(),
             "created_utc": datetime.utcnow().timestamp(),
-            "serialNumber": self._user_settings.serial_number or "",
+            "serialNumber": self._preferences.serial_number or "",
             "animalName": self.animal_name or "",
             "notes": self.notes or "",
             "session": session
@@ -293,7 +293,7 @@ class AppModel(ObservableObject):
             json.dump(info, file)
 
     def create_project_info(self) -> None:
-        self._project_info = ProjectInfo(root=self.output_location, device_id=self._user_settings.serial_number,
+        self._project_info = ProjectInfo(root=self.output_location, device_id=self._preferences.serial_number,
                                          ensure_exists=True)
 
         self._next_session.value = self._project_info.calculate_next_session_index()

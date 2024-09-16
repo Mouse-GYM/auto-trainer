@@ -1,9 +1,9 @@
 import logging
 
 logging.basicConfig(level=logging.WARNING)
-logging.getLogger("tools").setLevel(logging.DEBUG)
-logging.getLogger("autotrainer").setLevel(logging.DEBUG)
-logging.getLogger("inference_algorithms").setLevel(logging.DEBUG)
+logging.getLogger("tools").setLevel(logging.WARNING)
+logging.getLogger("autotrainer").setLevel(logging.WARNING)
+logging.getLogger("inference_algorithms").setLevel(logging.WARNING)
 
 if __name__ == '__main__':
     import sys
