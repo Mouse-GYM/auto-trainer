@@ -1,6 +1,7 @@
 import logging
 
 logging.basicConfig(level=logging.WARNING)
+logging.getLogger("transitions").setLevel(logging.WARNING)
 logging.getLogger("tools").setLevel(logging.WARNING)
 logging.getLogger("autotrainer").setLevel(logging.WARNING)
 logging.getLogger("inference_algorithms").setLevel(logging.WARNING)

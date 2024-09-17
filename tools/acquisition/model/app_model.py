@@ -12,6 +12,7 @@ from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_I
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core.project import ProjectInfo
 from tools.acquisition.behavior.behavior_model import BehaviorModel
+from tools.acquisition.behavior.behavior_model_transitions import BehaviorModelTransitions
 
 from tools.acquisition.model.analysis_model import AnalysisModel
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -46,7 +47,7 @@ class AppModel(ObservableObject):
 
         self._analysis = AnalysisModel(self.pellet_delivery)
 
-        self._behavioral = BehaviorModel(self._head_fix)
+        self._behavioral = BehaviorModelTransitions(self._head_fix)
 
         self._output_location = ""
 
