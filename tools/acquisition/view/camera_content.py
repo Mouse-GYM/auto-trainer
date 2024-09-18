@@ -1,9 +1,12 @@
+import typing
+
 from numpy import ndarray
 
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QGridLayout
 
 from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID
+from autotrainer.inference import PoseTuple
 from autotrainer.pyside.capture.QtCaptureView import image_data
 from autotrainer.video import VideoRecordMode
 from autotrainer.pyside import QCaptureView
@@ -66,7 +69,7 @@ class CameraContent(ContentWidget):
     def update_image(self):
         self._capture_view.update_image()
 
-    def update_pose(self, points):
+    def update_pose(self, points: typing.List[PoseTuple]):
         self._capture_view.update_pose(points)
 
     def _camera_source_changed(self, camera):

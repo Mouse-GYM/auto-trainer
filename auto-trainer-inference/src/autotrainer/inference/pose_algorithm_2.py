@@ -1,0 +1,127 @@
+import typing
+from collections import namedtuple
+from dataclasses import dataclass
+
+import numpy
+
+from autotrainer.core import ObservableObject
+
+PoseTuple = namedtuple("PoseTuple", ["x", "y"])
+
+
+@dataclass(frozen=True)
+class PoseLocation:
+    name: str
+    index: int
+    x: float
+    y: float
+
+
+@dataclass(frozen=True)
+class PoseResponse:
+    sequence: int
+    parts_flag: typing.Dict[str, bool]
+    locations: typing.List[typing.List[PoseLocation]]
+
+    def x_y_1(self) -> typing.List[PoseTuple]:
+        return list(map(lambda p: (p.x, p.y), self.locations[0]))
+
+    def x_y_2(self) -> typing.List[PoseTuple]:
+        return list(map(lambda p: (p.x, p.y), self.locations[1]))
+
+
+class PoseAlgorithm2(ObservableObject):
+    # TODO Configurable properties
+    MIN_CONFIDENCE_PLOT_THRESHOLD = 0.9
+    MIN_CONFIDENCE_PRESENT_THRESHOLD = 0.9
+
+    def __init__(self):
+        super().__init__(event_names=("pose_changed",))
+
+        self._parts_list = list()
+        self._parts = dict()
+        self._expected_num_parts = 0
+        self._sequence = 0
+
+        self._default_parts_flag = dict()
+        self._default_locations = list()
+
+    @property
+    def part_names(self) -> list:
+        return list(self._parts.keys())
+
+    def get_part_index(self, part: str) -> int:
+        if part in self._parts:
+            return self._parts[part]
+        return -1
+
+    def set_parts(self, parts: list):
+        self._parts_list = list(parts)
+        self._parts = dict()
+        self._default_parts_flag = dict()
+        self._default_locations = list()
+
+        for idx, part in enumerate(parts):
+            self._parts[part] = idx
+            self._default_parts_flag[part] = False
+            self._default_locations.append(None)
+
+        self._expected_num_parts = len(self._parts_list)
+
+    '''
+    Will be called once after the model initialized and body parts properties have been set.
+    See part_names() and get_part_index(name)
+    '''
+
+    def initialize(self):
+        pass
+
+    def process(self, all_frames: typing.List[numpy.ndarray]) -> PoseResponse:
+        left_frames = list()
+        right_frames = list()
+
+        for frame in range(0, len(all_frames), 2):
+            left_frames.append(all_frames[frame])
+
+        for frame in range(1, len(all_frames), 2):
+            right_frames.append(all_frames[frame])
+
+        return self.process_frames(all_frames, left_frames, right_frames)
+
+    '''
+    all_frames - frames in order as output from DLC
+    left_frames - sorted for just the left
+    right_frames - sorted for just the right
+    Each frame is already reshaped to (num_body_parts, 3)
+    '''
+
+    def process_frames(self, all_frames: list, left_frames: list, right_frames: list) -> PoseResponse:
+        self._sequence += 1
+
+        locations_1 = self._find_parts(left_frames)
+        locations_2 = self._find_parts(right_frames)
+
+        parts_flag = dict(self._default_parts_flag)
+
+        for pose in all_frames:
+            for idx, part in enumerate(self._parts_list):
+                if pose[idx, 2] >= PoseAlgorithm2.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                    parts_flag[part] = True
+
+        response = PoseResponse(sequence=self._sequence, parts_flag=parts_flag, locations=[locations_1, locations_2])
+
+        self.pose_changed(response)
+
+        return response
+
+    def _find_parts(self, frames: list) -> typing.List[PoseLocation]:
+        locations: typing.List[PoseLocation] = list(self._default_locations)
+
+        for pose in frames:
+            for idx, part in enumerate(self._parts_list):
+                if pose[idx, 2] >= PoseAlgorithm2.MIN_CONFIDENCE_PLOT_THRESHOLD:
+                    locations[idx] = (PoseLocation(part, idx, pose[idx, 0], pose[idx, 1]))
+                elif locations[idx] is None:
+                    locations[idx] = (PoseLocation(part, idx, -1, -1))
+
+        return locations

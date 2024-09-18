@@ -7,7 +7,7 @@ from tests.interactive.behavior_model.behavior_model_property_widget import Beha
 from tests.interactive.behavior_model.behavior_model_state_widget import BehaviorModelStateWidget
 
 from tests.interactive.behavior_model.behavior_model_input_widget import BehaviorModelInputWidget
-from tools.acquisition.behavior.behavior_model import BehaviorModel
+from autotrainer.behavior import BehaviorModel
 from tools.acquisition.model.head_fix_model import HeadFixModel
 
 
@@ -25,7 +25,7 @@ class BehaviorModelWindow(QMainWindow):
 
         self.head_fix_model = HeadFixModel()
 
-        self.behavior_model = BehaviorModel(self.head_fix_model)
+        self.behavior_model = BehaviorModel(self.head_fix_model.head_fix_reader)
 
         self.setWindowTitle("Behavior Model Testing")
         self.setMinimumWidth(800)

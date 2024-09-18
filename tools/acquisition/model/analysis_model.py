@@ -8,12 +8,7 @@ from PySide6.QtCore import QObject, Signal
 from events import Events
 
 from autotrainer.core import FixedArrayMultiQueue
-from autotrainer.inference import PosePredict, AnalysisMessageKind
-from autotrainer.inference.dlc.dlc_pose_model import DlcPoseModel
-from inference_algorithms import PelletOnlyPoseAlgorithm
-
-from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
-from tools.acquisition.inference.pellet_device_response_api import PelletDeviceResponseApi
+from autotrainer.inference import PosePredict, AnalysisMessageKind, PoseAlgorithm2, DlcPoseModel
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +16,10 @@ logger = logging.getLogger(__name__)
 class AnalysisModel(QObject):
     pose_ready = Signal(object)
 
-    def __init__(self, pellet: PelletDeliveryModel):
+    def __init__(self, pose_algorithm: PoseAlgorithm2):
         super().__init__()
 
-        # TODO remove Qt dependency, inherit from Events
+        # TODO remove Qt dependency, inherit from ObservableObject
         self.events = Events(("property_changed",))
 
         self._data_queue = Queue()
@@ -33,11 +28,7 @@ class AnalysisModel(QObject):
 
         self._is_enabled = False
         self._model_location = ""
-        self._response_api = PelletDeviceResponseApi(self, pellet)
-        self._algorithm = PelletOnlyPoseAlgorithm()
-        self._algorithm.api = self._response_api
-        self._pellet_model = pellet
-        self._pellet_model.pellet_reader.ack_received += lambda ack: self._algorithm.api_response(ack, True)
+        self._algorithm = pose_algorithm
 
         self._msg_thread = None
         self._data_thread = None
@@ -168,9 +159,8 @@ class AnalysisModel(QObject):
         while self._is_running:
             try:
                 pose_data = self._data_queue.get(block=False, timeout=0.5)
-                if self._is_pose_predict_enabled:
-                    vis_data = self._algorithm.process(pose_data)
-                    self.pose_ready.emit(vis_data)
+                response = self._algorithm.process(pose_data)
+                self.pose_ready.emit(response)
             except queue.Empty:
                 time.sleep(0.001)
             except Exception as ex:

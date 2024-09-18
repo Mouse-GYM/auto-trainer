@@ -1,9 +1,9 @@
-from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QListWidget, QListWidgetItem, QVBoxLayout
+from PySide6.QtWidgets import QWidget, QGridLayout, QListWidget, QListWidgetItem, QVBoxLayout
 from statemachine import State
 
+from autotrainer.behavior import BehaviorModel
 from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID
 from autotrainer.pyside import QSimpleGroupBox
-from tools.acquisition.behavior.behavior_model import BehaviorModel
 
 
 class TransitionListener:

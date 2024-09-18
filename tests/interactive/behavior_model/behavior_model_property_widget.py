@@ -1,7 +1,7 @@
 from PySide6.QtGui import Qt
 from PySide6.QtWidgets import QWidget, QFormLayout, QSlider, QLabel, QHBoxLayout
 
-from tools.acquisition.behavior.behavior_model_properties import BehaviorModelProperties
+from autotrainer.behavior import BehaviorModelProperties
 
 
 class BehaviorModelPropertyWidget(QWidget):

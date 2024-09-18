@@ -10,8 +10,9 @@ import yaml
 
 from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID
 from autotrainer.core import FixedArrayMultiQueue
-from autotrainer.core.project import ProjectInfo
-from tools.acquisition.behavior.behavior_model_transitions import BehaviorModelTransitions
+from autotrainer.core import ProjectInfo
+from autotrainer.behavior import BehaviorModel
+from autotrainer.inference import PoseAlgorithm2
 
 from tools.acquisition.model.analysis_model import AnalysisModel
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -44,9 +45,12 @@ class AppModel(ObservableObject):
 
         self._inference_queue = None
 
-        self._analysis = AnalysisModel(self.pellet_delivery)
+        self._pose_algorithm = PoseAlgorithm2()
 
-        self._behavioral = BehaviorModelTransitions(self._head_fix, self.pellet_delivery)
+        self._analysis = AnalysisModel(self._pose_algorithm)
+
+        self._behavioral = BehaviorModel(self._head_fix.head_fix_reader, self.pellet_delivery.pellet_reader,
+                                         self.pellet_delivery, self._pose_algorithm)
 
         self._output_location = ""
 

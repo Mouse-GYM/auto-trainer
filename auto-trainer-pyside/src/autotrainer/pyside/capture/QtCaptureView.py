@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import typing
 from collections import namedtuple
 
 from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QWidget, QLabel, QComboBox, QHBoxLayout, QVBoxLayout, QStackedLayout
 
+from autotrainer.inference import PoseTuple
 from autotrainer.pyside.CardWidget import CardWidget
 from .QtGLImageView import QGLImageView
 from .QtCaptureSettings import QCaptureSettings
@@ -154,7 +156,7 @@ class QCaptureView(QWidget):
 
         # self._fps_label.setText(f"{self._fps:.1f}")
 
-    def update_pose(self, points):
+    def update_pose(self, points: typing.List[PoseTuple]):
         self._image.set_points(points)
 
     @Slot(image_data, float)

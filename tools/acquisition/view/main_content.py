@@ -4,6 +4,7 @@ from PySide6 import QtCore
 from PySide6.QtCore import QTimer, Slot
 from PySide6.QtWidgets import QGridLayout
 
+from autotrainer.inference import PoseResponse
 from autotrainer.pyside import ATSeparator
 
 from tools.acquisition.model.app_model import AppModel
@@ -106,9 +107,9 @@ class MainContent(ContentWidget):
         self._head_fix_content.use_cache()
 
     @Slot()
-    def update_pose(self, points):
-        self._left_camera_content.update_pose(points[0])
-        self._right_camera_content.update_pose(points[1])
+    def update_pose(self, response: PoseResponse):
+        self._left_camera_content.update_pose(response.x_y_1())
+        self._right_camera_content.update_pose(response.x_y_2())
 
     @property
     def is_diagnostics_visible(self) -> bool:

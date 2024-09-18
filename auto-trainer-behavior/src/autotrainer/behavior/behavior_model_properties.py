@@ -17,9 +17,15 @@ class BehaviorModelProperties(ObservableObject):
 
         self._limits = limits
 
+        self._pellet_delivery_enabled = True
+        self._head_fixation_enabled = True
+        self._reach_detection_enabled = True
+
         self._baseline_intensity = limits.min_baseline_intensity
         self._current_session_pellets = 0
         self._current_day_pellets = 0
+
+        self._pellet_missing = False
 
     @property
     def limits(self) -> BehaviorModelLimits:
@@ -36,3 +42,19 @@ class BehaviorModelProperties(ObservableObject):
     @baseline_intensity.setter
     def baseline_intensity(self, value: int):
         self._baseline_intensity = self._on_property_changed("baseline_intensity", value, self._baseline_intensity)
+
+    @property
+    def pellet_delivery_enabled(self):
+        return self._pellet_delivery_enabled
+
+    @pellet_delivery_enabled.setter
+    def pellet_delivery_enabled(self, value: bool):
+        self._pellet_delivery_enabled = value
+
+    @property
+    def pellet_missing(self):
+        return self._pellet_missing
+
+    @pellet_missing.setter
+    def pellet_missing(self, value: bool):
+        self._pellet_missing = self._on_property_changed("pellet_missing", value, self._pellet_missing)

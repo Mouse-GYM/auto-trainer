@@ -1,8 +1,12 @@
+import typing
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QSurfaceFormat, QBrush, QPixmap, QPen
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QHBoxLayout, QGraphicsPixmapItem, \
     QGraphicsEllipseItem
+
+from autotrainer.inference import PoseTuple
 
 
 class QGLImageView(QWidget):
@@ -78,6 +82,9 @@ class QGLImageView(QWidget):
         else:
             self._pixmap.setPixmap(QPixmap.fromImage(image))
 
-    def set_points(self, point):
-        self._pellet_point.setPos(point[0] * self._width_factor, point[1] * self._height_factor)
-        self._star_point.setPos(point[2] * self._width_factor, point[3] * self._height_factor)
+    def set_points(self, points: typing.List[PoseTuple]):
+        # TODO Massive hack for current model.
+        pellet = points[0]
+        star = points[7]
+        self._pellet_point.setPos(pellet[0] * self._width_factor, pellet[1] * self._height_factor)
+        self._star_point.setPos(star[0] * self._width_factor, star[1] * self._height_factor)
