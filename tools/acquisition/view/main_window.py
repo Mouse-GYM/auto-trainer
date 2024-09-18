@@ -93,7 +93,6 @@ class MainWindow(QMainWindow):
 
     def on_activated(self):
         self.main_content.on_activated()
-        self._app_view_model.on_activated()
 
     def closeEvent(self, event):
         self._app_view_model.on_close()
@@ -246,7 +245,8 @@ class MainWindow(QMainWindow):
         elif name == "log_level":
             self._update_log_level(value)
 
-    def _update_log_level(self, value: int):
+    @staticmethod
+    def _update_log_level(value: int):
         logging.getLogger("tools").setLevel(value)
         logging.getLogger("autotrainer").setLevel(value)
         logging.getLogger("inference_algorithms").setLevel(value)

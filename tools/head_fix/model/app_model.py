@@ -1,24 +1,35 @@
+import logging
 import queue
 
+from autotrainer.core import ObservableObject
 from autotrainer.core.project import ProjectInterval
 from autotrainer.device import SerialInterface, HeadFixReader, GymDeviceMessageKind
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device.device_reader import DeviceReader
 
 from tools.head_fix.model.user_settings import UserSettings
 
+logger = logging.getLogger(__name__)
 
-class AppModel:
+
+class AppModel(ObservableObject):
     def __init__(self):
+        super().__init__()
         self._user_settings = UserSettings()
 
         self._msg_queue = queue.Queue()
 
         self._device_thread = None
 
-        self._head_fix_reader = None
+        self._head_fix_reader = HeadFixReader(self._msg_queue)
+        self._head_fix_reader.interval = ProjectInterval.HOUR
+        self._head_fix_reader.property_changed += self.reader_property_changed
+        self._head_fix_reader.ack_received += self.reader_ack_received
 
         self._is_connected = False
+
+        self._firmware_version = ""
 
         self._ports = list()
 
@@ -35,6 +46,14 @@ class AppModel:
     @property
     def is_connected(self):
         return self._is_connected
+
+    @property
+    def firmware_version(self) -> str:
+        return self._firmware_version
+
+    @firmware_version.setter
+    def firmware_version(self, value):
+        self._firmware_version = self._on_property_changed("firmware_version", value, self._firmware_version)
 
     @property
     def head_fix_reader(self):
@@ -87,8 +106,6 @@ class AppModel:
             self._is_connected = False
 
     def on_activated(self):
-        self._head_fix_reader = HeadFixReader(self._msg_queue)
-        self._head_fix_reader.interval = ProjectInterval.HOUR
         self._head_fix_reader.start()
 
     def on_close(self):
@@ -96,6 +113,14 @@ class AppModel:
         self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
         if self._device_thread is not None:
             self._device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
+
+    def reader_property_changed(self, name: str, value, old_value):
+        if name == DeviceReader.FIRMWARE_VERSION:
+            self.firmware_version = value
+
+    @staticmethod
+    def reader_ack_received(ack):
+        logger.info(f"ack context received: {ack}")
 
     def _set_stream_enable(self):
         if self._device_thread is not None:

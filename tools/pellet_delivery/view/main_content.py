@@ -2,7 +2,7 @@ import logging
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QWidget, QGridLayout, QComboBox, QHBoxLayout, QPushButton, QLabel, QPlainTextEdit
+from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QPlainTextEdit
 
 import qtawesome as qta
 

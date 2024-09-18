@@ -22,6 +22,7 @@ class PelletDeliveryModel(ObservableObject):
         self._device_thread = None
 
         self._pellet_reader = None
+        self._pellet_reader = PelletReader(self._message_queue)
 
         self._is_connected = False
 
@@ -112,7 +113,6 @@ class PelletDeliveryModel(ObservableObject):
         self._is_connected = False
 
     def on_activated(self):
-        self._pellet_reader = PelletReader(self._message_queue)
         self._pellet_reader.start()
 
     def on_close(self):

@@ -11,7 +11,6 @@ import yaml
 from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core.project import ProjectInfo
-from tools.acquisition.behavior.behavior_model import BehaviorModel
 from tools.acquisition.behavior.behavior_model_transitions import BehaviorModelTransitions
 
 from tools.acquisition.model.analysis_model import AnalysisModel
@@ -47,7 +46,7 @@ class AppModel(ObservableObject):
 
         self._analysis = AnalysisModel(self.pellet_delivery)
 
-        self._behavioral = BehaviorModelTransitions(self._head_fix)
+        self._behavioral = BehaviorModelTransitions(self._head_fix, self.pellet_delivery)
 
         self._output_location = ""
 
@@ -119,9 +118,6 @@ class AppModel(ObservableObject):
     @notes.setter
     def notes(self, value: str):
         self._notes = self._on_property_changed("notes", value, self._notes)
-
-    def on_activated(self):
-        self._analysis.on_activated()
 
     def on_capture_start(self) -> bool:
         self.create_project_info()

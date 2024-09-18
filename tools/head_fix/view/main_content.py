@@ -1,5 +1,4 @@
 import logging
-import time
 
 from PySide6.QtCore import Qt, Signal, QTimer, Slot
 from PySide6.QtGui import QIcon
@@ -79,7 +78,7 @@ class MainContent(QWidget):
 
         self._position = QSpinBox()
         self._position.setMaximum(100)
-        self._position.setValue(50)
+        self._position.setValue(0)
         self._position.setWrapping(False)
         self._position.valueChanged.connect(self._update_position)
         self._position.setEnabled(False)
@@ -192,7 +191,6 @@ class MainContent(QWidget):
 
     def on_activated(self):
         self._model.head_fix_reader.measurement_callback = self._measurements_received
-        self._model.head_fix_reader.property_changed += self._model_property_changed
 
     def _model_property_changed(self, name, value, _):
         if name == "is_load_cell_engaged":

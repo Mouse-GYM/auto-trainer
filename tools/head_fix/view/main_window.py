@@ -27,17 +27,20 @@ class MainWindow(QMainWindow):
 
         self.update_status("Not connected")
 
+        self._app_view_model.property_changed += self._model_property_changed
+
     def update_status(self, value: str):
         self.statusBar().showMessage(value)
 
     def on_activated(self):
         self._app_view_model.on_activated()
-
-        self._app_view_model.head_fix_reader.version_callback = lambda x: self.update_status(f"Head Fix Version: {x}")
-
         self.main_content.on_activated()
 
     def closeEvent(self, event):
         self._app_view_model.on_close()
 
         event.accept()
+
+    def _model_property_changed(self, name: str, value, _old_value):
+        if name == "firmware_version":
+            self.update_status(f"Head Fix Version: {value}")

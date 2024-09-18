@@ -6,7 +6,7 @@ from autotrainer.core.project import ProjectInfo
 from autotrainer.device import SerialInterface, HeadFixReader
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
-from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID, ObservableObject
+from autotrainer.core import ObservableObject
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +19,10 @@ class HeadFixModel(ObservableObject):
 
         self._device_thread = None
 
-        self._head_fix_reader = None
-
         self._reader_queue = queue.Queue()
+
+        self._head_fix_reader = HeadFixReader(self._reader_queue)
+        self._head_fix_reader.property_changed += self._head_fix_reader_property_changed
 
         self._is_connected = False
 
@@ -36,6 +37,8 @@ class HeadFixModel(ObservableObject):
         self._is_force_detector_engaged = False
 
         self._output_location = ""
+
+        self._head_fix_reader.load_cell_monitor.threshold = self._load_cell_threshold
 
     @property
     def is_connected(self):
@@ -148,9 +151,6 @@ class HeadFixModel(ObservableObject):
         self._is_connected = False
 
     def on_activated(self):
-        self._head_fix_reader = HeadFixReader(self._reader_queue)
-        self._head_fix_reader.load_cell_monitor.threshold = self._load_cell_threshold
-        self._head_fix_reader.property_changed += self._head_fix_reader_property_changed
         self._head_fix_reader.start()
 
     def on_close(self):

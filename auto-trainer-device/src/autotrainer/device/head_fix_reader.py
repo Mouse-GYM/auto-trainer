@@ -2,24 +2,18 @@ from __future__ import annotations
 
 import os
 import logging
-import threading
 import time
-import typing
-from collections import namedtuple
-from dataclasses import dataclass
 from datetime import datetime
 from queue import Queue
 from threading import Timer
 from typing import Callable
 
 import numpy
-from numexpr.expressions import double
 
 from autotrainer.core.project import ProjectInfo, ProjectInterval
 from autotrainer.core import PerfMonitor, ObservableObject
 
-from . import GymDeviceMessageKind
-from .device_thread import DeviceThreadMessageKind
+from .device_reader import DeviceReader
 from .head_fix import HeadFixMessageKind
 
 logger = logging.getLogger(__name__)
@@ -79,9 +73,6 @@ class LoadCellMonitor(ObservableObject):
             self.property_changed("is_engaged", False, True)
 
 
-weights = namedtuple("force_weights", ("value", "count"))
-
-
 class ForceDetector:
     def __init__(self):
         self._threshold: float = 400.0
@@ -103,16 +94,10 @@ class ForceDetector:
         return self._weight >= self._threshold
 
 
-class HeadFixReader(ObservableObject):
+class HeadFixReader(DeviceReader):
     def __init__(self, input_queue: Queue):
-        super().__init__()
+        super().__init__(input_queue, name="HeadFixReader")
 
-        self._name = "HeadFixReader"
-
-        self._input_queue = input_queue
-
-        self._ack_callback = None
-        self._version_callback = None
         self._measurement_callback = None
 
         self._project_info: ProjectInfo | None = None
@@ -132,8 +117,6 @@ class HeadFixReader(ObservableObject):
         self._force_detector = ForceDetector()
 
         self._perf_monitor = PerfMonitor(name="<HeadFixReader>", units="mps", report_count=3000)
-
-        self._current_thread = None
 
     @property
     def project_info(self) -> ProjectInfo:
@@ -158,22 +141,6 @@ class HeadFixReader(ObservableObject):
         self._interval = value
 
     @property
-    def ack_callback(self):
-        return self._measurement_callback
-
-    @ack_callback.setter
-    def ack_callback(self, ack_callback: Callable[[object], None]) -> None:
-        self._ack_callback = ack_callback
-
-    @property
-    def version_callback(self):
-        return self._version_callback
-
-    @version_callback.setter
-    def version_callback(self, version_callback: Callable[[str], None]) -> None:
-        self._version_callback = version_callback
-
-    @property
     def measurement_callback(self):
         return self._measurement_callback
 
@@ -189,86 +156,64 @@ class HeadFixReader(ObservableObject):
     def load_cell_monitor(self):
         return self._load_cell_monitor
 
-    def start(self):
-        self._current_thread = threading.Thread(target=self.run)
-        self._current_thread.start()
+    def message_received(self, msg, data):
+        if msg == HeadFixMessageKind.STREAM_START:
+            self._perf_monitor.reset()
+        elif msg == HeadFixMessageKind.MEASUREMENT:
+            weights = list()
+            switch = list()
+            pressure = list()
+            temperature = list()
+            humidity = list()
 
-    def run(self):
-        logger.debug(f"<{self._name}>: entering run loop")
+            if self._record_file is not None:
+                file_timestamp = datetime.now()
 
-        while True:
-            msg, data = self._input_queue.get()
+                needs_update = file_timestamp.hour != self._current_record_interval \
+                    if self._interval == ProjectInterval.HOUR \
+                    else file_timestamp.minute != self._current_record_interval
 
-            if msg == DeviceThreadMessageKind.TERMINATE:
-                break
+                if needs_update:
+                    self._update_record_file()
 
-            if msg == HeadFixMessageKind.STREAM_START:
-                self._perf_monitor.reset()
-            elif msg == GymDeviceMessageKind.ACK:
-                if data and self._ack_callback is not None:
-                    self._ack_callback(data)
-            elif msg == HeadFixMessageKind.MEASUREMENT:
-                weights = list()
-                switch = list()
-                pressure = list()
-                temperature = list()
-                humidity = list()
+            for m in data:
+                weights.append(m.weight)
+                switch.append(m.switch)
+                pressure.append(m.pressure)
+                temperature.append(m.temperature)
+                humidity.append(m.humidity)
 
                 if self._record_file is not None:
-                    file_timestamp = datetime.now()
+                    try:
+                        self._record_file.write(
+                            f"{time.time()}, {time.perf_counter_ns()}, {m.weight}, {m.switch}, {m.pressure},"
+                            f"{m.temperature}, {m.humidity}\n")
+                    except Exception as e:
+                        # This could be too much if something major is wrong.  Just output once per file rotation.
+                        if not self._had_write_error:
+                            logger.error(f"<{self._name}>: unable to write: {e}")
+                            self._had_write_error = True
 
-                    needs_update = file_timestamp.hour != self._current_record_interval \
-                        if self._interval == ProjectInterval.HOUR \
-                        else file_timestamp.minute != self._current_record_interval
+            # Measurement callback.
+            if self._measurement_callback is not None:
+                self._measurement_callback((weights, switch, pressure, temperature, humidity))
 
-                    if needs_update:
-                        self._update_record_file()
+            # Load cell monitor.
+            self._load_cell_monitor.update(numpy.mean(weights))
 
-                for m in data:
-                    weights.append(m.weight)
-                    switch.append(m.switch)
-                    pressure.append(m.pressure)
-                    temperature.append(m.temperature)
-                    humidity.append(m.humidity)
+            # Headbar monitor.
+            self._is_headbar_engaged = self._on_property_changed("is_headbar_engaged", numpy.mean(switch) > 0.5,
+                                                                 self._is_headbar_engaged)
 
-                    if self._record_file is not None:
-                        try:
-                            self._record_file.write(
-                                f"{time.time()}, {time.perf_counter_ns()}, {m.weight}, {m.switch}, {m.pressure},"
-                                f"{m.temperature}, {m.humidity}\n")
-                        except Exception as e:
-                            # This could be too much if something major is wrong.  Just output once per file rotation.
-                            if not self._had_write_error:
-                                logger.error(f"<{self._name}>: unable to write: {e}")
-                                self._had_write_error = True
+            # Force detector.
+            self._is_force_detector_engaged = self._on_property_changed("is_force_detector_engaged",
+                                                                        self._force_detector.update(pressure),
+                                                                        self._is_force_detector_engaged)
 
-                # Measurement callback
-                if self._measurement_callback is not None:
-                    self._measurement_callback((weights, switch, pressure, temperature, humidity))
+            # Performance monitoring.
+            self._perf_monitor.add_cycles(len(data))
 
-                # Load cell monitor
-                self._load_cell_monitor.update(numpy.mean(weights))
-
-                # Headbar monitor
-                self._is_headbar_engaged = self._on_property_changed("is_headbar_engaged", numpy.mean(switch) > 0.5,
-                                                                     self._is_headbar_engaged)
-
-                # Force detector
-                self._is_force_detector_engaged = self._on_property_changed("is_force_detector_engaged",
-                                                                            self._force_detector.update(pressure),
-                                                                            self._is_force_detector_engaged)
-
-                # Performance monitoring.
-                self._perf_monitor.add_cycles(len(data))
-            elif msg == GymDeviceMessageKind.VERSION:
-                if self._version_callback is not None:
-                    self._version_callback(data)
-
-            time.sleep(0.0001)
-
-        logger.debug(f"<{self._name}>: exiting run loop")
-
-    def _load_cell_property_changed(self, name, value, _):
+    def _load_cell_property_changed(self, _name, value, _):
         self._is_load_cell_engaged = self._on_property_changed("is_load_cell_engaged", value,
                                                                self._is_load_cell_engaged)
 

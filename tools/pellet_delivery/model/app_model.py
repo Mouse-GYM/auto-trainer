@@ -2,27 +2,35 @@ import logging
 import queue
 import uuid
 
+from autotrainer.core import ObservableObject
 from autotrainer.device import SerialInterface, GymDeviceMessageKind
 from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 from autotrainer.device import PelletReader
+from autotrainer.device.device_reader import DeviceReader
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
 logger = logging.getLogger(__name__)
 
 
-class AppModel:
+class AppModel(ObservableObject):
     def __init__(self):
+        super().__init__()
+
         self._user_settings = UserSettings()
 
         self._msg_queue = queue.Queue()
 
         self._device_thread = None
 
-        self._pellet_reader = None
+        self._pellet_reader = PelletReader(self._msg_queue)
+        self._pellet_reader.property_changed += self.reader_property_changed
+        self._pellet_reader.ack_received += self.reader_ack_received
 
         self._is_connected = False
+
+        self._firmware_version = ""
 
         self._ports = list()
 
@@ -41,8 +49,12 @@ class AppModel:
         return self._is_connected
 
     @property
-    def reader(self) -> PelletReader:
-        return self._pellet_reader
+    def firmware_version(self) -> str:
+        return self._firmware_version
+
+    @firmware_version.setter
+    def firmware_version(self, value):
+        self._firmware_version = self._on_property_changed("firmware_version", value, self._firmware_version)
 
     def refresh_ports(self):
         self._ports = SerialInterface.refresh_ports()
@@ -95,16 +107,19 @@ class AppModel:
             self._is_connected = False
 
     def on_activated(self):
-        self._pellet_reader = PelletReader(self._msg_queue)
-
-        self._pellet_reader.ack_callback = lambda x: logger.debug(f"ack received with context: {x}")
-
         self._pellet_reader.start()
 
     def on_close(self):
         self.disconnect_from_device()
         self._send_command(DeviceThreadMessageKind.TERMINATE)
         self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+
+    def reader_property_changed(self, name: str, value, old_value):
+        if name == DeviceReader.FIRMWARE_VERSION:
+            self.firmware_version = value
+
+    def reader_ack_received(self, ack):
+        logger.info(f"ack context received: {ack}")
 
     def _send_command(self, message, data=None, context=None):
         if context is not None:

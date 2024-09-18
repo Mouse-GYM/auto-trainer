@@ -55,7 +55,7 @@ class PelletDelivery(GymDevice):
         residual = super()._handle_response(cmd, data)
 
         if len(residual) > 0:
-            logger.error(f"unexpected data buffer: {data}")
+            logger.error(f"ignored data buffer: {data}")
 
         # Don't let unexpected responses build up the read buffer indefinitely if something went unhandled.
         return ""

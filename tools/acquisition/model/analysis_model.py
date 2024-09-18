@@ -37,6 +37,7 @@ class AnalysisModel(QObject):
         self._algorithm = PelletOnlyPoseAlgorithm()
         self._algorithm.api = self._response_api
         self._pellet_model = pellet
+        self._pellet_model.pellet_reader.ack_received += lambda ack: self._algorithm.api_response(ack, True)
 
         self._msg_thread = None
         self._data_thread = None
@@ -91,9 +92,6 @@ class AnalysisModel(QObject):
         self._model_location = value
 
         self.events.property_changed("model_location", value, old_value)
-
-    def on_activated(self):
-        self._pellet_model.pellet_reader.ack_callback = lambda x: self._algorithm.api_response(x, True)
 
     def start(self, network_queue: FixedArrayMultiQueue) -> bool:
         if self._msg_thread is None:
