@@ -186,7 +186,7 @@ class HeadFixReader(DeviceReader):
                 if self._record_file is not None:
                     try:
                         self._record_file.write(
-                            f"{time.time()}, {time.perf_counter_ns()}, {m.weight}, {m.switch}, {m.pressure},"
+                            f"{m.when}, {m.timestamp}, {m.weight}, {m.switch}, {m.pressure},"
                             f"{m.temperature}, {m.humidity}\n")
                     except Exception as e:
                         # This could be too much if something major is wrong.  Just output once per file rotation.

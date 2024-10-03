@@ -11,7 +11,8 @@ from .device_api import DeviceApi
 
 logger = logging.getLogger(__name__)
 
-HeadFixMeasurement = namedtuple('HeadFixMeasurement', ["weight", "switch", "pressure", "temperature", "humidity"])
+HeadFixMeasurement = namedtuple('HeadFixMeasurement',
+                                ["when", "timestamp", "weight", "switch", "pressure", "temperature", "humidity"])
 
 
 class HeadFixMessageKind(IntEnum):
@@ -121,8 +122,8 @@ def parse_measurement(data: str) -> (HeadFixMeasurement, str):
             return None, data
 
         try:
-            measurement = HeadFixMeasurement(int(parts[0]) / 10.0, int(parts[1]), int(parts[2]),
-                                             int(parts[3]) / 10.0, int(parts[4]) / 10.0)
+            measurement = HeadFixMeasurement(time.time(), time.perf_counter_ns(), int(parts[0]) / 10.0, int(parts[1]),
+                                             int(parts[2]), int(parts[3]) / 10.0, int(parts[4]) / 10.0)
 
             if len(parts) > 5:
                 print(len(parts))
