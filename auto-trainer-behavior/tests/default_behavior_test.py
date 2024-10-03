@@ -7,8 +7,10 @@ logging.getLogger('transitions').setLevel(logging.INFO)
 
 
 def test_default_transitions():
-    model = BehaviorModel(None, None)
+    model = BehaviorModel(None, None, None, None)
 
     assert model.state == SystemStates.InCage
 
     model.enter_tunnel()
+
+    assert model.state == "monitoring"
