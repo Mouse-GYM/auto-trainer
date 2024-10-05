@@ -1,0 +1,20 @@
+from autotrainer.core import ObservableObject
+from autotrainer.inference import PoseResponse
+
+
+class MockPoseAlgorithm(ObservableObject):
+    def __init__(self):
+        super().__init__(event_names=("pose_changed",))
+
+    def get_part_index(self, name: str) -> int:
+        if name == "Pellet":
+            return 0
+        else:
+            return -1
+
+    def send_response(self, pellet_seen: bool):
+        parts_flag = {"Pellet": pellet_seen}
+
+        response = PoseResponse(sequence=1, parts_flag=parts_flag, locations=[])
+
+        self.pose_changed(response)

@@ -2,7 +2,7 @@ import typing
 
 import numpy
 
-from autotrainer.inference import PoseAlgorithm2
+from autotrainer.inference import PoseAlgorithm
 from autotrainer.inference import PoseResponse, PoseLocation
 
 
@@ -56,7 +56,7 @@ def test_algorithm_output():
 
     parts = ["Part00", "Part01", "Part02", "Part03", "Part04", "Part05", "Part06", "Part07", "Part08", "Part09"]
 
-    algorithm = PoseAlgorithm2()
+    algorithm = PoseAlgorithm()
 
     algorithm.set_parts(parts)
 

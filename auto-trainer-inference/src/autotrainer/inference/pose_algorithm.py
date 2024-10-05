@@ -30,7 +30,7 @@ class PoseResponse:
         return list(map(lambda p: (p.x, p.y), self.locations[1]))
 
 
-class PoseAlgorithm2(ObservableObject):
+class PoseAlgorithm(ObservableObject):
     # TODO Configurable properties
     MIN_CONFIDENCE_PLOT_THRESHOLD = 0.9
     MIN_CONFIDENCE_PRESENT_THRESHOLD = 0.9
@@ -105,7 +105,7 @@ class PoseAlgorithm2(ObservableObject):
 
         for pose in all_frames:
             for idx, part in enumerate(self._parts_list):
-                if pose[idx, 2] >= PoseAlgorithm2.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                if pose[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     parts_flag[part] = True
 
         response = PoseResponse(sequence=self._sequence, parts_flag=parts_flag, locations=[locations_1, locations_2])
@@ -119,7 +119,7 @@ class PoseAlgorithm2(ObservableObject):
 
         for pose in frames:
             for idx, part in enumerate(self._parts_list):
-                if pose[idx, 2] >= PoseAlgorithm2.MIN_CONFIDENCE_PLOT_THRESHOLD:
+                if pose[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PLOT_THRESHOLD:
                     locations[idx] = (PoseLocation(part, idx, pose[idx, 0], pose[idx, 1]))
                 elif locations[idx] is None:
                     locations[idx] = (PoseLocation(part, idx, -1, -1))

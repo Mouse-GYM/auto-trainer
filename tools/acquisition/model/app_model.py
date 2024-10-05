@@ -12,7 +12,7 @@ from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_I
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.behavior import BehaviorModel
-from autotrainer.inference import PoseAlgorithm2
+from autotrainer.inference import PoseAlgorithm
 
 from tools.acquisition.model.analysis_model import AnalysisModel
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -45,7 +45,7 @@ class AppModel(ObservableObject):
 
         self._inference_queue = None
 
-        self._pose_algorithm = PoseAlgorithm2()
+        self._pose_algorithm = PoseAlgorithm()
 
         self._analysis = AnalysisModel(self._pose_algorithm)
 

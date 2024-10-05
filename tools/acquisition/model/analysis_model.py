@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, Signal
 from events import Events
 
 from autotrainer.core import FixedArrayMultiQueue
-from autotrainer.inference import PosePredict, AnalysisMessageKind, PoseAlgorithm2, DlcPoseModel
+from autotrainer.inference import PosePredict, AnalysisMessageKind, PoseAlgorithm, DlcPoseModel
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class AnalysisModel(QObject):
     pose_ready = Signal(object)
 
-    def __init__(self, pose_algorithm: PoseAlgorithm2):
+    def __init__(self, pose_algorithm: PoseAlgorithm):
         super().__init__()
 
         # TODO remove Qt dependency, inherit from ObservableObject
