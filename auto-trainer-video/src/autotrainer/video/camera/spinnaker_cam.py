@@ -198,6 +198,14 @@ class SpinCam(CameraBase):
         else:
             logger.warning(f"<{self._name} Gain is not writeable")
 
+        s_node_map = self._camera.GetTLStreamNodeMap()
+        handling_mode = PySpin.CEnumerationPtr(s_node_map.GetNode("StreamBufferHandlingMode"))
+        if not PySpin.IsAvailable(handling_mode) or not PySpin.IsWritable(handling_mode):
+            logger.warning(f"<{self._name} unable to set Buffer Handling mode (node retrieval)\n")
+        else:
+            handling_mode_entry = handling_mode.GetEntryByName("OldestFirst")
+            handling_mode.SetIntValue(handling_mode_entry.GetValue())
+
         self._pause_log = True
 
         # Set to class defaults.  Camera URL may override later.
