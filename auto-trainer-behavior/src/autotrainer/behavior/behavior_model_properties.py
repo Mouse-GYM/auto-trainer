@@ -9,7 +9,7 @@ class BehaviorModelLimits:
     max_baseline_intensity: int = 90
     max_pellets_per_session: int = 10
     max_pellets_per_day: int = 50
-    pellet_missing_time: float = 15.0
+    pellet_missing_time: float = 1.0
 
 
 class BehaviorModelProperties(ObservableObject):
