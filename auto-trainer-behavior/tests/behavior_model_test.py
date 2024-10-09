@@ -1,6 +1,6 @@
 import logging
 
-from autotrainer.behavior import BehaviorModel, SystemStates, PelletDeliveryStates
+from autotrainer.behavior import BehaviorModel, SystemState
 
 from mocks import MockHeadfixReader
 from mocks import MockPelletDelivery
@@ -18,31 +18,15 @@ def test_pellet_behavior():
 
     model = BehaviorModel(mock_headfix, mock_pellet, mock_pellet, mock_pose)
 
-    assert model.state == SystemStates.cage
+    assert model.state == SystemState.cage
 
     mock_headfix.is_load_cell_engaged = True
 
-    assert model.state == PelletDeliveryStates.monitoring
-
-    mock_pose.send_response(False)
-
-    assert model.state == PelletDeliveryStates.loading
-
-    mock_pellet.send_ack()
-
-    assert model.state == PelletDeliveryStates.sending
-
-    mock_pellet.send_ack()
-
-    assert model.state == PelletDeliveryStates.releasing
-
-    mock_pellet.send_ack()
-
-    assert model.state == PelletDeliveryStates.monitoring
+    assert model.state == SystemState.tunnel
 
     mock_headfix.is_load_cell_engaged = False
 
-    assert model.state == SystemStates.cage
+    assert model.state == SystemState.cage
 
 
 if __name__ == '__main__':

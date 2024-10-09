@@ -12,7 +12,7 @@ from autotrainer.video import VideoRecordMode
 from autotrainer.pyside import QCaptureView
 
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
-from tools.acquisition.view.ContentWidget import ContentWidget
+from tools.acquisition.view.content_widget import ContentWidget
 
 
 class CameraContent(ContentWidget):
@@ -51,6 +51,9 @@ class CameraContent(ContentWidget):
 
         self._model.property_changed += self._model_property_changed
 
+        # Swap because model shape is row x col == height x width
+        self._capture_view.setShape(self._model.shape[1], self._model.shape[0])
+
     @property
     def camera_view(self) -> QCaptureView:
         return self._capture_view
@@ -68,9 +71,10 @@ class CameraContent(ContentWidget):
 
     def update_image(self):
         self._capture_view.update_image()
+        self._capture_view.update_pose()
 
-    def update_pose(self, points: typing.List[PoseTuple]):
-        self._capture_view.update_pose(points)
+    def refresh_pose(self, points: typing.List[PoseTuple]):
+        self._capture_view.refresh_pose(points)
 
     def _camera_source_changed(self, camera):
         self._model.camera_source = camera
@@ -109,4 +113,5 @@ class CameraContent(ContentWidget):
             self._settings.setStillImageCaptureInterval(value)
         elif name == "shape":
             if value is not None and value[0] != 0 and value[1] != 0:
-                self._capture_view.setShape(value[0], value[1])
+                # Swap because model shape is row x col == height x width
+                self._capture_view.setShape(value[1], value[0])

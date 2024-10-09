@@ -48,6 +48,12 @@ class FixedArrayMultiQueue:
 
         self._frame_dest = numpy.zeros(self._shape, dtype='uint8')
 
+        self._overflow_count = 0
+
+    @property
+    def depth(self):
+        return self._depth
+
     @property
     def camera_count(self):
         return self._cam_count
@@ -76,10 +82,15 @@ class FixedArrayMultiQueue:
 
         self._read_index.value = 0
 
-    def put(self, content, camera) -> BufferResult:
+    def put(self, content, camera, allow_overflow: bool = True) -> BufferResult:
         buffer_index = self._buffer_index.value
 
         is_overflow = self._is_dirty[buffer_index].value
+
+        if is_overflow:
+            self._overflow_count += 1
+            if not allow_overflow:
+                return BufferResult.Overflow
 
         try:
             memoryview(self._buffers[buffer_index][camera][self._batch_index[camera].value]).cast("B")[:] = content.flatten()

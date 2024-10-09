@@ -71,8 +71,9 @@ class CaptureInferenceAttrs:
     Attributes
     ----------
     queue: Queue
-        the queue to push frames for inference
-        the index of this camera in the queue
+        A queue to push frames for inference
+    index: int
+        The index of this camera in the queue
     """
     queue: Queue | FixedArrayMultiQueue
     index: int

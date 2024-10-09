@@ -30,6 +30,9 @@ class QCaptureView(QWidget):
         self._next_frame_data: image_data | None = None
         self._is_frame_dirty = False
 
+        self._next_frame_points: typing.List[PoseTuple] | None = None
+        self._are_points_dirty = False
+
         self._card_widget = CardWidget()
 
         # Header
@@ -156,9 +159,6 @@ class QCaptureView(QWidget):
 
         # self._fps_label.setText(f"{self._fps:.1f}")
 
-    def update_pose(self, points: typing.List[PoseTuple]):
-        self._image.set_points(points)
-
     @Slot(image_data, float)
     def refresh_image(self, data: image_data, fps: float):
         self._next_frame_data = data
@@ -167,6 +167,20 @@ class QCaptureView(QWidget):
 
         if fps != self._fps:
             self._fps = fps
+
+    def update_pose(self):
+        if self._next_frame_points is None or not self._are_points_dirty:
+            return
+
+        self._image.set_points(self._next_frame_points)
+
+        self._are_points_dirty = False
+
+    @Slot(list)
+    def refresh_pose(self, points: typing.List[PoseTuple]):
+        self._next_frame_points = points
+
+        self._are_points_dirty = True
 
     def _source_changed(self, index):
         camera = self._camera.itemData(index)

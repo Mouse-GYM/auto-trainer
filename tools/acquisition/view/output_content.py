@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QHBoxLayout, QVBoxLayo
 
 from autotrainer.pyside import CardWidget
 from tools.acquisition.model.app_model import AppModel
-from tools.acquisition.view.ContentWidget import ContentWidget
+from tools.acquisition.view.content_widget import ContentWidget
 
 
 class OutputContent(ContentWidget):

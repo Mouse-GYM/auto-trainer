@@ -8,7 +8,7 @@ from autotrainer.inference import PoseResponse
 from autotrainer.pyside import ATSeparator
 
 from tools.acquisition.model.app_model import AppModel
-from tools.acquisition.view.ContentWidget import ContentWidget
+from tools.acquisition.view.content_widget import ContentWidget
 from tools.acquisition.view.analysis_content import AnalysisContent
 from tools.acquisition.view.camera_content import CameraContent
 from tools.acquisition.view.diagnostics_content import DiagnosticsContent
@@ -94,7 +94,7 @@ class MainContent(ContentWidget):
         self._timer.timeout.connect(self.update_image)
         self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
 
-        self._model.analysis.pose_ready.connect(self.update_pose)
+        self._model.analysis.pose_response_ready += self.refresh_pose
 
     @Slot()
     def update_image(self):
@@ -106,10 +106,11 @@ class MainContent(ContentWidget):
             self._top_camera_content.update_image()
         self._head_fix_content.use_cache()
 
-    @Slot()
-    def update_pose(self, response: PoseResponse):
-        self._left_camera_content.update_pose(response.x_y_1())
-        self._right_camera_content.update_pose(response.x_y_2())
+    def refresh_pose(self, response: PoseResponse):
+        if self._model.left_camera.is_enabled:
+            self._left_camera_content.refresh_pose(response.x_y_1())
+        if self._model.right_camera.is_enabled:
+            self._right_camera_content.refresh_pose(response.x_y_2())
 
     @property
     def is_diagnostics_visible(self) -> bool:

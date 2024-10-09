@@ -161,11 +161,14 @@ class VideoCaptureModel(ObservableObject):
 
     @property
     def shape(self) -> (int, int):
+        """
+        Be aware this is the shape as seen by the cameras ndarray frames which is row x col not width x height.
+        """
         if "height" in self._camera_properties and "width" in self._camera_properties:
-            width = int(self._camera_properties["height"])
-            height = int(self._camera_properties["width"])
-            if width > 0 and height > 0:
-                return width, height
+            rows = int(self._camera_properties["height"])
+            cols = int(self._camera_properties["width"])
+            if rows > 0 and cols > 0:
+                return rows, cols
 
         return 0, 0
 
@@ -255,14 +258,15 @@ class VideoCaptureModel(ObservableObject):
 
             decimation = 1 if self._preferences is None else self._preferences.live_feed_refresh_rate
 
-            if self._index == -1:
-                if "fps" in properties:
-                    self._video_reader.decimation = max(int(int(properties["fps"]) / decimation), 1)
-                elif self._video_reader is not None:
-                    # Assume 30fps
-                    self._video_reader.decimation = max(int(30 / decimation), 1)
-            else:
-                self._video_reader.decimation = 1
+            if self._video_reader is not None:
+                if self._index == -1:
+                    if "fps" in properties:
+                        self._video_reader.decimation = max(int(int(properties["fps"]) / decimation), 1)
+                    else:
+                        # Assume 30fps
+                        self._video_reader.decimation = max(int(30 / decimation), 1)
+                else:
+                    self._video_reader.decimation = 1
         else:
             self._is_primary = False
 

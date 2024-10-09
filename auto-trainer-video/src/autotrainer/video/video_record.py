@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 import time
@@ -25,7 +27,7 @@ class VideoRecordMode(IntEnum):
 
 @dataclass
 class VideoRecordProperties:
-    project_info: ProjectInfo = None
+    project_info: ProjectInfo | None = None
     """Information to determine file names and directories."""
     name: str = "camera"
     """Name used as part of video file names and image capture directory."""

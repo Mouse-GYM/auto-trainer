@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QCheckBox, QFileDialog, QWidget, QVBoxLayout, \
-    QHBoxLayout, QFormLayout, QStackedLayout
+    QHBoxLayout, QStackedLayout
 
 from autotrainer.pyside import CardWidget, QSwitch
 from tools.acquisition.model.analysis_model import AnalysisModel
-from tools.acquisition.view.ContentWidget import ContentWidget
+from tools.acquisition.view.content_widget import ContentWidget
 
 
 class AnalysisContent(ContentWidget):
@@ -90,9 +90,9 @@ class AnalysisContent(ContentWidget):
         self.setLayout(layout)
 
         self._model_property_changed("model_location", self._model.model_location, None)
-        self._model.events.property_changed += self._model_property_changed
+        self._model.property_changed += self._model_property_changed
 
-        self._toggle.setChecked(self._model.is_pose_predict_enabled)
+        self._toggle.setChecked(self._model.is_predict_enabled)
 
         self.set_is_editable(False)
 
@@ -111,7 +111,7 @@ class AnalysisContent(ContentWidget):
         self._enabled_label.setText("Enabled" if self._model.is_enabled else "Disabled")
 
     def _is_pose_response_state_changed(self, x: int):
-        self._model.is_pose_predict_enabled = x != 0
+        self._model.is_predict_enabled = x != 0
 
     def _location_changed(self):
         self._model.model_location = self._location.text()
@@ -126,7 +126,7 @@ class AnalysisContent(ContentWidget):
     def _model_property_changed(self, name, value, _):
         if name == "is_enabled":
             self._is_enabled.setChecked(value)
-        if name == "is_pose_predict_enabled":
+        if name == "is_predict_enabled":
             self._toggle.setChecked(value)
         elif name == "model_location":
             if value is not None and len(value) > 0:

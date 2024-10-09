@@ -1,30 +1,28 @@
+from __future__ import annotations
+
 import logging
 import queue
 import time
+import typing
 from multiprocessing import Queue
 from threading import Thread
 
-from PySide6.QtCore import QObject, Signal
-from events import Events
-
-from autotrainer.core import FixedArrayMultiQueue
-from autotrainer.inference import PosePredict, AnalysisMessageKind, PoseAlgorithm, DlcPoseModel
+from autotrainer.core import FixedArrayMultiQueue, ObservableObject
+from autotrainer.inference import PosePredict, AnalysisCommandMessageKind, AnalysisStatusMessageKind, PoseAlgorithm, \
+    DlcPoseModel, MemoryPoseModel, AnalysisMode
 
 logger = logging.getLogger(__name__)
 
 
-class AnalysisModel(QObject):
-    pose_ready = Signal(object)
-
+class AnalysisModel(ObservableObject):
     def __init__(self, pose_algorithm: PoseAlgorithm):
-        super().__init__()
-
-        # TODO remove Qt dependency, inherit from ObservableObject
-        self.events = Events(("property_changed",))
+        super().__init__(event_names=("pose_response_ready",))
 
         self._data_queue = Queue()
         self._cmd_queue = Queue()
         self._msg_queue = Queue()
+
+        self._offline_queue: Queue | FixedArrayMultiQueue | None = None
 
         self._is_enabled = False
         self._model_location = ""
@@ -37,7 +35,9 @@ class AnalysisModel(QObject):
 
         self._is_running = True
 
-        self._is_pose_predict_enabled = True
+        self._is_predict_enabled = True
+
+        self._frames_per_camera = 0
 
     @property
     def is_enabled(self) -> bool:
@@ -45,29 +45,15 @@ class AnalysisModel(QObject):
 
     @is_enabled.setter
     def is_enabled(self, value: bool):
-        if self._is_enabled == value:
-            return
-
-        old_value = self._is_enabled
-
-        self._is_enabled = value
-
-        self.events.property_changed("is_enabled", value, old_value)
+        self._is_enabled = self._on_property_changed("is_enabled", value, self._is_enabled)
 
     @property
-    def is_pose_predict_enabled(self) -> bool:
-        return self._is_pose_predict_enabled
+    def is_predict_enabled(self) -> bool:
+        return self._is_predict_enabled
 
-    @is_pose_predict_enabled.setter
-    def is_pose_predict_enabled(self, value: bool):
-        if self._is_pose_predict_enabled == value:
-            return
-
-        old_value = self._is_pose_predict_enabled
-
-        self._is_pose_predict_enabled = value
-
-        self.events.property_changed("is_pose_predict_enabled", value, old_value)
+    @is_predict_enabled.setter
+    def is_predict_enabled(self, value: bool):
+        self._is_predict_enabled = self._on_property_changed("is_predict_enabled", value, self._is_predict_enabled)
 
     @property
     def model_location(self) -> str:
@@ -75,14 +61,7 @@ class AnalysisModel(QObject):
 
     @model_location.setter
     def model_location(self, value: str):
-        if self._model_location == value:
-            return
-
-        old_value = self._model_location
-
-        self._model_location = value
-
-        self.events.property_changed("model_location", value, old_value)
+        self._model_location = self._on_property_changed("model_location", value, self._model_location)
 
     def start(self, network_queue: FixedArrayMultiQueue) -> bool:
         if self._msg_thread is None:
@@ -97,23 +76,29 @@ class AnalysisModel(QObject):
             logger.warning("analysis not started because there is no inference image queue")
             return False
 
-        if self._model_location is None or len(self._model_location) == 0:
-            logger.warning("analysis not started because the model not specified")
-            return False
+        self._offline_queue = FixedArrayMultiQueue(network_queue.depth, network_queue.camera_count,
+                                                   network_queue.frames_per_camera, network_queue.shape)
 
-        model = DlcPoseModel(self._model_location, 1, 0, network_queue.batch_size)
+        self._frames_per_camera = network_queue.frames_per_camera
+
+        if self._model_location is None or len(self._model_location) == 0:
+            logger.warning("analysis model not specified; using in-memory random data")
+            model = MemoryPoseModel(network_queue.batch_size)
+        else:
+            model = DlcPoseModel(self._model_location, 1, 0, network_queue.batch_size)
 
         if not model.is_valid():
             logger.warning("analysis not started because the model does not exist at the specified location")
             return False
 
-        self._process = PosePredict(model, network_queue, self._data_queue, self._cmd_queue, self._msg_queue)
+        self._process = PosePredict(model, network_queue, self._offline_queue, self._data_queue, self._cmd_queue,
+                                    self._msg_queue)
 
         self._process.start()
 
     def stop(self):
         if self._process is not None:
-            self._cmd_queue.put(AnalysisMessageKind.Terminate)
+            self._send_message(AnalysisCommandMessageKind.Terminate)
 
             logger.debug(f"<analysis> waiting for process termination")
 
@@ -138,18 +123,24 @@ class AnalysisModel(QObject):
     def write_configuration(self):
         return {"model": self.model_location, "isEnabled": self._is_enabled}
 
+    def _send_message(self, kind: AnalysisCommandMessageKind, context: typing.Any = None):
+        self._cmd_queue.put((kind, context))
+
     def _monitor_msg_queue(self):
         while self._is_running:
             try:
                 msg, context = self._msg_queue.get(block=False, timeout=0.5)
-                if msg == AnalysisMessageKind.Initialized:
+                if msg == AnalysisStatusMessageKind.Initialized:
                     logger.info(msg)
                     self._algorithm.set_parts(context)
                     self._algorithm.initialize()
-                    self._cmd_queue.put(AnalysisMessageKind.Start)
-                elif msg == AnalysisMessageKind.Performance:
-                    logger.info(f"{context[0] :.1f} predict/s")
-                    logger.info(f"{context[1] :.1f} frames/camera/s ({(context[1] * 2):.1f} total images/s)")
+                    self._send_message(AnalysisCommandMessageKind.Start)
+                elif msg == AnalysisStatusMessageKind.Performance:
+                    logger.info(f"{context :.1f} predict calls/s")
+                    fps = context * self._frames_per_camera
+                    logger.info(f"{fps :.1f} frames/camera/s ({(fps * 2):.1f} total frames/s)")
+                elif msg == AnalysisStatusMessageKind.Running:
+                    logger.info(f"predict running with {AnalysisMode(context).name} queue")
             except queue.Empty:
                 time.sleep(0.001)
             except Exception as ex:
@@ -160,7 +151,7 @@ class AnalysisModel(QObject):
             try:
                 pose_data = self._data_queue.get(block=False, timeout=0.5)
                 response = self._algorithm.process(pose_data)
-                self.pose_ready.emit(response)
+                self.pose_response_ready(response)
             except queue.Empty:
                 time.sleep(0.001)
             except Exception as ex:

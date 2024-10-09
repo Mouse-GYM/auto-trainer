@@ -7,7 +7,7 @@ from autotrainer.device import SerialInterface
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
-from tools.acquisition.view.ContentWidget import ContentWidget
+from tools.acquisition.view.content_widget import ContentWidget
 
 logger = logging.getLogger(__name__)
 

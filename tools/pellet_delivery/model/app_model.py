@@ -114,10 +114,11 @@ class AppModel(ObservableObject):
         self._send_command(DeviceThreadMessageKind.TERMINATE)
         self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
-    def reader_property_changed(self, name: str, value, old_value):
+    def reader_property_changed(self, name: str, value, _old_value):
         if name == DeviceReader.FIRMWARE_VERSION:
             self.firmware_version = value
 
+    # noinspection PyMethodMayBeStatic
     def reader_ack_received(self, ack):
         logger.info(f"ack context received: {ack}")
 

@@ -133,6 +133,8 @@ class AppModel(ObservableObject):
             shape_2 = self.right_camera.shape
             if shape_1 == shape_2:
                 self._inference_queue = FixedArrayMultiQueue(3, 2, 3, shape_1)
+            else:
+                logger.warning("analysis disabled: left and right camera frame sizes do not match")
 
         did_start = self.left_camera.on_prepare_capture(self._project_info, self._next_session, self._inference_queue)
 

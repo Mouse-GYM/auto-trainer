@@ -29,6 +29,15 @@ class PoseResponse:
     def x_y_2(self) -> typing.List[PoseTuple]:
         return list(map(lambda p: (p.x, p.y), self.locations[1]))
 
+    def pellet_seen(self) -> bool:
+        return self.parts_flag["Pellet"]
+
+    def star_seen(self):
+        return self.parts_flag["Star"]
+
+    def mouse_seen(self) -> bool:
+        return self.parts_flag["Tongue"] or self.parts_flag["Nose"]
+
 
 class PoseAlgorithm(ObservableObject):
     # TODO Configurable properties

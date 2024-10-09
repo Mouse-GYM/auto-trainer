@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget, QHBoxLayout, QPushBu
 from autotrainer.device import SerialInterface
 from autotrainer.pyside import ATSerialPortComboBox, CardWidget
 from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
-from tools.acquisition.view.ContentWidget import ContentWidget
+from tools.acquisition.view.content_widget import ContentWidget
 from tools.acquisition.view.pellet_control_content import PelletControlContent
 
 

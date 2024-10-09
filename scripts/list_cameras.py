@@ -3,6 +3,7 @@ import os
 # Must precede import cv2
 os.environ["OPENCV_LOG_LEVEL"] = "SILENT"
 
+# noinspection PyPep8
 from autotrainer.video import VideoManager
 
 VideoManager.open()
