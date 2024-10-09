@@ -143,6 +143,10 @@ class VideoCapture(Process):
         self._record = None
         self._record_queue = None
 
+        # Buffered send to record queue
+        self._queue_list = list()
+        self._queue_list_count = 0
+
         self.command_handler: Dict[CaptureCommandKind, Callable[[object], None]] = {
             CaptureCommandKind.TERMINATE: self._user_terminate,
             CaptureCommandKind.ENABLE_CAPTURE: self._begin_capture,
@@ -204,9 +208,6 @@ class VideoCapture(Process):
     def _run_capture_loop(self) -> None:
         fault_count = 0
 
-        queue_list = list()
-        queue_list_count = 0
-
         while self._is_running:
             try:
                 if self._command_queue is not None:
@@ -229,12 +230,12 @@ class VideoCapture(Process):
                         self._image_queue.put(frame[:, :, 0])
 
                 if self._is_record_active:
-                    queue_list.append((frame, when))
-                    queue_list_count += 1
-                    if queue_list_count >= self._record_batch_size:
-                        self._record_queue.put(queue_list)
-                        queue_list = list()
-                        queue_list_count = 0
+                    self._queue_list.append((frame, when))
+                    self._queue_list_count += 1
+                    if self._queue_list_count >= self._record_batch_size:
+                        self._record_queue.put(self._queue_list)
+                        self._queue_list = list()
+                        self._queue_list_count = 0
 
                 if self._network_queue is not None:
                     self._network_queue.put(frame, self._camera_idx)
@@ -281,9 +282,13 @@ class VideoCapture(Process):
         self._is_capturing = False
 
     def _enable_trigger(self, _: object):
+        self._queue_list = list()
+        self._queue_list_count = 0
         self._is_record_active = self._record_properties.should_record(True)
 
     def _disable_trigger(self, _: object):
         self._is_record_active = self._record_properties.should_record(False)
         # self._record_queue.put((None, None))
+        self._queue_list = list()
+        self._queue_list_count = 0
         self._record_queue.put(list())
