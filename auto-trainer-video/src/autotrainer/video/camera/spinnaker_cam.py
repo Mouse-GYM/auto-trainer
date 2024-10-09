@@ -280,6 +280,11 @@ class SpinCam(CameraBase):
             self.vertical_binning = int(value)
         elif name == "exposure":
             self.exposure = int(value)
+        elif name == "gain":
+            self._set_bounded_float_property_node(self._camera.Gain, float(value))
+        elif name == "gamma":
+            self._set_bounded_bool_property_node(self._camera.GammaEnable, True)
+            self._set_bounded_float_property_node(self._camera.Gamma, float(value))
         else:
             return super().set_property(name, value)
 
@@ -312,12 +317,35 @@ class SpinCam(CameraBase):
         self._camera.TriggerMode.SetValue(PySpin.TriggerMode_On)
 
     def _set_bounded_int_property_node(self, prop_node, value: int) -> int:
+        return int(self._set_bounded_float_property_node(prop_node, value))
+
+    def _set_bounded_float_property_node(self, prop_node, value: float) -> float:
         set_value = value
 
         try:
             if prop_node.GetAccessMode() == PySpin.RW:
                 max_width = prop_node.GetMax()
                 set_value = min(max_width, value)
+                prop_node.SetValue(value)
+                set_value = prop_node.GetValue()
+                if not self._pause_log:
+                    logger.debug(f"<{self._name}> {prop_node.GetDisplayName()} set to {set_value}")
+            elif prop_node.GetAccessMode() == PySpin.RO:
+                set_value = prop_node.GetValue()
+                logger.warning(
+                    f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not writeable - current value is {set_value}")
+            else:
+                logger.warning(f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not readable or writeable")
+        except Exception as ex:
+            logger.error(f"<{self._name}> {prop_node.GetDisplayName()} Exception during set {ex}")
+
+        return set_value
+
+    def _set_bounded_bool_property_node(self, prop_node, value: bool) -> bool:
+        set_value = value
+
+        try:
+            if prop_node.GetAccessMode() == PySpin.RW:
                 prop_node.SetValue(value)
                 set_value = prop_node.GetValue()
                 if not self._pause_log:
