@@ -1,1 +1,1 @@
-from .inference_behavior_model import InferenceBehaviorModel, InferenceState
+from .inference_behavior_machine import InferenceBehaviorMachine, InferenceState

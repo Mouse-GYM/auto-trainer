@@ -1,12 +1,12 @@
 import logging
-import time
 from enum import Enum
 
 from transitions.extensions import HierarchicalMachine
 
-from ..behavior_properties import BehaviorProperties
 from autotrainer.device import PelletReader
 from autotrainer.inference import PoseAlgorithm, PoseResponse
+
+from ..behavior_algorithm import BehaviorAlgorithm
 
 logger = logging.getLogger(__name__)
 
@@ -18,27 +18,25 @@ class InferenceState(str, Enum):
     releasing = "releasing"
 
 
-class InferenceBehaviorModel:
+class InferenceBehaviorMachine:
     states = [e for e in InferenceState]
 
     transitions = [
-        {"trigger": "load_pellet", "source": InferenceState.monitoring,
-         "dest": InferenceState.loading, "before": "before_load_pellet"},
-        {"trigger": "send_pellet", "source": InferenceState.loading,
-         "dest": InferenceState.sending, "before": "before_send_pellet"},
-        {"trigger": "release_pellet", "source": InferenceState.sending,
-         "dest": InferenceState.releasing, "before": "before_release_pellet",
-         "after": "after_release_pellet"},
-        {"trigger": "monitor_pellet", "source": "*",
-         "dest": InferenceState.monitoring}
+        {"trigger": "load_pellet", "source": InferenceState.monitoring, "dest": InferenceState.loading,
+         "before": "before_load_pellet", "conditions": "can_load_pellet"},
+        {"trigger": "send_pellet", "source": InferenceState.loading, "dest": InferenceState.sending,
+         "before": "before_send_pellet"},
+        {"trigger": "release_pellet", "source": InferenceState.sending, "dest": InferenceState.releasing,
+         "before": "before_release_pellet", "conditions": "can_release_pellet"},
+        {"trigger": "monitor_pellet", "source": "*", "dest": InferenceState.monitoring}
     ]
 
-    def __init__(self, properties: BehaviorProperties, pellet_device: PelletReader, pellet_command,
+    def __init__(self, properties: BehaviorAlgorithm, pellet_device: PelletReader, pellet_command,
                  pose: PoseAlgorithm):
         self.state = InferenceState.monitoring
 
-        self.machine = HierarchicalMachine(model=self, states=InferenceBehaviorModel.states,
-                                           transitions=InferenceBehaviorModel.transitions, auto_transitions=False,
+        self.machine = HierarchicalMachine(model=self, states=InferenceBehaviorMachine.states,
+                                           transitions=InferenceBehaviorMachine.transitions, auto_transitions=False,
                                            initial=InferenceState.monitoring, model_override=True)
 
         self._properties = properties
@@ -66,9 +64,11 @@ class InferenceBehaviorModel:
     def before_release_pellet(self):
         self._api_status_token = self.pellet_release()
 
-    # noinspection PyMethodMayBeStatic
-    def after_release_pellet(self):
-        logger.debug("pellet: delivery cycle complete")
+    def can_load_pellet(self):
+        return self._properties.pellet_delivery_enabled
+
+    def can_release_pellet(self):
+        return self._properties.can_release_pellet()
 
     @property
     def properties(self):
@@ -95,15 +95,17 @@ class InferenceBehaviorModel:
         return None
 
     def pose_changed(self, response: PoseResponse):
-        if response.pellet_seen():
-            self.properties.pellet_missing_time = time.time()
-            # TODO reset if in the loading process
-        else:
-            if self.state == InferenceState.monitoring:
-                if time.time() - self.properties.pellet_missing_time >= self._properties.limits.pellet_missing_time:
-                    self.load_pellet()
+        # TODO reset if in the loading process and pellet seen?
 
-        self._properties.session_mouse_seen = response.mouse_seen()
+        self.properties.pellet_seen(response.pellet_seen)
+
+        self._properties.mouse_seen(response.mouse_seen)
+
+        if not response.pellet_seen:
+            if self.state == InferenceState.monitoring:
+                self.load_pellet()
+            elif self.state == InferenceState.sending:
+                self.release_pellet()
 
     def pellet_device_ack_received(self, token):
         if token != self._api_status_token:
@@ -114,6 +116,7 @@ class InferenceBehaviorModel:
         elif self.state == InferenceState.sending:
             self.release_pellet()
         elif self.state == InferenceState.releasing:
+            self.properties.pellet_released()
             self.monitor_pellet()
 
     def trigger(self):

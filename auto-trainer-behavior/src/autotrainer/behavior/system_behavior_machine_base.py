@@ -2,13 +2,16 @@ from enum import Enum
 
 from transitions.extensions import HierarchicalMachine
 
+from .behavior_algorithm import BehaviorAlgorithm
+from .behavior_limits import BehaviorLimits
+
 
 class SystemState(str, Enum):
     cage = "cage",
     tunnel = "tunnel"
 
 
-class BehaviorModelBase:
+class SystemBehaviorMachineBase:
     states = [e for e in SystemState]
 
     transitions = [
@@ -18,12 +21,18 @@ class BehaviorModelBase:
          "before": "before_exit_tunnel", "after": "after_exit_tunnel"},
     ]
 
-    def __init__(self):
+    def __init__(self, properties: BehaviorAlgorithm = None):
         self.state = SystemState.cage
 
-        self.machine = HierarchicalMachine(model=self, states=BehaviorModelBase.states,
-                                           transitions=BehaviorModelBase.transitions, auto_transitions=False,
+        self.machine = HierarchicalMachine(model=self, states=SystemBehaviorMachineBase.states,
+                                           transitions=SystemBehaviorMachineBase.transitions, auto_transitions=False,
                                            initial=SystemState.cage, model_override=True)
+
+        self._algorithm = properties if properties is not None else BehaviorAlgorithm(BehaviorLimits())
+
+    @property
+    def algorithm(self):
+        return self._algorithm
 
     def trigger(self):
         pass

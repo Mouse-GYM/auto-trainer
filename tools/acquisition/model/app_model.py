@@ -11,10 +11,11 @@ import yaml
 from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
-from autotrainer.behavior import BehaviorModel
+from autotrainer.behavior import SystemBehaviorMachine
 from autotrainer.inference import PoseAlgorithm
 
 from tools.acquisition.model.analysis_model import AnalysisModel
+from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.model.head_fix_model import HeadFixModel
 from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
 from tools.acquisition.model.user_preferences import UserPreferences
@@ -49,8 +50,8 @@ class AppModel(ObservableObject):
 
         self._analysis = AnalysisModel(self._pose_algorithm)
 
-        self._behavioral = BehaviorModel(self._head_fix.head_fix_reader, self.pellet_delivery.pellet_reader,
-                                         self.pellet_delivery, self._pose_algorithm)
+        self._behavior = BehaviorModel(self._head_fix.head_fix_reader, self.pellet_delivery.pellet_reader,
+                                       self.pellet_delivery, self._pose_algorithm)
 
         self._output_location = ""
 
@@ -228,6 +229,9 @@ class AppModel(ObservableObject):
 
             if "analysis" in conf:
                 self.analysis.load_configuration(conf["analysis"])
+
+            if "behavior" in conf:
+                self._behavior.load_configuration(conf["behavior"])
 
             if "outputLocation" in conf:
                 self.output_location = conf["outputLocation"]

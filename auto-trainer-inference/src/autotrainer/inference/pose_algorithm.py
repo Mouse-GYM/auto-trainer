@@ -29,12 +29,15 @@ class PoseResponse:
     def x_y_2(self) -> typing.List[PoseTuple]:
         return list(map(lambda p: (p.x, p.y), self.locations[1]))
 
+    @property
     def pellet_seen(self) -> bool:
         return self.parts_flag["Pellet"]
 
+    @property
     def star_seen(self):
         return self.parts_flag["Star"]
 
+    @property
     def mouse_seen(self) -> bool:
         return self.parts_flag["Tongue"] or self.parts_flag["Nose"]
 

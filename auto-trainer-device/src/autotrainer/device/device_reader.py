@@ -37,7 +37,7 @@ class DeviceReader(ObservableObject):
             elif msg == GymDeviceMessageKind.ACK:
                 self.ack_received(data)
             elif msg == GymDeviceMessageKind.VERSION:
-                self.property_changed("firmware_version", data, None)
+                self.property_changed(DeviceReader.FIRMWARE_VERSION, data, None)
             else:
                 self.message_received(msg, data)
 
