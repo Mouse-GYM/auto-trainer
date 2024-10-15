@@ -63,6 +63,7 @@ class HeadFixModel(ObservableObject):
     @load_trigger.setter
     def load_trigger(self, value: int):
         self._load_cell_threshold = self._on_property_changed("load_trigger", value, self._load_cell_threshold)
+        self._head_fix_reader.load_cell_monitor.threshold = self._load_cell_threshold
 
     @property
     def output_location(self) -> str:
@@ -106,7 +107,7 @@ class HeadFixModel(ObservableObject):
     def update_position(self, value: int):
         if value == self._position:
             return None
-        
+
         self._position = self._on_property_changed("position", value, self._position)
 
         return self._send_with_token(HeadFixMessageKind.SERVO, str(value))
@@ -174,10 +175,26 @@ class HeadFixModel(ObservableObject):
         if "position" in conf:
             self.update_position(conf["position"])
         if "loadTrigger" in conf:
+            logger.warning("the 'loadTrigger' property has been moved to a sub-property of the 'loadCell' property")
             self.load_trigger = conf["loadTrigger"]
+        if "loadCell" in conf:
+            load_cell_conf = conf["loadCell"]
+            if "loadTrigger" in load_cell_conf:
+                self.load_trigger = load_cell_conf["loadTrigger"]
+            if "minLoadOnDuration" in load_cell_conf:
+                self._head_fix_reader.load_cell_monitor.threshold_duration = load_cell_conf["minLoadOnDuration"]
+            if "minEventDuration" in load_cell_conf:
+                self._head_fix_reader.load_cell_monitor.min_hold_duration = load_cell_conf["minEventDuration"]
+            if "minLoadOffDuration" in load_cell_conf:
+                self._head_fix_reader.load_cell_monitor.post_hold_duration = load_cell_conf["minLoadOffDuration"]
 
     def write_configuration(self):
-        return {"port": self.port, "position": self._position, "loadTrigger": self._load_cell_threshold}
+        load_cell = {"loadTrigger": self._head_fix_reader.load_cell_monitor.threshold,
+                     "minLoadOnDuration": self._head_fix_reader.load_cell_monitor.threshold_duration,
+                     "minEventDuration": self._head_fix_reader.load_cell_monitor.min_hold_duration,
+                     "minLoadOffDuration": self._head_fix_reader.load_cell_monitor.post_hold_duration}
+
+        return {"port": self.port, "position": self._position, "loadCell": load_cell}
 
     def _send_with_token(self, cmd, value=None):
         token = uuid.uuid4()

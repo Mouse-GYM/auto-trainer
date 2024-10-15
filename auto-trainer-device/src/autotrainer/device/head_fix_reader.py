@@ -25,10 +25,10 @@ class LoadCellMonitor(ObservableObject):
     def __init__(self):
         super().__init__()
 
-        self.threshold: float = 15.0
-        self.threshold_duration: float = 0.5
+        self.threshold: float = 10.0
+        self.threshold_duration: float = 0.25
         self.min_hold_duration: float = 5.0
-        self.post_hold_duration: float = 1.0
+        self.post_hold_duration: float = 2.0
 
         self._last_active_start: int = 0
         self._was_active: bool = False
