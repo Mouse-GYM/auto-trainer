@@ -50,8 +50,8 @@ class AppModel(ObservableObject):
 
         self._analysis = AnalysisModel(self._pose_algorithm)
 
-        self._behavior = BehaviorModel(self._head_fix.head_fix_reader, self.pellet_delivery.pellet_reader,
-                                       self.pellet_delivery, self._pose_algorithm)
+        self._behavior = BehaviorModel(self._head_fix.head_fix_reader, self.head_fix,
+                                       self.pellet_delivery.pellet_reader, self.pellet_delivery, self._pose_algorithm)
 
         self._output_location = ""
 

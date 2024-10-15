@@ -3,6 +3,9 @@ from autotrainer.inference import PoseResponse
 
 
 class MockPoseAlgorithm(ObservableObject):
+    """
+    Provides pose algorithm events for testing.
+    """
     def __init__(self):
         super().__init__(event_names=("pose_changed",))
 

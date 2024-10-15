@@ -2,7 +2,7 @@ import logging
 import time
 from datetime import datetime
 
-from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits, InferenceBehaviorMachine, InferenceState
+from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits, InferenceState
 
 from mocks import BehaviorMachineWithMocks
 
@@ -10,106 +10,162 @@ logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('transitions').setLevel(logging.INFO)
 
 
-def test_inference_behavior():
-    """Tests transition behavior using input from pellet changes and commands"""
-    properties = BehaviorAlgorithm(BehaviorLimits(max_pellets_per_session=2, max_pellets_per_day=3))
-
-    model = BehaviorMachineWithMocks(properties)
+def test_enter_exit_tunnel():
+    model = BehaviorMachineWithMocks(limits=BehaviorLimits(pellet_missing_time=0.1))
     inference_model = model.inference
+    algorithm = model.algorithm
+
+    # Default state
+    assert inference_model.state == InferenceState.missing
+    assert inference_model.is_in_tunnel is False
+    assert algorithm.pellet_last_seen == 0.0
+    assert algorithm.day_pellet_count == 0
+    assert algorithm.session_pellet_count == 0
+    assert algorithm.session_mouse_seen is False
+
+    model.enter_tunnel()
+
+    assert inference_model.state == InferenceState.missing
+    assert inference_model.is_in_tunnel is True
+    assert algorithm.pellet_last_seen == 0.0
+    assert algorithm.day_pellet_count == 0
+    assert algorithm.session_pellet_count == 0
+    assert algorithm.session_mouse_seen is False
+
+    model.exit_tunnel()
+
+    assert inference_model.state == InferenceState.missing
+    assert inference_model.is_in_tunnel is False
+    assert algorithm.pellet_last_seen == 0.0
+    assert algorithm.day_pellet_count == 0
+    assert algorithm.session_pellet_count == 0
+    assert algorithm.session_mouse_seen is False
+
+    model.enter_tunnel()
+
+    # Send a pose response with pellet part not seen which should trigger a load/release cycle.
+    model.lose_pellet()
 
     assert inference_model.state == InferenceState.monitoring
+    assert inference_model.is_in_tunnel is True
+    assert algorithm.pellet_last_seen == 0.0
+    assert algorithm.day_pellet_count == 1
+    assert algorithm.session_pellet_count == 1
+    assert algorithm.session_mouse_seen is False
 
-    assert properties.pellet_last_seen == 0.0
-    assert properties.day_pellet_count == 0
-    assert properties.session_pellet_count == 0
-    assert properties.session_mouse_seen is False
+    model.exit_tunnel()
 
-    model.pose.send_response(False, False)
+    # Should cover pellet under normal circumstances.  Pellet counts should decrement.
+    assert inference_model.state == InferenceState.covering
+    assert inference_model.is_in_tunnel is False
+    assert algorithm.pellet_last_seen == 0.0
+    assert algorithm.day_pellet_count == 0
+    assert algorithm.session_pellet_count == 0
+    assert algorithm.session_mouse_seen is False
 
-    model.expect_pellet_delivery()
+    model.enter_tunnel()
 
-    assert properties.pellet_last_seen == 0.0
-    assert properties.day_pellet_count == 1
-    assert properties.session_pellet_count == 1
-    assert properties.session_mouse_seen is False
+    # Entering again should have triggered a release (uncover) of the covered pellet.
+    model.expect_pellet_delivery(was_covered=True)
 
+    # Should uncover pellet and increment pellet counts.
     assert inference_model.state == InferenceState.monitoring
+    assert inference_model.is_in_tunnel is True
+    assert algorithm.pellet_last_seen == 0.0
+    assert algorithm.day_pellet_count == 1
+    assert algorithm.session_pellet_count == 1
+    assert algorithm.session_mouse_seen is False
+
+
+def test_pellet_seen():
+    model = BehaviorMachineWithMocks(limits=BehaviorLimits(pellet_missing_time=0.1))
+    algorithm = model.algorithm
+
+    model.enter_tunnel()
+
+    model.lose_pellet()
 
     model.pose.send_response(True, False)
 
-    assert properties.pellet_last_seen != 0.0
-    assert properties.day_pellet_count == 1
-    assert properties.session_pellet_count == 1
-    assert properties.session_mouse_seen is False
+    assert algorithm.pellet_last_seen != 0.0
 
-    # Ensure pellet load is triggered given the wait time
-    time.sleep(properties.limits.pellet_missing_time + 0.5)
 
-    model.pose.send_response(False, False)
+def test_session_limit():
+    model = BehaviorMachineWithMocks(limits=BehaviorLimits(pellet_missing_time=0.1, max_pellets_per_session=2))
+    inference_model = model.inference
+    algorithm = model.algorithm
 
-    model.expect_pellet_delivery()
+    model.enter_tunnel()
 
-    assert properties.pellet_last_seen != 0.0
-    assert properties.day_pellet_count == 2
-    assert properties.session_pellet_count == 2
-    assert properties.session_mouse_seen is False
+    model.lose_pellet()
 
-    #  Met session pellet limit - pellet should load, but not release
-    model.pose.send_response(False, True)
+    assert inference_model.state == InferenceState.monitoring
+    assert algorithm.day_pellet_count == 1
+    assert algorithm.session_pellet_count == 1
 
-    model.expect_pellet_delivery(False)
+    model.lose_pellet()
 
-    assert inference_model.state == InferenceState.sending
-    assert properties.pellet_last_seen != 0.0
-    assert properties.day_pellet_count == 2
-    assert properties.session_pellet_count == 2
-    assert properties.session_mouse_seen is True
+    assert inference_model.state == InferenceState.monitoring
+    assert algorithm.day_pellet_count == 2
+    assert algorithm.session_pellet_count == 2
+
+    # Session limit should have been reached
+
+    model.lose_pellet(should_release=False)
+
+    assert inference_model.state == InferenceState.covering
+    assert algorithm.day_pellet_count == 2
+    assert algorithm.session_pellet_count == 2
 
     # Start a new session
-    properties.start_session()
-    assert properties.pellet_last_seen == 0.0
-    assert properties.day_pellet_count == 2
-    assert properties.session_pellet_count == 0
-    assert properties.session_mouse_seen is False
+    model.exit_tunnel()
 
-    # First pellet of new session, 3rd pellet of day - should trigger a release from already loaded
-    model.pose.send_response(False, False)
+    model.enter_tunnel()
 
-    model.expect_pellet_delivery(expected_release=False)
+    # Need to acknowledge the expected trigger to uncover
+    model.expect_pellet_delivery(was_covered=True)
 
-    assert properties.pellet_last_seen == 0.0
-    assert properties.day_pellet_count == 3
-    assert properties.session_pellet_count == 1
-    assert properties.session_mouse_seen is False
+    # Previously covered re-released.
+    assert inference_model.state == InferenceState.monitoring
+    assert algorithm.day_pellet_count == 3
+    assert algorithm.session_pellet_count == 1
 
-    # 4rd pellet of day - should not trigger a response
-    model.pose.send_response(False, False)
 
-    model.expect_pellet_delivery(False)
+def test_day_limit():
+    model = BehaviorMachineWithMocks(limits=BehaviorLimits(pellet_missing_time=0.1, max_pellets_per_day=2))
+    inference_model = model.inference
+    algorithm = model.algorithm
 
-    assert properties.pellet_last_seen == 0.0
-    assert properties.day_pellet_count == 3
-    assert properties.session_pellet_count == 1
-    assert properties.session_mouse_seen is False
+    model.enter_tunnel()
 
-    # Force the new day logic, if working correctly, to trigger.  Should not access this field directly outside of
+    # Pellets one and two.
+    model.lose_pellet()
+    model.lose_pellet()
+
+    assert inference_model.state == InferenceState.monitoring
+    assert algorithm.day_pellet_count == 2
+    # Pellet over the day limit
+    model.lose_pellet(should_release=False)
+
+    assert inference_model.state == InferenceState.covering
+    assert algorithm.day_pellet_count == 2
+
+    # Force the new day logic to trigger, if working correctly.  Should not access this field directly outside of
     # testing.
-    properties._today = datetime(2000, 1, 1)
+    algorithm._today = datetime(2000, 1, 1)
 
     # Trigger a release on a new day.  Pellet is in sending state based on previous step.
-    time.sleep(properties.limits.pellet_missing_time + 0.01)
-    model.pose.send_response(False, False)
+    model.lose_pellet(was_covered=True)
 
-    model.expect_pellet_delivery(expected_release=False)
-
-    assert properties.pellet_last_seen == 0.0
-    assert properties.day_pellet_count == 1
-    # This assumes a new day does not interrupt or reset an ongoing session.
-    assert properties.session_pellet_count == 2
-    assert properties.session_mouse_seen is False
-
-    # TODO test pellet_delivery_enabled property behaves as expected
+    assert inference_model.state == InferenceState.monitoring
+    assert algorithm.day_pellet_count == 1
 
 
 if __name__ == '__main__':
-    test_inference_behavior()
+    test_enter_exit_tunnel()
+
+    test_pellet_seen()
+
+    test_session_limit()
+
+    test_day_limit()
