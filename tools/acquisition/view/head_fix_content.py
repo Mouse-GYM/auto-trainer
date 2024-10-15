@@ -1,5 +1,6 @@
 import logging
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
 
 from autotrainer.core import PerfMonitor
@@ -16,6 +17,8 @@ _INACTIVE_LOAD_CELL_COLOR = (240, 240, 240)
 
 
 class HeadFixContent(ContentWidget):
+    position_changed = Signal(int)
+
     def __init__(self, model: HeadFixModel):
         super().__init__()
 
@@ -121,6 +124,8 @@ class HeadFixContent(ContentWidget):
 
         self.set_is_editable(False)
 
+        self.position_changed.connect(lambda x: self._position.setValue(x))
+
     def on_activated(self):
         self._model.on_activated()
         self._model.head_fix_reader.measurement_callback = self._weight_received
@@ -185,7 +190,7 @@ class HeadFixContent(ContentWidget):
         elif name == "load_trigger":
             self._load_cell.setText(str(value))
         elif name == "position":
-            self._position.setValue(value)
+            self.position_changed.emit(value)
         elif name == "is_load_cell_engaged":
             if value:
                 self._plot1.getPlotItem().getViewBox().setBackgroundColor(_ACTIVE_LOAD_CELL_COLOR)

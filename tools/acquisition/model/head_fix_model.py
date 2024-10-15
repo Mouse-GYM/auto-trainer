@@ -104,6 +104,9 @@ class HeadFixModel(ObservableObject):
         return self._position
 
     def update_position(self, value: int):
+        if value == self._position:
+            return None
+        
         self._position = self._on_property_changed("position", value, self._position)
 
         return self._send_with_token(HeadFixMessageKind.SERVO, str(value))
