@@ -46,6 +46,10 @@ class PelletControl(QWidget):
         self._release_button.clicked.connect(lambda: self._app_model.release_pellet())
         b_layout.addWidget(self._release_button)
 
+        self._cover_button = QPushButton("Cover")
+        self._cover_button.clicked.connect(lambda: self._app_model.cover_pellet())
+        b_layout.addWidget(self._cover_button)
+
         layout.addLayout(b_layout, 0, 0, 1, 3)
 
         p_layout, self._x_pos = add_position("X (mm):", -10, 10)

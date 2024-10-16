@@ -15,8 +15,9 @@ class InferenceState(str, Enum):
     monitoring = "monitoring",
     missing = "missing",
     loading = "loading"
-    covering = "covering",
+    sending = "sending",
     releasing = "releasing"
+    covering = "covering",
 
 
 class InferenceBehaviorMachine:
@@ -27,10 +28,10 @@ class InferenceBehaviorMachine:
          "before": "before_load_pellet", "conditions": "can_load_pellet"},
         {"trigger": "load_pellet", "source": InferenceState.missing, "dest": InferenceState.loading,
          "before": "before_load_pellet", "conditions": "can_load_pellet"},
-        {"trigger": "send_pellet", "source": InferenceState.loading, "dest": InferenceState.covering,
+        {"trigger": "send_pellet", "source": InferenceState.loading, "dest": InferenceState.sending,
          "before": "before_send_pellet"},
         {"trigger": "cover_pellet", "source": InferenceState.monitoring, "dest": InferenceState.covering,
-         "before": "before_send_pellet", "after": "after_cover_pellet"},
+         "before": "before_cover_pellet", "after": "after_cover_pellet"},
         {"trigger": "release_pellet", "source": InferenceState.covering, "dest": InferenceState.releasing,
          "before": "before_release_pellet", "after": "after_release_pellet", "conditions": "can_release_pellet"},
         {"trigger": "monitor_pellet", "source": "*", "dest": InferenceState.monitoring}
@@ -87,6 +88,12 @@ class InferenceBehaviorMachine:
         else:
             self._api_status_token = None
 
+    def before_cover_pellet(self):
+        if self._algorithm.pellet_delivery_enabled and self.pellet_command is not None:
+            self._api_status_token = self.pellet_command.cover_pellet()
+        else:
+            self._api_status_token = None
+
     def before_release_pellet(self):
         if self._algorithm.pellet_delivery_enabled and self.pellet_command is not None:
             self._api_status_token = self.pellet_command.release_pellet()
@@ -131,7 +138,14 @@ class InferenceBehaviorMachine:
 
         if self.state == InferenceState.loading:
             self.send_pellet()
+        elif self.state == InferenceState.sending:
+            # Strictly speaking, the hardware ends the send phase with the pellet covered.  This is primarily to put
+            # things in a consistent state of covered whether it is right after sending, or if it was recovered for
+            # any reason.
+            self.state = InferenceState.covering
+            self.release_pellet()
         elif self.state == InferenceState.covering:
+            # Will occur after an actual cover command to the hardware.
             self.release_pellet()
         elif self.state == InferenceState.releasing:
             self.monitor_pellet()
@@ -186,6 +200,9 @@ class InferenceBehaviorMachine:
         pass
 
     def is_loading(self):
+        pass
+
+    def is_sending(self):
         pass
 
     def is_covering(self):

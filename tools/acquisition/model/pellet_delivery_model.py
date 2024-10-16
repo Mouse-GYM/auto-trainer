@@ -87,6 +87,9 @@ class PelletDeliveryModel(ObservableObject):
     def release_pellet(self) -> object:
         return self._send_with_token(PelletDeliveryMessageKind.RELEASE_PELLET)
 
+    def cover_pellet(self) -> object:
+        return self._send_with_token(PelletDeliveryMessageKind.COVER_PELLET)
+
     def connect_to_device(self):
         if not self.port or len(self.port) == 0:
             return

@@ -14,9 +14,10 @@ class PelletDeliveryMessageKind(IntEnum):
     LOAD_PELLET = 2,
     SEND_PELLET = 3,
     RELEASE_PELLET = 4,
-    SET_X = 5,
-    SET_Y = 6,
-    SET_Z = 7
+    COVER_PELLET = 5,
+    SET_X = 6,
+    SET_Y = 7,
+    SET_Z = 8
 
     @classmethod
     def is_member(cls, value):
@@ -42,6 +43,8 @@ class PelletDelivery(GymDevice):
             self._send_data("M0x", context)
         elif kind == PelletDeliveryMessageKind.RELEASE_PELLET:
             self._send_data("R0x", context)
+        elif kind == PelletDeliveryMessageKind.COVER_PELLET:
+            self._send_data("Q0x", context)
         elif kind == PelletDeliveryMessageKind.SET_X:
             self._send_data(f"I{typing.cast(int, data) + 10}x", context)
         elif kind == PelletDeliveryMessageKind.SET_Y:

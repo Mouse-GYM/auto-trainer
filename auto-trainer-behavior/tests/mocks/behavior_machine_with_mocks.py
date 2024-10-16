@@ -61,7 +61,7 @@ class BehaviorMachineWithMocks(SystemBehaviorMachine):
 
             self.pellet.send_ack()
 
-            assert self.inference.state == InferenceState.covering
+            assert self.inference.state == InferenceState.sending
 
             self.pellet.send_ack()
 

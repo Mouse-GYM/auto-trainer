@@ -24,5 +24,9 @@ class MockPelletDelivery(ObservableObject):
         self._last_token = uuid.uuid4()
         return self._last_token
 
+    def cover_pellet(self):
+        self._last_token = uuid.uuid4()
+        return self._last_token
+
     def send_ack(self):
         self.ack_received(self._last_token)

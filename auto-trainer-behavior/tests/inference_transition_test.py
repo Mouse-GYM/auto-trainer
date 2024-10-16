@@ -20,7 +20,10 @@ def test_inference_transitions():
 
     model.send_pellet()
 
-    assert model.state == InferenceState.covering
+    assert model.state == InferenceState.sending
+
+    # Simulate what happens when an actual send command completes.
+    model.state = InferenceState.covering
 
     model.release_pellet()
 
@@ -44,9 +47,11 @@ def test_inference_transitions():
 
     assert model.state == InferenceState.missing
 
-    # Reload while in tunnel.
+    # Reload while in tunnel.  These transitions happen automatically when the state machine has access to pellet
+    # commands.
     model.load_pellet()
     model.send_pellet()
+    model.state = InferenceState.covering
     model.release_pellet()
     model.monitor_pellet()
 

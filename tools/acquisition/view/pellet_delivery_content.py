@@ -67,6 +67,10 @@ class PelletDeliveryContent(ContentWidget):
         self._release_button.clicked.connect(lambda: self._model.release_pellet())
         layout.addWidget(self._release_button)
 
+        self._cover_button = QPushButton("Cover")
+        self._cover_button.clicked.connect(lambda: self._model.cover_pellet())
+        layout.addWidget(self._cover_button)
+
         self._footer.setLayout(layout)
 
         self._card_widget.footer.setContent(self._footer)

@@ -71,6 +71,9 @@ class AppModel(ObservableObject):
     def release_pellet(self):
         self._send_command(PelletDeliveryMessageKind.RELEASE_PELLET, context=uuid.uuid4())
 
+    def cover_pellet(self):
+        self._send_command(PelletDeliveryMessageKind.COVER_PELLET, context=uuid.uuid4())
+
     def set_x(self, value: int):
         self._send_command(PelletDeliveryMessageKind.SET_X, value, context=uuid.uuid4())
 
