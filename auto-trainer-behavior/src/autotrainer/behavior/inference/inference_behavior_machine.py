@@ -24,16 +24,16 @@ class InferenceBehaviorMachine:
     states = [e for e in InferenceState]
 
     transitions = [
-        {"trigger": "pellet_lost", "source": InferenceState.monitoring, "dest": InferenceState.missing,
-         "before": "before_load_pellet", "conditions": "can_load_pellet"},
+        {"trigger": "pellet_lost", "source": InferenceState.monitoring, "dest": InferenceState.missing},
         {"trigger": "load_pellet", "source": InferenceState.missing, "dest": InferenceState.loading,
-         "before": "before_load_pellet", "conditions": "can_load_pellet"},
+         "before": "before_load_pellet", "conditions": ["can_load_pellet", "can_use_pellet_command"]},
         {"trigger": "send_pellet", "source": InferenceState.loading, "dest": InferenceState.sending,
-         "before": "before_send_pellet"},
+         "before": "before_send_pellet", "conditions": "can_use_pellet_command"},
         {"trigger": "cover_pellet", "source": InferenceState.monitoring, "dest": InferenceState.covering,
-         "before": "before_cover_pellet", "after": "after_cover_pellet"},
+         "before": "before_cover_pellet", "after": "after_cover_pellet", "conditions": "can_use_pellet_command"},
         {"trigger": "release_pellet", "source": InferenceState.covering, "dest": InferenceState.releasing,
-         "before": "before_release_pellet", "after": "after_release_pellet", "conditions": "can_release_pellet"},
+         "before": "before_release_pellet", "after": "after_release_pellet",
+         "conditions": ["can_release_pellet", "can_use_pellet_command"]},
         {"trigger": "monitor_pellet", "source": "*", "dest": InferenceState.monitoring}
     ]
 
@@ -112,6 +112,9 @@ class InferenceBehaviorMachine:
     def can_release_pellet(self):
         return self._in_tunnel and self._algorithm.can_release_pellet()
 
+    def can_use_pellet_command(self):
+        return self._api_status_token is None
+
     @property
     def is_in_tunnel(self):
         return self._in_tunnel
@@ -128,13 +131,20 @@ class InferenceBehaviorMachine:
             if self.state == InferenceState.monitoring:
                 self.pellet_lost()
             if self.state == InferenceState.missing:
+                # Immediately go to missing, but load_pellet transition will only succeed if time, pellet limits, and
+                # other requirements are satisfied.
                 self.load_pellet()
             elif self.state == InferenceState.covering:
                 self.release_pellet()
+        else:
+            if self.state == InferenceState.missing:
+                self.monitor_pellet()
 
     def pellet_device_ack_received(self, token):
         if token != self._api_status_token:
             logger.warning("pellet delivery token mismatch")
+
+        self._api_status_token = None
 
         if self.state == InferenceState.loading:
             self.send_pellet()
