@@ -132,8 +132,7 @@ class AnalysisModel(ObservableObject):
                 msg, context = self._msg_queue.get(block=False, timeout=0.5)
                 if msg == AnalysisStatusMessageKind.Initialized:
                     logger.info(msg)
-                    self._algorithm.set_parts(context)
-                    self._algorithm.initialize()
+                    self._algorithm.initialize(context)
                     self._send_message(AnalysisCommandMessageKind.Start)
                 elif msg == AnalysisStatusMessageKind.Performance:
                     logger.info(f"{context :.1f} predict calls/s")

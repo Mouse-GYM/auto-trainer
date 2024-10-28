@@ -6,7 +6,6 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
-from multiprocessing import Value
 from queue import Queue, Empty
 from threading import Thread
 
@@ -41,8 +40,6 @@ class VideoRecordProperties:
     """Interval in seconds to rotate the video file.  0 to never rotate. Negative to disabled video recording."""
     image_interval: int = 0
     """Interval in seconds to capture images.  Values <= 0 disable image capture."""
-    next_session_index: Value = None
-    """Value to use for next session index, if applicable."""
     queue_batch_size = 60
     """Number of frames to batch for passing between capture and record queues."""
 
@@ -69,7 +66,6 @@ class VideoRecord(Thread):
         self._record_mode = properties.record_mode
         self._video_rotate_interval = properties.video_rotate_interval
         self._image_interval = properties.image_interval * 1e9
-        self._next_session_index = properties.next_session_index
 
         self._input_queue = input_queue
 
@@ -168,28 +164,27 @@ class VideoRecord(Thread):
 
     def _prepare_writers(self):
         self._interval_reference = self._project_info.get_interval(self._interval_mode)
-        session = 0 if self._next_session_index is None else self._next_session_index.value
 
-        self._prepare_video_writer(session)
-        self._prepare_image_capture(session)
+        self._prepare_video_writer()
+        self._prepare_image_capture()
 
     def _close_writers(self):
         self._close_image_writer()
         self._close_video_writer()
 
-    def _prepare_image_capture(self, session: int):
+    def _prepare_image_capture(self):
         self._close_image_writer()
 
         if self._image_interval > 0:
             self._image_location, self._image_name = (
-                self._project_info.get_image_capture_path(self._name, interval=self._interval_mode, session=session))
+                self._project_info.get_image_capture_path(self._name, interval=self._interval_mode))
 
             logger.debug(f"<{self.name}>: image capture to {self._image_location}")
 
     def _close_image_writer(self):
         self._image_location = None
 
-    def _prepare_video_writer(self, session: int):
+    def _prepare_video_writer(self):
         self._close_video_writer()
 
         if not self._is_video_enabled:
@@ -197,8 +192,7 @@ class VideoRecord(Thread):
 
         self._record_start = time.time()
 
-        video_file, timestamp_file = self._project_info.get_video_path(self._name, interval=self._interval_mode,
-                                                                       session=session)
+        video_file, timestamp_file = self._project_info.get_video_path(self._name, interval=self._interval_mode)
 
         logger.debug(f"<{self.name}>: video record to {video_file}")
 

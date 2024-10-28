@@ -1,2 +1,2 @@
-from .project_path import ProjectInfo
-from .project_path import ProjectInterval
+from .project_info import ProjectInfo
+from .project_info import ProjectInterval

@@ -22,3 +22,6 @@ class MockPoseAlgorithm(ObservableObject):
         response = PoseResponse(sequence=1, parts_flag=parts_flag, locations=[])
 
         self.pose_changed(response)
+
+    def perform_intersession(self):
+        pass

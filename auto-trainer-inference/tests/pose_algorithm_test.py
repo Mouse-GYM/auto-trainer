@@ -58,9 +58,7 @@ def test_algorithm_output():
 
     algorithm = PoseAlgorithm()
 
-    algorithm.set_parts(parts)
-
-    algorithm.initialize()
+    algorithm.initialize(parts)
 
     response = algorithm.process(data)
 

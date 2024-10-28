@@ -39,6 +39,14 @@ def test_enter_exit_tunnel():
     assert model.algorithm._is_in_session is False
     assert is_capture_triggered is False
 
+    model.headfix.is_load_cell_engaged = True
+
+    model.pose.send_response(False, True)
+
+    model.headfix.is_load_cell_engaged = False
+
+    assert model.state == SystemState.intersession
+
 
 if __name__ == '__main__':
     test_enter_exit_tunnel()

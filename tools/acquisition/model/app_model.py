@@ -7,11 +7,11 @@ from multiprocessing import Value
 from datetime import datetime
 
 import yaml
+from PySide6.scripts.pyside_tool import project
 
 from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
-from autotrainer.behavior import SystemBehaviorMachine
 from autotrainer.inference import PoseAlgorithm
 
 from tools.acquisition.model.analysis_model import AnalysisModel
@@ -59,8 +59,6 @@ class AppModel(ObservableObject):
 
         self._project_info = None
 
-        self._next_session = Value(ctypes.c_uint32, 0)
-
         self._animal_name = ""
 
         self._notes = ""
@@ -82,6 +80,10 @@ class AppModel(ObservableObject):
     @property
     def top_camera(self):
         return self._top_camera
+
+    @property
+    def behavior(self):
+        return self._behavior
 
     @property
     def analysis(self):
@@ -127,6 +129,8 @@ class AppModel(ObservableObject):
     def on_capture_start(self) -> bool:
         self.create_project_info()
 
+        self._behavior.on_prepare_capture(self._project_info)
+
         self._inference_queue = None
 
         if self._analysis.is_enabled:
@@ -137,21 +141,20 @@ class AppModel(ObservableObject):
             else:
                 logger.warning("analysis disabled: left and right camera frame sizes do not match")
 
-        did_start = self.left_camera.on_prepare_capture(self._project_info, self._next_session, self._inference_queue)
+        did_start = self.left_camera.on_prepare_capture(self._project_info, self._inference_queue)
 
         if not did_start:
             self.on_error("Camera Process Failed",
                           _failed_camera_template(self.left_camera.name, self.left_camera.last_error))
 
         if did_start:
-            did_start = did_start and self.right_camera.on_prepare_capture(self._project_info, self._next_session,
-                                                                           self._inference_queue)
+            did_start = did_start and self.right_camera.on_prepare_capture(self._project_info, self._inference_queue)
             if not did_start:
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(self.right_camera.name, self.right_camera.last_error))
 
         if did_start:
-            did_start = did_start and self.top_camera.on_prepare_capture(self._project_info, self._next_session)
+            did_start = did_start and self.top_camera.on_prepare_capture(self._project_info)
             if not did_start:
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(self.top_camera.name, self.top_camera.last_error))
@@ -269,15 +272,11 @@ class AppModel(ObservableObject):
         self.head_fix.on_close()
         self.pellet_delivery.on_close()
 
-    def _trigger_received(self, _sender, _trigger_id, context):
-        self._is_recording_trigger = context
+    def _trigger_received(self, _sender, _trigger_id, value):
+        self._is_recording_trigger = value
 
-        # Wait until the end of the trigger to increment.
-        if not context:
-            self._next_session.value += 1
-        else:
-            self._save_metadata(self._project_info.get_metadata_file(self._next_session.value),
-                                self._next_session.value)
+        if value:
+            self._save_metadata(self._project_info.get_metadata_file(-1), self._project_info.session.value)
 
     def _save_project_metadata(self, project_info: ProjectInfo):
         file_name = project_info.get_metadata_file()
@@ -302,7 +301,3 @@ class AppModel(ObservableObject):
     def create_project_info(self) -> None:
         self._project_info = ProjectInfo(root=self.output_location, device_id=self._preferences.serial_number,
                                          ensure_exists=True)
-
-        self._next_session.value = self._project_info.calculate_next_session_index()
-
-        location, _ = self._project_info.get_day_path()

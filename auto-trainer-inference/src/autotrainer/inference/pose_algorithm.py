@@ -67,7 +67,12 @@ class PoseAlgorithm(ObservableObject):
             return self._parts[part]
         return -1
 
-    def set_parts(self, parts: list):
+    '''
+    Will be called once after the model initialized and body parts properties have been set.
+    See part_names() and get_part_index(name)
+    '''
+
+    def initialize(self, parts: list):
         self._parts_list = list(parts)
         self._parts = dict()
         self._default_parts_flag = dict()
@@ -79,14 +84,6 @@ class PoseAlgorithm(ObservableObject):
             self._default_locations.append(None)
 
         self._expected_num_parts = len(self._parts_list)
-
-    '''
-    Will be called once after the model initialized and body parts properties have been set.
-    See part_names() and get_part_index(name)
-    '''
-
-    def initialize(self):
-        pass
 
     def process(self, all_frames: typing.List[numpy.ndarray]) -> PoseResponse:
         left_frames = list()

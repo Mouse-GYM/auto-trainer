@@ -1,13 +1,14 @@
 import time
 
-from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits,  SystemBehaviorMachine, InferenceState
+from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits,  SystemMachine, InferenceState
+from autotrainer.core import ProjectInfo
 
 from .mock_headfix import MockHeadfix
 from .mock_pellet_delivery import MockPelletDelivery
 from .mock_pose_algorithm import MockPoseAlgorithm
 
 
-class BehaviorMachineWithMocks(SystemBehaviorMachine):
+class BehaviorMachineWithMocks(SystemMachine):
     """
     State machine that automatically creates mock interfaces for testing and provides convenience methods for multi-step
     behavior.

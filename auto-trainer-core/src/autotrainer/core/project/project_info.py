@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import ctypes
 import os
 import sys
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
+from multiprocessing import Value
 from pathlib import Path
 from typing import Tuple, NamedTuple
 
@@ -68,6 +70,7 @@ class ProjectInfo:
     device_id: str = ""
     when: datetime = None
     ensure_exists: bool = False
+    session: Value = Value(ctypes.c_uint32, 1)
 
     def is_valid(self):
         return self.root is not None and len(self.root) > 0
@@ -114,10 +117,12 @@ class ProjectInfo:
 
         return IntervalSource(location, prefix, when.hour if interval == ProjectInterval.HOUR else when.minute)
 
-    def get_session_path(self, name: str = "", session: int = 0, skip_ensure: bool = False) -> SessionSource | None:
+    def get_session_path(self, name: str = "", session: int = -1, skip_ensure: bool = False) -> SessionSource | None:
         (location, today) = self.get_day_path(True)
 
-        session_str = f"session{session:03}"
+        s_idx = session if session >= 0 else self.session.value
+
+        session_str = f"session{s_idx:03}"
 
         location = os.path.join(location, session_str)
 
@@ -133,9 +138,9 @@ class ProjectInfo:
 
         prefix = f"{prefix}{s}"
 
-        return SessionSource(location, prefix, session)
+        return SessionSource(location, prefix, s_idx)
 
-    def get_source_path(self, name: str = "", interval: ProjectInterval = ProjectInterval.NONE, session: int = 0,
+    def get_source_path(self, name: str = "", interval: ProjectInterval = ProjectInterval.NONE, session: int = -1,
                         skip_ensure: bool = False) -> ProjectPath | None:
         if interval is None or interval == ProjectInterval.NONE:
             path = self.get_session_path(name, session=session, skip_ensure=skip_ensure)
@@ -168,7 +173,7 @@ class ProjectInfo:
                                                           path.interval)
 
     def get_video_path(self, name: str = "",
-                       interval: ProjectInterval = ProjectInterval.NONE, session: int = 0,
+                       interval: ProjectInterval = ProjectInterval.NONE, session: int = -1,
                        allow_overwrite: bool = False) -> Tuple[str | None, str | None]:
         path = self.get_source_path(name, interval=interval, session=session)
 
@@ -191,7 +196,7 @@ class ProjectInfo:
         return file_name, ts_file
 
     def get_image_capture_path(self, name: str = "", interval: ProjectInterval = ProjectInterval.NONE,
-                               session: int = 0) -> Tuple[str | None, str | None]:
+                               session: int = -1) -> Tuple[str | None, str | None]:
         base = self.get_source_path(name, interval=interval, session=session, skip_ensure=True)
 
         image_location = os.path.join(base.location, f"{base.prefix}{IMAGE_CAPTURE_SUFFIX}")
@@ -204,7 +209,7 @@ class ProjectInfo:
 
         return image_location, image_file_format_str
 
-    def calculate_next_session_index(self) -> int:
+    def calculate_next_session_index(self):
         location, _ = self.get_day_path()
 
         path = Path(location)
@@ -227,4 +232,4 @@ class ProjectInfo:
 
         session_vals.sort(reverse=True)
 
-        return session_vals[0] + 1
+        self.session.value = session_vals[0] + 1

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel, QMessag
     QSizePolicy, QWidget
 import qtawesome as qta
 
+from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
@@ -176,6 +177,10 @@ class MainWindow(QMainWindow):
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.triggered.connect(lambda: self._toggle_diagnostics_view())
 
+        self.capture_trigger_action = QAction("Trigger", self)
+        self.capture_trigger_action.setCheckable(True)
+        self.capture_trigger_action.triggered.connect(lambda: self._app_view_model.behavior.trigger_tunnel(self.capture_trigger_action.isChecked()))
+
         self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
         self.preferences_action.triggered.connect(lambda: self._show_preferences())
 
@@ -211,6 +216,8 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
 
         toolbar.addAction(self.edit_configuration_action)
+
+        toolbar.addAction(self.capture_trigger_action)
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)

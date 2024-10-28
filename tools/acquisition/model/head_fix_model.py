@@ -2,11 +2,10 @@ import logging
 import queue
 import uuid
 
-from autotrainer.core.project import ProjectInfo
+from autotrainer.core import ObservableObject, ProjectInfo
 from autotrainer.device import SerialInterface, HeadFixReader
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
-from autotrainer.core import ObservableObject
 
 logger = logging.getLogger(__name__)
 

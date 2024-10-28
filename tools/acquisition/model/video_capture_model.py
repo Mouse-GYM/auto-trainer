@@ -10,7 +10,8 @@ from threading import Event
 
 from numpy import ndarray
 
-from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, TriggerManager, ObservableObject
+from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, TriggerManager, ObservableObject, \
+    CAPTURE_TRIGGER_ID
 from autotrainer.core.project import ProjectInfo
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
@@ -18,8 +19,6 @@ from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMo
 from tools.acquisition.model.user_preferences import UserPreferences
 
 logger = logging.getLogger(__name__)
-
-CAPTURE_TRIGGER_ID = "CaptureTrigger"
 
 
 def create_camera_list():
@@ -42,12 +41,12 @@ def create_camera_list():
 
 
 class VideoCaptureModel(ObservableObject):
-    def __init__(self, name, preferences: UserPreferences = None, idx: int = 0):
+    def __init__(self, name, preferences: UserPreferences = None, inference_index: int = -1):
         super().__init__()
 
         self._name = name
         self._preferences = preferences
-        self._index = idx
+        self._inference_index = inference_index
 
         self._camera_source: CaptureCameraAttrs | None = None
         self._camera_properties = dict()
@@ -204,8 +203,7 @@ class VideoCaptureModel(ObservableObject):
         if self._display_update_fcn is not None and self._video_capture is not None:
             self._display_update_fcn(data, self._fps)
 
-    def on_prepare_capture(self, project_info: ProjectInfo, next_session_idx: Value,
-                           network_queue: FixedArrayMultiQueue = None) -> bool:
+    def on_prepare_capture(self, project_info: ProjectInfo, network_queue: FixedArrayMultiQueue = None) -> bool:
         self._last_error = None
 
         if not self._is_enabled:
@@ -223,7 +221,7 @@ class VideoCaptureModel(ObservableObject):
 
             camera = CaptureCameraAttrs(name=self._name, url=url)
 
-            inference = CaptureInferenceAttrs(queue=network_queue, index=self._index)
+            inference = CaptureInferenceAttrs(queue=network_queue, index=self._inference_index)
 
             capture_attrs = CaptureAttrs(command_queue=self._video_command_queue, status=self._video_status,
                                          image_queue=self._video_image_queue, frame=self._video_frame_index,
@@ -233,8 +231,7 @@ class VideoCaptureModel(ObservableObject):
             image_interval = self._still_image_capture_interval if self._is_still_capture_enabled else 0
             record_properties = VideoRecordProperties(project_info=project_info, record_mode=self.record_mode,
                                                       video_rotate_interval=rotate_interval,
-                                                      image_interval=image_interval,
-                                                      next_session_index=next_session_idx)
+                                                      image_interval=image_interval)
 
             self._video_capture = VideoCapture(capture_attrs, record_properties)
 
@@ -259,7 +256,7 @@ class VideoCaptureModel(ObservableObject):
             decimation = 1 if self._preferences is None else self._preferences.live_feed_refresh_rate
 
             if self._video_reader is not None:
-                if self._index == -1:
+                if self._inference_index == -1:
                     if "fps" in properties:
                         self._video_reader.decimation = max(int(int(properties["fps"]) / decimation), 1)
                     else:

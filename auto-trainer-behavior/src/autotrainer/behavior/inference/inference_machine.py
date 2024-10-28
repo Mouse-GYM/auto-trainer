@@ -1,7 +1,7 @@
 import logging
 from enum import Enum
 
-from transitions.extensions import HierarchicalMachine
+from transitions import Machine
 
 from autotrainer.device import PelletReader
 from autotrainer.inference import PoseAlgorithm, PoseResponse
@@ -20,7 +20,7 @@ class InferenceState(str, Enum):
     covering = "covering",
 
 
-class InferenceBehaviorMachine:
+class InferenceMachine:
     states = [e for e in InferenceState]
 
     transitions = [
@@ -42,8 +42,8 @@ class InferenceBehaviorMachine:
 
         self.state = InferenceState.missing
 
-        self.machine = HierarchicalMachine(model=self, states=InferenceBehaviorMachine.states,
-                                           transitions=InferenceBehaviorMachine.transitions, auto_transitions=False,
+        self.machine = Machine(model=self, states=InferenceMachine.states,
+                                           transitions=InferenceMachine.transitions, auto_transitions=False,
                                            initial=InferenceState.missing, model_override=True)
 
         self._algorithm = algorithm

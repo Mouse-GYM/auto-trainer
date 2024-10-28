@@ -1,6 +1,6 @@
 import logging
 
-from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits, InferenceBehaviorMachine, InferenceState
+from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits, InferenceMachine, InferenceState
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('transitions').setLevel(logging.INFO)
@@ -10,7 +10,7 @@ def test_inference_transitions():
     """Tests transition behavior with explicit calls to the transitions"""
     algorithm = BehaviorAlgorithm(BehaviorLimits())
 
-    model = InferenceBehaviorMachine(algorithm, None, None, None)
+    model = InferenceMachine(algorithm, None, None, None)
 
     assert model.state == InferenceState.missing
 
