@@ -17,10 +17,12 @@ class BehaviorLimits:
 
         if "maxPelletMissingSeconds" in values:
             kwargs["pellet_missing_time"] = values["maxPelletMissingSeconds"]
-
         if "maxPelletsPerSession" in values:
             kwargs["max_pellets_per_session"] = values["maxPelletsPerSession"]
         if "maxPelletsPerDay" in values:
             kwargs["max_pellets_per_day"] = values["maxPelletsPerDay"]
 
         return BehaviorLimits(**kwargs)
+    
+    def to_dictionary(self):
+        return {"maxPelletMissingSeconds": self.pellet_missing_time, "maxPelletsPerSession": self.max_pellets_per_session, "maxPelletsPerDay": self.max_pellets_per_day};

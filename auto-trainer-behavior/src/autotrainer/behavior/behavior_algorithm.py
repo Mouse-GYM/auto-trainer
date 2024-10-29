@@ -12,7 +12,10 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._limits = limits or BehaviorLimits()
 
+        self._project_info = None
+
         self._pellet_delivery_enabled = True
+        self._pellet_cover_enabled = True
         self._head_fixation_enabled = True
         self._reach_detection_enabled = True
 
@@ -30,20 +33,38 @@ class BehaviorAlgorithm(ObservableObject):
         self._start_day()
 
     @property
-    def pellet_delivery_enabled(self):
-        return self._pellet_delivery_enabled
-
-    @pellet_delivery_enabled.setter
-    def pellet_delivery_enabled(self, value: bool):
-        self._pellet_delivery_enabled = value
-
-    @property
     def limits(self) -> BehaviorLimits:
         return self._limits
 
     @limits.setter
     def limits(self, limits: BehaviorLimits):
         self._limits = limits
+
+    @property
+    def project(self):
+        return self._project_info
+
+    @project.setter
+    def project(self, project):
+        self._project_info = project
+
+    @property
+    def pellet_delivery_enabled(self):
+        return self._pellet_delivery_enabled
+
+    @pellet_delivery_enabled.setter
+    def pellet_delivery_enabled(self, value: bool):
+        self._pellet_delivery_enabled = self._on_property_changed("pellet_delivery_enabled", value,
+                                                                  self._pellet_delivery_enabled)
+
+    @property
+    def pellet_cover_enabled(self):
+        return self._pellet_cover_enabled
+
+    @pellet_cover_enabled.setter
+    def pellet_cover_enabled(self, value: bool):
+        self._pellet_cover_enabled = self._on_property_changed("pellet_cover_enabled", value,
+                                                               self._pellet_cover_enabled)
 
     @property
     def baseline_intensity(self):
@@ -75,6 +96,9 @@ class BehaviorAlgorithm(ObservableObject):
         if self._is_in_session:
             self._is_in_session = False
             self.session_ending()
+
+    def can_cover_pellet(self):
+        return self.pellet_cover_enabled
 
     def can_load_pellet(self):
         return self.pellet_delivery_enabled and (time.time() - self.pellet_last_seen >= self.limits.pellet_missing_time)

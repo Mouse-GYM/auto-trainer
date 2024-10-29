@@ -245,13 +245,7 @@ class AppModel(ObservableObject):
         return True
 
     def save_configuration(self, location: str):
-        conf = {"camera1": self._left_camera.write_configuration(),
-                "camera2": self._right_camera.write_configuration(),
-                "camera3": self._top_camera.write_configuration(),
-                "headFix": self.head_fix.write_configuration(),
-                "pelletDelivery": self.pellet_delivery.write_configuration(),
-                "analysis": self._analysis.write_configuration(),
-                "outputLocation": self.output_location}
+        conf = self._configuration_as_dict()
 
         try:
             with open(location, "w") as file:
@@ -278,6 +272,16 @@ class AppModel(ObservableObject):
         if value:
             self._save_metadata(self._project_info.get_metadata_file(-1), self._project_info.session.value)
 
+    def _configuration_as_dict(self) -> dict:
+        return {"camera1": self._left_camera.write_configuration(),
+                "camera2": self._right_camera.write_configuration(),
+                "camera3": self._top_camera.write_configuration(),
+                "headFix": self.head_fix.write_configuration(),
+                "pelletDelivery": self.pellet_delivery.write_configuration(),
+                "analysis": self._analysis.write_configuration(),
+                "behavior": self._behavior.write_configuration(),
+                "outputLocation": self.output_location}
+
     def _save_project_metadata(self, project_info: ProjectInfo):
         file_name = project_info.get_metadata_file()
         self._save_metadata(file_name, -1)
@@ -292,11 +296,17 @@ class AppModel(ObservableObject):
             "serialNumber": self._preferences.serial_number or "",
             "animalName": self.animal_name or "",
             "notes": self.notes or "",
-            "session": session
+            "session": session,
+            "configuration": self._configuration_as_dict()
         }
 
-        with open(file_name, "w") as file:
-            json.dump(info, file)
+        try:
+            with open(file_name + ".json", "w") as file:
+                json.dump(info, file)
+            with open(file_name + ".yaml", "w") as file:
+                yaml.dump(info, file, sort_keys=False)
+        except Exception as ex:
+            logger.error(ex)
 
     def create_project_info(self) -> None:
         self._project_info = ProjectInfo(root=self.output_location, device_id=self._preferences.serial_number,

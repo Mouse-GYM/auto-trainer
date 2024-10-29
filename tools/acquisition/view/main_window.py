@@ -217,7 +217,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addAction(self.edit_configuration_action)
 
-        toolbar.addAction(self.capture_trigger_action)
+        # toolbar.addAction(self.capture_trigger_action)
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)

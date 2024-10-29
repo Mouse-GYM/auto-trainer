@@ -30,7 +30,7 @@ class InferenceMachine:
         {"trigger": "send_pellet", "source": InferenceState.loading, "dest": InferenceState.sending,
          "before": "before_send_pellet", "conditions": "can_use_pellet_command"},
         {"trigger": "cover_pellet", "source": InferenceState.monitoring, "dest": InferenceState.covering,
-         "before": "before_cover_pellet", "after": "after_cover_pellet", "conditions": "can_use_pellet_command"},
+         "before": "before_cover_pellet", "after": "after_cover_pellet", "conditions": "can_cover_pellet"},
         {"trigger": "release_pellet", "source": InferenceState.covering, "dest": InferenceState.releasing,
          "before": "before_release_pellet", "after": "after_release_pellet",
          "conditions": ["can_release_pellet", "can_use_pellet_command"]},
@@ -43,8 +43,8 @@ class InferenceMachine:
         self.state = InferenceState.missing
 
         self.machine = Machine(model=self, states=InferenceMachine.states,
-                                           transitions=InferenceMachine.transitions, auto_transitions=False,
-                                           initial=InferenceState.missing, model_override=True)
+                               transitions=InferenceMachine.transitions, auto_transitions=False,
+                               initial=InferenceState.missing, model_override=True)
 
         self._algorithm = algorithm
 
@@ -77,25 +77,25 @@ class InferenceMachine:
             self.cover_pellet()
 
     def before_load_pellet(self):
-        if self._algorithm.pellet_delivery_enabled and self.pellet_command is not None:
+        if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.load_pellet()
         else:
             self._api_status_token = None
 
     def before_send_pellet(self):
-        if self._algorithm.pellet_delivery_enabled and self.pellet_command is not None:
+        if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.send_pellet()
         else:
             self._api_status_token = None
 
     def before_cover_pellet(self):
-        if self._algorithm.pellet_delivery_enabled and self.pellet_command is not None:
+        if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.cover_pellet()
         else:
             self._api_status_token = None
 
     def before_release_pellet(self):
-        if self._algorithm.pellet_delivery_enabled and self.pellet_command is not None:
+        if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.release_pellet()
         else:
             self._api_status_token = None
@@ -115,6 +115,9 @@ class InferenceMachine:
     def can_use_pellet_command(self):
         return self._api_status_token is None
 
+    def can_cover_pellet(self):
+        return self.can_use_pellet_command() and self._algorithm.can_cover_pellet()
+
     @property
     def is_in_tunnel(self):
         return self._in_tunnel
@@ -127,9 +130,13 @@ class InferenceMachine:
 
         self._algorithm.mouse_seen(response.mouse_seen)
 
+        if not self._algorithm.pellet_delivery_enabled:
+            return
+
         if not response.pellet_seen:
             if self.state == InferenceState.monitoring:
                 self.pellet_lost()
+
             if self.state == InferenceState.missing:
                 # Immediately go to missing, but load_pellet transition will only succeed if time, pellet limits, and
                 # other requirements are satisfied.

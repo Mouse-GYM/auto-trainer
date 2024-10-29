@@ -25,7 +25,7 @@ class IntersessionMachine:
         {"trigger": "end_analysis", "source": IntersessionState.detection, "dest": IntersessionState.idle},
     ]
 
-    def __init__(self, algorithm: BehaviorAlgorithm, pose: PoseAlgorithm = None):
+    def __init__(self, algorithm: BehaviorAlgorithm, pose: PoseAlgorithm = None, pose_command=None):
         self.state = IntersessionState.idle
 
         self._machine = Machine(model=self, states=IntersessionMachine.states,
@@ -39,8 +39,11 @@ class IntersessionMachine:
         if self._pose is not None:
             self._pose.pose_changed += self.pose_changed
 
+        self._pose_command = pose_command
+
     def pose_changed(self, response: PoseResponse):
-        pass
+        if self.state != IntersessionState.segmentation:
+            return
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

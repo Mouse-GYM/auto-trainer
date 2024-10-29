@@ -158,11 +158,11 @@ class ProjectInfo:
 
             d = f"_{self.device_id}" if self.device_id else ""
 
-            return os.path.join(location, f"{prefix}{d}_{timestamp}_metadata.json")
+            return os.path.join(location, f"{prefix}{d}_{timestamp}_metadata")
         else:
             source = self.get_session_path("metadata", session=session)
 
-            return os.path.join(source.location, f"{source.prefix}.json")
+            return os.path.join(source.location, f"{source.prefix}")
 
     def get_monitor_file(self, name: str = "monitor", ext: str = "csv",
                          interval: ProjectInterval = ProjectInterval.HOUR) -> IntervalFileInfo | None:

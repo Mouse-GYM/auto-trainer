@@ -13,6 +13,29 @@ class OutputContent(ContentWidget):
 
         self._card_widget = CardWidget()
 
+        content_layout = QVBoxLayout()
+
+        # Metadata
+        layout = QHBoxLayout()
+
+        layout.addWidget(QLabel("Name:"))
+        self._name = QLineEdit()
+        self._name.setText(self._model.animal_name)
+        self._name.textChanged.connect(self.name_changed)
+        layout.addWidget(self._name)
+
+        layout.addWidget(QLabel("Notes:"))
+        self._notes = QLineEdit()
+        self._notes.setText(self._model.notes)
+        self._notes.textChanged.connect(self.notes_changed)
+        layout.addWidget(self._notes)
+
+        widget = QWidget()
+        widget.setLayout(layout)
+
+        content_layout.addWidget(widget)
+
+        # Output location
         layout = QHBoxLayout()
 
         layout.addWidget(QLabel("Top-Level Location:"))
@@ -26,8 +49,6 @@ class OutputContent(ContentWidget):
         self._content.setLayout(layout)
 
         self._no_content = QWidget()
-        self._no_content.setLayout(QHBoxLayout())
-        self._no_content.layout().addWidget(QLabel("Edit configuration to modify output settings"))
 
         self._stacked_layout = QStackedLayout()
         self._stacked_layout.addWidget(self._no_content)
@@ -36,6 +57,11 @@ class OutputContent(ContentWidget):
         widget = QWidget()
         widget.setLayout(self._stacked_layout)
 
+        content_layout.addWidget(widget)
+
+        # All
+        widget = QWidget()
+        widget.setLayout(content_layout)
         self._card_widget.setContentWidget(widget)
 
         # Header
@@ -75,7 +101,17 @@ class OutputContent(ContentWidget):
     def location_changed(self, value: str):
         self._model.output_location = value
 
+    def name_changed(self, value: str):
+        self._model.animal_name = value
+
+    def notes_changed(self, value: str):
+        self._model.notes = value
+
     def _model_property_changed(self, name, value, _):
         if name == "output_location":
             self._location.setText(value)
             self._output_location_header.setText(value)
+        if name == "animal_name":
+            self._name.setText(value)
+        if name == "notes":
+            self._notes.setText(value)
