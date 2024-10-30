@@ -24,14 +24,14 @@ class InferenceMachine:
     states = [e for e in InferenceState]
 
     transitions = [
-        {"trigger": "pellet_lost", "source": InferenceState.monitoring, "dest": InferenceState.missing},
+        {"trigger": "pellet_lost", "source": "*", "dest": InferenceState.missing},
         {"trigger": "load_pellet", "source": InferenceState.missing, "dest": InferenceState.loading,
          "before": "before_load_pellet", "conditions": ["can_load_pellet", "can_use_pellet_command"]},
         {"trigger": "send_pellet", "source": InferenceState.loading, "dest": InferenceState.sending,
          "before": "before_send_pellet", "conditions": "can_use_pellet_command"},
         {"trigger": "cover_pellet", "source": InferenceState.monitoring, "dest": InferenceState.covering,
          "before": "before_cover_pellet", "after": "after_cover_pellet", "conditions": "can_cover_pellet"},
-        {"trigger": "release_pellet", "source": InferenceState.covering, "dest": InferenceState.releasing,
+        {"trigger": "release_pellet", "source": [InferenceState.covering, InferenceState.monitoring], "dest": InferenceState.releasing,
          "before": "before_release_pellet", "after": "after_release_pellet",
          "conditions": ["can_release_pellet", "can_use_pellet_command"]},
         {"trigger": "monitor_pellet", "source": "*", "dest": InferenceState.monitoring}
@@ -67,8 +67,10 @@ class InferenceMachine:
     def before_enter_tunnel(self):
         self._in_tunnel = True
 
-        if self.state == InferenceState.covering:
+        if self.state == InferenceState.covering or self.state == InferenceState.monitoring:
             self.release_pellet()
+        else:
+            print(self.state)
 
     def after_exit_tunnel(self):
         self._in_tunnel = False
@@ -110,7 +112,7 @@ class InferenceMachine:
         return self._algorithm.can_load_pellet()
 
     def can_release_pellet(self):
-        return self._in_tunnel and self._algorithm.can_release_pellet()
+        return (self._in_tunnel or not self._algorithm.pellet_cover_enabled) and self._algorithm.can_release_pellet()
 
     def can_use_pellet_command(self):
         return self._api_status_token is None
@@ -142,10 +144,12 @@ class InferenceMachine:
                 # other requirements are satisfied.
                 self.load_pellet()
             elif self.state == InferenceState.covering:
-                self.release_pellet()
+                self.pellet_lost()
         else:
             if self.state == InferenceState.missing:
                 self.monitor_pellet()
+            elif self.state == InferenceState.covering and self._in_tunnel:
+                self.release_pellet()
 
     def pellet_device_ack_received(self, token):
         if token != self._api_status_token:
