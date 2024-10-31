@@ -1,3 +1,8 @@
+"""
+Test transition behavior with explicit calls to the transitions and the behavior algorithm state only.  Transitions that
+would/should happen due to external input (devices, pose information) are tested elsewhere.  These tests do not require
+mocks or real interfaces.
+"""
 import logging
 
 import pytest
@@ -10,53 +15,70 @@ logging.getLogger('transitions').setLevel(logging.INFO)
 
 
 def test_constructor():
-    model = SystemMachine(algorithm=BehaviorAlgorithm(BehaviorLimits(pellet_missing_time=0.1)))
+    """
+    Simple validation of overriding default algorithm/limits.
 
-    assert model.algorithm.limits.pellet_missing_time == 0.1
+    :return: None
+    """
+    machine = SystemMachine(algorithm=BehaviorAlgorithm(BehaviorLimits(pellet_missing_time=0.1)))
+
+    assert machine.algorithm.limits.pellet_missing_time == 0.1
 
 
-def test_behavior_transitions():
-    """Tests transition behavior with explicit calls to the transitions"""
-    model = SystemMachine(None, None, None, None, None)
+def test_enter_exit_transitions():
+    machine = SystemMachine()
 
-    assert model.state == SystemState.cage
+    # Current code assumes intersession analysis is off by default.  Flag if that changes and we forget to update
+    # assumptions.
+    assert machine.algorithm.intersession_enabled is False
 
-    with pytest.raises(MachineError):
-        model.exit_intersession()
-
-    with pytest.raises(MachineError):
-        model.exit_tunnel()
-
-    model.enter_tunnel()
-
-    assert model.state == SystemState.tunnel
+    assert machine.state == SystemState.cage
 
     with pytest.raises(MachineError):
-        model.enter_intersession()
+        machine.exit_intersession()
 
     with pytest.raises(MachineError):
-        model.exit_intersession()
+        machine.exit_tunnel()
 
-    model.exit_tunnel()
+    machine.enter_tunnel()
 
-    assert model.state == SystemState.cage
-
-    model.enter_intersession()
-
-    assert model.state == SystemState.intersession
+    assert machine.state == SystemState.tunnel
 
     with pytest.raises(MachineError):
-        model.enter_tunnel()
+        machine.enter_intersession()
 
     with pytest.raises(MachineError):
-        model.exit_tunnel()
+        machine.exit_intersession()
 
-    model.exit_intersession()
+    machine.exit_tunnel()
 
-    assert model.state == SystemState.cage
+    assert machine.state == SystemState.cage
+
+    machine.algorithm.intersession_enabled = True
+
+    machine.enter_tunnel()
+
+    assert machine.state == SystemState.tunnel
+
+    machine.algorithm.mouse_seen(True)
+
+    machine.exit_tunnel()
+
+    # Test with intersession enabled.
+    assert machine.state == SystemState.intersession
+
+    with pytest.raises(MachineError):
+        machine.enter_tunnel()
+
+    with pytest.raises(MachineError):
+        machine.exit_tunnel()
+
+    machine.exit_intersession()
+
+    assert machine.state == SystemState.cage
 
 
 if __name__ == '__main__':
     test_constructor()
 
-    test_behavior_transitions()
+    test_enter_exit_transitions()

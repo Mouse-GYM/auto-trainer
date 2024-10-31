@@ -1,6 +1,6 @@
 import time
 
-from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits,  SystemMachine, InferenceState
+from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits, SystemMachine, InferenceState
 from autotrainer.core import ProjectInfo
 
 from .mock_headfix import MockHeadfix
@@ -38,13 +38,34 @@ class BehaviorMachineWithMocks(SystemMachine):
     def pose(self):
         return self._mock_pose
 
-    def lose_pellet(self, should_release: bool = True, was_covered: bool = False, mouse_seen: bool = False):
+    def mock_pose_response(self, pellet_seen: bool, mouse_seen: bool):
+        self.pose.send_response(pellet_seen, mouse_seen)
+
+    def mock_pellet_seen(self, was_covered: bool = False, mouse_seen: bool = False):
+        self.mock_pose_response(True, mouse_seen)
+
+        if was_covered:
+            assert self.inference.state == InferenceState.releasing
+
+            self.pellet.send_ack()
+
+            assert self.inference.state == InferenceState.monitoring
+        else:
+            self.expect_pellet_delivery(True, was_covered)
+
+    def mock_pellet_missing(self, should_release: bool = True, was_covered: bool = False, mouse_seen: bool = False):
         # Make sure we are beyond the required pellet missing time.
         time.sleep(self.algorithm.limits.pellet_missing_time + 0.1)
 
-        self.pose.send_response(False, mouse_seen)
+        self.mock_pose_response(False, mouse_seen)
 
         self.expect_pellet_delivery(should_release, was_covered)
+
+    def expect_cover_command(self):
+        # An explicit cover command should have been set.  Should be in covering state and have an ack from the command.
+        assert self.inference.state == InferenceState.covering
+
+        self.pellet.send_ack()
 
     def expect_pellet_delivery(self, should_release: bool = True, was_covered: bool = False):
         """

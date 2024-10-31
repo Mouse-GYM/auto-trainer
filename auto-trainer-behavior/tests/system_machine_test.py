@@ -10,7 +10,7 @@ logging.getLogger('transitions').setLevel(logging.INFO)
 
 
 def test_enter_exit_tunnel():
-    # Observe for capture being triggered.
+    # Observe for video capture being triggered.
     is_capture_triggered = False
 
     def set_capture_triggered(_sender, _id, b: bool):
@@ -19,36 +19,52 @@ def test_enter_exit_tunnel():
 
     TriggerManager.instance().register(set_capture_triggered, CAPTURE_TRIGGER_ID)
 
-    model = BehaviorMachineWithMocks()
+    machine = BehaviorMachineWithMocks()
 
-    assert model.state == SystemState.cage
-    assert model.headfix.current_position == 0
-    assert model.algorithm._is_in_session is False
+    # Current code assumes intersession analysis is off by default.
+    assert machine.algorithm.intersession_enabled is False
 
-    model.headfix.is_load_cell_engaged = True
+    # Defaults
+    assert machine.state == SystemState.cage
+    assert machine.headfix.current_position == 0
+    assert machine.algorithm._is_in_session is False
 
-    assert model.state == SystemState.tunnel
-    assert model.headfix.current_position == model.algorithm.baseline_intensity
-    assert model.algorithm._is_in_session is True
+    # Should trigger enter tunnel, new session, and associated changes.
+    machine.headfix.mock_load_cell_engaged(True)
+
+    assert machine.state == SystemState.tunnel
+    assert machine.headfix.current_position == machine.algorithm.baseline_intensity
+    assert machine.algorithm._is_in_session is True
     assert is_capture_triggered is True
 
-    model.headfix.is_load_cell_engaged = False
+    # Exit tunnel and end session.
+    machine.headfix.mock_load_cell_engaged(False)
 
-    assert model.state == SystemState.cage
-    assert model.headfix.current_position == 0
-    assert model.algorithm._is_in_session is False
+    assert machine.state == SystemState.cage
+    assert machine.headfix.current_position == 0
+    assert machine.algorithm._is_in_session is False
     assert is_capture_triggered is False
 
+def test_intersession_enabled():
     """
-    model.headfix.is_load_cell_engaged = True
-
-    model.pose.send_response(False, True)
-
-    model.headfix.is_load_cell_engaged = False
-
-    assert model.state == SystemState.intersession
+    Placeholder for intersession analysis when ready.  Will not test details of intersession state machine, but that the
+    system changes are as expected.
+    :return: None
     """
+    machine = BehaviorMachineWithMocks()
+
+    machine.algorithm.intersession_enabled = True
+
+    machine.headfix.mock_load_cell_engaged(True)
+
+    machine.pose.send_response(False, True)
+
+    machine.headfix.mock_load_cell_engaged(False)
+
+    assert machine.state == SystemState.intersession
 
 
 if __name__ == '__main__':
     test_enter_exit_tunnel()
+
+    test_intersession_enabled()

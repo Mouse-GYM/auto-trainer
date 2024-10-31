@@ -10,21 +10,21 @@ def test_intersession_transitions():
     """Tests transition behavior with explicit calls to the transitions"""
     algorithm = BehaviorAlgorithm(BehaviorLimits())
 
-    model = IntersessionMachine(algorithm, None)
+    machine = IntersessionMachine(algorithm, None)
 
-    assert model.state == IntersessionState.idle
+    assert machine.state == IntersessionState.idle
 
-    model.perform_segmentation()
+    machine.perform_segmentation()
 
-    assert model.state == IntersessionState.segmentation
+    assert machine.state == IntersessionState.segmentation
 
-    model.perform_detection()
+    machine.perform_detection()
 
-    assert model.state == IntersessionState.detection
+    assert machine.state == IntersessionState.detection
 
-    model.end_analysis()
+    machine.end_analysis()
 
-    assert model.state == IntersessionState.idle
+    assert machine.state == IntersessionState.idle
 
 
 if __name__ == '__main__':

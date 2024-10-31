@@ -12,12 +12,7 @@ class MockHeadfix(ObservableObject):
 
         self._current_position = 0
 
-    @property
-    def is_load_cell_engaged(self):
-        return self._is_load_cell_engaged
-
-    @is_load_cell_engaged.setter
-    def is_load_cell_engaged(self, b: bool):
+    def mock_load_cell_engaged(self, b: bool):
         self._is_load_cell_engaged = self._on_property_changed("is_load_cell_engaged", b, self._is_load_cell_engaged)
 
     @property

@@ -8,7 +8,7 @@ from .behavior_limits import BehaviorLimits
 
 class BehaviorAlgorithm(ObservableObject):
     def __init__(self, limits: BehaviorLimits = None):
-        super().__init__(event_names=("session_ending",))
+        super().__init__(event_names=("session_starting", "session_ending"))
 
         self._limits = limits or BehaviorLimits()
 
@@ -16,8 +16,8 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._pellet_delivery_enabled = True
         self._pellet_cover_enabled = True
-        self._head_fixation_enabled = True
-        self._reach_detection_enabled = True
+
+        self._intersession_enabled = False
 
         self._baseline_intensity = limits.min_baseline_intensity
         self._day_pellet_count = 0
@@ -67,6 +67,15 @@ class BehaviorAlgorithm(ObservableObject):
                                                                self._pellet_cover_enabled)
 
     @property
+    def intersession_enabled(self):
+        return self._intersession_enabled
+
+    @intersession_enabled.setter
+    def intersession_enabled(self, value: bool):
+        self._intersession_enabled = self._on_property_changed("intersession_enabled", value,
+                                                               self._intersession_enabled)
+
+    @property
     def baseline_intensity(self):
         return self._baseline_intensity
 
@@ -87,10 +96,14 @@ class BehaviorAlgorithm(ObservableObject):
         return self._session_mouse_seen
 
     def start_session(self):
+        self.end_session()
+
         self._set_session_pellet_count(0)
         self._set_pellet_last_seen(0.0)
         self._is_in_session = True
         self._session_mouse_seen = False
+
+        self.session_starting()
 
     def end_session(self):
         if self._is_in_session:

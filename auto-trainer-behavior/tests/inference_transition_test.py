@@ -1,68 +1,103 @@
+"""
+Test transition behavior with explicit calls to the transitions and the behavior algorithm state only.  Transitions that
+would/should happen due to external input (devices, pose information) are tested elsewhere.  These tests do not require
+mocks or real interfaces.
+"""
 import logging
 
-from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits, InferenceMachine, InferenceState
+from autotrainer.behavior import InferenceMachine, InferenceState
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('transitions').setLevel(logging.INFO)
 
 
-def test_inference_transitions():
-    """Tests transition behavior with explicit calls to the transitions"""
-    algorithm = BehaviorAlgorithm(BehaviorLimits())
+def assert_load_cycle(machine: InferenceMachine, should_release: bool = True) -> None:
+    """
+    This is essentially the spec of what the behavior should be each time an ack is received from the real pellet device
+    for a load->release cycle.  It defines what should happen in pellet_device_ack_received().  The state machine should
+    pass tests using this, and then similarly pass when using an actual pellet device or mock.
+    :param machine: InferenceMachine instance
+    :param should_release: True if pellet release is expected (vs. remaining covered)
+    :return: None
+    """
+    machine.load_pellet()
 
-    model = InferenceMachine(algorithm, None, None, None)
+    assert machine.state == InferenceState.loading
 
-    assert model.state == InferenceState.missing
+    machine.send_pellet()
 
-    model.load_pellet()
+    assert machine.state == InferenceState.sending
 
-    assert model.state == InferenceState.loading
+    # When send completes, the machine transitions to covering in the ack that won't ever come in this testing.
+    machine.state = InferenceState.covering
 
-    model.send_pellet()
+    machine.release_pellet()
 
-    assert model.state == InferenceState.sending
+    if should_release:
+        assert machine.state == InferenceState.releasing
 
-    # Simulate what happens when an actual send command completes.
-    model.state = InferenceState.covering
+        machine.monitor_pellet()
 
-    model.release_pellet()
+        assert machine.state == InferenceState.monitoring
+    else:
+        assert machine.state == InferenceState.covering
 
-    # Should not have worked if not in tunnel.
 
-    assert model.state == InferenceState.covering
+def assert_covered_was_released(machine: InferenceMachine) -> None:
+    """
+    Verify that a covered pellet was release, which should also immediately transition to monitoring.
+    :param machine: InferenceMachine instance
+    :return: None
+    """
+    assert machine.state == InferenceState.releasing
 
-    # Have to forcibly enter tunnel and start a session for testing purposes.
-    algorithm.start_session()
-    model.before_enter_tunnel()
+    machine.monitor_pellet()
 
-    # Should transition to releasing if tunnel entered while covered.
+    assert machine.state == InferenceState.monitoring
 
-    assert model.state == InferenceState.releasing
 
-    model.monitor_pellet()
+def test_covered_load_cycle():
+    machine = InferenceMachine()
 
-    assert model.state == InferenceState.monitoring
+    assert_load_cycle(machine, should_release=False)
 
-    model.pellet_lost()
+    # Forcibly start a session for testing purposes.  This would normally occur at the system state level.
+    machine.algorithm.start_session()
 
-    assert model.state == InferenceState.missing
+    # Should transition to releasing if session starts while covered.
+    assert_covered_was_released(machine)
 
-    # Reload while in tunnel.  These transitions happen automatically when the state machine has access to pellet
-    # commands.
-    model.load_pellet()
-    model.send_pellet()
-    model.state = InferenceState.covering
-    model.release_pellet()
-    model.monitor_pellet()
+    machine.algorithm.end_session()
 
-    assert model.state == InferenceState.monitoring
+    # Should return to covered at end of session
+    assert machine.state == InferenceState.covering
 
-    # Leaving should attempt to cover.
+    machine.algorithm.start_session()
 
-    model.after_exit_tunnel()
+    assert_covered_was_released(machine)
 
-    assert model.state == InferenceState.covering
+    # Reload missing pellet from monitoring state.
+    machine.pellet_lost()
+
+    assert machine.state == InferenceState.missing
+
+    assert_load_cycle(machine, should_release=True)
+
+    machine.algorithm.end_session()
+
+    assert machine.state == InferenceState.covering
+
+
+def test_covered_disabled_load_cycle():
+    machine = InferenceMachine()
+
+    machine.algorithm.pellet_cover_enabled = False
+
+    # With covering disabled, should go directly to release whether in session or not (i.e., in tunnel or not)
+    assert_load_cycle(machine, should_release=True)
 
 
 if __name__ == '__main__':
-    test_inference_transitions()
+    test_covered_load_cycle()
+
+    test_covered_disabled_load_cycle()

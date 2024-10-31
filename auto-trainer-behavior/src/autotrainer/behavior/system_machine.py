@@ -86,14 +86,10 @@ class SystemMachine:
 
         TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, True)
 
-        self._inference.before_enter_tunnel()
-
         if self._head_fix_command is not None:
             self._head_fix_command.update_position(self.algorithm.baseline_intensity)
 
     def after_exit_tunnel(self):
-        self._inference.after_exit_tunnel()
-
         self.algorithm.end_session()
 
     def after_enter_intersession(self):
@@ -105,8 +101,8 @@ class SystemMachine:
         if self._head_fix_command is not None:
             self._head_fix_command.update_position(0)
 
-        # if self.algorithm.session_mouse_seen:
-        #    self.enter_intersession()
+        if self.algorithm.intersession_enabled and self.algorithm.session_mouse_seen:
+            self.enter_intersession()
 
     def head_fix_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
