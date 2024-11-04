@@ -5,9 +5,12 @@ import pathlib
 import time
 import logging
 import typing
+import urllib
 from multiprocessing import Queue, Value, Array
 from threading import Event
+from urllib.parse import urlparse
 
+import numpy
 from numpy import ndarray
 
 from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, TriggerManager, ObservableObject, \
@@ -326,26 +329,100 @@ class VideoCaptureModel(ObservableObject):
         if "stillImageCaptureInterval" in conf:
             self.still_image_capture_interval = conf["stillImageCaptureInterval"]
 
+        url = None
+
+        if "name" in conf:
+            name = conf["name"]
+        else:
+            name = "<unnamed>"
+
         if "url" in conf:
-            if "name" in conf:
-                name = conf["name"]
-            else:
-                name = "<unnamed>"
-
             url = conf["url"]
+        elif "camera" in conf:
+            camera = conf["camera"]
+            scheme = ""
+            host = ""
+            path = ""
+            port = ""
+            params = dict()
+            for key in camera:
+                if key == "scheme":
+                    scheme = camera[key] or ""
+                elif key == "host":
+                    host = camera[key] or ""
+                elif key == "path":
+                    path = camera[key] or ""
+                elif key == "port":
+                    port = camera[key] or ""
+                else:
+                    params[key] = camera[key]
 
+            url = f"{scheme}://{host}"
+
+            if len(port) > 0:
+                url += f":{port}"
+
+            if len(path) > 0:
+                url += f"/{path}"
+
+            if len(params) > 0:
+                url += "?" + urllib.parse.urlencode(params)
+
+        print(f"url: {url}")
+
+        if url is not None:
             existing = list(filter(lambda m: m.url == url, self._camera_list))
 
             if len(existing) == 0:
-                source = CaptureCameraAttrs(name=name, url=url)
+                non_duplicate = name
+                idx = 1
+                same_name = list(filter(lambda m: m.name == non_duplicate, self._camera_list))
+                while len(same_name) > 0:
+                    non_duplicate = f"{name} ({idx})"
+                    same_name = list(filter(lambda m: m.name == non_duplicate, self._camera_list))
+                    idx += 1
+                source = CaptureCameraAttrs(name=non_duplicate, url=url)
                 self._camera_list.insert(0, source)
+                self.property_changed("camera_list", self._camera_list, self._camera_list)
             else:
                 source = existing[0]
 
             self.camera_source = source
 
     def write_configuration(self):
-        return {"id": self._name, "name": self._camera_source.name, "url": self._camera_source.url,
+        parsed = urlparse(self._camera_source.url)
+
+        camera = dict()
+
+        if parsed.scheme:
+            camera["scheme"] = parsed.scheme
+
+        if parsed.hostname:
+            camera["host"] = parsed.hostname
+
+        if parsed.path:
+            camera["path"] = parsed.path
+
+        if parsed.port:
+            camera["port"] = parsed.port
+
+        params = VideoManager.parse_params(self._camera_source.url)
+
+        for key in params:
+            try:
+                val = float(params[key])
+                if abs(int(val) - val) < numpy.finfo(float).eps * 2:
+                    val = int(val)
+                params[key] = val
+            except:
+                if str(params[key]).lower() == "true":
+                    params[key] = True
+                elif str(params[key]).lower() == "false":
+                    params[key] = False
+
+        camera.update(params)
+
+        return {"id": self._name, "name": self._camera_source.name, "camera": camera,
                 "isEnabled": self._is_enabled, "isRecordEnabled": self._is_recording_enabled,
                 "recordMode": int(self._record_mode), "isStillImageCaptureEnabled": self._is_still_capture_enabled,
                 "stillImageCaptureInterval": self._still_image_capture_interval}

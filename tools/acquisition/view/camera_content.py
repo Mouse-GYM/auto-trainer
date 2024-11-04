@@ -115,3 +115,5 @@ class CameraContent(ContentWidget):
             if value is not None and value[0] != 0 and value[1] != 0:
                 # Swap because model shape is row x col == height x width
                 self._capture_view.setShape(value[1], value[0])
+        elif name == "camera_list":
+            self._capture_view.setCameras(self._model.camera_list)
