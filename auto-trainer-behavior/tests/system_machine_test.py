@@ -26,22 +26,22 @@ def test_enter_exit_tunnel():
 
     # Defaults
     assert machine.state == SystemState.cage
-    assert machine.headfix.current_position == 0
+    assert machine.mock_headfix.current_position == 0
     assert machine.algorithm._is_in_session is False
 
     # Should trigger enter tunnel, new session, and associated changes.
-    machine.headfix.mock_load_cell_engaged(True)
+    machine.mock_headfix.mock_load_cell_engaged(True)
 
     assert machine.state == SystemState.tunnel
-    assert machine.headfix.current_position == machine.algorithm.baseline_intensity
+    assert machine.mock_headfix.current_position == machine.algorithm.baseline_intensity
     assert machine.algorithm._is_in_session is True
     assert is_capture_triggered is True
 
     # Exit tunnel and end session.
-    machine.headfix.mock_load_cell_engaged(False)
+    machine.mock_headfix.mock_load_cell_engaged(False)
 
     assert machine.state == SystemState.cage
-    assert machine.headfix.current_position == 0
+    assert machine.mock_headfix.current_position == 0
     assert machine.algorithm._is_in_session is False
     assert is_capture_triggered is False
 
@@ -55,11 +55,11 @@ def test_intersession_enabled():
 
     machine.algorithm.intersession_enabled = True
 
-    machine.headfix.mock_load_cell_engaged(True)
+    machine.mock_headfix.mock_load_cell_engaged(True)
 
-    machine.pose.send_response(False, True)
+    machine.mock_inference.mock_send_response(False, True)
 
-    machine.headfix.mock_load_cell_engaged(False)
+    machine.mock_headfix.mock_load_cell_engaged(False)
 
     assert machine.state == SystemState.intersession
 

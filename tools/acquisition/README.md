@@ -1,7 +1,7 @@
 # Acquisition UI
 
 ## Using Configurations
-Configuration files load preset values for the settings of each module (cameras, devices, analysis, output).  When 
+Configuration files load preset values for the settings of each module (cameras, devices, behavior, output).  When 
 the application starts it will load the most recent configuration file, if available and be in non-edit mode.
 
 To make changes to module settings use the Edit Configuration toolbar button.  This will change the controls in 
@@ -56,7 +56,7 @@ of values that should not be the default is valid.
 * Y - device `Jxx` command
 * Z - device `Kxx` command
 
-### Analysis
+### Behavior
 * Enable - enable or disable pellet delivery based on marker detection
 * Model - the folder containing the DLC model to use
 
@@ -123,7 +123,7 @@ pelletDelivery:
   x: 0
   y: 0
   z: 0
-analysis:
+inference:
   model: /home/jetson/models/Christie-2024-05-02
   isEnabled: true
 behavior:

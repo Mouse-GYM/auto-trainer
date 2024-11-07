@@ -64,7 +64,7 @@ class MainContent(ContentWidget):
         self._layout.addWidget(self._pellet_delivery_content, 3, 0, 1, 3)
         self._content_widgets.append(self._pellet_delivery_content)
 
-        analysis_content = BehaviorContent(self._model.behavior, self._model.analysis)
+        analysis_content = BehaviorContent(self._model.behavior, self._model.inference)
         self._layout.addWidget(analysis_content, 1, 0, 2, 3)
         self._content_widgets.append(analysis_content)
 
@@ -95,7 +95,7 @@ class MainContent(ContentWidget):
         self._timer.timeout.connect(self.update_image)
         self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
 
-        self._model.analysis.pose_response_ready += self.refresh_pose
+        self._model.inference.pose_response_ready += self.refresh_pose
 
         self.set_diagnostics_visible(False)
 

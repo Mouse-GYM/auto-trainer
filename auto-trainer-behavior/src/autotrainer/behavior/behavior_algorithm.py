@@ -122,6 +122,9 @@ class BehaviorAlgorithm(ObservableObject):
         return (self._is_in_session or not self.pellet_cover_enabled) and self.session_pellet_count < self.limits.max_pellets_per_session and \
             self._day_pellet_count < self.limits.max_pellets_per_day
 
+    def can_perform_intersession_analysis(self):
+        return self.intersession_enabled and self.session_mouse_seen
+
     def pellet_seen(self, seen: bool = True):
         if seen:
             self._set_pellet_last_seen(time.time())

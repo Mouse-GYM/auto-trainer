@@ -5,11 +5,12 @@ from transitions import Machine
 
 from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID, ProjectInfo
 from autotrainer.device import HeadFixReader, PelletReader
-from autotrainer.inference import PoseAlgorithm
 
 from .behavior_algorithm import BehaviorAlgorithm
 from .behavior_limits import BehaviorLimits
+from .event_manager import EventManager, BehaviorEventKind
 from .inference.inference_machine import InferenceMachine
+from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ class SystemMachine:
 
     def __init__(self, algorithm: BehaviorAlgorithm = None, head_fix_reader: HeadFixReader = None,
                  head_fix_command=None, pellet_reader: PelletReader = None, pellet_command=None,
-                 pose: PoseAlgorithm = None, pose_command=None, project_info: ProjectInfo = None):
+                 inference: InferenceProtocol = None, project_info: ProjectInfo = None):
 
         self.state = SystemState.cage
 
@@ -55,9 +56,10 @@ class SystemMachine:
         if self._head_fix_reader is not None:
             self._head_fix_reader.property_changed += self.head_fix_property_changed
 
-        self._inference = InferenceMachine(self.algorithm, pellet_reader, pellet_command, pose)
+        self._inference = InferenceMachine(self.algorithm, pellet_reader, pellet_command, inference)
 
-        self._intersession = IntersessionMachine(self.algorithm, pose, pose_command)
+        self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
+        self._intersession.events.on_analysis_ended += self.intersession_ended
 
         self._algorithm.session_ending += self.session_ended
 
@@ -70,15 +72,23 @@ class SystemMachine:
         return self._inference
 
     @property
+    def intersession(self) -> IntersessionMachine:
+        return self._intersession
+
+    @property
     def project(self) -> ProjectInfo:
         return self._project_info
 
     @project.setter
     def project(self, value: ProjectInfo):
         self._project_info = value
+        EventManager.instance().project = self._project_info
         self._algorithm.project = self._project_info
+        self._intersession.project = self._project_info
 
     def before_enter_tunnel(self):
+        EventManager.instance().post_event(BehaviorEventKind.tunnelEnter)
+
         if self._project_info is not None:
             self._project_info.calculate_next_session_index()
 
@@ -90,6 +100,7 @@ class SystemMachine:
             self._head_fix_command.update_position(self.algorithm.baseline_intensity)
 
     def after_exit_tunnel(self):
+        EventManager.instance().post_event(BehaviorEventKind.tunnelExit)
         self.algorithm.end_session()
 
     def after_enter_intersession(self):
@@ -101,8 +112,14 @@ class SystemMachine:
         if self._head_fix_command is not None:
             self._head_fix_command.update_position(0)
 
-        if self.algorithm.intersession_enabled and self.algorithm.session_mouse_seen:
+        EventManager.instance().flush()
+
+        if self.algorithm.can_perform_intersession_analysis():
             self.enter_intersession()
+
+    def intersession_ended(self):
+        if self.state == SystemState.intersession:
+            self.exit_intersession()
 
     def head_fix_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
@@ -110,10 +127,14 @@ class SystemMachine:
 
         if name == "is_load_cell_engaged":
             if value:
+                EventManager.instance().post_event(BehaviorEventKind.loadCellActive)
                 self.enter_tunnel()
             else:
+                EventManager.instance().post_event(BehaviorEventKind.loadCellInactive)
                 self.exit_tunnel()
 
+    # region State Machine Requirements
+    # Methods required for model_override=True to work.
     def trigger(self):
         pass
 
@@ -152,3 +173,4 @@ class SystemMachine:
 
     def is_intersession(self):
         pass
+    # endregion

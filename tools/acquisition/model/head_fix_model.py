@@ -39,6 +39,16 @@ class HeadFixModel(ObservableObject):
 
         self._head_fix_reader.load_cell_monitor.threshold = self._load_cell_threshold
 
+        self._project: ProjectInfo | None = None
+
+    @property
+    def project(self) -> ProjectInfo:
+        return self._project
+
+    @project.setter
+    def project(self, value: ProjectInfo) -> None:
+        self._project = value
+
     @property
     def is_connected(self):
         return self._is_connected
@@ -117,13 +127,13 @@ class HeadFixModel(ObservableObject):
 
         return self._send_with_token(HeadFixMessageKind.UPDATE_TARE)
 
-    def connect_to_device(self, project_info: ProjectInfo):
+    def connect_to_device(self):
         if not self.port or len(self.port) == 0:
             return
 
         device_interface = SerialInterface(self.port)
 
-        self._head_fix_reader.project_info = project_info
+        self._head_fix_reader.project_info = self._project
 
         head_fix = HeadFix(buffer_size=20)
 
@@ -168,16 +178,16 @@ class HeadFixModel(ObservableObject):
         if name == "is_force_detector_engaged":
             self.is_force_detector_engaged = value
 
-    def load_configuration(self, conf):
-        if "port" in conf:
-            self.port = conf["port"]
-        if "position" in conf:
-            self.update_position(conf["position"])
-        if "loadTrigger" in conf:
+    def load_configuration(self, configuration: dict):
+        if "port" in configuration:
+            self.port = configuration["port"]
+        if "position" in configuration:
+            self.update_position(configuration["position"])
+        if "loadTrigger" in configuration:
             logger.warning("the 'loadTrigger' property has been moved to a sub-property of the 'loadCell' property")
-            self.load_trigger = conf["loadTrigger"]
-        if "loadCell" in conf:
-            load_cell_conf = conf["loadCell"]
+            self.load_trigger = configuration["loadTrigger"]
+        if "loadCell" in configuration:
+            load_cell_conf = configuration["loadCell"]
             if "loadTrigger" in load_cell_conf:
                 self.load_trigger = load_cell_conf["loadTrigger"]
             if "minLoadOnDuration" in load_cell_conf:
@@ -187,7 +197,7 @@ class HeadFixModel(ObservableObject):
             if "minLoadOffDuration" in load_cell_conf:
                 self._head_fix_reader.load_cell_monitor.post_hold_duration = load_cell_conf["minLoadOffDuration"]
 
-    def write_configuration(self):
+    def save_configuration(self) -> dict:
         load_cell = {"loadTrigger": self._head_fix_reader.load_cell_monitor.threshold,
                      "minLoadOnDuration": self._head_fix_reader.load_cell_monitor.threshold_duration,
                      "minEventDuration": self._head_fix_reader.load_cell_monitor.min_hold_duration,

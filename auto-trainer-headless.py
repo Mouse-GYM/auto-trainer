@@ -41,7 +41,7 @@ def main(configuration: str):
             preferences.last_configuration = configuration
 
     app_view_model.head_fix.on_activated()
-    app_view_model.pellet_delivery.on_activated()
+    app_view_model._pellet_delivery.on_activated()
 
     if not app_view_model.on_capture_start():
         logger.error("failed to start capture")

@@ -11,6 +11,8 @@ class MemoryPoseModel(PoseModel):
 
         self._batchsize = batchsize
 
+        self.use_random = False
+
     def is_valid(self) -> bool:
         return True
 
@@ -30,7 +32,10 @@ class MemoryPoseModel(PoseModel):
         all_frames = list()
 
         for idx in range(self._batchsize):
-            data = numpy.random.rand(len(self.body_parts), 3)
+            if self.use_random:
+                data = numpy.random.rand(len(self.body_parts), 3)
+            else:
+                data = numpy.ones((len(self.body_parts), 3))
 
             # pose_predict normalizes on the assumption these values are in absolute frame size
             data[:, 0] *= frames.shape[2]

@@ -71,6 +71,8 @@ class ProjectInfo:
     when: datetime = None
     ensure_exists: bool = False
     session: Value = Value(ctypes.c_uint32, 1)
+    camera_1: str = ""
+    camera_2: str = ""
 
     def is_valid(self):
         return self.root is not None and len(self.root) > 0
@@ -208,6 +210,20 @@ class ProjectInfo:
         image_file_format_str = base.prefix + "_{when}" + ".png"
 
         return image_location, image_file_format_str
+
+    def get_intersession_pose_path(self, name: str = "", session: int = -1, allow_overwrite: bool = False):
+        source = self.get_source_path(name, session=session)
+
+        file_name = os.path.join(source.location, f"{source.prefix}_raw2D.h5")
+
+        index = 0
+
+        if not allow_overwrite:
+            while os.path.exists(file_name):
+                index += 1
+                file_name = os.path.join(source.location, f"{source.prefix}_{index}.h5")
+
+        return file_name
 
     def calculate_next_session_index(self):
         location, _ = self.get_day_path()

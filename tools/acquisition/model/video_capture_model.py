@@ -87,9 +87,19 @@ class VideoCaptureModel(ObservableObject):
 
         self._is_trace_enabled = True
 
+        self._project: ProjectInfo | None = None
+
         TriggerManager.instance().register(self._on_trigger, CAPTURE_TRIGGER_ID)
 
         self._update_camera_source(self._camera_list[0])
+
+    @property
+    def project(self) -> ProjectInfo:
+        return self._project
+
+    @project.setter
+    def project(self, value: ProjectInfo):
+        self._project = value
 
     @property
     def name(self) -> str:
@@ -206,7 +216,7 @@ class VideoCaptureModel(ObservableObject):
         if self._display_update_fcn is not None and self._video_capture is not None:
             self._display_update_fcn(data, self._fps)
 
-    def on_prepare_capture(self, project_info: ProjectInfo, network_queue: FixedArrayMultiQueue = None) -> bool:
+    def on_prepare_capture(self, network_queue: FixedArrayMultiQueue = None) -> bool:
         self._last_error = None
 
         if not self._is_enabled:
@@ -232,7 +242,7 @@ class VideoCaptureModel(ObservableObject):
 
             rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
             image_interval = self._still_image_capture_interval if self._is_still_capture_enabled else 0
-            record_properties = VideoRecordProperties(project_info=project_info, record_mode=self.record_mode,
+            record_properties = VideoRecordProperties(project_info=self._project, record_mode=self.record_mode,
                                                       video_rotate_interval=rotate_interval,
                                                       image_interval=image_interval)
 
@@ -295,8 +305,6 @@ class VideoCaptureModel(ObservableObject):
             else:
                 logger.error(f"<{self._name}> did not receive process terminates status")
 
-        if self._video_command_queue.qsize() > 0:
-            self._trace(f"clearing command queue {self._video_command_queue.qsize()}")
         clear_queue(self._video_command_queue)
 
         if self._video_capture is not None:
@@ -315,7 +323,7 @@ class VideoCaptureModel(ObservableObject):
 
         self._video_reader_teardown()
 
-    def load_configuration(self, conf):
+    def load_configuration(self, conf: dict):
         if "id" in conf:
             self._name = conf["id"]
         if "isEnabled" in conf:
@@ -368,8 +376,6 @@ class VideoCaptureModel(ObservableObject):
             if len(params) > 0:
                 url += "?" + urllib.parse.urlencode(params)
 
-        print(f"url: {url}")
-
         if url is not None:
             existing = list(filter(lambda m: m.url == url, self._camera_list))
 
@@ -389,7 +395,7 @@ class VideoCaptureModel(ObservableObject):
 
             self.camera_source = source
 
-    def write_configuration(self):
+    def save_configuration(self) -> dict:
         parsed = urlparse(self._camera_source.url)
 
         camera = dict()

@@ -4,9 +4,11 @@ from enum import Enum
 from transitions import Machine
 
 from autotrainer.device import PelletReader
-from autotrainer.inference import PoseAlgorithm, PoseResponse
+from autotrainer.inference import PoseResponse
 
+from ..inference_protocol import InferenceProtocol
 from ..behavior_algorithm import BehaviorAlgorithm, BehaviorLimits
+from ..event_manager import EventManager, BehaviorEventKind, EventInfo
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ class InferenceMachine:
         {"trigger": "load_pellet", "source": InferenceState.missing, "dest": InferenceState.loading,
          "before": "before_load_pellet", "conditions": "can_load_pellet"},
         {"trigger": "send_pellet", "source": InferenceState.loading, "dest": InferenceState.sending,
-         "before": "before_send_pellet", "conditions": "can_use_pellet_command"},
+         "before": "before_send_pellet", "conditions": "can_send_pellet"},
         {"trigger": "cover_pellet", "source": InferenceState.monitoring, "dest": InferenceState.covering,
          "before": "before_cover_pellet", "after": "after_cover_pellet", "conditions": "can_cover_pellet"},
         {"trigger": "release_pellet", "source": [InferenceState.covering, InferenceState.monitoring],
@@ -41,7 +43,7 @@ class InferenceMachine:
     ]
 
     def __init__(self, algorithm: BehaviorAlgorithm = None, pellet_device: PelletReader = None, pellet_command=None,
-                 pose: PoseAlgorithm = None):
+                 inference: InferenceProtocol = None):
 
         self.state = InferenceState.missing
 
@@ -61,10 +63,10 @@ class InferenceMachine:
 
         self.pellet_command = pellet_command
 
-        self.pose = pose
+        self._inference = inference
 
-        if self.pose is not None:
-            self.pose.pose_changed += self._pose_changed
+        if self._inference is not None and self._inference.pose_algorithm is not None:
+            self._inference.pose_algorithm.pose_changed += self._pose_changed
 
         self._api_status_token = None
 
@@ -75,24 +77,32 @@ class InferenceMachine:
     def before_load_pellet(self):
         if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.load_pellet()
+            EventManager.instance().post_event(
+                EventInfo(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token))
         else:
             self._api_status_token = None
 
     def before_send_pellet(self):
         if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.send_pellet()
+            EventManager.instance().post_event(
+                EventInfo(BehaviorEventKind.pelletSendBegin, context=self._api_status_token))
         else:
             self._api_status_token = None
 
     def before_cover_pellet(self):
         if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.cover_pellet()
+            EventManager.instance().post_event(
+                EventInfo(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token))
         else:
             self._api_status_token = None
 
     def before_release_pellet(self):
         if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.release_pellet()
+            EventManager.instance().post_event(
+                EventInfo(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token))
         else:
             self._api_status_token = None
 
@@ -103,13 +113,24 @@ class InferenceMachine:
         self._algorithm.pellet_covered()
 
     def can_load_pellet(self):
-        return self.can_use_pellet_command() and self._algorithm.can_load_pellet()
+        can = self.can_use_pellet_command() and self._algorithm.can_load_pellet()
+        EventManager.instance().post_event(EventInfo(BehaviorEventKind.pelletLoadCan, context=can))
+        return can
+
+    def can_send_pellet(self):
+        can = self.can_use_pellet_command()
+        EventManager.instance().post_event(EventInfo(BehaviorEventKind.pelletSendCan, context=can))
+        return can
 
     def can_cover_pellet(self):
-        return self.can_use_pellet_command() and self._algorithm.can_cover_pellet()
+        can = self.can_use_pellet_command() and self._algorithm.can_cover_pellet()
+        EventManager.instance().post_event(EventInfo(BehaviorEventKind.pelletCoverCan, context=can))
+        return can
 
     def can_release_pellet(self):
-        return self.can_use_pellet_command() and self._algorithm.can_release_pellet()
+        can = self.can_use_pellet_command() and self._algorithm.can_release_pellet()
+        EventManager.instance().post_event(EventInfo(BehaviorEventKind.pelletReleaseCan, context=can))
+        return can
 
     def can_use_pellet_command(self):
         return self._api_status_token is None
@@ -155,7 +176,9 @@ class InferenceMachine:
                 self.release_pellet()
 
     def _pellet_device_ack_received(self, token):
+        EventManager.instance().post_event(EventInfo(BehaviorEventKind.pelletAcknowledge, context=token))
         if token != self._api_status_token:
+            EventManager.instance().post_event(EventInfo(BehaviorEventKind.pelletMismatch, context=token))
             logger.warning("pellet delivery token mismatch")
 
         self._api_status_token = None

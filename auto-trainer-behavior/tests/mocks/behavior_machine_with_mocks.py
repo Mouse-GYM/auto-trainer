@@ -1,3 +1,4 @@
+import tempfile
 import time
 
 from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits, SystemMachine, InferenceState
@@ -5,7 +6,7 @@ from autotrainer.core import ProjectInfo
 
 from .mock_headfix import MockHeadfix
 from .mock_pellet_delivery import MockPelletDelivery
-from .mock_pose_algorithm import MockPoseAlgorithm
+from .mock_inference import MockInference
 
 
 class BehaviorMachineWithMocks(SystemMachine):
@@ -17,29 +18,30 @@ class BehaviorMachineWithMocks(SystemMachine):
     def __init__(self, algorithm: BehaviorAlgorithm = None, limits: BehaviorLimits = None):
         self._mock_headfix = MockHeadfix()
         self._mock_pellet = MockPelletDelivery()
-        self._mock_pose = MockPoseAlgorithm()
+        self._mock_inference = MockInference()
+        self._project_info = ProjectInfo(root=tempfile.gettempdir(), device_id="123456", ensure_exists=False)
 
         limits = limits if limits is not None else BehaviorLimits()
 
         algorithm = algorithm if algorithm is not None else BehaviorAlgorithm(limits)
 
         super().__init__(algorithm, self._mock_headfix, self._mock_headfix, self._mock_pellet, self._mock_pellet,
-                         self._mock_pose)
+                         self._mock_inference, self._project_info)
 
     @property
-    def headfix(self):
+    def mock_headfix(self):
         return self._mock_headfix
 
     @property
-    def pellet(self):
+    def mock_pellet(self):
         return self._mock_pellet
 
     @property
-    def pose(self):
-        return self._mock_pose
+    def mock_inference(self):
+        return self._mock_inference
 
     def mock_pose_response(self, pellet_seen: bool, mouse_seen: bool):
-        self.pose.send_response(pellet_seen, mouse_seen)
+        self.mock_inference.mock_send_response(pellet_seen, mouse_seen)
 
     def mock_pellet_seen(self, was_covered: bool = False, mouse_seen: bool = False):
         self.mock_pose_response(True, mouse_seen)
@@ -47,7 +49,7 @@ class BehaviorMachineWithMocks(SystemMachine):
         if was_covered:
             assert self.inference.state == InferenceState.releasing
 
-            self.pellet.send_ack()
+            self.mock_pellet.send_ack()
 
             assert self.inference.state == InferenceState.monitoring
         else:
@@ -65,7 +67,7 @@ class BehaviorMachineWithMocks(SystemMachine):
         # An explicit cover command should have been set.  Should be in covering state and have an ack from the command.
         assert self.inference.state == InferenceState.covering
 
-        self.pellet.send_ack()
+        self.mock_pellet.send_ack()
 
     def expect_pellet_delivery(self, should_release: bool = True, was_covered: bool = False):
         """
@@ -81,15 +83,15 @@ class BehaviorMachineWithMocks(SystemMachine):
         if not was_covered:
             assert self.inference.state == InferenceState.loading
 
-            self.pellet.send_ack()
+            self.mock_pellet.send_ack()
 
             assert self.inference.state == InferenceState.sending
 
-            self.pellet.send_ack()
+            self.mock_pellet.send_ack()
 
         if should_release:
             assert self.inference.state == InferenceState.releasing
 
-            self.pellet.send_ack()
+            self.mock_pellet.send_ack()
 
             assert self.inference.state == InferenceState.monitoring

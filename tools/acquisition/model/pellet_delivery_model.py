@@ -2,7 +2,7 @@ import logging
 import queue
 import uuid
 
-from autotrainer.core import ObservableObject
+from autotrainer.core import ObservableObject, ProjectInfo
 from autotrainer.device import SerialInterface
 from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
@@ -31,6 +31,16 @@ class PelletDeliveryModel(ObservableObject):
         self._y = 0
 
         self._z = 0
+
+        self._project: ProjectInfo | None = None
+
+    @property
+    def project(self) -> ProjectInfo:
+        return self._project
+
+    @project.setter
+    def project(self, value: ProjectInfo) -> None:
+        self._project = value
 
     @property
     def port(self) -> str:
@@ -122,17 +132,17 @@ class PelletDeliveryModel(ObservableObject):
         self.disconnect_from_device()
         self._message_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
-    def load_configuration(self, conf):
-        if "port" in conf:
-            self.port = conf["port"]
-        if "x" in conf:
-            self.set_x(conf["x"])
-        if "y" in conf:
-            self.set_y(conf["y"])
-        if "z" in conf:
-            self.set_z(conf["z"])
+    def load_configuration(self, configuration: dict):
+        if "port" in configuration:
+            self.port = configuration["port"]
+        if "x" in configuration:
+            self.set_x(configuration["x"])
+        if "y" in configuration:
+            self.set_y(configuration["y"])
+        if "z" in configuration:
+            self.set_z(configuration["z"])
 
-    def write_configuration(self):
+    def save_configuration(self) -> dict:
         return {"port": self.port, "x": self._x, "y": self._y, "z": self._z}
 
     def _send_with_token(self, cmd, data=None):

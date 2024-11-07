@@ -11,7 +11,24 @@ logger = logging.getLogger(__name__)
 
 
 class FixedArrayMultiQueue:
+    """
+    Alternative to multiprocessing.Queue.
+
+    FixedArrayMultiQueue is an alternative to multiprocessing.Queue that
+    * Explicitly queues batches of 2D data from one or more sources
+    * Pre-allocates RawArray instances to hold the data for performance
+
+    The class does not share the exact put/get_xyz interface of the standard Queue classes as it is not a drop-in
+    replacement for Queue in terms of behavior.
+    """
     def __init__(self, depth: int, cam_count: int, frames_per_camera: int, shape: (int, int), primary: int = 0):
+        """
+        :param depth: queue length before discarding old data if consumers can not keep up
+        :param cam_count: number of sources (e.g., cameras) providing 2D data (frames)
+        :param frames_per_camera: number of frames per source
+        :param shape: size of each frame
+        :param primary: indicates which source (index) defines when frames_per_camera is met and a buffer rotates
+        """
         # indexing: [buffer][camera][batch_frame]
         self._buffers = list()
         self._is_dirty = list()
@@ -77,10 +94,15 @@ class FixedArrayMultiQueue:
     def reset(self):
         self._buffer_index.value = 0
 
+        for idx in range(self._cam_count):
+            self._is_dirty[idx].value = False
+
         for cdx in range(self._cam_count):
             self._batch_index[cdx].value = 0
 
         self._read_index.value = 0
+
+        self._overflow_count = 0
 
     def put(self, content, camera, allow_overflow: bool = True) -> BufferResult:
         buffer_index = self._buffer_index.value
@@ -93,7 +115,8 @@ class FixedArrayMultiQueue:
                 return BufferResult.Overflow
 
         try:
-            memoryview(self._buffers[buffer_index][camera][self._batch_index[camera].value]).cast("B")[:] = content.flatten()
+            memoryview(self._buffers[buffer_index][camera][self._batch_index[camera].value]).cast("B")[
+            :] = content.flatten()
         except IndexError:
             logger.error(f"IndexError {buffer_index} {camera} {self._batch_index[camera].value}")
 
@@ -132,3 +155,6 @@ class FixedArrayMultiQueue:
             self._read_index.value = 0
 
         return True
+
+    def empty(self) -> bool:
+        return not self._is_dirty[self._read_index.value].value

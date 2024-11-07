@@ -11,7 +11,11 @@ def verify_common_output(response: PoseResponse, sequence: int, parts: typing.Li
 
     num_parts = len(parts)
 
-    assert response.parts_flag and len(response.parts_flag) == num_parts
+    assert response.parts_flags and len(response.parts_flags) == 3
+
+    assert len(response.parts_flags[0]) == num_parts
+    assert len(response.parts_flags[1]) == num_parts
+    assert len(response.parts_flags[2]) == num_parts
 
     assert response.locations and len(response.locations) == 2
 
@@ -64,7 +68,9 @@ def test_algorithm_output():
 
     verify_common_output(response, 1, parts)
 
-    verify_all_false(response.parts_flag)
+    verify_all_false(response.parts_flags[0])
+    verify_all_false(response.parts_flags[1])
+    verify_all_false(response.parts_flags[2])
 
     verify_all_empty(response.locations)
 
@@ -75,10 +81,31 @@ def test_algorithm_output():
 
     verify_common_output(response, 2, parts)
 
-    verify_all_false(response.parts_flag, 5)
+    verify_all_false(response.parts_flags[0])
+    verify_all_false(response.parts_flags[1], 5)
+    verify_all_false(response.parts_flags[2])
 
     # Interleaved frame 3 changed above is for the right/second camera.
     verify_all_empty(response.locations, 1, 5)
+
+    # Trigger dual part flag.
+    data[2][5][2] = 0.95
+
+    response = algorithm.process(data)
+
+    verify_all_false(response.parts_flags[0], 5)
+    verify_all_false(response.parts_flags[1], 5)
+    verify_all_false(response.parts_flags[2], 5)
+
+    # Seen in both, but not in paired frames - should not trigger dual
+    data[2][5][2] = 0.00
+    data[4][5][2] = 0.95
+
+    response = algorithm.process(data)
+
+    verify_all_false(response.parts_flags[0], 5)
+    verify_all_false(response.parts_flags[1], 5)
+    verify_all_false(response.parts_flags[2])
 
 
 if __name__ == '__main__':

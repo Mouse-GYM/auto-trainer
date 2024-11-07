@@ -1,37 +1,69 @@
-from autotrainer.behavior import SystemMachine, BehaviorLimits
+from autotrainer.behavior import SystemMachine, BehaviorLimits, InferenceProtocol
 from autotrainer.core import ObservableObject, ProjectInfo
-from autotrainer.device import HeadFixReader, PelletReader
-from autotrainer.inference import PoseAlgorithm
+
+from tools.acquisition.model.head_fix_model import HeadFixModel
+from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
 
 
 class BehaviorModel(ObservableObject):
-    def __init__(self, head_fix_reader: HeadFixReader, head_fix, pellet_device: PelletReader,
-                 pellet_command, pose: PoseAlgorithm):
+    def __init__(self, head_fix: HeadFixModel, pellet: PelletDeliveryModel, inference: InferenceProtocol):
         super().__init__()
 
-        self._machine = SystemMachine(None, head_fix_reader, head_fix, pellet_device, pellet_command, pose)
+        self._machine = SystemMachine(None, head_fix.head_fix_reader, head_fix, pellet.pellet_reader, pellet, inference)
+
+        self._project: ProjectInfo | None = None
+
+        self._is_intersession_enabled = False
+
+    @property
+    def project(self) -> ProjectInfo:
+        return self._project
+
+    @project.setter
+    def project(self, value: ProjectInfo) -> None:
+        self._project = value
 
     @property
     def algorithm(self):
         return self._machine.algorithm
 
-    def load_configuration(self, values: dict):
-        self._machine.algorithm.limits = BehaviorLimits.from_dictionary(values)
+    @property
+    def is_intersession_enabled(self) -> bool:
+        return self._is_intersession_enabled
 
-        if "isDeliverPelletEnabled" in values:
-            self._machine.algorithm.pellet_delivery_enabled = values["isDeliverPelletEnabled"]
-        if "isCoverPelletEnabled" in values:
-            self._machine.algorithm.pellet_cover_enabled = values["isCoverPelletEnabled"]
+    @is_intersession_enabled.setter
+    def is_intersession_enabled(self, value: bool) -> None:
+        self._is_intersession_enabled = self._on_property_changed("is_intersession_enabled", value,
+                                                                  self._is_intersession_enabled)
+        self._machine.algorithm.intersession_enabled = self._is_intersession_enabled
 
-    def write_configuration(self):
+    def load_configuration(self, configuration: dict):
+        self._machine.algorithm.limits = BehaviorLimits.from_dictionary(configuration)
+
+        if "isDeliverPelletEnabled" in configuration:
+            self._machine.algorithm.pellet_delivery_enabled = configuration["isDeliverPelletEnabled"]
+        if "isCoverPelletEnabled" in configuration:
+            self._machine.algorithm.pellet_cover_enabled = configuration["isCoverPelletEnabled"]
+        if "isIntersessionAnalysisEnabled" in configuration:
+            self.is_intersession_enabled = configuration["isIntersessionAnalysisEnabled"]
+
+    def save_configuration(self) -> dict:
         limits = self._machine.algorithm.limits.to_dictionary()
-        limits.update({"isDeliverPelletEnabled": self._machine.algorithm.pellet_delivery_enabled, "isCoverPelletEnabled": self._machine.algorithm.pellet_cover_enabled})
+        limits.update({"isDeliverPelletEnabled": self._machine.algorithm.pellet_delivery_enabled,
+                       "isCoverPelletEnabled": self._machine.algorithm.pellet_cover_enabled,
+                       "isIntersessionAnalysisEnabled": self._is_intersession_enabled})
         return limits
 
-    def on_prepare_capture(self, project_info: ProjectInfo):
-        self._machine.project = project_info
+    def on_prepare_capture(self):
+        self._machine.project = self._project
 
     def trigger_tunnel(self, value: bool):
+        """
+        Provides the ability to manually trigger tunnel enter/exit state changes independent of load cell events.
+        Future load cell events will still have the expected behavior.
+        :param value: True to enter tunnel, False to exit.
+        :return:
+        """
         if value:
             self._machine.enter_tunnel()
         else:

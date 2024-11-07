@@ -20,8 +20,13 @@ class PoseLocation:
 @dataclass(frozen=True)
 class PoseResponse:
     sequence: int
-    parts_flag: typing.Dict[str, bool]
+    """Simple index to track responses"""
+
+    parts_flags: (typing.Dict[str, bool], typing.Dict[str, bool], typing.Dict[str, bool])
+    """Tuple indicating part seen for left, right, and both (same frame)"""
+
     locations: typing.List[typing.List[PoseLocation]]
+    """Normalized X, Y locations for each part for each camera, if above threshold, otherwise -1, -1"""
 
     def x_y_1(self) -> typing.List[PoseTuple]:
         return list(map(lambda p: (p.x, p.y), self.locations[0]))
@@ -31,15 +36,18 @@ class PoseResponse:
 
     @property
     def pellet_seen(self) -> bool:
-        return self.parts_flag["Pellet"]
+        """Default logic/conditions for pellet seen"""
+        return self.parts_flags[0]["Pellet"] or self.parts_flags[1]["Pellet"]
 
     @property
     def star_seen(self):
-        return self.parts_flag["Star"]
+        """Default logic/conditions for star seen"""
+        return self.parts_flags[0]["Star"] or self.parts_flags[1]["Star"]
 
     @property
     def mouse_seen(self) -> bool:
-        return self.parts_flag["Tongue"] or self.parts_flag["Nose"]
+        """Default logic/conditions for mouse seen"""
+        return self.parts_flags[2]["Nose"]
 
 
 class PoseAlgorithm(ObservableObject):
@@ -60,7 +68,7 @@ class PoseAlgorithm(ObservableObject):
 
     @property
     def part_names(self) -> list:
-        return list(self._parts.keys())
+        return list(self._parts_list)
 
     def get_part_index(self, part: str) -> int:
         if part in self._parts:
@@ -110,14 +118,23 @@ class PoseAlgorithm(ObservableObject):
         locations_1 = self._find_parts(left_frames)
         locations_2 = self._find_parts(right_frames)
 
-        parts_flag = dict(self._default_parts_flag)
+        parts_flag_1 = dict(self._default_parts_flag)
+        parts_flag_2 = dict(self._default_parts_flag)
+        parts_flag_3 = dict(self._default_parts_flag)
 
-        for pose in all_frames:
+        for pose_l, pose_r in zip(left_frames, right_frames):
             for idx, part in enumerate(self._parts_list):
-                if pose[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                    parts_flag[part] = True
+                maybe_dual = False
+                if pose_l[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                    parts_flag_1[part] = True
+                    maybe_dual = True
+                if pose_r[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                    parts_flag_2[part] = True
+                    if maybe_dual:
+                        parts_flag_3[part] = True
 
-        response = PoseResponse(sequence=self._sequence, parts_flag=parts_flag, locations=[locations_1, locations_2])
+        response = PoseResponse(sequence=self._sequence, parts_flags=(parts_flag_1, parts_flag_2, parts_flag_3),
+                                locations=[locations_1, locations_2])
 
         self.pose_changed(response)
 

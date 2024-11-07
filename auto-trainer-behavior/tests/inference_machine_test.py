@@ -138,14 +138,14 @@ def test_pellet_seen():
 
     model.mock_pellet_missing()
 
-    model.pose.send_response(True, False)
+    model.mock_inference.mock_send_response(True, False)
 
     assert inference_model.state == InferenceState.monitoring
     assert algorithm.pellet_last_seen != 0.0
     assert algorithm.session_pellet_count == 1
 
     # Again - nothing should happen
-    model.pose.send_response(True, False)
+    model.mock_inference.mock_send_response(True, False)
 
     assert inference_model.state == InferenceState.monitoring
     assert algorithm.pellet_last_seen != 0.0
@@ -154,20 +154,20 @@ def test_pellet_seen():
     # Wait.  Nothing should again
     time.sleep(algorithm.limits.pellet_missing_time + 0.1)
 
-    model.pose.send_response(True, False)
+    model.mock_inference.mock_send_response(True, False)
 
     assert inference_model.state == InferenceState.monitoring
     assert algorithm.pellet_last_seen != 0.0
     assert algorithm.session_pellet_count == 1
 
     # Miss a frame and then bring back
-    model.pose.send_response(False, False)
+    model.mock_inference.mock_send_response(False, False)
 
     assert inference_model.state == InferenceState.missing
     assert algorithm.pellet_last_seen != 0.0
     assert algorithm.session_pellet_count == 1
 
-    model.pose.send_response(True, False)
+    model.mock_inference.mock_send_response(True, False)
     time.sleep(algorithm.limits.pellet_missing_time + 0.1)
 
     assert inference_model.state == InferenceState.monitoring

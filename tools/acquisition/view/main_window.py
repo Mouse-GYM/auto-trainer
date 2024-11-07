@@ -48,6 +48,8 @@ class MainWindow(QMainWindow):
 
         # self.setWindowFlags(Qt.Dialog | Qt.MSWindowsFixedSizeDialogHint)
 
+        self.setMaximumSize(1880, 1080)
+
         self._app_view_model.on_error += self._show_error
 
         self._preferences.property_changed += self._preferences_property_changed
@@ -219,7 +221,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addAction(self.edit_configuration_action)
 
-        # toolbar.addAction(self.capture_trigger_action)
+        toolbar.addAction(self.capture_trigger_action)
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)

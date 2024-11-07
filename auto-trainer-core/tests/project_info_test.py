@@ -34,6 +34,7 @@ def test_hourly():
 
     assert hourly_source.interval == 8
 
+
 def test_implicit_session():
     when = datetime(2024, 6, 8, 8, 45, 23)
 
@@ -58,6 +59,7 @@ def test_implicit_session():
 
     assert session_source.session_index == 9
 
+
 def test_explicit_session():
     when = datetime(2023, 6, 8, 8, 45, 23)
 
@@ -77,6 +79,6 @@ if __name__ == '__main__':
 
     test_hourly()
 
-    test_implicit_session();
+    test_implicit_session()
 
     test_explicit_session()
