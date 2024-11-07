@@ -12,9 +12,12 @@ class CardFooter(QWidget):
         self.setObjectName("CardFooter")
         self.setStyleSheet("#CardFooter {background-color: #d9d9d9; padding: 16px; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px}")
 
+        self.setContentsMargins(0, 0, 0, 0)
+
         self._layout = None
 
     def setContent(self, widget: QWidget):
         self._layout = QVBoxLayout()
+        self._layout.setContentsMargins(6, 2, 2,6)
         self._layout.addWidget(widget)
         self.setLayout(self._layout)

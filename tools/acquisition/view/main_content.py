@@ -29,27 +29,33 @@ class MainContent(ContentWidget):
 
         self._content_widgets: typing.List[ContentWidget] = list()
 
-        self._layout = QGridLayout()
+        self.setContentsMargins(0, 0, 0, 0)
 
-        self._layout.setColumnStretch(7, 1)
+        self._layout = QGridLayout()
+        self._layout.setHorizontalSpacing(0)
+        self._layout.setVerticalSpacing(0)
+        self._layout.setSpacing(0)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+
+        # self._layout.setColumnStretch(7, 1)
 
         self._left_camera_content = CameraContent(self._model.left_camera)
         self._left_camera_content.camera_view.setTitle("Left Camera")
-        self._left_camera_content.camera_view.setSize(450, 300)
+        # self._left_camera_content.camera_view.setSize(450, 300)
 
         self._layout.addWidget(self._left_camera_content, 0, 0, 1, 2)
         self._content_widgets.append(self._left_camera_content)
 
         self._right_camera_content = CameraContent(self._model.right_camera)
         self._right_camera_content.camera_view.setTitle("Right Camera")
-        self._right_camera_content.camera_view.setSize(450, 300)
+        # self._right_camera_content.camera_view.setSize(450, 300)
 
         self._layout.addWidget(self._right_camera_content, 0, 2, 1, 2)
         self._content_widgets.append(self._right_camera_content)
 
         self._top_camera_content = CameraContent(self._model.top_camera)
         self._top_camera_content.camera_view.setTitle("Top Camera")
-        self._top_camera_content.camera_view.setSize(450, 300)
+        # self._top_camera_content.camera_view.setSize(450, 300)
 
         self._layout.addWidget(self._top_camera_content, 0, 4, 1, 2)
         self._content_widgets.append(self._top_camera_content)
@@ -90,6 +96,8 @@ class MainContent(ContentWidget):
         self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
 
         self._model.analysis.pose_response_ready += self.refresh_pose
+
+        self.set_diagnostics_visible(False)
 
     @Slot()
     def update_image(self):

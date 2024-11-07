@@ -32,7 +32,7 @@ class HeadFixContent(ContentWidget):
         self._plot1 = PGWidget()
         self._plot1.setBackground("w")
         self._plot1.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
-        self._plot1.setMinimumHeight(180)
+        self._plot1.setMinimumHeight(140)
         self._plot1.getViewBox().setRange(yRange=[0, 50])
         self._plot1.scale_x = 100.0
 

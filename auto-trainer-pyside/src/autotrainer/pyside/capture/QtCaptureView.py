@@ -19,7 +19,7 @@ class QCaptureView(QWidget):
     camera_changed = Signal(object)
     recording_indicator_changed = Signal(bool)
 
-    def __init__(self, image_width: int = 450, image_height: int = 300):
+    def __init__(self, image_width: int = 420, image_height: int = 280):
         super().__init__()
 
         self._image_width = image_width

@@ -1,3 +1,4 @@
+from PySide6 import QtCore
 from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QCheckBox, QFileDialog, QWidget, QVBoxLayout, \
     QHBoxLayout, QStackedLayout, QGridLayout
 

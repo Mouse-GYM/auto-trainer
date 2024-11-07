@@ -14,5 +14,6 @@ class CardHeader(QWidget):
 
     def setContent(self, widget: QWidget):
         self._layout = QVBoxLayout()
+        self._layout.setContentsMargins(6, 4, 4,6)
         self._layout.addWidget(widget)
         self.setLayout(self._layout)

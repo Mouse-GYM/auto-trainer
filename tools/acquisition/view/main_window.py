@@ -32,6 +32,8 @@ class MainWindow(QMainWindow):
 
         self.main_content = MainContent(self._app_view_model)
 
+        self.setContentsMargins(0, 0, 0, 0)
+
         self.setCentralWidget(self.main_content)
 
         self.centralWidget().layout().setContentsMargins(0, 0, 0, 0)
@@ -44,7 +46,7 @@ class MainWindow(QMainWindow):
 
         self._configure_statusbar()
 
-        self.setWindowFlags(Qt.Dialog | Qt.MSWindowsFixedSizeDialogHint)
+        # self.setWindowFlags(Qt.Dialog | Qt.MSWindowsFixedSizeDialogHint)
 
         self._app_view_model.on_error += self._show_error
 
