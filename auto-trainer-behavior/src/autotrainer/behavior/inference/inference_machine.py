@@ -49,7 +49,7 @@ class InferenceMachine:
 
         self.machine = Machine(model=self, states=InferenceMachine.states,
                                transitions=InferenceMachine.transitions, auto_transitions=False,
-                               initial=InferenceState.missing, model_override=True)
+                               initial=InferenceState.missing, ignore_invalid_triggers=True, model_override=True)
 
         self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm(BehaviorLimits())
 

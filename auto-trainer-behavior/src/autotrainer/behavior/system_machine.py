@@ -42,7 +42,8 @@ class SystemMachine:
         self.state = SystemState.cage
 
         self.machine = Machine(model=self, states=SystemMachine.states, transitions=SystemMachine.transitions,
-                               auto_transitions=False, initial=SystemState.cage, model_override=True)
+                               auto_transitions=False, initial=SystemState.cage, ignore_invalid_triggers=True,
+                               model_override=True)
 
         self._project_info = project_info
 

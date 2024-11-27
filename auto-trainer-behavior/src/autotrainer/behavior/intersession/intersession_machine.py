@@ -35,7 +35,7 @@ class IntersessionMachine:
                  inference: InferenceProtocol = None):
         self.state = IntersessionState.idle
 
-        self._machine = Machine(model=self, states=IntersessionMachine.states,
+        self._machine = Machine(model=self, states=IntersessionMachine.states, ignore_invalid_triggers=True,
                                 transitions=IntersessionMachine.transitions, auto_transitions=False,
                                 initial=IntersessionState.idle, model_override=True)
 
