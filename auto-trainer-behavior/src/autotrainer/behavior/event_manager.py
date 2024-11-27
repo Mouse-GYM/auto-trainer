@@ -28,8 +28,16 @@ class BehaviorEventKind(IntEnum, Enum):
     pelletReleaseCan = 1210
     pelletReleaseBegin = 1211,
     pelletReleaseEnd = 1212,
-    pelletAcknowledge = 1298,
-    pelletMismatch = 1299
+    pelletAcknowledgeToken = 1298,
+    pelletExternalToken = 1299,
+    sessionStarted = 1301,
+    sessionEnded = 1302,
+    sessionPelletIncrease = 1311,
+    sessionPelletDecrease = 1312,
+    sessionMouseSeen = 1321,
+    dayStarted = 1401,
+    dayIncreasePellet = 1411,
+    dayDecreasePellet = 1412
 
 
 @dataclass(frozen=True)

@@ -30,7 +30,7 @@ def run_acquisition(configuration: str = None):
     if not verify_configuration(configuration):
         return -1
 
-    window = MainWindow(app, configuration)
+    window = MainWindow(app, configuration, "1.1.17")
 
     window.show()
 

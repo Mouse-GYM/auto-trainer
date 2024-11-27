@@ -8,7 +8,6 @@ from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel, QMessag
     QSizePolicy, QWidget
 import qtawesome as qta
 
-from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, app: QApplication, configuration: str = None):
+    def __init__(self, app: QApplication, configuration: str = None, app_version: str = ""):
         super().__init__()
 
         self._app = app
@@ -26,9 +25,9 @@ class MainWindow(QMainWindow):
         self._preferences = UserPreferences()
         self._update_log_level(self._preferences.log_level)
 
-        self._app_view_model = AppModel(self._preferences)
+        self._app_view_model = AppModel(self._preferences, app_version)
 
-        self.setWindowTitle("Auto Trainer - Acquisition")
+        self.setWindowTitle(f"Auto Trainer - Acquisition v{app_version}")
 
         self.main_content = MainContent(self._app_view_model)
 
@@ -221,7 +220,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addAction(self.edit_configuration_action)
 
-        toolbar.addAction(self.capture_trigger_action)
+        # toolbar.addAction(self.capture_trigger_action)
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)

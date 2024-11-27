@@ -176,10 +176,17 @@ class InferenceMachine:
                 self.release_pellet()
 
     def _pellet_device_ack_received(self, token):
-        EventManager.instance().post_event(EventInfo(BehaviorEventKind.pelletAcknowledge, context=token))
+        if self._api_status_token is None:
+            # External command.  Safe to ignore.
+            return
+
         if token != self._api_status_token:
-            EventManager.instance().post_event(EventInfo(BehaviorEventKind.pelletMismatch, context=token))
-            logger.warning("pellet delivery token mismatch")
+            # External command while we are waiting for our own.  Track in case it is causing conflicts.
+            EventManager.instance().post_event(EventInfo(BehaviorEventKind.pelletExternalToken, context=token))
+            logger.warning("ignoring pellet delivery token from external command")
+            return
+
+        EventManager.instance().post_event(EventInfo(BehaviorEventKind.pelletAcknowledgeToken, context=token))
 
         self._api_status_token = None
 

@@ -28,10 +28,12 @@ def _failed_camera_template(name: str, error: str):
 
 
 class AppModel(ObservableObject):
-    def __init__(self, preferences: UserPreferences):
+    def __init__(self, preferences: UserPreferences, app_version: str = ""):
         super().__init__(("on_error",))
 
         self._preferences = preferences
+
+        self._app_version = app_version
 
         self._left_camera = VideoCaptureModel("left", self._preferences, 0)
         self._right_camera = VideoCaptureModel("right", self._preferences, 1)
@@ -310,8 +312,9 @@ class AppModel(ObservableObject):
         info = {
             "date": now.strftime("%Y%m%d_%H%M%S"),
             "created": now.timestamp(),
-            "created_utc": datetime.utcnow().timestamp(),
+            "createdUtc": datetime.utcnow().timestamp(),
             "serialNumber": self._preferences.serial_number or "",
+            "appVersion": self._app_version,
             "animalName": self.animal_name or "",
             "notes": self.notes or "",
             "session": session,
