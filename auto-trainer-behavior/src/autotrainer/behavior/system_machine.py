@@ -1,19 +1,22 @@
 import logging
 from enum import Enum
 
+from opentelemetry import trace
 from transitions import Machine
 
-from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID, ProjectInfo
+from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID, ProjectInfo, EventManager
 from autotrainer.device import HeadFixReader, PelletReader
 
 from .behavior_algorithm import BehaviorAlgorithm
 from .behavior_limits import BehaviorLimits
-from .event_manager import EventManager, BehaviorEventKind
+from .behavior_event_kind import BehaviorEventKind
 from .inference.inference_machine import InferenceMachine
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine
 
 logger = logging.getLogger(__name__)
+
+tracer = trace.get_tracer("behavior")
 
 
 class SystemState(str, Enum):
@@ -64,6 +67,8 @@ class SystemMachine:
 
         self._algorithm.session_ending += self.session_ended
 
+        self._session_trace = None
+
     @property
     def algorithm(self):
         return self._algorithm
@@ -93,6 +98,7 @@ class SystemMachine:
         if self._project_info is not None:
             self._project_info.calculate_next_session_index()
 
+        self._session_trace = tracer.start_span("session")
         self.algorithm.start_session()
 
         TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, True)
@@ -103,6 +109,7 @@ class SystemMachine:
     def after_exit_tunnel(self):
         EventManager.instance().post_event(BehaviorEventKind.tunnelExit)
         self.algorithm.end_session()
+        self._session_trace.end()
 
     def after_enter_intersession(self):
         self._intersession.perform_segmentation()
@@ -128,11 +135,11 @@ class SystemMachine:
 
         if name == "is_load_cell_engaged":
             if value:
-                EventManager.instance().post_event(BehaviorEventKind.loadCellActive)
-                self.enter_tunnel()
+                if self.state == SystemState.cage:
+                    self.enter_tunnel()
             else:
-                EventManager.instance().post_event(BehaviorEventKind.loadCellInactive)
-                self.exit_tunnel()
+                if self.state == SystemState.tunnel:
+                    self.exit_tunnel()
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

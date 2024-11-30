@@ -6,15 +6,16 @@ import time
 from datetime import datetime
 from queue import Queue
 from threading import Timer
-from typing import Callable
+from typing import Callable, Optional
 
 import numpy
 
 from autotrainer.core.project import ProjectInfo, ProjectInterval
-from autotrainer.core import PerfMonitor, ObservableObject
+from autotrainer.core import PerfMonitor, ObservableObject, EventManager
 
 from .device_reader import DeviceReader
 from .head_fix import HeadFixMessageKind
+from .head_fix_event_kind import HeadFixEventKind
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ class LoadCellMonitor(ObservableObject):
         self._was_active: bool = False
         self._active_debounce: Timer = _NO_OP_TIMER
         self._inactive_debounce: Timer = _NO_OP_TIMER
+        self._when = 0
+        self._index = 0
 
         self._is_engaged: bool = False
 
@@ -41,17 +44,21 @@ class LoadCellMonitor(ObservableObject):
     def is_engaged(self) -> bool:
         return self._is_engaged
 
-    def update(self, value: float):
+    def update(self, value: numpy.floating, when: int, index: int):
         if value > self.threshold:
             self._inactive_debounce.cancel()
             if not self._was_active:
                 self._was_active = True
+                self._when = when
+                self._index = index
                 self._active_debounce = Timer(self.threshold_duration, self._ensure_active)
                 self._active_debounce.start()
         else:
             self._active_debounce.cancel()
             if self._was_active:
                 self._was_active = False
+                self._when = when
+                self._index = index
                 hold_time = time.perf_counter() - self._last_active_start
                 if hold_time >= self.min_hold_duration:
                     duration = self.post_hold_duration
@@ -63,6 +70,8 @@ class LoadCellMonitor(ObservableObject):
     def _ensure_active(self):
         if not self._is_engaged:
             self._is_engaged = True
+            EventManager.instance().post_event(HeadFixEventKind.loadCellStateChanged, context=True,
+                                               when=datetime.fromtimestamp(self._when), index=self._index)
             self.property_changed("is_engaged", True, False)
 
             self._last_active_start = time.perf_counter()
@@ -70,6 +79,8 @@ class LoadCellMonitor(ObservableObject):
     def _ensure_inactive(self):
         if self._is_engaged:
             self._is_engaged = False
+            EventManager.instance().post_event(HeadFixEventKind.loadCellStateChanged, context=True,
+                                               when=datetime.fromtimestamp(self._when), index=self._index)
             self.property_changed("is_engaged", False, True)
 
 
@@ -100,7 +111,7 @@ class HeadFixReader(DeviceReader):
 
         self._measurement_callback = None
 
-        self._project_info: ProjectInfo | None = None
+        self._project_info: Optional[ProjectInfo] = None
         self._interval = ProjectInterval.HOUR
         self._record_file = None
         self._current_record_interval = -1
@@ -199,7 +210,7 @@ class HeadFixReader(DeviceReader):
                 self._measurement_callback((weights, switch, pressure, temperature, humidity))
 
             # Load cell monitor.
-            self._load_cell_monitor.update(numpy.mean(weights))
+            self._load_cell_monitor.update(numpy.mean(weights), data[0].when, data[0].timestamp)
 
             # Headbar monitor.
             self._is_headbar_engaged = self._on_property_changed("is_headbar_engaged", numpy.mean(switch) > 0.5,

@@ -1,11 +1,18 @@
 import logging
 import queue
-from enum import IntEnum
+from enum import IntEnum, Enum
 from queue import Queue
+
+from autotrainer.core import EventManager
 
 from .device import Device, DeviceApi
 
 logger = logging.getLogger(__name__)
+
+
+class GymDeviceEventKind(IntEnum, Enum):
+    deviceCommandSend = 2001,
+    deviceCommandAcknowledge = 2002
 
 
 class GymDeviceMessageKind(IntEnum):
@@ -44,7 +51,7 @@ class GymDevice(Device):
             if resp == "\n":
                 if len(self._read_buffer) > 0:
                     self._read_buffer = self._handle_response(self._last_command, self._read_buffer)
-                    
+
                 continue
 
             if resp == "!":
@@ -63,6 +70,8 @@ class GymDevice(Device):
                 self._last_command = ""
                 self._read_buffer = ""
 
+                EventManager.instance().post_event(GymDeviceEventKind.deviceCommandAcknowledge,
+                                                   context=self._last_command_token)
                 self._api.send_message(GymDeviceMessageKind.ACK, self._last_command_token)
 
                 self._is_busy = False
@@ -82,6 +91,8 @@ class GymDevice(Device):
             self._last_command = data[0:-1]
             self._last_command_token = token
             self._api.send_data_str(data)
+            EventManager.instance().post_event(GymDeviceEventKind.deviceCommandSend,
+                                               context=f"{data}({self._last_command_token})")
         else:
             logger.debug("storing in command buffer")
             self._command_buffer.put((data, token))

@@ -1,9 +1,9 @@
 import time
 from datetime import datetime
 
-from autotrainer.core import ObservableObject
-from .event_manager import EventManager, BehaviorEventKind, EventInfo
+from autotrainer.core import ObservableObject, EventManager, EventInfo
 
+from .behavior_event_kind import BehaviorEventKind
 from .behavior_limits import BehaviorLimits
 
 
@@ -171,9 +171,9 @@ class BehaviorAlgorithm(ObservableObject):
     def _increment_session_pellet_count(self, incr: int = 1):
         value = max(self._session_pellet_count + incr, 0)
         if incr > 0:
-            EventManager.instance().post_event(EventInfo(BehaviorEventKind.sessionPelletIncrease, context=value))
+            EventManager.instance().post_event(BehaviorEventKind.sessionPelletIncrease, context=value)
         elif incr < 0:
-            EventManager.instance().post_event(EventInfo(BehaviorEventKind.sessionPelletDecrease, context=value))
+            EventManager.instance().post_event(BehaviorEventKind.sessionPelletDecrease, context=value)
         self._set_session_pellet_count(value)
 
     def _set_day_pellet_count(self, value: int):
@@ -183,7 +183,7 @@ class BehaviorAlgorithm(ObservableObject):
     def _increment_day_pellet_count(self, incr: int = 1):
         value = max(self._day_pellet_count + incr, 0)
         if incr > 0:
-            EventManager.instance().post_event(EventInfo(BehaviorEventKind.dayIncreasePellet, context=value))
+            EventManager.instance().post_event(BehaviorEventKind.dayIncreasePellet, context=value)
         elif incr < 0:
-            EventManager.instance().post_event(EventInfo(BehaviorEventKind.dayDecreasePellet, context=value))
+            EventManager.instance().post_event(BehaviorEventKind.dayDecreasePellet, context=value)
         self._set_day_pellet_count(value)

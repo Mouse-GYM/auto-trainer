@@ -1,3 +1,5 @@
+from typing import Optional
+
 from autotrainer.behavior import SystemMachine, BehaviorLimits, InferenceProtocol
 from autotrainer.core import ObservableObject, ProjectInfo
 
@@ -11,7 +13,7 @@ class BehaviorModel(ObservableObject):
 
         self._machine = SystemMachine(None, head_fix.head_fix_reader, head_fix, pellet.pellet_reader, pellet, inference)
 
-        self._project: ProjectInfo | None = None
+        self._project: Optional[ProjectInfo] = None
 
         self._is_intersession_enabled = False
 

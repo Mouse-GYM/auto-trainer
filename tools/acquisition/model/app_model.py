@@ -7,7 +7,7 @@ from datetime import datetime
 
 import yaml
 
-from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID
+from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID, EventManager
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.inference import PoseAlgorithm
@@ -282,6 +282,8 @@ class AppModel(ObservableObject):
 
         for camera in self._cameras:
             camera.on_close()
+
+        EventManager.instance().close()
 
         self.head_fix.on_close()
         self._pellet_delivery.on_close()

@@ -1,6 +1,7 @@
 import logging
 import queue
 import uuid
+from typing import Optional
 
 from autotrainer.core import ObservableObject, ProjectInfo
 from autotrainer.device import SerialInterface, HeadFixReader
@@ -39,7 +40,7 @@ class HeadFixModel(ObservableObject):
 
         self._head_fix_reader.load_cell_monitor.threshold = self._load_cell_threshold
 
-        self._project: ProjectInfo | None = None
+        self._project: Optional[ProjectInfo] = None
 
     @property
     def project(self) -> ProjectInfo:

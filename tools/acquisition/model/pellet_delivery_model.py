@@ -1,6 +1,7 @@
 import logging
 import queue
 import uuid
+from typing import Optional
 
 from autotrainer.core import ObservableObject, ProjectInfo
 from autotrainer.device import SerialInterface
@@ -32,7 +33,7 @@ class PelletDeliveryModel(ObservableObject):
 
         self._z = 0
 
-        self._project: ProjectInfo | None = None
+        self._project: Optional[ProjectInfo] = None
 
     @property
     def project(self) -> ProjectInfo:
