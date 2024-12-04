@@ -26,6 +26,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._is_in_session = False
         self._session_pellet_count = 0
         self._session_mouse_seen = False
+        self._pellet_seen = False
 
         self._pellet_last_seen = 0.0
 
@@ -103,6 +104,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._set_pellet_last_seen(0.0)
         self._is_in_session = True
         self._session_mouse_seen = False
+        self._pellet_seen = False
 
         EventManager.instance().post_event(BehaviorEventKind.sessionStarted)
 
@@ -123,13 +125,17 @@ class BehaviorAlgorithm(ObservableObject):
     def can_release_pellet(self) -> bool:
         self._check_date()
 
-        return (self._is_in_session or not self.pellet_cover_enabled) and self.session_pellet_count < self.limits.max_pellets_per_session and \
-            self._day_pellet_count < self.limits.max_pellets_per_day
+        return (self._is_in_session or not self.pellet_cover_enabled) \
+            and self.session_pellet_count < self.limits.max_pellets_per_session
 
     def can_perform_intersession_analysis(self):
         return self.intersession_enabled and self.session_mouse_seen
 
     def pellet_seen(self, seen: bool = True):
+        if self._pellet_seen != seen:
+            self._pellet_seen = seen
+            EventManager.instance().post_event(BehaviorEventKind.pelletSeen, context=seen)
+
         if seen:
             self._set_pellet_last_seen(time.time())
 

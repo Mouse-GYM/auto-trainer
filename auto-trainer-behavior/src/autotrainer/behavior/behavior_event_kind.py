@@ -27,5 +27,5 @@ class BehaviorEventKind(IntEnum, Enum):
     sessionMouseSeen = 1321,
     dayStarted = 1401,
     dayIncreasePellet = 1411,
-    dayDecreasePellet = 1412
-
+    dayDecreasePellet = 1412,
+    pelletSeen = 1501
