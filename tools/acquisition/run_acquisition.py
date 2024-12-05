@@ -18,7 +18,7 @@ def verify_configuration(configuration: str):
     return True
 
 
-def run_acquisition(configuration: str = None):
+def run_acquisition(configuration: str = None, is_dev: bool = False):
     from PySide6.QtWidgets import QApplication
 
     from tools.acquisition.view.main_window import MainWindow
@@ -30,7 +30,7 @@ def run_acquisition(configuration: str = None):
     if not verify_configuration(configuration):
         return -1
 
-    window = MainWindow(app, configuration, "1.1.17")
+    window = MainWindow(app, configuration, "1.1.17", is_dev)
 
     window.show()
 

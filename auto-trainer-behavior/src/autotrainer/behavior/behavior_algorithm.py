@@ -1,7 +1,7 @@
 import time
 from datetime import datetime
 
-from autotrainer.core import ObservableObject, EventManager, EventInfo
+from autotrainer.core import ObservableObject, EventManager
 
 from .behavior_event_kind import BehaviorEventKind
 from .behavior_limits import BehaviorLimits

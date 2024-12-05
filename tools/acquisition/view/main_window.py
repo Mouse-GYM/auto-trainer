@@ -17,10 +17,11 @@ logger = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, app: QApplication, configuration: str = None, app_version: str = ""):
+    def __init__(self, app: QApplication, configuration: str = None, app_version: str = "", is_dev: bool = False):
         super().__init__()
 
         self._app = app
+        self._is_dev = is_dev
 
         self._preferences = UserPreferences()
         self._update_log_level(self._preferences.log_level)
@@ -182,7 +183,10 @@ class MainWindow(QMainWindow):
 
         self.capture_trigger_action = QAction("Trigger", self)
         self.capture_trigger_action.setCheckable(True)
-        self.capture_trigger_action.triggered.connect(lambda: self._app_view_model.behavior.trigger_tunnel(self.capture_trigger_action.isChecked()))
+        self.capture_trigger_action.triggered.connect(self._internal_simulate_trigger)
+
+        self.mouse_seen_action = QAction("Mouse Seen", self)
+        self.mouse_seen_action.triggered.connect(self._internal_set_mouse_seen)
 
         self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
         self.preferences_action.triggered.connect(lambda: self._show_preferences())
@@ -220,7 +224,9 @@ class MainWindow(QMainWindow):
 
         toolbar.addAction(self.edit_configuration_action)
 
-        # toolbar.addAction(self.capture_trigger_action)
+        if self._is_dev:
+            toolbar.addAction(self.capture_trigger_action)
+            toolbar.addAction(self.mouse_seen_action)
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -254,6 +260,12 @@ class MainWindow(QMainWindow):
             self._status_configuration.setText(value)
         elif name == "log_level":
             self._update_log_level(value)
+
+    def _internal_simulate_trigger(self):
+        self._app_view_model.behavior.trigger_tunnel(self.capture_trigger_action.isChecked())
+
+    def _internal_set_mouse_seen(self):
+        self._app_view_model.behavior.algorithm.mouse_seen(True)
 
     @staticmethod
     def _update_log_level(value: int):

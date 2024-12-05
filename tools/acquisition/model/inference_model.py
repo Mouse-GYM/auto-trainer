@@ -13,7 +13,8 @@ import numpy
 
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
     intersession_process
-from autotrainer.core import FixedArrayMultiQueue, ObservableObject, ProjectInfo
+from autotrainer.behavior.behavior_event_kind import BehaviorEventKind
+from autotrainer.core import FixedArrayMultiQueue, ObservableObject, ProjectInfo, EventManager
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     DlcPoseModel, MemoryPoseModel, InferenceMode
@@ -296,6 +297,7 @@ class InferenceModel(ObservableObject):
             self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
         except Exception as ex:
             logger.error(ex)
+            EventManager.instance().post_event(BehaviorEventKind.intersessionSegmentationError, context=str(ex))
             self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
             self._intersession_block.configuration.complete(self._intersession_block.configuration.nonce, False)
             self._intersession_block = None

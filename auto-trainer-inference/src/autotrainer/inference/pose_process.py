@@ -114,11 +114,13 @@ class PoseProcess(Process):
             self._msg_queue.put((kind, context))
 
     def _set_process_live(self):
+        logger.debug("processing live")
         self._input_queue = self._live_input_queue
         self._mode = InferenceMode.Live
         self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
 
     def _set_process_offline(self):
+        logger.debug("processing offline")
         self._input_queue = self._offline_input_queue
         self._mode = InferenceMode.Offline
         self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
