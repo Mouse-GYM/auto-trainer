@@ -87,12 +87,21 @@ class HeadFixContent(ContentWidget):
 
         layout.addWidget(QLabel("Position:"))
 
+        self._current_position = QLabel("0")
+        layout.addWidget(self._current_position)
+
+        layout.addStretch(1)
+
+        layout.addWidget(QLabel("Move:"))
+
         self._position = QSpinBox()
         self._position.setValue(self._model.position)
         self._position.setMaximum(100)
         self._position.setWrapping(False)
         self._position.valueChanged.connect(self._update_position)
         layout.addWidget(self._position)
+
+        layout.addStretch(1)
 
         layout.addWidget(QLabel("Load Cell Trigger (g):"))
         self._load_cell = QLineEdit()
@@ -124,7 +133,7 @@ class HeadFixContent(ContentWidget):
 
         self.set_is_editable(False)
 
-        self.position_changed.connect(lambda x: self._position.setValue(x))
+        self.position_changed.connect(lambda x: self._current_position.setText(str(x)))
 
     def on_activated(self):
         self._model.on_activated()
@@ -175,7 +184,7 @@ class HeadFixContent(ContentWidget):
             self._model.port = None
 
     def _update_position(self):
-        self._model.update_position(self._position.value())
+        self._model.update_position(self._position.value(), True)
 
     def _update_trigger(self):
         try:

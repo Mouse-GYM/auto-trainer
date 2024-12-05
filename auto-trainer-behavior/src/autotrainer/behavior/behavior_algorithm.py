@@ -81,6 +81,11 @@ class BehaviorAlgorithm(ObservableObject):
     def baseline_intensity(self):
         return self._baseline_intensity
 
+    @baseline_intensity.setter
+    def baseline_intensity(self, value):
+        self._baseline_intensity = value
+        EventManager.instance().post_event(BehaviorEventKind.headfixBaselineChanged, context=value)
+
     @property
     def pellet_last_seen(self) -> float:
         return self._pellet_last_seen

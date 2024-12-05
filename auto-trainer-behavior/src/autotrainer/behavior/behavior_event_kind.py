@@ -29,3 +29,4 @@ class BehaviorEventKind(IntEnum, Enum):
     dayIncreasePellet = 1411,
     dayDecreasePellet = 1412,
     pelletSeen = 1501
+    headfixBaselineChanged = 1601

@@ -130,6 +130,10 @@ behavior:
   maxPelletMissingSeconds: 1.0
   maxPelletsPerSession: 15
   maxPelletsPerDay: 120
+  minBaselineIntensity: 5.0
+  maxBaselineIntensity: 90.0
+  baselineIntensityIncrement: 15.0
+  defaultBaselineIntensity: 30.0
 
 outputLocation: /home/jetson/output
 ```

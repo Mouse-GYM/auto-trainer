@@ -60,6 +60,9 @@ class SystemMachine:
         if self._head_fix_reader is not None:
             self._head_fix_reader.property_changed += self.head_fix_property_changed
 
+        if self._head_fix_command is not None:
+            self._head_fix_command.property_changed += self.head_fix_command_property_changed
+
         self._inference = InferenceMachine(self.algorithm, pellet_reader, pellet_command, inference)
 
         self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
@@ -140,6 +143,10 @@ class SystemMachine:
             else:
                 if self.state == SystemState.tunnel:
                     self.exit_tunnel()
+
+    def head_fix_command_property_changed(self, name: str, value, _):
+        if name == "baseline_intensity":
+            self.algorithm.baseline_intensity = value
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

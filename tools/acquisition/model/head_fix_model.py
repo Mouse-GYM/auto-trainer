@@ -114,7 +114,10 @@ class HeadFixModel(ObservableObject):
     def position(self) -> int:
         return self._position
 
-    def update_position(self, value: int):
+    def update_position(self, value: int, set_baseline: bool = False):
+        if set_baseline:
+            self.property_changed("baseline_intensity", value, self._position)
+
         if value == self._position:
             return None
 

@@ -48,6 +48,8 @@ class BehaviorModel(ObservableObject):
             self._machine.algorithm.pellet_cover_enabled = configuration["isCoverPelletEnabled"]
         if "isIntersessionAnalysisEnabled" in configuration:
             self.is_intersession_enabled = configuration["isIntersessionAnalysisEnabled"]
+        if "defaultBaselineIntensity" in configuration:
+            self._machine.algorithm.baseline_intensity = configuration["defaultBaselineIntensity"]
 
     def save_configuration(self) -> dict:
         limits = self._machine.algorithm.limits.to_dictionary()
