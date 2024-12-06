@@ -134,15 +134,24 @@ class SystemMachine:
 
     def head_fix_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
+            EventManager.instance().post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
             return
+        else:
+            EventManager.instance().post_event(BehaviorEventKind.headfixLoadCellChanged, context=value)
 
         if name == "is_load_cell_engaged":
             if value:
                 if self.state == SystemState.cage:
                     self.enter_tunnel()
+                else:
+                    EventManager.instance().post_event(BehaviorEventKind.headfixLoadCellChangedWrongState,
+                                                       context=self.state)
             else:
                 if self.state == SystemState.tunnel:
                     self.exit_tunnel()
+                else:
+                    EventManager.instance().post_event(BehaviorEventKind.headfixLoadCellChangedWrongState,
+                                                       context=self.state)
 
     def head_fix_command_property_changed(self, name: str, value, _):
         if name == "baseline_intensity":

@@ -30,6 +30,9 @@ class BehaviorEventKind(IntEnum, Enum):
     dayDecreasePellet = 1412,
     pelletSeen = 1501
     headfixBaselineChanged = 1601,
+    headfixLoadCellChanged = 1602,
+    headfixLoadCellChangedInIntersession = 1603,
+    headfixLoadCellChangedWrongState = 1604,
     intersessionSegmentationCan = 1701,
     intersessionSegmentationBegin = 1702,
     intersessionSegmentationEnd = 1703,
