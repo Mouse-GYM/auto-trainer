@@ -136,10 +136,9 @@ class SystemMachine:
         if self.state == SystemState.intersession:
             EventManager.instance().post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
             return
-        else:
-            EventManager.instance().post_event(BehaviorEventKind.headfixLoadCellChanged, context=value)
 
         if name == "is_load_cell_engaged":
+            EventManager.instance().post_event(BehaviorEventKind.headfixLoadCellChanged, context=value)
             if value:
                 if self.state == SystemState.cage:
                     self.enter_tunnel()
