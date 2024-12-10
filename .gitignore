@@ -165,3 +165,8 @@ cython_debug/
 profile.*
 
 cameras.txt
+
+# pixi environments
+.pixi
+pixi.lock
+pixi.toml

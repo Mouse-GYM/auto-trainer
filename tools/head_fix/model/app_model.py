@@ -26,6 +26,7 @@ class AppModel(ObservableObject):
         self._head_fix_reader.interval = ProjectInterval.HOUR
         self._head_fix_reader.property_changed += self.reader_property_changed
         self._head_fix_reader.ack_received += self.reader_ack_received
+        self._head_fix_reader.tare_callback = self.tare
 
         self._is_connected = False
 

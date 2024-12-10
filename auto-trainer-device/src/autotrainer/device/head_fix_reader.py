@@ -105,6 +105,33 @@ class ForceDetector:
         return self._weight >= self._threshold
 
 
+class TareDetector:
+    def __init__(self):
+        self._threshold: float = 0.1
+        self._range_threshold: float = 0.2
+        self._duration: float = 2.0
+        self._sample_rate: int = 100
+
+        self._buffer_len = int(self._sample_rate * self._duration)
+        self._values = numpy.zeros(self._buffer_len)
+        self._index = 0
+
+    def update(self, values: list) -> bool:
+        increase = len(values)
+
+        self._values[self._index:(self._index + increase)] = numpy.array(values)
+
+        self._index += increase
+
+        if self._index >= self._buffer_len:
+            self._index = 0
+
+        r_max = numpy.max(self._values)
+        r_min = numpy.min(self._values)
+
+        return numpy.all(numpy.abs(self._values) > 0.1) and ((r_max - r_min) <= 0.2)
+
+
 class HeadFixReader(DeviceReader):
     def __init__(self, input_queue: Queue):
         super().__init__(input_queue, name="HeadFixReader")
@@ -126,6 +153,9 @@ class HeadFixReader(DeviceReader):
 
         self._is_force_detector_engaged = False
         self._force_detector = ForceDetector()
+
+        self._tare_detector = TareDetector()
+        self._tare_callback = None
 
         self._perf_monitor = PerfMonitor(name="<HeadFixReader>", units="mps", report_count=3000)
 
@@ -158,6 +188,14 @@ class HeadFixReader(DeviceReader):
     @measurement_callback.setter
     def measurement_callback(self, measurement_callback: Callable[[tuple], None]) -> None:
         self._measurement_callback = measurement_callback
+
+    @property
+    def tare_callback(self):
+        return self._tare_callback
+
+    @tare_callback.setter
+    def tare_callback(self, tare_callback: Callable[[], None]) -> None:
+        self._tare_callback = tare_callback
 
     @property
     def is_headbar_engaged(self):
@@ -220,6 +258,9 @@ class HeadFixReader(DeviceReader):
             self._is_force_detector_engaged = self._on_property_changed("is_force_detector_engaged",
                                                                         self._force_detector.update(pressure),
                                                                         self._is_force_detector_engaged)
+
+            if self._tare_detector.update(weights) and self._tare_callback is not None:
+                self._tare_callback()
 
             # Performance monitoring.
             self._perf_monitor.add_cycles(len(data))

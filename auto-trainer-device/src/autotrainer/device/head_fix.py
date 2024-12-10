@@ -41,6 +41,10 @@ class HeadFix(GymDevice):
     def measurements(self) -> typing.List[HeadFixMeasurement]:
         return self._measurements
 
+    @property
+    def buffer_size(self) -> int:
+        return self._measurement_buffer_count
+
     def connect(self):
         # Force streaming to stop if active.
         self._send_data("Tx")
