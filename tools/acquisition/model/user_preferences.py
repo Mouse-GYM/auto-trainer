@@ -18,6 +18,7 @@ class UserPreferences(ObservableObject):
             self._settings = QSettings()
 
         self._last_configuration = self._settings.value("system/last_configuration", "")
+        self._log_location: str = self._settings.value("system/log_location", "")
         self._log_level = self._settings.value("system/log_level", 30, int)
         self._serial_number = self._settings.value("system/serial_number", "00000")
         self._live_feed_refresh_rate = self._settings.value("display/refresh_rate", 15, int)
@@ -52,6 +53,15 @@ class UserPreferences(ObservableObject):
         self._live_feed_refresh_rate = self._on_property_changed("live_feed_refresh_rate", value,
                                                                  self.live_feed_refresh_rate)
         self._settings.setValue("display/refresh_rate", self._live_feed_refresh_rate)
+
+    @property
+    def log_location(self) -> str:
+        return self._log_location
+
+    @log_location.setter
+    def log_location(self, value: str) -> None:
+        self._log_location = self._on_property_changed("log_location", value, self.log_location)
+        self._settings.setValue("system/log_location", self._log_location)
 
     @property
     def log_level(self) -> int:

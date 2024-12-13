@@ -1,6 +1,6 @@
 import logging
 
-from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox
+from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox, QLabel
 
 from tools.acquisition.model.user_preferences import UserPreferences
 
@@ -28,9 +28,15 @@ class PreferencesContent(QWidget):
         else:
             self._log_level_combobox.setCurrentIndex(0)
 
+        self._log_location_edit = QLineEdit()
+        self._log_location_edit.setText(preferences.log_location)
+        self._log_location_edit.textChanged.connect(self._log_location_changed)
+
         self.layout = QFormLayout()
 
         self.layout.addRow("Device Id:", self._device_id_edit)
+        self.layout.addRow("Log location:", self._log_location_edit)
+        self.layout.addRow("", QLabel("Change requires restart.  Leave blank for default location."))
         self.layout.addRow("Log level:", self._log_level_combobox)
 
         self.setLayout(self.layout)
@@ -41,3 +47,6 @@ class PreferencesContent(QWidget):
     def _log_level_changed(self, value):
         if value != -1:
             self._preferences.log_level = self._log_level_combobox.itemData(value)
+
+    def _log_location_changed(self, value: str):
+        self._preferences.log_location = value
