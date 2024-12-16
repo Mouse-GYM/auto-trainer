@@ -14,7 +14,7 @@ import numpy
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
     intersession_process
 from autotrainer.behavior.behavior_event_kind import BehaviorEventKind
-from autotrainer.core import FixedArrayMultiQueue, ObservableObject, ProjectInfo, EventManager
+from autotrainer.core import FixedArrayMultiQueue, ObservableObject, ProjectInfo, EventManager, clear_queue
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     DlcPoseModel, MemoryPoseModel, InferenceMode
@@ -188,6 +188,10 @@ class InferenceModel(ObservableObject):
             self._process = None
 
             self._set_status(InferenceStatus.stopped)
+
+            clear_queue(self._data_queue)
+            clear_queue(self._msg_queue)
+            clear_queue(self._cmd_queue)
 
     def terminate(self):
         self.stop()

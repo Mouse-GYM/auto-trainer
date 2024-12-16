@@ -317,6 +317,8 @@ class VideoCaptureModel(ObservableObject):
 
             self._video_capture = None
 
+        clear_queue(self._video_image_queue)
+
     def on_close(self):
         if self._video_capture is not None:
             self._video_capture.terminate()
