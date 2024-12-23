@@ -71,7 +71,7 @@ class CaptureInferenceAttrs:
     Attributes
     ----------
     queue: Queue
-        A queue to push frames for inference
+        A queue to push frames for pellet
     index: int
         The index of this camera in the queue
     """
@@ -105,7 +105,7 @@ class VideoCapture(Process):
     Process-based class for video capture and recording.
 
     VideoCapture runs as a separate process for video capture and recording.  An optional image queue can be provided
-    to receive frames from the camera.  A separate, optional inference queue can be provided to feed inference models
+    to receive frames from the camera.  A separate, optional pellet queue can be provided to feed pellet models
     or any other process.
     """
 

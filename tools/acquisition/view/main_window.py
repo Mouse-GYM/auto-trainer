@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel, QMessag
     QSizePolicy, QWidget
 import qtawesome as qta
 
+from autotrainer.core import EventManager
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
@@ -98,6 +99,7 @@ class MainWindow(QMainWindow):
             self.run_action.setEnabled(True)
 
     def on_activated(self):
+        EventManager.create()
         self.main_content.on_activated()
 
     def closeEvent(self, event):
@@ -186,6 +188,9 @@ class MainWindow(QMainWindow):
         self.capture_trigger_action.setCheckable(True)
         self.capture_trigger_action.triggered.connect(self._internal_simulate_trigger)
 
+        self.pellet_seen_action = QAction("Pellet Seen", self)
+        self.pellet_seen_action.triggered.connect(self._internal_set_pellet_seen)
+
         self.mouse_seen_action = QAction("Mouse Seen", self)
         self.mouse_seen_action.triggered.connect(self._internal_set_mouse_seen)
 
@@ -227,6 +232,7 @@ class MainWindow(QMainWindow):
 
         if self._is_dev:
             toolbar.addAction(self.capture_trigger_action)
+            toolbar.addAction(self.pellet_seen_action)
             toolbar.addAction(self.mouse_seen_action)
 
         spacer = QWidget()
@@ -264,6 +270,9 @@ class MainWindow(QMainWindow):
 
     def _internal_simulate_trigger(self):
         self._app_view_model.behavior.trigger_tunnel(self.capture_trigger_action.isChecked())
+
+    def _internal_set_pellet_seen(self):
+        self._app_view_model.behavior.algorithm.pellet_seen(True)
 
     def _internal_set_mouse_seen(self):
         self._app_view_model.behavior.algorithm.mouse_seen(True)

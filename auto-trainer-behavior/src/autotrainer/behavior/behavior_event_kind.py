@@ -18,6 +18,9 @@ class BehaviorEventKind(IntEnum, Enum):
     pelletReleaseCan = 1210
     pelletReleaseBegin = 1211,
     pelletReleaseEnd = 1212,
+    pelletHomeCan = 1213,
+    pelletHomeBegin = 1214,
+    pelletHomeEnd = 1215,
     pelletAcknowledgeToken = 1298,
     pelletExternalToken = 1299,
     sessionStarted = 1301,

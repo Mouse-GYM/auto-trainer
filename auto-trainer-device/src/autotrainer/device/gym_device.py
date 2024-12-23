@@ -70,7 +70,7 @@ class GymDevice(Device):
                 self._last_command = ""
                 self._read_buffer = ""
 
-                EventManager.instance().post_event(GymDeviceEventKind.deviceCommandAcknowledge,
+                EventManager.post_event(GymDeviceEventKind.deviceCommandAcknowledge,
                                                    context=self._last_command_token)
                 self._api.send_message(GymDeviceMessageKind.ACK, self._last_command_token)
 
@@ -91,7 +91,7 @@ class GymDevice(Device):
             self._last_command = data[0:-1]
             self._last_command_token = token
             self._api.send_data_str(data)
-            EventManager.instance().post_event(GymDeviceEventKind.deviceCommandSend,
+            EventManager.post_event(GymDeviceEventKind.deviceCommandSend,
                                                context=f"{data}({self._last_command_token})")
         else:
             logger.debug("storing in command buffer")

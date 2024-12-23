@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("inference", help="the DeepLabCut inference to use")
+    parser.add_argument("pellet", help="the DeepLabCut pellet to use")
     parser.add_argument("left", help="the left camera video source file")
     parser.add_argument("right", help="the right camera video source file")
     parser.add_argument("-b", "--batchsize", help="the batch size for DLC", type=int, default=5)
@@ -49,7 +49,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if not os.path.exists(os.path.join(args.inference, "config.yaml")):
-        logger.error("The inference configuration does not exist")
+        logger.error("The pellet configuration does not exist")
 
     if not os.path.exists(args.left):
         logger.error("The left camera video file does not exist")

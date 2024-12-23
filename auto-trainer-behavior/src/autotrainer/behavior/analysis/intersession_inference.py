@@ -13,16 +13,16 @@ logger = logging.getLogger(__name__)
 
 def intersession_inference(pose_data: ndarray, part_names: typing.List[str], project: ProjectInfo) -> None:
     """
-    Called once for pose data from all video frames passed to the inference model.
+    Called once for pose data from all video frames passed to the pellet model.
 
-    :param pose_data: interleaved batch pose data from inference model
+    :param pose_data: interleaved batch pose data from pellet model
     :param part_names: names associated with each pose position
     :param project: current project info for finding/defining file names
     :return: None
     """
     try:
         shape = pose_data.shape
-        EventManager.instance().post_event(BehaviorEventKind.intersessionSegmentationSave, context=f"{shape}")
+        EventManager.post_event(BehaviorEventKind.intersessionSegmentationSave, context=f"{shape}")
         axis_labels = ("x", "y", "p")
         columns = pandas.MultiIndex.from_product([part_names, axis_labels], names=["bodyparts", "coords"])
 
@@ -38,5 +38,5 @@ def intersession_inference(pose_data: ndarray, part_names: typing.List[str], pro
         df_xyp.to_hdf(project.get_intersession_pose_path(name=project.camera_2), "df_with_missing", format="table",
                       mode="w")
     except Exception as e:
-        logger.error(f"intersession inference failed: {e}")
-        EventManager.instance().post_event(BehaviorEventKind.intersessionSegmentationSaveError)
+        logger.error(f"intersession pellet failed: {e}")
+        EventManager.post_event(BehaviorEventKind.intersessionSegmentationSaveError)

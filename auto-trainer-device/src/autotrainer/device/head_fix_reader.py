@@ -70,7 +70,7 @@ class LoadCellMonitor(ObservableObject):
     def _ensure_active(self):
         if not self._is_engaged:
             self._is_engaged = True
-            EventManager.instance().post_event(HeadFixEventKind.loadCellStateChanged, context=True,
+            EventManager.post_event(HeadFixEventKind.loadCellStateChanged, context=True,
                                                when=datetime.fromtimestamp(self._when), index=self._index)
             self.property_changed("is_engaged", True, False)
 
@@ -79,7 +79,7 @@ class LoadCellMonitor(ObservableObject):
     def _ensure_inactive(self):
         if self._is_engaged:
             self._is_engaged = False
-            EventManager.instance().post_event(HeadFixEventKind.loadCellStateChanged, context=False,
+            EventManager.post_event(HeadFixEventKind.loadCellStateChanged, context=False,
                                                when=datetime.fromtimestamp(self._when), index=self._index)
             self.property_changed("is_engaged", False, True)
 

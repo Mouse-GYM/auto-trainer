@@ -146,7 +146,7 @@ class InferenceModel(ObservableObject):
             self._data_thread.start()
 
         if network_queue is None:
-            logger.warning("inference not started because there is no inference image queue")
+            logger.warning("pellet not started because there is no pellet image queue")
             self._set_status(InferenceStatus.stopped)
             return False
 
@@ -158,13 +158,13 @@ class InferenceModel(ObservableObject):
                                                    network_queue.frames_per_camera, network_queue.shape)
 
         if self._model_location is None or len(self._model_location) == 0:
-            logger.warning("inference model not specified; using in-memory random data")
+            logger.warning("pellet model not specified; using in-memory random data")
             model = MemoryPoseModel(network_queue.batch_size)
         else:
             model = DlcPoseModel(self._model_location, 1, 0, network_queue.batch_size)
 
         if not model.is_valid():
-            logger.warning("inference not started because the model does not exist at the specified location")
+            logger.warning("pellet not started because the model does not exist at the specified location")
             return False
 
         self._process = PoseProcess(model, network_queue, self._offline_queue, self._data_queue, self._cmd_queue,
@@ -178,12 +178,12 @@ class InferenceModel(ObservableObject):
 
             self._send_message(InferenceCommandMessageKind.Terminate)
 
-            logger.debug(f"<inference> waiting for process termination")
+            logger.debug(f"<pellet> waiting for process termination")
 
             while self._process.is_alive():
                 time.sleep(0.1)
 
-            logger.debug(f"<inference> process terminated")
+            logger.debug(f"<pellet> process terminated")
 
             self._process = None
 
@@ -301,7 +301,7 @@ class InferenceModel(ObservableObject):
             self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
         except Exception as ex:
             logger.error(ex)
-            EventManager.instance().post_event(BehaviorEventKind.intersessionSegmentationError, context=str(ex))
+            EventManager.post_event(BehaviorEventKind.intersessionSegmentationError, context=str(ex))
             self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
             self._intersession_block.configuration.complete(self._intersession_block.configuration.nonce, False)
             self._intersession_block = None

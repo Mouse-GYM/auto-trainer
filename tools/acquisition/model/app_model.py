@@ -156,7 +156,7 @@ class AppModel(ObservableObject):
             if shape_1 == shape_2:
                 self._inference_queue = FixedArrayMultiQueue(3, 2, 3, shape_1)
             else:
-                logger.warning("inference disabled: left and right camera frame sizes do not match")
+                logger.warning("pellet disabled: left and right camera frame sizes do not match")
 
         did_start = self.left_camera.on_prepare_capture(self._inference_queue)
 
@@ -250,8 +250,8 @@ class AppModel(ObservableObject):
             if "analysis" in conf:
                 self.inference.load_configuration(conf["analysis"])
 
-            if "inference" in conf:
-                self.inference.load_configuration(conf["inference"])
+            if "pellet" in conf:
+                self.inference.load_configuration(conf["pellet"])
 
             if "behavior" in conf:
                 self._behavior.load_configuration(conf["behavior"])
@@ -283,7 +283,7 @@ class AppModel(ObservableObject):
         for camera in self._cameras:
             camera.on_close()
 
-        EventManager.instance().close()
+        EventManager.close()
 
         self.head_fix.on_close()
         self._pellet_delivery.on_close()
@@ -300,7 +300,7 @@ class AppModel(ObservableObject):
                 "camera3": self._top_camera.save_configuration(),
                 "headFix": self.head_fix.save_configuration(),
                 "pelletDelivery": self._pellet_delivery.save_configuration(),
-                "inference": self._inference.save_configuration(),
+                "pellet": self._inference.save_configuration(),
                 "behavior": self._behavior.save_configuration(),
                 "outputLocation": self.output_location}
 

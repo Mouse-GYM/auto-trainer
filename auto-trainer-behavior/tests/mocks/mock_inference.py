@@ -1,3 +1,5 @@
+from typing import Optional
+
 from autotrainer.core import ObservableObject
 from autotrainer.inference import PoseResponse
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration
@@ -10,8 +12,8 @@ class MockInference(ObservableObject):
     def __init__(self):
         super().__init__(event_names=("pose_changed",))
 
-        self.segmentation_configuration : SegmentationConfiguration | None = None
-        self.detection_configuration: DetectionConfiguration | None = None
+        self.segmentation_configuration : Optional[SegmentationConfiguration] = None
+        self.detection_configuration: Optional[DetectionConfiguration] = None
 
     # region Mocks
     # Methods that provide the expected response from other parts of the system that are not being tested here.

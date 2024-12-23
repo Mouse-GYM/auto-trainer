@@ -30,7 +30,33 @@ class EventManager:
     _instance = None
 
     @classmethod
-    def instance(cls):
+    def post_event_info(cls, info: EventInfo):
+        if cls._instance is not None:
+            cls._instance.post_event_info_2(info)
+
+    @classmethod
+    def post_event(cls, kind: int, context: Optional[object] = None, when: Optional[datetime] = None,
+                   index: int = None):
+        if cls._instance is not None:
+            cls._instance.post_event_2(kind, context, when, index)
+
+    @classmethod
+    def set_project(cls, project: ProjectInfo):
+        if cls._instance is not None:
+            cls._instance.project = project
+
+    @classmethod
+    def flush(cls):
+        if cls._instance is not None:
+            cls._instance.flush_2()
+
+    @classmethod
+    def close(cls):
+        if cls._instance is not None:
+            cls._instance.close_2()
+
+    @classmethod
+    def create(cls) -> EventManager:
         if cls._instance is None:
             cls._instance = EventManager("EventManagerInstance")
 
@@ -38,7 +64,7 @@ class EventManager:
 
     def __init__(self, key=""):
         if key != "EventManagerInstance":
-            raise Exception("Use EventManager.instance()")
+            raise Exception("Use EventManager.create() to create.")
 
         self._project_info = None
 
@@ -62,18 +88,18 @@ class EventManager:
 
         self._update_event_file()
 
-    def flush(self):
+    def flush_2(self):
         if self._event_file is not None:
             self._event_file.flush()
 
-    def close(self):
+    def close_2(self):
         self._write_active = False
 
-    def post_event_info(self, info: EventInfo):
+    def post_event_info_2(self, info: EventInfo):
         self._write_queue.put(info)
 
-    def post_event(self, kind: int, context: Optional[object] = None, when: Optional[datetime] = None,
-                   index: int = None):
+    def post_event_2(self, kind: int, context: Optional[object] = None, when: Optional[datetime] = None,
+                     index: int = None):
         info = EventInfo(kind, when=when or datetime.now(), index=index or time.perf_counter_ns(), context=context)
 
         self.post_event_info(info)

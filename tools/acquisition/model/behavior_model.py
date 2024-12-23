@@ -11,7 +11,7 @@ class BehaviorModel(ObservableObject):
     def __init__(self, head_fix: HeadFixModel, pellet: PelletDeliveryModel, inference: InferenceProtocol):
         super().__init__()
 
-        self._machine = SystemMachine(None, head_fix.head_fix_reader, head_fix, pellet.pellet_reader, pellet, inference)
+        self._machine = SystemMachine(None, head_fix, pellet.pellet_reader, pellet, inference)
 
         self._project: Optional[ProjectInfo] = None
 

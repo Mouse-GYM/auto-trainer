@@ -1,7 +1,7 @@
 import tempfile
 import time
 
-from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits, SystemMachine, InferenceState
+from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits, SystemMachine, PelletState
 from autotrainer.core import ProjectInfo
 
 from .mock_headfix import MockHeadfix
@@ -25,7 +25,7 @@ class BehaviorMachineWithMocks(SystemMachine):
 
         algorithm = algorithm if algorithm is not None else BehaviorAlgorithm(limits)
 
-        super().__init__(algorithm, self._mock_headfix, self._mock_headfix, self._mock_pellet, self._mock_pellet,
+        super().__init__(algorithm, self._mock_headfix, self._mock_pellet, self._mock_pellet,
                          self._mock_inference, self._project_info)
 
     @property
@@ -47,11 +47,11 @@ class BehaviorMachineWithMocks(SystemMachine):
         self.mock_pose_response(True, mouse_seen)
 
         if was_covered:
-            assert self.inference.state == InferenceState.releasing
+            assert self.inference.state == PelletState.releasing
 
             self.mock_pellet.send_ack()
 
-            assert self.inference.state == InferenceState.monitoring
+            assert self.inference.state == PelletState.monitoring
         else:
             self.expect_pellet_delivery(True, was_covered)
 
@@ -65,7 +65,7 @@ class BehaviorMachineWithMocks(SystemMachine):
 
     def expect_cover_command(self):
         # An explicit cover command should have been set.  Should be in covering state and have an ack from the command.
-        assert self.inference.state == InferenceState.covering
+        assert self.inference.state == PelletState.covering
 
         self.mock_pellet.send_ack()
 
@@ -81,17 +81,17 @@ class BehaviorMachineWithMocks(SystemMachine):
         """
 
         if not was_covered:
-            assert self.inference.state == InferenceState.loading
+            assert self.inference.state == PelletState.loading
 
             self.mock_pellet.send_ack()
 
-            assert self.inference.state == InferenceState.sending
+            assert self.inference.state == PelletState.sending
 
             self.mock_pellet.send_ack()
 
         if should_release:
-            assert self.inference.state == InferenceState.releasing
+            assert self.inference.state == PelletState.releasing
 
             self.mock_pellet.send_ack()
 
-            assert self.inference.state == InferenceState.monitoring
+            assert self.inference.state == PelletState.monitoring

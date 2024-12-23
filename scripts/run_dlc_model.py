@@ -111,7 +111,7 @@ def process_video(network, front_source, side_source, batch_size: int, user_max_
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("inference", help="the DeepLabCut inference to use")
+    parser.add_argument("pellet", help="the DeepLabCut pellet to use")
     parser.add_argument("front", help="the front camera video source file")
     parser.add_argument("side", help="the side camera video source file")
     parser.add_argument("-b", "--batchsize", help="the batch size for DLC", type=int, default=5)

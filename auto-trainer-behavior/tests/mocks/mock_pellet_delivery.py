@@ -16,6 +16,11 @@ class MockPelletDelivery(ObservableObject):
 
         self._last_token = None
 
+    def send_home(self):
+        self._last_token = uuid.uuid4()
+        logger.debug("home")
+        return self._last_token
+
     def load_pellet(self):
         self._last_token = uuid.uuid4()
         logger.debug("load")

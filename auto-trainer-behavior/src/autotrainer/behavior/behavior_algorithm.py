@@ -84,7 +84,7 @@ class BehaviorAlgorithm(ObservableObject):
     @baseline_intensity.setter
     def baseline_intensity(self, value):
         self._baseline_intensity = value
-        EventManager.instance().post_event(BehaviorEventKind.headfixBaselineChanged, context=value)
+        EventManager.post_event(BehaviorEventKind.headfixBaselineChanged, context=value)
 
     @property
     def pellet_last_seen(self) -> float:
@@ -111,13 +111,13 @@ class BehaviorAlgorithm(ObservableObject):
         self._session_mouse_seen = False
         self._pellet_seen = False
 
-        EventManager.instance().post_event(BehaviorEventKind.sessionStarted)
+        EventManager.post_event(BehaviorEventKind.sessionStarted)
 
         self.session_starting()
 
     def end_session(self):
         if self._is_in_session:
-            EventManager.instance().post_event(BehaviorEventKind.sessionEnded)
+            EventManager.post_event(BehaviorEventKind.sessionEnded)
             self._is_in_session = False
             self.session_ending()
 
@@ -139,7 +139,7 @@ class BehaviorAlgorithm(ObservableObject):
     def pellet_seen(self, seen: bool = True):
         if self._pellet_seen != seen:
             self._pellet_seen = seen
-            EventManager.instance().post_event(BehaviorEventKind.pelletSeen, context=seen)
+            EventManager.post_event(BehaviorEventKind.pelletSeen, context=seen)
 
         if seen:
             self._set_pellet_last_seen(time.time())
@@ -157,7 +157,7 @@ class BehaviorAlgorithm(ObservableObject):
             was_seen = self._session_mouse_seen
             self._session_mouse_seen = self._on_property_changed("session_mouse_seen", seen, self._session_mouse_seen)
             if not was_seen:
-                EventManager.instance().post_event(BehaviorEventKind.sessionMouseSeen)
+                EventManager.post_event(BehaviorEventKind.sessionMouseSeen)
 
     def _start_day(self):
         self._day_pellet_count = 0
@@ -165,7 +165,7 @@ class BehaviorAlgorithm(ObservableObject):
     def _check_date(self):
         today = datetime.now().date()
         if today != self._today:
-            EventManager.instance().post_event(BehaviorEventKind.dayStarted)
+            EventManager.post_event(BehaviorEventKind.dayStarted)
             self._today = today
             self._start_day()
 
@@ -182,9 +182,9 @@ class BehaviorAlgorithm(ObservableObject):
     def _increment_session_pellet_count(self, incr: int = 1):
         value = max(self._session_pellet_count + incr, 0)
         if incr > 0:
-            EventManager.instance().post_event(BehaviorEventKind.sessionPelletIncrease, context=value)
+            EventManager.post_event(BehaviorEventKind.sessionPelletIncrease, context=value)
         elif incr < 0:
-            EventManager.instance().post_event(BehaviorEventKind.sessionPelletDecrease, context=value)
+            EventManager.post_event(BehaviorEventKind.sessionPelletDecrease, context=value)
         self._set_session_pellet_count(value)
 
     def _set_day_pellet_count(self, value: int):
@@ -194,7 +194,7 @@ class BehaviorAlgorithm(ObservableObject):
     def _increment_day_pellet_count(self, incr: int = 1):
         value = max(self._day_pellet_count + incr, 0)
         if incr > 0:
-            EventManager.instance().post_event(BehaviorEventKind.dayIncreasePellet, context=value)
+            EventManager.post_event(BehaviorEventKind.dayIncreasePellet, context=value)
         elif incr < 0:
-            EventManager.instance().post_event(BehaviorEventKind.dayDecreasePellet, context=value)
+            EventManager.post_event(BehaviorEventKind.dayDecreasePellet, context=value)
         self._set_day_pellet_count(value)

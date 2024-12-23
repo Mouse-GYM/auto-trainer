@@ -5,13 +5,13 @@ mocks or real interfaces.
 """
 import logging
 
-from autotrainer.behavior import InferenceMachine, InferenceState
+from autotrainer.behavior import PelletMachine, PelletState
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('transitions').setLevel(logging.INFO)
 
 
-def assert_load_cycle(machine: InferenceMachine, should_release: bool = True) -> None:
+def assert_load_cycle(machine: PelletMachine, should_release: bool = True) -> None:
     """
     This is essentially the spec of what the behavior should be each time an ack is received from the real pellet device
     for a load->release cycle.  It defines what should happen in pellet_device_ack_received().  The state machine should
@@ -22,42 +22,42 @@ def assert_load_cycle(machine: InferenceMachine, should_release: bool = True) ->
     """
     machine.load_pellet()
 
-    assert machine.state == InferenceState.loading
+    assert machine.state == PelletState.loading
 
     machine.send_pellet()
 
-    assert machine.state == InferenceState.sending
+    assert machine.state == PelletState.sending
 
     # When send completes, the machine transitions to covering in the ack that won't ever come in this testing.
-    machine.state = InferenceState.covering
+    machine.state = PelletState.covering
 
     machine.release_pellet()
 
     if should_release:
-        assert machine.state == InferenceState.releasing
+        assert machine.state == PelletState.releasing
 
         machine.monitor_pellet()
 
-        assert machine.state == InferenceState.monitoring
+        assert machine.state == PelletState.monitoring
     else:
-        assert machine.state == InferenceState.covering
+        assert machine.state == PelletState.covering
 
 
-def assert_covered_was_released(machine: InferenceMachine) -> None:
+def assert_covered_was_released(machine: PelletMachine) -> None:
     """
     Verify that a covered pellet was release, which should also immediately transition to monitoring.
     :param machine: InferenceMachine instance
     :return: None
     """
-    assert machine.state == InferenceState.releasing
+    assert machine.state == PelletState.releasing
 
     machine.monitor_pellet()
 
-    assert machine.state == InferenceState.monitoring
+    assert machine.state == PelletState.monitoring
 
 
 def test_covered_load_cycle():
-    machine = InferenceMachine()
+    machine = PelletMachine()
 
     assert_load_cycle(machine, should_release=False)
 
@@ -70,7 +70,7 @@ def test_covered_load_cycle():
     machine.algorithm.end_session()
 
     # Should return to covered at end of session
-    assert machine.state == InferenceState.covering
+    assert machine.state == PelletState.covering
 
     machine.algorithm.start_session()
 
@@ -79,17 +79,17 @@ def test_covered_load_cycle():
     # Reload missing pellet from monitoring state.
     machine.pellet_lost()
 
-    assert machine.state == InferenceState.missing
+    assert machine.state == PelletState.missing
 
     assert_load_cycle(machine, should_release=True)
 
     machine.algorithm.end_session()
 
-    assert machine.state == InferenceState.covering
+    assert machine.state == PelletState.covering
 
 
 def test_covered_disabled_load_cycle():
-    machine = InferenceMachine()
+    machine = PelletMachine()
 
     machine.algorithm.pellet_cover_enabled = False
 

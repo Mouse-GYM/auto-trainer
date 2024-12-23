@@ -1,8 +1,11 @@
+from typing import Protocol
+
 from events import Events
 
 
 class ObservableObject(Events):
     """Defines a class with a standard property_changed event."""
+
     def __init__(self, event_names=()):
         super().__init__(event_names + ("property_changed",))
 
@@ -14,3 +17,15 @@ class ObservableObject(Events):
         self.property_changed(property_name, new_value, old_value)
 
         return new_value
+
+
+class EventSlotProtocol(Protocol):
+    def __iadd__(self, f):
+        pass
+
+    def __isub__(self, f):
+        pass
+
+
+class ObservableObjectProtocol(Protocol):
+    property_changed: EventSlotProtocol

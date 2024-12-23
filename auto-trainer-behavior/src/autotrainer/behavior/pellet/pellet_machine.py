@@ -4,11 +4,9 @@ from enum import Enum
 from opentelemetry import trace
 from transitions import Machine
 
-from autotrainer.core import EventManager, EventInfo
+from autotrainer.core import EventManager
 from autotrainer.device import PelletReader
-from autotrainer.inference import PoseResponse
 
-from ..inference_protocol import InferenceProtocol
 from ..behavior_algorithm import BehaviorAlgorithm, BehaviorLimits
 from ..behavior_event_kind import BehaviorEventKind
 
@@ -17,43 +15,45 @@ logger = logging.getLogger(__name__)
 tracer = trace.get_tracer("behavior")
 
 
-class InferenceState(str, Enum):
+class PelletState(str, Enum):
     monitoring = "monitoring",
     missing = "missing",
     loading = "loading"
     sending = "sending",
     releasing = "releasing"
     covering = "covering",
+    home = "home"
 
 
-class InferenceMachine:
-    states = [e for e in InferenceState]
+class PelletMachine:
+    states = [e for e in PelletState]
 
     # Note that transitions have conditions, where applicable.  What may appear to be unconditional calls to cover,
     # release, or otherwise perform pellet transitions will not succeed and perform those actions if these conditions
     # are met.
     transitions = [
-        {"trigger": "pellet_lost", "source": "*", "dest": InferenceState.missing},
-        {"trigger": "load_pellet", "source": InferenceState.missing, "dest": InferenceState.loading,
+        {"trigger": "pellet_lost", "source": "*", "dest": PelletState.missing},
+        {"trigger": "load_pellet", "source": PelletState.missing, "dest": PelletState.loading,
          "before": "before_load_pellet", "conditions": "can_load_pellet"},
-        {"trigger": "send_pellet", "source": InferenceState.loading, "dest": InferenceState.sending,
-         "before": "before_send_pellet", "conditions": "can_send_pellet"},
-        {"trigger": "cover_pellet", "source": InferenceState.monitoring, "dest": InferenceState.covering,
+        {"trigger": "send_pellet", "source": [PelletState.loading, PelletState.home],
+         "dest": PelletState.sending, "before": "before_send_pellet", "conditions": "can_send_pellet"},
+        {"trigger": "cover_pellet", "source": PelletState.monitoring, "dest": PelletState.covering,
          "before": "before_cover_pellet", "after": "after_cover_pellet", "conditions": "can_cover_pellet"},
-        {"trigger": "release_pellet", "source": [InferenceState.covering, InferenceState.monitoring],
-         "dest": InferenceState.releasing, "before": "before_release_pellet", "after": "after_release_pellet",
+        {"trigger": "release_pellet", "source": [PelletState.covering, PelletState.monitoring],
+         "dest": PelletState.releasing, "before": "before_release_pellet", "after": "after_release_pellet",
          "conditions": "can_release_pellet"},
-        {"trigger": "monitor_pellet", "source": "*", "dest": InferenceState.monitoring}
+        {"trigger": "monitor_pellet", "source": "*", "dest": PelletState.monitoring},
+        {"trigger": "move_home", "source": "*", "dest": PelletState.home, "before": "before_move_home",
+         "conditions": "can_move_home"},
     ]
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None, pellet_device: PelletReader = None, pellet_command=None,
-                 inference: InferenceProtocol = None):
+    def __init__(self, algorithm: BehaviorAlgorithm = None, pellet_device: PelletReader = None, pellet_command=None):
 
-        self.state = InferenceState.missing
+        self.state = PelletState.missing
 
-        self.machine = Machine(model=self, states=InferenceMachine.states,
-                               transitions=InferenceMachine.transitions, auto_transitions=False,
-                               initial=InferenceState.missing, model_override=True)
+        self.machine = Machine(model=self, states=PelletMachine.states,
+                               transitions=PelletMachine.transitions, auto_transitions=False,
+                               initial=PelletState.missing, model_override=True)
 
         self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm(BehaviorLimits())
 
@@ -67,11 +67,6 @@ class InferenceMachine:
 
         self.pellet_command = pellet_command
 
-        self._inference = inference
-
-        if self._inference is not None and self._inference.pose_algorithm is not None:
-            self._inference.pose_algorithm.pose_changed += self._pose_changed
-
         self._api_status_token = None
 
         self._pellet_command_trace = None
@@ -80,32 +75,40 @@ class InferenceMachine:
     def algorithm(self):
         return self._algorithm
 
+    def before_move_home(self):
+        if self.pellet_command is not None:
+            self._pellet_command_trace = tracer.start_span("move_home")
+            self._api_status_token = self.pellet_command.send_home()
+            EventManager.post_event(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
+        else:
+            self._api_status_token = None
+
     def before_load_pellet(self):
         if self.pellet_command is not None:
             self._pellet_command_trace = tracer.start_span("load_pellet")
             self._api_status_token = self.pellet_command.load_pellet()
-            EventManager.instance().post_event(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
+            EventManager.post_event(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
     def before_send_pellet(self):
         if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.send_pellet()
-            EventManager.instance().post_event(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
+            EventManager.post_event(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
     def before_cover_pellet(self):
         if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.cover_pellet()
-            EventManager.instance().post_event(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
+            EventManager.post_event(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
     def before_release_pellet(self):
         if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.release_pellet()
-            EventManager.instance().post_event(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
+            EventManager.post_event(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
@@ -115,28 +118,50 @@ class InferenceMachine:
     def after_cover_pellet(self):
         self._algorithm.pellet_covered()
 
+    def can_move_home(self):
+        can = self.can_use_pellet_command()
+        EventManager.post_event(BehaviorEventKind.pelletHomeCan, context=can)
+        return can
+
     def can_load_pellet(self):
         can = self.can_use_pellet_command() and self._algorithm.can_load_pellet()
-        EventManager.instance().post_event(BehaviorEventKind.pelletLoadCan, context=can)
+        EventManager.post_event(BehaviorEventKind.pelletLoadCan, context=can)
         return can
 
     def can_send_pellet(self):
         can = self.can_use_pellet_command()
-        EventManager.instance().post_event(BehaviorEventKind.pelletSendCan, context=can)
+        EventManager.post_event(BehaviorEventKind.pelletSendCan, context=can)
         return can
 
     def can_cover_pellet(self):
         can = self.can_use_pellet_command() and self._algorithm.can_cover_pellet()
-        EventManager.instance().post_event(BehaviorEventKind.pelletCoverCan, context=can)
+        EventManager.post_event(BehaviorEventKind.pelletCoverCan, context=can)
         return can
 
     def can_release_pellet(self):
         can = self.can_use_pellet_command() and self._algorithm.can_release_pellet()
-        EventManager.instance().post_event(BehaviorEventKind.pelletReleaseCan, context=can)
+        EventManager.post_event(BehaviorEventKind.pelletReleaseCan, context=can)
         return can
 
     def can_use_pellet_command(self):
         return self._api_status_token is None
+
+    def pellet_seen(self, seen: bool):
+        if not seen:
+            if self.state == PelletState.monitoring:
+                self.pellet_lost()
+
+            if self.state == PelletState.missing:
+                # Immediately go to missing, but load_pellet transition will only succeed if time, pellet limits, and
+                # other requirements are satisfied.
+                self.load_pellet()
+            elif self.state == PelletState.covering:
+                self.pellet_lost()
+        else:
+            if self.state == PelletState.missing:
+                self.monitor_pellet()
+            elif self.state == PelletState.covering:
+                self.release_pellet()
 
     # region Callbacks
     def _session_starting(self):
@@ -145,38 +170,14 @@ class InferenceMachine:
         # may need to release in the monitoring state.
         # We also may have toggled between enabling and disabling the cover behavior, so even if pellet_cover_enabled
         # is false, send the command.
-        if self.state == InferenceState.covering or self.state == InferenceState.monitoring:
+        if self.state == PelletState.covering or self.state == PelletState.monitoring:
             self.release_pellet()
+        elif self.state == PelletState.home:
+            self.send_pellet()
 
     def _session_ending(self):
-        if self.state == InferenceState.monitoring:
+        if self.state == PelletState.monitoring:
             self.cover_pellet()
-
-    def _pose_changed(self, response: PoseResponse):
-        # TODO reset if in the loading process and pellet seen?
-
-        self._algorithm.pellet_seen(response.pellet_seen)
-
-        self._algorithm.mouse_seen(response.mouse_seen)
-
-        if not self._algorithm.pellet_delivery_enabled:
-            return
-
-        if not response.pellet_seen:
-            if self.state == InferenceState.monitoring:
-                self.pellet_lost()
-
-            if self.state == InferenceState.missing:
-                # Immediately go to missing, but load_pellet transition will only succeed if time, pellet limits, and
-                # other requirements are satisfied.
-                self.load_pellet()
-            elif self.state == InferenceState.covering:
-                self.pellet_lost()
-        else:
-            if self.state == InferenceState.missing:
-                self.monitor_pellet()
-            elif self.state == InferenceState.covering:
-                self.release_pellet()
 
     def _pellet_device_ack_received(self, token):
         if self._api_status_token is None:
@@ -185,28 +186,29 @@ class InferenceMachine:
 
         if token != self._api_status_token:
             # External command while we are waiting for our own.  Track in case it is causing conflicts.
-            EventManager.instance().post_event(BehaviorEventKind.pelletExternalToken, context=token)
+            EventManager.post_event(BehaviorEventKind.pelletExternalToken, context=token)
             logger.warning("ignoring pellet delivery token from external command")
             return
 
-        self._pellet_command_trace.end()
+        if self._pellet_command_trace is not None:
+            self._pellet_command_trace.end()
 
-        EventManager.instance().post_event(BehaviorEventKind.pelletAcknowledgeToken, context=token)
+        EventManager.post_event(BehaviorEventKind.pelletAcknowledgeToken, context=token)
 
         self._api_status_token = None
 
-        if self.state == InferenceState.loading:
+        if self.state == PelletState.loading:
             self.send_pellet()
-        elif self.state == InferenceState.sending:
+        elif self.state == PelletState.sending:
             # Strictly speaking, the hardware ends the send phase with the pellet covered.  This is primarily to put
             # things in a consistent state of covered whether it is right after sending, or if it was recovered for
             # any reason.
-            self.state = InferenceState.covering
+            self.state = PelletState.covering
             self.release_pellet()
-        elif self.state == InferenceState.covering:
+        elif self.state == PelletState.covering:
             # Will occur after an actual cover command to the hardware.
             self.release_pellet()
-        elif self.state == InferenceState.releasing:
+        elif self.state == PelletState.releasing:
             self.monitor_pellet()
 
     # endregion
@@ -217,6 +219,12 @@ class InferenceMachine:
         pass
 
     def may_trigger(self):
+        pass
+
+    def move_home(self):
+        pass
+
+    def may_move_home(self):
         pass
 
     def pellet_lost(self):
@@ -253,6 +261,9 @@ class InferenceMachine:
         pass
 
     def may_monitor_pellet(self):
+        pass
+
+    def is_home(self):
         pass
 
     def is_missing(self):

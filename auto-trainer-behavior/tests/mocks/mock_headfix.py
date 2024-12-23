@@ -1,4 +1,5 @@
 from autotrainer.core import ObservableObject
+from autotrainer.device import HeadFixReader
 
 
 class MockHeadfix(ObservableObject):
@@ -16,8 +17,15 @@ class MockHeadfix(ObservableObject):
         self._is_load_cell_engaged = self._on_property_changed("is_load_cell_engaged", b, self._is_load_cell_engaged)
 
     @property
+    def head_fix_reader(self) -> HeadFixReader:
+        return self
+
+    @property
     def current_position(self):
         return self._current_position
 
     def update_position(self, value: int):
         self._current_position = value
+
+    def tare(self):
+        pass

@@ -35,7 +35,7 @@ class MemoryPoseModel(PoseModel):
             if self.use_random:
                 data = numpy.random.rand(len(self.body_parts), 3)
             else:
-                data = numpy.zeros((len(self.body_parts), 3))
+                data = numpy.ones((len(self.body_parts), 3))
 
             # pose_predict normalizes on the assumption these values are in absolute frame size
             data[:, 0] *= frames.shape[2]
