@@ -17,12 +17,11 @@ tracer = trace.get_tracer("behavior")
 
 class PelletState(str, Enum):
     monitoring = "monitoring",
-    missing = "missing",
     loading = "loading"
     sending = "sending",
     releasing = "releasing"
     covering = "covering",
-    home = "home"
+    home = "moving_home"
 
 
 class PelletMachine:
@@ -32,15 +31,15 @@ class PelletMachine:
     # release, or otherwise perform pellet transitions will not succeed and perform those actions if these conditions
     # are met.
     transitions = [
-        {"trigger": "pellet_lost", "source": "*", "dest": PelletState.missing},
-        {"trigger": "load_pellet", "source": PelletState.missing, "dest": PelletState.loading,
-         "before": "before_load_pellet", "conditions": "can_load_pellet"},
+        {"trigger": "load_pellet", "source": [PelletState.monitoring, PelletState.covering],
+         "dest": PelletState.loading, "before": "before_load_pellet", "after": "after_load_pellet",
+         "conditions": "can_load_pellet"},
         {"trigger": "send_pellet", "source": [PelletState.loading, PelletState.home],
          "dest": PelletState.sending, "before": "before_send_pellet", "conditions": "can_send_pellet"},
         {"trigger": "cover_pellet", "source": PelletState.monitoring, "dest": PelletState.covering,
-         "before": "before_cover_pellet", "after": "after_cover_pellet", "conditions": "can_cover_pellet"},
+         "before": "before_cover_pellet", "conditions": "can_cover_pellet"},
         {"trigger": "release_pellet", "source": [PelletState.covering, PelletState.monitoring],
-         "dest": PelletState.releasing, "before": "before_release_pellet", "after": "after_release_pellet",
+         "dest": PelletState.releasing, "before": "before_release_pellet",
          "conditions": "can_release_pellet"},
         {"trigger": "monitor_pellet", "source": "*", "dest": PelletState.monitoring},
         {"trigger": "move_home", "source": "*", "dest": PelletState.home, "before": "before_move_home",
@@ -49,11 +48,11 @@ class PelletMachine:
 
     def __init__(self, algorithm: BehaviorAlgorithm = None, pellet_device: PelletReader = None, pellet_command=None):
 
-        self.state = PelletState.missing
+        self.state = PelletState.monitoring
 
         self.machine = Machine(model=self, states=PelletMachine.states,
                                transitions=PelletMachine.transitions, auto_transitions=False,
-                               initial=PelletState.missing, model_override=True)
+                               initial=PelletState.monitoring, model_override=True)
 
         self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm(BehaviorLimits())
 
@@ -98,6 +97,9 @@ class PelletMachine:
         else:
             self._api_status_token = None
 
+    def after_load_pellet(self):
+        self._algorithm.pellet_loaded()
+
     def before_cover_pellet(self):
         if self.pellet_command is not None:
             self._api_status_token = self.pellet_command.cover_pellet()
@@ -111,12 +113,6 @@ class PelletMachine:
             EventManager.post_event(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
-
-    def after_release_pellet(self):
-        self._algorithm.pellet_released()
-
-    def after_cover_pellet(self):
-        self._algorithm.pellet_covered()
 
     def can_move_home(self):
         can = self.can_use_pellet_command()
@@ -149,18 +145,12 @@ class PelletMachine:
     def pellet_seen(self, seen: bool):
         if not seen:
             if self.state == PelletState.monitoring:
-                self.pellet_lost()
-
-            if self.state == PelletState.missing:
-                # Immediately go to missing, but load_pellet transition will only succeed if time, pellet limits, and
-                # other requirements are satisfied.
+                # load_pellet transition will only succeed if time, pellet limits, and other requirements are satisfied.
                 self.load_pellet()
             elif self.state == PelletState.covering:
-                self.pellet_lost()
+                self.load_pellet()
         else:
-            if self.state == PelletState.missing:
-                self.monitor_pellet()
-            elif self.state == PelletState.covering:
+            if self.state == PelletState.covering:
                 self.release_pellet()
 
     # region Callbacks
@@ -227,12 +217,6 @@ class PelletMachine:
     def may_move_home(self):
         pass
 
-    def pellet_lost(self):
-        pass
-
-    def may_pellet_lost(self):
-        pass
-
     def load_pellet(self):
         pass
 
@@ -264,9 +248,6 @@ class PelletMachine:
         pass
 
     def is_home(self):
-        pass
-
-    def is_missing(self):
         pass
 
     def is_loading(self):

@@ -76,10 +76,7 @@ def test_covered_load_cycle():
 
     assert_covered_was_released(machine)
 
-    # Reload missing pellet from monitoring state.
-    machine.pellet_lost()
-
-    assert machine.state == PelletState.missing
+    assert machine.state == PelletState.monitoring
 
     assert_load_cycle(machine, should_release=True)
 

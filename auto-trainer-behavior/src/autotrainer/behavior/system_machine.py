@@ -71,7 +71,7 @@ class SystemMachine:
         if inference is not None and inference.pose_algorithm is not None:
             inference.pose_algorithm.pose_changed += self._pose_changed
 
-        self._inference = PelletMachine(self.algorithm, pellet_reader, pellet_command)
+        self._pellet_machine = PelletMachine(self.algorithm, pellet_reader, pellet_command)
 
         self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
         self._intersession.events.on_analysis_started += self._intersession_started
@@ -86,8 +86,8 @@ class SystemMachine:
         return self._algorithm
 
     @property
-    def inference(self) -> PelletMachine:
-        return self._inference
+    def pellet(self) -> PelletMachine:
+        return self._pellet_machine
 
     @property
     def intersession(self) -> IntersessionMachine:
@@ -138,7 +138,7 @@ class SystemMachine:
             self.enter_intersession()
 
     def _intersession_started(self):
-        self.inference.move_home()
+        self._pellet_machine.move_home()
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
@@ -156,13 +156,13 @@ class SystemMachine:
                     self.enter_tunnel()
                 else:
                     EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedWrongState,
-                                                       context=self.state)
+                                            context=self.state)
             else:
                 if self.state == SystemState.tunnel:
                     self.exit_tunnel()
                 else:
                     EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedWrongState,
-                                                       context=self.state)
+                                            context=self.state)
 
     def _head_fix_command_property_changed(self, name: str, value, _):
         if name == "baseline_intensity":
@@ -181,7 +181,7 @@ class SystemMachine:
         if not self._algorithm.pellet_delivery_enabled:
             return
 
-        self._inference.pellet_seen(response.pellet_seen)
+        self._pellet_machine.pellet_seen(response.pellet_seen)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

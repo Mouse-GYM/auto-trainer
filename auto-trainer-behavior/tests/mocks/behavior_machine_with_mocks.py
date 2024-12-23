@@ -47,11 +47,11 @@ class BehaviorMachineWithMocks(SystemMachine):
         self.mock_pose_response(True, mouse_seen)
 
         if was_covered:
-            assert self.inference.state == PelletState.releasing
+            assert self.pellet.state == PelletState.releasing
 
             self.mock_pellet.send_ack()
 
-            assert self.inference.state == PelletState.monitoring
+            assert self.pellet.state == PelletState.monitoring
         else:
             self.expect_pellet_delivery(True, was_covered)
 
@@ -65,7 +65,7 @@ class BehaviorMachineWithMocks(SystemMachine):
 
     def expect_cover_command(self):
         # An explicit cover command should have been set.  Should be in covering state and have an ack from the command.
-        assert self.inference.state == PelletState.covering
+        assert self.pellet.state == PelletState.covering
 
         self.mock_pellet.send_ack()
 
@@ -81,17 +81,17 @@ class BehaviorMachineWithMocks(SystemMachine):
         """
 
         if not was_covered:
-            assert self.inference.state == PelletState.loading
+            assert self.pellet.state == PelletState.loading
 
             self.mock_pellet.send_ack()
 
-            assert self.inference.state == PelletState.sending
+            assert self.pellet.state == PelletState.sending
 
             self.mock_pellet.send_ack()
 
         if should_release:
-            assert self.inference.state == PelletState.releasing
+            assert self.pellet.state == PelletState.releasing
 
             self.mock_pellet.send_ack()
 
-            assert self.inference.state == PelletState.monitoring
+            assert self.pellet.state == PelletState.monitoring

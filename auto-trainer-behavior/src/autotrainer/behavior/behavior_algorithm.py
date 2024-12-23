@@ -131,7 +131,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._check_date()
 
         return (self._is_in_session or not self.pellet_cover_enabled) \
-            and self.session_pellet_count < self.limits.max_pellets_per_session
+            and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_perform_intersession_analysis(self):
         return self.intersession_enabled and self.session_mouse_seen
@@ -144,13 +144,8 @@ class BehaviorAlgorithm(ObservableObject):
         if seen:
             self._set_pellet_last_seen(time.time())
 
-    def pellet_covered(self):
-        self._increment_session_pellet_count(-1)
-        self._increment_day_pellet_count(-1)
-
-    def pellet_released(self):
+    def pellet_loaded(self):
         self._increment_session_pellet_count()
-        self._increment_day_pellet_count()
 
     def mouse_seen(self, seen: bool = True):
         if self._is_in_session and seen:
@@ -176,7 +171,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._session_pellet_count = self._on_property_changed("session_pellet_count", value,
                                                                self._session_pellet_count)
 
-        if self._session_pellet_count == self.limits.max_pellets_per_session:
+        if self._session_pellet_count > self.limits.max_pellets_per_session:
             self.end_session()
 
     def _increment_session_pellet_count(self, incr: int = 1):
