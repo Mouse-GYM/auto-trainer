@@ -5,6 +5,7 @@ from autotrainer.core import ObservableObject, EventManager
 
 from .behavior_event_kind import BehaviorEventKind
 from .behavior_limits import BehaviorLimits
+from .system_machine_state import SystemState
 
 
 class BehaviorAlgorithm(ObservableObject):
@@ -30,6 +31,8 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._pellet_last_seen = 0.0
 
+        self._system_state = SystemState.cage
+
         self._today = None
 
         self._start_day()
@@ -49,6 +52,18 @@ class BehaviorAlgorithm(ObservableObject):
     @project.setter
     def project(self, project):
         self._project_info = project
+
+    @property
+    def system_state(self) -> SystemState:
+        return self._system_state
+
+    @system_state.setter
+    def system_state(self, value: SystemState):
+        self._system_state = value
+
+    @property
+    def is_in_session(self) -> bool:
+        return self._is_in_session
 
     @property
     def pellet_delivery_enabled(self):

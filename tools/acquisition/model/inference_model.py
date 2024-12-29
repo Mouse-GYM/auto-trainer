@@ -1,4 +1,5 @@
 import logging
+import os
 import queue
 import time
 import typing
@@ -280,10 +281,15 @@ class InferenceModel(ObservableObject):
 
     def _feed_intersession_analysis(self):
         try:
-            capture_1 = cv2.VideoCapture(
-                self._project.get_video_path(name=self._project.camera_1, allow_overwrite=True)[0])
-            capture_2 = cv2.VideoCapture(
-                self._project.get_video_path(name=self._project.camera_2, allow_overwrite=True)[0])
+            path_1 = self._project.get_video_path(name=self._project.camera_1, allow_overwrite=True)[0]
+            capture_1 = cv2.VideoCapture(path_1)
+            file_size = os.path.getsize(path_1)
+            logger.info(f"{path_1} size: {file_size}")
+
+            path_2 = self._project.get_video_path(name=self._project.camera_2, allow_overwrite=True)[0]
+            capture_2 = cv2.VideoCapture(path_2)
+            file_size = os.path.getsize(path_2)
+            logger.info(f"{path_2} size: {file_size}")
 
             idx = 0
 
@@ -310,6 +316,7 @@ class InferenceModel(ObservableObject):
         ret, frame = capture.read()
 
         if not ret:
+            logger.info(f"end of video at index {index}")
             return False
 
         while True:

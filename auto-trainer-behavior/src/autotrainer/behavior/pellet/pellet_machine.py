@@ -7,6 +7,7 @@ from transitions import Machine
 from autotrainer.core import EventManager
 from autotrainer.device import PelletReader
 
+from ..system_machine_state import SystemState
 from ..behavior_algorithm import BehaviorAlgorithm, BehaviorLimits
 from ..behavior_event_kind import BehaviorEventKind
 
@@ -21,7 +22,7 @@ class PelletState(str, Enum):
     sending = "sending",
     releasing = "releasing"
     covering = "covering",
-    home = "moving_home"
+    home = "home"
 
 
 class PelletMachine:
@@ -48,7 +49,7 @@ class PelletMachine:
 
     def __init__(self, algorithm: BehaviorAlgorithm = None, pellet_device: PelletReader = None, pellet_command=None):
 
-        self.state = PelletState.monitoring
+        self.state = PelletState.covering
 
         self.machine = Machine(model=self, states=PelletMachine.states,
                                transitions=PelletMachine.transitions, auto_transitions=False,
@@ -143,15 +144,15 @@ class PelletMachine:
         return self._api_status_token is None
 
     def pellet_seen(self, seen: bool):
-        if not seen:
-            if self.state == PelletState.monitoring:
-                # load_pellet transition will only succeed if time, pellet limits, and other requirements are satisfied.
-                self.load_pellet()
-            elif self.state == PelletState.covering:
-                self.load_pellet()
-        else:
-            if self.state == PelletState.covering:
-                self.release_pellet()
+        # if not seen:
+        #    if self.state == PelletState.monitoring:
+        #         self.load_pellet()
+        #     elif self.state == PelletState.covering:
+        #         self.load_pellet()
+        # else:
+        #     if self.state == PelletState.covering:
+        #         self.release_pellet()
+        self._try_next_state(seen)
 
     # region Callbacks
     def _session_starting(self):
@@ -160,14 +161,16 @@ class PelletMachine:
         # may need to release in the monitoring state.
         # We also may have toggled between enabling and disabling the cover behavior, so even if pellet_cover_enabled
         # is false, send the command.
-        if self.state == PelletState.covering or self.state == PelletState.monitoring:
-            self.release_pellet()
-        elif self.state == PelletState.home:
-            self.send_pellet()
+        # if self.state == PelletState.covering or self.state == PelletState.monitoring:
+        #     self.release_pellet()
+        # elif self.state == PelletState.home:
+        #     self.send_pellet()
+        self._try_next_state(True, True)
 
     def _session_ending(self):
-        if self.state == PelletState.monitoring:
-            self.cover_pellet()
+        # if self.state == PelletState.monitoring:
+        #    self.cover_pellet()
+        self._try_next_state()
 
     def _pellet_device_ack_received(self, token):
         if self._api_status_token is None:
@@ -187,21 +190,57 @@ class PelletMachine:
 
         self._api_status_token = None
 
-        if self.state == PelletState.loading:
-            self.send_pellet()
-        elif self.state == PelletState.sending:
-            # Strictly speaking, the hardware ends the send phase with the pellet covered.  This is primarily to put
-            # things in a consistent state of covered whether it is right after sending, or if it was recovered for
-            # any reason.
-            self.state = PelletState.covering
-            self.release_pellet()
-        elif self.state == PelletState.covering:
-            # Will occur after an actual cover command to the hardware.
-            self.release_pellet()
-        elif self.state == PelletState.releasing:
-            self.monitor_pellet()
+        self._try_next_state()
 
     # endregion
+
+    def _try_next_state(self, pellet_seen: bool = True, must_release: bool = False):
+        if self._algorithm.is_in_session:
+            if self.state == PelletState.loading:
+                self.send_pellet()
+            elif self.state == PelletState.sending:
+                # The hardware ends the send phase with the pellet covered.  Put things in a consistent state of
+                # covered without sending an unnecessary command.
+                self.state = PelletState.covering
+                self.release_pellet()
+            elif self.state == PelletState.covering:
+                if pellet_seen:
+                    self.release_pellet()
+                else:
+                    self.load_pellet()
+            elif self.state == PelletState.releasing:
+                self.monitor_pellet()
+            elif self.state == PelletState.home:
+                self.send_pellet()
+            elif self.state == PelletState.monitoring:
+                if must_release:
+                    self.release_pellet()
+                elif not pellet_seen:
+                    self.load_pellet()
+        else:
+            if self._algorithm.system_state == SystemState.intersession:
+                if self.state != PelletState.home:
+                    self.move_home()
+            else:
+                if self.state == PelletState.loading:
+                    self.send_pellet()
+                elif self.state == PelletState.sending:
+                    # The hardware ends the send phase with the pellet covered.  Put things in a consistent state of
+                    # covered without sending an unnecessary command.
+                    self.state = PelletState.covering
+                    self.release_pellet()
+                elif self.state == PelletState.covering:
+                    if not pellet_seen:
+                        self.load_pellet()
+                elif self.state == PelletState.releasing:
+                    self.monitor_pellet()
+                elif self.state == PelletState.monitoring:
+                    if not pellet_seen:
+                        self.load_pellet()
+                    else:
+                        self.cover_pellet()
+                elif self.state == PelletState.home:
+                    self.send_pellet()
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

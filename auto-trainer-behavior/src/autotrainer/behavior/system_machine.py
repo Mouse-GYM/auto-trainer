@@ -1,5 +1,4 @@
 import logging
-from enum import Enum
 
 from opentelemetry import trace
 from transitions import Machine
@@ -8,6 +7,7 @@ from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID, ProjectInfo, Ev
 from autotrainer.device import PelletReader
 from autotrainer.inference import PoseResponse
 
+from .system_machine_state import SystemState
 from .behavior_algorithm import BehaviorAlgorithm
 from .behavior_limits import BehaviorLimits
 from .behavior_event_kind import BehaviorEventKind
@@ -21,12 +21,6 @@ logger = logging.getLogger(__name__)
 tracer = trace.get_tracer("behavior")
 
 
-class SystemState(str, Enum):
-    cage = "cage",
-    tunnel = "tunnel",
-    intersession = "intersession"
-
-
 class SystemMachine:
     states = [e for e in SystemState]
 
@@ -34,10 +28,11 @@ class SystemMachine:
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
          "before": "before_enter_tunnel"},
         {"trigger": "exit_tunnel", "source": SystemState.tunnel, "dest": SystemState.cage,
-         "after": "after_exit_tunnel"},
+         "before": "before_exit_tunnel", "after": "after_exit_tunnel"},
         {"trigger": "enter_intersession", "source": SystemState.cage, "dest": SystemState.intersession,
-         "after": "after_enter_intersession"},
-        {"trigger": "exit_intersession", "source": SystemState.intersession, "dest": SystemState.cage}
+         "before": "before_enter_intersession", "after": "after_enter_intersession"},
+        {"trigger": "exit_intersession", "source": SystemState.intersession, "dest": SystemState.cage,
+         "before": "before_exit_intersession"}
     ]
 
     def __init__(self, algorithm: BehaviorAlgorithm = None,
@@ -74,7 +69,6 @@ class SystemMachine:
         self._pellet_machine = PelletMachine(self.algorithm, pellet_reader, pellet_command)
 
         self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
-        self._intersession.events.on_analysis_started += self._intersession_started
         self._intersession.events.on_analysis_ended += self._intersession_ended
 
         self._algorithm.session_ending += self._session_ended
@@ -118,13 +112,24 @@ class SystemMachine:
         if self._head_fix_command is not None:
             self._head_fix_command.update_position(self.algorithm.baseline_intensity)
 
+        self._algorithm.system_state = SystemState.tunnel
+
+    def before_exit_tunnel(self):
+        self._algorithm.system_state = SystemState.cage
+
     def after_exit_tunnel(self):
         EventManager.post_event(BehaviorEventKind.tunnelExit)
         self.algorithm.end_session()
         self._session_trace.end()
 
+    def before_enter_intersession(self):
+        self._algorithm.system_state = SystemState.intersession
+
     def after_enter_intersession(self):
         self._intersession.perform_segmentation()
+
+    def before_exit_intersession(self):
+        self._algorithm.system_state = SystemState.cage
 
     def _session_ended(self):
         TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, False)
@@ -136,9 +141,6 @@ class SystemMachine:
 
         if self.algorithm.can_perform_intersession_analysis():
             self.enter_intersession()
-
-    def _intersession_started(self):
-        self._pellet_machine.move_home()
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
