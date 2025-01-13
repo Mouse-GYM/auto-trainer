@@ -1,7 +1,7 @@
 import time
 from datetime import datetime
 
-from autotrainer.core import ObservableObject, EventManager
+from autotrainer.core import ObservableObject, EventManager, TriggerManager, CAPTURE_TRIGGER_ID
 
 from .behavior_event_kind import BehaviorEventKind
 from .behavior_limits import BehaviorLimits
@@ -118,23 +118,36 @@ class BehaviorAlgorithm(ObservableObject):
         return self._session_mouse_seen
 
     def start_session(self):
-        self.end_session()
+        if self._is_in_session:
+            return
 
-        self._set_session_pellet_count(0)
-        self._set_pellet_last_seen(0.0)
+        EventManager.post_event(BehaviorEventKind.sessionStarting)
+
+        if self._project_info is not None:
+            self._project_info.calculate_next_session_index()
+
         self._is_in_session = True
+        self._set_pellet_last_seen(0.0)
         self._session_mouse_seen = False
         self._pellet_seen = False
 
-        EventManager.post_event(BehaviorEventKind.sessionStarted)
+        TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, True)
 
         self.session_starting()
 
+        EventManager.post_event(BehaviorEventKind.sessionStarted)
+
     def end_session(self):
         if self._is_in_session:
-            EventManager.post_event(BehaviorEventKind.sessionEnded)
+            EventManager.post_event(BehaviorEventKind.sessionEnding)
+            TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, False)
             self._is_in_session = False
             self.session_ending()
+            EventManager.post_event(BehaviorEventKind.sessionEnded)
+            EventManager.flush()
+
+    def reset_session_pellet_count(self):
+        self._set_session_pellet_count(0)
 
     def can_cover_pellet(self):
         return self.pellet_cover_enabled
@@ -186,8 +199,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._session_pellet_count = self._on_property_changed("session_pellet_count", value,
                                                                self._session_pellet_count)
 
-        if self._session_pellet_count > self.limits.max_pellets_per_session:
-            self.end_session()
+        # if self._session_pellet_count > self.limits.max_pellets_per_session:
+        #    self.end_session()
 
     def _increment_session_pellet_count(self, incr: int = 1):
         value = max(self._session_pellet_count + incr, 0)

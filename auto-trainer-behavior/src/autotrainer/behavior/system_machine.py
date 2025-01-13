@@ -1,9 +1,10 @@
 import logging
+from threading import Timer
 
 from opentelemetry import trace
 from transitions import Machine
 
-from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID, ProjectInfo, EventManager
+from autotrainer.core import ProjectInfo, EventManager
 from autotrainer.device import PelletReader
 from autotrainer.inference import PoseResponse
 
@@ -11,7 +12,7 @@ from .system_machine_state import SystemState
 from .behavior_algorithm import BehaviorAlgorithm
 from .behavior_limits import BehaviorLimits
 from .behavior_event_kind import BehaviorEventKind
-from .pellet.pellet_machine import PelletMachine
+from .pellet.pellet_machine import PelletMachine, PelletState
 from .head_fix_protocol import HeadFixProtocol
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine
@@ -67,13 +68,13 @@ class SystemMachine:
             inference.pose_algorithm.pose_changed += self._pose_changed
 
         self._pellet_machine = PelletMachine(self.algorithm, pellet_reader, pellet_command)
+        self._pellet_machine.events.pellet_loading += self._pellet_loading
+        self._pellet_machine.events.pellet_sending += self._pellet_sending
 
         self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
         self._intersession.events.on_analysis_ended += self._intersession_ended
 
         self._algorithm.session_ending += self._session_ended
-
-        self._session_trace = None
 
     @property
     def algorithm(self):
@@ -101,13 +102,9 @@ class SystemMachine:
     def before_enter_tunnel(self):
         EventManager.post_event(BehaviorEventKind.tunnelEnter)
 
-        if self._project_info is not None:
-            self._project_info.calculate_next_session_index()
+        self.algorithm.reset_session_pellet_count()
 
-        self._session_trace = tracer.start_span("session")
         self.algorithm.start_session()
-
-        TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, True)
 
         if self._head_fix_command is not None:
             self._head_fix_command.update_position(self.algorithm.baseline_intensity)
@@ -118,9 +115,11 @@ class SystemMachine:
         self._algorithm.system_state = SystemState.cage
 
     def after_exit_tunnel(self):
+        if self._head_fix_command is not None:
+            self._head_fix_command.update_position(0)
+
         EventManager.post_event(BehaviorEventKind.tunnelExit)
         self.algorithm.end_session()
-        self._session_trace.end()
 
     def before_enter_intersession(self):
         self._algorithm.system_state = SystemState.intersession
@@ -132,13 +131,6 @@ class SystemMachine:
         self._algorithm.system_state = SystemState.cage
 
     def _session_ended(self):
-        TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, False)
-
-        if self._head_fix_command is not None:
-            self._head_fix_command.update_position(0)
-
-        EventManager.flush()
-
         if self.algorithm.can_perform_intersession_analysis():
             self.enter_intersession()
 
@@ -184,6 +176,24 @@ class SystemMachine:
             return
 
         self._pellet_machine.pellet_seen(response.pellet_seen)
+
+    def _pellet_loading(self):
+        self._timer1 = Timer(2, self._consider_end_session)
+        self._timer1.start()
+
+    def _pellet_sending(self):
+        if self.state == SystemState.tunnel:
+            self.algorithm.start_session()
+
+    def _consider_end_session(self):
+        # Do not end if the mouse is still in the tunnel and (a pellet is seen or the pellet deliver is in the sending
+        # or releasing states).  Otherwise, there will be no trigger to start a new session and recording (tunnel entry
+        # or sending the pellet)
+        if (self.state == SystemState.tunnel and
+                (self.algorithm.pellet_seen() or self._pellet_machine.state == PelletState.sending or self._pellet_machine.state == PelletState.releasing or self._pellet_machine.state == PelletState.monitoring)):
+            return
+
+        self.algorithm.end_session()
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

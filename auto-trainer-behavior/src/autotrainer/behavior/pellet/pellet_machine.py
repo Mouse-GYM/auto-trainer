@@ -1,6 +1,7 @@
 import logging
 from enum import Enum
 
+from events import Events
 from opentelemetry import trace
 from transitions import Machine
 
@@ -48,7 +49,6 @@ class PelletMachine:
     ]
 
     def __init__(self, algorithm: BehaviorAlgorithm = None, pellet_device: PelletReader = None, pellet_command=None):
-
         self.state = PelletState.covering
 
         self.machine = Machine(model=self, states=PelletMachine.states,
@@ -71,9 +71,15 @@ class PelletMachine:
 
         self._pellet_command_trace = None
 
+        self._events = Events(("pellet_loading", "pellet_sending"))
+
     @property
     def algorithm(self):
         return self._algorithm
+
+    @property
+    def events(self):
+        return self._events
 
     def before_move_home(self):
         if self.pellet_command is not None:
@@ -85,6 +91,7 @@ class PelletMachine:
 
     def before_load_pellet(self):
         if self.pellet_command is not None:
+            self.events.pellet_loading()
             self._pellet_command_trace = tracer.start_span("load_pellet")
             self._api_status_token = self.pellet_command.load_pellet()
             EventManager.post_event(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
@@ -93,6 +100,7 @@ class PelletMachine:
 
     def before_send_pellet(self):
         if self.pellet_command is not None:
+            self.events.pellet_sending()
             self._api_status_token = self.pellet_command.send_pellet()
             EventManager.post_event(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
         else:
