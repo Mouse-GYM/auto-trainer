@@ -104,7 +104,8 @@ class SystemMachine:
 
         self.algorithm.reset_session_pellet_count()
 
-        self.algorithm.start_session()
+        if self._pellet_machine.state == PelletState.sending or self._pellet_machine.state == PelletState.covering or self._pellet_machine.state == PelletState.releasing or self._pellet_machine.state == PelletState.monitoring:
+            self.algorithm.start_session()
 
         if self._head_fix_command is not None:
             self._head_fix_command.update_position(self.algorithm.baseline_intensity)
@@ -190,7 +191,7 @@ class SystemMachine:
         # or releasing states).  Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
         if (self.state == SystemState.tunnel and
-                (self.algorithm.pellet_seen() or self._pellet_machine.state == PelletState.sending or self._pellet_machine.state == PelletState.releasing or self._pellet_machine.state == PelletState.monitoring)):
+                (self._pellet_machine.state == PelletState.sending or self._pellet_machine.state == PelletState.releasing or self._pellet_machine.state == PelletState.monitoring)):
             return
 
         self.algorithm.end_session()
