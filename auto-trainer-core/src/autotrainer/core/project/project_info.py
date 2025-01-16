@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -19,6 +20,8 @@ MINUTE_INTERVAL_FORMAT = "h%Hm%M"
 HOUR_INTERVAL_FORMAT = "h%H"
 
 IMAGE_CAPTURE_SUFFIX = "_images"
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectInterval(IntEnum):
@@ -225,13 +228,16 @@ class ProjectInfo:
 
         return file_name
 
-    def calculate_next_session_index(self):
+    def calculate_next_session_index(self) -> None:
         location, _ = self.get_day_path()
+
+        logger.debug(f"calculating next session index in {location}")
 
         path = Path(location)
 
         if not path.exists() or not path.is_dir():
-            return 1
+            self.session.value = 1
+            return
 
         session_dirs = [x.name[-3:] for x in path.iterdir() if x.is_dir() and "session" in x.name]
 
@@ -244,8 +250,13 @@ class ProjectInfo:
         session_vals = [int(x) for x in session_dirs if int_map_fcn(x) is not None]
 
         if len(session_vals) == 0:
-            return 1
+            logger.debug(f"no existing sessions found")
+            self.session.value = 1
+        else:
+            logger.debug(f"found {len(session_vals)} existing session directories")
 
-        session_vals.sort(reverse=True)
+            session_vals.sort(reverse=True)
 
-        self.session.value = session_vals[0] + 1
+            logger.debug(f"last session index for day: {session_vals[0]}")
+
+            self.session.value = session_vals[0] + 1
