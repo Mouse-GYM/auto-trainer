@@ -158,8 +158,13 @@ class BehaviorAlgorithm(ObservableObject):
     def can_release_pellet(self) -> bool:
         self._check_date()
 
-        return (self._is_in_session or not self.pellet_cover_enabled) \
-            and self.session_pellet_count <= self.limits.max_pellets_per_session
+        if not self.pellet_cover_enabled:
+            if self.system_state.tunnel:
+                return self.session_pellet_count <= self.limits.max_pellets_per_session
+            else:
+                return True
+
+        return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_perform_intersession_analysis(self):
         return self.intersession_enabled and self.session_mouse_seen
