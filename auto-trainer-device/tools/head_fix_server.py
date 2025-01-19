@@ -17,6 +17,10 @@ humidity = 0
 
 fw_version = "0.0.0"
 
+enable_streaming = False
+
+samples_sent = 0
+
 
 def get_value(input_val: str):
     if len(input_val) < 2:
@@ -57,12 +61,12 @@ def accept_user_commands():
 
 
 def handle_command(s, cmd: str, msg: str):
-    global fw_version
+    global fw_version, enable_streaming, samples_sent
 
     s.write(cmd.encode())
 
     if cmd == "A":
-        logger.info(f"servo: {int(msg)}")
+        logger.info(f"servo: {float(msg)}")
     elif cmd == "F":
         s.write(f"0H{fw_version}\n".encode())
     elif cmd == "L":
@@ -80,12 +84,19 @@ def handle_command(s, cmd: str, msg: str):
         s.write("Points per mg: ".encode())
         s.write("30\n".encode())
         time.sleep(1)
+    elif cmd == "S":
+        logger.info("start stream")
+        samples_sent = 0
+        enable_streaming = True
+    elif cmd == "T":
+        logger.info("stop stream")
+        enable_streaming = False
     else:
-        logger.info(f"{cmd}: {msg}")
+        logger.info(f"unhandled {cmd}: {msg}")
 
 
 def run_server(port: str, frequency: int, use_random: bool):
-    global weight, switch_pin, pressure_pin, temperature, humidity, fw_version
+    global weight, switch_pin, pressure_pin, temperature, humidity, fw_version, enable_streaming, samples_sent
 
     logger.info(f"head fix server on port {port} with update frequency {frequency}Hz")
     logger.info(f"head fix firmware version {fw_version}")
@@ -115,35 +126,36 @@ def run_server(port: str, frequency: int, use_random: bool):
     report_interval = frequency * 10
 
     while True:
-        while time.perf_counter_ns() - start_time >= interval_ns * samples_sent:
-            time.perf_counter_ns()
-            s.write(f"s{weight}".encode())
-            s.write(f"d{switch_pin}".encode())
-            s.write(f"a{pressure_pin}".encode())
-            s.write(f"t{temperature}".encode())
-            s.write(f"h{humidity}".encode())
-            s.write("n".encode())
-            samples_sent += 1
+        if enable_streaming:
+            while time.perf_counter_ns() - start_time >= interval_ns * samples_sent:
+                time.perf_counter_ns()
+                s.write(f"s{weight}".encode())
+                s.write(f"d{switch_pin}".encode())
+                s.write(f"a{pressure_pin}".encode())
+                s.write(f"t{temperature}".encode())
+                s.write(f"h{humidity}".encode())
+                s.write("n\n".encode())
+                samples_sent += 1
 
-            if samples_sent % report_interval == 0:
-                logger.debug(f"{((1.0e9 * samples_sent) / (time.perf_counter_ns() - start_time)):.1f}Hz")
+                if samples_sent % report_interval == 0:
+                    logger.debug(f"{((1.0e9 * samples_sent) / (time.perf_counter_ns() - start_time)):.1f}Hz")
 
-            if use_random:
-                next_val = random() - 0.5
-                weight += round(next_val * 2)
-                if weight > 300:
-                    weight -= 5
-                if weight < 0:
-                    weight += 5
-                next_val = random()
-                if next_val < 0.01:
-                    switch_pin = 0 if switch_pin == 1 else 1
-                next_val = next_val - 0.5
-                pressure_pin += round(next_val * 5)
-                next_val = random() - 0.5
-                temperature += round(next_val * 2)
-                next_val = random() - 0.5
-                humidity += round(next_val * 2)
+                if use_random:
+                    next_val = random() - 0.5
+                    weight += round(next_val * 2)
+                    if weight > 300:
+                        weight -= 5
+                    if weight < 0:
+                        weight += 5
+                    next_val = random()
+                    if next_val < 0.01:
+                        switch_pin = 0 if switch_pin == 1 else 1
+                    next_val = next_val - 0.5
+                    pressure_pin += round(next_val * 5)
+                    next_val = random() - 0.5
+                    temperature += round(next_val * 2)
+                    next_val = random() - 0.5
+                    humidity += round(next_val * 2)
 
         while s.in_waiting > 0:
             data = s.read(1).decode()
@@ -154,6 +166,7 @@ def run_server(port: str, frequency: int, use_random: bool):
         if len(msg) and msg[-1] == "x":
             handle_command(s, msg[0], msg[1:-1])
             msg = ""
+            s.write("%".encode())
 
         if mon_thread is not None and not mon_thread.is_alive():
             break

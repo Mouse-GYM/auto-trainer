@@ -73,7 +73,8 @@ class AppModel(ObservableObject):
         if enable:
             self._set_stream_enable()
         else:
-            self._device_thread.send_message(HeadFixMessageKind.STREAM_STOP)
+            if self._device_thread is not None:
+                self._device_thread.send_message(HeadFixMessageKind.STREAM_STOP)
 
         self._user_settings.stream_enabled = enable
 

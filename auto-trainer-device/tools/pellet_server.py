@@ -108,12 +108,13 @@ class DeviceState:
             self.println("2000")
         elif cmd == "P":
             self.send_home()
-            time.sleep(0.01)
+            time.sleep(3)
             self.send_home()
         elif cmd == "Q":
-            pass
+            time.sleep(0.25)
         elif cmd == "R":
             self.play_tone(5000)
+            time.sleep(0.25)
             self.delivery_state = 0
         elif cmd == "S":
             pass
@@ -150,10 +151,14 @@ class DeviceState:
         self.current_y = 0
         self.current_z = 0
 
+        time.sleep(1)
+
     def deliver_pellet(self):
         self.writeln(self.delivery_state)
 
         logger.info("deliver pellet")
+
+        time.sleep(1)
 
         if self.delivery_state == 1:
             self.writeln(73)

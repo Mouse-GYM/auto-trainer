@@ -46,6 +46,7 @@ class BehaviorEventKind(IntEnum, Enum):
     intersessionSegmentationError = 1705,
     intersessionSegmentationSave = 1706,
     intersessionSegmentationSaveError = 1707,
+    intersessionSegmentationInputError = 1708,
     intersessionDetectionCan = 1711,
     intersessionDetectionBegin = 1712,
     intersessionDetectionEnd = 1713,

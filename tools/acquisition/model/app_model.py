@@ -247,6 +247,7 @@ class AppModel(ObservableObject):
             if "pelletDelivery" in conf:
                 self._pellet_delivery.load_configuration(conf["pelletDelivery"])
 
+            # TODO: renamed to "pellet".  Keep for backwards compatibility for a few iterations.
             if "analysis" in conf:
                 self.inference.load_configuration(conf["analysis"])
 

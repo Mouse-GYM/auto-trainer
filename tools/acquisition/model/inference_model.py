@@ -75,6 +75,8 @@ class InferenceModel(ObservableObject):
         self._frame_width = 1
         self._frame_height = 1
 
+        self._intersession_wait_time: float = 1.0
+
         self._project: Optional[ProjectInfo] = None
 
         self._intersession_block: Optional[IntersessionBlock] = None
@@ -112,6 +114,15 @@ class InferenceModel(ObservableObject):
     @model_location.setter
     def model_location(self, value: str):
         self._model_location = self._on_property_changed("model_location", value, self._model_location)
+
+    @property
+    def intersession_wait_time(self) -> float:
+        return self._intersession_wait_time
+
+    @intersession_wait_time.setter
+    def intersession_wait_time(self, value: float):
+        self._intersession_wait_time = self._on_property_changed("intersession_wait_time", value,
+                                                                 self._intersession_wait_time)
 
     @property
     def status(self) -> InferenceStatus:
@@ -204,9 +215,12 @@ class InferenceModel(ObservableObject):
             self.model_location = configuration["model"]
         if "isEnabled" in configuration:
             self.is_enabled = configuration["isEnabled"]
+        if "intersessionWaitTime" in configuration:
+            self.intersession_wait_time = configuration["intersessionWaitTime"]
 
     def save_configuration(self) -> dict:
-        return {"model": self.model_location, "isEnabled": self._is_enabled}
+        return {"model": self.model_location, "isEnabled": self._is_enabled,
+                "intersessionWaitTime": self._intersession_wait_time}
 
     def _set_status(self, status: InferenceStatus):
         self._status = self._on_property_changed("status", status, self._status)
@@ -257,7 +271,7 @@ class InferenceModel(ObservableObject):
                     if pose_data is None:
                         if self._intersession_block is not None:
                             success = True
-                            
+
                             try:
                                 logger.info(f"processed {self._intersession_block.pose_data.shape[0]} pose responses")
 
@@ -282,14 +296,35 @@ class InferenceModel(ObservableObject):
     def _feed_intersession_analysis(self):
         try:
             path_1 = self._project.get_video_path(name=self._project.camera_1, allow_overwrite=True)[0]
-            capture_1 = cv2.VideoCapture(path_1)
             file_size = os.path.getsize(path_1)
             logger.info(f"{path_1} size: {file_size}")
 
             path_2 = self._project.get_video_path(name=self._project.camera_2, allow_overwrite=True)[0]
-            capture_2 = cv2.VideoCapture(path_2)
             file_size = os.path.getsize(path_2)
             logger.info(f"{path_2} size: {file_size}")
+
+            capture_1 = None
+            capture_2 = None
+
+            def check_frame_count(file_path: str):
+                capture = cv2.VideoCapture(file_path)
+                count = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+                if count < 1:
+                    capture.release()
+                    return None
+                return capture
+
+            timeout = time.time() + self._intersession_wait_time
+
+            while capture_1 is None or capture_2 is None:
+                if capture_1 is None:
+                    capture_1 = check_frame_count(path_1)
+                if capture_2 is None:
+                    capture_2 = check_frame_count(path_2)
+                if time.time() > timeout:
+                    EventManager.post_event(BehaviorEventKind.intersessionSegmentationInputError)
+                    logger.error("timeout waiting for intersession video files")
+                    break
 
             idx = 0
 
