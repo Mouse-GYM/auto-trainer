@@ -40,6 +40,8 @@ def intersession_process(project: ProjectInfo) -> IntersessionResponse:
     dlc_seg = "_raw2D"
     center_method = (1, "Pellet")
     process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
-    # results_dict = segment_reaches(session_path, center_method, available_XYZ)
+    results_dict = segment_reaches(location, center_method, available_XYZ)
+
+    logger.info(f"process intersession pose data complete {results_dict}")
 
     return IntersessionResponse()
