@@ -132,7 +132,7 @@ class SystemMachine:
         self._algorithm.system_state = SystemState.cage
 
     def _session_ended(self):
-        if self.algorithm.can_perform_intersession_analysis():
+        if self.algorithm.can_perform_intersession_analysis() and self.state == SystemState.cage:
             self.enter_intersession()
 
     def _intersession_ended(self):

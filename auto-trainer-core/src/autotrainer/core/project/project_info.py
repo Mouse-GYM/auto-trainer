@@ -64,7 +64,7 @@ def _safe_ensure_location(location: str) -> bool:
 
 
 # Windows does not like .mp4 extension when opencv is technically saving to an mkv container.
-_video_write_ext = "mp4" if sys.platform.startswith("linux") else "mkv"
+video_write_ext = "mp4" if sys.platform.startswith("linux") else "mkv"
 
 
 @dataclass
@@ -185,14 +185,14 @@ class ProjectInfo:
         if path is None:
             return None, None
 
-        file_name = f"{path.full_path}.{_video_write_ext}"
+        file_name = f"{path.full_path}.{video_write_ext}"
 
         index = 0
 
         if not allow_overwrite:
             while os.path.exists(file_name):
                 index += 1
-                file_name = f"{path.full_path}_{index}.{_video_write_ext}"
+                file_name = f"{path.full_path}_{index}.{video_write_ext}"
 
         modifier = "" if index == 0 else "_" + str(index)
 

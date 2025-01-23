@@ -49,20 +49,20 @@ class GymDevice(Device):
 
         for resp in all_resp:
             if resp == "\n":
-                if len(self._read_buffer) > 0:
+                if len(self._read_buffer) > 0 and self._identifier != "P":
                     self._read_buffer = self._handle_response(self._last_command, self._read_buffer)
 
                 continue
 
             if resp == "!":
                 if not self._is_waiting_ack:
-                    logger.warning("ack received unexpectedly")
+                    logger.warning(f"{self._identifier} ack received unexpectedly")
                 self._is_waiting_ack = False
             elif resp == "%":
                 if not self._is_busy:
-                    logger.warning("term received unexpectedly")
+                    logger.warning(f"{self._identifier} term received unexpectedly")
 
-                logger.debug(f"{self._last_command} command complete")
+                logger.debug(f"{self._identifier} {self._last_command} command complete")
 
                 if len(self._read_buffer) > 0:
                     self._handle_response(self._last_command, self._read_buffer)
