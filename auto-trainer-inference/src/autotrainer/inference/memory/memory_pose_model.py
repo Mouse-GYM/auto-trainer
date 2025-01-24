@@ -25,8 +25,11 @@ class MemoryPoseModel(PoseModel):
         self.body_parts.append("LH_spread")
         self.body_parts.append("LH_grab")
         self.body_parts.append("Star")
-        self.body_parts.append("Tongue")
+        self.body_parts.append("Tongue_mid")
+        self.body_parts.append("Tongue_tip")
         self.body_parts.append("Nose")
+        self.body_parts.append("Triangle")
+        self.body_parts.append("Mouth")
 
     def predict(self, frames: numpy.ndarray) -> typing.List[numpy.ndarray]:
         all_frames = list()
@@ -35,7 +38,7 @@ class MemoryPoseModel(PoseModel):
             if self.use_random:
                 data = numpy.random.rand(len(self.body_parts), 3)
             else:
-                data = numpy.zeros((len(self.body_parts), 3))
+                data = numpy.ones((len(self.body_parts), 3))
 
             # pose_predict normalizes on the assumption these values are in absolute frame size
             data[:, 0] *= frames.shape[2]

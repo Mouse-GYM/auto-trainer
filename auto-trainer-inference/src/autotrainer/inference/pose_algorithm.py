@@ -70,6 +70,10 @@ class PoseAlgorithm(ObservableObject):
     def part_names(self) -> list:
         return list(self._parts_list)
 
+    @property
+    def part_count(self) -> int:
+        return len(self._parts_list)
+
     def get_part_index(self, part: str) -> int:
         if part in self._parts:
             return self._parts[part]

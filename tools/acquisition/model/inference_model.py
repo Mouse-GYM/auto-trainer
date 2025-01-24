@@ -36,7 +36,11 @@ class InferenceStatus(str, Enum):
 class IntersessionBlock:
     configuration: SegmentationConfiguration
     frame_count: int = 0
-    pose_data: numpy.ndarray = numpy.empty((0, 30), dtype=numpy.float32)
+    parts_count: int = 10
+    pose_data: numpy.ndarray = None
+
+    def __post_init__(self):
+        self.pose_data = numpy.empty((0, self.parts_count * 3), dtype=numpy.float32)
 
 
 @dataclass
@@ -134,7 +138,7 @@ class InferenceModel(ObservableObject):
 
     def perform_segmentation(self, configuration: SegmentationConfiguration):
         logger.info("performing segmentation")
-        self._intersession_block = IntersessionBlock(configuration)
+        self._intersession_block = IntersessionBlock(configuration=configuration, parts_count=self._algorithm.part_count)
         self._send_message(InferenceCommandMessageKind.ProcessOffline)
         self._offline_thread = Thread(target=self._feed_intersession_analysis)
         self._offline_thread.start()
