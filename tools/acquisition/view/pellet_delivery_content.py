@@ -1,10 +1,14 @@
+import logging
+
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget, QHBoxLayout, QPushButton
 
-from autotrainer.device import SerialInterface
+from autotrainer.device import SerialInterface, HAVE_WHISKER_DEVICE
 from autotrainer.pyside import ATSerialPortComboBox, CardWidget
 from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
 from tools.acquisition.view.content_widget import ContentWidget
 from tools.acquisition.view.pellet_control_content import PelletControlContent
+
+logger = logging.getLogger(__name__)
 
 
 class PelletDeliveryContent(ContentWidget):
@@ -100,6 +104,9 @@ class PelletDeliveryContent(ContentWidget):
 
     def _refresh_ports(self):
         ports = SerialInterface.refresh_ports()
+
+        if HAVE_WHISKER_DEVICE:
+            ports.insert(0, "CAN bus")
 
         self._port_combobox.refresh_ports(ports)
 

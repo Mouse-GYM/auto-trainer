@@ -1,3 +1,4 @@
+import typing
 from queue import Queue
 from typing import Callable
 
@@ -21,7 +22,11 @@ class DeviceApi:
         self._message_callback = message_callback
         self._message_queue = message_queue
 
-    def send_data(self, value: bytes):
+    @property
+    def interface(self) -> DeviceInterface:
+        return self._interface
+
+    def send_data(self, value: typing.Any):
         """Sends data to the device"""
         if self._interface is not None:
             self._interface.write(value)

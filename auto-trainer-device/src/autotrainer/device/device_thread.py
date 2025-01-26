@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 from queue import Queue, Empty
 from enum import IntEnum
@@ -49,6 +50,8 @@ class DeviceThread(Thread):
 
         self._name = "device-thread"
 
+        self._read_limit: int = math.inf
+
     @property
     def name(self) -> str:
         return self._name
@@ -56,6 +59,14 @@ class DeviceThread(Thread):
     @name.setter
     def name(self, value: str):
         self._name = value
+
+    @property
+    def read_limit(self) -> int:
+        return self._read_limit
+
+    @read_limit.setter
+    def read_limit(self, value: int):
+        self._read_limit = value
 
     def send_message(self, kind: int, data: object = None, context: object = None):
         if self._cmd_queue is not None:
@@ -111,8 +122,12 @@ class DeviceThread(Thread):
     def _run_connected(self) -> bool:
         while True:
             # Data from the device for the device listener to process.
+            heartbeat = 0
             while self._interface.can_read():
-                self._device.notify_data(self._interface.read())
+                self._device.notify_data(self._interface.read(self._read_limit))
+                heartbeat += 1
+                if heartbeat > 5:
+                    break
 
             # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
             try:

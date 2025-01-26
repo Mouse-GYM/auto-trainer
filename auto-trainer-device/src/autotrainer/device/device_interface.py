@@ -1,4 +1,5 @@
 import math
+import typing
 
 
 class DeviceInterface:
@@ -23,20 +24,20 @@ class DeviceInterface:
     def can_read(self) -> bool:
         pass
 
-    def read(self, max_count: int = math.inf) -> bytes:
-        """ Reads the available number of bytes from the interface up to max_count
+    def read(self, max_count: int = math.inf) -> typing.Any:
+        """ Reads the available number of values from the interface up to max_count
 
-        :param max_count: maximum number of bytes to read
-        :returns bytes: the byte array of data
-        :rtype: bytes
+        :param max_count: maximum number of values to read
+        :returns typing.Any: the data
+        :rtype: typing.Any
         """
         pass
 
-    def write(self, value: bytes) -> int:
-        """ Writes the byte array to the interface
+    def write(self, value: typing.Any) -> int:
+        """ Writes the content value(s) to the interface
 
-        :param value: The byte array to be written
-        :return: the number of bytes written"""
+        :param value: The content to be written
+        :return: the number of values written"""
         pass
 
     def write_str(self, value: str) -> int:
@@ -45,3 +46,4 @@ class DeviceInterface:
         :param value: The string to be written
         :return: the number of bytes written"""
         pass
+

@@ -1,9 +1,13 @@
 import logging
 import queue
 import uuid
+from pathlib import Path
+
+import yaml
 
 from autotrainer.core import ObservableObject
-from autotrainer.device import SerialInterface, GymDeviceMessageKind
+from autotrainer.device import SerialInterface, GymDeviceMessageKind, WhiskerDevice, WhiskerInterface, \
+    HAVE_WHISKER_DEVICE, IS_REAL_WHISKER_DEVICE, ServoConfig, StepperConfig, WhiskerFileInterface, WhiskerMovement
 from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 from autotrainer.device import PelletReader
@@ -32,6 +36,12 @@ class AppModel(ObservableObject):
 
         self._firmware_version = ""
 
+        self._x = None
+        self._y = None
+        self._z = None
+
+        self._command_pending = False
+
         self._ports = list()
 
         self.refresh_ports()
@@ -56,40 +66,136 @@ class AppModel(ObservableObject):
     def firmware_version(self, value):
         self._firmware_version = self._on_property_changed("firmware_version", value, self._firmware_version)
 
+    @property
+    def x(self):
+        return self._x
+
+    @x.setter
+    def x(self, value):
+        self._x = self._on_property_changed("x", value, self._x)
+
+    @property
+    def y(self):
+        return self._y
+
+    @y.setter
+    def y(self, value):
+        self._y = self._on_property_changed("y", value, self._y)
+
+    @property
+    def z(self):
+        return self._z
+
+    @z.setter
+    def z(self, value):
+        self._z = self._on_property_changed("z", value, self._z)
+
+    @property
+    def command_pending(self):
+        return self._command_pending
+
+    @command_pending.setter
+    def command_pending(self, value):
+        self._command_pending = self._on_property_changed("command_pending", value, self._command_pending)
+
     def refresh_ports(self):
         self._ports = SerialInterface.refresh_ports()
 
+        if HAVE_WHISKER_DEVICE:
+            self._ports.insert(0, "CAN bus")
+
+        return self._ports
+
     def send_home(self):
+        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.SEND_HOME, context=uuid.uuid4())
 
     def load_pellet(self):
+        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.LOAD_PELLET, context=uuid.uuid4())
 
     def send_pellet(self):
+        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.SEND_PELLET, context=uuid.uuid4())
 
     def release_pellet(self):
+        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.RELEASE_PELLET, context=uuid.uuid4())
 
     def cover_pellet(self):
+        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.COVER_PELLET, context=uuid.uuid4())
 
     def set_x(self, value: int):
+        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.SET_X, value, context=uuid.uuid4())
 
     def set_y(self, value: int):
+        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.SET_Y, value, context=uuid.uuid4())
 
     def set_z(self, value: int):
+        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.SET_Z, value, context=uuid.uuid4())
 
     def connect_to_device(self):
         if len(self._user_settings.port) == 0:
             return
 
-        device_interface = SerialInterface(self._user_settings.port)
+        load_config = None
+        barrier_config = None
+        x_config = None
+        y_config = None
+        z_config = None
+        load_movement = None
+        send_movement = None
+        home_movement = None
+        config = Path.home().joinpath(".alogus_config.yaml")
+        logger.info(f"looking for configuration alogus file: {config}")
 
-        self._device_thread = DeviceThread(PelletDelivery(), device_interface, self._msg_queue)
+        if config.exists():
+            try:
+                with open(config, "r") as file:
+                    conf = yaml.safe_load(file)
+                    logging.info("alogus configuration loaded")
+                    if "pellet" in conf:
+                        if "load" in conf["pellet"]:
+                            load_config = ServoConfig.from_dict(conf["pellet"]["load"])
+                            logger.info(f"load configuration: {load_config}")
+                        if "barrier" in conf["pellet"]:
+                            barrier_config = ServoConfig.from_dict(conf["pellet"]["barrier"])
+                            logger.info(f"barrier configuration: {barrier_config}")
+                        if "x" in conf["pellet"]:
+                            x_config = StepperConfig.from_dict(conf["pellet"]["x"])
+                            logger.info(f"X stepper configuration: {x_config}")
+                        if "y" in conf["pellet"]:
+                            y_config = StepperConfig.from_dict(conf["pellet"]["y"])
+                            logger.info(f"Y stepper configuration: {y_config}")
+                        if "z" in conf["pellet"]:
+                            z_config = StepperConfig.from_dict(conf["pellet"]["z"])
+                            logger.info(f"Z stepper configuration: {z_config}")
+                        if "actions" in conf["pellet"]:
+                            if "load" in conf["pellet"]["actions"]:
+                                load_movement = WhiskerMovement.from_dict("load", conf["pellet"]["actions"]["load"])
+                            if "home" in conf["pellet"]["actions"]:
+                                home_movement = WhiskerMovement.from_dict("home", conf["pellet"]["actions"]["home"])
+                            if "send" in conf["pellet"]["actions"]:
+                                send_movement = WhiskerMovement.from_dict("send", conf["pellet"]["actions"]["send"])
+            except Exception as e:
+                logger.error(f"error loading config: {e}")
+
+        if self._user_settings.port == "CAN bus":
+            if IS_REAL_WHISKER_DEVICE:
+                w_interface = WhiskerInterface(load_arm_config=load_config, barrier_config=barrier_config,
+                                               x_config=x_config, y_config=y_config, z_config=z_config)
+            else:
+                w_interface = WhiskerFileInterface(load_arm_config=load_config, barrier_config=barrier_config,
+                                                   x_config=x_config, y_config=y_config, z_config=z_config)
+            self._device_thread = DeviceThread(WhiskerDevice(buffer_size=10, send_movement=send_movement, home_movement=home_movement, load_movement=load_movement), w_interface, self._msg_queue)
+        else:
+            self._device_thread = DeviceThread(PelletDelivery(), SerialInterface(self._user_settings.port),
+                                               self._msg_queue)
+
         self._device_thread.name = "pellet"
 
         self._device_thread.start()
@@ -120,10 +226,17 @@ class AppModel(ObservableObject):
     def reader_property_changed(self, name: str, value, _old_value):
         if name == DeviceReader.FIRMWARE_VERSION:
             self.firmware_version = value
+        elif name == "device_x":
+            self.x = value
+        elif name == "device_y":
+            self.y = value
+        elif name == "device_z":
+            self.z = value
 
     # noinspection PyMethodMayBeStatic
     def reader_ack_received(self, ack):
         logger.info(f"ack context received: {ack}")
+        self.command_pending = False
 
     def _send_command(self, message, data=None, context=None):
         if context is not None:

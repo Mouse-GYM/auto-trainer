@@ -1,6 +1,7 @@
 import logging
 import math
 import sys
+import typing
 
 import serial
 import serial.tools.list_ports
@@ -91,13 +92,13 @@ class SerialInterface(DeviceInterface):
     def can_read(self) -> bool:
         return self.is_open and self._serial.in_waiting > 0
 
-    def read(self, max_count: int = math.inf) -> bytes:
+    def read(self, max_count: int = math.inf) -> typing.Any:
         if self.can_read():
             return self._serial.read(min(self._serial.in_waiting, max_count))
 
         return b""
 
-    def write(self, value: bytes) -> int:
+    def write(self, value: typing.Any) -> int:
         if self.is_open:
             return self._serial.write(value)
 

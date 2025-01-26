@@ -4,7 +4,7 @@ import uuid
 from typing import Optional
 
 from autotrainer.core import ObservableObject, ProjectInfo
-from autotrainer.device import SerialInterface, HeadFixReader
+from autotrainer.device import SerialInterface, HeadFixReader, WhiskerDevice, WhiskerInterface
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 
@@ -121,34 +121,35 @@ class HeadFixModel(ObservableObject):
         if value == self._position:
             return None
 
+        if isinstance(value, str):
+            value = int(value)
+
         self._position = self._on_property_changed("position", value, self._position)
 
-        return self._send_with_token(HeadFixMessageKind.SERVO, str(value))
+        return self._send_with_token(HeadFixMessageKind.MAGNET_INTENSITY, value)
 
     def tare(self):
         if not self._is_connected:
             return
 
-        return self._send_with_token(HeadFixMessageKind.UPDATE_TARE)
+        return self._send_with_token(HeadFixMessageKind.UPDATE_SCALE_TARE)
 
     def connect_to_device(self):
+        self._head_fix_reader.project_info = self._project
+
         if not self.port or len(self.port) == 0:
             return
 
-        device_interface = SerialInterface(self.port)
+        self._device_thread = DeviceThread(HeadFix(buffer_size=20), SerialInterface(self.port), self._reader_queue)
 
-        self._head_fix_reader.project_info = self._project
-
-        head_fix = HeadFix(buffer_size=20)
-
-        self._device_thread = DeviceThread(head_fix, device_interface, self._reader_queue)
+        # self._device_thread = DeviceThread(WhiskerDevice(buffer_size=50), WhiskerInterface(), self._reader_queue)
         self._device_thread.name = "head-fix"
 
         self._device_thread.start()
 
         self._send_command(DeviceThreadMessageKind.CONNECT)
 
-        self._send_command(HeadFixMessageKind.SERVO, str(self._position))
+        self._send_command(HeadFixMessageKind.MAGNET_INTENSITY, self._position)
 
         self._send_command(HeadFixMessageKind.STREAM_START)
 

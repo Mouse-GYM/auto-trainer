@@ -80,9 +80,15 @@ class MainContent(QWidget):
         self._position.setMaximum(100)
         self._position.setValue(0)
         self._position.setWrapping(False)
-        self._position.valueChanged.connect(self._update_position)
         self._position.setEnabled(False)
         position_layout.addWidget(self._position, 0, Qt.AlignLeft)
+
+        self._update_position_button = QPushButton("Set Position")
+        self._update_position_button.setEnabled(False)
+        self._update_position_button.clicked.connect(self._update_position)
+        position_layout.addWidget(self._update_position_button, 0)
+
+        position_layout.addStretch(1)
 
         self._tare_button = QPushButton("Tare")
         self._tare_button.setEnabled(False)
@@ -219,7 +225,7 @@ class MainContent(QWidget):
         self._perf_monitor.add_cycles(len(measurements[0]))
 
     def _refresh_ports(self):
-        ports = SerialInterface.refresh_ports()
+        ports = self._model.refresh_ports()
 
         self._port_combobox.refresh_ports(ports)
 
@@ -263,6 +269,7 @@ class MainContent(QWidget):
 
         self._position.setEnabled(self._model.is_connected)
         self._tare_button.setEnabled(self._model.is_connected)
+        self._update_position_button.setEnabled(self._model.is_connected)
         self._plot1.setEnabled(self._model.is_connected)
         self._plot2.setEnabled(self._model.is_connected)
         self._plot3.setEnabled(self._model.is_connected)

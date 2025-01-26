@@ -6,7 +6,6 @@ from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QL
 
 import qtawesome as qta
 
-from autotrainer.device import SerialInterface
 from autotrainer.pyside import TextBoxHandler, ATSerialPortComboBox
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.pellet_delivery.view.pellet_control import PelletControl
@@ -20,6 +19,8 @@ class MainContent(QWidget):
         super().__init__()
 
         self._app_view_model = app_view_model
+
+        self._app_view_model.property_changed += self._model_property_changed
 
         self._ignore_port_changes = False
 
@@ -59,7 +60,7 @@ class MainContent(QWidget):
 
         log_output = QPlainTextEdit()
         log_output.setReadOnly(True)
-        layout.addWidget(log_output, 2, 0)
+        layout.addWidget(log_output, 3, 0)
         handler = TextBoxHandler(log_output)
         handler.setFormatter(logging.Formatter(fmt="%(asctime)s: %(levelname)s: %(name)s: %(message)s"))
         logging.getLogger("autotrainer").addHandler(handler)
@@ -76,7 +77,7 @@ class MainContent(QWidget):
         pass
 
     def _refresh_ports(self):
-        ports = SerialInterface.refresh_ports()
+        ports = self._app_view_model.refresh_ports()
 
         self._port_combobox.refresh_ports(ports)
 
@@ -97,3 +98,10 @@ class MainContent(QWidget):
         self._pellet_control.setEnabled(self._app_view_model.is_connected)
         self._port_combobox.setEnabled(not self._app_view_model.is_connected)
         self._refresh_button.setEnabled(not self._app_view_model.is_connected)
+
+    def _model_property_changed(self, name: str, value: object, _: object):
+        if name == "command_pending":
+            self._pellet_control.setEnabled(not value)
+            self._port_combobox.setEnabled(not value)
+            self._refresh_button.setEnabled(not value)
+            self._connect_button.setEnabled(not value)

@@ -25,6 +25,8 @@ class PelletControl(QWidget):
 
         self._app_model: AppModel = app_model
 
+        self._app_model.property_changed += self._model_property_changed
+
         layout = QGridLayout()
 
         b_layout = QHBoxLayout()
@@ -64,6 +66,15 @@ class PelletControl(QWidget):
         self._z_pos.valueChanged.connect(self._update_z)
         layout.addLayout(p_layout, 1, 2)
 
+        self._x_device = QLabel("Device X: ?")
+        layout.addWidget(self._x_device, 2, 0)
+
+        self._y_device = QLabel("Device Y: ?")
+        layout.addWidget(self._y_device, 2, 1)
+
+        self._z_device = QLabel("Device Z: ?")
+        layout.addWidget(self._z_device, 2, 2)
+
         self.setLayout(layout)
 
         self.setEnabled(False)
@@ -76,3 +87,11 @@ class PelletControl(QWidget):
 
     def _update_z(self):
         self._app_model.set_z(self._z_pos.value())
+
+    def _model_property_changed(self, name: str, value, _old_value):
+        if name == "x":
+            self._x_device.setText(f"Device X: {round(value, 3)}")
+        elif name == "y":
+            self._y_device.setText(f"Device Y: {round(value, 3)}")
+        elif name == "z":
+            self._z_device.setText(f"Device Z: {round(value, 3)}")

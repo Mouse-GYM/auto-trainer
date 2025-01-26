@@ -9,15 +9,18 @@ logger = logging.getLogger(__name__)
 
 
 class PelletDeliveryMessageKind(IntEnum):
-    RAW_COMMAND = 0,
-    SEND_HOME = 1,
-    LOAD_PELLET = 2,
-    SEND_PELLET = 3,
-    RELEASE_PELLET = 4,
-    COVER_PELLET = 5,
-    SET_X = 6,
-    SET_Y = 7,
-    SET_Z = 8
+    RAW_COMMAND = 100,
+    SEND_HOME = 101,
+    LOAD_PELLET = 102,
+    SEND_PELLET = 103,
+    RELEASE_PELLET = 104,
+    COVER_PELLET = 105,
+    SET_X = 106,
+    SET_Y = 107,
+    SET_Z = 108,
+    UPDATE_X = 1001
+    UPDATE_Y= 1002,
+    UPDATE_Z = 1003,
 
     @classmethod
     def is_member(cls, value):
@@ -37,10 +40,13 @@ class PelletDelivery(GymDevice):
             self._send_data("F0x", context)
         elif kind == PelletDeliveryMessageKind.SEND_HOME:
             self._send_data("H0x", context)
+            self.api.send_message(PelletDeliveryMessageKind.UPDATE_X, 1000)
         elif kind == PelletDeliveryMessageKind.LOAD_PELLET:
             self._send_data("P0x", context)
+            self.api.send_message(PelletDeliveryMessageKind.UPDATE_Y, 1000)
         elif kind == PelletDeliveryMessageKind.SEND_PELLET:
             self._send_data("M0x", context)
+            self.api.send_message(PelletDeliveryMessageKind.UPDATE_Z, 1000)
         elif kind == PelletDeliveryMessageKind.RELEASE_PELLET:
             self._send_data("R0x", context)
         elif kind == PelletDeliveryMessageKind.COVER_PELLET:

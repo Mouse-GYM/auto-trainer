@@ -1,3 +1,5 @@
+import typing
+
 from .device_api import DeviceApi
 
 
@@ -13,7 +15,7 @@ class Device:
     def disconnect(self):
         pass
 
-    def notify_data(self, data: bytes) -> None:
+    def notify_data(self, data: typing.Any) -> None:
         """Notification for data received from the device
 
         :param data: one or more bytes received from the device to be handled/interpreted by this Device instance

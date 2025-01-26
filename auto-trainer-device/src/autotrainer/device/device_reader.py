@@ -48,4 +48,4 @@ class DeviceReader(ObservableObject):
         logger.debug(f"<{self._name}>: exiting run loop")
 
     def message_received(self, msg, _data):
-        logger.debug(f"<{self._name}>: unhandled message {msg}")
+        pass

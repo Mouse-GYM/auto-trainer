@@ -2,7 +2,7 @@ import logging
 import time
 import re
 import typing
-from collections import namedtuple
+from dataclasses import dataclass
 from enum import IntEnum
 
 from autotrainer.core import PerfMonitor
@@ -11,16 +11,22 @@ from .device_api import DeviceApi
 
 logger = logging.getLogger(__name__)
 
-HeadFixMeasurement = namedtuple('HeadFixMeasurement',
-                                ["when", "timestamp", "weight", "switch", "pressure", "temperature", "humidity"])
-
+@dataclass
+class HeadFixMeasurement:
+    when: float = 0
+    timestamp: int = 0
+    weight: float = 0
+    switch: float = 0
+    pressure: float = 0
+    temperature: float = 0
+    humidity: float = 0
 
 class HeadFixMessageKind(IntEnum):
     RAW_COMMAND = 1,
     MEASUREMENT = 2,
-    SERVO = 3,
+    MAGNET_INTENSITY = 3,
     SETTINGS = 4,
-    UPDATE_TARE = 5,
+    UPDATE_SCALE_TARE = 5,
     STREAM_START = 6,
     STREAM_STOP = 7
 
@@ -54,11 +60,11 @@ class HeadFix(GymDevice):
             self._send_data(typing.cast(str, data), context)
         elif kind == GymDeviceMessageKind.VERSION:
             self._send_data("Fx", context)
-        elif kind == HeadFixMessageKind.SERVO:
-            self._send_data(f"A{typing.cast(str, data)}x", context)
+        elif kind == HeadFixMessageKind.MAGNET_INTENSITY:
+            self._send_data(f"A{typing.cast(int, data)}x", context)
         elif kind == HeadFixMessageKind.SETTINGS:
             self._send_data("Ox", context)
-        elif kind == HeadFixMessageKind.UPDATE_TARE:
+        elif kind == HeadFixMessageKind.UPDATE_SCALE_TARE:
             self._send_data("Mx", context)
         elif kind == HeadFixMessageKind.STREAM_START:
             self._perf_monitor.reset()
@@ -135,7 +141,8 @@ def parse_measurement(data: str) -> (HeadFixMeasurement, str):
                 return measurement, parts[5]
             else:
                 return measurement, ""
-        except:
+        except Exception as ex:
             logger.warning(f"unexpected pattern: {data}")
+            logger.warning(ex)
 
     return None, data

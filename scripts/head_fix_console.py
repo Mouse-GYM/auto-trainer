@@ -93,7 +93,7 @@ def run_monitor(port: str):
             elif cmd.startswith("F"):
                 device_thread.send_message(GymDeviceMessageKind.VERSION)
             elif cmd.startswith("M"):
-                device_thread.send_message(HeadFixMessageKind.UPDATE_TARE)
+                device_thread.send_message(HeadFixMessageKind.UPDATE_SCALE_TARE)
             elif cmd.startswith("S"):
                 device_thread.send_message(HeadFixMessageKind.STREAM_START)
             elif cmd.startswith("T"):

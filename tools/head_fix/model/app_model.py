@@ -1,9 +1,13 @@
 import logging
 import queue
+from pathlib import Path
+
+import yaml
 
 from autotrainer.core import ObservableObject
 from autotrainer.core.project import ProjectInterval
-from autotrainer.device import SerialInterface, HeadFixReader, GymDeviceMessageKind
+from autotrainer.device import SerialInterface, HeadFixReader, GymDeviceMessageKind, WhiskerDevice, WhiskerInterface, \
+    HAVE_WHISKER_DEVICE, ServoConfig, IS_REAL_WHISKER_DEVICE, WhiskerFileInterface
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 from autotrainer.device.device_reader import DeviceReader
@@ -63,11 +67,19 @@ class AppModel(ObservableObject):
     def refresh_ports(self):
         self._ports = SerialInterface.refresh_ports()
 
+        if HAVE_WHISKER_DEVICE:
+            self._ports.insert(0, "CAN bus")
+
+        return self._ports
+
     def update_position(self, value: int):
-        self._device_thread.send_message(HeadFixMessageKind.SERVO, str(value))
+        self._device_thread.send_message(HeadFixMessageKind.MAGNET_INTENSITY, value)
 
     def tare(self):
-        self._device_thread.send_message(HeadFixMessageKind.UPDATE_TARE)
+        if self._device_thread is not None:
+            self._device_thread.send_message(HeadFixMessageKind.UPDATE_SCALE_TARE)
+        else:
+            logger.warning("attempt to tare when device thread is not initialized")
 
     def set_stream_enabled(self, enable: bool):
         if enable:
@@ -82,9 +94,35 @@ class AppModel(ObservableObject):
         if len(self._user_settings.port) == 0:
             return
 
-        device_interface = SerialInterface(self._user_settings.port)
+        magnet_config = None
 
-        self._device_thread = DeviceThread(HeadFix(buffer_size=10), device_interface, self._msg_queue)
+        config = Path.home().joinpath(".alogus_config.yaml")
+        logger.info(f"looking for configuration alogus file: {config}")
+
+        if config.exists():
+            try:
+                with open(config, "r") as file:
+                    conf = yaml.safe_load(file)
+                    logging.info("alogus configuration loaded")
+                    if "magnet" in conf and "head" in conf["magnet"]:
+                        magnet_config = ServoConfig.from_dict(conf["magnet"]["head"])
+                        logger.info(f"head fix configuration: {magnet_config}")
+
+            except Exception as e:
+                logger.error(f"error loading config: {e}")
+
+        if self._user_settings.port == "CAN bus":
+            if IS_REAL_WHISKER_DEVICE:
+                logger.debug(f"initializing with magnet configuration {magnet_config}")
+                w_interface = WhiskerInterface(magnet_config=magnet_config)
+            else:
+                w_interface = WhiskerFileInterface(magnet_config=magnet_config)
+
+            self._device_thread = DeviceThread(WhiskerDevice(buffer_size=10), w_interface, self._msg_queue)
+        else:
+            self._device_thread = DeviceThread(HeadFix(buffer_size=10), SerialInterface(self._user_settings.port),
+                                               self._msg_queue)
+
         self._device_thread.name = "head-fix"
 
         self._device_thread.start()

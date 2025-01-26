@@ -3,7 +3,7 @@ import sys
 
 from tools.pellet_delivery.run_pellet_delivery_ui import run_pellet_delivery_ui
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s\t [%(name)s] %(message)s")
 logging.getLogger('autotrainer').setLevel(logging.DEBUG)
 logging.getLogger('tools').setLevel(logging.DEBUG)
 

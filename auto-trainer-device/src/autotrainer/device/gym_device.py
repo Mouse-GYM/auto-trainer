@@ -1,5 +1,6 @@
 import logging
 import queue
+import typing
 from enum import IntEnum, Enum
 from queue import Queue
 
@@ -44,7 +45,7 @@ class GymDevice(Device):
     def firmware_version(self):
         return self._firmware_version
 
-    def notify_data(self, data: bytes):
+    def notify_data(self, data: typing.Any):
         all_resp = data.decode()
 
         for resp in all_resp:
