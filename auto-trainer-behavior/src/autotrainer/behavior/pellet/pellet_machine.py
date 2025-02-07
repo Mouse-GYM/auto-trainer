@@ -240,6 +240,8 @@ class PelletMachine:
                 elif self.state == PelletState.covering:
                     if not pellet_seen:
                         self.load_pellet()
+                    else:
+                        self.release_pellet()
                 elif self.state == PelletState.releasing:
                     self.monitor_pellet()
                 elif self.state == PelletState.monitoring:
