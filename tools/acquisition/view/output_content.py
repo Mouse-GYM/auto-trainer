@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QHBoxLayout, QVBoxLayout, QStackedLayout
+from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QHBoxLayout, QVBoxLayout, QStackedLayout, QFormLayout
 
 from autotrainer.pyside import CardWidget
 from tools.acquisition.model.app_model import AppModel
@@ -16,19 +16,16 @@ class OutputContent(ContentWidget):
         content_layout = QVBoxLayout()
 
         # Metadata
-        layout = QHBoxLayout()
+        layout = QFormLayout()
 
-        layout.addWidget(QLabel("Name:"))
-        self._name = QLineEdit()
-        self._name.setText(self._model.animal_name)
-        self._name.textChanged.connect(self.name_changed)
-        layout.addWidget(self._name)
+        self._name = QLabel(model.animal_name)
+        self._name.setText("(none)")
+        layout.addRow("Subject:", self._name)
 
-        layout.addWidget(QLabel("Notes:"))
         self._notes = QLineEdit()
         self._notes.setText(self._model.notes)
         self._notes.textChanged.connect(self.notes_changed)
-        layout.addWidget(self._notes)
+        layout.addRow("Notes:", self._notes)
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -100,9 +97,6 @@ class OutputContent(ContentWidget):
 
     def location_changed(self, value: str):
         self._model.output_location = value
-
-    def name_changed(self, value: str):
-        self._model.animal_name = value
 
     def notes_changed(self, value: str):
         self._model.notes = value

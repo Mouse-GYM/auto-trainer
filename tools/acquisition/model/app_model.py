@@ -4,12 +4,14 @@ import os
 import time
 import typing
 from datetime import datetime
+from pathlib import Path
 
 import yaml
 
 from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID, EventManager
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
+from autotrainer.core import AnimalSubject
 from autotrainer.inference import PoseAlgorithm
 
 from tools.acquisition.model.inference_model import InferenceModel
@@ -67,7 +69,15 @@ class AppModel(ObservableObject):
                                                     self._inference, self._behavior, self._head_fix,
                                                     self._pellet_delivery]
 
+        self._animals: typing.List[AnimalSubject] = []
+
+        self._selected_animal: typing.Optional[AnimalSubject] = None
+
         TriggerManager.instance().register(self._trigger_received, CAPTURE_TRIGGER_ID)
+
+        self._head_fix.property_changed += self._on_head_fix_property_changed
+
+        self._load_animals()
 
     @property
     def preferences(self) -> UserPreferences:
@@ -109,6 +119,29 @@ class AppModel(ObservableObject):
     def output_location(self) -> str:
         return self._output_location
 
+    @property
+    def animals(self) -> typing.List[AnimalSubject]:
+        return self._animals
+
+    @animals.setter
+    def animals(self, value: typing.List[AnimalSubject]):
+        self._animals = self._on_property_changed("animals", value, self._animals)
+
+    @property
+    def selected_animal(self) -> typing.Optional[AnimalSubject]:
+        return self._selected_animal
+
+    @selected_animal.setter
+    def selected_animal(self, value: typing.Optional[AnimalSubject]):
+        self._selected_animal = self._on_property_changed("selected_animal", value, self._selected_animal)
+
+        if self._selected_animal is not None:
+            self.property_changed("animal_name", self.animal_name, self.animal_name)
+            self.head_fix.baseline_intensity = self._selected_animal.baseline_magnet_intensity
+            self.head_fix.update_position(self._selected_animal.baseline_magnet_intensity)
+        else:
+            self.property_changed("animal_name", "(none)", "(none)")
+
     @output_location.setter
     def output_location(self, value: str):
         if self._output_location == value:
@@ -124,7 +157,10 @@ class AppModel(ObservableObject):
 
     @property
     def animal_name(self) -> str:
-        return self._animal_name
+        if self._selected_animal is not None:
+            return self._selected_animal.name
+        else:
+            return "(none)"
 
     @animal_name.setter
     def animal_name(self, value: str):
@@ -137,6 +173,27 @@ class AppModel(ObservableObject):
     @notes.setter
     def notes(self, value: str):
         self._notes = self._on_property_changed("notes", value, self._notes)
+
+    def add_animal(self, name: str, select: bool = True):
+        if not name or len(name) == 0:
+            return
+
+        animal = [x for x in self._animals if x.name == name]
+
+        if len(animal) == 0:
+            animal = AnimalSubject(name)
+            animal.to_file(str(Path(self._preferences.animal_location).joinpath(f"{name}.json")))
+
+            # Ensure property change events for listeners
+            animals = self._animals.copy()
+            animals.append(animal)
+
+            self.animals = animals
+        else:
+            animal = animal[0]
+
+        if select:
+            self.selected_animal = animal
 
     def on_capture_start(self) -> bool:
         self._project_info = ProjectInfo(root=self.output_location, device_id=self._preferences.serial_number,
@@ -289,11 +346,40 @@ class AppModel(ObservableObject):
         self.head_fix.on_close()
         self._pellet_delivery.on_close()
 
+    def _load_animals(self):
+        animals = []
+
+        current_animal = self.selected_animal
+
+        if self._preferences.animal_location is None or len(self._preferences.animal_location) == 0:
+            default_location = Path.home().joinpath("Documents").joinpath("RawDataLocal").joinpath("Animals")
+
+            try:
+                default_location.mkdir(parents=True)
+                self._preferences.animal_location = str(default_location)
+            except Exception as e:
+                logger.error(f"Failed to create default animal location {default_location}: {e}")
+                return
+
+        path = Path(self._preferences.animal_location)
+
+        if path.exists() and path.is_dir():
+            files = [x.name for x in path.iterdir() if not x.is_dir() and ".json" in x.name]
+            loaded = [AnimalSubject.from_file(str(path.joinpath(x))) for x in files]
+            animals = [x for x in loaded if x is not None]
+
+        self.animals = animals
+
     def _trigger_received(self, _sender, _trigger_id, value):
         self._is_recording_trigger = value
 
         if value:
             self._save_metadata(self._project_info.get_metadata_file(-1), self._project_info.session.value)
+
+    def _on_head_fix_property_changed(self, name: str, value, _):
+        if name == "baseline_intensity" and self._selected_animal is not None:
+            self._selected_animal.baseline_magnet_intensity = value
+            self._selected_animal.to_file(str(Path(self._preferences.animal_location).joinpath(f"{self._selected_animal.name}.json")))
 
     def _configuration_as_dict(self) -> dict:
         return {"camera1": self._left_camera.save_configuration(),
@@ -318,7 +404,7 @@ class AppModel(ObservableObject):
             "createdUtc": datetime.utcnow().timestamp(),
             "serialNumber": self._preferences.serial_number or "",
             "appVersion": self._app_version,
-            "animalName": self.animal_name or "",
+            "animalName": self.animal_name,
             "notes": self.notes or "",
             "session": session,
             "configuration": self._configuration_as_dict()

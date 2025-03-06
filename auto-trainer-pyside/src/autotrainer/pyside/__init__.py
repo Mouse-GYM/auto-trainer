@@ -11,3 +11,4 @@ from .TextBoxHandler import TextBoxHandler
 from .QtSimpleGroupBox import QSimpleGroupBox
 from .QtSwitch import QSwitch
 from .QtLabeledSwitch import QLabeledSwitch
+from .QtIndicator import QtIndicator

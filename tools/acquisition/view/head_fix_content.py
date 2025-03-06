@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton,
 
 from autotrainer.core import PerfMonitor
 from autotrainer.device import SerialInterface, HAVE_WHISKER_DEVICE
-from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget
+from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget, QtIndicator
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
 from tools.acquisition.view.content_widget import ContentWidget
@@ -55,15 +55,21 @@ class HeadFixContent(ContentWidget):
         title.setStyleSheet("font-weight: bold")
         layout.addWidget(title)
 
+        layout.addSpacing(10)
+
+        layout.addWidget(QLabel("Baseline: "))
+        self._baseline = QLabel("0")
+        layout.addWidget(self._baseline)
+
         layout.addStretch(1)
 
-        self._headbar_engaged = QLabel("Headbar: Disengaged")
+        self._headbar_engaged = QtIndicator(text="Headbar")
         layout.addWidget(self._headbar_engaged)
 
-        self._load_cell_engaged = QLabel("Load Cell: Disengaged")
+        self._load_cell_engaged = QtIndicator(text="Load Cell")
         layout.addWidget(self._load_cell_engaged)
 
-        self._force_detector_engaged = QLabel("Force Detector: Disengaged")
+        self._force_detector_engaged = QtIndicator(text="Force Detector")
         layout.addWidget(self._force_detector_engaged)
 
         layout.addWidget(QLabel("Port:"))
@@ -85,14 +91,16 @@ class HeadFixContent(ContentWidget):
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
 
-        layout.addWidget(QLabel("Position:"))
+        layout.addWidget(QLabel("Current Intensity:"))
 
         self._current_position = QLabel("0")
         layout.addWidget(self._current_position)
 
-        layout.addStretch(1)
+        self._baseline_button = QPushButton("Set as Baseline")
+        self._baseline_button.clicked.connect(lambda: self._model.set_current_as_baseline())
+        layout.addWidget(self._baseline_button)
 
-        layout.addWidget(QLabel("Move:"))
+        layout.addWidget(QLabel("Move To:"))
 
         self._position = QSpinBox()
         self._position.setValue(self._model.position)
@@ -108,8 +116,6 @@ class HeadFixContent(ContentWidget):
         self._load_cell.editingFinished.connect(self._update_trigger)
         self._load_cell.setText(str(self._model.load_trigger))
         layout.addWidget(self._load_cell)
-
-        layout.addStretch(1)
 
         self._tare_button = QPushButton("Tare")
         self._tare_button.setEnabled(False)
@@ -152,18 +158,10 @@ class HeadFixContent(ContentWidget):
 
     def use_cache(self):
         self._plot1.use_cache()
-        if self._model.is_load_cell_engaged:
-            self._load_cell_engaged.setText("Load Cell: Engaged")
-        else:
-            self._load_cell_engaged.setText("Load Cell: Disengaged")
-        if self._model.is_headbar_engaged:
-            self._headbar_engaged.setText("Headbar: Engaged")
-        else:
-            self._headbar_engaged.setText("Headbar: Disengaged")
-        if self._model.is_force_detector_engaged:
-            self._force_detector_engaged.setText("Force Detector: Engaged")
-        else:
-            self._force_detector_engaged.setText("Force Detector: Disengaged")
+
+        self._load_cell_engaged.setState(self._model.is_load_cell_engaged)
+        self._headbar_engaged.setState(self._model.is_headbar_engaged)
+        self._force_detector_engaged.setState(self._model.is_force_detector_engaged)
 
     def _weight_received(self, value):
         values = value[0]
@@ -187,7 +185,7 @@ class HeadFixContent(ContentWidget):
             self._model.port = None
 
     def _update_position(self):
-        self._model.update_position(self._position.value(), True)
+        self._model.update_position(self._position.value())
 
     def _update_trigger(self):
         try:
@@ -203,6 +201,8 @@ class HeadFixContent(ContentWidget):
             self._load_cell.setText(str(value))
         elif name == "position":
             self.position_changed.emit(value)
+        elif name == "baseline_intensity":
+            self._baseline.setText(str(value))
         elif name == "is_load_cell_engaged":
             if value:
                 self._plot1.getPlotItem().getViewBox().setBackgroundColor(_ACTIVE_LOAD_CELL_COLOR)

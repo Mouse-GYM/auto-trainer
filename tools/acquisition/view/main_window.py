@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication, QFileDialog, \
-    QSizePolicy, QWidget
+    QSizePolicy, QWidget, QComboBox
 import qtawesome as qta
 
 from autotrainer.core import EventManager
@@ -52,6 +52,8 @@ class MainWindow(QMainWindow):
 
         self.setMaximumSize(1880, 1080)
 
+        self._app_view_model.property_changed += self._app_model_property_changed
+
         self._app_view_model.on_error += self._show_error
 
         self._preferences.property_changed += self._preferences_property_changed
@@ -60,6 +62,8 @@ class MainWindow(QMainWindow):
             if configuration:
                 self._preferences.last_configuration = configuration
             self._status_configuration.setText(self._preferences.last_configuration)
+
+        self._reload_animals(self._app_view_model.animals)
 
     def on_capture_start_stop(self, is_toggled):
         if is_toggled:
@@ -231,6 +235,7 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.edit_configuration_action)
 
         if self._is_dev:
+            toolbar.addSeparator()
             toolbar.addAction(self.capture_trigger_action)
             toolbar.addAction(self.pellet_seen_action)
             toolbar.addAction(self.mouse_seen_action)
@@ -238,6 +243,18 @@ class MainWindow(QMainWindow):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         toolbar.addWidget(spacer)
+
+        toolbar.addWidget(QLabel("Subject:"))
+        self._animal_dropdown = QComboBox()
+        self._animal_dropdown.setMinimumWidth(200)
+        self._animal_dropdown.setEditable(True)
+        self._animal_dropdown.setDuplicatesEnabled(False)
+        self._animal_dropdown.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self._animal_dropdown.currentIndexChanged.connect(self._animal_changed)
+        self._animal_dropdown.lineEdit().editingFinished.connect(self._add_animal)
+        toolbar.addWidget(self._animal_dropdown)
+
+        toolbar.addSeparator()
 
         toolbar.addAction(self.preferences_action)
 
@@ -276,6 +293,39 @@ class MainWindow(QMainWindow):
 
     def _internal_set_mouse_seen(self):
         self._app_view_model.behavior.algorithm.mouse_seen(True)
+
+    def _add_animal(self):
+        self._app_view_model.add_animal(self._animal_dropdown.currentText())
+
+    def _animal_changed(self, index: int):
+        if self._animal_dropdown.currentIndex() != -1:
+            self._app_view_model.selected_animal = self._animal_dropdown.currentData()
+        else:
+            self._app_view_model.selected_animal = None
+
+    def _app_model_property_changed(self, name: str, value, _old_value):
+        if name == "animals":
+            self._reload_animals(value)
+        elif name == "selected_animal":
+            if value is None:
+                self._animal_dropdown.clear()
+            else:
+                index = self._animal_dropdown.findText(value.name)
+                if index != -1:
+                    self._animal_dropdown.setCurrentIndex(index)
+
+    def _reload_animals(self, animals):
+        self._animal_dropdown.clear()
+
+        for animal in animals:
+            self._animal_dropdown.addItem(animal.name, animal)
+
+        if self._app_view_model.selected_animal is not None:
+            index = self._animal_dropdown.findText(self._app_view_model.selected_animal.name)
+            if index != -1:
+                self._animal_dropdown.setCurrentIndex(index)
+        else:
+            self._animal_dropdown.setCurrentIndex(-1)
 
     @staticmethod
     def _update_log_level(value: int):

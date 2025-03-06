@@ -21,4 +21,5 @@ class PreferencesDialog(QDialog):
         self.layout = QVBoxLayout()
         self.layout.addWidget(PreferencesContent(preferences))
         self.layout.addWidget(self.buttonBox)
+
         self.setLayout(self.layout)

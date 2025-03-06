@@ -26,6 +26,8 @@ class HeadFixModel(ObservableObject):
 
         self._is_connected = False
 
+        self._baseline_intensity = 0
+
         self._position = 0
 
         self._is_headbar_engaged = False
@@ -111,13 +113,18 @@ class HeadFixModel(ObservableObject):
                                                                     self._is_force_detector_engaged)
 
     @property
+    def baseline_intensity(self) -> int:
+        return self._baseline_intensity
+
+    @baseline_intensity.setter
+    def baseline_intensity(self, value: int):
+        self._baseline_intensity = self._on_property_changed("baseline_intensity", value, self._baseline_intensity)
+
+    @property
     def position(self) -> int:
         return self._position
 
-    def update_position(self, value: int, set_baseline: bool = False):
-        if set_baseline:
-            self.property_changed("baseline_intensity", value, self._position)
-
+    def update_position(self, value: int):
         if value == self._position:
             return None
 
@@ -127,6 +134,9 @@ class HeadFixModel(ObservableObject):
         self._position = self._on_property_changed("position", value, self._position)
 
         return self._send_with_token(HeadFixMessageKind.MAGNET_INTENSITY, value)
+
+    def set_current_as_baseline(self):
+        self.baseline_intensity = self.position
 
     def tare(self):
         if not self._is_connected:

@@ -9,7 +9,7 @@ class UserPreferences(ObservableObject):
     def __init__(self):
         super().__init__()
 
-        if sys.platform.startswith('win'):
+        if sys.platform.startswith("win"):
             self._settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "Colorado", "Auto Trainer")
         else:
             QCoreApplication.setOrganizationName("Colorado")
@@ -22,6 +22,8 @@ class UserPreferences(ObservableObject):
         self._log_level = self._settings.value("system/log_level", 30, int)
         self._serial_number = self._settings.value("system/serial_number", "00000")
         self._live_feed_refresh_rate = self._settings.value("display/refresh_rate", 15, int)
+
+        self._animal_location = self._settings.value("system/animal_location", "")
 
     def save(self):
         self._settings.sync()
@@ -62,6 +64,15 @@ class UserPreferences(ObservableObject):
     def log_location(self, value: str) -> None:
         self._log_location = self._on_property_changed("log_location", value, self.log_location)
         self._settings.setValue("system/log_location", self._log_location)
+
+    @property
+    def animal_location(self) -> str:
+        return self._animal_location
+
+    @animal_location.setter
+    def animal_location(self, value: str) -> None:
+        self._animal_location = self._on_property_changed("animal_location", value, self.animal_location)
+        self._settings.setValue("system/animal_location", self._animal_location)
 
     @property
     def log_level(self) -> int:

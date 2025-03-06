@@ -6,3 +6,4 @@ from .trigger_manager import TriggerManager, CAPTURE_TRIGGER_ID
 from .perf_monitor import PerfMonitor
 from .project import ProjectInfo, ProjectInterval, video_write_ext
 from .event_manager import EventManager, EventInfo
+from .animal import AnimalSubject

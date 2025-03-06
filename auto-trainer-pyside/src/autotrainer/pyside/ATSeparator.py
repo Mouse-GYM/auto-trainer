@@ -7,7 +7,6 @@ class ATSeparator(QFrame):
         super().__init__()
 
         self.setFrameShape(QFrame.Shape.HLine)
-
         self.set_color(color)
 
     def set_color(self, color: str):
