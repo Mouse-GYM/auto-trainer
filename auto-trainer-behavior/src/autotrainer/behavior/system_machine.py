@@ -117,7 +117,7 @@ class SystemMachine:
 
     def after_exit_tunnel(self):
         if self._head_fix_command is not None:
-            self._head_fix_command.update_position(0)
+            self._head_fix_command.update_position(self.algorithm.baseline_intensity)
 
         EventManager.post_event(BehaviorEventKind.tunnelExit)
         self.algorithm.end_session()
