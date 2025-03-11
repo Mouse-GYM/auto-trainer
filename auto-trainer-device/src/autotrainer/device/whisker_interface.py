@@ -23,11 +23,23 @@ PELLET_LOAD_SERVO_ID = 1
 
 
 @dataclass
-class ServoConfig:
-    min_pos: float = 0
-    max_pos: float = 100
-    min_pwm: float = 1000
-    max_pwm: float = 2000
+class Source:
+    src_id: int = -1
+
+
+@dataclass
+class Heartbeat(Source):
+    unused: bool = False
+
+
+@dataclass
+class ServoConfig(Source):
+    motor_id: int = -1
+    error: bool = False
+    min_position: float = 0
+    max_position: float = 100
+    min_pwm_duration_us: float = 1000
+    max_pwm_duration_us: float = 2000
 
     max_vel: float = 25.0
     max_acc: float = 100.0
@@ -37,9 +49,9 @@ class ServoConfig:
         config = ServoConfig()
 
         if "min_pos" in data:
-            config.min_pos = data["min_pos"]
+            config.min_position = data["min_pos"]
         if "max_pos" in data:
-            config.max_pos = data["max_pos"]
+            config.max_position = data["max_pos"]
         if "min_pwm" in data:
             config.min_pwm = data["min_pwm"]
         if "max_pwm" in data:
@@ -53,7 +65,9 @@ class ServoConfig:
 
 
 @dataclass
-class StepperConfig:
+class StepperConfig(Source):
+    motor_id: int = -1
+    error: bool = False
     min_step_inverse: int = 64
     steps_per_revolution: float = 48.0
 
@@ -76,6 +90,42 @@ class StepperConfig:
         return config
 
 
+def _translate(message) -> typing.Any:
+    # print (message.type, message.dst_id)
+    if message.type == JerryCANCmdType.HEARTBEAT:
+        heartbeat = Heartbeat()
+        heartbeat.src_id = message.dst_id
+        return heartbeat
+
+    if message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type == JerryCANCfgMsg.Type.SERVO:
+        config = ServoConfig()
+        config.src_id = message.dst_id
+
+        config.motor_id = message.cfg_response.servo.motor_id
+        config.error = message.cfg_response.servo.error == 1
+
+        config.min_position = message.cfg_response.servo.min_position
+        config.max_position = message.cfg_response.servo.max_position
+        config.min_pwm = message.cfg_response.servo.min_pwm_duration_us
+        config.max_pwm = message.cfg_response.servo.max_pwm_duration_us
+
+        return config
+
+    if (message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type ==
+        JerryCANCfgMsg.Type.STEPPER):
+        config = StepperConfig()
+        config.src_id = message.dst_id
+
+        config.motor_id = message.cfg_response.stepper.motor_id
+        config.error = message.cfg_response.stepper.error
+
+        config.min_step_inverse = message.cfg_response.stepper.min_step_inverse
+        config.steps_per_revolution = message.cfg_response.stepper.steps_per_revolution
+        return config
+
+    return None
+
+
 class WhiskerInterface(DeviceInterface):
     """
     Somewhat temporary attempt to confirm the Alogus hardware to the existing device hardware interface.  Will likely
@@ -90,8 +140,10 @@ class WhiskerInterface(DeviceInterface):
 
     def __init__(self, magnet_config: typing.Optional[ServoConfig] = None,
                  barrier_config: typing.Optional[ServoConfig] = None,
-                 load_arm_config: typing.Optional[ServoConfig] = None, x_config: typing.Optional[StepperConfig] = None,
-                 y_config: typing.Optional[StepperConfig] = None, z_config: typing.Optional[StepperConfig] = None):
+                 load_arm_config: typing.Optional[ServoConfig] = None,
+                 x_config: typing.Optional[StepperConfig] = None,
+                 y_config: typing.Optional[StepperConfig] = None,
+                 z_config: typing.Optional[StepperConfig] = None):
         super().__init__()
 
         try:
@@ -157,7 +209,7 @@ class WhiskerInterface(DeviceInterface):
                 messages.append(message)
                 time.sleep(0.0001)
 
-        return messages
+        return [x for x in map(_translate, messages) if x is not None]
 
     def write(self, value: typing.Any) -> int:
         msg, destination = value
@@ -174,17 +226,17 @@ class WhiskerInterface(DeviceInterface):
         self._pellet_dst = dst_id
 
         if self._is_open and self._pellet_dst is not None:
-            self._write_servo_config(self._pellet_dst, PELLET_LOAD_SERVO_ID, self._load_arm_config)
-            self._write_servo_config(self._pellet_dst, PELLET_COVER_SERVO_ID, self._barrier_config)
-            self._write_stepper_config(self._pellet_dst, PELLET_X_MOTOR_ID, self._x_config)
-            self._write_stepper_config(self._pellet_dst, PELLET_Y_MOTOR_ID, self._y_config)
-            self._write_stepper_config(self._pellet_dst, PELLET_Z_MOTOR_ID, self._z_config)
+            self.write_servo_config(self._pellet_dst, PELLET_LOAD_SERVO_ID, self._load_arm_config)
+            self.write_servo_config(self._pellet_dst, PELLET_COVER_SERVO_ID, self._barrier_config)
+            self.write_stepper_config(self._pellet_dst, PELLET_X_MOTOR_ID, self._x_config)
+            self.write_stepper_config(self._pellet_dst, PELLET_Y_MOTOR_ID, self._y_config)
+            self.write_stepper_config(self._pellet_dst, PELLET_Z_MOTOR_ID, self._z_config)
 
     def configure_magnet(self, dst_id: int):
         self._magnet_dst = dst_id
 
         if self._is_open and self._magnet_dst is not None:
-            self._write_servo_config(self._magnet_dst, MAGNET_MOTOR_ID, self._magnet_config)
+            self.write_servo_config(self._magnet_dst, MAGNET_MOTOR_ID, self._magnet_config)
 
     def tare_load_cell(self):
         if self._is_open and self._magnet_dst is not None:
@@ -217,19 +269,22 @@ class WhiskerInterface(DeviceInterface):
     def set_load(self, value: float):
         if self._is_open and self._pellet_dst is not None:
             logger.info(f"set load arm {value}")
-            self._jc.ServoMove(self._pellet_dst, PELLET_LOAD_SERVO_ID, value, self._load_arm_config.max_vel,
+            self._jc.ServoMove(self._pellet_dst, PELLET_LOAD_SERVO_ID, value,
+                               self._load_arm_config.max_vel,
                                self._load_arm_config.max_acc, AbsOrRel.ABSOLUTE)
 
     def set_barrier(self, value):
         if self._is_open and self._pellet_dst is not None:
             logger.info(f"set barrier arm {value}")
-            self._jc.ServoMove(self._pellet_dst, PELLET_COVER_SERVO_ID, value, self._barrier_config.max_vel,
+            self._jc.ServoMove(self._pellet_dst, PELLET_COVER_SERVO_ID, value,
+                               self._barrier_config.max_vel,
                                self._barrier_config.max_acc, AbsOrRel.ABSOLUTE)
 
     def release_pellet(self):
         if self._is_open and self._pellet_dst is not None:
             logger.info(f"release pellet {self._barrier_config.min_pos}")
-            self._jc.ServoMove(self._pellet_dst, PELLET_COVER_SERVO_ID, self._barrier_config.min_pos,
+            self._jc.ServoMove(self._pellet_dst, PELLET_COVER_SERVO_ID,
+                               self._barrier_config.min_pos,
                                self._barrier_config.max_vel, self._barrier_config.max_acc,
                                AbsOrRel.ABSOLUTE)
 
@@ -238,34 +293,40 @@ class WhiskerInterface(DeviceInterface):
     def cover_pellet(self):
         if self._is_open and self._pellet_dst is not None:
             logger.info(f"cover pellet {self._barrier_config.max_pos}")
-            self._jc.ServoMove(self._pellet_dst, PELLET_COVER_SERVO_ID, self._barrier_config.max_pos,
+            self._jc.ServoMove(self._pellet_dst, PELLET_COVER_SERVO_ID,
+                               self._barrier_config.max_pos,
                                self._barrier_config.max_vel, self._barrier_config.max_acc,
                                AbsOrRel.ABSOLUTE)
 
-    def _write_stepper_config(self, dst_id: int, motor_id: int, config: StepperConfig) -> bool:
+    def write_stepper_config(self, dst_id: int, config: StepperConfig) -> bool:
         if self._is_open:
-            if self._jc.StepperCfgWrite(dst_id, motor_id, config.min_step_inverse, config.steps_per_revolution) == 0:
+            if self._jc.StepperCfgWrite(dst_id, config.motor_id, config.min_step_inverse,
+                                        config.steps_per_revolution) == 0:
                 logger.debug(
-                    f"stepper {dst_id} {motor_id} config write: {config.min_step_inverse} {config.steps_per_revolution}")
+                    f"stepper {dst_id} {config.motor_id} config write: {config.min_step_inverse} {config.steps_per_revolution}")
                 return True
             else:
-                logger.error(f"stepper {dst_id} {motor_id} config write failed")
+                logger.error(f"stepper {dst_id} {config.motor_id} config write failed")
 
         return False
 
-    def _write_servo_config(self, dst_id: int, motor_id: int, servo_config: ServoConfig) -> bool:
+    def write_servo_config(self, dst_id: int, servo_config: ServoConfig) -> bool:
         if self._is_open:
-            if self._jc.ServoCfgWrite(dst_id, motor_id, servo_config.min_pos, servo_config.max_pos,
-                                      servo_config.min_pwm, servo_config.max_pwm) == 0:
+            if self._jc.ServoCfgWrite(dst_id, servo_config.motor_id, servo_config.min_position,
+                                      servo_config.max_position,
+                                      servo_config.min_pwm_duration_us,
+                                      servo_config.max_pwm_duration_us) == 0:
                 logger.debug(
-                    f"servo {dst_id} {motor_id} config write: {servo_config.min_pos} {servo_config.max_pos} {servo_config.min_pwm} {servo_config.max_pwm}")
+                    f"servo {dst_id} {servo_config.motor_id} config write: {servo_config.min_position}"
+                    f" {servo_config.max_position} {servo_config.min_pwm_duration_us} "
+                    f"{servo_config.max_pwm_duration_us}")
                 return True
             else:
-                logger.error(f"servo {dst_id} {motor_id} config write failed")
+                logger.error(f"servo {dst_id} {servo_config.motor_id} config write failed")
 
         return False
 
-    def request_servo_read(self, dst: int, motor_id: int) -> bool:
+    def request_servo_config(self, dst: int, motor_id: int) -> bool:
         if self._is_open:
             msg = JerryCANCfgMsg()
             msg.type = JerryCANCfgMsg.Type.SERVO
@@ -274,6 +335,23 @@ class WhiskerInterface(DeviceInterface):
                 return True
 
         return False
+
+    def request_stepper_config(self, dst: int, motor_id: int) -> bool:
+        if self._is_open:
+            msg = JerryCANCfgMsg()
+            msg.type = JerryCANCfgMsg.Type.STEPPER
+            msg.servo.motor_id = motor_id
+            if self._jc.CfgRead(dst, msg) == 0:
+                return True
+
+        return False
+
+    def heartbeat(self) -> bool:
+        return self.is_open and self._jc.Heartbeat() == 0
+
+    # NOTE: E-Stop is not implemented in the target
+    # def emergency_stop(self) -> bool:
+    #  return self.is_open and self._jc.EStop() == 0
 
     def tone_write(self, frequency, duration: int = 1000):
         self._jc.ToneWrite(self._pellet_dst, 0, frequency, duration)
