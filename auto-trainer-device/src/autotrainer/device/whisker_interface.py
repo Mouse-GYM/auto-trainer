@@ -24,6 +24,19 @@ PELLET_LOAD_SERVO_ID = 1
 
 
 @dataclass
+class DigitalOutputs(Enum):
+    STIMULUS_1 = 1
+    STIMULUS_2 = 2
+    STIMULUS_3 = 3
+    STIMULUS_4 = 4
+
+
+@dataclass
+class AnalogOutputs(Enum):
+    STATUS_OUT = 0
+
+
+@dataclass
 class Source:
     src_id: int = -1
 
@@ -45,14 +58,6 @@ class PelletDigitalInputs(Source):
     stimulus_2 = False
     stimulus_3 = False
     stimulus_4 = False
-
-
-@dataclass
-class DigitalOutputs(Enum):
-    STIMULUS_1 = 1
-    STIMULUS_2 = 2
-    STIMULUS_3 = 3
-    STIMULUS_4 = 4
 
 
 @dataclass
@@ -117,6 +122,11 @@ class StepperConfig(Source):
 class Tone(Source):
     time_remaining_ms: int = 0
     frequency_hz: int = 0
+
+
+@dataclass
+class AnalogOutput(Source):
+    status_out_mv: int = 0
 
 
 def _translate(message) -> typing.Any:
@@ -187,6 +197,15 @@ def _translate(message) -> typing.Any:
         tone.frequency_hz = message.tone.frequency_hz
 
         return tone
+
+    if message.type == JerryCANCmdType.ANALOG_OUT:
+        # print("ANALOG_OUT")
+        if message.analog_out.instance == 0 and WhiskerInterface.is_pellet(message.dst_id):
+            analog = AnalogOutput()
+
+            analog.src_id = message.dst_id
+            analog.status_out_mv = message.analog_out.value_mv
+            return analog
 
     return None
 
@@ -437,3 +456,6 @@ class WhiskerInterface(DeviceInterface):
 
     def emit_tone(self, dst: int, frequency: int, duration_ms: int = 1000) -> bool:
         return self._jc.ToneWrite(dst, 0, frequency, duration_ms) == 0
+
+    def set_analog_output(self, dst: int, channel: AnalogOutputs, millivolts: int):
+        return self._jc.AnalogOutWrite(dst, int(channel.value), millivolts) == 0
