@@ -2,6 +2,7 @@ import logging
 import time
 import typing
 from dataclasses import dataclass
+from enum import Enum
 
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel
@@ -30,6 +31,28 @@ class Source:
 @dataclass
 class Heartbeat(Source):
     unused: bool = False
+
+
+@dataclass
+class MagnetDigitalInputs(Source):
+    continuity_0 = False
+    continuity_1 = False
+
+
+@dataclass
+class PelletDigitalInputs(Source):
+    stimulus_1 = False
+    stimulus_2 = False
+    stimulus_3 = False
+    stimulus_4 = False
+
+
+@dataclass
+class DigitalOutputs(Enum):
+    STIMULUS_1 = 1
+    STIMULUS_2 = 2
+    STIMULUS_3 = 3
+    STIMULUS_4 = 4
 
 
 @dataclass
@@ -93,11 +116,13 @@ class StepperConfig(Source):
 def _translate(message) -> typing.Any:
     # print (message.type, message.dst_id)
     if message.type == JerryCANCmdType.HEARTBEAT:
+        # print("HEARTBEAT")
         heartbeat = Heartbeat()
         heartbeat.src_id = message.dst_id
         return heartbeat
 
     if message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type == JerryCANCfgMsg.Type.SERVO:
+        # print("SERVO CONFIG")
         config = ServoConfig()
         config.src_id = message.dst_id
 
@@ -113,6 +138,7 @@ def _translate(message) -> typing.Any:
 
     if (message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type ==
         JerryCANCfgMsg.Type.STEPPER):
+        # print("STEPPER CONFIG")
         config = StepperConfig()
         config.src_id = message.dst_id
 
@@ -122,6 +148,29 @@ def _translate(message) -> typing.Any:
         config.min_step_inverse = message.cfg_response.stepper.min_step_inverse
         config.steps_per_revolution = message.cfg_response.stepper.steps_per_revolution
         return config
+
+    if message.type == JerryCANCmdType.GPIO_READ:
+        # print("GPIO READ ", message.dst_id,
+        #      message.gpio_read.instance, hex(message.gpio_read.state))
+        # Digital inputs only for Magnet module
+        if WhiskerInterface.is_magnet(message.dst_id):
+            gpios = MagnetDigitalInputs()
+            gpios.src_id = message.dst_id
+
+            gpios.continuity_0 = ((message.gpio_read.state & 0x10) != 0)
+            gpios.continuity_1 = ((message.gpio_read.state & 0x20) != 0)
+
+            return gpios
+        else:
+            gpios = PelletDigitalInputs()
+            gpios.src_id = message.dst_id
+
+            gpios.stimulus_1 = ((message.gpio_read.state & 0x010) != 0)
+            gpios.stimulus_2 = ((message.gpio_read.state & 0x020) != 0)
+            gpios.stimulus_3 = ((message.gpio_read.state & 0x040) != 0)
+            gpios.stimulus_4 = ((message.gpio_read.state & 0x080) != 0)
+
+            return gpios
 
     return None
 
@@ -179,6 +228,14 @@ class WhiskerInterface(DeviceInterface):
         self._z_config = z_config
         if self._z_config is None:
             self._z_config = StepperConfig()
+
+    @staticmethod
+    def is_pellet(dst_id: int):
+        return dst_id < 4
+
+    @staticmethod
+    def is_magnet(dst_id: int):
+        return not WhiskerInterface.is_pellet(dst_id)
 
     @property
     def is_open(self) -> bool:
@@ -299,55 +356,64 @@ class WhiskerInterface(DeviceInterface):
                                AbsOrRel.ABSOLUTE)
 
     def write_stepper_config(self, dst_id: int, config: StepperConfig) -> bool:
-        if self._is_open:
-            if self._jc.StepperCfgWrite(dst_id, config.motor_id, config.min_step_inverse,
-                                        config.steps_per_revolution) == 0:
-                logger.debug(
-                    f"stepper {dst_id} {config.motor_id} config write: {config.min_step_inverse} {config.steps_per_revolution}")
-                return True
-            else:
-                logger.error(f"stepper {dst_id} {config.motor_id} config write failed")
-
-        return False
+        if self._jc.StepperCfgWrite(dst_id, config.motor_id, config.min_step_inverse,
+                                    config.steps_per_revolution) == 0:
+            logger.debug(
+                f"stepper {dst_id} {config.motor_id} config write: {config.min_step_inverse} {config.steps_per_revolution}")
+            return True
+        else:
+            logger.error(f"stepper {dst_id} {config.motor_id} config write failed")
+            return False
 
     def write_servo_config(self, dst_id: int, servo_config: ServoConfig) -> bool:
-        if self._is_open:
-            if self._jc.ServoCfgWrite(dst_id, servo_config.motor_id, servo_config.min_position,
-                                      servo_config.max_position,
-                                      servo_config.min_pwm_duration_us,
-                                      servo_config.max_pwm_duration_us) == 0:
-                logger.debug(
-                    f"servo {dst_id} {servo_config.motor_id} config write: {servo_config.min_position}"
-                    f" {servo_config.max_position} {servo_config.min_pwm_duration_us} "
-                    f"{servo_config.max_pwm_duration_us}")
-                return True
-            else:
-                logger.error(f"servo {dst_id} {servo_config.motor_id} config write failed")
-
-        return False
+        if self._jc.ServoCfgWrite(dst_id, servo_config.motor_id, servo_config.min_position,
+                                  servo_config.max_position,
+                                  servo_config.min_pwm_duration_us,
+                                  servo_config.max_pwm_duration_us) == 0:
+            logger.debug(
+                f"servo {dst_id} {servo_config.motor_id} config write: {servo_config.min_position}"
+                f" {servo_config.max_position} {servo_config.min_pwm_duration_us} "
+                f"{servo_config.max_pwm_duration_us}")
+            return True
+        else:
+            logger.error(f"servo {dst_id} {servo_config.motor_id} config write failed")
+            return False
 
     def request_servo_config(self, dst: int, motor_id: int) -> bool:
-        if self._is_open:
-            msg = JerryCANCfgMsg()
-            msg.type = JerryCANCfgMsg.Type.SERVO
-            msg.servo.motor_id = motor_id
-            if self._jc.CfgRead(dst, msg) == 0:
-                return True
-
-        return False
+        msg = JerryCANCfgMsg()
+        msg.type = JerryCANCfgMsg.Type.SERVO
+        msg.servo.motor_id = motor_id
+        return self._jc.CfgRead(dst, msg) == 0
 
     def request_stepper_config(self, dst: int, motor_id: int) -> bool:
-        if self._is_open:
-            msg = JerryCANCfgMsg()
-            msg.type = JerryCANCfgMsg.Type.STEPPER
-            msg.servo.motor_id = motor_id
-            if self._jc.CfgRead(dst, msg) == 0:
-                return True
-
-        return False
+        msg = JerryCANCfgMsg()
+        msg.type = JerryCANCfgMsg.Type.STEPPER
+        msg.servo.motor_id = motor_id
+        return self._jc.CfgRead(dst, msg) == 0
 
     def heartbeat(self) -> bool:
-        return self.is_open and self._jc.Heartbeat() == 0
+        return self._jc.Heartbeat() == 0
+
+    def write_gpio(self, dst: int, gpio: DigitalOutputs, state: bool) -> bool:
+        # These values are based on the order and listing in the DTS files for
+        # each board.
+
+        if WhiskerInterface.is_magnet(dst):
+            return True
+
+        else:
+            if gpio is DigitalOutputs.STIMULUS_1:
+                gpio_id = 4
+            elif gpio is DigitalOutputs.STIMULUS_2:
+                gpio_id = 5
+            elif gpio is DigitalOutputs.STIMULUS_3:
+                gpio_id = 6
+            elif gpio is DigitalOutputs.STIMULUS_4:
+                gpio_id = 7
+            else:
+                return False
+
+        return self._jc.GPIOWrite(dst, 0, gpio_id, state) == 0
 
     # NOTE: E-Stop is not implemented in the target
     # def emergency_stop(self) -> bool:
