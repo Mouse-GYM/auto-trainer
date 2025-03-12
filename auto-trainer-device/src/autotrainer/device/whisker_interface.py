@@ -145,6 +145,13 @@ class PressureReading(Source):
     pressure: float = 0
 
 
+@dataclass
+class ColorLed(Source):
+    red: int = 0
+    green: int = 0
+    blue: int = 0
+
+
 def is_pellet_by_addr(addr: int) -> bool:
     return addr < 4
 
@@ -253,6 +260,18 @@ def _translate(message) -> typing.Any:
             pressure.pressure = 0
 
         return pressure
+
+    if message.type == JerryCANCmdType.RGB_LED:
+        print("RGB LED")
+        led = ColorLed()
+
+        led.target = addr2tgt(message.dst_id)
+        led.red = message.rgb_led.red
+        led.green = message.rgb_led.green
+        led.blue = message.rgb_led.blue
+
+        return led
+
     return None
 
 
@@ -516,6 +535,10 @@ class WhiskerInterface(DeviceInterface):
         return self._jc.ToneWrite(self.tgt2addr(Target.PELLET_DEVICE), 0, frequency,
                                   duration_ms) == 0
 
-    def set_analog_output(self, channel: AnalogOutputs, millivolts: int):
+    def set_analog_output(self, channel: AnalogOutputs, millivolts: int) -> bool:
         return self._jc.AnalogOutWrite(self.tgt2addr(Target.PELLET_DEVICE), int(channel.value),
                                        millivolts) == 0
+
+    def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> bool:
+        return self._jc.RGBLEDWrite(self.tgt2addr(Target.PELLET_DEVICE), red_percent,
+                                    green_percent, blue_percent) == 0

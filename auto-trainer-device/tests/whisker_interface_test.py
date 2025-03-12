@@ -14,7 +14,8 @@ except ImportError:
 
 from autotrainer.device import (WhiskerInterface, Target, Heartbeat, ServoConfig, StepperConfig,
                                 DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
-                                AnalogOutputs, AnalogOutput, LoadCellReading, PressureReading)
+                                AnalogOutputs, AnalogOutput, LoadCellReading, PressureReading,
+                                ColorLed)
 
 MAGNET_ADDRESS = 4
 PELLET_ADDRESS = 1
@@ -206,6 +207,20 @@ def test_tare_pressure_sensor(interface: WhiskerInterface):
     assert False
 
 
+@pytest.mark.canbus
+def test_color_led(interface: WhiskerInterface):
+    red = 25
+    green = 50
+    blue = 75
+
+    assert interface.set_color_led(red, green, blue)
+    led = get_response(interface, ColorLed, Target.PELLET_DEVICE)
+    assert led is not None
+    assert led.red == red
+    assert led.green == green
+    assert led.blue == blue
+
+
 def get_response(interface: WhiskerInterface, typeof, target: Target, timeout: float = 1.1):
     now = time.time()
 
@@ -246,6 +261,7 @@ if __name__ == '__main__':
         test_analog_out(iface)
         test_tare_load_cell(iface)
         test_tare_pressure_sensor(iface)
+        test_color_led(iface)
 
     iface.close()
     # tone_write()
