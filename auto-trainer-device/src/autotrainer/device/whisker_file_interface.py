@@ -12,9 +12,12 @@ logger = logging.getLogger(__name__)
 class WhiskerFileInterface(WhiskerInterface):
     def __init__(self, magnet_config: typing.Optional[ServoConfig] = None,
                  barrier_config: typing.Optional[ServoConfig] = None,
-                 load_arm_config: typing.Optional[ServoConfig] = None, x_config: typing.Optional[StepperConfig] = None,
-                 y_config: typing.Optional[StepperConfig] = None, z_config: typing.Optional[StepperConfig] = None):
-        super().__init__(magnet_config, barrier_config, load_arm_config, x_config, y_config, z_config)
+                 load_arm_config: typing.Optional[ServoConfig] = None,
+                 x_config: typing.Optional[StepperConfig] = None,
+                 y_config: typing.Optional[StepperConfig] = None,
+                 z_config: typing.Optional[StepperConfig] = None):
+        super().__init__(magnet_config, barrier_config, load_arm_config, x_config, y_config,
+                         z_config)
 
         self._is_open = True
 
@@ -103,6 +106,6 @@ class WhiskerFileInterface(WhiskerInterface):
             f"servo {dst_id} {motor_id} config write: {servo_config.min_pos} {servo_config.max_pos} {servo_config.min_pwm} {servo_config.max_pwm}")
         return True
 
-    def tone_write(self, dst: int, frequency, duration):
+    def emit_tone(self, dst: int, frequency, duration):
         if self._is_open:
             logger.info(f"play tone f{frequency} d{duration}")

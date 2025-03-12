@@ -113,6 +113,12 @@ class StepperConfig(Source):
         return config
 
 
+@dataclass
+class Tone(Source):
+    time_remaining_ms: int = 0
+    frequency_hz: int = 0
+
+
 def _translate(message) -> typing.Any:
     # print (message.type, message.dst_id)
     if message.type == JerryCANCmdType.HEARTBEAT:
@@ -171,6 +177,16 @@ def _translate(message) -> typing.Any:
             gpios.stimulus_4 = ((message.gpio_read.state & 0x080) != 0)
 
             return gpios
+
+    if message.type == JerryCANCmdType.TONE:
+        # print("TONE")
+        tone = Tone()
+
+        tone.src_id = message.dst_id
+        tone.time_remaining_ms = message.tone.duration_ms
+        tone.frequency_hz = message.tone.frequency_hz
+
+        return tone
 
     return None
 
@@ -345,7 +361,7 @@ class WhiskerInterface(DeviceInterface):
                                self._barrier_config.max_vel, self._barrier_config.max_acc,
                                AbsOrRel.ABSOLUTE)
 
-            self.tone_write(self._pellet_dst, 6000)
+            self.emit_tone(self._pellet_dst, 6000)
 
     def cover_pellet(self):
         if self._is_open and self._pellet_dst is not None:
@@ -419,5 +435,5 @@ class WhiskerInterface(DeviceInterface):
     # def emergency_stop(self) -> bool:
     #  return self.is_open and self._jc.EStop() == 0
 
-    def tone_write(self, frequency, duration: int = 1000):
-        self._jc.ToneWrite(self._pellet_dst, 0, frequency, duration)
+    def emit_tone(self, dst: int, frequency: int, duration_ms: int = 1000) -> bool:
+        return self._jc.ToneWrite(dst, 0, frequency, duration_ms) == 0

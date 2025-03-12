@@ -13,7 +13,7 @@ except ImportError:
         pass
 
 from autotrainer.device import (WhiskerInterface, Heartbeat, ServoConfig, StepperConfig,
-                                DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs)
+                                DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone)
 
 DESTINATION_NODE = 0x01
 
@@ -154,11 +154,27 @@ def test_read_gpio(interface: WhiskerInterface, dst_id: int):
     return data
 
 
+@pytest.mark.canbus
+def test_tone(interface: WhiskerInterface, dst_id: int):
+    if WhiskerInterface.is_pellet(dst_id):
+        FREQUENCY_HZ = 1000
+        DURATION_MS = 100
+        assert interface.emit_tone(dst_id, FREQUENCY_HZ, DURATION_MS);
+        #        ans = input("Hear Tone (y/n)? ")
+        #        assert ans == 'y'
+        tone = get_response(interface, Tone, dst_id, 0.5)
+        assert tone is not None
+        assert tone.frequency_hz == FREQUENCY_HZ
+        assert tone.time_remaining_ms <= DURATION_MS
+    else:
+        return
+
+
 def get_response(interface: WhiskerInterface, typeof, src_id: int, timeout: float = 0.2):
     now = time.time()
 
     while time.time() - now < timeout:
-        messages = interface.read(1)
+        messages = interface.read(10)
         # print ("len=", len(messages))
         if len(messages) > 0:
             for msg in messages:
@@ -172,7 +188,7 @@ def get_response(interface: WhiskerInterface, typeof, src_id: int, timeout: floa
 
 if __name__ == '__main__':
     iface = test_connect()
-    for i in range(10):
+    for i in range(1):
         print(f"{i + 1}")
         for tgt in [1, 4]:
             # magnet modules have bit at 0x4 set
@@ -188,6 +204,6 @@ if __name__ == '__main__':
                 test_write_stepper_config(iface, tgt, stepper_config)
                 test_write_gpio(iface, tgt, True)
                 test_write_gpio(iface, tgt, False)
-
+                test_tone(iface, tgt)
     iface.close()
     # tone_write()
