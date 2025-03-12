@@ -12,11 +12,12 @@ except ImportError:
         # Expected in some environments.
         pass
 
-from autotrainer.device import (WhiskerInterface, Heartbeat, ServoConfig, StepperConfig,
+from autotrainer.device import (WhiskerInterface, Target, Heartbeat, ServoConfig, StepperConfig,
                                 DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
                                 AnalogOutputs, AnalogOutput)
 
-DESTINATION_NODE = 0x01
+MAGNET_ADDRESS = 4
+PELLET_ADDRESS = 1
 
 
 @pytest.mark.canbus
@@ -25,11 +26,15 @@ def test_connect():
     interface = WhiskerInterface()
 
     assert interface.open()
+
+    interface.set_magnet_address(dst_id=int(MAGNET_ADDRESS))
+    interface.set_pellet_address(dst_id=int(PELLET_ADDRESS))
+
     return interface
 
 
 @pytest.mark.canbus
-def test_read(interface: WhiskerInterface, dst):
+def test_read(interface: WhiskerInterface):
     """Verify interface read() returns jerrycan messages"""
 
     # Ensure messages start arriving.
@@ -47,94 +52,91 @@ def test_read(interface: WhiskerInterface, dst):
 
 
 @pytest.mark.canbus
-def test_heartbeat(interface: WhiskerInterface, dst_id):
+def test_heartbeat(interface: WhiskerInterface, target: Target):
     """Verify ping"""
     assert interface.heartbeat()
 
-    heartbeat = get_response(interface, Heartbeat, dst_id, 2)
+    heartbeat = get_response(interface, Heartbeat, target, 2)
 
     assert heartbeat is not None
-    assert heartbeat.src_id == dst_id
 
 
 @pytest.mark.canbus
-def test_read_servo_config(interface: WhiskerInterface, dst_id, motor_id: int):
+def test_read_servo_config(interface: WhiskerInterface, target: Target, motor_id: int):
     """Verify servo configuration can be read"""
-    assert interface.request_servo_config(dst_id, motor_id)
+    assert interface.request_servo_config(target, motor_id)
 
-    config = get_response(interface, ServoConfig, dst_id)
+    config = get_response(interface, ServoConfig, target)
 
     assert config is not None
-    assert config.src_id == dst_id
     assert config.motor_id == motor_id
 
     return config
 
 
 @pytest.mark.canbus
-def test_write_servo_config(interface: WhiskerInterface, dst_id: int, config: ServoConfig):
+def test_write_servo_config(interface: WhiskerInterface, target: Target, config: ServoConfig):
     """Verify servo configuration can be written"""
     orig_min = config.min_position
     orig_max = config.max_position
 
     config.min_position -= 10
     config.max_position += 10
-    assert interface.write_servo_config(dst_id, config)
+    assert interface.write_servo_config(target, config)
 
-    new_config = test_read_servo_config(interface, dst_id, config.motor_id)
+    new_config = test_read_servo_config(interface, target, config.motor_id)
     assert new_config.min_position == config.min_position
     assert new_config.max_position == config.max_position
 
     config.min_position = orig_min
     config.max_position = orig_max
 
-    assert interface.write_servo_config(dst_id, config)
+    assert interface.write_servo_config(target, config)
 
 
 @pytest.mark.canbus
-def test_read_stepper_config(interface: WhiskerInterface, dst_id, motor_id: int):
+def test_read_stepper_config(interface: WhiskerInterface, motor_id: int):
     """Verify servo configuration can be read"""
-    assert interface.request_stepper_config(dst_id, motor_id)
+    assert interface.request_stepper_config(motor_id)
 
-    config = get_response(interface, StepperConfig, dst_id)
+    config = get_response(interface, StepperConfig, Target.PELLET_DEVICE)
 
     assert config is not None
-    assert config.src_id == dst_id
     assert config.motor_id == motor_id
 
     return config
 
 
-def write_stepper_config(interface: WhiskerInterface, dst_id: int, config: StepperConfig) -> bool:
-    if not interface.write_stepper_config(dst_id, config):
+def write_stepper_config(interface: WhiskerInterface, config: StepperConfig) -> bool:
+    if not interface.write_stepper_config(config):
         return False
 
-    new_config = test_read_stepper_config(interface, dst_id, config.motor_id)
+    new_config = test_read_stepper_config(interface, config.motor_id)
 
     return new_config.min_step_inverse == config.min_step_inverse and \
         new_config.steps_per_revolution == config.steps_per_revolution
 
 
 @pytest.mark.canbus
-def test_write_stepper_config(interface: WhiskerInterface, dst_id: int, config: StepperConfig):
+def test_write_stepper_config(interface: WhiskerInterface, config: StepperConfig):
     """Verify servo configuration can be written"""
     orig_min = config.min_step_inverse
     orig_steps = config.steps_per_revolution
 
     config.min_step_inverse *= 2
     config.steps_per_revolution *= 2
-    assert write_stepper_config(interface, dst_id, config)
+    assert write_stepper_config(interface, config)
 
     config.min_step_inverse = orig_min
     config.steps_per_revolution = orig_steps
-    assert write_stepper_config(interface, dst_id, config)
+    assert write_stepper_config(interface, config)
 
 
 @pytest.mark.canbus
-def test_write_gpio(interface: WhiskerInterface, dst_id: int, state: bool):
-    assert interface.write_gpio(dst_id, DigitalOutputs.STIMULUS_1, state)
+def test_write_gpio(interface: WhiskerInterface, state: bool):
+    assert interface.write_gpio(DigitalOutputs.STIMULUS_1, state)
 
-    for i in range(5):
+    for tries in range(5):
         data = test_read_gpio(iface, tgt)
         if data is not None and data.stimulus_1 == state:
             assert True
@@ -144,46 +146,35 @@ def test_write_gpio(interface: WhiskerInterface, dst_id: int, state: bool):
 
 
 @pytest.mark.canbus
-def test_read_gpio(interface: WhiskerInterface, dst_id: int):
-    if WhiskerInterface.is_pellet(dst_id):
-        data = get_response(interface, PelletDigitalInputs, dst_id, 2.0)
-    else:
-        data = get_response(interface, MagnetDigitalInputs, dst_id, 2.0)
-
+def test_read_gpio(interface: WhiskerInterface, target: Target):
+    data = get_response(interface, PelletDigitalInputs, target, 2.0)
     assert data is not None
-
     return data
 
 
 @pytest.mark.canbus
-def test_tone(interface: WhiskerInterface, dst_id: int):
-    if WhiskerInterface.is_pellet(dst_id):
-        FREQUENCY_HZ = 1000
-        DURATION_MS = 100
-        assert interface.emit_tone(dst_id, FREQUENCY_HZ, DURATION_MS);
+def test_tone(interface: WhiskerInterface):
+    frequency_hz = 1000
+    duration_ms = 100
+    assert interface.emit_tone(frequency_hz, duration_ms);
 
-        tone = get_response(interface, Tone, dst_id)
-        assert tone is not None
-        assert tone.frequency_hz == FREQUENCY_HZ
-        assert tone.time_remaining_ms <= DURATION_MS
-    else:
-        return
+    tone = get_response(interface, Tone, Target.PELLET_DEVICE)
+    assert tone is not None
+    assert tone.frequency_hz == frequency_hz
+    assert tone.time_remaining_ms <= duration_ms
 
 
 @pytest.mark.canbus
-def test_analog_out(interface: WhiskerInterface, dst_id: int):
-    if WhiskerInterface.is_pellet(dst_id):
-        VALUE_MV = 1000
-        assert interface.set_analog_output(dst_id, AnalogOutputs.STATUS_OUT, VALUE_MV);
+def test_analog_out(interface: WhiskerInterface):
+    value_mv = 1000
+    assert interface.set_analog_output(AnalogOutputs.STATUS_OUT, value_mv);
 
-        aout = get_response(interface, AnalogOutput, dst_id)
-        assert aout is not None
-        assert aout.status_out_mv == VALUE_MV
-    else:
-        return
+    aout = get_response(interface, AnalogOutput, Target.PELLET_DEVICE)
+    assert aout is not None
+    assert aout.status_out_mv == value_mv
 
 
-def get_response(interface: WhiskerInterface, typeof, src_id: int, timeout: float = 1.1):
+def get_response(interface: WhiskerInterface, typeof, target: Target, timeout: float = 1.1):
     now = time.time()
 
     while time.time() - now < timeout:
@@ -191,7 +182,7 @@ def get_response(interface: WhiskerInterface, typeof, src_id: int, timeout: floa
         # print ("len=", len(messages))
         if len(messages) > 0:
             for msg in messages:
-                if isinstance(msg, typeof) and msg.src_id == src_id:
+                if isinstance(msg, typeof) and interface.is_same_target(target, msg.src_id):
                     # print ("FOUND")
                     return msg
         time.sleep(0.001)
@@ -201,24 +192,26 @@ def get_response(interface: WhiskerInterface, typeof, src_id: int, timeout: floa
 
 if __name__ == '__main__':
     iface = test_connect()
-    for i in range(1):
+
+    for i in range(10):
         print(f"{i + 1}")
-        for tgt in [1, 4]:
+        for tgt in [Target.PELLET_DEVICE, Target.MAGNET_DEVICE]:
             # magnet modules have bit at 0x4 set
-            for i in range(5):
+            for j in range(5):
                 test_heartbeat(iface, tgt)
                 # time.sleep(0.15)
             servo_config = test_read_servo_config(iface, tgt, 0)
             test_write_servo_config(iface, tgt, servo_config)
 
-            # only pellet modules have stepper motors and digital outs
-            if WhiskerInterface.is_pellet(tgt):
-                stepper_config = test_read_stepper_config(iface, tgt, 0)
-                test_write_stepper_config(iface, tgt, stepper_config)
-                test_write_gpio(iface, tgt, True)
-                test_write_gpio(iface, tgt, False)
-                test_tone(iface, tgt)
-                test_analog_out(iface, tgt)
+    # Pellet or Magnet-only capabilities
+    for i in range(10):
+        print(f"{i + 1}")
+        stepper_config = test_read_stepper_config(iface, 0)
+        test_write_stepper_config(iface, stepper_config)
+        test_write_gpio(iface, True)
+        test_write_gpio(iface, False)
+        test_tone(iface)
+        test_analog_out(iface)
 
     iface.close()
     # tone_write()

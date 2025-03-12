@@ -8,7 +8,7 @@ from .head_fix_reader import HeadFixReader
 from .pellet_delivery import PelletDelivery, PelletDeliveryMessageKind
 from .pellet_reader import PelletReader
 from .serial_interface import SerialInterface
-from .whisker_interface import WhiskerInterface, ServoConfig, StepperConfig, Heartbeat, \
+from .whisker_interface import WhiskerInterface, Target, ServoConfig, StepperConfig, Heartbeat, \
     DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone, AnalogOutput, AnalogOutputs
 from .whisker_file_interface import WhiskerFileInterface
 from .whisker_device import WhiskerDevice, HAVE_WHISKER_DEVICE, IS_REAL_WHISKER_DEVICE
