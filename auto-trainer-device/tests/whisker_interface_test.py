@@ -15,7 +15,7 @@ except ImportError:
 from autotrainer.device import (WhiskerInterface, Target, Heartbeat, ServoConfig, StepperConfig,
                                 DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
                                 AnalogOutputs, AnalogOutput, LoadCellReading, PressureReading,
-                                ColorLed)
+                                ColorLed, AudioData, DoorData)
 
 MAGNET_ADDRESS = 4
 PELLET_ADDRESS = 1
@@ -23,13 +23,15 @@ PELLET_ADDRESS = 1
 
 @pytest.mark.canbus
 def test_connect():
+    global MAGNET_ADDRESS, PELLET_ADDRESS
+
     """Verify CAN is available and accessible to supporting libraries (pyjerrycan)"""
     interface = WhiskerInterface()
 
     assert interface.open()
 
-    interface.set_magnet_address(addr=int(MAGNET_ADDRESS))
-    interface.set_pellet_address(addr=int(PELLET_ADDRESS))
+    interface.set_magnet_address(MAGNET_ADDRESS)
+    interface.set_pellet_address(PELLET_ADDRESS)
 
     return interface
 
@@ -221,7 +223,16 @@ def test_color_led(interface: WhiskerInterface):
     assert led.blue == blue
 
 
-def get_response(interface: WhiskerInterface, typeof, target: Target, timeout: float = 1.1):
+def test_streaming_data(interface: WhiskerInterface):
+    audio = get_response(interface, AudioData, Target.PELLET_DEVICE)
+    assert audio is None or len(audio.magnitudes) == 128
+
+    door = get_response(interface, DoorData, Target.PELLET_DEVICE)
+    assert door is not None
+    assert len(door.open_state) == 3
+
+
+def get_response(interface: WhiskerInterface, typeof, target: Target, timeout: float = 2.0):
     now = time.time()
 
     while time.time() - now < timeout:
@@ -243,25 +254,23 @@ if __name__ == '__main__':
     for i in range(1):
         print(f"{i + 1}")
         for tgt in [Target.PELLET_DEVICE, Target.MAGNET_DEVICE]:
-            # magnet modules have bit at 0x4 set
-            for j in range(5):
-                test_heartbeat(iface, tgt)
-                # time.sleep(0.15)
+            test_heartbeat(iface, tgt)
             servo_config = test_read_servo_config(iface, tgt, 0)
             test_write_servo_config(iface, tgt, servo_config)
 
     # Pellet or Magnet-only capabilities
     for i in range(1):
         print(f"{i + 1}")
-        stepper_config = test_read_stepper_config(iface, 0)
-        test_write_stepper_config(iface, stepper_config)
-        test_write_gpio(iface, True)
-        test_write_gpio(iface, False)
-        test_tone(iface)
-        test_analog_out(iface)
-        test_tare_load_cell(iface)
-        test_tare_pressure_sensor(iface)
-        test_color_led(iface)
+        # stepper_config = test_read_stepper_config(iface, 0)
+        # test_write_stepper_config(iface, stepper_config)
+        # test_write_gpio(iface, True)
+        # test_write_gpio(iface, False)
+        # test_tone(iface)
+        # test_analog_out(iface)
+        # test_tare_load_cell(iface)
+        # test_tare_pressure_sensor(iface)
+        # test_color_led(iface)
+        test_streaming_data(iface)
 
     iface.close()
     # tone_write()

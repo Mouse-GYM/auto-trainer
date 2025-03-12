@@ -152,6 +152,16 @@ class ColorLed(Source):
     blue: int = 0
 
 
+@dataclass
+class AudioData(Source):
+    magnitudes = []
+
+
+@dataclass
+class DoorData(Source):
+    open_state = [False, False, False]
+
+
 def is_pellet_by_addr(addr: int) -> bool:
     return addr < 4
 
@@ -165,6 +175,8 @@ def addr2tgt(addr: int) -> Target:
 
 
 def _translate(message) -> typing.Any:
+    global _audio
+
     # print (message.type, message.dst_id)
     if message.type == JerryCANCmdType.HEARTBEAT:
         # print("HEARTBEAT")
@@ -262,7 +274,7 @@ def _translate(message) -> typing.Any:
         return pressure
 
     if message.type == JerryCANCmdType.RGB_LED:
-        print("RGB LED")
+        # print("RGB LED")
         led = ColorLed()
 
         led.target = addr2tgt(message.dst_id)
@@ -272,6 +284,32 @@ def _translate(message) -> typing.Any:
 
         return led
 
+    if message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_BEGIN:
+        # print("AUDIO BEGIN")
+        _audio = AudioData()
+        _audio.target = addr2tgt(message.dst_id)
+
+    if message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_CONT:
+        # print("AUDIO CONT")
+        if _audio is not None and _audio.target == addr2tgt(message.dst_id):
+            _audio.magnitudes.extend(message.audio_data.magnitudes)
+
+    if message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_END:
+        # print("AUDIO END")
+        return _audio
+
+    if message.type == JerryCANCmdType.DOOR_SENSOR:
+        # print("DOOR")
+        door = DoorData()
+        door.target = addr2tgt(message.dst_id)
+
+        door.open_state = [
+            message.doors.opened & 0x1 != 0,
+            message.doors.opened & 0x2 != 0,
+            message.doors.opened & 0x4 != 0,
+        ]
+
+        return door
     return None
 
 
