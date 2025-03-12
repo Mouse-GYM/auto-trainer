@@ -14,7 +14,7 @@ except ImportError:
 
 from autotrainer.device import (WhiskerInterface, Target, Heartbeat, ServoConfig, StepperConfig,
                                 DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
-                                AnalogOutputs, AnalogOutput, LoadCell)
+                                AnalogOutputs, AnalogOutput, LoadCellReading, PressureReading)
 
 MAGNET_ADDRESS = 4
 PELLET_ADDRESS = 1
@@ -179,11 +179,27 @@ def test_tare_load_cell(interface: WhiskerInterface):
     assert interface.tare_load_cell();
 
     for tries in range(3):
-        loadcell = get_response(interface, LoadCell, Target.MAGNET_DEVICE)
+        loadcell = get_response(interface, LoadCellReading, Target.MAGNET_DEVICE)
         assert loadcell is not None
         # TODO - check when there is real hardware
         # print(loadcell.load_mv)
         # if loadcell.load_mv == 0:
+        #     return
+        return
+
+    assert False
+
+
+@pytest.mark.canbus
+def test_tare_pressure_sensor(interface: WhiskerInterface):
+    assert interface.tare_pressure_sensor();
+
+    for tries in range(3):
+        pressure = get_response(interface, PressureReading, Target.MAGNET_DEVICE)
+        assert pressure is not None
+        # TODO - check when there is real hardware
+        # print(pressure.pressure_mv)
+        # if pressure.pressure_mv == 0:
         #     return
         return
 
@@ -229,6 +245,7 @@ if __name__ == '__main__':
         test_tone(iface)
         test_analog_out(iface)
         test_tare_load_cell(iface)
+        test_tare_pressure_sensor(iface)
 
     iface.close()
     # tone_write()

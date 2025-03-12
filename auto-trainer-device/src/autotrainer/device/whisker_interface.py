@@ -136,8 +136,13 @@ class AnalogOutput(Source):
 
 
 @dataclass
-class LoadCell(Source):
-    load_mv: float = 0
+class LoadCellReading(Source):
+    load: float = 0
+
+
+@dataclass
+class PressureReading(Source):
+    pressure: float = 0
 
 
 def is_pellet_by_addr(addr: int) -> bool:
@@ -229,13 +234,25 @@ def _translate(message) -> typing.Any:
             return analog
 
     if message.type == JerryCANCmdType.LOAD_CELL_READ:
-        loadcell = LoadCell()
+        # print("LOAD CELL")
+        loadcell = LoadCellReading()
 
         loadcell.target = addr2tgt(message.dst_id)
-        loadcell.load_mv = message.load_cell_read.load_mv
+        loadcell.load_mv = float(message.load_cell_read.load_mv) / 100.0
 
         return loadcell
 
+    if message.type == JerryCANCmdType.PRESSURE_READ:
+        # print("PRESSURE")
+        pressure = PressureReading()
+
+        pressure.target = addr2tgt(message.dst_id)
+        if message.pressure_read.error != 0:
+            pressure.pressure = float(message.pressure_read.pressure_mv) / 100.0
+        else:
+            pressure.pressure = 0
+
+        return pressure
     return None
 
 
@@ -375,6 +392,9 @@ class WhiskerInterface(DeviceInterface):
 
     def tare_load_cell(self) -> bool:
         return self._jc.LoadCellTare(self.tgt2addr(Target.MAGNET_DEVICE), 0) == 0
+
+    def tare_pressure_sensor(self) -> bool:
+        return self._jc.PressureSensorTare(self.tgt2addr(Target.MAGNET_DEVICE), 0) == 0
 
     def set_magnet_intensity(self, intensity: float):
         logger.info(f"set magnet intensity {intensity}")
