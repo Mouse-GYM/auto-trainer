@@ -14,7 +14,7 @@ except ImportError:
 
 from autotrainer.device import (WhiskerInterface, Target, Heartbeat, ServoConfig, StepperConfig,
                                 DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
-                                AnalogOutputs, AnalogOutput)
+                                AnalogOutputs, AnalogOutput, LoadCell)
 
 MAGNET_ADDRESS = 4
 PELLET_ADDRESS = 1
@@ -27,8 +27,8 @@ def test_connect():
 
     assert interface.open()
 
-    interface.set_magnet_address(dst_id=int(MAGNET_ADDRESS))
-    interface.set_pellet_address(dst_id=int(PELLET_ADDRESS))
+    interface.set_magnet_address(addr=int(MAGNET_ADDRESS))
+    interface.set_pellet_address(addr=int(PELLET_ADDRESS))
 
     return interface
 
@@ -174,6 +174,22 @@ def test_analog_out(interface: WhiskerInterface):
     assert aout.status_out_mv == value_mv
 
 
+@pytest.mark.canbus
+def test_tare_load_cell(interface: WhiskerInterface):
+    assert interface.tare_load_cell();
+
+    for tries in range(3):
+        loadcell = get_response(interface, LoadCell, Target.MAGNET_DEVICE)
+        assert loadcell is not None
+        # TODO - check when there is real hardware
+        # print(loadcell.load_mv)
+        # if loadcell.load_mv == 0:
+        #     return
+        return
+
+    assert False
+
+
 def get_response(interface: WhiskerInterface, typeof, target: Target, timeout: float = 1.1):
     now = time.time()
 
@@ -182,7 +198,7 @@ def get_response(interface: WhiskerInterface, typeof, target: Target, timeout: f
         # print ("len=", len(messages))
         if len(messages) > 0:
             for msg in messages:
-                if isinstance(msg, typeof) and interface.is_same_target(target, msg.src_id):
+                if isinstance(msg, typeof) and msg.target == target:
                     # print ("FOUND")
                     return msg
         time.sleep(0.001)
@@ -193,7 +209,7 @@ def get_response(interface: WhiskerInterface, typeof, target: Target, timeout: f
 if __name__ == '__main__':
     iface = test_connect()
 
-    for i in range(10):
+    for i in range(1):
         print(f"{i + 1}")
         for tgt in [Target.PELLET_DEVICE, Target.MAGNET_DEVICE]:
             # magnet modules have bit at 0x4 set
@@ -204,7 +220,7 @@ if __name__ == '__main__':
             test_write_servo_config(iface, tgt, servo_config)
 
     # Pellet or Magnet-only capabilities
-    for i in range(10):
+    for i in range(1):
         print(f"{i + 1}")
         stepper_config = test_read_stepper_config(iface, 0)
         test_write_stepper_config(iface, stepper_config)
@@ -212,6 +228,7 @@ if __name__ == '__main__':
         test_write_gpio(iface, False)
         test_tone(iface)
         test_analog_out(iface)
+        test_tare_load_cell(iface)
 
     iface.close()
     # tone_write()

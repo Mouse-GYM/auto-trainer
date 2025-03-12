@@ -44,7 +44,7 @@ class AnalogOutputs(Enum):
 
 @dataclass
 class Source:
-    src_id: int = -1
+    target: Target = None
 
 
 @dataclass
@@ -135,12 +135,21 @@ class AnalogOutput(Source):
     status_out_mv: int = 0
 
 
-def is_pellet_by_id(id: int) -> bool:
-    return id < 4
+@dataclass
+class LoadCell(Source):
+    load_mv: float = 0
 
 
-def is_magnet_by_id(id: int) -> bool:
-    return not is_pellet_by_id(id)
+def is_pellet_by_addr(addr: int) -> bool:
+    return addr < 4
+
+
+def is_magnet_by_addr(addr: int) -> bool:
+    return not is_pellet_by_addr(addr)
+
+
+def addr2tgt(addr: int) -> Target:
+    return Target.PELLET_DEVICE if is_pellet_by_addr(addr) else Target.MAGNET_DEVICE
 
 
 def _translate(message) -> typing.Any:
@@ -148,13 +157,13 @@ def _translate(message) -> typing.Any:
     if message.type == JerryCANCmdType.HEARTBEAT:
         # print("HEARTBEAT")
         heartbeat = Heartbeat()
-        heartbeat.src_id = message.dst_id
+        heartbeat.target = addr2tgt(message.dst_id)
         return heartbeat
 
     if message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type == JerryCANCfgMsg.Type.SERVO:
         # print("SERVO CONFIG")
         config = ServoConfig()
-        config.src_id = message.dst_id
+        config.target = addr2tgt(message.dst_id)
 
         config.motor_id = message.cfg_response.servo.motor_id
         config.error = message.cfg_response.servo.error == 1
@@ -170,7 +179,7 @@ def _translate(message) -> typing.Any:
         JerryCANCfgMsg.Type.STEPPER):
         # print("STEPPER CONFIG")
         config = StepperConfig()
-        config.src_id = message.dst_id
+        config.target = addr2tgt(message.dst_id)
 
         config.motor_id = message.cfg_response.stepper.motor_id
         config.error = message.cfg_response.stepper.error
@@ -180,11 +189,10 @@ def _translate(message) -> typing.Any:
         return config
 
     if message.type == JerryCANCmdType.GPIO_READ:
-        # print("GPIO READ ", message.dst_id,
-        #      message.gpio_read.instance, hex(message.gpio_read.state))
-        if is_magnet_by_id(message.dst_id):
+        # print("GPIO READ")
+        if is_magnet_by_addr(message.dst_id):
             gpios = MagnetDigitalInputs()
-            gpios.src_id = message.dst_id
+            gpios.target = message.dst_id
 
             gpios.continuity_0 = ((message.gpio_read.state & 0x10) != 0)
             gpios.continuity_1 = ((message.gpio_read.state & 0x20) != 0)
@@ -192,7 +200,7 @@ def _translate(message) -> typing.Any:
             return gpios
         else:
             gpios = PelletDigitalInputs()
-            gpios.src_id = message.dst_id
+            gpios.target = addr2tgt(message.dst_id)
 
             gpios.stimulus_1 = ((message.gpio_read.state & 0x010) != 0)
             gpios.stimulus_2 = ((message.gpio_read.state & 0x020) != 0)
@@ -205,7 +213,7 @@ def _translate(message) -> typing.Any:
         # print("TONE")
         tone = Tone()
 
-        tone.src_id = message.dst_id
+        tone.target = addr2tgt(message.dst_id)
         tone.time_remaining_ms = message.tone.duration_ms
         tone.frequency_hz = message.tone.frequency_hz
 
@@ -213,12 +221,20 @@ def _translate(message) -> typing.Any:
 
     if message.type == JerryCANCmdType.ANALOG_OUT:
         # print("ANALOG_OUT")
-        if message.analog_out.instance == 0 and is_pellet_by_id(message.dst_id):
+        if message.analog_out.instance == 0 and is_pellet_by_addr(message.dst_id):
             analog = AnalogOutput()
 
-            analog.src_id = message.dst_id
+            analog.target = addr2tgt(message.dst_id)
             analog.status_out_mv = message.analog_out.value_mv
             return analog
+
+    if message.type == JerryCANCmdType.LOAD_CELL_READ:
+        loadcell = LoadCell()
+
+        loadcell.target = addr2tgt(message.dst_id)
+        loadcell.load_mv = message.load_cell_read.load_mv
+
+        return loadcell
 
     return None
 
@@ -250,8 +266,8 @@ class WhiskerInterface(DeviceInterface):
 
         self._is_open = False
 
-        self._pellet_dst: typing.Optional[int] = None
-        self._magnet_dst: typing.Optional[int] = None
+        self._pellet_addr: typing.Optional[int] = None
+        self._magnet_addr: typing.Optional[int] = None
 
         self._magnet_config = magnet_config
         if self._magnet_config is None:
@@ -283,27 +299,27 @@ class WhiskerInterface(DeviceInterface):
             self._z_config = StepperConfig()
         self._z_config.motor_id = PELLET_Z_MOTOR_ID
 
-    def is_pellet(self, dst_id: int):
-        return self.is_same_target(Target.PELLET_DEVICE, dst_id)
+    def is_pellet(self, addr: int):
+        return self.is_same_target(Target.PELLET_DEVICE, addr)
 
-    def is_magnet(self, dst_id: int):
-        return self.is_same_target(Target.MAGNET_DEVICE, dst_id)
+    def is_magnet(self, addr: int):
+        return self.is_same_target(Target.MAGNET_DEVICE, addr)
 
-    def set_pellet_address(self, dst_id: int):
-        self._pellet_dst = dst_id
+    def set_pellet_address(self, addr: int):
+        self._pellet_addr = addr
 
-    def set_magnet_address(self, dst_id: int):
-        self._magnet_dst = dst_id
+    def set_magnet_address(self, addr: int):
+        self._magnet_addr = addr
 
     def tgt2addr(self, target: Target) -> int:
-        dst = self._pellet_dst if target == Target.PELLET_DEVICE else self._magnet_dst
+        dst = self._pellet_addr if target == Target.PELLET_DEVICE else self._magnet_addr
         if dst is None:
             exit("Pellet or Magnet CAN IDs not configured.")
         return dst
 
     def is_same_target(self, target: Target, id: int):
-        return target == Target.PELLET_DEVICE and id == self._pellet_dst or \
-            target == Target.MAGNET_DEVICE and id == self._magnet_dst
+        return target == Target.PELLET_DEVICE and id == self._pellet_addr or \
+            target == Target.MAGNET_DEVICE and id == self._magnet_addr
 
     @property
     def is_open(self) -> bool:
@@ -357,8 +373,8 @@ class WhiskerInterface(DeviceInterface):
     def configure_magnet(self):
         self.write_servo_config(Target.MAGNET_DEVICE, self._magnet_config)
 
-    def tare_load_cell(self):
-        self._jc.LoadCellTare(self.tgt2addr(Target.MAGNET_DEVICE), 0)
+    def tare_load_cell(self) -> bool:
+        return self._jc.LoadCellTare(self.tgt2addr(Target.MAGNET_DEVICE), 0) == 0
 
     def set_magnet_intensity(self, intensity: float):
         logger.info(f"set magnet intensity {intensity}")
