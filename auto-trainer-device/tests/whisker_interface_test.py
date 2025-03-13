@@ -15,7 +15,8 @@ except ImportError:
 from autotrainer.device import (WhiskerInterface, Target, Heartbeat, ServoConfig, StepperConfig,
                                 DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
                                 AnalogOutputs, AnalogOutput, LoadCellReading, PressureReading,
-                                ColorLed, AudioData, DoorData)
+                                ColorLed, AudioData, DoorData, ServoStatus, StepperStatus,
+                                SensorStatus)
 
 MAGNET_ADDRESS = 4
 PELLET_ADDRESS = 1
@@ -224,24 +225,37 @@ def test_color_led(interface: WhiskerInterface):
 
 
 def test_streaming_data(interface: WhiskerInterface):
-    audio = get_response(interface, AudioData, Target.PELLET_DEVICE)
-    assert audio is None or len(audio.magnitudes) == 128
+    audio = get_response(interface, AudioData, Target.PELLET_DEVICE, 3.0)
+    assert len(audio.magnitudes) == 32
 
     door = get_response(interface, DoorData, Target.PELLET_DEVICE)
     assert door is not None
     assert len(door.open_state) == 3
+
+    status = get_response(interface, ServoStatus, Target.PELLET_DEVICE)
+    assert status is not None
+
+    status = get_response(interface, ServoStatus, Target.MAGNET_DEVICE)
+    assert status is not None
+
+    status = get_response(interface, StepperStatus, Target.PELLET_DEVICE)
+    assert status is not None
+
+    # Needs Temp/Hum sensor
+    # status = get_response(interface, SensorStatus, Target.MAGNET_DEVICE)
+    # assert status is not None
 
 
 def get_response(interface: WhiskerInterface, typeof, target: Target, timeout: float = 2.0):
     now = time.time()
 
     while time.time() - now < timeout:
-        messages = interface.read(10)
+        messages = interface.read(1)
         # print ("len=", len(messages))
         if len(messages) > 0:
             for msg in messages:
                 if isinstance(msg, typeof) and msg.target == target:
-                    # print ("FOUND")
+                    # print("FOUND")
                     return msg
         time.sleep(0.001)
 
@@ -251,26 +265,22 @@ def get_response(interface: WhiskerInterface, typeof, target: Target, timeout: f
 if __name__ == '__main__':
     iface = test_connect()
 
-    for i in range(1):
-        print(f"{i + 1}")
-        for tgt in [Target.PELLET_DEVICE, Target.MAGNET_DEVICE]:
-            test_heartbeat(iface, tgt)
-            servo_config = test_read_servo_config(iface, tgt, 0)
-            test_write_servo_config(iface, tgt, servo_config)
+    for tgt in [Target.PELLET_DEVICE, Target.MAGNET_DEVICE]:
+        test_heartbeat(iface, tgt)
+        servo_config = test_read_servo_config(iface, tgt, 0)
+        test_write_servo_config(iface, tgt, servo_config)
 
     # Pellet or Magnet-only capabilities
-    for i in range(1):
-        print(f"{i + 1}")
-        # stepper_config = test_read_stepper_config(iface, 0)
-        # test_write_stepper_config(iface, stepper_config)
-        # test_write_gpio(iface, True)
-        # test_write_gpio(iface, False)
-        # test_tone(iface)
-        # test_analog_out(iface)
-        # test_tare_load_cell(iface)
-        # test_tare_pressure_sensor(iface)
-        # test_color_led(iface)
-        test_streaming_data(iface)
+
+    stepper_config = test_read_stepper_config(iface, 0)
+    test_write_stepper_config(iface, stepper_config)
+    test_write_gpio(iface, True)
+    test_write_gpio(iface, False)
+    test_tone(iface)
+    test_analog_out(iface)
+    test_tare_load_cell(iface)
+    test_tare_pressure_sensor(iface)
+    test_color_led(iface)
+    test_streaming_data(iface)
 
     iface.close()
-    # tone_write()

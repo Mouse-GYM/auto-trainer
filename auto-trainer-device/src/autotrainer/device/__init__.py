@@ -11,7 +11,8 @@ from .serial_interface import SerialInterface
 from .whisker_interface import (WhiskerInterface, Target, ServoConfig, StepperConfig, Heartbeat,
                                 DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
                                 AnalogOutput, AnalogOutputs, LoadCellReading, PressureReading,
-                                ColorLed, AudioData, DoorData)
+                                ColorLed, AudioData, DoorData, StepperStatus, ServoStatus,
+                                SensorStatus)
 from .whisker_file_interface import WhiskerFileInterface
 from .whisker_device import WhiskerDevice, HAVE_WHISKER_DEVICE, IS_REAL_WHISKER_DEVICE
 from .whisker_movement import WhiskerMovement

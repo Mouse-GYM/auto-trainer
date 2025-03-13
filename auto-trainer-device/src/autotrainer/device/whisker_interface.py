@@ -99,6 +99,12 @@ class ServoConfig(Source):
 
 
 @dataclass
+class ServoStatus(Source):
+    motor_id: int = 0
+    position: float = 0
+
+
+@dataclass
 class StepperConfig(Source):
     motor_id: int = -1
     error: bool = False
@@ -122,6 +128,13 @@ class StepperConfig(Source):
             config.max_acc = data["max_acc"]
 
         return config
+
+
+@dataclass
+class StepperStatus(Source):
+    motor_id: int = 0
+    position: float = 0
+    limit_switch: bool = False
 
 
 @dataclass
@@ -154,12 +167,24 @@ class ColorLed(Source):
 
 @dataclass
 class AudioData(Source):
+    packet_id: int = 0
     magnitudes = []
 
 
 @dataclass
 class DoorData(Source):
     open_state = [False, False, False]
+
+
+@dataclass
+class Status(Source):
+    unused: bool = True
+
+
+@dataclass
+class SensorStatus(Source):
+    temperature_c: float = 0
+    humidity_percent: float = 0
 
 
 def is_pellet_by_addr(addr: int) -> bool:
@@ -172,6 +197,9 @@ def is_magnet_by_addr(addr: int) -> bool:
 
 def addr2tgt(addr: int) -> Target:
     return Target.PELLET_DEVICE if is_pellet_by_addr(addr) else Target.MAGNET_DEVICE
+
+
+_audio = AudioData()
 
 
 def _translate(message) -> typing.Any:
@@ -286,17 +314,30 @@ def _translate(message) -> typing.Any:
 
     if message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_BEGIN:
         # print("AUDIO BEGIN")
-        _audio = AudioData()
+        _audio.magnitudes.clear()
         _audio.target = addr2tgt(message.dst_id)
+        _audio.packet_id = message.audio_data_cmd.stream_id
 
     if message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_CONT:
         # print("AUDIO CONT")
-        if _audio is not None and _audio.target == addr2tgt(message.dst_id):
+        if _audio.packet_id != 0 and _audio.target == addr2tgt(message.dst_id):
             _audio.magnitudes.extend(message.audio_data.magnitudes)
 
     if message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_END:
         # print("AUDIO END")
-        return _audio
+        a = None
+        if len(_audio.magnitudes) == 32 and message.audio_data_cmd.stream_id == _audio.packet_id:
+            a = AudioData()
+            a.magnitudes = _audio.magnitudes.copy()
+            a.packet_id = _audio.packet_id
+            a.target = _audio.target
+        else:
+            print(f"Dropping...{len(_audio.magnitudes)}")
+
+        _audio.magnitudes.clear()
+        _audio.packet_id = 0
+
+        return a
 
     if message.type == JerryCANCmdType.DOOR_SENSOR:
         # print("DOOR")
@@ -310,6 +351,35 @@ def _translate(message) -> typing.Any:
         ]
 
         return door
+
+    if message.type == JerryCANCmdType.SERVO_STATUS:
+        # print("SERVO STAT")
+        status = ServoStatus()
+        status.target = addr2tgt(message.dst_id)
+
+        status.position = message.servo_status.position
+        status.motor_id = message.servo_status.motor_id
+        return status
+
+    if message.type == JerryCANCmdType.STEPPER_STATUS:
+        # print("STEPPER STAT")
+        status = StepperStatus()
+        status.target = addr2tgt(message.dst_id)
+
+        status.position = message.stepper_status.position
+        status.limit_switch = message.stepper_status.limit_switch
+        status.motor_id = message.stepper_status.motor_id
+
+        return status
+
+    if message.type == JerryCANCmdType.TEMP_HUM_READ:
+        status = SensorStatus()
+        status.target = addr2tgt(message.dst_id)
+        status.temperature_c = float(message.temp_hum_read.temperature) / 100.0
+        status.pressure_percent = float(message.temp_hum_read.pressure) / 100.0
+
+        print(f"{status.temperature_c} {status.pressure_percent}")
+        return status
     return None
 
 
