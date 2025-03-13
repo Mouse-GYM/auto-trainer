@@ -385,9 +385,6 @@ def _translate(message) -> typing.Any:
 
 class WhiskerInterface(DeviceInterface):
     """
-    Somewhat temporary attempt to confirm the Alogus hardware to the existing device hardware interface.  Will likely
-    change substantially.
-
     WhiskerInterface implements the details of
         * communication (read and write) with Alogus hardware interface (pyjerrcan)
 
@@ -461,9 +458,9 @@ class WhiskerInterface(DeviceInterface):
             exit("Pellet or Magnet CAN IDs not configured.")
         return dst
 
-    def is_same_target(self, target: Target, id: int):
-        return target == Target.PELLET_DEVICE and id == self._pellet_addr or \
-            target == Target.MAGNET_DEVICE and id == self._magnet_addr
+    def is_same_target(self, target: Target, addr: int):
+        return target == Target.PELLET_DEVICE and addr == self._pellet_addr or \
+            target == Target.MAGNET_DEVICE and addr == self._magnet_addr
 
     @property
     def is_open(self) -> bool:
@@ -616,7 +613,7 @@ class WhiskerInterface(DeviceInterface):
         msg.servo.motor_id = motor_id
         return self._jc.CfgRead(self.tgt2addr(Target.PELLET_DEVICE), msg) == 0
 
-    def heartbeat(self) -> bool:
+    def send_heartbeat(self) -> bool:
         return self._jc.Heartbeat() == 0
 
     def write_gpio(self, gpio: DigitalOutputs, state: bool) -> bool:

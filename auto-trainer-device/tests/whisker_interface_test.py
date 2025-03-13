@@ -58,7 +58,7 @@ def test_read(interface: WhiskerInterface):
 @pytest.mark.canbus
 def test_heartbeat(interface: WhiskerInterface, target: Target):
     """Verify ping"""
-    assert interface.heartbeat()
+    assert interface.send_heartbeat()
 
     heartbeat = get_response(interface, Heartbeat, target, 2)
 
@@ -241,7 +241,7 @@ def test_streaming_data(interface: WhiskerInterface):
     status = get_response(interface, StepperStatus, Target.PELLET_DEVICE)
     assert status is not None
 
-    # Needs Temp/Hum sensor
+    # TODO Needs Temp/Hum sensor
     # status = get_response(interface, SensorStatus, Target.MAGNET_DEVICE)
     # assert status is not None
 
@@ -251,11 +251,9 @@ def get_response(interface: WhiskerInterface, typeof, target: Target, timeout: f
 
     while time.time() - now < timeout:
         messages = interface.read(1)
-        # print ("len=", len(messages))
         if len(messages) > 0:
             for msg in messages:
                 if isinstance(msg, typeof) and msg.target == target:
-                    # print("FOUND")
                     return msg
         time.sleep(0.001)
 
