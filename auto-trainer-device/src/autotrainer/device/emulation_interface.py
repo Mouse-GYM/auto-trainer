@@ -2,22 +2,15 @@ import logging
 import time
 import typing
 
-from .whisker_interface import WhiskerInterface, ServoConfig, StepperConfig
-
-from .pyjerryfile import JerryCANMsg, JerryCANCmdType, JerryStepperStatus
+from . import Motor
+from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
+                               StepperStatus, ServoStatus)
 
 logger = logging.getLogger(__name__)
 
 
-class WhiskerFileInterface(WhiskerInterface):
-    def __init__(self, magnet_config: typing.Optional[ServoConfig] = None,
-                 barrier_config: typing.Optional[ServoConfig] = None,
-                 load_arm_config: typing.Optional[ServoConfig] = None,
-                 x_config: typing.Optional[StepperConfig] = None,
-                 y_config: typing.Optional[StepperConfig] = None,
-                 z_config: typing.Optional[StepperConfig] = None):
-        super().__init__(magnet_config, barrier_config, load_arm_config, x_config, y_config,
-                         z_config)
+class EmulationInterface(DeviceInterface):
+    def __init__(self):
 
         self._is_open = True
 
@@ -33,7 +26,6 @@ class WhiskerFileInterface(WhiskerInterface):
         self._magnet_pos = 0.0
 
     def open(self) -> bool:
-
         return self._is_open
 
     def close(self):
@@ -44,14 +36,17 @@ class WhiskerFileInterface(WhiskerInterface):
         now = time.perf_counter()
         if now - self._last_message > 1:
             self._last_message = now
-            messages.append(JerryCANMsg.stepper_message(0, self._pellet_x))
-            messages.append(JerryCANMsg.stepper_message(1, self._pellet_y))
-            messages.append(JerryCANMsg.stepper_message(2, self._pellet_z))
+            messages.append(
+                StepperStatus(Motor.PELLET_X_MOTOR, self._pellet_x, self._pellet_x == 0))
+            messages.append(
+                StepperStatus(Motor.PELLET_Y_MOTOR, self._pellet_y, self._pellet_y == 0))
+            messages.append(
+                StepperStatus(Motor.PELLET_Z_MOTOR, self._pellet_z, self._pellet_z == 0))
 
-            messages.append(JerryCANMsg.servo_message(1, 0, self._barrier_pos))
-            messages.append(JerryCANMsg.servo_message(1, 1, self._load_pos))
+            messages.append(ServoStatus(Motor.PELLET_COVER_SERVO, 0, self._barrier_pos))
+            messages.append(ServoStatus(Motor.PELLET_LOAD_SERVO, 1, self._load_pos))
 
-            messages.append(JerryCANMsg.servo_message(4, 0, self._magnet_pos))
+            messages.append(ServoStatus(Motor.MAGNET_SERVO, 0, self._magnet_pos))
         return messages
 
     def write(self, value: typing.Any) -> int:

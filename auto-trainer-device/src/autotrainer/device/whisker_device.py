@@ -3,7 +3,7 @@ import time
 import typing
 from datetime import datetime
 
-from .whisker_movement import WhiskerMovement
+from .motor_steps import MotorSteps
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ from .device_api import DeviceApi
 from .gym_device import GymDeviceMessageKind, GymDeviceEventKind
 from .head_fix import HeadFixMeasurement, HeadFixMessageKind
 from .pellet_delivery import PelletDeliveryMessageKind
-from .whisker_interface import WhiskerInterface
+from .can_interface import CanInterface
 
 PELLET_DESTINATION = 0x00
 MAGNET_DESTINATION = 0x01
@@ -45,12 +45,13 @@ class WhiskerDevice(Device):
     """
 
     @staticmethod
-    def _as_whisker_interface(value) -> typing.Optional[WhiskerInterface]:
-        if value is not None and isinstance(value.interface, WhiskerInterface):
+    def _as_whisker_interface(value) -> typing.Optional[CanInterface]:
+        if value is not None and isinstance(value.interface, CanInterface):
             return value.interface
         return None
 
-    def __init__(self, api: DeviceApi = None, buffer_size: int = 50, home_movement=None, load_movement=None,
+    def __init__(self, api: DeviceApi = None, buffer_size: int = 50, home_movement=None,
+                 load_movement=None,
                  send_movement=None):
         super().__init__(api)
 
@@ -67,7 +68,7 @@ class WhiskerDevice(Device):
         self._pellet_dst: typing.Optional[int] = None
         self._magnet_dst: typing.Optional[int] = None
 
-        self._whisker_interface: typing.Optional[WhiskerInterface] = None
+        self._whisker_interface: typing.Optional[CanInterface] = None
 
         self._pellet_desired_x = None
         self._pellet_desired_y = None
@@ -193,7 +194,8 @@ class WhiskerDevice(Device):
                 if message.type == JerryCANCmdType.STATUS:
                     pass
                 elif message.type == JerryCANCmdType.LOAD_CELL_READ:
-                    self._current_measurement = HeadFixMeasurement(time.time(), time.perf_counter_ns(),
+                    self._current_measurement = HeadFixMeasurement(time.time(),
+                                                                   time.perf_counter_ns(),
                                                                    message.load_cell_read.load_mv * 10,
                                                                    self._current_digital, 0,
                                                                    self._current_temperature,
@@ -205,10 +207,12 @@ class WhiskerDevice(Device):
                         self._current_measurement = None
 
                     if len(self._measurements) >= self._measurement_buffer_count:
-                        self._api.send_message(HeadFixMessageKind.MEASUREMENT, self._measurements.copy())
+                        self._api.send_message(HeadFixMessageKind.MEASUREMENT,
+                                               self._measurements.copy())
                         self._measurements = list()
                 elif message.type == JerryCANCmdType.TEMP_HUM_READ:
-                    self._current_temperature = (message.temp_hum_read.temperature / 100.0) * (9.0 / 5) + 32
+                    self._current_temperature = (message.temp_hum_read.temperature / 100.0) * (
+                        9.0 / 5) + 32
                     self._current_humidity = message.temp_hum_read.humidity / 100.0
                 elif message.type == JerryCANCmdType.GPIO_READ:
                     if message.dst_id == self._magnet_dst:
@@ -222,7 +226,8 @@ class WhiskerDevice(Device):
                                 self.api.send_message(PelletDeliveryMessageKind.UPDATE_X,
                                                       message.stepper_status.position)
                             if self._pellet_desired_x is not None:
-                                if abs(message.stepper_status.position - self._pellet_desired_x) < 0.01:
+                                if abs(
+                                    message.stepper_status.position - self._pellet_desired_x) < 0.01:
                                     self._pellet_desired_x = None
                                     if self._compound_movement is not None:
                                         self._perform_next_compound_step()
@@ -235,7 +240,8 @@ class WhiskerDevice(Device):
                                 self.api.send_message(PelletDeliveryMessageKind.UPDATE_Y,
                                                       message.stepper_status.position)
                             if self._pellet_desired_y is not None:
-                                if abs(message.stepper_status.position - self._pellet_desired_y) < 0.01:
+                                if abs(
+                                    message.stepper_status.position - self._pellet_desired_y) < 0.01:
                                     self._pellet_desired_y = None
                                     if self._compound_movement is not None:
                                         self._perform_next_compound_step()
@@ -248,7 +254,8 @@ class WhiskerDevice(Device):
                                 self.api.send_message(PelletDeliveryMessageKind.UPDATE_Z,
                                                       message.stepper_status.position)
                             if self._pellet_desired_z is not None:
-                                if abs(message.stepper_status.position - self._pellet_desired_z) < 0.01:
+                                if abs(
+                                    message.stepper_status.position - self._pellet_desired_z) < 0.01:
                                     self._pellet_desired_z = None
                                     if self._compound_movement is not None:
                                         self._perform_next_compound_step()
