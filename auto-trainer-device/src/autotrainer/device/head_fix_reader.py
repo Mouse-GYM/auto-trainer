@@ -9,6 +9,7 @@ from threading import Timer
 from typing import Callable, Optional
 
 import numpy
+from math import floor
 
 from autotrainer.core.project import ProjectInfo, ProjectInterval
 from autotrainer.core import PerfMonitor, ObservableObject, EventManager
@@ -71,7 +72,7 @@ class LoadCellMonitor(ObservableObject):
         if not self._is_engaged:
             self._is_engaged = True
             EventManager.post_event(HeadFixEventKind.loadCellStateChanged, context=True,
-                                               when=datetime.fromtimestamp(self._when), index=self._index)
+                                    when=datetime.fromtimestamp(self._when), index=self._index)
             self.property_changed("is_engaged", True, False)
 
             self._last_active_start = time.perf_counter()
@@ -80,29 +81,44 @@ class LoadCellMonitor(ObservableObject):
         if self._is_engaged:
             self._is_engaged = False
             EventManager.post_event(HeadFixEventKind.loadCellStateChanged, context=False,
-                                               when=datetime.fromtimestamp(self._when), index=self._index)
+                                    when=datetime.fromtimestamp(self._when), index=self._index)
             self.property_changed("is_engaged", False, True)
 
 
 class ForceDetector:
     def __init__(self):
         self._threshold: float = 400.0
-        self._average_duration: float = 1.0
+        self._window_length: float = 0.25
+        self._buffer_length: float = 1
         self._sample_rate = 100
 
         self._values = numpy.empty((1, 0))
 
         self._weight = 0
 
-        self._retain_count = round(self._sample_rate * self._average_duration)
+        self._retain_count = round(self._sample_rate * self._buffer_length)
+
+        self._window_count = round(self._sample_rate * self._window_length)
+
+        self._first_third = floor(self._window_count / 3)
+        self._last_third = self._window_count - self._first_third
 
     def update(self, values: list) -> bool:
         self._values = numpy.append(self._values, values)
         self._values = self._values[-self._retain_count:]
 
-        self._weight = numpy.mean(self._values)
+        if len(self._values) < self._retain_count:
+            return False
 
-        return self._weight >= self._threshold
+        for idx in range(self._window_count * 2):
+            s_1 = idx + self._last_third
+            e_1 = idx + self._window_count
+            s_2 = idx
+            e_2 = idx + self._first_third
+            if numpy.all(self._values[s_1:e_1] <= (self._values[s_2:e_2] - 30)) is True:
+                return True
+
+        return False
 
 
 class TareDetector:

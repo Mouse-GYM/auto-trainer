@@ -188,9 +188,13 @@ class MainWindow(QMainWindow):
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.triggered.connect(lambda: self._toggle_diagnostics_view())
 
-        self.capture_trigger_action = QAction("Trigger", self)
+        self.capture_trigger_action = QAction("Trigger Load Cell", self)
         self.capture_trigger_action.setCheckable(True)
         self.capture_trigger_action.triggered.connect(self._internal_simulate_trigger)
+
+        self.force_detector_action = QAction("Trigger Force Detector", self)
+        self.force_detector_action.setCheckable(True)
+        self.force_detector_action.triggered.connect(self._internal_set_force_detector_seen)
 
         self.pellet_seen_action = QAction("Pellet Seen", self)
         self.pellet_seen_action.triggered.connect(self._internal_set_pellet_seen)
@@ -237,6 +241,7 @@ class MainWindow(QMainWindow):
         if self._is_dev:
             toolbar.addSeparator()
             toolbar.addAction(self.capture_trigger_action)
+            toolbar.addAction(self.force_detector_action)
             toolbar.addAction(self.pellet_seen_action)
             toolbar.addAction(self.mouse_seen_action)
 
@@ -287,6 +292,11 @@ class MainWindow(QMainWindow):
 
     def _internal_simulate_trigger(self):
         self._app_view_model.behavior.trigger_tunnel(self.capture_trigger_action.isChecked())
+
+    def _internal_set_force_detector_seen(self):
+        new_value = self.force_detector_action.isChecked()
+        self._app_view_model.head_fix.head_fix_reader.property_changed("is_force_detector_engaged", new_value,
+                                                                       not new_value)
 
     def _internal_set_pellet_seen(self):
         self._app_view_model.behavior.algorithm.pellet_seen(True)
