@@ -292,25 +292,25 @@ class CanInterface(DeviceInterface):
         self._z_config = StepperConfig()
         self._z_config.motor = Motor.PELLET_Z_MOTOR
 
-    def _is_pellet(self, addr: int):
-        return self.is_same_target(Target.PELLET_DEVICE, addr)
-
-    def _is_magnet(self, addr: int):
-        return self.is_same_target(Target.MAGNET_DEVICE, addr)
-
     def set_pellet_address(self, addr: int):
         self._pellet_addr = addr
 
     def set_magnet_address(self, addr: int):
         self._magnet_addr = addr
 
-    def tgt2addr(self, target: Target) -> int:
+    def _is_pellet(self, addr: int):
+        return self._is_same_target(Target.PELLET_DEVICE, addr)
+
+    def _is_magnet(self, addr: int):
+        return self._is_same_target(Target.MAGNET_DEVICE, addr)
+
+    def _tgt2addr(self, target: Target) -> int:
         dst = self._pellet_addr if target is Target.PELLET_DEVICE else self._magnet_addr
         if dst is None:
             exit("Pellet or Magnet CAN IDs not configured.")
         return dst
 
-    def is_same_target(self, target: Target, addr: int):
+    def _is_same_target(self, target: Target, addr: int):
         return target is Target.PELLET_DEVICE and addr == self._pellet_addr or \
             target is Target.MAGNET_DEVICE and addr == self._magnet_addr
 
@@ -357,157 +357,153 @@ class CanInterface(DeviceInterface):
         raise NotImplementedError()
 
     def set_motor_configuration(self, motor: Motor, servo_config=typing.Optional[ServoConfig],
-                                stepper_config=typing.Optional[StepperConfig]):
-        if servo_config is None and stepper_config is None:
-            return
+                                stepper_config=typing.Optional[StepperConfig]) -> bool:
+        if servo_config is None:
+            servo_config = ServoConfig()
+        if stepper_config is None:
+            stepper_config = StepperConfig()
 
         if motor is Motor.MAGNET_SERVO:
             self._magnet_config = servo_config
             self._magnet_config.motor = motor
-            self.write_servo_config(Target.MAGNET_DEVICE, self._magnet_config)
+            return self.write_servo_config(Target.MAGNET_DEVICE, self._magnet_config)
 
         elif motor is Motor.PELLET_X_MOTOR:
             self._x_config = stepper_config
             self._x_config.motor = motor
-            self.write_stepper_config(self._x_config)
+            return self.write_stepper_config(self._x_config)
 
         elif motor is Motor.PELLET_Y_MOTOR:
             self._y_config = stepper_config
             self._y_config.motor = motor
-            self.write_stepper_config(self._y_config)
+            return self.write_stepper_config(self._y_config)
 
         elif motor is Motor.PELLET_Z_MOTOR:
             self._z_config = stepper_config
             self._z_config.motor = motor
-            self.write_stepper_config(self._z_config)
+            return self.write_stepper_config(self._z_config)
 
         elif motor is Motor.PELLET_COVER_SERVO:
             self._barrier_config = servo_config
             self._barrier_config.motor = motor
-            self.write_servo_config(Target.PELLET_DEVICE, self._barrier_config)
+            return self.write_servo_config(Target.PELLET_DEVICE, self._barrier_config)
 
         elif motor is Motor.PELLET_LOAD_SERVO:
             self._load_arm_config = servo_config
             self._load_arm_config.motor = motor
-            self.write_servo_config(Target.PELLET_DEVICE, self._load_arm_config)
+            return self.write_servo_config(Target.PELLET_DEVICE, self._load_arm_config)
+
+        return False
 
     def configure_pellet(self):
-        self.write_servo_config(Target.PELLET_DEVICE, self._load_arm_config)
-        self.write_servo_config(Target.PELLET_DEVICE, self._barrier_config)
-        self.write_stepper_config(self._x_config)
-        self.write_stepper_config(self._y_config)
-        self.write_stepper_config(self._z_config)
+        self.set_motor_configuration(Motor.PELLET_LOAD_SERVO, self._load_arm_config)
+        self.set_motor_configuration(Motor.PELLET_COVER_SERVO, self._barrier_config)
+        self.set_motor_configuration(Motor.PELLET_X_MOTOR, self._x_config)
+        self.set_motor_configuration(Motor.PELLET_Y_MOTOR, self._y_config)
+        self.set_motor_configuration(Motor.PELLET_Z_MOTOR, self._z_config)
 
     def configure_magnet(self):
-        self.write_servo_config(Target.MAGNET_DEVICE, self._magnet_config)
+        self.set_motor_configuration(Motor.MAGNET_SERVO, self._magnet_config)
 
     def tare_load_cell(self) -> bool:
-        return self._jc.LoadCellTare(self.tgt2addr(Target.MAGNET_DEVICE), 0) == 0
+        return self._jc.LoadCellTare(self._tgt2addr(Target.MAGNET_DEVICE), 0) == 0
 
     def tare_pressure_sensor(self) -> bool:
-        return self._jc.PressureSensorTare(self.tgt2addr(Target.MAGNET_DEVICE), 0) == 0
+        return self._jc.PressureSensorTare(self._tgt2addr(Target.MAGNET_DEVICE), 0) == 0
 
-    def set_magnet_intensity(self, intensity: float):
-        logger.info(f"set magnet intensity {intensity}")
-        self._jc.ServoMove(self.tgt2addr(Target.MAGNET_DEVICE), _MAGNET_SERVO_ID,
-                           intensity, self._magnet_config.max_vel, self._magnet_config.max_acc,
-                           AbsOrRel.ABSOLUTE)
+    def set_magnet(self, position: float) -> bool:
+        logger.info(f"set magnet position {position}")
+        return self._jc.ServoMove(self.tgt2addr(Target.MAGNET_DEVICE), _MAGNET_SERVO_ID,
+                           position, self._magnet_config.max_velocity, self._magnet_config.max_acceleration,
+                           AbsOrRel.ABSOLUTE) == 0
 
-    def set_x(self, value: float):
-        logger.info(f"set pellet absolute x {value}")
-        self._jc.StepperMove(self.tgt2addr(Target.PELLET_DEVICE), _PELLET_X_MOTOR_ID,
-                             value,
-                             self._x_config.max_vel,
-                             self._x_config.max_acc, AbsOrRel.ABSOLUTE)
+    def set_x(self, position: float) -> bool:
+        logger.info(f"set pellet absolute x {position}")
+        return self._jc.StepperMove(self._tgt2addr(Target.PELLET_DEVICE), _PELLET_X_MOTOR_ID,
+                             position,
+                             self._x_config.max_velocity,
+                             self._x_config.max_acceleration, AbsOrRel.ABSOLUTE) == 0
 
-    def set_y(self, value: float):
-        logger.info(f"set pellet absolute y {value}")
-        self._jc.StepperMove(self.tgt2addr(Target.PELLET_DEVICE), _PELLET_Y_MOTOR_ID, value,
-                             self._y_config.max_vel,
-                             self._y_config.max_acc, AbsOrRel.ABSOLUTE)
+    def set_y(self, position: float):
+        logger.info(f"set pellet absolute y {position}")
+        return self._jc.StepperMove(self._tgt2addr(Target.PELLET_DEVICE), _PELLET_Y_MOTOR_ID, position,
+                             self._y_config.max_velocity,
+                             self._y_config.max_acceleration, AbsOrRel.ABSOLUTE) == 0
 
-    def set_z(self, value: float):
-        logger.info(f"set pellet absolute z {value}")
-        self._jc.StepperMove(self.tgt2addr(Target.PELLET_DEVICE), _PELLET_Z_MOTOR_ID, value,
-                             self._z_config.max_vel,
-                             self._z_config.max_acc, AbsOrRel.ABSOLUTE)
+    def set_z(self, position: float):
+        logger.info(f"set pellet absolute z {position}")
+        return self._jc.StepperMove(self._tgt2addr(Target.PELLET_DEVICE), _PELLET_Z_MOTOR_ID, position,
+                             self._z_config.max_velocity,
+                             self._z_config.max_acceleration, AbsOrRel.ABSOLUTE) == 0
 
-    def set_load(self, value: float):
-        logger.info(f"set load arm {value}")
-        self._jc.ServoMove(self.tgt2addr(Target.PELLET_DEVICE), _PELLET_LOAD_SERVO_ID, value,
-                           self._load_arm_config.max_vel,
-                           self._load_arm_config.max_acc, AbsOrRel.ABSOLUTE)
+    def set_load(self, position: float):
+        logger.info(f"set load arm {position}")
+        return self._jc.ServoMove(self._tgt2addr(Target.PELLET_DEVICE), _PELLET_LOAD_SERVO_ID, position,
+                           self._load_arm_config.max_velocity,
+                           self._load_arm_config.max_acceleration, AbsOrRel.ABSOLUTE) == 0
 
-    def set_barrier(self, value):
-        logger.info(f"set barrier arm {value}")
-        self._jc.ServoMove(self.tgt2addr(Target.PELLET_DEVICE), _PELLET_COVER_SERVO_ID, value,
-                           self._barrier_config.max_vel,
-                           self._barrier_config.max_acc, AbsOrRel.ABSOLUTE)
+    def set_barrier(self, position):
+        logger.info(f"set barrier arm {position}")
+        return self._jc.ServoMove(self._tgt2addr(Target.PELLET_DEVICE), _PELLET_COVER_SERVO_ID, position,
+                           self._barrier_config.max_velocity,
+                           self._barrier_config.max_acceleration, AbsOrRel.ABSOLUTE) == 0
 
-    def release_pellet(self):
-        logger.info(f"release pellet {self._barrier_config.min_position}")
-        self._jc.ServoMove(self.tgt2addr(Target.PELLET_DEVICE), _PELLET_COVER_SERVO_ID,
-                           self._barrier_config.min_position,
-                           self._barrier_config.max_vel, self._barrier_config.max_acc,
-                           AbsOrRel.ABSOLUTE)
+    def release_pellet(self) -> bool:
+        return self.set_barrier(self._barrier_config.min_position) and \
+            self.emit_tone(self._tgt2addr(Target.PELLET_DEVICE), 6000)
 
-        self.emit_tone(self.tgt2addr(Target.PELLET_DEVICE), 6000)
-
-    def cover_pellet(self):
+    def cover_pellet(self) -> bool:
         logger.info(f"cover pellet {self._barrier_config.max_position}")
-        self._jc.ServoMove(self.tgt2addr(Target.PELLET_DEVICE), _PELLET_COVER_SERVO_ID,
-                           self._barrier_config.max_position,
-                           self._barrier_config.max_vel, self._barrier_config.max_acc,
-                           AbsOrRel.ABSOLUTE)
+        return self.set_barrier(self._barrier_config.max_position)
 
     def write_stepper_config(self, config: StepperConfig) -> bool:
 
         motor_id = _motor_to_id(config.motor)
-        if self._jc.StepperCfgWrite(self.tgt2addr(Target.PELLET_DEVICE), motor_id,
+        if self._jc.StepperCfgWrite(self._tgt2addr(Target.PELLET_DEVICE), motor_id,
                                     config.min_step_inverse,
                                     config.steps_per_revolution) == 0:
             logger.debug(
-                f"stepper {self.tgt2addr(Target.PELLET_DEVICE)} {motor_id} config write: {config.min_step_inverse} {config.steps_per_revolution}")
+                f"stepper {self._tgt2addr(Target.PELLET_DEVICE)} {motor_id} config write: {config.min_step_inverse} {config.steps_per_revolution}")
             return True
         else:
             logger.error(
-                f"stepper {self.tgt2addr(Target.PELLET_DEVICE)} {motor_id} config write failed")
+                f"stepper {self._tgt2addr(Target.PELLET_DEVICE)} {motor_id} config write failed")
             return False
 
     def write_servo_config(self, target: Target, config: ServoConfig) -> bool:
         motor_id = _motor_to_id(config.motor)
 
-        if self._jc.ServoCfgWrite(self.tgt2addr(target), motor_id,
+        if self._jc.ServoCfgWrite(self._tgt2addr(target), motor_id,
                                   config.min_position,
                                   config.max_position,
                                   config.min_pwm_duration_us,
                                   config.max_pwm_duration_us) == 0:
             logger.debug(
-                f"servo {self.tgt2addr(target)} {motor_id} config write: {config.min_position}"
+                f"servo {self._tgt2addr(target)} {motor_id} config write: {config.min_position}"
                 f" {config.max_position} {config.min_pwm_duration_us} "
                 f"{config.max_pwm_duration_us}")
             return True
         else:
             logger.error(
-                f"servo {self.tgt2addr(target)} {motor_id} config write failed")
+                f"servo {self._tgt2addr(target)} {motor_id} config write failed")
             return False
 
     def request_servo_config(self, target: Target, motor: Motor) -> bool:
         msg = JerryCANCfgMsg()
         msg.type = JerryCANCfgMsg.Type.SERVO
         msg.servo.motor_id = _motor_to_id(motor)
-        return self._jc.CfgRead(self.tgt2addr(target), msg) == 0
+        return self._jc.CfgRead(self._tgt2addr(target), msg) == 0
 
     def request_stepper_config(self, motor: Motor) -> bool:
         msg = JerryCANCfgMsg()
         msg.type = JerryCANCfgMsg.Type.STEPPER
         msg.servo.motor_id = _motor_to_id(motor)
-        return self._jc.CfgRead(self.tgt2addr(Target.PELLET_DEVICE), msg) == 0
+        return self._jc.CfgRead(self._tgt2addr(Target.PELLET_DEVICE), msg) == 0
 
     def send_heartbeat(self) -> bool:
         return self._jc.Heartbeat() == 0
 
-    def write_gpio(self, gpio: DigitalOutputs, state: bool) -> bool:
+    def set_digital_output(self, gpio: DigitalOutputs, state: bool) -> bool:
         # These values are based on the order and listing in the DTS files for
         # each board.
         if gpio is DigitalOutputs.STIMULUS_1:
@@ -521,20 +517,20 @@ class CanInterface(DeviceInterface):
         else:
             return False
 
-        return self._jc.GPIOWrite(self.tgt2addr(Target.PELLET_DEVICE), 0, gpio_id, state) == 0
+        return self._jc.GPIOWrite(self._tgt2addr(Target.PELLET_DEVICE), 0, gpio_id, state) == 0
 
     # NOTE: E-Stop is not implemented in the target
     # def emergency_stop(self) -> bool:
     #  return self.is_open and self._jc.EStop() == 0
 
     def emit_tone(self, frequency: int, duration_ms: int = 1000) -> bool:
-        return self._jc.ToneWrite(self.tgt2addr(Target.PELLET_DEVICE), 0, frequency,
+        return self._jc.ToneWrite(self._tgt2addr(Target.PELLET_DEVICE), 0, frequency,
                                   duration_ms) == 0
 
     def set_analog_output(self, channel: AnalogOutputs, millivolts: int) -> bool:
-        return self._jc.AnalogOutWrite(self.tgt2addr(Target.PELLET_DEVICE), int(channel.value),
+        return self._jc.AnalogOutWrite(self._tgt2addr(Target.PELLET_DEVICE), int(channel.value),
                                        millivolts) == 0
 
     def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> bool:
-        return self._jc.RGBLEDWrite(self.tgt2addr(Target.PELLET_DEVICE), red_percent,
+        return self._jc.RGBLEDWrite(self._tgt2addr(Target.PELLET_DEVICE), red_percent,
                                     green_percent, blue_percent) == 0

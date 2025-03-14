@@ -1,3 +1,18 @@
+"""
+Interface classes that define the capabilities of the mouse gym hardware in a way
+that hardware can be swapped or emulated.
+
+There is a set of enumerations that define entities of the hardware:
++ Target - Either the Pellet or Magnet module
++ Motor - Motor that can be controlled
++ DigitalOutputs - Set of available digital outputs
++ AnalogOutputs - Set of available analog outputs
+
+There is a set of data classes that contain state and status of the gym hardware.
+
+There is a main interface class (DeviceInterface) that defines the API for access to the abstracted
+hardware.
+"""
 import math
 import typing
 from dataclasses import dataclass
@@ -36,6 +51,9 @@ class AnalogOutputs(Enum):
 
 @dataclass
 class Source:
+    """
+    Base class of any data set received by the device
+    """
     target: Target = None
 
     def __init(self, target: Target = None):
@@ -70,8 +88,8 @@ class ServoConfig(Source):
     min_pwm_duration_us: float = 1000
     max_pwm_duration_us: float = 2000
 
-    max_vel: float = 25.0
-    max_acc: float = 100.0
+    max_velocity: float = 25.0
+    max_acceleration: float = 100.0
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -86,9 +104,9 @@ class ServoConfig(Source):
         if "max_pwm" in data:
             config.max_pwm = data["max_pwm"]
         if "max_vel" in data:
-            config.max_vel = data["max_vel"]
+            config.max_velocity = data["max_vel"]
         if "max_acc" in data:
-            config.max_acc = data["max_acc"]
+            config.max_acceleration = data["max_acc"]
 
         return config
 
@@ -111,8 +129,8 @@ class StepperConfig(Source):
     min_step_inverse: int = 64
     steps_per_revolution: float = 48.0
 
-    max_vel: float = 25.0
-    max_acc: float = 100.0
+    max_velocity: float = 25.0
+    max_acceleration: float = 100.0
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -123,9 +141,9 @@ class StepperConfig(Source):
         if "steps_per_revolution" in data:
             config.steps_per_revolution = data["steps_per_revolution"]
         if "max_vel" in data:
-            config.max_vel = data["max_vel"]
+            config.max_velocity = data["max_vel"]
         if "max_acc" in data:
-            config.max_acc = data["max_acc"]
+            config.max_acceleration = data["max_acc"]
 
         return config
 

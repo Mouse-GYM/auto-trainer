@@ -4,7 +4,8 @@ import typing
 
 from . import Motor
 from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
-                               StepperStatus, ServoStatus)
+                               StepperStatus, ServoStatus, Target, DigitalOutputs,
+                               Motor, AnalogOutputs)
 
 logger = logging.getLogger(__name__)
 
@@ -55,52 +56,101 @@ class EmulationInterface(DeviceInterface):
 
         return 0
 
-    def tare_load_cell(self):
+    def set_motor_configuration(self, motor: Motor, servo_config=typing.Optional[ServoConfig],
+                                stepper_config=typing.Optional[StepperConfig]) -> bool:
+        if self._is_open:
+            logger.info(f"Set motor configuration {int(motor.value)}")
+        return self._is_open
+
+    def configure_pellet(self):
+        if self._is_open:
+            logger.info(f"Configure all pellet motors")
+        return self._is_open
+
+    def configure_magnet(self):
+        if self._is_open:
+            logger.info(f"Configure all magnet motors")
+        return self._is_open
+
+    def tare_load_cell(self) -> bool:
         if self._is_open:
             logger.info(f"tare load cell")
+        return self._is_open
 
-    def set_magnet_intensity(self, dst_id: int, intensity: float):
+    def set_magnet(self, dst_id: int, position: float) -> bool:
         if self._is_open:
-            logger.info(f"set magnet intensity {intensity}")
+            logger.info(f"set magnet position {position}")
+        return self._is_open
 
-    def set_x(self, value: float):
+    def set_x(self, position: float) -> bool:
         if self._is_open:
-            logger.info(f"set pellet absolute x {value}")
-            self._pellet_x = value + 0.00000001
+            logger.info(f"set pellet absolute x {position}")
+            self._pellet_x = position + 0.00000001
+        return self._is_open
 
-    def set_y(self, value: float):
+    def set_y(self, position: float) -> bool:
         if self._is_open:
-            logger.info(f"set pellet absolute y {value}")
-            self._pellet_y = value + 0.00000001
+            logger.info(f"set pellet absolute y {position}")
+            self._pellet_y = position + 0.00000001
+        return self._is_open
 
-    def set_z(self, value: float):
+    def set_z(self, position: float) -> bool:
         if self._is_open:
-            logger.info(f"set pellet absolute z {value}")
-            self._pellet_z = value + 0.000001
+            logger.info(f"set pellet absolute z {position}")
+            self._pellet_z = position + 0.000001
+        return self._is_open
 
-    def set_load(self, value: float):
+    def set_load(self, position: float) -> bool:
         if self._is_open:
-            logger.info(f"set load arm {value}")
-            self._load_pos = value + 0.000001
+            logger.info(f"set load arm {position}")
+            self._load_pos = position + 0.000001
+        return self._is_open
 
-    def release_pellet(self):
+    def set_barrier(self, position) -> bool:
+        if self._is_open:
+            logger.info(f"set barrier arm {position}")
+        return self._is_open
+
+    def release_pellet(self) -> bool:
         if self._is_open:
             logger.info("release pellet")
+        return self.set_barrier(0)
 
-    def cover_pellet(self):
+    def cover_pellet(self) -> bool:
         if self._is_open:
             logger.info("cover pellet")
+        return self.set_barrier(100)
 
-    def _write_stepper_config(self, dst_id: int, motor_id: int, config: StepperConfig) -> bool:
-        logger.debug(
-            f"stepper {dst_id} {motor_id} config write: {config.min_step_inverse} {config.steps_per_revolution}")
-        return True
-
-    def _write_servo_config(self, dst_id: int, motor_id: int, servo_config: ServoConfig) -> bool:
-        logger.debug(
-            f"servo {dst_id} {motor_id} config write: {servo_config.min_pos} {servo_config.max_pos} {servo_config.min_pwm} {servo_config.max_pwm}")
-        return True
-
-    def emit_tone(self, dst: int, frequency, duration):
+    def emit_tone(self, dst: int, frequency, duration) -> bool:
         if self._is_open:
             logger.info(f"play tone f{frequency} d{duration}")
+        return self._is_open
+
+    def request_servo_config(self, target: Target, motor: Motor) -> bool:
+        if self._is_open:
+            logger.info(f"request servo config {int(target.value)} {int(motor.value)}")
+        return self._is_open
+
+    def request_stepper_config(self, motor: Motor) -> bool:
+        if self._is_open:
+            logger.info(f"request stepper config {int(Target.PELLET_DEVICE.value)}"
+                        f" {int(motor.value)}")
+        return self._is_open
+
+    def send_heartbeat(self) -> bool:
+        return self._is_open
+
+    def set_digital_output(self, gpio: DigitalOutputs, state: bool) -> bool:
+        if self._is_open:
+            logger.info(f"Set digital output {int(gpio.value)} -> {state}")
+        return self._is_open
+
+    def set_analog_output(self, channel: AnalogOutputs, millivolts: int) -> bool:
+        if self._is_open:
+            logger.info(f"Set analog output {int(channel.value)} -> {millivolts}")
+        return self._is_open
+
+    def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> bool:
+        if self._is_open:
+            logger.info(f"Set color LED ({red_percent}, {green_percent}, {blue_percent})")
+        return self._is_open

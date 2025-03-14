@@ -5,11 +5,6 @@ import pytest
 try:
     from pyjerrycan import JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, JerryCAN
 except ImportError:
-    try:
-        from autotrainer.device.pyjerryfile import JerryCAN, JerryCANMsg, JerryCANCfgMsg, \
-            JerryCANCmdType
-    except Exception:
-        # Expected in some environments.
         pass
 
 from autotrainer.device import (CanInterface, Target, Motor, Heartbeat, ServoConfig, StepperConfig,
@@ -26,7 +21,6 @@ PELLET_ADDRESS = 1
 def test_connect():
     global MAGNET_ADDRESS, PELLET_ADDRESS
 
-    """Verify CAN is available and accessible to supporting libraries (pyjerrycan)"""
     interface = CanInterface()
 
     assert interface.open()
@@ -73,7 +67,6 @@ def test_read_servo_config(interface: CanInterface, target: Target, motor: Motor
     config = get_response(interface, ServoConfig, target)
 
     assert config is not None
-    print(f"{config.motor.value} vs {motor.value}")
     assert config.motor is motor
 
     return config
@@ -107,7 +100,6 @@ def test_read_stepper_config(interface: CanInterface, motor: Motor):
     config = get_response(interface, StepperConfig, Target.PELLET_DEVICE)
 
     assert config is not None
-    print(f"{int(config.motor.value)} {int(motor.value)}")
     assert config.motor is motor
 
     return config
@@ -140,7 +132,7 @@ def test_write_stepper_config(interface: CanInterface, config: StepperConfig):
 
 @pytest.mark.canbus
 def test_write_gpio(interface: CanInterface, state: bool):
-    assert interface.write_gpio(DigitalOutputs.STIMULUS_1, state)
+    assert interface.set_digital_output(DigitalOutputs.STIMULUS_1, state)
 
     for tries in range(5):
         data = test_read_gpio(iface, Target.PELLET_DEVICE)

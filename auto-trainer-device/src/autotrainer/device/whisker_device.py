@@ -16,12 +16,8 @@ try:
     HAVE_WHISKER_DEVICE = True
     IS_REAL_WHISKER_DEVICE = True
 except Exception as ex:
-    try:
-        from .pyjerryfile import JerryCAN, JerryCANMsg, JerryCANCfgMsg, JerryCANCmdType
-
-        HAVE_WHISKER_DEVICE = True
-    except Exception as ex:
-        logger.warning("Alogus hardware support not found")
+    logger.warning("Alogus hardware support not found")
+    pass
 
 from autotrainer.core import EventManager
 
@@ -117,7 +113,7 @@ class WhiskerDevice(Device):
             self._whisker_interface.tare_load_cell()
             self._complete_command(context)
         elif kind == HeadFixMessageKind.MAGNET_INTENSITY:
-            self._whisker_interface.set_magnet_intensity(self._magnet_dst, typing.cast(int, data))
+            self._whisker_interface.set_magnet(self._magnet_dst, typing.cast(int, data))
             self._complete_command(context)
         elif kind == PelletDeliveryMessageKind.SET_X:
             if self._pending_move_token is not None:
