@@ -116,6 +116,13 @@ class PelletDeliveryModel(ObservableObject):
 
         self._device_thread.send_message(DeviceThreadMessageKind.CONNECT)
 
+        # For the v1 hardware, this value is retained by the device as a pellet send location.  If it was requested in
+        # UI or from a configuration file prior to connection, having called set_(x/y/z) at some point will have not had
+        # any effect on the hardware.
+        self.set_x(self.x)
+        self.set_y(self.y)
+        self.set_z(self.z)
+
         self._is_connected = True
 
     def disconnect_from_device(self):
