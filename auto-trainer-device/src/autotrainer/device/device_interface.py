@@ -67,16 +67,16 @@ class Heartbeat(Source):
 
 @dataclass
 class MagnetDigitalInputs(Source):
-    continuity_0 = False
-    continuity_1 = False
+    continuity_0: bool = False
+    continuity_1: bool = False
 
 
 @dataclass
 class PelletDigitalInputs(Source):
-    stimulus_1 = False
-    stimulus_2 = False
-    stimulus_3 = False
-    stimulus_4 = False
+    stimulus_1: bool = False
+    stimulus_2: bool = False
+    stimulus_3: bool = False
+    stimulus_4: bool = False
 
 
 @dataclass
@@ -175,12 +175,12 @@ class AnalogOutput(Source):
 
 @dataclass
 class LoadCellReading(Source):
-    load: float = 0
+    load_mv: float = 0
 
 
 @dataclass
 class PressureReading(Source):
-    pressure: float = 0
+    pressure_mv: float = 0
 
 
 @dataclass

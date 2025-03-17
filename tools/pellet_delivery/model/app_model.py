@@ -6,9 +6,9 @@ from pathlib import Path
 import yaml
 
 from autotrainer.core import ObservableObject
-from autotrainer.device import SerialInterface, GymDeviceMessageKind, WhiskerDevice, \
+from autotrainer.device import SerialInterface, GymDeviceMessageKind, CanDevice, \
     Motor, ServoConfig, StepperConfig, MotorSteps, CanInterface, EmulationInterface, \
-    HAVE_WHISKER_DEVICE, IS_REAL_WHISKER_DEVICE
+    HAVE_CAN_DEVICE, IS_REAL_CAN_DEVICE
 
 from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
@@ -66,7 +66,8 @@ class AppModel(ObservableObject):
 
     @firmware_version.setter
     def firmware_version(self, value):
-        self._firmware_version = self._on_property_changed("firmware_version", value, self._firmware_version)
+        self._firmware_version = self._on_property_changed("firmware_version", value,
+                                                           self._firmware_version)
 
     @property
     def x(self):
@@ -98,12 +99,13 @@ class AppModel(ObservableObject):
 
     @command_pending.setter
     def command_pending(self, value):
-        self._command_pending = self._on_property_changed("command_pending", value, self._command_pending)
+        self._command_pending = self._on_property_changed("command_pending", value,
+                                                          self._command_pending)
 
     def refresh_ports(self):
         self._ports = SerialInterface.refresh_ports()
 
-        if HAVE_WHISKER_DEVICE:
+        if HAVE_CAN_DEVICE:
             self._ports.insert(0, "CAN bus")
 
         return self._ports
@@ -192,7 +194,7 @@ class AppModel(ObservableObject):
                 logger.error(f"error loading config: {e}")
 
         if self._user_settings.port == "CAN bus":
-            if IS_REAL_WHISKER_DEVICE:
+            if IS_REAL_CAN_DEVICE:
                 w_interface = CanInterface()
                 w_interface.set_pellet_address(1)  # TODO - actual address
                 w_interface.set_magnet_address(4)  # TODO - actual address
@@ -204,11 +206,12 @@ class AppModel(ObservableObject):
             else:
                 w_interface = EmulationInterface()
             self._device_thread = DeviceThread(
-                WhiskerDevice(buffer_size=10, send_movement=send_movement,
-                              home_movement=home_movement, load_movement=load_movement),
+                CanDevice(buffer_size=10, send_movement=send_movement,
+                          home_movement=home_movement, load_movement=load_movement),
                 w_interface, self._msg_queue)
         else:
-            self._device_thread = DeviceThread(PelletDelivery(), SerialInterface(self._user_settings.port),
+            self._device_thread = DeviceThread(PelletDelivery(),
+                                               SerialInterface(self._user_settings.port),
                                                self._msg_queue)
 
         self._device_thread.name = "pellet"

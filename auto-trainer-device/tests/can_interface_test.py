@@ -2,11 +2,6 @@
 import time
 import pytest
 
-try:
-    from pyjerrycan import JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, JerryCAN
-except ImportError:
-        pass
-
 from autotrainer.device import (CanInterface, Target, Motor, Heartbeat, ServoConfig, StepperConfig,
                                 DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
                                 AnalogOutputs, AnalogOutput, LoadCellReading, PressureReading,

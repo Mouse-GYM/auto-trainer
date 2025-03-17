@@ -12,7 +12,7 @@ from .device_interface import (DeviceInterface, Target, Motor, ServoConfig, Step
                                Heartbeat, DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs,
                                Tone, AnalogOutput, AnalogOutputs, LoadCellReading, PressureReading,
                                ColorLed, AudioData, DoorData, StepperStatus, ServoStatus,
-                               SensorStatus)
+                               SensorStatus, Status)
 from .emulation_interface import EmulationInterface
-from .whisker_device import WhiskerDevice, HAVE_WHISKER_DEVICE, IS_REAL_WHISKER_DEVICE
+from .can_device import CanDevice, HAVE_CAN_DEVICE, IS_REAL_CAN_DEVICE
 from .motor_steps import MotorSteps

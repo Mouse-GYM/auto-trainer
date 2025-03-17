@@ -15,12 +15,13 @@ def _assert_incomplete(data: str) -> None:
 
 
 def test_parse_valid_measurement():
-    measurement, residual = parse_measurement("s32d0a18t238h557n")
+    measurement, residual = parse_measurement("s32d2a18t238h557n")
 
     assert measurement is not None
 
     assert measurement.weight == pytest.approx(3.2, abs=1e-6, rel=1e-9)
-    assert measurement.switch == 0
+    assert measurement.switch.continuity_0 == False
+    assert measurement.switch.continuity_1 == True
     assert measurement.pressure == 18
     assert measurement.temperature == pytest.approx(23.8, abs=1e-6, rel=1e-9)
     assert measurement.humidity == pytest.approx(55.7, abs=1e-6, rel=1e-9)
@@ -44,7 +45,8 @@ def test_parse_incomplete_measurement():
     _assert_incomplete("2d0a18t238h55")
 
 
-def _assert_measurement_list(measurements: list, expected_count: int, residual: str, expected_residual: str) -> None:
+def _assert_measurement_list(measurements: list, expected_count: int, residual: str,
+                             expected_residual: str) -> None:
     assert len(measurements) == expected_count
     assert residual == expected_residual
 
@@ -71,7 +73,8 @@ def test_multiple_measurements():
     measurements, residual = parse_measurements("s32d0a18t238h557n\ns32d0a18t238h557n")
     _assert_measurement_list(measurements, 2, residual, "")
 
-    measurements, residual = parse_measurements("s32d0a18t238h557n\ns32d0a18t238h557n\r\ns32d0a18t238h557n")
+    measurements, residual = parse_measurements(
+        "s32d0a18t238h557n\ns32d0a18t238h557n\r\ns32d0a18t238h557n")
     _assert_measurement_list(measurements, 3, residual, "")
 
 

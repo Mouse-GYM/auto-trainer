@@ -4,7 +4,7 @@ import uuid
 from typing import Optional
 
 from autotrainer.core import ObservableObject, ProjectInfo
-from autotrainer.device import SerialInterface, HeadFixReader, WhiskerDevice, WhiskerInterface
+from autotrainer.device import SerialInterface, HeadFixReader, CanDevice, CanInterface
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 
@@ -74,7 +74,8 @@ class HeadFixModel(ObservableObject):
 
     @load_trigger.setter
     def load_trigger(self, value: int):
-        self._load_cell_threshold = self._on_property_changed("load_trigger", value, self._load_cell_threshold)
+        self._load_cell_threshold = self._on_property_changed("load_trigger", value,
+                                                              self._load_cell_threshold)
         self._head_fix_reader.load_cell_monitor.threshold = self._load_cell_threshold
 
     @property
@@ -83,7 +84,8 @@ class HeadFixModel(ObservableObject):
 
     @output_location.setter
     def output_location(self, value: str):
-        self._output_location = self._on_property_changed("output_location", value, self._output_location)
+        self._output_location = self._on_property_changed("output_location", value,
+                                                          self._output_location)
 
     @property
     def is_headbar_engaged(self) -> bool:
@@ -109,7 +111,8 @@ class HeadFixModel(ObservableObject):
 
     @is_force_detector_engaged.setter
     def is_force_detector_engaged(self, value: bool):
-        self._is_force_detector_engaged = self._on_property_changed("is_force_detector_engaged", value,
+        self._is_force_detector_engaged = self._on_property_changed("is_force_detector_engaged",
+                                                                    value,
                                                                     self._is_force_detector_engaged)
 
     @property
@@ -118,7 +121,8 @@ class HeadFixModel(ObservableObject):
 
     @baseline_intensity.setter
     def baseline_intensity(self, value: int):
-        self._baseline_intensity = self._on_property_changed("baseline_intensity", value, self._baseline_intensity)
+        self._baseline_intensity = self._on_property_changed("baseline_intensity", value,
+                                                             self._baseline_intensity)
 
     @property
     def position(self) -> int:
@@ -150,9 +154,11 @@ class HeadFixModel(ObservableObject):
         if not self.port or len(self.port) == 0:
             return
 
-        self._device_thread = DeviceThread(HeadFix(buffer_size=20), SerialInterface(self.port), self._reader_queue)
+        self._device_thread = DeviceThread(HeadFix(buffer_size=20), SerialInterface(self.port),
+                                           self._reader_queue)
 
-        # self._device_thread = DeviceThread(WhiskerDevice(buffer_size=50), WhiskerInterface(), self._reader_queue)
+        # self._device_thread = DeviceThread(CanDevice(buffer_size=50), CanInterface(),
+        # self._reader_queue)
         self._device_thread.name = "head-fix"
 
         self._device_thread.start()
@@ -199,24 +205,29 @@ class HeadFixModel(ObservableObject):
         if "position" in configuration:
             self.update_position(configuration["position"])
         if "loadTrigger" in configuration:
-            logger.warning("the 'loadTrigger' property has been moved to a sub-property of the 'loadCell' property")
+            logger.warning(
+                "the 'loadTrigger' property has been moved to a sub-property of the 'loadCell' property")
             self.load_trigger = configuration["loadTrigger"]
         if "loadCell" in configuration:
             load_cell_conf = configuration["loadCell"]
             if "loadTrigger" in load_cell_conf:
                 self.load_trigger = load_cell_conf["loadTrigger"]
             if "minLoadOnDuration" in load_cell_conf:
-                self._head_fix_reader.load_cell_monitor.threshold_duration = load_cell_conf["minLoadOnDuration"]
+                self._head_fix_reader.load_cell_monitor.threshold_duration = load_cell_conf[
+                    "minLoadOnDuration"]
             if "minEventDuration" in load_cell_conf:
-                self._head_fix_reader.load_cell_monitor.min_hold_duration = load_cell_conf["minEventDuration"]
+                self._head_fix_reader.load_cell_monitor.min_hold_duration = load_cell_conf[
+                    "minEventDuration"]
             if "minLoadOffDuration" in load_cell_conf:
-                self._head_fix_reader.load_cell_monitor.post_hold_duration = load_cell_conf["minLoadOffDuration"]
+                self._head_fix_reader.load_cell_monitor.post_hold_duration = load_cell_conf[
+                    "minLoadOffDuration"]
         if "autoTare" in configuration:
             auto_tare_conf = configuration["autoTare"]
             if "threshold" in auto_tare_conf:
                 self._head_fix_reader.tare_detector.threshold = auto_tare_conf["threshold"]
             if "rangeThreshold" in auto_tare_conf:
-                self._head_fix_reader.tare_detector.range_threshold = auto_tare_conf["rangeThreshold"]
+                self._head_fix_reader.tare_detector.range_threshold = auto_tare_conf[
+                    "rangeThreshold"]
             if "duration" in auto_tare_conf:
                 self._head_fix_reader.tare_detector.duration = auto_tare_conf["duration"]
 
@@ -232,7 +243,8 @@ class HeadFixModel(ObservableObject):
             "duration": self._head_fix_reader.tare_detector.duration
         }
 
-        return {"port": self.port, "position": self._position, "loadCell": load_cell, "autoTare": auto_tare}
+        return {"port": self.port, "position": self._position, "loadCell": load_cell,
+                "autoTare": auto_tare}
 
     def _send_with_token(self, cmd, value=None):
         token = uuid.uuid4()

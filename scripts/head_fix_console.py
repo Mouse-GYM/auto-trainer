@@ -45,8 +45,9 @@ def monitor_message_queue():
             if perf_start is None:
                 perf_start = time.perf_counter_ns()
             for measurement in msg[1]:
-                output_fd.write(f"{measurement.weight}, {measurement.switch}, {measurement.pressure},"
-                                f"{measurement.temperature}, {measurement.humidity}\n")
+                output_fd.write(
+                    f"{measurement.weight}, {measurement.switch.continuity_0}, {measurement.switch.continuity_1},"
+                    f" {measurement.pressure}, {measurement.temperature}, {measurement.humidity}\n")
 
             measurement_count += len(msg[1])
 
@@ -58,7 +59,8 @@ def monitor_message_queue():
         output_fd.close()
 
     if perf_count > 0 and perf_start is not None:
-        logger.info(f"{perf_count} samples at {(1.0e9 * perf_count) / (perf_end - perf_start)} samples/s")
+        logger.info(
+            f"{perf_count} samples at {(1.0e9 * perf_count) / (perf_end - perf_start)} samples/s")
 
 
 def run_monitor(port: str):
@@ -117,7 +119,8 @@ if __name__ == '__main__':
 
     parser.add_argument("port", help="the serial port to use")
     parser.add_argument("-o", "--output", help="and output file to record measurements")
-    parser.add_argument("-p", "--perf", help="performance measurement with specified number of samples",
+    parser.add_argument("-p", "--perf",
+                        help="performance measurement with specified number of samples",
                         type=int, default=-1)
 
     args = parser.parse_args()
