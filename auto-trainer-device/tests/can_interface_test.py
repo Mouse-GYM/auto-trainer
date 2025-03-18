@@ -147,11 +147,13 @@ def test_read_gpio(interface: CanInterface, target: Target):
 
 @pytest.mark.canbus
 def test_tone(interface: CanInterface):
-    frequency_hz = 1000
-    duration_ms = 100
+    frequency_hz = 1500
+    duration_ms = 400
     assert interface.emit_tone(frequency_hz, duration_ms);
 
-    tone = get_response(interface, Tone, Target.PELLET_DEVICE)
+    # give it a chance to update
+    for retry in range(3):
+        tone = get_response(interface, Tone, Target.PELLET_DEVICE)
     assert tone is not None
     assert tone.frequency_hz == frequency_hz
     assert tone.time_remaining_ms <= duration_ms
@@ -206,7 +208,9 @@ def test_color_led(interface: CanInterface):
     blue = 75
 
     assert interface.set_color_led(red, green, blue)
-    led = get_response(interface, ColorLed, Target.PELLET_DEVICE)
+    # Allow the data to catch up with the command
+    for tries in range(3):
+        led = get_response(interface, ColorLed, Target.PELLET_DEVICE)
     assert led is not None
     assert led.red == red
     assert led.green == green
@@ -252,21 +256,23 @@ def get_response(interface: CanInterface, typeof, target: Target, timeout: float
 if __name__ == '__main__':
     iface = test_connect()
 
-    test_heartbeat(iface, Target.PELLET_DEVICE)
-    test_heartbeat(iface, Target.MAGNET_DEVICE)
+    for ii in range(100):
+        print(ii)
+        test_heartbeat(iface, Target.PELLET_DEVICE)
+        test_heartbeat(iface, Target.MAGNET_DEVICE)
 
-    # Pellet or Magnet-only capabilities
-    servo_config = test_read_servo_config(iface, Target.MAGNET_DEVICE, Motor.MAGNET_SERVO)
-    test_write_servo_config(iface, Target.MAGNET_DEVICE, servo_config)
-    stepper_config = test_read_stepper_config(iface, Motor.PELLET_X_MOTOR)
-    test_write_stepper_config(iface, stepper_config)
-    test_write_gpio(iface, True)
-    test_write_gpio(iface, False)
-    test_tone(iface)
-    test_analog_out(iface)
-    test_tare_load_cell(iface)
-    test_tare_pressure_sensor(iface)
-    test_color_led(iface)
-    test_streaming_data(iface)
+        # Pellet or Magnet-only capabilities
+        servo_config = test_read_servo_config(iface, Target.MAGNET_DEVICE, Motor.MAGNET_SERVO)
+        test_write_servo_config(iface, Target.MAGNET_DEVICE, servo_config)
+        stepper_config = test_read_stepper_config(iface, Motor.PELLET_X_MOTOR)
+        test_write_stepper_config(iface, stepper_config)
+        test_write_gpio(iface, True)
+        test_write_gpio(iface, False)
+        test_tone(iface)
+        test_analog_out(iface)
+        test_tare_load_cell(iface)
+        test_tare_pressure_sensor(iface)
+        test_color_led(iface)
+        test_streaming_data(iface)
 
     iface.close()

@@ -410,14 +410,14 @@ class CanInterface(DeviceInterface):
         return False
 
     def _configure_pellet(self):
-        self.set_motor_configuration(Motor.PELLET_LOAD_SERVO, self._load_arm_config)
-        self.set_motor_configuration(Motor.PELLET_COVER_SERVO, self._barrier_config)
-        self.set_motor_configuration(Motor.PELLET_X_MOTOR, self._x_config)
-        self.set_motor_configuration(Motor.PELLET_Y_MOTOR, self._y_config)
-        self.set_motor_configuration(Motor.PELLET_Z_MOTOR, self._z_config)
+        self.set_motor_configuration(Motor.PELLET_LOAD_SERVO, servo_config=self._load_arm_config)
+        self.set_motor_configuration(Motor.PELLET_COVER_SERVO, servo_config=self._barrier_config)
+        self.set_motor_configuration(Motor.PELLET_X_MOTOR, stepper_config=self._x_config)
+        self.set_motor_configuration(Motor.PELLET_Y_MOTOR, stepper_config=self._y_config)
+        self.set_motor_configuration(Motor.PELLET_Z_MOTOR, stepper_config=self._z_config)
 
     def _configure_magnet(self):
-        self.set_motor_configuration(Motor.MAGNET_SERVO, self._magnet_config)
+        self.set_motor_configuration(Motor.MAGNET_SERVO, servo_config=self._magnet_config)
 
     def tare_load_cell(self) -> bool:
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
