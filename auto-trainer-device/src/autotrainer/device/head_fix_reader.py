@@ -115,7 +115,7 @@ class ForceDetector:
             e_1 = idx + self._window_count
             s_2 = idx
             e_2 = idx + self._first_third
-            if numpy.all(self._values[s_1:e_1] <= (self._values[s_2:e_2] - 30)) is True:
+            if numpy.all(self._values[s_1:e_1] <= (self._values[s_2:e_2] - 30)):
                 return True
 
         return False
