@@ -16,17 +16,15 @@ hardware.
 import math
 import typing
 from dataclasses import dataclass
-from enum import Enum
+from enum import IntEnum
 
 
-@dataclass
-class Target(Enum):
+class Target(IntEnum):
     PELLET_DEVICE = 0
     MAGNET_DEVICE = 1
 
 
-@dataclass
-class Motor(Enum):
+class Motor(IntEnum):
     NONE = 0
     MAGNET_SERVO = 1
     PELLET_X_MOTOR = 2
@@ -36,16 +34,14 @@ class Motor(Enum):
     PELLET_LOAD_SERVO = 6
 
 
-@dataclass
-class DigitalOutputs(Enum):
+class DigitalOutputs(IntEnum):
     STIMULUS_1 = 1
     STIMULUS_2 = 2
     STIMULUS_3 = 3
     STIMULUS_4 = 4
 
 
-@dataclass
-class AnalogOutputs(Enum):
+class AnalogOutputs(IntEnum):
     STATUS_OUT = 0
 
 
@@ -100,9 +96,9 @@ class ServoConfig(Source):
         if "max_pos" in data:
             config.max_position = data["max_pos"]
         if "min_pwm" in data:
-            config.min_pwm = data["min_pwm"]
+            config.min_pwm_duration_us = data["min_pwm"]
         if "max_pwm" in data:
-            config.max_pwm = data["max_pwm"]
+            config.max_pwm_duration_us = data["max_pwm"]
         if "max_vel" in data:
             config.max_velocity = data["max_vel"]
         if "max_acc" in data:

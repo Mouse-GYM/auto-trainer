@@ -370,8 +370,8 @@ class CanInterface(DeviceInterface):
     def write_str(self, value: str) -> int:
         raise NotImplementedError()
 
-    def set_motor_configuration(self, motor: Motor, servo_config=typing.Optional[ServoConfig],
-                                stepper_config=typing.Optional[StepperConfig]) -> bool:
+    def set_motor_configuration(self, motor: Motor, servo_config=None,
+                                stepper_config=None) -> bool:
         if servo_config is None:
             servo_config = ServoConfig()
         if stepper_config is None:
@@ -427,7 +427,7 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
         return addr is not None and self._jc.PressureSensorTare(addr, 0) == 0
 
-    def set_magnet(self, position: float) -> bool:
+    def set_magnet(self, position: int) -> bool:
         logger.info(f"set magnet position {position}")
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
         return addr is not None and self._jc.ServoMove(addr, _MAGNET_SERVO_ID,

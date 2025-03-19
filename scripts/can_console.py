@@ -50,8 +50,7 @@ def monitor_message_queue():
                 for measurement in msg[1]:
                     output_fd.write(
                         f"{measurement.when}, {measurement.timestamp}, {measurement.weight}, "
-                        f" {measurement.switch.continuity_0}, {measurement.switch.continuity_1},"
-                        f" {measurement.pressure},"
+                        f" {measurement.switch}, {measurement.pressure},"
                         f" {measurement.temperature}, {measurement.humidity}\n")
 
             measurement_count += len(msg[1])
@@ -76,11 +75,8 @@ def monitor_message_queue():
 def run_monitor(can_id: int):
     global perf_count
 
-    device_interface = CanInterface()
-
     device = CanDevice()
-
-    device_thread = DeviceThread(device, device_interface, msg_queue)
+    device_thread = DeviceThread(device, device._interface, msg_queue)
 
     device_thread.start()
 

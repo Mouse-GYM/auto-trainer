@@ -43,9 +43,7 @@ class MyTestCase(unittest.TestCase):
 
     def test_construction(self) -> CanDevice:
         try:
-            device = CanDevice(home_movement=MotorSteps("home", [{"x": 10}]),
-                               load_movement=MotorSteps("load", [{"y": 11}]),
-                               send_movement=MotorSteps("send", [{"z": 12}]))
+            device = CanDevice()
             return device
         except:
             self.fail()
@@ -102,7 +100,7 @@ class MyTestCase(unittest.TestCase):
     def test_load_cell_reading(self):
         notify_data(self, LoadCellReading(Target.MAGNET_DEVICE, 13))
 
-    def test_load_cell_reading(self):
+    def test_pressure_reading(self):
         notify_data(self, PressureReading(Target.MAGNET_DEVICE, 14))
 
     def test_sensor_status(self):
@@ -128,7 +126,11 @@ class MyTestCase(unittest.TestCase):
         notify_data(self, StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR, 30, False))
 
     def test_load_servo_status(self):
-        notify_data(self, ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, 40))
+        status = ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, 40)
+        self._expected = [
+            (PelletDeliveryMessageKind.UPDATE_LOAD, 40)
+        ]
+        notify_data(self, status)
 
     def test_servo_config(self):
         notify_data(self, ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0, 0,

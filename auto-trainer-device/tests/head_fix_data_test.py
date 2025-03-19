@@ -15,13 +15,12 @@ def _assert_incomplete(data: str) -> None:
 
 
 def test_parse_valid_measurement():
-    measurement, residual = parse_measurement("s32d2a18t238h557n")
+    measurement, residual = parse_measurement("s32d0a18t238h557n")
 
     assert measurement is not None
 
     assert measurement.weight == pytest.approx(3.2, abs=1e-6, rel=1e-9)
-    assert measurement.switch.continuity_0 == False
-    assert measurement.switch.continuity_1 == True
+    assert measurement.switch == False
     assert measurement.pressure == 18
     assert measurement.temperature == pytest.approx(23.8, abs=1e-6, rel=1e-9)
     assert measurement.humidity == pytest.approx(55.7, abs=1e-6, rel=1e-9)

@@ -46,7 +46,7 @@ def monitor_message_queue():
                 perf_start = time.perf_counter_ns()
             for measurement in msg[1]:
                 output_fd.write(
-                    f"{measurement.weight}, {measurement.switch.continuity_0}, {measurement.switch.continuity_1},"
+                    f"{measurement.weight}, {measurement.switch},"
                     f" {measurement.pressure}, {measurement.temperature}, {measurement.humidity}\n")
 
             measurement_count += len(msg[1])

@@ -18,7 +18,7 @@ class HeadFixMeasurement:
     when: float = 0
     timestamp: int = 0
     weight: float = 0
-    switch: MagnetDigitalInputs = MagnetDigitalInputs()
+    switch: int = 0
     pressure: float = 0
     temperature: float = 0
     humidity: float = 0

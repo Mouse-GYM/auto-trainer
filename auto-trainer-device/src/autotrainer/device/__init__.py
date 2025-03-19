@@ -14,5 +14,5 @@ from .device_interface import (DeviceInterface, Target, Motor, ServoConfig, Step
                                ColorLed, AudioData, DoorData, StepperStatus, ServoStatus,
                                SensorStatus, Status)
 from .emulation_interface import EmulationInterface
-from .can_device import CanDevice, HAVE_CAN_DEVICE, IS_REAL_CAN_DEVICE
+from .can_device import CanDevice, HAVE_CAN_DEVICE
 from .motor_steps import MotorSteps

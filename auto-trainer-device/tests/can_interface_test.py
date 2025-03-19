@@ -256,23 +256,21 @@ def get_response(interface: CanInterface, typeof, target: Target, timeout: float
 if __name__ == '__main__':
     iface = test_connect()
 
-    for ii in range(100):
-        print(ii)
-        test_heartbeat(iface, Target.PELLET_DEVICE)
-        test_heartbeat(iface, Target.MAGNET_DEVICE)
+    test_heartbeat(iface, Target.PELLET_DEVICE)
+    test_heartbeat(iface, Target.MAGNET_DEVICE)
 
-        # Pellet or Magnet-only capabilities
-        servo_config = test_read_servo_config(iface, Target.MAGNET_DEVICE, Motor.MAGNET_SERVO)
-        test_write_servo_config(iface, Target.MAGNET_DEVICE, servo_config)
-        stepper_config = test_read_stepper_config(iface, Motor.PELLET_X_MOTOR)
-        test_write_stepper_config(iface, stepper_config)
-        test_write_gpio(iface, True)
-        test_write_gpio(iface, False)
-        test_tone(iface)
-        test_analog_out(iface)
-        test_tare_load_cell(iface)
-        test_tare_pressure_sensor(iface)
-        test_color_led(iface)
-        test_streaming_data(iface)
+    # Pellet or Magnet-only capabilities
+    servo_config = test_read_servo_config(iface, Target.MAGNET_DEVICE, Motor.MAGNET_SERVO)
+    test_write_servo_config(iface, Target.MAGNET_DEVICE, servo_config)
+    stepper_config = test_read_stepper_config(iface, Motor.PELLET_X_MOTOR)
+    test_write_stepper_config(iface, stepper_config)
+    test_write_gpio(iface, True)
+    test_write_gpio(iface, False)
+    test_tone(iface)
+    test_analog_out(iface)
+    test_tare_load_cell(iface)
+    test_tare_pressure_sensor(iface)
+    test_color_led(iface)
+    test_streaming_data(iface)
 
     iface.close()

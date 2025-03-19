@@ -162,8 +162,7 @@ class TareDetector:
         if self._index >= self._buffer_len:
             self._index = 0
 
-        return numpy.all(numpy.abs(self._values) > self._threshold) and numpy.ptp(
-            self._values) <= self._range_threshold
+        return numpy.all(numpy.abs(self._values) > self._threshold) and numpy.ptp(self._values) <= self._range_threshold
 
     def _reset(self) -> None:
         self._buffer_len = int(self._sample_rate * self._duration)
@@ -278,8 +277,7 @@ class HeadFixReader(DeviceReader):
                 if self._record_file is not None:
                     try:
                         self._record_file.write(
-                            f"{m.when}, {m.timestamp}, {m.weight}, {m.switch.continuity_0},"
-                            f"{m.switch.continuity_1}, {m.pressure},"
+                            f"{m.when}, {m.timestamp}, {m.weight}, {m.switch}, {m.pressure},"
                             f"{m.temperature}, {m.humidity}\n")
                     except Exception as e:
                         # This could be too much if something major is wrong.  Just output once per file rotation.
@@ -295,14 +293,12 @@ class HeadFixReader(DeviceReader):
             self._load_cell_monitor.update(numpy.mean(weights), data[0].when, data[0].timestamp)
 
             # Headbar monitor.
-            self._is_headbar_engaged = self._on_property_changed("is_headbar_engaged",
-                                                                 numpy.mean(switch) > 0.5,
+            self._is_headbar_engaged = self._on_property_changed("is_headbar_engaged", numpy.mean(switch) > 0.5,
                                                                  self._is_headbar_engaged)
 
             # Force detector.
             self._is_force_detector_engaged = self._on_property_changed("is_force_detector_engaged",
-                                                                        self._force_detector.update(
-                                                                            pressure),
+                                                                        self._force_detector.update(pressure),
                                                                         self._is_force_detector_engaged)
 
             if self._tare_detector.update(weights) and self._tare_callback is not None:
