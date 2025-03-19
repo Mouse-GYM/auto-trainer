@@ -1,14 +1,10 @@
 import logging
 import queue
-from pathlib import Path
-
-import yaml
 
 from autotrainer.core import ObservableObject
 from autotrainer.core.project import ProjectInterval
 from autotrainer.device import (SerialInterface, HeadFixReader, GymDeviceMessageKind, CanDevice,
-                                CanInterface, Motor, HAVE_CAN_DEVICE, ServoConfig,
-                                IS_REAL_CAN_DEVICE, EmulationInterface)
+                                HAVE_CAN_DEVICE)
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 from autotrainer.device.device_reader import DeviceReader
@@ -59,8 +55,7 @@ class AppModel(ObservableObject):
 
     @firmware_version.setter
     def firmware_version(self, value):
-        self._firmware_version = self._on_property_changed("firmware_version", value,
-                                                           self._firmware_version)
+        self._firmware_version = self._on_property_changed("firmware_version", value, self._firmware_version)
 
     @property
     def head_fix_reader(self):
@@ -96,31 +91,9 @@ class AppModel(ObservableObject):
         if len(self._user_settings.port) == 0:
             return
 
-        magnet_config = None
-
-        config = Path.home().joinpath(".alogus_config.yaml")
-        logger.info(f"looking for configuration alogus file: {config}")
-
-        if config.exists():
-            try:
-                with open(config, "r") as file:
-                    conf = yaml.safe_load(file)
-                    logging.info("alogus configuration loaded")
-                    if "magnet" in conf and "head" in conf["magnet"]:
-                        magnet_config = ServoConfig.from_dict(conf["magnet"]["head"])
-                        logger.info(f"head fix configuration: {magnet_config}")
-
-            except Exception as e:
-                logger.error(f"error loading config: {e}")
-
         if self._user_settings.port == "CAN bus":
-            if IS_REAL_CAN_DEVICE:
-                logger.debug(f"initializing with magnet configuration {magnet_config}")
-                w_interface = CanInterface()
-            else:
-                w_interface = EmulationInterface()
-            w_interface.set_motor_configuration(Motor.MAGNET_SERVO, magnet_config)
-            self._device_thread = DeviceThread(CanDevice(buffer_size=10), w_interface,
+            device = CanDevice()
+            self._device_thread = DeviceThread(device, device._interface,
                                                self._msg_queue)
         else:
             self._device_thread = DeviceThread(HeadFix(buffer_size=10),

@@ -58,7 +58,7 @@ def monitor_message_queue():
                 for d in data:
                     output_fd.write(
                         f"{d.when}, {d.timestamp}, {d.weight}, "
-                        f" {d.switch.continuity_0}, {d.switch.continuity_1},"
+                        f" {d.switch},"
                         f" {d.pressure},"
                         f" {d.temperature}, {d.humidity}\n")
 
@@ -184,13 +184,8 @@ def run_monitor(can_id: int):
     global perf_count
     global print_status
 
-    device_interface = CanInterface()
-
-    device = CanDevice(home_movement=CanDevice.create_home_movement(),
-                       send_movement=CanDevice.create_send_movement(),
-                       load_movement=CanDevice.create_load_movement())
-
-    device_thread = DeviceThread(device, device_interface, message_queue=msg_queue)
+    device = CanDevice()
+    device_thread = DeviceThread(device, device._interface, msg_queue)
 
     device_thread.start()
 

@@ -77,7 +77,7 @@ class EmulationInterface(DeviceInterface):
             logger.info(f"tare load cell")
         return self._is_open
 
-    def set_magnet(self, dst_id: int, position: float) -> bool:
+    def set_magnet(self, position: float) -> bool:
         if self._is_open:
             logger.info(f"set magnet position {position}")
         return self._is_open
