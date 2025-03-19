@@ -8,6 +8,7 @@ from typing import Callable
 
 from .device_interface import DeviceInterface
 from .device import Device
+from .can_device import HAVE_CAN_DEVICE
 from .device_api import DeviceApi
 
 logger = logging.getLogger(__name__)
@@ -45,12 +46,13 @@ class DeviceThread(Thread):
         self._message_queue = message_queue
         self._cmd_queue: Queue = Queue()
 
-        self._api = DeviceApi(self._interface, message_callback=message_callback, message_queue=message_queue)
+        self._api = DeviceApi(self._interface, message_callback=message_callback,
+                              message_queue=message_queue)
         self._device.api = self._api
 
         self._name = "device-thread"
 
-        self._read_limit: int = math.inf
+        self._read_limit: int = 1 if HAVE_CAN_DEVICE else math.inf
 
     @property
     def name(self) -> str:

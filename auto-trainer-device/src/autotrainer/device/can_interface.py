@@ -300,6 +300,20 @@ class CanInterface(DeviceInterface):
         self._magnet_addr = addr
         logger.info(f"magnet module located at {self._magnet_addr}")
 
+    @staticmethod
+    def is_servo(motor: Motor) -> bool:
+        return motor is Motor.MAGNET_SERVO or \
+            motor is Motor.PELLET_LOAD_SERVO or \
+            motor is Motor.PELLET_COVER_SERVO
+
+    @staticmethod
+    def is_stepper(motor: Motor) -> bool:
+        return not CanInterface.is_servo(motor)
+
+    @staticmethod
+    def target_of_motor(motor: Motor) -> Target:
+        return Target.MAGNET_DEVICE if motor is Motor.MAGNET_SERVO else Target.PELLET_DEVICE
+
     def _is_pellet(self, addr: int):
         return self._is_same_target(Target.PELLET_DEVICE, addr)
 
@@ -380,7 +394,7 @@ class CanInterface(DeviceInterface):
         if motor is Motor.MAGNET_SERVO:
             self._magnet_config = servo_config
             self._magnet_config.motor = motor
-            return self.write_servo_config(Target.MAGNET_DEVICE, self._magnet_config)
+            return self.write_servo_config(self._magnet_config)
 
         elif motor is Motor.PELLET_X_MOTOR:
             self._x_config = stepper_config
@@ -400,12 +414,12 @@ class CanInterface(DeviceInterface):
         elif motor is Motor.PELLET_COVER_SERVO:
             self._barrier_config = servo_config
             self._barrier_config.motor = motor
-            return self.write_servo_config(Target.PELLET_DEVICE, self._barrier_config)
+            return self.write_servo_config(self._barrier_config)
 
         elif motor is Motor.PELLET_LOAD_SERVO:
             self._load_arm_config = servo_config
             self._load_arm_config.motor = motor
-            return self.write_servo_config(Target.PELLET_DEVICE, self._load_arm_config)
+            return self.write_servo_config(self._load_arm_config)
 
         return False
 
@@ -491,6 +505,17 @@ class CanInterface(DeviceInterface):
         logger.info(f"cover pellet {self._barrier_config.max_position}")
         return self.set_barrier(self._barrier_config.max_position)
 
+    def stepper_home(self, motor: Motor) -> bool:
+        logger.info(f"Homing Stepper Motor {motor.value}")
+        if CanInterface.is_servo(motor):
+            return False
+
+        addr = self._tgt2addr(Target.PELLET_DEVICE)
+
+        # Third arg - forward/rev. Only X is fwd; others are reverse
+        return addr is not None and self._jc.StepperHome(addr, _motor_to_id(motor),
+                                                         motor == Motor.PELLET_X_MOTOR)
+
     def write_stepper_config(self, config: StepperConfig) -> bool:
         motor_id = _motor_to_id(config.motor)
         addr = self._tgt2addr(Target.PELLET_DEVICE)
@@ -508,8 +533,9 @@ class CanInterface(DeviceInterface):
                 f"stepper {addr} {motor_id} config write failed")
             return False
 
-    def write_servo_config(self, target: Target, config: ServoConfig) -> bool:
+    def write_servo_config(self, config: ServoConfig) -> bool:
         motor_id = _motor_to_id(config.motor)
+        target = CanInterface.target_of_motor(config.motor)
 
         addr = self._tgt2addr(target)
         if addr is None:
@@ -530,20 +556,17 @@ class CanInterface(DeviceInterface):
                 f"servo {addr} {motor_id} config write failed")
             return False
 
-    def request_servo_config(self, target: Target, motor: Motor) -> bool:
+    def request_motor_config(self, motor: Motor) -> bool:
+        target = CanInterface.target_of_motor(motor)
         msg = JerryCANCfgMsg()
-        msg.type = JerryCANCfgMsg.Type.SERVO
+        if CanInterface.is_servo(motor):
+            msg.type = JerryCANCfgMsg.Type.SERVO
+        else:
+            msg.type = JerryCANCfgMsg.Type.STEPPER
+
         msg.servo.motor_id = _motor_to_id(motor)
 
         addr = self._tgt2addr(target)
-        return addr is not None and self._jc.CfgRead(addr, msg) == 0
-
-    def request_stepper_config(self, motor: Motor) -> bool:
-        msg = JerryCANCfgMsg()
-        msg.type = JerryCANCfgMsg.Type.STEPPER
-        msg.servo.motor_id = _motor_to_id(motor)
-
-        addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.CfgRead(addr, msg) == 0
 
     def send_heartbeat(self) -> bool:

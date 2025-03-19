@@ -69,6 +69,10 @@ class CanDevice(Device):
         self._pellet_desired_y = None
         self._pellet_desired_z = None
 
+        self._is_homing_x = None
+        self._is_homing_y = None
+        self._is_homing_z = None
+
         self._pellet_desired_load = None
 
         self._pending_move_token = None
@@ -99,12 +103,27 @@ class CanDevice(Device):
         if kind == GymDeviceMessageKind.VERSION:
             self._api.send_message(GymDeviceMessageKind.VERSION, "1.0")
             self._complete_command(context)
+
+        elif kind == GymDeviceMessageKind.READ_CONFIG:
+            self._interface.request_motor_config(data)
+
+        elif kind == GymDeviceMessageKind.WRITE_CONFIG:
+            if CanInterface.is_stepper(data.motor):
+                self._interface.write_stepper_config(data)
+            else:
+                self._interface.write_servo_config(data)
+
+            self._interface.request_motor_config(data.motor)
+
         elif kind == HeadFixMessageKind.UPDATE_SCALE_TARE:
             self._interface.tare_load_cell()
+            self._interface.tare_pressure_sensor()
             self._complete_command(context)
+
         elif kind == HeadFixMessageKind.MAGNET_INTENSITY:
             self._interface.set_magnet(typing.cast(int, data))
             self._complete_command(context)
+
         elif kind == PelletDeliveryMessageKind.SET_X:
             if self._pending_move_token is not None:
                 self._complete_command(context)
@@ -113,6 +132,7 @@ class CanDevice(Device):
             location = typing.cast(int, data) / 10.0
             self._pellet_desired_x = location
             self._interface.set_x(location)
+
         elif kind == PelletDeliveryMessageKind.SET_Y:
             if self._pending_move_token is not None:
                 self._complete_command(context)
@@ -121,6 +141,7 @@ class CanDevice(Device):
             location = typing.cast(int, data) / 10.0
             self._pellet_desired_y = location
             self._interface.set_y(location)
+
         elif kind == PelletDeliveryMessageKind.SET_Z:
             if self._pending_move_token is not None:
                 self._complete_command(context)
@@ -129,6 +150,23 @@ class CanDevice(Device):
             location = typing.cast(int, data) / 10.0
             self._pellet_desired_z = location
             self._interface.set_z(location)
+
+        elif kind == PelletDeliveryMessageKind.SEND_TO_LIMITS:
+            if self._pending_move_token is not None:
+                self._complete_command(context)
+                return
+
+            motor = typing.cast(Motor, data)
+            self._interface.stepper_home(motor)
+            self._pending_move_token = context
+
+            if motor is Motor.PELLET_X_MOTOR:
+                self._is_homing_x = True
+            elif motor is Motor.PELLET_Y_MOTOR:
+                self._is_homing_y = True
+            elif motor is Motor.PELLET_Z_MOTOR:
+                self._is_homing_z = True
+
         elif kind == PelletDeliveryMessageKind.SEND_HOME:
             if self._pending_move_token is not None or self._home_movement is None:
                 self._complete_command(context)
@@ -137,6 +175,7 @@ class CanDevice(Device):
             self._compound_movement = self._home_movement.steps
             logger.info(f"performing compound action: {self._compound_movement}")
             self._perform_next_compound_step()
+
         elif kind == PelletDeliveryMessageKind.LOAD_PELLET:
             if self._pending_move_token is not None or self._load_movement is None:
                 self._complete_command(context)
@@ -145,6 +184,7 @@ class CanDevice(Device):
             self._compound_movement = self._load_movement.steps
             logger.info(f"performing compound action: {self._compound_movement}")
             self._perform_next_compound_step()
+
         elif kind == PelletDeliveryMessageKind.SEND_PELLET:
             if self._pending_move_token is not None or self._send_movement is None:
                 self._complete_command(context)
@@ -153,12 +193,19 @@ class CanDevice(Device):
             self._compound_movement = self._send_movement.steps
             logger.info(f"performing compound action: {self._compound_movement}")
             self._perform_next_compound_step()
+
         elif kind == PelletDeliveryMessageKind.RELEASE_PELLET:
             self._interface.release_pellet()
             self._complete_command(context)
+
         elif kind == PelletDeliveryMessageKind.COVER_PELLET:
             self._interface.cover_pellet()
             self._complete_command(context)
+
+        elif kind == PelletDeliveryMessageKind.PLAY_TONE:
+            self._interface.emit_tone(data[0], data[1])
+            self._complete_command(context)
+
         else:
             logger.info(f"unhandled command queue message: {kind}")
 
@@ -195,6 +242,14 @@ class CanDevice(Device):
                     if self._api is not None:
                         self.api.send_message(PelletDeliveryMessageKind.UPDATE_X,
                                               message.position)
+
+                    if self._is_homing_x is not None:
+                        if message.limit_switch:
+                            token = self._pending_move_token
+                            self._pending_move_token = None
+                            self._is_homing_x = None
+                            self._complete_command(token)
+
                     if self._pellet_desired_x is not None:
                         if abs(
                             message.position - self._pellet_desired_x) < 0.01:
@@ -209,6 +264,14 @@ class CanDevice(Device):
                     if self._api is not None:
                         self.api.send_message(PelletDeliveryMessageKind.UPDATE_Y,
                                               message.position)
+
+                    if self._is_homing_y is not None:
+                        if message.limit_switch:
+                            token = self._pending_move_token
+                            self._pending_move_token = None
+                            self._is_homing_y = None
+                            self._complete_command(token)
+
                     if self._pellet_desired_y is not None:
                         if abs(
                             message.position - self._pellet_desired_y) < 0.01:
@@ -219,10 +282,18 @@ class CanDevice(Device):
                                 token = self._pending_move_token
                                 self._pending_move_token = None
                                 self._complete_command(token)
+
                 elif message.motor is Motor.PELLET_Z_MOTOR:
                     if self._api is not None:
                         self.api.send_message(PelletDeliveryMessageKind.UPDATE_Z,
                                               message.position)
+                    if self._is_homing_z is not None:
+                        if message.limit_switch:
+                            token = self._pending_move_token
+                            self._pending_move_token = None
+                            self._is_homing_z = None
+                            self._complete_command(token)
+
                     if self._pellet_desired_z is not None:
                         if abs(
                             message.position - self._pellet_desired_z) < 0.01:
@@ -255,12 +326,24 @@ class CanDevice(Device):
                         f"[{datetime.now()}] servo {message.target.value}"
                         f":{message.motor.value} position: {message.position}")
 
+                if self._api is not None:
+                    if message.motor is Motor.MAGNET_SERVO:
+                        self.api.send_message(HeadFixMessageKind.UPDATE_MAGNET, message)
+                    elif message.motor is Motor.PELLET_LOAD_SERVO:
+                        self.api.send_message(PelletDeliveryMessageKind.UPDATE_LOAD_SERVO, message)
+                    elif message.motor is Motor.PELLET_COVER_SERVO:
+                        self.api.send_message(PelletDeliveryMessageKind.UPDATE_COVER_SERVO, message)
+
             elif isinstance(message, StepperConfig):
+                if self._api is not None:
+                    self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
                 logger.debug(
                     f"stepper {message.target.value}|{message.motor}: {message.min_step_inverse}"
                     f" {message.steps_per_revolution}")
 
             elif isinstance(message, ServoConfig):
+                if self._api is not None:
+                    self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
                 logger.debug(
                     f"servo {message.target.value}|{message.motor.value}:"
                     f" {message.min_position} {message.min_pwm_duration_us}"
@@ -313,7 +396,7 @@ class CanDevice(Device):
                 self._compound_movement = None
 
     @staticmethod
-    def _create_home_movement(self):
+    def create_home_movement():
         return [
             {"z": 10.5},
             {"x": 20.5},
@@ -321,7 +404,7 @@ class CanDevice(Device):
         ]
 
     @staticmethod
-    def _create_send_movement(self):
+    def create_send_movement():
         return [
             {"z": 20.5},
             {"x": 10.5},
@@ -329,7 +412,7 @@ class CanDevice(Device):
         ]
 
     @staticmethod
-    def _create_load_movement(self):
+    def create_load_movement():
         return [
             {"z": 30.5},
             {"x": 20.5},

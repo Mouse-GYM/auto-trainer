@@ -5,7 +5,8 @@ import time
 from threading import Thread
 
 from autotrainer.device import CanDevice, DeviceThread, CanInterface, DeviceThreadMessageKind, \
-    HeadFixMessageKind, GymDeviceMessageKind
+    HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, Target, \
+    StepperConfig, ServoConfig, ServoStatus, StepperStatus
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
@@ -19,9 +20,11 @@ perf_start = None
 
 perf_count = -1
 
+print_status = None
+
 
 def monitor_message_queue():
-    global perf_start, perf_count
+    global perf_start, perf_count, print_status
     logger.info("starting message queue thread")
 
     measurement_count = 0
@@ -32,29 +35,34 @@ def monitor_message_queue():
 
     if output_file is not None:
         output_fd = open(output_file, 'w')
-        output_fd.write("Time, Index, Weight, Switch, Pressure, Temperature, Humidity\n")
+        output_fd.write("Time, Index, Weight, Switch #1, Switch #2, Pressure, Temperature, "
+                        "Humidity\n")
 
     next_heartbeat = 500
 
     while True:
-        msg = msg_queue.get()
+        kind, data = msg_queue.get()
 
-        if msg[0] == DeviceThreadMessageKind.TERMINATE:
+        if kind == DeviceThreadMessageKind.TERMINATE:
+            print("Breaking")
             break
 
-        if msg[0] == HeadFixMessageKind.MEASUREMENT:
+        elif kind == GymDeviceMessageKind.VERSION:
+            print(data)
+
+        elif kind == HeadFixMessageKind.MEASUREMENT:
             if perf_start is None:
                 perf_start = time.perf_counter_ns()
 
             if output_fd is not None:
-                for measurement in msg[1]:
+                for d in data:
                     output_fd.write(
-                        f"{measurement.when}, {measurement.timestamp}, {measurement.weight}, "
-                        f" {measurement.switch.continuity_0}, {measurement.switch.continuity_1},"
-                        f" {measurement.pressure},"
-                        f" {measurement.temperature}, {measurement.humidity}\n")
+                        f"{d.when}, {d.timestamp}, {d.weight}, "
+                        f" {d.switch.continuity_0}, {d.switch.continuity_1},"
+                        f" {d.pressure},"
+                        f" {d.temperature}, {d.humidity}\n")
 
-            measurement_count += len(msg[1])
+            measurement_count += len(data)
 
             if measurement_count > next_heartbeat:
                 logger.info(
@@ -65,6 +73,60 @@ def monitor_message_queue():
                 perf_end = time.perf_counter_ns()
                 break
 
+        elif kind == GymDeviceMessageKind.READ_CONFIG:
+            if isinstance(data, ServoConfig):
+                print(
+                    f"SERVO\n"
+                    f"- target={data.target.value}\n"
+                    f"- motor={data.motor.value}\n"
+                    #                   f"- max vel={data.max_velocity}\n"
+                    #                   f"- max accel={data.max_acceleration}\n"
+                    f"- min pos={data.min_position}\n"
+                    f"- min pwm={data.min_pwm_duration_us}\n"
+                    f"- max pos={data.max_position}\n"
+                    f"- max pwm={data.max_pwm_duration_us}\n"
+                )
+            elif isinstance(data, StepperConfig):
+                print(f"STEPPER\n"
+                      f"- target={data.target.value}\n"
+                      f"- motor={data.motor}\n"
+                      # f"- max vel={data.max_velocity}\n"
+                      # f"- max accel={data.max_acceleration}\n"
+                      f"- min step={data.min_step_inverse}\n"
+                      f"- step/rev={data.steps_per_revolution}\n"
+                      )
+
+        elif ((kind == PelletDeliveryMessageKind.UPDATE_COVER_SERVO and
+               print_status is Motor.PELLET_COVER_SERVO) or
+              (kind == PelletDeliveryMessageKind.UPDATE_LOAD_SERVO and
+               print_status is Motor.PELLET_LOAD_SERVO) or
+              (kind == HeadFixMessageKind.UPDATE_MAGNET and
+               print_status is Motor.MAGNET_SERVO)):
+
+            if isinstance(data, ServoStatus):
+                print(
+                    f"SERVO:\n"
+                    f"- target={data.target.value}\n"
+                    f"- motor={data.motor.value}\n"
+                    f"- position={data.position}\n"
+                )
+                print_status = None
+        elif ((kind == PelletDeliveryMessageKind.UPDATE_X and
+               print_status is Motor.PELLET_X_MOTOR) or
+              (kind == PelletDeliveryMessageKind.UPDATE_Y and
+               print_status is Motor.PELLET_Y_MOTOR) or
+              (kind == PelletDeliveryMessageKind.UPDATE_Z and
+               print_status is Motor.PELLET_Z_MOTOR)):
+            # if isinstance(StepperStatus, data):
+            print(
+                f"STEPPER:\n"
+                # f"target={data.target.value}\n"
+                f"- motor={print_status.value}\n"
+                f"- position={data}\n"
+                # f"at limit={data.limit_switch}\n"
+            )
+            print_status = None
+
     if output_fd is not None:
         output_fd.close()
 
@@ -73,14 +135,62 @@ def monitor_message_queue():
             f"{perf_count} samples at {(1.0e9 * perf_count) / (perf_end - perf_start)} samples/s")
 
 
+def str_to_motor(motor_name: str):
+    if motor_name == 'x':
+        return Motor.PELLET_X_MOTOR
+    elif motor_name == 'y':
+        return Motor.PELLET_Y_MOTOR
+    elif motor_name == 'z':
+        return Motor.PELLET_Z_MOTOR
+    elif motor_name == 'load':
+        return Motor.PELLET_LOAD_SERVO
+    elif motor_name == 'cover':
+        return Motor.PELLET_COVER_SERVO
+    elif motor_name == 'magnet':
+        return Motor.MAGNET_SERVO
+    else:
+        return None
+
+
+def write_config(motor: Motor, device_thread):
+    if motor is None:
+        return
+
+    if motor is Motor.PELLET_X_MOTOR or \
+        motor is Motor.PELLET_Y_MOTOR or \
+        motor is Motor.PELLET_Z_MOTOR:
+        config = StepperConfig()
+        config.motor = motor
+        config.target = CanInterface.target_of_motor(motor)
+        # config.max_velocity = float(input("Max Velocity = "))
+        # config.max_acceleration = float(input("Max Acceleration = "))
+        config.min_step_inverse = int(input("Min Step (inverted) = "))
+        config.steps_per_revolution = float(input("Steps/Revolution = "))
+        device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, config)
+    else:
+        config = ServoConfig()
+        config.motor = motor
+        config.target = CanInterface.target_of_motor(motor)
+        # config.max_velocity = float(input("Max Velocity = "))
+        # config.max_acceleration = float(input("Max Acceleration = "))
+        config.min_position = int(input("Min Position = "))
+        config.max_position = int(input("Max Position = "))
+        config.min_pwm_duration_us = int(input("Min PWM Duration (usec) = "))
+        config.max_pwm_duration_us = int(input("Max PWM Duration (usec) = "))
+        device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, config)
+
+
 def run_monitor(can_id: int):
     global perf_count
+    global print_status
 
     device_interface = CanInterface()
 
-    device = CanDevice()
+    device = CanDevice(home_movement=CanDevice.create_home_movement(),
+                       send_movement=CanDevice.create_send_movement(),
+                       load_movement=CanDevice.create_load_movement())
 
-    device_thread = DeviceThread(device, device_interface, msg_queue)
+    device_thread = DeviceThread(device, device_interface, message_queue=msg_queue)
 
     device_thread.start()
 
@@ -92,16 +202,80 @@ def run_monitor(can_id: int):
 
     while True:
         if perf_count <= 0:
-            cmd = input("Enter command: ")
+            time.sleep(1)
+            line = input("Enter command: ").split()
+            cmd = line[0]
+            params = line[1:]
 
-            if cmd.startswith("q"):
+            if cmd == 'q':
                 device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
                 msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
                 break
-            elif cmd.startswith("F"):
-                device_thread.send_message(GymDeviceMessageKind.VERSION)
-            elif cmd.startswith("M"):
+            elif cmd == '?':
+                print("?                  ::help")
+                print("a <motor>          ::Read Configuration")
+                print("b <motor>          ::Write Configuration")
+                print("c                  ::Cover Pellet")
+                print("d <freq> <period>  ::Tone (hz, sec)")
+                print("h                  ::Home Position")
+                print("l                  ::Load Pellet")
+                print("m <pos>            ::Move Magnet")
+                print("q                  ::Quit")
+                print("r                  ::Release Pellet")
+                print("s                  ::Send Pellet")
+                print("t                  ::Tare Load Cell")
+                print("v                  ::Version (not available yet)")
+                print("w <motor>          ::Motor Status")
+                print("x <pos>            ::Move X")
+                print("y <pos>            ::Move Y")
+                print("z <pos>            ::Move Z")
+                print("X                  ::Home X to Limit")
+                print("Y                  ::Home Y to Limit")
+                print("Z                  ::Home Z to Limit")
+                print()
+                print("<motor> is one of [x, y, z, load, cover, magnet]")
+
+            elif cmd == 'a':
+                device_thread.send_message(GymDeviceMessageKind.READ_CONFIG,
+                                           str_to_motor(params[0]))
+            elif cmd == 'b':
+                write_config(str_to_motor(params[0]), device_thread)
+            elif cmd == 'c':
+                device_thread.send_message(PelletDeliveryMessageKind.COVER_PELLET)
+            elif cmd == 'd':
+                device_thread.send_message(PelletDeliveryMessageKind.PLAY_TONE,
+                                           data=(int(params[0]), int(params[1])))
+            elif cmd == 'h':
+                device_thread.send_message(PelletDeliveryMessageKind.SEND_HOME)
+            elif cmd == 'l':
+                device_thread.send_message(PelletDeliveryMessageKind.LOAD_PELLET)
+            elif cmd == 'm':
+                device_thread.send_message(HeadFixMessageKind.MAGNET_INTENSITY, data=int(params[0]))
+            elif cmd == 'r':
+                device_thread.send_message(PelletDeliveryMessageKind.RELEASE_PELLET)
+            elif cmd == 's':
+                device_thread.send_message(PelletDeliveryMessageKind.SEND_PELLET)
+            elif cmd == 't':
                 device_thread.send_message(HeadFixMessageKind.UPDATE_SCALE_TARE)
+            elif cmd == 'v':
+                device_thread.send_message(GymDeviceMessageKind.VERSION)
+            elif cmd == 'w':
+                print_status = str_to_motor(params[0])
+            elif cmd == 'x':
+                device_thread.send_message(PelletDeliveryMessageKind.SET_X, data=int(params[0]))
+            elif cmd == 'y':
+                device_thread.send_message(PelletDeliveryMessageKind.SET_Y, data=int(params[0]))
+            elif cmd == 'z':
+                device_thread.send_message(PelletDeliveryMessageKind.SET_Z, data=int(params[0]))
+            elif cmd == 'X':
+                device_thread.send_message(PelletDeliveryMessageKind.SEND_TO_LIMITS,
+                                           data=Motor.PELLET_X_MOTOR)
+            elif cmd == 'Y':
+                device_thread.send_message(PelletDeliveryMessageKind.SEND_TO_LIMITS,
+                                           data=Motor.PELLET_Y_MOTOR)
+            elif cmd == 'Z':
+                device_thread.send_message(PelletDeliveryMessageKind.SEND_TO_LIMITS,
+                                           data=Motor.PELLET_Z_MOTOR)
         else:
             if not mon_thread.is_alive():
                 device_thread.send_message(DeviceThreadMessageKind.TERMINATE)

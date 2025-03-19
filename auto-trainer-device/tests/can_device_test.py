@@ -131,12 +131,22 @@ class MyTestCase(unittest.TestCase):
         notify_data(self, ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, 40))
 
     def test_servo_config(self):
-        notify_data(self, ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0, 0,
-                                      0, 0, 0))
+        config = ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0, 0,
+                             0, 0, 0)
+
+        self._expected = [
+            (GymDeviceMessageKind.READ_CONFIG, config)
+        ]
+        notify_data(self, config)
 
     def test_stepper_config(self):
-        notify_data(self, StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0,
-                                        0, 0))
+        config = StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0,
+                               0, 0)
+        self._expected = [
+            (GymDeviceMessageKind.READ_CONFIG, config),
+        ]
+
+        notify_data(self, config)
 
 
 if __name__ == '__main__':
