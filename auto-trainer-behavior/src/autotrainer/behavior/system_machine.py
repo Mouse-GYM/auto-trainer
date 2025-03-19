@@ -160,8 +160,13 @@ class SystemMachine:
                     EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                             context=self.state)
         elif name == "is_force_detector_engaged":
+            logger.warning(f"Force detector engaged: {value}")
+            logger.warning(f"\tsystem state: {self.state}")
+            logger.warning(f"\thead fixation enabled: {self.algorithm.head_fixation_enabled}")
             if value and self.state == SystemState.tunnel and self.algorithm.head_fixation_enabled:
+                logger.warning(f"\thead fix command available: {self._head_fix_command is not None}")
                 if self._head_fix_command is not None:
+                    logger.warning(f"\tsetting position to 100")
                     self._head_fix_command.update_position(100)
                 EventManager.post_event(BehaviorEventKind.headFixationEnabled)
 
