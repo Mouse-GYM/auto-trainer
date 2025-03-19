@@ -49,9 +49,7 @@ def monitor_message_queue():
             if output_fd is not None:
                 for measurement in msg[1]:
                     output_fd.write(
-                        f"{measurement.when}, {measurement.timestamp}, {measurement.weight}, "
-                        f" {measurement.switch}, {measurement.pressure},"
-                        f" {measurement.temperature}, {measurement.humidity}\n")
+                        f"{measurement.when}, {measurement.timestamp}, {measurement.weight}, {measurement.switch}, {measurement.pressure}, {measurement.temperature}, {measurement.humidity}\n")
 
             measurement_count += len(msg[1])
 

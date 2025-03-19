@@ -8,21 +8,18 @@ from enum import IntEnum
 from autotrainer.core import PerfMonitor
 from .gym_device import GymDevice, GymDeviceMessageKind
 from .device_api import DeviceApi
-from .device_interface import MagnetDigitalInputs, Target
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class HeadFixMeasurement:
     when: float = 0
     timestamp: int = 0
     weight: float = 0
-    switch: int = 0
+    switch: float = 0
     pressure: float = 0
     temperature: float = 0
     humidity: float = 0
-
 
 class HeadFixMessageKind(IntEnum):
     RAW_COMMAND = 1,
@@ -90,8 +87,7 @@ class HeadFix(GymDevice):
                 self._measurements.append(measurement)
 
                 if len(self._measurements) >= self._measurement_buffer_count:
-                    self._api.send_message(HeadFixMessageKind.MEASUREMENT,
-                                           self._measurements.copy())
+                    self._api.send_message(HeadFixMessageKind.MEASUREMENT, self._measurements.copy())
                     self._measurements = list()
 
             self._perf_monitor.add_cycles(len(measurements))
@@ -136,13 +132,8 @@ def parse_measurement(data: str) -> (HeadFixMeasurement, str):
             return None, data
 
         try:
-            measurement = HeadFixMeasurement(time.time(), time.perf_counter_ns(),
-                                             int(parts[0]) / 10.0,
-                                             MagnetDigitalInputs(
-                                                 Target.MAGNET_DEVICE, int(parts[1]) & 0x1 == 0x1,
-                                                                       int(parts[1]) & 0x2 == 0x2),
-                                             int(parts[2]), int(parts[3]) / 10.0,
-                                             int(parts[4]) / 10.0)
+            measurement = HeadFixMeasurement(time.time(), time.perf_counter_ns(), int(parts[0]) / 10.0, int(parts[1]),
+                                             int(parts[2]), int(parts[3]) / 10.0, int(parts[4]) / 10.0)
 
             if len(parts) > 5:
                 print(len(parts))

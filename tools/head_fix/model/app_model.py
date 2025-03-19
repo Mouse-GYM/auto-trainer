@@ -55,8 +55,7 @@ class AppModel(ObservableObject):
 
     @firmware_version.setter
     def firmware_version(self, value):
-        self._firmware_version = self._on_property_changed("firmware_version", value,
-                                                           self._firmware_version)
+        self._firmware_version = self._on_property_changed("firmware_version", value, self._firmware_version)
 
     @property
     def head_fix_reader(self):
