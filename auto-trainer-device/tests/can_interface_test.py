@@ -7,13 +7,19 @@ from autotrainer.device import (CanInterface, Target, Motor, Heartbeat, ServoCon
                                 AnalogOutputs, AnalogOutput, LoadCellReading, PressureReading,
                                 ColorLed, AudioData, DoorData, ServoStatus, StepperStatus,
                                 SensorStatus)
+from pyjerrycan import JerryCANMsg
 
 MAGNET_ADDRESS = 4
 PELLET_ADDRESS = 1
 
 
-@pytest.mark.canbus
-def test_connect():
+@pytest.fixture
+def interface():
+    return _connect()
+
+
+# @pytest.skip(reason="utility method")
+def _connect():
     global MAGNET_ADDRESS, PELLET_ADDRESS
 
     interface = CanInterface()
@@ -26,49 +32,53 @@ def test_connect():
     return interface
 
 
+# @pytest.mark.canbus
+# def test_read(interface: CanInterface):
+#     """Verify interface read() returns jerrycan messages"""
+#
+#     # Ensure messages start arriving.
+#     time.sleep(0.1)
+#
+#     # Verify returns one message by default.
+#     messages = interface.read()
+#     assert isinstance(messages, list) and len(messages) == 1
+#     assert isinstance(messages[0], JerryCANMsg)
+#
+#     # Verify can return multiple messages.
+#     cnt = 3
+#     messages = interface.read(cnt)
+#     assert isinstance(messages, list) and len(messages) == cnt
+
+
 @pytest.mark.canbus
-def test_read(interface: CanInterface):
-    """Verify interface read() returns jerrycan messages"""
-
-    # Ensure messages start arriving.
-    time.sleep(0.1)
-
-    # Verify returns one message by default.
-    messages = interface.read()
-    assert isinstance(messages, list) and len(messages) == 1
-    assert isinstance(messages[0], JerryCANMsg)
-
-    # Verify can return multiple messages.
-    cnt = 3
-    messages = interface.read(cnt)
-    assert isinstance(messages, list) and len(messages) == cnt
-
-
-@pytest.mark.canbus
-def test_heartbeat(interface: CanInterface, target: Target):
+def test_heartbeat(interface: CanInterface, target: Target = Target.PELLET_DEVICE):
     """Verify ping"""
     assert interface.send_heartbeat()
 
-    heartbeat = get_response(interface, Heartbeat, target, 2)
+    heartbeat = get_response(interface, Heartbeat, target)
 
     assert heartbeat is not None
 
 
-@pytest.mark.canbus
-def test_read_servo_config(interface: CanInterface, target: Target, motor: Motor):
+def _read_servo_config(interface: CanInterface, target: Target, motor: Motor):
     """Verify servo configuration can be read"""
     assert interface.request_servo_config(target, motor)
 
-    config = get_response(interface, ServoConfig, target)
+    return get_response(interface, ServoConfig, target)
+
+
+@pytest.mark.canbus
+def test_read_servo_config(interface: CanInterface, target: Target = Target.MAGNET_DEVICE,
+                           motor: Motor = Motor.MAGNET_SERVO):
+    config = _read_servo_config(interface, target, motor)
 
     assert config is not None
     assert config.motor is motor
 
-    return config
-
 
 @pytest.mark.canbus
-def test_write_servo_config(interface: CanInterface, target: Target, config: ServoConfig):
+def test_write_servo_config(interface: CanInterface, target: Target = Target.MAGNET_DEVICE):
+    config = _read_servo_config(interface, target, Motor.MAGNET_SERVO)
     """Verify servo configuration can be written"""
     orig_min = config.min_position
     orig_max = config.max_position
@@ -77,7 +87,7 @@ def test_write_servo_config(interface: CanInterface, target: Target, config: Ser
     config.max_position += 10
     assert interface.write_servo_config(target, config)
 
-    new_config = test_read_servo_config(interface, target, config.motor)
+    new_config = _read_servo_config(interface, target, config.motor)
     assert new_config.min_position == config.min_position
     assert new_config.max_position == config.max_position
 
@@ -87,50 +97,55 @@ def test_write_servo_config(interface: CanInterface, target: Target, config: Ser
     assert interface.write_servo_config(target, config)
 
 
-@pytest.mark.canbus
-def test_read_stepper_config(interface: CanInterface, motor: Motor):
+def _read_stepper_config(interface: CanInterface, motor: Motor):
     """Verify servo configuration can be read"""
     assert interface.request_stepper_config(motor)
 
-    config = get_response(interface, StepperConfig, Target.PELLET_DEVICE)
+    return get_response(interface, StepperConfig, Target.PELLET_DEVICE)
+
+
+@pytest.mark.canbus
+def test_read_stepper_config(interface: CanInterface, motor: Motor = Motor.PELLET_Z_MOTOR):
+    """Verify servo configuration can be read"""
+    config = _read_stepper_config(interface, motor)
 
     assert config is not None
     assert config.motor is motor
 
-    return config
 
-
-def write_stepper_config(interface: CanInterface, config: StepperConfig) -> bool:
+@pytest.mark.skip(reason="test utility")
+def _write_stepper_config(interface: CanInterface, config: StepperConfig) -> bool:
     if not interface.write_stepper_config(config):
         return False
 
-    new_config = test_read_stepper_config(interface, config.motor)
+    new_config = _read_stepper_config(interface, config.motor)
 
     return new_config.min_step_inverse == config.min_step_inverse and \
         new_config.steps_per_revolution == config.steps_per_revolution
 
 
 @pytest.mark.canbus
-def test_write_stepper_config(interface: CanInterface, config: StepperConfig):
+def test_write_stepper_config(interface: CanInterface):
+    config = _read_stepper_config(interface, Motor.PELLET_Z_MOTOR)
+
     """Verify servo configuration can be written"""
     orig_min = config.min_step_inverse
     orig_steps = config.steps_per_revolution
 
     config.min_step_inverse *= 2
     config.steps_per_revolution *= 2
-    assert write_stepper_config(interface, config)
+    assert _write_stepper_config(interface, config)
 
     config.min_step_inverse = orig_min
     config.steps_per_revolution = orig_steps
-    assert write_stepper_config(interface, config)
+    assert _write_stepper_config(interface, config)
 
 
-@pytest.mark.canbus
-def test_write_gpio(interface: CanInterface, state: bool):
+def _write_gpio(interface: CanInterface, state: bool):
     assert interface.set_digital_output(DigitalOutputs.STIMULUS_1, state)
 
     for tries in range(5):
-        data = test_read_gpio(iface, Target.PELLET_DEVICE)
+        data = _read_gpio(interface, Target.PELLET_DEVICE)
         if data is not None and data.stimulus_1 == state:
             assert True
             return
@@ -139,10 +154,13 @@ def test_write_gpio(interface: CanInterface, state: bool):
 
 
 @pytest.mark.canbus
-def test_read_gpio(interface: CanInterface, target: Target):
-    data = get_response(interface, PelletDigitalInputs, target, 2.0)
-    assert data is not None
-    return data
+def test_write_gpio(interface: CanInterface):
+    _write_gpio(interface, True)
+    _write_gpio(interface, False)
+
+
+def _read_gpio(interface: CanInterface, target: Target):
+    return get_response(interface, PelletDigitalInputs, target, 2.0)
 
 
 @pytest.mark.canbus
@@ -217,6 +235,7 @@ def test_color_led(interface: CanInterface):
     assert led.blue == blue
 
 
+@pytest.mark.canbus
 def test_streaming_data(interface: CanInterface):
     audio = get_response(interface, AudioData, Target.PELLET_DEVICE, 3.0)
     assert audio is None or len(audio.magnitudes) == 32
@@ -239,6 +258,7 @@ def test_streaming_data(interface: CanInterface):
     # assert status is not None
 
 
+@pytest.mark.canbus
 def get_response(interface: CanInterface, typeof, target: Target, timeout: float = 2.0):
     now = time.time()
 
@@ -254,18 +274,18 @@ def get_response(interface: CanInterface, typeof, target: Target, timeout: float
 
 
 if __name__ == '__main__':
-    iface = test_connect()
+    iface = _connect()
 
     test_heartbeat(iface, Target.PELLET_DEVICE)
     test_heartbeat(iface, Target.MAGNET_DEVICE)
 
     # Pellet or Magnet-only capabilities
-    servo_config = test_read_servo_config(iface, Target.MAGNET_DEVICE, Motor.MAGNET_SERVO)
-    test_write_servo_config(iface, Target.MAGNET_DEVICE, servo_config)
-    stepper_config = test_read_stepper_config(iface, Motor.PELLET_X_MOTOR)
-    test_write_stepper_config(iface, stepper_config)
-    test_write_gpio(iface, True)
-    test_write_gpio(iface, False)
+    test_read_servo_config(iface, Target.MAGNET_DEVICE, Motor.MAGNET_SERVO)
+    test_write_servo_config(iface, Target.MAGNET_DEVICE)
+    test_read_stepper_config(iface, Motor.PELLET_X_MOTOR)
+    test_write_stepper_config(iface)
+    test_write_gpio(iface)
+    test_write_gpio(iface)
     test_tone(iface)
     test_analog_out(iface)
     test_tare_load_cell(iface)
