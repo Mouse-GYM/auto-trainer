@@ -2,12 +2,13 @@
 import time
 import pytest
 
+pytestmark = pytest.mark.canbus
+
 from autotrainer.device import (CanInterface, Target, Motor, Heartbeat, ServoConfig, StepperConfig,
                                 DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
                                 AnalogOutputs, AnalogOutput, LoadCellReading, PressureReading,
                                 ColorLed, AudioData, DoorData, ServoStatus, StepperStatus,
                                 SensorStatus)
-from pyjerrycan import JerryCANMsg
 
 MAGNET_ADDRESS = 4
 PELLET_ADDRESS = 1
@@ -30,24 +31,6 @@ def _connect():
     interface.set_pellet_address(PELLET_ADDRESS)
 
     return interface
-
-
-# @pytest.mark.canbus
-# def test_read(interface: CanInterface):
-#     """Verify interface read() returns jerrycan messages"""
-#
-#     # Ensure messages start arriving.
-#     time.sleep(0.1)
-#
-#     # Verify returns one message by default.
-#     messages = interface.read()
-#     assert isinstance(messages, list) and len(messages) == 1
-#     assert isinstance(messages[0], JerryCANMsg)
-#
-#     # Verify can return multiple messages.
-#     cnt = 3
-#     messages = interface.read(cnt)
-#     assert isinstance(messages, list) and len(messages) == cnt
 
 
 @pytest.mark.canbus
