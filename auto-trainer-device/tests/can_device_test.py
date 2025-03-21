@@ -52,8 +52,8 @@ class MyTestCase(unittest.TestCase):
         device = self.test_construction()
         interface = CanInterface()
         # for these tests, do NOT open interface
-        interface.set_magnet_address(0x40)
-        interface.set_pellet_address(0x01)
+        interface._set_magnet_address(0x40)
+        interface._set_pellet_address(0x01)
         device.api = DeviceApi(interface=interface, message_callback=self.data_callback)
         return device
 
@@ -128,7 +128,8 @@ class MyTestCase(unittest.TestCase):
     def test_load_servo_status(self):
         status = ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, 40)
         self._expected = [
-            (PelletDeliveryMessageKind.UPDATE_LOAD, 40)
+            (PelletDeliveryMessageKind.UPDATE_LOAD_SERVO, 40),
+            (PelletDeliveryMessageKind.UPDATE_LOAD_SERVO, 40)
         ]
         notify_data(self, status)
 

@@ -1,6 +1,6 @@
 from .device import Device
 from .device_api import DeviceApi
-from .can_interface import CanInterface
+from .can_interface import CanInterface, motor_to_str, target_to_str
 from .device_thread import DeviceThread, DeviceThreadMessageKind
 from .gym_device import GymDevice, GymDeviceMessageKind
 from .head_fix import (HeadFix, HeadFixMeasurement, HeadFixMessageKind, parse_measurements,

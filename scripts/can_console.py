@@ -5,8 +5,8 @@ import time
 from threading import Thread
 
 from autotrainer.device import CanDevice, DeviceThread, CanInterface, DeviceThreadMessageKind, \
-    HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, Target, \
-    StepperConfig, ServoConfig, ServoStatus, StepperStatus
+    HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, \
+    StepperConfig, ServoConfig, ServoStatus, StepperStatus, motor_to_str, target_to_str
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
@@ -19,6 +19,8 @@ output_file = None
 perf_start = None
 
 perf_count = -1
+
+perf_print = False
 
 print_status = None
 
@@ -44,7 +46,6 @@ def monitor_message_queue():
         kind, data = msg_queue.get()
 
         if kind == DeviceThreadMessageKind.TERMINATE:
-            print("Breaking")
             break
 
         elif kind == GymDeviceMessageKind.VERSION:
@@ -65,8 +66,9 @@ def monitor_message_queue():
             measurement_count += len(data)
 
             if measurement_count > next_heartbeat:
-                logger.info(
-                    f"{measurement_count} samples at {(1.0e9 * measurement_count) / (time.perf_counter_ns() - perf_start)} samples/s")
+                if perf_print:
+                    logger.info(
+                        f"{measurement_count} samples at {(1.0e9 * measurement_count) / (time.perf_counter_ns() - perf_start)} samples/s")
                 next_heartbeat += 500
 
             if 0 < perf_count <= measurement_count:
@@ -77,8 +79,8 @@ def monitor_message_queue():
             if isinstance(data, ServoConfig):
                 print(
                     f"SERVO\n"
-                    f"- target={data.target.value}\n"
-                    f"- motor={data.motor.value}\n"
+                    f"- target={target_to_str(data.target)}\n"
+                    f"- motor={motor_to_str(data.motor)}\n"
                     #                   f"- max vel={data.max_velocity}\n"
                     #                   f"- max accel={data.max_acceleration}\n"
                     f"- min pos={data.min_position}\n"
@@ -88,8 +90,8 @@ def monitor_message_queue():
                 )
             elif isinstance(data, StepperConfig):
                 print(f"STEPPER\n"
-                      f"- target={data.target.value}\n"
-                      f"- motor={data.motor}\n"
+                      f"- target={target_to_str(data.target)}\n"
+                      f"- motor={motor_to_str(data.motor)}\n"
                       # f"- max vel={data.max_velocity}\n"
                       # f"- max accel={data.max_acceleration}\n"
                       f"- min step={data.min_step_inverse}\n"
@@ -103,14 +105,15 @@ def monitor_message_queue():
               (kind == HeadFixMessageKind.UPDATE_MAGNET and
                print_status is Motor.MAGNET_SERVO)):
 
-            if isinstance(data, ServoStatus):
-                print(
-                    f"SERVO:\n"
-                    f"- target={data.target.value}\n"
-                    f"- motor={data.motor.value}\n"
-                    f"- position={data.position}\n"
-                )
-                print_status = None
+            # TODO deliver full packet. See can_device at or around line 328
+            # if isinstance(data, ServoStatus):
+            print(
+                f"SERVO:\n"
+                # f"- target={target_to_str(data.target)}\n"
+                f"- motor={motor_to_str(print_status)}\n"
+                f"- position={data}\n"
+            )
+            print_status = None
         elif ((kind == PelletDeliveryMessageKind.UPDATE_X and
                print_status is Motor.PELLET_X_MOTOR) or
               (kind == PelletDeliveryMessageKind.UPDATE_Y and
@@ -120,8 +123,8 @@ def monitor_message_queue():
             # if isinstance(StepperStatus, data):
             print(
                 f"STEPPER:\n"
-                # f"target={data.target.value}\n"
-                f"- motor={print_status.value}\n"
+                # f"target={target_to_str(data.target)}\n"
+                f"- motor={motor_to_str(print_status)}\n"
                 f"- position={data}\n"
                 # f"at limit={data.limit_switch}\n"
             )
@@ -130,7 +133,7 @@ def monitor_message_queue():
     if output_fd is not None:
         output_fd.close()
 
-    if perf_count > 0 and perf_start is not None:
+    if perf_print and perf_count > 0 and perf_start is not None:
         logger.info(
             f"{perf_count} samples at {(1.0e9 * perf_count) / (perf_end - perf_start)} samples/s")
 
@@ -198,7 +201,10 @@ def run_monitor(can_id: int):
     while True:
         if perf_count <= 0:
             time.sleep(1)
-            line = input("Enter command: ").split()
+            line = []
+            while len(line) == 0:
+                line = input("Enter command (?=help): ").split()
+
             cmd = line[0]
             params = line[1:]
 
@@ -218,7 +224,7 @@ def run_monitor(can_id: int):
                 print("q                  ::Quit")
                 print("r                  ::Release Pellet")
                 print("s                  ::Send Pellet")
-                print("t                  ::Tare Load Cell")
+                print("t                  ::Tare Load Cell/Pressure Sensors")
                 print("v                  ::Version (not available yet)")
                 print("w <motor>          ::Motor Status")
                 print("x <pos>            ::Move X")
@@ -239,7 +245,8 @@ def run_monitor(can_id: int):
                 device_thread.send_message(PelletDeliveryMessageKind.COVER_PELLET)
             elif cmd == 'd':
                 device_thread.send_message(PelletDeliveryMessageKind.PLAY_TONE,
-                                           data=(int(params[0]), int(params[1])))
+                                           # period from sec to msec
+                                           data=(int(params[0]), int(params[1]) * 1000))
             elif cmd == 'h':
                 device_thread.send_message(PelletDeliveryMessageKind.SEND_HOME)
             elif cmd == 'l':
@@ -257,11 +264,14 @@ def run_monitor(can_id: int):
             elif cmd == 'w':
                 print_status = str_to_motor(params[0])
             elif cmd == 'x':
-                device_thread.send_message(PelletDeliveryMessageKind.SET_X, data=int(params[0]))
+                device_thread.send_message(PelletDeliveryMessageKind.SET_X,
+                                           data=int(params[0]) * 10)
             elif cmd == 'y':
-                device_thread.send_message(PelletDeliveryMessageKind.SET_Y, data=int(params[0]))
+                device_thread.send_message(PelletDeliveryMessageKind.SET_Y,
+                                           data=int(params[0]) * 10)
             elif cmd == 'z':
-                device_thread.send_message(PelletDeliveryMessageKind.SET_Z, data=int(params[0]))
+                device_thread.send_message(PelletDeliveryMessageKind.SET_Z,
+                                           data=int(params[0]) * 10)
             elif cmd == 'X':
                 device_thread.send_message(PelletDeliveryMessageKind.SEND_TO_LIMITS,
                                            data=Motor.PELLET_X_MOTOR)
@@ -298,6 +308,6 @@ if __name__ == '__main__':
 
     output_file = args.output
 
-    perf_count = args.perf
+    perf_print = perf_count != -1
 
     run_monitor(args.can)

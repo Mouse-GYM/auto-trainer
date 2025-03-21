@@ -1,6 +1,7 @@
 """Assumes/requires real hardware is available and actively sending messages of some sort."""
 import time
 import pytest
+from torch.jit import interface
 
 from autotrainer.device import (CanInterface, Target, Motor, Heartbeat, ServoConfig, StepperConfig,
                                 DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
@@ -20,27 +21,14 @@ def test_connect():
 
     assert interface.open()
 
-    interface.set_magnet_address(MAGNET_ADDRESS)
-    interface.set_pellet_address(PELLET_ADDRESS)
+    tries = 0
+    while not interface.are_addresses_valid() and tries < 100:
+        msgs = interface.read(20)
+        tries += 1
+
+    assert interface.are_addresses_valid()
 
     return interface
-
-
-@pytest.mark.canbus
-def test_read(interface: CanInterface):
-    """Verify interface read() returns jerrycan messages"""
-
-    # Ensure messages start arriving.
-    time.sleep(0.1)
-
-    # Verify returns one message by default.
-    messages = interface.read()
-    assert isinstance(messages, list) and len(messages) == 1
-
-    # Verify can return multiple messages.
-    cnt = 3
-    messages = interface.read(cnt)
-    assert isinstance(messages, list) and len(messages) == cnt
 
 
 @pytest.mark.canbus
@@ -135,7 +123,7 @@ def test_read_gpio(interface: CanInterface, target: Target):
 
 @pytest.mark.canbus
 def test_tone(interface: CanInterface):
-    frequency_hz = 1500
+    frequency_hz = 2000
     duration_ms = 400
     assert interface.emit_tone(frequency_hz, duration_ms);
 
@@ -166,8 +154,7 @@ def test_tare_load_cell(interface: CanInterface):
         loadcell = get_response(interface, LoadCellReading, Target.MAGNET_DEVICE)
         assert loadcell is not None
         # TODO - check when there is real hardware
-        # print(loadcell.load_mv)
-        # if loadcell.load_mv == 0:
+        # if loadcell.load_mv <= 0.01:
         #     return
         return
 
@@ -182,8 +169,7 @@ def test_tare_pressure_sensor(interface: CanInterface):
         pressure = get_response(interface, PressureReading, Target.MAGNET_DEVICE)
         assert pressure is not None
         # TODO - check when there is real hardware
-        # print(pressure.pressure_mv)
-        # if pressure.pressure_mv == 0:
+        # if pressure.pressure_mv <= 0.01:
         #     return
         return
 

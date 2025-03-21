@@ -317,7 +317,7 @@ class CanDevice(Device):
 
             elif isinstance(message, ServoStatus):
                 if message.motor is Motor.PELLET_LOAD_SERVO:
-                    self._manage_next_move(PelletDeliveryMessageKind.UPDATE_LOAD,
+                    self._manage_next_move(PelletDeliveryMessageKind.UPDATE_LOAD_SERVO,
                                            message.position, self._pellet_desired_load)
 
                 if self._pending_move_token is not None:
@@ -325,13 +325,16 @@ class CanDevice(Device):
                         f"[{datetime.now()}] servo {message.target.value}"
                         f":{message.motor.value} position: {message.position}")
 
+                # @TODO Deliver the full packet, not just the value. Have the same for StepperStatus
                 if self._api is not None:
                     if message.motor is Motor.MAGNET_SERVO:
-                        self.api.send_message(HeadFixMessageKind.UPDATE_MAGNET, message)
+                        self.api.send_message(HeadFixMessageKind.UPDATE_MAGNET, message.position)
                     elif message.motor is Motor.PELLET_LOAD_SERVO:
-                        self.api.send_message(PelletDeliveryMessageKind.UPDATE_LOAD_SERVO, message)
+                        self.api.send_message(PelletDeliveryMessageKind.UPDATE_LOAD_SERVO,
+                                              message.position)
                     elif message.motor is Motor.PELLET_COVER_SERVO:
-                        self.api.send_message(PelletDeliveryMessageKind.UPDATE_COVER_SERVO, message)
+                        self.api.send_message(PelletDeliveryMessageKind.UPDATE_COVER_SERVO,
+                                              message.position)
 
             elif isinstance(message, StepperConfig):
                 if self._api is not None:
