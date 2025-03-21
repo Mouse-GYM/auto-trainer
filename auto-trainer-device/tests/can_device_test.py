@@ -2,7 +2,10 @@ import pytest
 
 pytestmark = pytest.mark.canbus
 
-from pyjerrycan import StepperStatus
+try:
+    from pyjerrycan import StepperStatus
+except:
+    pass
 
 from autotrainer.device import (CanDevice, DeviceApi, CanInterface, GymDeviceMessageKind,
                                 HeadFixMessageKind, PelletDeliveryMessageKind, Status,
