@@ -117,7 +117,8 @@ if __name__ == '__main__':
 
     parser.add_argument("port", help="the serial port to use")
     parser.add_argument("-o", "--output", help="and output file to record measurements")
-    parser.add_argument("-p", "--perf", help="performance measurement with specified number of samples",
+    parser.add_argument("-p", "--perf",
+                        help="performance measurement with specified number of samples",
                         type=int, default=-1)
 
     args = parser.parse_args()

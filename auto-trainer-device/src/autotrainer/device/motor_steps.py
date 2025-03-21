@@ -1,4 +1,4 @@
-class WhiskerMovement:
+class MotorSteps:
     @classmethod
     def from_dict(cls, name: str, data: dict):
 
@@ -10,7 +10,7 @@ class WhiskerMovement:
 
         print(f"{name}: {steps}")
 
-        return WhiskerMovement(name, steps)
+        return MotorSteps(name, steps)
 
     def __init__(self, name: str, steps: list):
         self._name = name

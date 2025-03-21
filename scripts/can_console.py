@@ -4,8 +4,8 @@ import queue
 import time
 from threading import Thread
 
-from autotrainer.device import WhiskerInterface, DeviceThread, WhiskerDevice, DeviceThreadMessageKind, \
-    HeadFixMessageKind
+from autotrainer.device import CanDevice, DeviceThread, CanInterface, DeviceThreadMessageKind, \
+    HeadFixMessageKind, GymDeviceMessageKind
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
@@ -66,17 +66,15 @@ def monitor_message_queue():
         output_fd.close()
 
     if perf_count > 0 and perf_start is not None:
-        logger.info(f"{perf_count} samples at {(1.0e9 * perf_count) / (perf_end - perf_start)} samples/s")
+        logger.info(
+            f"{perf_count} samples at {(1.0e9 * perf_count) / (perf_end - perf_start)} samples/s")
 
 
 def run_monitor(can_id: int):
     global perf_count
 
-    device_interface = WhiskerInterface()
-
-    whisker = WhiskerDevice()
-
-    device_thread = DeviceThread(whisker, device_interface, msg_queue)
+    device = CanDevice()
+    device_thread = DeviceThread(device, device._interface, msg_queue)
 
     device_thread.start()
 
@@ -117,7 +115,8 @@ if __name__ == '__main__':
 
     parser.add_argument("can", help="the can id", type=int, default=1)
     parser.add_argument("-o", "--output", help="and output file to record measurements")
-    parser.add_argument("-p", "--perf", help="performance measurement with specified number of samples",
+    parser.add_argument("-p", "--perf",
+                        help="performance measurement with specified number of samples",
                         type=int, default=-1)
 
     args = parser.parse_args()
