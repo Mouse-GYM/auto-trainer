@@ -272,9 +272,8 @@ def _translate(message) -> typing.Any:
         status = SensorStatus()
         status.target = _addr2tgt(message.dst_id)
         status.temperature_c = float(message.temp_hum_read.temperature) / 100.0
-        status.pressure_percent = float(message.temp_hum_read.pressure) / 100.0
+        status.humidity_percent = float(message.temp_hum_read.humidity) / 100.0
 
-        print(f"{status.temperature_c} {status.pressure_percent}")
         return status
 
     return None
@@ -414,6 +413,19 @@ class CanInterface(DeviceInterface):
 
     def write_str(self, value: str) -> int:
         raise NotImplementedError()
+
+    def get_response(self, typeof, target: Target, timeout: float = 2.0):
+        now = time.time()
+
+        while time.time() - now < timeout:
+            messages = self.read(1)
+            if len(messages) > 0:
+                for msg in messages:
+                    if isinstance(msg, typeof) and msg.target is target:
+                        return msg
+            time.sleep(0.001)
+
+        return None
 
     def set_motor_configuration(self, motor: Motor, servo_config=None,
                                 stepper_config=None) -> bool:

@@ -6,27 +6,27 @@ from threading import Thread
 
 from autotrainer.device import CanDevice, DeviceThread, CanInterface, DeviceThreadMessageKind, \
     HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, \
-    StepperConfig, ServoConfig, ServoStatus, StepperStatus, motor_to_str, target_to_str
+    StepperConfig, ServoConfig, ServoStatus, StepperStatus, motor_to_str, target_to_str, Target
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 msg_queue = queue.Queue()
-
 output_file = None
-
 perf_start = None
-
 perf_count = -1
-
 perf_print = False
-
 print_status = None
+positions = {
+    PelletDeliveryMessageKind.SET_X: 0,
+    PelletDeliveryMessageKind.SET_Y: 0,
+    PelletDeliveryMessageKind.SET_Z: 0,
+}
 
 
 def monitor_message_queue():
-    global perf_start, perf_count, print_status
+    global perf_start, perf_count, print_status, positions
     logger.info("starting message queue thread")
 
     measurement_count = 0
@@ -130,6 +130,11 @@ def monitor_message_queue():
             )
             print_status = None
 
+        if kind == PelletDeliveryMessageKind.UPDATE_X or \
+            kind == PelletDeliveryMessageKind.UPDATE_Y or \
+            kind == PelletDeliveryMessageKind.UPDATE_Z:
+            positions[kind] = int(data)
+
     if output_fd is not None:
         output_fd.close()
 
@@ -183,6 +188,45 @@ def write_config(motor: Motor, device_thread):
         device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, config)
 
 
+def wait_for_move(kind, position):
+    now = time.time()
+
+    while time.time() - now < 2:
+        return position >= positions[kind] - 0.1 or position <= positions[kind] + 0.1
+
+    return None
+
+
+def round_trip_test(motor: Motor, trips: int, device_thread):
+    global print_status, positions
+
+    min_pos = 0
+    max_pos = -10 if motor is Motor.PELLET_X_MOTOR else 10
+    kind = None
+
+    if motor is Motor.PELLET_X_MOTOR:
+        kind = PelletDeliveryMessageKind.SET_X
+    elif motor is Motor.PELLET_Y_MOTOR:
+        kind = PelletDeliveryMessageKind.SET_Y
+    elif motor is Motor.PELLET_Z_MOTOR:
+        kind = PelletDeliveryMessageKind.SET_Z
+
+    if kind is None:
+        print("Test only supports Stepper Motors")
+        return
+
+    for i in range(trips):
+        device_thread.send_message(kind, data=min_pos * 10)
+        time.sleep(2)
+        print_status = motor
+        time.sleep(1)
+
+        device_thread.send_message(kind, data=max_pos * 10)
+        time.sleep(2)
+        print_status = motor
+        time.sleep(1)
+
+
 def run_monitor(can_id: int):
     global perf_count
     global print_status
@@ -218,6 +262,7 @@ def run_monitor(can_id: int):
                 print("b <motor>          ::Write Configuration")
                 print("c                  ::Cover Pellet")
                 print("d <freq> <period>  ::Tone (hz, sec)")
+                print("e <motor> <trips>  ::Stepper round trip test")
                 print("h                  ::Home Position")
                 print("l                  ::Load Pellet")
                 print("m <pos>            ::Move Magnet")
@@ -247,6 +292,8 @@ def run_monitor(can_id: int):
                 device_thread.send_message(PelletDeliveryMessageKind.PLAY_TONE,
                                            # period from sec to msec
                                            data=(int(params[0]), int(params[1]) * 1000))
+            elif cmd == 'e':
+                round_trip_test(str_to_motor(params[0]), int(params[1]), device_thread)
             elif cmd == 'h':
                 device_thread.send_message(PelletDeliveryMessageKind.SEND_HOME)
             elif cmd == 'l':
