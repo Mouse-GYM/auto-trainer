@@ -12,7 +12,6 @@ from .device_api import DeviceApi
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 class HeadFixMeasurement:
     when: float = 0
     timestamp: int = 0
@@ -21,6 +20,8 @@ class HeadFixMeasurement:
     pressure: float = 0
     temperature: float = 0
     humidity: float = 0
+    spectrum: typing.List[float] = []
+    head_contact: bool = False
 
 
 class HeadFixMessageKind(IntEnum):
