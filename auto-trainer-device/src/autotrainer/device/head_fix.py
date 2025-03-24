@@ -11,6 +11,7 @@ from .device_api import DeviceApi
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class HeadFixMeasurement:
     when: float = 0
@@ -21,9 +22,10 @@ class HeadFixMeasurement:
     temperature: float = 0
     humidity: float = 0
 
+
 class HeadFixMessageKind(IntEnum):
     RAW_COMMAND = 1,
-    MEASUREMENT = 2,
+    MEASUREMENT = -101,  # Deprecated
     MAGNET_INTENSITY = 3,
     SETTINGS = 4,
     UPDATE_SCALE_TARE = 5,

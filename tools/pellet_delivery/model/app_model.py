@@ -5,13 +5,11 @@ from pathlib import Path
 
 import yaml
 
-from autotrainer.core import ObservableObject
+from autotrainer.core import ObservableObject, DeviceReader, PelletReader
 from autotrainer.device import SerialInterface, GymDeviceMessageKind, WhiskerDevice, WhiskerInterface, \
     HAVE_WHISKER_DEVICE, IS_REAL_WHISKER_DEVICE, ServoConfig, StepperConfig, WhiskerFileInterface, WhiskerMovement
 from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
-from autotrainer.device import PelletReader
-from autotrainer.device.device_reader import DeviceReader
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 

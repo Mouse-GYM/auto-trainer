@@ -1,7 +1,8 @@
 from queue import Queue
 
+from autotrainer.core import SystemStatusMessageKind
+
 from .device_reader import DeviceReader
-from .pellet_delivery import PelletDeliveryMessageKind
 
 
 class PelletReader(DeviceReader):
@@ -9,9 +10,9 @@ class PelletReader(DeviceReader):
         super().__init__(input_queue, name="PelletReader")
 
     def message_received(self, msg, data):
-        if msg == PelletDeliveryMessageKind.UPDATE_X:
+        if msg == SystemStatusMessageKind.UPDATE_X:
             self.property_changed("device_x", data, None)
-        if msg == PelletDeliveryMessageKind.UPDATE_Y:
+        if msg == SystemStatusMessageKind.UPDATE_Y:
             self.property_changed("device_y", data, None)
-        if msg == PelletDeliveryMessageKind.UPDATE_Z:
+        if msg == SystemStatusMessageKind.UPDATE_Z:
             self.property_changed("device_z", data, None)

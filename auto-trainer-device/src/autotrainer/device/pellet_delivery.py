@@ -18,9 +18,9 @@ class PelletDeliveryMessageKind(IntEnum):
     SET_X = 106,
     SET_Y = 107,
     SET_Z = 108,
-    UPDATE_X = 1001
-    UPDATE_Y= 1002,
-    UPDATE_Z = 1003,
+    UPDATE_X = -2001
+    UPDATE_Y = -2002,
+    UPDATE_Z = -2003,
 
     @classmethod
     def is_member(cls, value):

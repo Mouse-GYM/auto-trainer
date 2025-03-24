@@ -3,11 +3,10 @@ import queue
 import uuid
 from typing import Optional
 
-from autotrainer.core import ObservableObject, ProjectInfo
+from autotrainer.core import ObservableObject, ProjectInfo, PelletReader
 from autotrainer.device import SerialInterface
 from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
-from autotrainer.device import PelletReader
 
 logger = logging.getLogger(__name__)
 
