@@ -190,7 +190,7 @@ def _translate(message) -> typing.Any:
         config.max_position = message.cfg_response.servo.max_position
         config.min_pwm = message.cfg_response.servo.min_pwm_duration_us
         config.max_pwm = message.cfg_response.servo.max_pwm_duration_us
-
+ 
         return config
 
     elif (message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type ==

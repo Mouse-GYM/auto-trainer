@@ -80,8 +80,8 @@ def monitor_message_queue():
                     f"SERVO\n"
                     f"- target={target_to_str(data.target)}\n"
                     f"- motor={motor_to_str(data.motor)}\n"
-                    #                   f"- max vel={data.max_velocity}\n"
-                    #                   f"- max accel={data.max_acceleration}\n"
+                    f"- max vel={data.max_velocity}\n"
+                    f"- max accel={data.max_acceleration}\n"
                     f"- min pos={data.min_position}\n"
                     f"- min pwm={data.min_pwm_duration_us}\n"
                     f"- max pos={data.max_position}\n"
@@ -91,8 +91,8 @@ def monitor_message_queue():
                 print(f"STEPPER\n"
                       f"- target={target_to_str(data.target)}\n"
                       f"- motor={motor_to_str(data.motor)}\n"
-                      # f"- max vel={data.max_velocity}\n"
-                      # f"- max accel={data.max_acceleration}\n"
+                      f"- max vel={data.max_velocity}\n"
+                      f"- max accel={data.max_acceleration}\n"
                       f"- min step={data.min_step_inverse}\n"
                       f"- step/rev={data.steps_per_revolution}\n"
                       )
@@ -169,8 +169,8 @@ def write_config(motor: Motor, device_thread):
         config = StepperConfig()
         config.motor = motor
         config.target = target_of_motor(motor)
-        # config.max_velocity = float(input("Max Velocity = "))
-        # config.max_acceleration = float(input("Max Acceleration = "))
+        config.max_velocity = float(input("Max Velocity = "))
+        config.max_acceleration = float(input("Max Acceleration = "))
         config.min_step_inverse = int(input("Min Step (inverted) = "))
         config.steps_per_revolution = float(input("Steps/Revolution = "))
         device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, config)
@@ -178,8 +178,8 @@ def write_config(motor: Motor, device_thread):
         config = ServoConfig()
         config.motor = motor
         config.target = target_of_motor(motor)
-        # config.max_velocity = float(input("Max Velocity = "))
-        # config.max_acceleration = float(input("Max Acceleration = "))
+        config.max_velocity = float(input("Max Velocity = "))
+        config.max_acceleration = float(input("Max Acceleration = "))
         config.min_position = int(input("Min Position = "))
         config.max_position = int(input("Max Position = "))
         config.min_pwm_duration_us = int(input("Min PWM Duration (usec) = "))
