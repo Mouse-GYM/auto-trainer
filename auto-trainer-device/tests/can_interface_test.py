@@ -1,7 +1,6 @@
 """Assumes/requires real hardware is available and actively sending messages of some sort."""
 import time
 import pytest
-from torch.jit import interface
 
 from autotrainer.device import (CanInterface, Target, Motor, Heartbeat, ServoConfig, StepperConfig,
                                 DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
@@ -218,8 +217,8 @@ def test_stepper_home(interface: CanInterface):
 if __name__ == '__main__':
     iface = test_connect()
 
-    # test_heartbeat(iface, Target.PELLET_DEVICE)
-    # test_heartbeat(iface, Target.MAGNET_DEVICE)
+    test_heartbeat(iface, Target.PELLET_DEVICE)
+    test_heartbeat(iface, Target.MAGNET_DEVICE)
 
     # Pellet or Magnet-only capabilities
     servo_config = test_read_config(iface, Motor.MAGNET_SERVO)
@@ -230,7 +229,7 @@ if __name__ == '__main__':
     test_write_gpio(iface, False)
     test_tone(iface)
     test_analog_out(iface)
-    # test_tare_load_cell(iface)
+    test_tare_load_cell(iface)
     # test_tare_pressure_sensor(iface)
     test_color_led(iface)
     test_streaming_data(iface)
