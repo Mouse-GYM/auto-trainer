@@ -44,23 +44,31 @@ def test_heartbeat(interface: CanInterface, target: Target = Target.PELLET_DEVIC
     assert heartbeat is not None
 
 
-@pytest.mark.canbus
-def test_read_config(interface: CanInterface, motor: Motor):
+def _read_config(interface: CanInterface, motor: Motor):
     target = CanInterface.target_of_motor(motor)
 
     """Verify servo configuration can be read"""
     assert interface.request_motor_config(motor)
 
     config = get_response(interface,
-        ServoConfig if interface.is_servo(motor) else StepperConfig,
-        target)
+                          ServoConfig if interface.is_servo(motor) else StepperConfig,
+                          target)
+
+    return config
+
+
+@pytest.mark.canbus
+def test_read_config(interface: CanInterface, motor: Motor):
+    config = _read_config(interface, motor)
+
     assert config is not None
     assert config.motor is motor
 
 
 @pytest.mark.canbus
-def test_write_servo_config(interface: CanInterface, config: ServoConfig):
-    """Verify servo configuration can be written"""
+def test_write_servo_config(interface: CanInterface, motor: Motor):
+    config = _read_config(interface, motor)
+
     orig_min = config.min_position
     orig_max = config.max_position
 
@@ -68,7 +76,7 @@ def test_write_servo_config(interface: CanInterface, config: ServoConfig):
     config.max_position += 10
     assert interface.write_servo_config(config)
 
-    new_config = test_read_config(interface, config.motor)
+    new_config = _read_config(interface, config.motor)
     assert new_config.min_position == config.min_position
     assert new_config.max_position == config.max_position
 
@@ -82,15 +90,16 @@ def _write_stepper_config(interface: CanInterface, config: StepperConfig) -> boo
     if not interface.write_stepper_config(config):
         return False
 
-    new_config = _read_stepper_config(interface, config.motor)
+    new_config = _read_config(interface, config.motor)
 
     return new_config.min_step_inverse == config.min_step_inverse and \
         new_config.steps_per_revolution == config.steps_per_revolution
 
 
 @pytest.mark.canbus
-def test_write_stepper_config(interface: CanInterface, config: StepperConfig):
-    """Verify servo configuration can be written"""
+def test_write_stepper_config(interface: CanInterface, motor: Motor):
+    config = _read_config(interface, motor)
+
     orig_min = config.min_step_inverse
     orig_steps = config.steps_per_revolution
 
@@ -222,6 +231,7 @@ def test_stepper_home(interface: CanInterface):
     assert interface.stepper_home(Motor.PELLET_Z_MOTOR)
     time.sleep(1)
 
+
 def get_response(interface: CanInterface, typeof, target: Target, timeout: float = 2.0):
     now = time.time()
 
@@ -243,16 +253,15 @@ if __name__ == '__main__':
     test_heartbeat(iface, Target.MAGNET_DEVICE)
 
     # Pellet or Magnet-only capabilities
-    test_read_servo_config(iface, Target.MAGNET_DEVICE, Motor.MAGNET_SERVO)
-    test_write_servo_config(iface, Target.MAGNET_DEVICE)
-    test_read_stepper_config(iface, Motor.PELLET_X_MOTOR)
-    test_write_stepper_config(iface)
-    test_write_gpio(iface, True)
-    test_write_gpio(iface, False)
+    test_read_config(iface, Motor.MAGNET_SERVO)
+    test_write_servo_config(iface, Motor.MAGNET_SERVO)
+    test_read_config(iface, Motor.PELLET_X_MOTOR)
+    test_write_stepper_config(iface, Motor.PELLET_X_MOTOR)
+    test_write_gpio(iface)
     test_tone(iface)
     test_analog_out(iface)
     test_tare_load_cell(iface)
-   	test_tare_pressure_sensor(iface)
+    test_tare_pressure_sensor(iface)
     test_color_led(iface)
     test_streaming_data(iface)
 

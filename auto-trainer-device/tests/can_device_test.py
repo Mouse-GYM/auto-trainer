@@ -14,7 +14,6 @@ from autotrainer.device import (CanDevice, DeviceApi, CanInterface, GymDeviceMes
                                 ServoConfig, StepperConfig
                                 )
 
-
 _expected = []
 
 
@@ -56,8 +55,8 @@ def _construction():
 
     interface = CanInterface()
     # for these tests, do NOT open interface
-    interface.set_magnet_address(0x40)
-    interface.set_pellet_address(0x01)
+    interface._set_magnet_address(0x40)
+    interface._set_pellet_address(0x01)
     device.api = DeviceApi(interface=interface, message_callback=data_callback)
     return device
 
@@ -171,8 +170,8 @@ def test_load_servo_status():
     global _expected
 
     status = ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, 40)
-        self._expected = [
-            (PelletDeliveryMessageKind.UPDATE_LOAD_SERVO, 40),
+    _expected = [
+        (PelletDeliveryMessageKind.UPDATE_LOAD_SERVO, 40),
         (PelletDeliveryMessageKind.UPDATE_LOAD_SERVO, 40)
     ]
     notify_data(status)
@@ -180,22 +179,28 @@ def test_load_servo_status():
 
 @pytest.mark.canbus
 def test_servo_config():
-    config = ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0, 0,
-                             0, 0, 0)
+    global _expected
 
-    self._expected = [
+    config = ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0, 0,
+                         0, 0, 0)
+
+    _expected = [
         (GymDeviceMessageKind.READ_CONFIG, config)
     ]
     notify_data(config)
 
+
 @pytest.mark.canbus
-def test_stepper_config(self):
+def test_stepper_config():
+    global _expected
+
     config = StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0,
                            0, 0)
-    self._expected = [
+    _expected = [
         (GymDeviceMessageKind.READ_CONFIG, config),
     ]
-		notify_data(config)
+    notify_data(config)
+
 
 if __name__ == '__main__':
     test_notify_version()
