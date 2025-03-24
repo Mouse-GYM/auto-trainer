@@ -179,7 +179,7 @@ class CanDevice(Device):
             self._complete_command(context)
 
         elif kind == HeadFixMessageKind.MAGNET_INTENSITY:
-            self._interface.set_magnet(typing.cast(int, data))
+            self._interface.set_magnet(position=typing.cast(int, data))
             self._complete_command(context)
 
         elif kind == PelletDeliveryMessageKind.SET_X:
@@ -296,7 +296,7 @@ class CanDevice(Device):
                 self._current_humidity = message.humidity_percent
 
             elif isinstance(message, MagnetDigitalInputs):
-                self._current_digital = message.continuity_0 | message.continuity_1 << 1
+                self._current_digital = message.continuity_0
 
             elif isinstance(message, StepperStatus):
                 if message.motor is Motor.PELLET_X_MOTOR:

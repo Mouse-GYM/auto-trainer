@@ -2,6 +2,7 @@ import logging
 import time
 import typing
 
+from . import Motor
 from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
                                StepperStatus, ServoStatus, Target, DigitalOutputs,
                                Motor, AnalogOutputs)

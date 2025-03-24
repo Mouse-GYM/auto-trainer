@@ -37,8 +37,7 @@ def monitor_message_queue():
 
     if output_file is not None:
         output_fd = open(output_file, 'w')
-        output_fd.write("Time, Index, Weight, Switch #1, Switch #2, Pressure, Temperature, "
-                        "Humidity\n")
+        output_fd.write("Time, Index, Weight, Switch, Pressure, Temperature, Humidity\n")
 
     next_heartbeat = 500
 

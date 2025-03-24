@@ -368,6 +368,7 @@ class CanInterface(DeviceInterface):
 
         if self._magnet_addr is None and message.dst_id & 0x4 == magnet_destination:
             self._set_magnet_address(message.dst_id)
+
             self._configure_magnet()
 
     @property
