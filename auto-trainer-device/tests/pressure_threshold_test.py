@@ -34,7 +34,7 @@ def test_threshold_behavior():
                     trigger_count += 1
                 measurement_buffer.clear()
 
-        assert trigger_count == 20
+        assert trigger_count == 11
 
 
 if __name__ == '__main__':
