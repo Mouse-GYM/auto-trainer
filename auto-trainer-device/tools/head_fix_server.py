@@ -14,6 +14,7 @@ switch_pin = 0
 pressure_pin = 0
 temperature = 0
 humidity = 0
+force_trigger = False
 
 fw_version = "0.0.0"
 
@@ -33,7 +34,7 @@ def get_value(input_val: str):
 
 
 def accept_user_commands():
-    global weight, switch_pin, pressure_pin, temperature, humidity
+    global weight, switch_pin, pressure_pin, temperature, humidity, force_trigger
 
     while True:
         cmd = input()
@@ -58,6 +59,8 @@ def accept_user_commands():
             val = get_value(cmd)
             if val is not None:
                 humidity = val
+        elif cmd.lower().startswith("f"):
+            force_trigger = True
 
 
 def handle_command(s, cmd: str, msg: str):
@@ -96,7 +99,7 @@ def handle_command(s, cmd: str, msg: str):
 
 
 def run_server(port: str, frequency: int, use_random: bool):
-    global weight, switch_pin, pressure_pin, temperature, humidity, fw_version, enable_streaming, samples_sent
+    global weight, switch_pin, pressure_pin, temperature, humidity, fw_version, enable_streaming, samples_sent, force_trigger
 
     logger.info(f"head fix server on port {port} with update frequency {frequency}Hz")
     logger.info(f"head fix firmware version {fw_version}")
@@ -124,6 +127,8 @@ def run_server(port: str, frequency: int, use_random: bool):
     samples_sent = 0
 
     report_interval = frequency * 10
+
+    force_trigger_start = -1
 
     while True:
         if enable_streaming:
@@ -156,6 +161,14 @@ def run_server(port: str, frequency: int, use_random: bool):
                     temperature += round(next_val * 2)
                     next_val = random() - 0.5
                     humidity += round(next_val * 2)
+
+                if force_trigger:
+                    force_trigger_start = samples_sent
+                    pressure_pin = 100
+                    force_trigger = False
+                elif force_trigger_start > 0 and samples_sent - force_trigger_start > 100:
+                    force_trigger_start = -1
+                    pressure_pin = 0
 
         while s.in_waiting > 0:
             data = s.read(1).decode()

@@ -21,6 +21,8 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._intersession_enabled = False
 
+        self._head_fixation_enabled = False
+
         self._baseline_intensity = limits.min_baseline_intensity
         self._day_pellet_count = 0
 
@@ -91,6 +93,14 @@ class BehaviorAlgorithm(ObservableObject):
     def intersession_enabled(self, value: bool):
         self._intersession_enabled = self._on_property_changed("intersession_enabled", value,
                                                                self._intersession_enabled)
+    @property
+    def head_fixation_enabled(self):
+        return self._head_fixation_enabled
+
+    @head_fixation_enabled.setter
+    def head_fixation_enabled(self, value: bool):
+        self._head_fixation_enabled = self._on_property_changed("head_fixation_enabled", value,
+                                                               self._head_fixation_enabled)
 
     @property
     def baseline_intensity(self):

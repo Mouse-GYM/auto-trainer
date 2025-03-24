@@ -54,3 +54,5 @@ class BehaviorEventKind(IntEnum, Enum):
     intersessionDetectionError = 1715,
     intersessionDetectionSave = 1716,
     intersessionDetectionSaveError = 1717
+    headFixationForceDetectorChanged = 1801,
+    headFixationEnabled = 1802

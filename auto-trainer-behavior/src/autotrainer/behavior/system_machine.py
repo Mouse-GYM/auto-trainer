@@ -75,6 +75,7 @@ class SystemMachine:
         self._intersession.events.on_analysis_ended += self._intersession_ended
 
         self._algorithm.session_ending += self._session_ended
+        self._algorithm.property_changed += self._algorithm_property_changed
 
     @property
     def algorithm(self):
@@ -158,6 +159,18 @@ class SystemMachine:
                 else:
                     EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                             context=self.state)
+        elif name == "is_force_detector_engaged":
+            logger.warning(f"Force detector engaged: {value}")
+            logger.warning(f"\tsystem state: {self.state}")
+            logger.warning(f"\thead fixation enabled: {self.algorithm.head_fixation_enabled}")
+            if value and self.state == SystemState.tunnel and self.algorithm.head_fixation_enabled:
+                logger.warning(f"\thead fix command available: {self._head_fix_command is not None}")
+                if self._head_fix_command is not None:
+                    logger.warning(f"\tsetting position to 100")
+                    self._head_fix_command.update_position(100)
+                EventManager.post_event(BehaviorEventKind.headFixationEnabled)
+
+            EventManager.post_event(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
 
     def _head_fix_command_property_changed(self, name: str, value, _):
         if name == "baseline_intensity":
@@ -178,6 +191,11 @@ class SystemMachine:
 
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
+    def _algorithm_property_changed(self, name: str, value, _):
+        if name == "head_fixation_enabled":
+            if self._head_fix_command is not None and not value:
+                self._head_fix_command.update_position(self.algorithm.baseline_intensity)
+
     def _pellet_loading(self):
         self._timer1 = Timer(2, self._consider_end_session)
         self._timer1.start()
@@ -191,7 +209,8 @@ class SystemMachine:
         # or releasing states).  Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
         if (self.state == SystemState.tunnel and
-                (self._pellet_machine.state == PelletState.sending or self._pellet_machine.state == PelletState.releasing or self._pellet_machine.state == PelletState.monitoring)):
+                (
+                        self._pellet_machine.state == PelletState.sending or self._pellet_machine.state == PelletState.releasing or self._pellet_machine.state == PelletState.monitoring)):
             return
 
         self.algorithm.end_session()
