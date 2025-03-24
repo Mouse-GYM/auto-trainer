@@ -4,9 +4,9 @@ import queue
 import time
 from threading import Thread
 
-from autotrainer.device import CanDevice, DeviceThread, CanInterface, DeviceThreadMessageKind, \
+from autotrainer.device import CanDevice, DeviceThread, DeviceThreadMessageKind, \
     HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, \
-    StepperConfig, ServoConfig, ServoStatus, StepperStatus, motor_to_str, target_to_str, Target
+    StepperConfig, ServoConfig, motor_to_str, target_to_str, target_of_motor
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
@@ -17,7 +17,7 @@ output_file = None
 perf_start = None
 perf_count = -1
 perf_print = False
-print_status = None
+print_status = Motor.NONE
 positions = {
     PelletDeliveryMessageKind.SET_X: 0,
     PelletDeliveryMessageKind.SET_Y: 0,
@@ -112,7 +112,7 @@ def monitor_message_queue():
                 f"- motor={motor_to_str(print_status)}\n"
                 f"- position={data}\n"
             )
-            print_status = None
+            print_status = Motor.NONE
         elif ((kind == PelletDeliveryMessageKind.UPDATE_X and
                print_status is Motor.PELLET_X_MOTOR) or
               (kind == PelletDeliveryMessageKind.UPDATE_Y and
@@ -127,7 +127,7 @@ def monitor_message_queue():
                 f"- position={data}\n"
                 # f"at limit={data.limit_switch}\n"
             )
-            print_status = None
+            print_status = Motor.NONE
 
         if kind == PelletDeliveryMessageKind.UPDATE_X or \
             kind == PelletDeliveryMessageKind.UPDATE_Y or \
@@ -168,7 +168,7 @@ def write_config(motor: Motor, device_thread):
         motor is Motor.PELLET_Z_MOTOR:
         config = StepperConfig()
         config.motor = motor
-        config.target = CanInterface.target_of_motor(motor)
+        config.target = target_of_motor(motor)
         # config.max_velocity = float(input("Max Velocity = "))
         # config.max_acceleration = float(input("Max Acceleration = "))
         config.min_step_inverse = int(input("Min Step (inverted) = "))
@@ -177,7 +177,7 @@ def write_config(motor: Motor, device_thread):
     else:
         config = ServoConfig()
         config.motor = motor
-        config.target = CanInterface.target_of_motor(motor)
+        config.target = target_of_motor(motor)
         # config.max_velocity = float(input("Max Velocity = "))
         # config.max_acceleration = float(input("Max Acceleration = "))
         config.min_position = int(input("Min Position = "))
@@ -215,18 +215,18 @@ def round_trip_test(motor: Motor, trips: int, device_thread):
         return
 
     for i in range(trips):
-        device_thread.send_message(kind, data=min_pos * 10)
-        time.sleep(2)
-        print_status = motor
-        time.sleep(1)
-
         device_thread.send_message(kind, data=max_pos * 10)
         time.sleep(2)
         print_status = motor
         time.sleep(1)
 
+        device_thread.send_message(kind, data=min_pos * 10)
+        time.sleep(2)
+        print_status = motor
+        time.sleep(1)
 
-def run_monitor(can_id: int):
+
+def run_monitor():
     global perf_count
     global print_status
 
@@ -356,4 +356,4 @@ if __name__ == '__main__':
 
     perf_print = perf_count != -1
 
-    run_monitor(args.can)
+    run_monitor()

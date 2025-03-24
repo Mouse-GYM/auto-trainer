@@ -4,11 +4,11 @@ pytestmark = pytest.mark.canbus
 
 try:
     from pyjerrycan import StepperStatus
-except:
+except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
 from autotrainer.device import (CanDevice, DeviceApi, CanInterface, GymDeviceMessageKind,
-                                HeadFixMessageKind, PelletDeliveryMessageKind, MotorSteps, Status,
+                                HeadFixMessageKind, PelletDeliveryMessageKind, Status,
                                 Target, LoadCellReading, PressureReading, SensorStatus,
                                 MagnetDigitalInputs, Motor, StepperStatus, ServoStatus,
                                 ServoConfig, StepperConfig
@@ -50,7 +50,7 @@ def data_callback(kind: int, response: object):
 def _construction():
     try:
         device = CanDevice()
-    except:
+    except (ModuleNotFoundError, TypeError, AttributeError):
         assert False
 
     interface = CanInterface()

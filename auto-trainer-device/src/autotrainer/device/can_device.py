@@ -1,3 +1,13 @@
+"""
+Device interface for the CANbus protocol to the Alogus device.
+
+Extends the Device class that defines a fixed API to access the device. This
+class relies on the CanInterface class to send and receive data.
+
+As part of its initialization sequence, it loads a set of multi-stage motor movement
+protocols from the file ~/.alogus_config.yaml.
+"""
+
 import logging
 import time
 import yaml
@@ -12,7 +22,7 @@ try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCfgMsg, JerryCANCmdType
 
     HAVE_CAN_DEVICE = True
-except Exception as ex:
+except (ModuleNotFoundError, TypeError, AttributeError):
     logger.warning("Alogus hardware support not found")
     pass
 
@@ -24,17 +34,11 @@ from .device_api import DeviceApi
 from .gym_device import GymDeviceMessageKind, GymDeviceEventKind
 from .head_fix import HeadFixMeasurement, HeadFixMessageKind
 from .pellet_delivery import PelletDeliveryMessageKind
-from .can_interface import CanInterface
+from .can_interface import CanInterface, is_stepper
 from .device_interface import *
 
 
 class CanDevice(Device):
-    """
-    Somewhat temporary attempt to confirm the Alogus hardware to the existing device hardware interface.  Will likely
-    change substantially.
-
-    Generally used in combination with DeviceThread to fully communicate with the Alogus hardware.
-    """
 
     def __init__(self, api: DeviceApi = None, buffer_size: int = 50):
         super().__init__(api)
@@ -84,6 +88,10 @@ class CanDevice(Device):
     @api.setter
     def api(self, value: DeviceApi):
         self._api = value
+
+    '''
+    Load the default configurations and motor control sequences from ~/.alogus_config.yaml
+    '''
 
     def load_defaults(self):
         load_config = None
@@ -154,6 +162,12 @@ class CanDevice(Device):
             self._interface.set_motor_configuration(Motor.MAGNET_SERVO,
                                                     servo_config=magnet_config)
 
+    '''
+    This method is called when a command to a target is requested. This method
+    translates the application command to the appropriate call to the CanInterface
+    instance
+    '''
+
     def notify_message(self, kind: int, data: object, context: object = None) -> None:
         if self._interface is None:
             return
@@ -163,12 +177,17 @@ class CanDevice(Device):
             self._complete_command(context)
 
         elif kind == GymDeviceMessageKind.READ_CONFIG:
+            assert isinstance(data, Motor)
             self._interface.request_motor_config(data)
 
         elif kind == GymDeviceMessageKind.WRITE_CONFIG:
-            if CanInterface.is_stepper(data.motor):
+            assert isinstance(data, ServoConfig) or isinstance(data, StepperConfig)
+
+            if is_stepper(data.motor):
+                isinstance(data, StepperConfig)
                 self._interface.write_stepper_config(data)
             else:
+                assert isinstance(data, ServoConfig)
                 self._interface.write_servo_config(data)
 
             self._interface.request_motor_config(data.motor)
@@ -261,11 +280,17 @@ class CanDevice(Device):
             self._complete_command(context)
 
         elif kind == PelletDeliveryMessageKind.PLAY_TONE:
+            assert isinstance(data, tuple)
             self._interface.emit_tone(data[0], data[1])
             self._complete_command(context)
 
         else:
             logger.info(f"unhandled command queue message: {kind}")
+
+    '''
+    This method is called when data from the target is received. The data is 
+    forwarded to a DeviceAPI class.
+    '''
 
     def notify_data(self, data: typing.Any) -> None:
         for message in data:
@@ -325,7 +350,8 @@ class CanDevice(Device):
                         f"[{datetime.now()}] servo {message.target.value}"
                         f":{message.motor.value} position: {message.position}")
 
-                # @TODO Deliver the full packet, not just the value. Have the same for StepperStatus
+                # @TODO Deliver the full data set, not just the position. Have the same for
+                # @TODO StepperStatus
                 if self._api is not None:
                     if message.motor is Motor.MAGNET_SERVO:
                         self.api.send_message(HeadFixMessageKind.UPDATE_MAGNET, message.position)
@@ -363,9 +389,20 @@ class CanDevice(Device):
         # Breath on Linux
         time.sleep(0.001)
 
+    '''
+    On completion of a command, the class reports that to a DeviceAPI class.
+    Note that 'completion' may only indicate that the message was sent to the
+    target, not that the target is complete in executing the command.
+    '''
+
     def _complete_command(self, token: object) -> None:
         EventManager.post_event(GymDeviceEventKind.deviceCommandAcknowledge, context=token)
         self._api.send_message(GymDeviceMessageKind.ACK, token)
+
+    '''
+    On a multi-step motor sequence, handle the next step of the sequence when its
+    detected that the current motor movement is complete
+    '''
 
     def _manage_next_move(self, kind, position, desired):
         if self._api is not None:
@@ -378,6 +415,10 @@ class CanDevice(Device):
                     token = self._pending_move_token
                     self._pending_move_token = None
                     self._complete_command(token)
+
+    '''
+    Issue the next step in a multi-step motor sequence
+    '''
 
     def _perform_next_compound_step(self):
         self._pellet_desired_x = None
