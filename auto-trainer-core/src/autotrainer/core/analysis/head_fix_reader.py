@@ -11,11 +11,10 @@ from typing import Callable, Optional
 import numpy
 from math import floor
 
-from autotrainer.core.project import ProjectInfo, ProjectInterval
-from autotrainer.core import PerfMonitor, ObservableObject, EventManager
+from autotrainer.core import ProjectInfo, ProjectInterval
+from autotrainer.core import PerfMonitor, ObservableObject, EventManager, SystemStatusMessageKind
 
 from .device_reader import DeviceReader
-from .head_fix import HeadFixMessageKind
 from .head_fix_event_kind import HeadFixEventKind
 
 logger = logging.getLogger(__name__)
@@ -264,9 +263,9 @@ class HeadFixReader(DeviceReader):
         return self._tare_detector
 
     def message_received(self, msg, data):
-        if msg == HeadFixMessageKind.STREAM_START:
+        if msg == SystemStatusMessageKind.STREAM_START:
             self._perf_monitor.reset()
-        elif msg == HeadFixMessageKind.MEASUREMENT:
+        elif msg == SystemStatusMessageKind.MEASUREMENT:
             weights = list()
             switch = list()
             pressure = list()

@@ -1,7 +1,6 @@
 from typing import Protocol
 
-from autotrainer.core import ObservableObjectProtocol
-from autotrainer.device import HeadFixReader
+from autotrainer.core import ObservableObjectProtocol, HeadFixReader
 
 
 class HeadFixProtocol(ObservableObjectProtocol, Protocol):

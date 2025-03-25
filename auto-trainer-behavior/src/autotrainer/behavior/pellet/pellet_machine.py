@@ -5,8 +5,7 @@ from events import Events
 from opentelemetry import trace
 from transitions import Machine
 
-from autotrainer.core import EventManager
-from autotrainer.device import PelletReader
+from autotrainer.core import EventManager, PelletReader
 
 from ..system_machine_state import SystemState
 from ..behavior_algorithm import BehaviorAlgorithm, BehaviorLimits
