@@ -2,7 +2,7 @@ import csv
 from pathlib import Path
 
 from autotrainer.device.head_fix import HeadFixMeasurement
-from autotrainer.device.head_fix_reader import ForceDetector
+from autotrainer.core import ForceDetector
 
 
 def test_threshold_behavior():
