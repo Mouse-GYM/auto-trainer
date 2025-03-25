@@ -1,11 +1,11 @@
-from autotrainer.core import ObservableObject
-from autotrainer.device import HeadFixReader
+from autotrainer.core import ObservableObject, HeadFixReader
 
 
 class MockHeadfix(ObservableObject):
     """
     Provides both head fix command and reader interfaces for testing.
     """
+
     def __init__(self):
         super().__init__()
 

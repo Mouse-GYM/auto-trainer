@@ -3,11 +3,10 @@ import queue
 
 from autotrainer.core import ObservableObject
 from autotrainer.core.project import ProjectInterval
-from autotrainer.device import (SerialInterface, HeadFixReader, GymDeviceMessageKind, CanDevice,
-                                HAVE_CAN_DEVICE)
+from autotrainer.core import ObservableObject, ProjectInterval, DeviceReader, HeadFixReader
+from autotrainer.device import SerialInterface, GymDeviceMessageKind, CanDevice, HAVE_CAN_DEVICE
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
-from autotrainer.device.device_reader import DeviceReader
 
 from tools.head_fix.model.user_settings import UserSettings
 

@@ -4,11 +4,8 @@ from .can_interface import CanInterface, motor_to_str, target_to_str, is_stepper
     target_of_motor
 from .device_thread import DeviceThread, DeviceThreadMessageKind
 from .gym_device import GymDevice, GymDeviceMessageKind
-from .head_fix import (HeadFix, HeadFixMeasurement, HeadFixMessageKind, parse_measurements,
-                       parse_measurement)
-from .head_fix_reader import HeadFixReader
+from .head_fix import HeadFix, HeadFixMessageKind, parse_measurements, parse_measurement
 from .pellet_delivery import PelletDelivery, PelletDeliveryMessageKind
-from .pellet_reader import PelletReader
 from .serial_interface import SerialInterface
 from .device_interface import (DeviceInterface, Target, Motor, ServoConfig, StepperConfig,
                                Heartbeat, DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs,

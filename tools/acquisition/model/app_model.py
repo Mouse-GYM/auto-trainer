@@ -77,6 +77,8 @@ class AppModel(ObservableObject):
 
         self._head_fix.property_changed += self._on_head_fix_property_changed
 
+        self._pellet_delivery.property_changed += self._on_pellet_property_changed
+
         self._load_animals()
 
     @property
@@ -139,6 +141,9 @@ class AppModel(ObservableObject):
             self.property_changed("animal_name", self.animal_name, self.animal_name)
             self.head_fix.baseline_intensity = self._selected_animal.baseline_magnet_intensity
             self.head_fix.update_position(self._selected_animal.baseline_magnet_intensity)
+            self.pellet_delivery.set_x(self._selected_animal.pellet_x)
+            self.pellet_delivery.set_y(self._selected_animal.pellet_y)
+            self.pellet_delivery.set_z(self._selected_animal.pellet_z)
         else:
             self.property_changed("animal_name", "(none)", "(none)")
 
@@ -379,7 +384,23 @@ class AppModel(ObservableObject):
     def _on_head_fix_property_changed(self, name: str, value, _):
         if name == "baseline_intensity" and self._selected_animal is not None:
             self._selected_animal.baseline_magnet_intensity = value
-            self._selected_animal.to_file(str(Path(self._preferences.animal_location).joinpath(f"{self._selected_animal.name}.json")))
+            self._save_animal_metadata()
+
+    def _on_pellet_property_changed(self, name: str, value, _):
+        if name == "x" and self._selected_animal is not None:
+            self._selected_animal.pellet_x = value
+            self._save_animal_metadata()
+        elif name == "y" and self._selected_animal is not None:
+            self._selected_animal.pellet_y = value
+            self._save_animal_metadata()
+        elif name == "z" and self._selected_animal is not None:
+            self._selected_animal.pellet_z = value
+            self._save_animal_metadata()
+
+    def _save_animal_metadata(self):
+        if self._selected_animal is not None:
+            self._selected_animal.to_file(
+                str(Path(self._preferences.animal_location).joinpath(f"{self._selected_animal.name}.json")))
 
     def _configuration_as_dict(self) -> dict:
         return {"camera1": self._left_camera.save_configuration(),

@@ -22,7 +22,7 @@ class BehaviorContent(ContentWidget):
         content = QWidget()
         content_layout = QGridLayout()
         content_layout.setRowStretch(3, 1)
-        content_layout.setColumnStretch(4, 1)
+        content_layout.setColumnStretch(6, 1)
 
         content_layout.addWidget(QLabel("Live Analysis:"))
         self._inference_enabled = QSwitch()
@@ -43,6 +43,11 @@ class BehaviorContent(ContentWidget):
         self._intersession_toggle = QSwitch()
         self._intersession_toggle.stateChanged.connect(self._intersession_toggle_state_changed)
         content_layout.addWidget(self._intersession_toggle, 0, 3)
+
+        content_layout.addWidget(QLabel("Head Fixation (100%):"), 0, 4)
+        self._head_fixation_toggle = QSwitch()
+        self._head_fixation_toggle.stateChanged.connect(self._head_fixation_toggle_state_changed)
+        content_layout.addWidget(self._head_fixation_toggle, 0, 5)
 
         content.setLayout(content_layout)
         self._card_widget.setContentWidget(content)
@@ -146,6 +151,9 @@ class BehaviorContent(ContentWidget):
 
     def _intersession_toggle_state_changed(self, x: int):
         self._behavior_model.is_intersession_enabled = x != 0
+
+    def _head_fixation_toggle_state_changed(self, x: int):
+        self._behavior_model.algorithm.head_fixation_enabled = x != 0
 
     def _location_changed(self):
         self._inference_model.model_location = self._location.text()

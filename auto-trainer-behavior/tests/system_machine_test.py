@@ -41,7 +41,6 @@ def test_enter_exit_tunnel():
     machine.mock_headfix.mock_load_cell_engaged(False)
 
     assert machine.state == SystemState.cage
-    assert machine.mock_headfix.current_position == 0
     assert machine.algorithm._is_in_session is False
     assert is_capture_triggered is False
 

@@ -3,8 +3,8 @@ import queue
 import uuid
 from typing import Optional
 
-from autotrainer.core import ObservableObject, ProjectInfo
-from autotrainer.device import SerialInterface, HeadFixReader
+from autotrainer.core import ObservableObject, ProjectInfo, HeadFixReader
+from autotrainer.device import SerialInterface
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 
