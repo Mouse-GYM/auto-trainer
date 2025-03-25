@@ -18,6 +18,7 @@ class PelletDeliveryMessageKind(IntEnum):
     SET_X = 106,
     SET_Y = 107,
     SET_Z = 108,
+    # Deprecated
     UPDATE_X = -2001
     UPDATE_Y = -2002,
     UPDATE_Z = -2003,
