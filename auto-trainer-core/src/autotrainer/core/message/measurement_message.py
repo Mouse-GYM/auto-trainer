@@ -36,7 +36,7 @@ class MeasurementMessage(Protocol):
 
     @property
     def pressure(self) -> float:
-        """The force detector value in mV."""
+        """The force detector value in the range of [0, 1024]"""
         pass
 
     # Deprecated
