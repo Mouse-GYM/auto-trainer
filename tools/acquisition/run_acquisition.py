@@ -82,7 +82,7 @@ def run_acquisition(configuration: str = None, is_dev: bool = False):
 
     verify_log_location(preferences.log_location, preferences.serial_number)
 
-    window = MainWindow(app, preferences, configuration, "1.1.32", is_dev)
+    window = MainWindow(app, preferences, configuration, "1.1.33", is_dev)
 
     window.show()
 
