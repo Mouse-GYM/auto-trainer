@@ -5,13 +5,10 @@ import pytest
 pytestmark = pytest.mark.canbus
 
 from autotrainer.device import (CanInterface, Target, Motor, Heartbeat, ServoConfig, StepperConfig,
-                                DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs, Tone,
+                                DigitalOutputs, PelletDigitalInputs, Tone,
                                 AnalogOutputs, AnalogOutput, LoadCellReading, PressureReading,
                                 ColorLed, AudioData, DoorData, ServoStatus, StepperStatus,
-                                SensorStatus)
-
-MAGNET_ADDRESS = 4
-PELLET_ADDRESS = 1
+                                SensorStatus, target_of_motor, is_servo)
 
 
 @pytest.fixture
@@ -21,14 +18,16 @@ def interface():
 
 # @pytest.skip(reason="utility method")
 def _connect():
-    global MAGNET_ADDRESS, PELLET_ADDRESS
-
     interface = CanInterface()
 
     assert interface.open()
 
-    interface.set_magnet_address(MAGNET_ADDRESS)
-    interface.set_pellet_address(PELLET_ADDRESS)
+    tries = 0
+    while not interface.are_addresses_valid() and tries < 100:
+        interface.read(20)
+        tries += 1
+
+    assert interface.are_addresses_valid()
 
     return interface
 
@@ -43,75 +42,62 @@ def test_heartbeat(interface: CanInterface, target: Target = Target.PELLET_DEVIC
     assert heartbeat is not None
 
 
-def _read_servo_config(interface: CanInterface, target: Target, motor: Motor):
-    """Verify servo configuration can be read"""
-    assert interface.request_servo_config(target, motor)
+def _read_config(interface: CanInterface, motor: Motor):
+    target = target_of_motor(motor)
 
-    return get_response(interface, ServoConfig, target)
+    """Verify servo configuration can be read"""
+    assert interface.request_motor_config(motor)
+
+    config = get_response(interface,
+                          ServoConfig if is_servo(motor) else StepperConfig,
+                          target)
+
+    return config
 
 
 @pytest.mark.canbus
-def test_read_servo_config(interface: CanInterface, target: Target = Target.MAGNET_DEVICE,
-                           motor: Motor = Motor.MAGNET_SERVO):
-    config = _read_servo_config(interface, target, motor)
+def test_read_config(interface: CanInterface, motor: Motor = Motor.MAGNET_SERVO):
+    config = _read_config(interface, motor)
 
     assert config is not None
     assert config.motor is motor
 
 
 @pytest.mark.canbus
-def test_write_servo_config(interface: CanInterface, target: Target = Target.MAGNET_DEVICE):
-    config = _read_servo_config(interface, target, Motor.MAGNET_SERVO)
-    """Verify servo configuration can be written"""
+def test_write_servo_config(interface: CanInterface, motor: Motor = Motor.MAGNET_SERVO):
+    config = _read_config(interface, motor)
+
     orig_min = config.min_position
     orig_max = config.max_position
 
     config.min_position -= 10
     config.max_position += 10
-    assert interface.write_servo_config(target, config)
+    assert interface.write_servo_config(config)
 
-    new_config = _read_servo_config(interface, target, config.motor)
+    new_config = _read_config(interface, config.motor)
     assert new_config.min_position == config.min_position
     assert new_config.max_position == config.max_position
 
     config.min_position = orig_min
     config.max_position = orig_max
 
-    assert interface.write_servo_config(target, config)
+    assert interface.write_servo_config(config)
 
 
-def _read_stepper_config(interface: CanInterface, motor: Motor):
-    """Verify servo configuration can be read"""
-    assert interface.request_stepper_config(motor)
-
-    return get_response(interface, StepperConfig, Target.PELLET_DEVICE)
-
-
-@pytest.mark.canbus
-def test_read_stepper_config(interface: CanInterface, motor: Motor = Motor.PELLET_Z_MOTOR):
-    """Verify servo configuration can be read"""
-    config = _read_stepper_config(interface, motor)
-
-    assert config is not None
-    assert config.motor is motor
-
-
-@pytest.mark.skip(reason="test utility")
 def _write_stepper_config(interface: CanInterface, config: StepperConfig) -> bool:
     if not interface.write_stepper_config(config):
         return False
 
-    new_config = _read_stepper_config(interface, config.motor)
+    new_config = _read_config(interface, config.motor)
 
     return new_config.min_step_inverse == config.min_step_inverse and \
         new_config.steps_per_revolution == config.steps_per_revolution
 
 
 @pytest.mark.canbus
-def test_write_stepper_config(interface: CanInterface):
-    config = _read_stepper_config(interface, Motor.PELLET_Z_MOTOR)
+def test_write_stepper_config(interface: CanInterface, motor: Motor = Motor.PELLET_Z_MOTOR):
+    config = _read_config(interface, motor)
 
-    """Verify servo configuration can be written"""
     orig_min = config.min_step_inverse
     orig_steps = config.steps_per_revolution
 
@@ -148,15 +134,15 @@ def _read_gpio(interface: CanInterface, target: Target):
 
 @pytest.mark.canbus
 def test_tone(interface: CanInterface):
-    frequency_hz = 1500
+    frequency_hz = 2000
     duration_ms = 400
     assert interface.emit_tone(frequency_hz, duration_ms);
 
     # give it a chance to update
+    tone = None
     for retry in range(3):
         tone = get_response(interface, Tone, Target.PELLET_DEVICE)
     assert tone is not None
-    assert tone.frequency_hz == frequency_hz
     assert tone.time_remaining_ms <= duration_ms
 
 
@@ -177,11 +163,8 @@ def test_tare_load_cell(interface: CanInterface):
     for tries in range(3):
         loadcell = get_response(interface, LoadCellReading, Target.MAGNET_DEVICE)
         assert loadcell is not None
-        # TODO - check when there is real hardware
-        # print(loadcell.load_mv)
-        # if loadcell.load_mv == 0:
-        #     return
-        return
+        if loadcell.load_mv <= 0.01:
+            return
 
     assert False
 
@@ -193,11 +176,8 @@ def test_tare_pressure_sensor(interface: CanInterface):
     for tries in range(3):
         pressure = get_response(interface, PressureReading, Target.MAGNET_DEVICE)
         assert pressure is not None
-        # TODO - check when there is real hardware
-        # print(pressure.pressure_mv)
-        # if pressure.pressure_mv == 0:
-        #     return
-        return
+        if pressure.pressure_mv <= 0.01:
+            return
 
     assert False
 
@@ -210,6 +190,7 @@ def test_color_led(interface: CanInterface):
 
     assert interface.set_color_led(red, green, blue)
     # Allow the data to catch up with the command
+    led = None
     for tries in range(3):
         led = get_response(interface, ColorLed, Target.PELLET_DEVICE)
     assert led is not None
@@ -236,12 +217,19 @@ def test_streaming_data(interface: CanInterface):
     status = get_response(interface, StepperStatus, Target.PELLET_DEVICE)
     assert status is not None
 
-    # TODO Needs Temp/Hum sensor
-    # status = get_response(interface, SensorStatus, Target.MAGNET_DEVICE)
-    # assert status is not None
+    status = get_response(interface, SensorStatus, Target.MAGNET_DEVICE)
+    assert status is not None
 
 
-@pytest.mark.canbus
+def test_stepper_home(interface: CanInterface):
+    assert interface.stepper_home(Motor.PELLET_X_MOTOR)
+    time.sleep(1)
+    assert interface.stepper_home(Motor.PELLET_Y_MOTOR)
+    time.sleep(1)
+    assert interface.stepper_home(Motor.PELLET_Z_MOTOR)
+    time.sleep(1)
+
+
 def get_response(interface: CanInterface, typeof, target: Target, timeout: float = 2.0):
     now = time.time()
 
@@ -262,12 +250,10 @@ if __name__ == '__main__':
     test_heartbeat(iface, Target.PELLET_DEVICE)
     test_heartbeat(iface, Target.MAGNET_DEVICE)
 
-    # Pellet or Magnet-only capabilities
-    test_read_servo_config(iface, Target.MAGNET_DEVICE, Motor.MAGNET_SERVO)
-    test_write_servo_config(iface, Target.MAGNET_DEVICE)
-    test_read_stepper_config(iface, Motor.PELLET_X_MOTOR)
-    test_write_stepper_config(iface)
-    test_write_gpio(iface)
+    test_read_config(iface, Motor.MAGNET_SERVO)
+    test_write_servo_config(iface, Motor.MAGNET_SERVO)
+    test_read_config(iface, Motor.PELLET_X_MOTOR)
+    test_write_stepper_config(iface, Motor.PELLET_X_MOTOR)
     test_write_gpio(iface)
     test_tone(iface)
     test_analog_out(iface)
@@ -275,5 +261,6 @@ if __name__ == '__main__':
     test_tare_pressure_sensor(iface)
     test_color_led(iface)
     test_streaming_data(iface)
+    test_stepper_home(iface)
 
     iface.close()

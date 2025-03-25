@@ -8,7 +8,7 @@ class MotorSteps:
             if "type" in step and "value" in step:
                 steps.append({step['type']: step['value']})
 
-        print(f"{name}: {steps}")
+        # print(f"{name}: {steps}")
 
         return MotorSteps(name, steps)
 

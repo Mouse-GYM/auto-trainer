@@ -18,7 +18,9 @@ class GymDeviceEventKind(IntEnum, Enum):
 
 class GymDeviceMessageKind(IntEnum):
     VERSION = -1,
-    ACK = -2
+    ACK = -2,
+    READ_CONFIG = -3,
+    WRITE_CONFIG = -4
 
     @classmethod
     def is_member(cls, value):
@@ -72,7 +74,7 @@ class GymDevice(Device):
                 self._read_buffer = ""
 
                 EventManager.post_event(GymDeviceEventKind.deviceCommandAcknowledge,
-                                                   context=self._last_command_token)
+                                        context=self._last_command_token)
                 self._api.send_message(GymDeviceMessageKind.ACK, self._last_command_token)
 
                 self._is_busy = False
@@ -93,7 +95,7 @@ class GymDevice(Device):
             self._last_command_token = token
             self._api.send_data_str(data)
             EventManager.post_event(GymDeviceEventKind.deviceCommandSend,
-                                               context=f"{data}({self._last_command_token})")
+                                    context=f"{data}({self._last_command_token})")
         else:
             logger.debug("storing in command buffer")
             self._command_buffer.put((data, token))

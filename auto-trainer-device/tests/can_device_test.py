@@ -4,7 +4,7 @@ pytestmark = pytest.mark.canbus
 
 try:
     from pyjerrycan import StepperStatus
-except:
+except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
 from autotrainer.device import (CanDevice, DeviceApi, CanInterface, GymDeviceMessageKind,
@@ -13,6 +13,8 @@ from autotrainer.device import (CanDevice, DeviceApi, CanInterface, GymDeviceMes
                                 MagnetDigitalInputs, Motor, StepperStatus, ServoStatus,
                                 ServoConfig, StepperConfig
                                 )
+
+_expected = []
 
 
 def notify_command(kind, tag, data=None, expected=None, repeat=1):
@@ -35,9 +37,6 @@ def notify_data(data):
     device.notify_data([data])
 
 
-_expected = []
-
-
 @pytest.mark.canbus
 def data_callback(kind: int, response: object):
     assert len(_expected) != 0
@@ -51,13 +50,13 @@ def data_callback(kind: int, response: object):
 def _construction():
     try:
         device = CanDevice()
-    except:
+    except (ModuleNotFoundError, TypeError, AttributeError):
         assert False
 
     interface = CanInterface()
     # for these tests, do NOT open interface
-    interface.set_magnet_address(0x40)
-    interface.set_pellet_address(0x01)
+    interface._set_magnet_address(0x40)
+    interface._set_pellet_address(0x01)
     device.api = DeviceApi(interface=interface, message_callback=data_callback)
     return device
 
@@ -172,21 +171,35 @@ def test_load_servo_status():
 
     status = ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, 40)
     _expected = [
-        (PelletDeliveryMessageKind.UPDATE_LOAD, 40)
+        (PelletDeliveryMessageKind.UPDATE_LOAD_SERVO, 40),
+        (PelletDeliveryMessageKind.UPDATE_LOAD_SERVO, 40)
     ]
     notify_data(status)
 
 
 @pytest.mark.canbus
 def test_servo_config():
-    notify_data(ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0, 0,
-                            0, 0, 0))
+    global _expected
+
+    config = ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0, 0,
+                         0, 0, 0)
+
+    _expected = [
+        (GymDeviceMessageKind.READ_CONFIG, config)
+    ]
+    notify_data(config)
 
 
 @pytest.mark.canbus
 def test_stepper_config():
-    notify_data(StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0,
-                              0, 0))
+    global _expected
+
+    config = StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0,
+                           0, 0)
+    _expected = [
+        (GymDeviceMessageKind.READ_CONFIG, config),
+    ]
+    notify_data(config)
 
 
 if __name__ == '__main__':

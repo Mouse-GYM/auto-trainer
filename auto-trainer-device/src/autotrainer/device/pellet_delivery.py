@@ -18,10 +18,13 @@ class PelletDeliveryMessageKind(IntEnum):
     SET_X = 106,
     SET_Y = 107,
     SET_Z = 108,
+    SEND_TO_LIMITS = 109,
+    PLAY_TONE = 110,
     UPDATE_X = 1001
     UPDATE_Y = 1002,
     UPDATE_Z = 1003,
-    UPDATE_LOAD = 1004,
+    UPDATE_LOAD_SERVO = 1004,
+    UPDATE_COVER_SERVO = 1005,
 
     @classmethod
     def is_member(cls, value):

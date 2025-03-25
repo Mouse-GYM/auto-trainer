@@ -1,3 +1,13 @@
+"""
+Device interface for the CANbus protocol to the Alogus device.
+
+Extends the Device class that defines a fixed API to access the device. This
+class relies on the CanInterface class to send and receive data.
+
+As part of its initialization sequence, it loads a set of multi-stage motor movement
+protocols from the file ~/.alogus_config.yaml.
+"""
+
 import logging
 import time
 import yaml
@@ -12,7 +22,7 @@ try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCfgMsg, JerryCANCmdType
 
     HAVE_CAN_DEVICE = True
-except Exception as ex:
+except (ModuleNotFoundError, TypeError, AttributeError):
     logger.warning("Alogus hardware support not found")
     pass
 
@@ -24,17 +34,11 @@ from .device_api import DeviceApi
 from .gym_device import GymDeviceMessageKind, GymDeviceEventKind
 from .head_fix import HeadFixMeasurement, HeadFixMessageKind
 from .pellet_delivery import PelletDeliveryMessageKind
-from .can_interface import CanInterface
+from .can_interface import CanInterface, is_stepper
 from .device_interface import *
 
 
 class CanDevice(Device):
-    """
-    Somewhat temporary attempt to confirm the Alogus hardware to the existing device hardware interface.  Will likely
-    change substantially.
-
-    Generally used in combination with DeviceThread to fully communicate with the Alogus hardware.
-    """
 
     def __init__(self, api: DeviceApi = None, buffer_size: int = 50):
         super().__init__(api)
@@ -58,6 +62,10 @@ class CanDevice(Device):
         self._pellet_desired_y = None
         self._pellet_desired_z = None
 
+        self._is_homing_x = None
+        self._is_homing_y = None
+        self._is_homing_z = None
+
         self._pellet_desired_load = None
 
         self._pending_move_token = None
@@ -71,7 +79,14 @@ class CanDevice(Device):
         self._delay_start = None
         self._delay_desired = None
 
-        self.load_defaults()
+        self._x_config = None
+        self._y_config = None
+        self._z_config = None
+        self._load_config = None
+        self._barrier_config = None
+        self._magnet_config = None
+
+        self.load_defaults()  # should be last line in __init__()
 
     @property
     def api(self):
@@ -81,16 +96,12 @@ class CanDevice(Device):
     def api(self, value: DeviceApi):
         self._api = value
 
+    '''
+    Load the default configurations and motor control sequences from ~/.alogus_config.yaml
+    '''
+
     def load_defaults(self):
-        load_config = None
-        barrier_config = None
-        x_config = None
-        y_config = None
-        z_config = None
-        magnet_config = None
-        load_movement = None
-        send_movement = None
-        home_movement = None
+
         config = Path.home().joinpath(".alogus_config.yaml")
         logger.info(f"looking for configuration alogus file: {config}")
 
@@ -101,54 +112,56 @@ class CanDevice(Device):
                     logging.info("alogus configuration loaded")
                     if "pellet" in conf:
                         if "load" in conf["pellet"]:
-                            load_config = ServoConfig.from_dict(conf["pellet"]["load"])
-                            logger.info(f"load configuration: {load_config}")
+                            self._load_config = ServoConfig.from_dict(conf["pellet"]["load"])
+                            logger.info(f"load configuration: {self._load_config}")
                         if "barrier" in conf["pellet"]:
-                            barrier_config = ServoConfig.from_dict(conf["pellet"]["barrier"])
-                            logger.info(f"barrier configuration: {barrier_config}")
+                            self._barrier_config = ServoConfig.from_dict(conf["pellet"]["barrier"])
+                            logger.info(f"barrier configuration: {self._barrier_config}")
                         if "x" in conf["pellet"]:
-                            x_config = StepperConfig.from_dict(conf["pellet"]["x"])
-                            logger.info(f"X stepper configuration: {x_config}")
+                            self._x_config = StepperConfig.from_dict(conf["pellet"]["x"])
+                            logger.info(f"X stepper configuration: {self._x_config}")
                         if "y" in conf["pellet"]:
-                            y_config = StepperConfig.from_dict(conf["pellet"]["y"])
-                            logger.info(f"Y stepper configuration: {y_config}")
+                            self._y_config = StepperConfig.from_dict(conf["pellet"]["y"])
+                            logger.info(f"Y stepper configuration: {self._y_config}")
                         if "z" in conf["pellet"]:
-                            z_config = StepperConfig.from_dict(conf["pellet"]["z"])
-                            logger.info(f"Z stepper configuration: {z_config}")
+                            self._z_config = StepperConfig.from_dict(conf["pellet"]["z"])
+                            logger.info(f"Z stepper configuration: {self._z_config}")
+                    if "magnet" in conf:
                         if "head" in conf["magnet"]:
-                            magnet_config = ServoConfig.from_dict(conf["magnet"]["head"])
-                            logger.info(f"Magnet stepper configuration: {z_config}")
-                        if "actions" in conf["pellet"]:
-                            if "load" in conf["pellet"]["actions"]:
-                                load_movement = MotorSteps.from_dict("load", conf["pellet"][
-                                    "actions"]["load"])
-                            if "home" in conf["pellet"]["actions"]:
-                                home_movement = MotorSteps.from_dict("home",
-                                                                     conf["pellet"]["actions"][
-                                                                         "home"])
-                            if "send" in conf["pellet"]["actions"]:
-                                send_movement = MotorSteps.from_dict("send",
-                                                                     conf["pellet"]["actions"][
-                                                                         "send"])
+                            self._magnet_config = ServoConfig.from_dict(conf["magnet"]["head"])
+                            logger.info(f"Magnet stepper configuration: {self._magnet_config}")
+                    if "actions" in conf:
+                        if "load" in conf["actions"]:
+                            self._load_movement = MotorSteps.from_dict("load",
+                                                                       conf["actions"]["load"])
+                        if "home" in conf["actions"]:
+                            self._home_movement = MotorSteps.from_dict("home",
+                                                                       conf["actions"]["home"])
+                        if "send" in conf["actions"]:
+                            self._send_movement = MotorSteps.from_dict("send",
+                                                                       conf["actions"]["send"])
             except Exception as e:
                 logger.error(f"error loading config: {e}")
-
-            self._home_movement = home_movement
-            self._load_movement = load_movement
-            self._send_movement = send_movement
+                assert False
 
             self._interface.set_motor_configuration(Motor.PELLET_LOAD_SERVO,
-                                                    servo_config=load_config)
-            self._interface.set_motor_configuration(Motor.PELLET_LOAD_SERVO,
-                                                    servo_config=barrier_config)
-            self._interface.set_motor_configuration(Motor.PELLET_LOAD_SERVO,
-                                                    stepper_config=x_config)
-            self._interface.set_motor_configuration(Motor.PELLET_LOAD_SERVO,
-                                                    stepper_config=y_config)
-            self._interface.set_motor_configuration(Motor.PELLET_LOAD_SERVO,
-                                                    stepper_config=z_config)
+                                                    servo_config=self._load_config)
+            self._interface.set_motor_configuration(Motor.PELLET_COVER_SERVO,
+                                                    servo_config=self._barrier_config)
+            self._interface.set_motor_configuration(Motor.PELLET_X_MOTOR,
+                                                    stepper_config=self._x_config)
+            self._interface.set_motor_configuration(Motor.PELLET_Y_MOTOR,
+                                                    stepper_config=self._y_config)
+            self._interface.set_motor_configuration(Motor.PELLET_Z_MOTOR,
+                                                    stepper_config=self._z_config)
             self._interface.set_motor_configuration(Motor.MAGNET_SERVO,
-                                                    servo_config=magnet_config)
+                                                    servo_config=self._magnet_config)
+
+    '''
+    This method is called when a command to a target is requested. This method
+    translates the application command to the appropriate call to the CanInterface
+    instance
+    '''
 
     def notify_message(self, kind: int, data: object, context: object = None) -> None:
         if self._interface is None:
@@ -158,8 +171,39 @@ class CanDevice(Device):
             self._api.send_message(GymDeviceMessageKind.VERSION, "1.0")
             self._complete_command(context)
 
+        elif kind == GymDeviceMessageKind.READ_CONFIG:
+            assert isinstance(data, Motor)
+            self._interface.request_motor_config(data)
+
+        elif kind == GymDeviceMessageKind.WRITE_CONFIG:
+            assert isinstance(data, ServoConfig) or isinstance(data, StepperConfig)
+
+            if is_stepper(data.motor):
+                isinstance(data, StepperConfig)
+
+                self._interface.write_stepper_config(data)
+                if data.motor is Motor.PELLET_LOAD_SERVO:
+                    self._load_config = data
+                elif data.motor is Motor.MAGNET_SERVO:
+                    self._magnet_config = data
+                elif data.motor is Motor.PELLET_COVER_SERVO:
+                    self._barrier_config = data
+            else:
+                assert isinstance(data, ServoConfig)
+                self._interface.write_servo_config(data)
+
+                if data.motor is Motor.PELLET_X_MOTOR:
+                    self._x_config = data
+                elif data.motor is Motor.PELLET_Y_MOTOR:
+                    self._y_config = data
+                elif data.motor is Motor.PELLET_Z_MOTOR:
+                    self._z_config = data
+
+            self._interface.request_motor_config(data.motor)
+
         elif kind == HeadFixMessageKind.UPDATE_SCALE_TARE:
             self._interface.tare_load_cell()
+            self._interface.tare_pressure_sensor()
             self._complete_command(context)
 
         elif kind == HeadFixMessageKind.MAGNET_INTENSITY:
@@ -192,6 +236,22 @@ class CanDevice(Device):
             location = typing.cast(int, data) / 10.0
             self._pellet_desired_z = location
             self._interface.set_z(location)
+
+        elif kind == PelletDeliveryMessageKind.SEND_TO_LIMITS:
+            if self._pending_move_token is not None:
+                self._complete_command(context)
+                return
+
+            motor = typing.cast(Motor, data)
+            self._interface.stepper_home(motor)
+            self._pending_move_token = context
+
+            if motor is Motor.PELLET_X_MOTOR:
+                self._is_homing_x = True
+            elif motor is Motor.PELLET_Y_MOTOR:
+                self._is_homing_y = True
+            elif motor is Motor.PELLET_Z_MOTOR:
+                self._is_homing_z = True
 
         elif kind == PelletDeliveryMessageKind.SEND_HOME:
             if self._pending_move_token is not None or self._home_movement is None:
@@ -227,8 +287,19 @@ class CanDevice(Device):
         elif kind == PelletDeliveryMessageKind.COVER_PELLET:
             self._interface.cover_pellet()
             self._complete_command(context)
+
+        elif kind == PelletDeliveryMessageKind.PLAY_TONE:
+            assert isinstance(data, tuple)
+            self._interface.emit_tone(data[0], data[1])
+            self._complete_command(context)
+
         else:
             logger.info(f"unhandled command queue message: {kind}")
+
+    '''
+    This method is called when data from the target is received. The data is 
+    forwarded to a DeviceAPI class.
+    '''
 
     def notify_data(self, data: typing.Any) -> None:
         for message in data:
@@ -280,7 +351,7 @@ class CanDevice(Device):
 
             elif isinstance(message, ServoStatus):
                 if message.motor is Motor.PELLET_LOAD_SERVO:
-                    self._manage_next_move(PelletDeliveryMessageKind.UPDATE_LOAD,
+                    self._manage_next_move(PelletDeliveryMessageKind.UPDATE_LOAD_SERVO,
                                            message.position, self._pellet_desired_load)
 
                 if self._pending_move_token is not None:
@@ -289,11 +360,19 @@ class CanDevice(Device):
                         f":{message.motor.value} position: {message.position}")
 
             elif isinstance(message, StepperConfig):
+                self.add_vel_and_accel_to_config(message)
+
+                if self._api is not None:
+                    self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
                 logger.debug(
                     f"stepper {message.target.value}|{message.motor}: {message.min_step_inverse}"
                     f" {message.steps_per_revolution}")
 
             elif isinstance(message, ServoConfig):
+                self.add_vel_and_accel_to_config(message)
+
+                if self._api is not None:
+                    self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
                 logger.debug(
                     f"servo {message.target.value}|{message.motor.value}:"
                     f" {message.min_position} {message.min_pwm_duration_us}"
@@ -311,9 +390,20 @@ class CanDevice(Device):
         # Breath on Linux
         time.sleep(0.001)
 
+    '''
+    On completion of a command, the class reports that to a DeviceAPI class.
+    Note that 'completion' may only indicate that the message was sent to the
+    target, not that the target is complete in executing the command.
+    '''
+
     def _complete_command(self, token: object) -> None:
         EventManager.post_event(GymDeviceEventKind.deviceCommandAcknowledge, context=token)
         self._api.send_message(GymDeviceMessageKind.ACK, token)
+
+    '''
+    On a multi-step motor sequence, handle the next step of the sequence when its
+    detected that the current motor movement is complete
+    '''
 
     def _manage_next_move(self, kind, position, desired):
         if self._api is not None:
@@ -326,6 +416,10 @@ class CanDevice(Device):
                     token = self._pending_move_token
                     self._pending_move_token = None
                     self._complete_command(token)
+
+    '''
+    Issue the next step in a multi-step motor sequence
+    '''
 
     def _perform_next_compound_step(self):
         self._pellet_desired_x = None
@@ -362,3 +456,34 @@ class CanDevice(Device):
                 self._pending_move_token = None
                 self._complete_command(token)
                 self._compound_movement = None
+
+    '''
+    Max velocity and acceleration was not intended to be a global configuration
+    item, so it's not stored remotely. When receiving the data, the local system
+    needs to update the received configuration with those values.
+    '''
+
+    def add_vel_and_accel_to_config(self, config):
+        if config.motor is Motor.MAGNET_SERVO:
+            config.max_velocity = self._magnet_config.max_velocity
+            config.max_acceleration = self._magnet_config.max_acceleration
+
+        elif config.motor is Motor.PELLET_COVER_SERVO:
+            config.max_velocity = self._barrier_config.max_velocity
+            config.max_acceleration = self._barrier_config.max_acceleration
+
+        elif config.motor is Motor.PELLET_LOAD_SERVO:
+            config.max_velocity = self._load_config.max_velocity
+            config.max_acceleration = self._load_config.max_acceleration
+
+        elif config.motor is Motor.PELLET_X_MOTOR:
+            config.max_velocity = self._x_config.max_velocity
+            config.max_acceleration = self._x_config.max_acceleration
+
+        elif config.motor is Motor.PELLET_Y_MOTOR:
+            config.max_velocity = self._y_config.max_velocity
+            config.max_acceleration = self._y_config.max_acceleration
+
+        elif config.motor is Motor.PELLET_Z_MOTOR:
+            config.max_velocity = self._z_config.max_velocity
+            config.max_acceleration = self._z_config.max_acceleration
