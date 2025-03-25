@@ -55,13 +55,14 @@ class BehaviorMachineWithMocks(SystemMachine):
         else:
             self.expect_pellet_delivery(True, was_covered)
 
-    def mock_pellet_missing(self, should_release: bool = True, was_covered: bool = False, mouse_seen: bool = False):
+    def mock_pellet_missing(self, should_release: bool = True, was_covered: bool = False, mouse_seen: bool = False,
+                            should_prerelease: bool = False):
         # Make sure we are beyond the required pellet missing time.
         time.sleep(self.algorithm.limits.pellet_missing_time + 0.1)
 
         self.mock_pose_response(False, mouse_seen)
 
-        self.expect_pellet_delivery(should_release, was_covered)
+        self.expect_pellet_delivery(should_release, was_covered, should_prerelease)
 
     def expect_cover_command(self):
         # An explicit cover command should have been set.  Should be in covering state and have an ack from the command.
@@ -69,7 +70,8 @@ class BehaviorMachineWithMocks(SystemMachine):
 
         self.mock_pellet.send_ack()
 
-    def expect_pellet_delivery(self, should_release: bool = True, was_covered: bool = False):
+    def expect_pellet_delivery(self, should_release: bool = True, was_covered: bool = False,
+                               should_prerelease: bool = False):
         """
         Convenience method that uses the mock pellet device reader to send the expected ack() to the machine for the
         expected transitions.  This method assumes that load_pellet() has already been triggered via pose response or
@@ -78,6 +80,8 @@ class BehaviorMachineWithMocks(SystemMachine):
         :param should_release: whether the pellet is expected to be released (vs. left covered)
 
         :param was_covered: whether the pellet should already be in the covered state
+
+        :param should_prerelease: whether movement should include the prerelease step
         """
 
         if not was_covered:
@@ -85,13 +89,19 @@ class BehaviorMachineWithMocks(SystemMachine):
 
             self.mock_pellet.send_ack()
 
+            if should_prerelease:
+                assert self.pellet.state == PelletState.prerelease
+
+                self.mock_pellet.send_ack()
+
             assert self.pellet.state == PelletState.sending
 
             self.mock_pellet.send_ack()
 
         if should_release:
-            assert self.pellet.state == PelletState.releasing
+            if not should_prerelease:
+                assert self.pellet.state == PelletState.releasing
 
-            self.mock_pellet.send_ack()
+                self.mock_pellet.send_ack()
 
             assert self.pellet.state == PelletState.monitoring

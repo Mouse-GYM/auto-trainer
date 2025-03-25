@@ -119,7 +119,7 @@ def test_cover_pellet_disabled():
     assert pellet_machine.state == PelletState.monitoring
 
     # Send a pose response with pellet not seen which should trigger a load/release cycle while in tunnel.
-    machine.mock_pellet_missing()
+    machine.mock_pellet_missing(should_prerelease=True)
 
     machine.exit_tunnel()
 
@@ -128,7 +128,7 @@ def test_cover_pellet_disabled():
 
     machine.enter_tunnel()
 
-    # See comments in InferenceMachine._session_starting.  Even though covering is disabled, this is expected.
+    # See comments in PelletMachine._session_starting.  Even though covering is disabled, this is expected.
     machine.expect_pellet_delivery(should_release=True, was_covered=True)
 
     machine.exit_tunnel()
@@ -139,7 +139,7 @@ def test_cover_pellet_disabled():
     # Send a pose response with pellet not seen which should trigger a load/cover cycle while out of tunnel.
     machine.mock_pose_response(False, False)
 
-    machine.mock_pellet_missing(should_release=True)
+    machine.mock_pellet_missing(should_release=True, should_prerelease=True)
 
     # This should be the same as entering with it covered above.
     machine.enter_tunnel()
