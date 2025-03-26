@@ -166,8 +166,8 @@ class SystemMachine:
             if value and self.state == SystemState.tunnel and self.algorithm.head_fixation_enabled:
                 logger.warning(f"\thead fix command available: {self._head_fix_command is not None}")
                 if self._head_fix_command is not None:
-                    logger.warning(f"\tsetting position to 100")
-                    self._head_fix_command.update_position(100)
+                    logger.warning(f"\tsetting position to {self.algorithm.auto_clamp_intensity}")
+                    self._head_fix_command.update_position(self.algorithm.auto_clamp_intensity)
                 EventManager.post_event(BehaviorEventKind.headFixationEnabled)
 
             EventManager.post_event(BehaviorEventKind.headFixationForceDetectorChanged, context=value)

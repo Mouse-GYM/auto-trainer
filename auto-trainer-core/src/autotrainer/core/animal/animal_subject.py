@@ -25,11 +25,14 @@ class AnimalSubject:
                 data = json.load(file)
 
                 animal.name = data["name"]
-                animal.baseline_magnet_intensity = data["baseline_magnet_intensity"]
 
-                animal.pellet_x = data["pellet_x"]
-                animal.pellet_y = data["pellet_y"]
-                animal.pellet_z = data["pellet_z"]
+                if "baseline_magnet_intensity" in data:
+                    animal.baseline_magnet_intensity = data["baseline_magnet_intensity"]
+
+                if "pellet_x" and "pellet_y" and "pellet_z" in data:
+                    animal.pellet_x = data["pellet_x"]
+                    animal.pellet_y = data["pellet_y"]
+                    animal.pellet_z = data["pellet_z"]
             except:
                 logger.error(f"Error loading animal subject from {file_path}")
                 return None

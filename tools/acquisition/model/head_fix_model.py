@@ -210,6 +210,12 @@ class HeadFixModel(ObservableObject):
                 self._head_fix_reader.load_cell_monitor.min_hold_duration = load_cell_conf["minEventDuration"]
             if "minLoadOffDuration" in load_cell_conf:
                 self._head_fix_reader.load_cell_monitor.post_hold_duration = load_cell_conf["minLoadOffDuration"]
+        if "headbarPressure" in configuration:
+            force_detector_conf = configuration["headbarPressure"]
+            if "threshold" in force_detector_conf:
+                self._head_fix_reader.force_detector.threshold = force_detector_conf["threshold"]
+            if "duration" in force_detector_conf:
+                self._head_fix_reader.force_detector.duration = force_detector_conf["duration"]
         if "autoTare" in configuration:
             auto_tare_conf = configuration["autoTare"]
             if "threshold" in auto_tare_conf:
@@ -225,13 +231,17 @@ class HeadFixModel(ObservableObject):
                      "minEventDuration": self._head_fix_reader.load_cell_monitor.min_hold_duration,
                      "minLoadOffDuration": self._head_fix_reader.load_cell_monitor.post_hold_duration}
 
+        force_detector = {"threshold": self._head_fix_reader.force_detector.threshold,
+                          "duration": self._head_fix_reader.force_detector.duration}
+
         auto_tare = {
             "threshold": self._head_fix_reader.tare_detector.threshold,
             "rangeThreshold": self._head_fix_reader.tare_detector.range_threshold,
             "duration": self._head_fix_reader.tare_detector.duration
         }
 
-        return {"port": self.port, "position": self._position, "loadCell": load_cell, "autoTare": auto_tare}
+        return {"port": self.port, "position": self._position, "loadCell": load_cell, "headbarPressure": force_detector,
+                "autoTare": auto_tare}
 
     def _send_with_token(self, cmd, value=None):
         token = uuid.uuid4()

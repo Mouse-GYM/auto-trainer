@@ -42,6 +42,7 @@ class BehaviorEventKind(IntEnum, Enum):
     headfixLoadCellChangedInIntersession = 1603,
     headfixLoadCellChangedWrongState = 1604,
     headfixAutoTare = 1611,
+    autoClampIntensityChanged = 1621,
     intersessionSegmentationCan = 1701,
     intersessionSegmentationBegin = 1702,
     intersessionSegmentationEnd = 1703,
