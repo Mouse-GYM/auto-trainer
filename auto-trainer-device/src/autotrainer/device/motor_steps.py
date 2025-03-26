@@ -1,4 +1,4 @@
-class WhiskerMovement:
+class MotorSteps:
     @classmethod
     def from_dict(cls, name: str, data: dict):
 
@@ -8,9 +8,9 @@ class WhiskerMovement:
             if "type" in step and "value" in step:
                 steps.append({step['type']: step['value']})
 
-        print(f"{name}: {steps}")
+        # print(f"{name}: {steps}")
 
-        return WhiskerMovement(name, steps)
+        return MotorSteps(name, steps)
 
     def __init__(self, name: str, steps: list):
         self._name = name

@@ -4,7 +4,7 @@ import uuid
 from typing import Optional
 
 from autotrainer.core import ObservableObject, ProjectInfo, HeadFixReader
-from autotrainer.device import SerialInterface, WhiskerDevice, WhiskerInterface
+from autotrainer.device import SerialInterface
 from autotrainer.device import HeadFix, HeadFixMessageKind
 from autotrainer.device import DeviceThread, DeviceThreadMessageKind
 
@@ -152,7 +152,6 @@ class HeadFixModel(ObservableObject):
 
         self._device_thread = DeviceThread(HeadFix(buffer_size=20), SerialInterface(self.port), self._reader_queue)
 
-        # self._device_thread = DeviceThread(WhiskerDevice(buffer_size=50), WhiskerInterface(), self._reader_queue)
         self._device_thread.name = "head-fix"
 
         self._device_thread.start()

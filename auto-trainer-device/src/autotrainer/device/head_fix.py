@@ -41,7 +41,8 @@ class HeadFixMessageKind(IntEnum):
     SETTINGS = 4,
     UPDATE_SCALE_TARE = 5,
     STREAM_START = 6,
-    STREAM_STOP = 7
+    STREAM_STOP = 7,
+    UPDATE_MAGNET = 1000,
 
 
 class HeadFix(GymDevice):
