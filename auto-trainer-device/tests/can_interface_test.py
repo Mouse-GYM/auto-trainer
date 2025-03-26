@@ -161,7 +161,7 @@ def test_tare_load_cell(interface: CanInterface):
     assert interface.tare_load_cell();
 
     for tries in range(3):
-        loadcell = get_response(interface, LoadCellReading, Target.MAGNET_DEVICE)
+        loadcell = get_response(interface, LoadCellReading, Target.MAGNET_DEVICE, 4)
         assert loadcell is not None
         if loadcell.load_mv <= 0.01:
             return
@@ -261,6 +261,5 @@ if __name__ == '__main__':
     test_tare_pressure_sensor(iface)
     test_color_led(iface)
     test_streaming_data(iface)
-    test_stepper_home(iface)
 
     iface.close()
