@@ -130,6 +130,7 @@ class SystemMachine:
 
     def before_exit_intersession(self):
         self._algorithm.system_state = SystemState.cage
+        self._pellet_machine.environment_changed()
 
     def _session_ended(self):
         if self.algorithm.can_perform_intersession_analysis() and self.state == SystemState.cage:

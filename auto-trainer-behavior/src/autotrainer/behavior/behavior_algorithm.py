@@ -93,6 +93,7 @@ class BehaviorAlgorithm(ObservableObject):
     def intersession_enabled(self, value: bool):
         self._intersession_enabled = self._on_property_changed("intersession_enabled", value,
                                                                self._intersession_enabled)
+
     @property
     def head_fixation_enabled(self):
         return self._head_fixation_enabled

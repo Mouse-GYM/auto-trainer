@@ -15,12 +15,15 @@ class BehaviorEventKind(IntEnum, Enum):
     pelletCoverCan = 1207
     pelletCoverBegin = 1208,
     pelletCoverEnd = 1209,
-    pelletReleaseCan = 1210
+    pelletReleaseCan = 1210,
     pelletReleaseBegin = 1211,
     pelletReleaseEnd = 1212,
     pelletHomeCan = 1213,
     pelletHomeBegin = 1214,
     pelletHomeEnd = 1215,
+    pelletPrereleaseCan = 1216,
+    pelletPrereleaseBegin = 1217,
+    pelletPrereleaseEnd = 1218,
     pelletAcknowledgeToken = 1298,
     pelletExternalToken = 1299,
     sessionStarting = 1301,
