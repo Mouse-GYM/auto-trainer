@@ -3,10 +3,11 @@ import time
 from queue import Queue
 from threading import Thread
 
-from autotrainer.core import ObservableObject
-from autotrainer.device import DeviceThreadMessageKind, GymDeviceMessageKind
+from autotrainer.core import ObservableObject, SystemStatusMessageKind
 
 logger = logging.getLogger(__name__)
+
+TERMINATE = -1001
 
 
 class DeviceReader(ObservableObject):
@@ -32,11 +33,11 @@ class DeviceReader(ObservableObject):
         while True:
             msg, data = self._input_queue.get()
 
-            if msg == DeviceThreadMessageKind.TERMINATE:
+            if msg == TERMINATE:
                 break
-            elif msg == GymDeviceMessageKind.ACK:
+            elif msg == SystemStatusMessageKind.ACK:
                 self.ack_received(data)
-            elif msg == GymDeviceMessageKind.VERSION:
+            elif msg == SystemStatusMessageKind.VERSION:
                 self.property_changed(DeviceReader.FIRMWARE_VERSION, data, None)
             else:
                 self.message_received(msg, data)

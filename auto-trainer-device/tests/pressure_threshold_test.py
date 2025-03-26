@@ -1,6 +1,7 @@
 import csv
 from pathlib import Path
 
+from autotrainer.device import DeviceApi, GymDeviceMessageKind
 from autotrainer.device.head_fix import HeadFixMeasurement
 from autotrainer.core import ForceDetector
 
