@@ -303,6 +303,9 @@ class PelletMachine:
     def is_loading(self):
         pass
 
+    def is_prerelease(self):
+        pass
+
     def is_sending(self):
         pass
 

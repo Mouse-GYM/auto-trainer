@@ -84,23 +84,54 @@ class LoadCellMonitor(ObservableObject):
             self.property_changed("is_engaged", False, True)
 
 
-class ForceDetector:
+class ForceDetector(ObservableObject):
     def __init__(self):
-        self._threshold: float = 400.0
-        self._window_length: float = 0.25
-        self._buffer_length: float = 1
+        super().__init__()
+
         self._sample_rate = 100
+
+        self._threshold: float = 30
+        self._duration: float = 0.25
 
         self._values = numpy.empty((1, 0))
 
-        self._weight = 0
+        self._buffer_length: float = 1.0
+        self._retain_count: int = 1
 
-        self._retain_count = round(self._sample_rate * self._buffer_length)
+        self._window_count: int = 3
 
-        self._window_count = round(self._sample_rate * self._window_length)
+        self._first_third = 1
+        self._last_third = 1
 
-        self._first_third = floor(self._window_count / 3)
-        self._last_third = self._window_count - self._first_third
+        self._rebuild_buffers()
+
+    @property
+    def sample_rate(self) -> int:
+        return self._sample_rate
+
+    @sample_rate.setter
+    def sample_rate(self, value: int) -> None:
+        # Odd number sample rates lead to mismatched indexing.  Can just handle here once by effectively doing the
+        # round.
+        self._sample_rate = value + (value % 2)
+        self._rebuild_buffers()
+
+    @property
+    def threshold(self) -> float:
+        return self._threshold
+
+    @threshold.setter
+    def threshold(self, value: float) -> None:
+        self._threshold = self._on_property_changed("threshold", value, self._threshold)
+
+    @property
+    def duration(self) -> float:
+        return self._duration
+
+    @duration.setter
+    def duration(self, value: float) -> None:
+        self._duration = self._on_property_changed("duration", value, self._duration)
+        self._rebuild_buffers()
 
     def update(self, values: list) -> bool:
         self._values = numpy.append(self._values, values)
@@ -109,15 +140,33 @@ class ForceDetector:
         if len(self._values) < self._retain_count:
             return False
 
-        for idx in range(self._window_count * 2):
-            s_1 = idx + self._last_third
-            e_1 = idx + self._window_count
-            s_2 = idx
-            e_2 = idx + self._first_third
-            if numpy.all(self._values[s_2:e_2] <= (self._values[s_1:e_1] - 30)):
+        # Values are appended and dropped in batches.  Need to evaluate over the full window size as more than just one
+        # sample will be gone the next evaluation.  We could just evaluate oldest last window_count samples, but there
+        # would be greater latency in the response.  We are also evaluating the same window of samples multiple times
+        # depending on the measurement batch size, but this is simple calculation and not worth optimizing out at the
+        # moment.
+        for idx in range(self._window_count * 3):
+            new_start = idx + self._last_third
+            new_end = idx + self._window_count
+            old_start = idx
+            old_end = idx + self._first_third
+
+            if numpy.all(self._values[old_start:old_end] <= (self._values[new_start:new_end] - self._threshold)):
                 return True
 
         return False
+
+    def _rebuild_buffers(self):
+        # Measurements are received in batches.  Depending on that batch size, it may not result in a continuous, moving
+        # evaluation with data processed in batches.  Store a larger buffer than the window so we can apply the window
+        # over each starting and ending element.
+        self._buffer_length = self._duration * 4
+        self._retain_count = round(self._sample_rate * self._buffer_length)
+
+        self._window_count = round(self._sample_rate * self._duration)
+
+        self._first_third = floor(self._window_count / 3)
+        self._last_third = self._window_count - self._first_third
 
 
 class TareDetector:
@@ -261,6 +310,10 @@ class HeadFixReader(DeviceReader):
     @property
     def tare_detector(self):
         return self._tare_detector
+
+    @property
+    def force_detector(self):
+        return self._force_detector
 
     def message_received(self, msg, data):
         if msg == SystemStatusMessageKind.STREAM_START:
