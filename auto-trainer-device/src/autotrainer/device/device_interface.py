@@ -18,20 +18,12 @@ import typing
 from dataclasses import dataclass
 from enum import IntEnum
 
+from autotrainer.core.message import Motor
+
 
 class Target(IntEnum):
     PELLET_DEVICE = 0
     MAGNET_DEVICE = 1
-
-
-class Motor(IntEnum):
-    NONE = 0
-    MAGNET_SERVO = 1
-    PELLET_X_MOTOR = 2
-    PELLET_Y_MOTOR = 3
-    PELLET_Z_MOTOR = 4
-    PELLET_COVER_SERVO = 5
-    PELLET_LOAD_SERVO = 6
 
 
 class DigitalOutputs(IntEnum):
@@ -77,15 +69,13 @@ class PelletDigitalInputs(Source):
 
 @dataclass
 class ServoConfig(Source):
-    motor: Motor = Motor.NONE
-    error: bool = False
-    min_position: float = 0
-    max_position: float = 100
-    min_pwm_duration_us: float = 1000
-    max_pwm_duration_us: float = 2000
-
-    max_velocity: float = 25.0
-    max_acceleration: float = 100.0
+    _motor: Motor = Motor.NONE
+    _min_position: float = 0
+    _max_position: float = 100
+    _min_pwm_duration_us: float = 1000
+    _max_pwm_duration_us: float = 2000
+    _max_velocity: float = 25.0
+    _max_acceleration: float = 100.0
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -105,6 +95,62 @@ class ServoConfig(Source):
             config.max_acceleration = data["max_acc"]
 
         return config
+
+    @property
+    def motor(self) -> Motor:
+        return self._motor
+
+    @motor.setter
+    def motor(self, value: Motor):
+        self._motor = value
+
+    @property
+    def maximum_velocity(self) -> float:
+        return self._max_velocity
+
+    @maximum_velocity.setter
+    def maximum_velocity(self, value: float):
+        self._max_velocity = value
+
+    @property
+    def maximum_acceleration(self) -> float:
+        return self._max_acceleration
+
+    @maximum_acceleration.setter
+    def maximum_acceleration(self, value: float):
+        self._max_acceleration = value
+
+    @property
+    def minimum_position(self) -> float:
+        return self._min_position
+
+    @minimum_position.setter
+    def minimum_position(self, value: float):
+        self._min_position = value
+
+    @property
+    def maximum_position(self) -> float:
+        return self._max_position
+
+    @maximum_position.setter
+    def maximum_position(self, value: float):
+        self._max_position = value
+
+    @property
+    def minimum_pwm_duration(self) -> float:
+        return self._min_pwm_duration_us
+
+    @minimum_pwm_duration.setter
+    def minimum_pwm_duration(self, value: float):
+        self._min_pwm_duration_us = value
+
+    @property
+    def maximum_pwm_duration(self) -> float:
+        return self._max_pwm_duration_us
+
+    @maximum_pwm_duration.setter
+    def maximum_pwm_duration(self, value: float):
+        self._max_pwm_duration_us = value
 
 
 @dataclass
@@ -130,20 +176,18 @@ class ServoStatus(Source):
 
 @dataclass
 class StepperConfig(Source):
-    motor: Motor = Motor.NONE
-    error: bool = False
-    min_step_inverse: int = 64
-    steps_per_revolution: float = 48.0
-
-    max_velocity: float = 25.0
-    max_acceleration: float = 100.0
+    _motor: Motor = Motor.NONE
+    _min_step_inverse: int = 64
+    _steps_per_revolution: float = 48.0
+    _max_velocity: float = 25.0
+    _max_acceleration: float = 100.0
 
     @classmethod
     def from_dict(cls, data: dict):
         config = StepperConfig()
 
         if "min_step_inverse" in data:
-            config.min_step_inverse = data["min_step_inverse"]
+            config.min_step_inverted = data["min_step_inverse"]
         if "steps_per_revolution" in data:
             config.steps_per_revolution = data["steps_per_revolution"]
         if "max_vel" in data:
@@ -152,6 +196,46 @@ class StepperConfig(Source):
             config.max_acceleration = data["max_acc"]
 
         return config
+
+    @property
+    def motor(self) -> Motor:
+        return self._motor
+
+    @motor.setter
+    def motor(self, value: Motor):
+        self._motor = value
+
+    @property
+    def maximum_velocity(self) -> float:
+        return self._max_velocity
+
+    @maximum_velocity.setter
+    def maximum_velocity(self, value: float):
+        self._max_velocity = value
+
+    @property
+    def maximum_acceleration(self) -> float:
+        return self._max_acceleration
+
+    @maximum_acceleration.setter
+    def maximum_acceleration(self, value: float):
+        self._max_acceleration = value
+
+    @property
+    def minimum_step_inverted(self) -> int:
+        return self._min_step_inverse
+
+    @minimum_step_inverted.setter
+    def minimum_step_inverted(self, value: int):
+        self._min_step_inverse = value
+
+    @property
+    def steps_per_revolution(self) -> float:
+        return self._steps_per_revolution
+
+    @steps_per_revolution.setter
+    def steps_per_revolution(self, value: float):
+        self._steps_per_revolution = value
 
 
 @dataclass

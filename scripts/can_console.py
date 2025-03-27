@@ -168,24 +168,22 @@ def write_config(motor: Motor, device_thread):
         motor is Motor.PELLET_Y_MOTOR or \
         motor is Motor.PELLET_Z_MOTOR:
         config = StepperConfig()
-        config.motor = motor
-        config.target = target_of_motor(motor)
-        config.max_velocity = float(input("Max Velocity = "))
-        config.max_acceleration = float(input("Max Acceleration = "))
-        config.min_step_inverse = int(input("Min Step (inverted) = "))
+
+        config.maximum_velocity = float(input("Max Velocity = "))
+        config.maximum_acceleration = float(input("Max Acceleration = "))
+        config.minimum_step_inverted = int(input("Min Step (inverted) = "))
         config.steps_per_revolution = float(input("Steps/Revolution = "))
-        device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, config)
+        device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, (motor, config))
     else:
         config = ServoConfig()
-        config.motor = motor
-        config.target = target_of_motor(motor)
-        config.max_velocity = float(input("Max Velocity = "))
-        config.max_acceleration = float(input("Max Acceleration = "))
-        config.min_position = int(input("Min Position = "))
-        config.max_position = int(input("Max Position = "))
-        config.min_pwm_duration_us = int(input("Min PWM Duration (usec) = "))
-        config.max_pwm_duration_us = int(input("Max PWM Duration (usec) = "))
-        device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, config)
+
+        config.maximum_velocity = float(input("Max Velocity = "))
+        config.maximum_acceleration = float(input("Max Acceleration = "))
+        config.minimum_position = float(input("Min Position = "))
+        config.maximum_position = float(input("Max Position = "))
+        config.minimum_pwm_duration = float(input("Min PWM Duration (usec) = "))
+        config.maximum_pwm_duration = float(input("Max PWM Duration (usec) = "))
+        device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, (motor, config))
 
 
 def wait_for_move(kind, position):
@@ -263,9 +261,10 @@ def run_monitor():
                 print("c                  ::Cover Pellet")
                 print("d <freq> <period>  ::Tone (hz, sec)")
                 print("e <motor> <trips>  ::Stepper round trip test")
+                print("f <file>           ::Load Motor Configuration")
+                print("F <file>           ::Load Compound Movement Configuration")
                 print("h                  ::Home Position")
                 print("l                  ::Load Pellet")
-                print("L <file>           ::Load Motor & Motion Configuration")
                 print("m <pos>            ::Move Magnet Servo [0:180] (deg)")
                 print("n <pos>            ::Move Load Servo [0:110] (deg)")
                 print("o <pos>            ::Move Cover Servo [0:180] (deg)")
@@ -278,9 +277,9 @@ def run_monitor():
                 print("x <pos>            ::Move X [-12.0,0.0] (turns)")
                 print("y <pos>            ::Move Y [0:12] (turns)")
                 print("z <pos>            ::Move Z [0:12] (turns)")
-                print("X                  ::Home X to Limit")
-                print("Y                  ::Home Y to Limit")
-                print("Z                  ::Home Z to Limit")
+                print("X                  ::Send X to Limit")
+                print("Y                  ::Send Y to Limit")
+                print("Z                  ::Send Z to Limit")
                 print()
                 print("<motor> is one of [x, y, z, load, cover, magnet]")
 
@@ -297,12 +296,14 @@ def run_monitor():
                                            data=(int(params[0]), int(params[1]) * 1000))
             elif cmd == 'e':
                 round_trip_test(str_to_motor(params[0]), int(params[1]), device_thread)
+            elif cmd == 'f':
+                device_thread.use_motor_configuration(params[0])
+            elif cmd == 'F':
+                device_thread.use_compound_movement(params[0])
             elif cmd == 'h':
                 device_thread.send_message(PelletDeliveryMessageKind.SEND_HOME)
             elif cmd == 'l':
                 device_thread.send_message(PelletDeliveryMessageKind.LOAD_PELLET)
-            elif cmd == 'L':
-                device_thread.send_message(GymDeviceMessageKind.LOAD_CONFIG_FILE, params[0])
             elif cmd == 'm':
                 device_thread.send_message(HeadFixMessageKind.SET_MAGNET_INTENSITY,
                                            data=float(params[0]))

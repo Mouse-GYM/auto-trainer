@@ -11,7 +11,7 @@ from autotrainer.device import (CanDevice, DeviceApi, CanInterface, GymDeviceMes
                                 HeadFixMessageKind, PelletDeliveryMessageKind, Status,
                                 Target, LoadCellReading, PressureReading, SensorStatus,
                                 MagnetDigitalInputs, Motor, StepperStatus, ServoStatus,
-                                ServoConfig, StepperConfig
+                                ServoConfig, StepperConfig, MotorSteps
                                 )
 from autotrainer.core.message import SystemStatusMessageKind
 
@@ -59,6 +59,11 @@ def _construction():
     interface._set_magnet_address(0x40)
     interface._set_pellet_address(0x01)
     device.api = DeviceApi(interface=interface, message_callback=data_callback)
+
+    device.notify_message(GymDeviceMessageKind.SET_HOME_PROCEDURE, MotorSteps("home", [{"x": 0}]))
+    device.notify_message(GymDeviceMessageKind.SET_SEND_PROCEDURE, MotorSteps("send", [{"y": 0}]))
+    device.notify_message(GymDeviceMessageKind.SET_LOAD_PROCEDURE, MotorSteps("load", [{"z": 0}]))
+
     return device
 
 
@@ -182,7 +187,7 @@ def test_load_servo_status():
 def test_servo_config():
     global _expected
 
-    config = ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0, 0,
+    config = ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, 0, 0, 0,
                          0, 0, 0)
 
     _expected = [
@@ -195,7 +200,7 @@ def test_servo_config():
 def test_stepper_config():
     global _expected
 
-    config = StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, False, 0, 0,
+    config = StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, 0, 0,
                            0, 0)
     _expected = [
         (GymDeviceMessageKind.READ_CONFIG, config),

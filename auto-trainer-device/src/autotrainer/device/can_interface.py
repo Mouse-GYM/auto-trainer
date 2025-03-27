@@ -22,6 +22,7 @@ except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
 from .device_interface import *
+from autotrainer.core.message import Motor
 
 logger = logging.getLogger(__name__)
 
@@ -382,36 +383,48 @@ class CanInterface(DeviceInterface):
         return None
 
     '''
-    Set a motor's configuration. Only one of servo_config or stepper_config
-    should be set.
+    Set a motor's configuration.
+    
+    motor - Motor associated with the configuration
+    config - Configuration data
+    write - Indication to push data to target (True), or locally store new configuration (False)
     '''
 
-    def set_motor_configuration(self, motor: Motor, config) -> bool:
+    def set_motor_configuration(self, motor: Motor, config, write: bool = True) -> bool:
         rc = False
+
+        config.motor = motor
+        config.target = target_of_motor(motor)
 
         if motor is Motor.MAGNET_SERVO:
             self.magnet_config = config
-            rc = self._write_servo_config(self.magnet_config)
+            if write:
+                rc = self._write_servo_config(self.magnet_config)
 
         elif motor is Motor.PELLET_X_MOTOR:
             self.x_config = config
-            rc = self._write_stepper_config(self.x_config)
+            if write:
+                rc = self._write_stepper_config(self.x_config)
 
         elif motor is Motor.PELLET_Y_MOTOR:
             self.y_config = config
-            rc = self._write_stepper_config(self.y_config)
+            if write:
+                rc = self._write_stepper_config(self.y_config)
 
         elif motor is Motor.PELLET_Z_MOTOR:
             self.z_config = config
-            rc = self._write_stepper_config(self.z_config)
+            if write:
+                rc = self._write_stepper_config(self.z_config)
 
         elif motor is Motor.PELLET_COVER_SERVO:
             self.barrier_config = config
-            rc = self._write_servo_config(self.barrier_config)
+            if write:
+                rc = self._write_servo_config(self.barrier_config)
 
         elif motor is Motor.PELLET_LOAD_SERVO:
             self.load_config = config
-            rc = self._write_servo_config(self.load_config)
+            if write:
+                rc = self._write_servo_config(self.load_config)
 
         # wait for write to complete
         if rc:
@@ -423,6 +436,7 @@ class CanInterface(DeviceInterface):
     Write the currently-known configuration for each of the pellet board's motors. 
     '''
 
+    # Deprecated - do not use; alternate is to individually write configurations
     def configure_pellet(self):
         self._write_servo_config(self.load_config)
         self._write_servo_config(self.barrier_config)
@@ -434,6 +448,7 @@ class CanInterface(DeviceInterface):
     Write the currently-known configuration for each of the magnet board's motors. 
     '''
 
+    # Deprecated - do not use; alternate is to individually write configurations
     def configure_magnet(self):
         self._write_servo_config(self.magnet_config)
 
@@ -466,8 +481,9 @@ class CanInterface(DeviceInterface):
         logger.info(f"set magnet position {position}")
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
         return addr is not None and self._jc.ServoMove(addr, _MAGNET_SERVO_ID,
-                                                       position, self.magnet_config.max_velocity,
-                                                       self.magnet_config.max_acceleration,
+                                                       position,
+                                                       self.magnet_config.maximum_velocity,
+                                                       self.magnet_config.maximum_acceleration,
                                                        AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -484,8 +500,8 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.StepperMove(addr, _PELLET_X_MOTOR_ID,
                                                          position,
-                                                         self.x_config.max_velocity,
-                                                         self.x_config.max_acceleration,
+                                                         self.x_config.maximum_velocity,
+                                                         self.x_config.maximum_acceleration,
                                                          AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -502,8 +518,8 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.StepperMove(addr, _PELLET_Y_MOTOR_ID,
                                                          position,
-                                                         self.y_config.max_velocity,
-                                                         self.y_config.max_acceleration,
+                                                         self.y_config.maximum_velocity,
+                                                         self.y_config.maximum_acceleration,
                                                          AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -521,8 +537,8 @@ class CanInterface(DeviceInterface):
 
         return addr is not None and self._jc.StepperMove(addr, _PELLET_Z_MOTOR_ID,
                                                          position,
-                                                         self.z_config.max_velocity,
-                                                         self.z_config.max_acceleration,
+                                                         self.z_config.maximum_velocity,
+                                                         self.z_config.maximum_acceleration,
                                                          AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -539,8 +555,8 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.ServoMove(addr, _PELLET_LOAD_SERVO_ID,
                                                        position,
-                                                       self.load_config.max_velocity,
-                                                       self.load_config.max_acceleration,
+                                                       self.load_config.maximum_velocity,
+                                                       self.load_config.maximum_acceleration,
                                                        AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -557,8 +573,8 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.ServoMove(addr, _PELLET_COVER_SERVO_ID,
                                                        position,
-                                                       self.barrier_config.max_velocity,
-                                                       self.barrier_config.max_acceleration,
+                                                       self.barrier_config.maximum_velocity,
+                                                       self.barrier_config.maximum_acceleration,
                                                        AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -568,7 +584,7 @@ class CanInterface(DeviceInterface):
     def release_pellet(self) -> bool:
         addr = self._tgt2addr(Target.PELLET_DEVICE)
 
-        return addr is not None and self.set_barrier(self.barrier_config.min_position) and \
+        return addr is not None and self.set_barrier(self.barrier_config.minimum_position) and \
             self.emit_tone(addr, 6000)
 
     '''
@@ -576,8 +592,8 @@ class CanInterface(DeviceInterface):
     '''
 
     def cover_pellet(self) -> bool:
-        logger.info(f"cover pellet {self.barrier_config.max_position}")
-        return self.set_barrier(self.barrier_config.max_position)
+        logger.info(f"cover pellet {self.barrier_config.maximum_position}")
+        return self.set_barrier(self.barrier_config.maximum_position)
 
     '''
     Send the given motor (X, Y, or Z) to the 0 position
@@ -605,10 +621,11 @@ class CanInterface(DeviceInterface):
             return False
 
         if self._jc.StepperCfgWrite(addr, motor_id,
-                                    config.min_step_inverse,
+                                    config.minimum_step_inverted,
                                     config.steps_per_revolution) == 0:
             logger.debug(
-                f"stepper {addr} {motor_id} config write: {config.min_step_inverse} {config.steps_per_revolution}")
+                f"stepper {addr} {motor_id} config write: {config.minimum_step_inverted}"
+                f" {config.steps_per_revolution}")
             return True
         else:
             logger.error(
@@ -628,14 +645,14 @@ class CanInterface(DeviceInterface):
             return False
 
         if self._jc.ServoCfgWrite(addr, motor_id,
-                                  config.min_position,
-                                  config.max_position,
-                                  config.min_pwm_duration_us,
-                                  config.max_pwm_duration_us) == 0:
+                                  config.minimum_position,
+                                  config.maximum_position,
+                                  config.minimum_pwm_duration,
+                                  config.maximum_pwm_duration) == 0:
             logger.debug(
-                f"servo {addr} {motor_id} config write: {config.min_position}"
-                f" {config.max_position} {config.min_pwm_duration_us} "
-                f"{config.max_pwm_duration_us}")
+                f"servo {addr} {motor_id} config write: {config.minimum_position}"
+                f" {config.maximum_position} {config.minimum_pwm_duration} "
+                f"{config.maximum_pwm_duration}")
             return True
         else:
             logger.error(
@@ -751,13 +768,14 @@ class CanInterface(DeviceInterface):
 
             config.target = target
             config.motor = motor
-            config.error = message.cfg_response.servo.error == 1
 
             config.min_position = message.cfg_response.servo.min_position
             config.max_position = message.cfg_response.servo.max_position
             config.min_pwm = message.cfg_response.servo.min_pwm_duration_us
             config.max_pwm = message.cfg_response.servo.max_pwm_duration_us
 
+            # Update the local copy of the received configuration
+            self.set_motor_configuration(motor, config, False)
             return config
 
         elif (message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type ==
@@ -779,10 +797,12 @@ class CanInterface(DeviceInterface):
 
             config.target = target
             config.motor = motor
-            config.error = message.cfg_response.stepper.error
 
             config.min_step_inverse = message.cfg_response.stepper.min_step_inverse
             config.steps_per_revolution = message.cfg_response.stepper.steps_per_revolution
+
+            # Update the local copy of the received configuration
+            self.set_motor_configuration(motor, config, False)
 
             return config
 

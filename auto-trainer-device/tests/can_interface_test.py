@@ -67,30 +67,30 @@ def test_read_config(interface: CanInterface, motor: Motor = Motor.MAGNET_SERVO)
 def test_write_servo_config(interface: CanInterface, motor: Motor = Motor.MAGNET_SERVO):
     config = _read_config(interface, motor)
 
-    orig_min = config.min_position
-    orig_max = config.max_position
+    orig_min = config.minimum_position
+    orig_max = config.maximum_position
 
-    config.min_position -= 10
-    config.max_position += 10
-    assert interface._write_servo_config(config)
+    config.maximum_position -= 10
+    config.minimum_position += 10
+    assert interface.set_motor_configuration(motor, config)
 
     new_config = _read_config(interface, config.motor)
-    assert new_config.min_position == config.min_position
-    assert new_config.max_position == config.max_position
+    assert new_config.min_position == config.minimum_position
+    assert new_config.max_position == config.maximum_position
 
-    config.min_position = orig_min
-    config.max_position = orig_max
+    config.minimum_position = orig_min
+    config.maximum_position = orig_max
 
-    assert interface._write_servo_config(config)
+    assert interface.set_motor_configuration(motor, config)
 
 
-def _write_stepper_config(interface: CanInterface, config: StepperConfig) -> bool:
-    if not interface._write_stepper_config(config):
+def _write_stepper_config(interface: CanInterface, motor: Motor, config: StepperConfig) -> bool:
+    if not interface.set_motor_configuration(motor, config):
         return False
 
-    new_config = _read_config(interface, config.motor)
+    new_config = _read_config(interface, motor)
 
-    return new_config.min_step_inverse == config.min_step_inverse and \
+    return new_config.min_step_inverse == config.minimum_step_inverted and \
         new_config.steps_per_revolution == config.steps_per_revolution
 
 
@@ -98,16 +98,16 @@ def _write_stepper_config(interface: CanInterface, config: StepperConfig) -> boo
 def test_write_stepper_config(interface: CanInterface, motor: Motor = Motor.PELLET_Z_MOTOR):
     config = _read_config(interface, motor)
 
-    orig_min = config.min_step_inverse
+    orig_min = config.minimum_step_inverted
     orig_steps = config.steps_per_revolution
 
-    config.min_step_inverse *= 2
+    config.minimum_step_inverted *= 2
     config.steps_per_revolution *= 2
-    assert _write_stepper_config(interface, config)
+    assert _write_stepper_config(interface, motor, config)
 
-    config.min_step_inverse = orig_min
+    config.minimum_step_inverted = orig_min
     config.steps_per_revolution = orig_steps
-    assert _write_stepper_config(interface, config)
+    assert _write_stepper_config(interface, motor, config)
 
 
 def _write_gpio(interface: CanInterface, state: bool):

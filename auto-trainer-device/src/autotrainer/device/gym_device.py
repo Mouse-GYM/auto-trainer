@@ -21,7 +21,9 @@ class GymDeviceMessageKind(IntEnum):
     ACK = -2,
     READ_CONFIG = -3,
     WRITE_CONFIG = -4,
-    LOAD_CONFIG_FILE = -5
+    SET_HOME_PROCEDURE = -5,
+    SET_LOAD_PROCEDURE = -6,
+    SET_SEND_PROCEDURE = -7,
 
     @classmethod
     def is_member(cls, value):
