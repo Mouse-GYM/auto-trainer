@@ -4,6 +4,7 @@ import queue
 import time
 from threading import Thread
 
+from autotrainer.core import SystemStatusMessageKind
 from autotrainer.device import CanDevice, DeviceThread, DeviceThreadMessageKind, \
     HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, target_of_motor
@@ -97,11 +98,11 @@ def monitor_message_queue():
                       f"- step/rev={data.steps_per_revolution}\n"
                       )
 
-        elif ((kind == PelletDeliveryMessageKind.UPDATE_COVER_SERVO and
+        elif ((kind == SystemStatusMessageKind.PELLET_COVER and
                print_status is Motor.PELLET_COVER_SERVO) or
-              (kind == PelletDeliveryMessageKind.UPDATE_LOAD_SERVO and
+              (kind == SystemStatusMessageKind.PELLET_LOAD and
                print_status is Motor.PELLET_LOAD_SERVO) or
-              (kind == HeadFixMessageKind.UPDATE_MAGNET and
+              (kind == SystemStatusMessageKind.HEAD_MAGNET and
                print_status is Motor.MAGNET_SERVO)):
 
             # TODO deliver full packet. See can_device at or around line 328
@@ -113,11 +114,11 @@ def monitor_message_queue():
                 f"- position={data}\n"
             )
             print_status = Motor.NONE
-        elif ((kind == PelletDeliveryMessageKind.UPDATE_X and
+        elif ((kind == SystemStatusMessageKind.PELLET_X and
                print_status is Motor.PELLET_X_MOTOR) or
-              (kind == PelletDeliveryMessageKind.UPDATE_Y and
+              (kind == SystemStatusMessageKind.PELLET_Y and
                print_status is Motor.PELLET_Y_MOTOR) or
-              (kind == PelletDeliveryMessageKind.UPDATE_Z and
+              (kind == SystemStatusMessageKind.PELLET_Z and
                print_status is Motor.PELLET_Z_MOTOR)):
             # if isinstance(StepperStatus, data):
             print(
@@ -129,9 +130,9 @@ def monitor_message_queue():
             )
             print_status = Motor.NONE
 
-        if kind == PelletDeliveryMessageKind.UPDATE_X or \
-            kind == PelletDeliveryMessageKind.UPDATE_Y or \
-            kind == PelletDeliveryMessageKind.UPDATE_Z:
+        if kind == SystemStatusMessageKind.PELLET_X or \
+            kind == SystemStatusMessageKind.PELLET_Y or \
+            kind == SystemStatusMessageKind.PELLET_Z:
             positions[kind] = int(data)
 
     if output_fd is not None:
@@ -199,8 +200,8 @@ def wait_for_move(kind, position):
 def round_trip_test(motor: Motor, trips: int, device_thread):
     global print_status, positions
 
-    min_pos = 0
-    max_pos = -10 if motor is Motor.PELLET_X_MOTOR else 10
+    min_pos = 0.0
+    max_pos = -10.0 if motor is Motor.PELLET_X_MOTOR else 10.0
     kind = None
 
     if motor is Motor.PELLET_X_MOTOR:
@@ -215,12 +216,12 @@ def round_trip_test(motor: Motor, trips: int, device_thread):
         return
 
     for i in range(trips):
-        device_thread.send_message(kind, data=max_pos * 10)
+        device_thread.send_message(kind, data=max_pos)
         time.sleep(2)
         print_status = motor
         time.sleep(1)
 
-        device_thread.send_message(kind, data=min_pos * 10)
+        device_thread.send_message(kind, data=min_pos)
         time.sleep(2)
         print_status = motor
         time.sleep(1)
@@ -264,16 +265,18 @@ def run_monitor():
                 print("e <motor> <trips>  ::Stepper round trip test")
                 print("h                  ::Home Position")
                 print("l                  ::Load Pellet")
-                print("m <pos>            ::Move Magnet")
+                print("m <pos>            ::Move Magnet Servo [0:180] (deg)")
+                print("n <pos>            ::Move Load Servo [0:110] (deg)")
+                print("o <pos>            ::Move Cover Servo [0:180] (deg)")
                 print("q                  ::Quit")
                 print("r                  ::Release Pellet")
                 print("s                  ::Send Pellet")
                 print("t                  ::Tare Load Cell/Pressure Sensors")
                 print("v                  ::Version (not available yet)")
                 print("w <motor>          ::Motor Status")
-                print("x <pos>            ::Move X")
-                print("y <pos>            ::Move Y")
-                print("z <pos>            ::Move Z")
+                print("x <pos>            ::Move X [-12.0,0.0] (turns)")
+                print("y <pos>            ::Move Y [0:12] (turns)")
+                print("z <pos>            ::Move Z [0:12] (turns)")
                 print("X                  ::Home X to Limit")
                 print("Y                  ::Home Y to Limit")
                 print("Z                  ::Home Z to Limit")
@@ -298,7 +301,14 @@ def run_monitor():
             elif cmd == 'l':
                 device_thread.send_message(PelletDeliveryMessageKind.LOAD_PELLET)
             elif cmd == 'm':
-                device_thread.send_message(HeadFixMessageKind.MAGNET_INTENSITY, data=int(params[0]))
+                device_thread.send_message(HeadFixMessageKind.SET_MAGNET_INTENSITY,
+                                           data=float(params[0]))
+            elif cmd == 'n':
+                device_thread.send_message(PelletDeliveryMessageKind.SET_LOAD_SERVO,
+                                           data=float(params[0]))
+            elif cmd == 'o':
+                device_thread.send_message(PelletDeliveryMessageKind.SET_COVER_SERVO,
+                                           data=float(params[0]))
             elif cmd == 'r':
                 device_thread.send_message(PelletDeliveryMessageKind.RELEASE_PELLET)
             elif cmd == 's':
@@ -311,13 +321,13 @@ def run_monitor():
                 print_status = str_to_motor(params[0])
             elif cmd == 'x':
                 device_thread.send_message(PelletDeliveryMessageKind.SET_X,
-                                           data=int(params[0]) * 10)
+                                           data=float(params[0]))
             elif cmd == 'y':
                 device_thread.send_message(PelletDeliveryMessageKind.SET_Y,
-                                           data=int(params[0]) * 10)
+                                           data=float(params[0]))
             elif cmd == 'z':
                 device_thread.send_message(PelletDeliveryMessageKind.SET_Z,
-                                           data=int(params[0]) * 10)
+                                           data=float(params[0]))
             elif cmd == 'X':
                 device_thread.send_message(PelletDeliveryMessageKind.SEND_TO_LIMITS,
                                            data=Motor.PELLET_X_MOTOR)

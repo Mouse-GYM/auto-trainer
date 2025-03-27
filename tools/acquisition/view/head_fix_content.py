@@ -182,7 +182,7 @@ class HeadFixContent(ContentWidget):
             self._model.port = None
 
     def _update_position(self):
-        self._model.update_position(self._position.value())
+        self._model.set_position(self._position.value())
 
     def _update_trigger(self):
         try:

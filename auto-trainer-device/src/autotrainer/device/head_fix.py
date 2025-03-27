@@ -22,8 +22,10 @@ class HeadFixMeasurement:
     spectrum: typing.List[float] = []
     head_contact: bool = False
 
-    def __init__(self, when: float = 0, timestamp: int = 0, weight: float = 0, switch: float = 0, pressure: float = 0,
-                 temperature: float = 0, humidity: float = 0, spectrum: typing.Optional[typing.List[float]] = None):
+    def __init__(self, when: float = 0, timestamp: int = 0, weight: float = 0, switch: float = 0,
+                 pressure: float = 0,
+                 temperature: float = 0, humidity: float = 0,
+                 spectrum: typing.Optional[typing.List[float]] = None):
         self.when = when
         self.timestamp = timestamp
         self.weight = weight
@@ -37,12 +39,14 @@ class HeadFixMeasurement:
 class HeadFixMessageKind(IntEnum):
     RAW_COMMAND = 1,
     MEASUREMENT = -101,  # Deprecated
-    MAGNET_INTENSITY = 3,
+    SET_MAGNET_INTENSITY = 3,
     SETTINGS = 4,
     UPDATE_SCALE_TARE = 5,
     STREAM_START = 6,
     STREAM_STOP = 7,
-    UPDATE_MAGNET = 1000,
+
+    UPDATE_MAGNET = -1100,  # Deprecated
+    AUDIO_DATA = -1101,  # Deprecated
 
 
 class HeadFix(GymDevice):
@@ -74,7 +78,7 @@ class HeadFix(GymDevice):
             self._send_data(typing.cast(str, data), context)
         elif kind == GymDeviceMessageKind.VERSION:
             self._send_data("Fx", context)
-        elif kind == HeadFixMessageKind.MAGNET_INTENSITY:
+        elif kind == HeadFixMessageKind.SET_MAGNET_INTENSITY:
             self._send_data(f"A{typing.cast(int, data)}x", context)
         elif kind == HeadFixMessageKind.SETTINGS:
             self._send_data("Ox", context)
@@ -101,7 +105,8 @@ class HeadFix(GymDevice):
                 self._measurements.append(measurement)
 
                 if len(self._measurements) >= self._measurement_buffer_count:
-                    self._api.send_message(HeadFixMessageKind.MEASUREMENT, self._measurements.copy())
+                    self._api.send_message(HeadFixMessageKind.MEASUREMENT,
+                                           self._measurements.copy())
                     self._measurements = list()
 
             self._perf_monitor.add_cycles(len(measurements))
@@ -146,8 +151,10 @@ def parse_measurement(data: str) -> (HeadFixMeasurement, str):
             return None, data
 
         try:
-            measurement = HeadFixMeasurement(time.time(), time.perf_counter_ns(), int(parts[0]) / 10.0, int(parts[1]),
-                                             int(parts[2]), int(parts[3]) / 10.0, int(parts[4]) / 10.0)
+            measurement = HeadFixMeasurement(time.time(), time.perf_counter_ns(),
+                                             int(parts[0]) / 10.0, int(parts[1]),
+                                             int(parts[2]), int(parts[3]) / 10.0,
+                                             int(parts[4]) / 10.0)
 
             if len(parts) > 5:
                 print(len(parts))

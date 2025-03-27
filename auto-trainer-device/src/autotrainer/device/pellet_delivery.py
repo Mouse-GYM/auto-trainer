@@ -4,6 +4,7 @@ from enum import IntEnum
 
 from .gym_device import GymDevice, GymDeviceMessageKind
 from .device_api import DeviceApi
+from autotrainer.core.message import SystemStatusMessageKind
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,15 @@ class PelletDeliveryMessageKind(IntEnum):
     SET_Z = 108,
     SEND_TO_LIMITS = 109,
     PLAY_TONE = 110,
-    UPDATE_LOAD_SERVO = 1004,
-    UPDATE_COVER_SERVO = 1005,
+    SET_LOAD_SERVO = 111,
+    SET_COVER_SERVO = 112,
+
     # Deprecated
     UPDATE_X = -2001
     UPDATE_Y = -2002,
     UPDATE_Z = -2003,
+    UPDATE_LOAD_SERVO = -2004,
+    UPDATE_COVER_SERVO = -2005,
 
     @classmethod
     def is_member(cls, value):
@@ -45,13 +49,13 @@ class PelletDelivery(GymDevice):
             self._send_data("F0x", context)
         elif kind == PelletDeliveryMessageKind.SEND_HOME:
             self._send_data("H0x", context)
-            self.api.send_message(PelletDeliveryMessageKind.UPDATE_X, 1000)
+            self.api.send_message(SystemStatusMessageKind.PELLET_X, 1000)
         elif kind == PelletDeliveryMessageKind.LOAD_PELLET:
             self._send_data("P0x", context)
-            self.api.send_message(PelletDeliveryMessageKind.UPDATE_Y, 1000)
+            self.api.send_message(SystemStatusMessageKind.PELLET_Y, 1000)
         elif kind == PelletDeliveryMessageKind.SEND_PELLET:
             self._send_data("M0x", context)
-            self.api.send_message(PelletDeliveryMessageKind.UPDATE_Z, 1000)
+            self.api.send_message(SystemStatusMessageKind.PELLET_Z, 1000)
         elif kind == PelletDeliveryMessageKind.RELEASE_PELLET:
             self._send_data("R0x", context)
         elif kind == PelletDeliveryMessageKind.COVER_PELLET:
