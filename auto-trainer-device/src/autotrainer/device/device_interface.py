@@ -117,6 +117,16 @@ class ServoStatus(Source):
         self.motor = motor
         self.position = position
 
+    @property
+    def location(self) -> float:
+        """Current servo position in degrees."""
+        return self.position
+
+    @property
+    def status(self) -> int:
+        """Current servo status value."""
+        return 0
+
 
 @dataclass
 class StepperConfig(Source):
@@ -156,6 +166,19 @@ class StepperStatus(Source):
         self.motor = motor
         self.position = position
         self.limit_switch = limit_switch
+
+    @property
+    def location(self) -> float:
+        """Current motor position in turns."""
+        return self.position
+
+    @property
+    def status(self) -> int:
+        return 0
+
+    @property
+    def limit_hi(self) -> bool:
+        return self.limit_switch
 
 
 @dataclass

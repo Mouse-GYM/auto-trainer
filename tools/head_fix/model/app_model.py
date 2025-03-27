@@ -54,7 +54,8 @@ class AppModel(ObservableObject):
 
     @firmware_version.setter
     def firmware_version(self, value):
-        self._firmware_version = self._on_property_changed("firmware_version", value, self._firmware_version)
+        self._firmware_version = self._on_property_changed(DeviceReader.FIRMWARE_VERSION, value,
+                                                           self._firmware_version)
 
     @property
     def head_fix_reader(self):
@@ -68,8 +69,8 @@ class AppModel(ObservableObject):
 
         return self._ports
 
-    def update_position(self, value: int):
-        self._device_thread.send_message(HeadFixMessageKind.MAGNET_INTENSITY, value)
+    def set_position(self, value: float):
+        self._device_thread.send_message(HeadFixMessageKind.SET_MAGNET_INTENSITY, value)
 
     def tare(self):
         if self._device_thread is not None:
@@ -79,7 +80,7 @@ class AppModel(ObservableObject):
 
     def set_stream_enabled(self, enable: bool):
         if enable:
-            self._set_stream_enable()
+            self._enable_data_stream()
         else:
             if self._device_thread is not None:
                 self._device_thread.send_message(HeadFixMessageKind.STREAM_STOP)
@@ -108,7 +109,7 @@ class AppModel(ObservableObject):
         self._device_thread.send_message(GymDeviceMessageKind.VERSION)
 
         if self._user_settings.stream_enabled:
-            self._set_stream_enable()
+            self._enable_data_stream()
 
         self._is_connected = True
 
@@ -138,7 +139,7 @@ class AppModel(ObservableObject):
     def reader_ack_received(ack):
         logger.info(f"ack context received: {ack}")
 
-    def _set_stream_enable(self):
+    def _enable_data_stream(self):
         if self._device_thread is not None:
             self._device_thread.send_message(HeadFixMessageKind.STREAM_START)
         if self._head_fix_reader is not None:

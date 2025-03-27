@@ -606,6 +606,11 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_magnet(self, position: int) -> bool:
+        if position < 0:
+            position = 0
+        elif position > 180:
+            position = 180
+
         logger.info(f"set magnet position {position}")
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
         return addr is not None and self._jc.ServoMove(addr, _MAGNET_SERVO_ID,
@@ -618,6 +623,11 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_x(self, position: float) -> bool:
+        if position > 0:
+            position = 0
+        elif position < -12:
+            position = -12
+
         logger.info(f"set pellet absolute x {position}")
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.StepperMove(addr, _PELLET_X_MOTOR_ID,
@@ -631,6 +641,11 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_y(self, position: float):
+        if position < 0:
+            position = 0
+        elif position > 12:
+            position = 12
+
         logger.info(f"set pellet absolute y {position}")
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.StepperMove(addr, _PELLET_Y_MOTOR_ID,
@@ -644,6 +659,11 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_z(self, position: float):
+        if position < 0:
+            position = 0
+        elif position > 12:
+            position = 12
+
         logger.info(f"set pellet absolute z {position}")
         addr = self._tgt2addr(Target.PELLET_DEVICE)
 
@@ -658,6 +678,11 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_load(self, position: float):
+        if position < 0:
+            position = 0
+        elif position > 120:
+            position = 120
+
         logger.info(f"set load arm {position}")
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.ServoMove(addr, _PELLET_LOAD_SERVO_ID,
@@ -671,6 +696,11 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_barrier(self, position):
+        if position < 0:
+            position = 0
+        elif position > 180:
+            position = 180
+
         logger.info(f"set barrier arm {position}")
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.ServoMove(addr, _PELLET_COVER_SERVO_ID,

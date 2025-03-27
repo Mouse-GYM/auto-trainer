@@ -27,6 +27,7 @@ except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
 from autotrainer.core import EventManager
+from autotrainer.core.message import SystemStatusMessageKind
 from .motor_steps import MotorSteps
 from .device import Device
 from .emulation_interface import EmulationInterface
@@ -34,7 +35,7 @@ from .device_api import DeviceApi
 from .gym_device import GymDeviceMessageKind, GymDeviceEventKind
 from .head_fix import HeadFixMeasurement, HeadFixMessageKind
 from .pellet_delivery import PelletDeliveryMessageKind
-from .can_interface import CanInterface, is_stepper
+from .can_interface import CanInterface
 from .device_interface import *
 
 
@@ -52,6 +53,7 @@ class CanDevice(Device):
         self._current_digital = 0
         self._current_temperature = 0
         self._current_humidity = 0
+        self._current_audio = []
 
         self._pellet_dst: typing.Optional[int] = None
         self._magnet_dst: typing.Optional[int] = None
@@ -177,28 +179,7 @@ class CanDevice(Device):
 
         elif kind == GymDeviceMessageKind.WRITE_CONFIG:
             assert isinstance(data, ServoConfig) or isinstance(data, StepperConfig)
-
-            if is_stepper(data.motor):
-                isinstance(data, StepperConfig)
-
-                self._interface.write_stepper_config(data)
-                if data.motor is Motor.PELLET_LOAD_SERVO:
-                    self._load_config = data
-                elif data.motor is Motor.MAGNET_SERVO:
-                    self._magnet_config = data
-                elif data.motor is Motor.PELLET_COVER_SERVO:
-                    self._barrier_config = data
-            else:
-                assert isinstance(data, ServoConfig)
-                self._interface.write_servo_config(data)
-
-                if data.motor is Motor.PELLET_X_MOTOR:
-                    self._x_config = data
-                elif data.motor is Motor.PELLET_Y_MOTOR:
-                    self._y_config = data
-                elif data.motor is Motor.PELLET_Z_MOTOR:
-                    self._z_config = data
-
+            self._interface.set_motor_configuration(data.motor, data)
             self._interface.request_motor_config(data.motor)
 
         elif kind == HeadFixMessageKind.UPDATE_SCALE_TARE:
@@ -206,36 +187,47 @@ class CanDevice(Device):
             self._interface.tare_pressure_sensor()
             self._complete_command(context)
 
-        elif kind == HeadFixMessageKind.MAGNET_INTENSITY:
-            self._interface.set_magnet(position=typing.cast(int, data))
+        elif kind == HeadFixMessageKind.SET_MAGNET_INTENSITY:
+            assert isinstance(data, float) or isinstance(data, int)
+            self._interface.set_magnet(float(data))
+            self._complete_command(context)
+
+        elif kind == PelletDeliveryMessageKind.SET_LOAD_SERVO:
+            assert isinstance(data, float) or isinstance(data, int)
+            self._interface.set_load(float(data))
+            self._complete_command(context)
+
+        elif kind == PelletDeliveryMessageKind.SET_COVER_SERVO:
+            assert isinstance(data, float) or isinstance(data, int)
+            self._interface.set_barrier(float(data))
             self._complete_command(context)
 
         elif kind == PelletDeliveryMessageKind.SET_X:
+            assert isinstance(data, float) or isinstance(data, int)
             if self._pending_move_token is not None:
                 self._complete_command(context)
                 return
             self._pending_move_token = context
-            location = typing.cast(int, data) / 10.0
-            self._pellet_desired_x = location
-            self._interface.set_x(location)
+            self._pellet_desired_x = float(data)
+            self._interface.set_x(self._pellet_desired_x)
 
         elif kind == PelletDeliveryMessageKind.SET_Y:
+            assert isinstance(data, float) or isinstance(data, int)
             if self._pending_move_token is not None:
                 self._complete_command(context)
                 return
             self._pending_move_token = context
-            location = typing.cast(int, data) / 10.0
-            self._pellet_desired_y = location
-            self._interface.set_y(location)
+            self._pellet_desired_y = float(data)
+            self._interface.set_y(self._pellet_desired_y)
 
         elif kind == PelletDeliveryMessageKind.SET_Z:
+            assert isinstance(data, float) or isinstance(data, int)
             if self._pending_move_token is not None:
                 self._complete_command(context)
                 return
             self._pending_move_token = context
-            location = typing.cast(int, data) / 10.0
-            self._pellet_desired_z = location
-            self._interface.set_z(location)
+            self._pellet_desired_z = float(data)
+            self._interface.set_z(self._pellet_desired_z)
 
         elif kind == PelletDeliveryMessageKind.SEND_TO_LIMITS:
             if self._pending_move_token is not None:
@@ -293,6 +285,10 @@ class CanDevice(Device):
             self._interface.emit_tone(data[0], data[1])
             self._complete_command(context)
 
+        elif kind == HeadFixMessageKind.STREAM_START or \
+            kind == HeadFixMessageKind.STREAM_STOP:
+            pass
+
         else:
             logger.info(f"unhandled command queue message: {kind}")
 
@@ -312,7 +308,8 @@ class CanDevice(Device):
                                                                message.load_mv,
                                                                self._current_digital, 0,
                                                                self._current_temperature,
-                                                               self._current_humidity)
+                                                               self._current_humidity,
+                                                               self._current_audio)
 
             elif isinstance(message, PressureReading):
                 if self._current_measurement is not None:
@@ -332,17 +329,20 @@ class CanDevice(Device):
             elif isinstance(message, MagnetDigitalInputs):
                 self._current_digital = message.continuity_0
 
+            elif isinstance(message, AudioData):
+                self._current_audio = message.magnitudes
+
             elif isinstance(message, StepperStatus):
                 if message.motor is Motor.PELLET_X_MOTOR:
-                    self._manage_next_move(PelletDeliveryMessageKind.UPDATE_X,
+                    self._manage_next_move(SystemStatusMessageKind.PELLET_X,
                                            message.position, self._pellet_desired_x)
 
                 elif message.motor is Motor.PELLET_Y_MOTOR:
-                    self._manage_next_move(PelletDeliveryMessageKind.UPDATE_Y,
+                    self._manage_next_move(SystemStatusMessageKind.PELLET_Y,
                                            message.position, self._pellet_desired_y)
 
                 elif message.motor is Motor.PELLET_Z_MOTOR:
-                    self._manage_next_move(PelletDeliveryMessageKind.UPDATE_Z,
+                    self._manage_next_move(SystemStatusMessageKind.PELLET_Z,
                                            message.position, self._pellet_desired_z)
 
                 if self._pending_move_token is not None:
@@ -351,8 +351,17 @@ class CanDevice(Device):
 
             elif isinstance(message, ServoStatus):
                 if message.motor is Motor.PELLET_LOAD_SERVO:
-                    self._manage_next_move(PelletDeliveryMessageKind.UPDATE_LOAD_SERVO,
+                    self._manage_next_move(SystemStatusMessageKind.PELLET_LOAD,
                                            message.position, self._pellet_desired_load)
+
+                elif message.motor is Motor.MAGNET_SERVO:
+                    if self._api is not None:
+                        self.api.send_message(SystemStatusMessageKind.HEAD_MAGNET, message.position)
+
+                elif message.motor is Motor.PELLET_COVER_SERVO:
+                    if self._api is not None:
+                        self.api.send_message(SystemStatusMessageKind.PELLET_COVER,
+                                              message.position)
 
                 if self._pending_move_token is not None:
                     logger.debug(
@@ -432,15 +441,15 @@ class CanDevice(Device):
             if len(self._compound_movement) > 0:
                 step = self._compound_movement.pop(0)
                 if "x" in step:
-                    location = step["x"] / 10.0
+                    location = step["x"]
                     self._pellet_desired_x = location
                     self._interface.set_x(location)
                 elif "y" in step:
-                    location = step["y"] / 10.0
+                    location = step["y"]
                     self._pellet_desired_y = location
                     self._interface.set_y(location)
                 elif "z" in step:
-                    location = step["z"] / 10.0
+                    location = step["z"]
                     self._pellet_desired_z = location
                     self._interface.set_z(location)
                 elif "load" in step:

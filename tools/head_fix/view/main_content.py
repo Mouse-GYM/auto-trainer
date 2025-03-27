@@ -106,7 +106,7 @@ class MainContent(QWidget):
         self._enable_streaming = QCheckBox("Stream measurements")
         self._enable_streaming.setEnabled(True)
         self._enable_streaming.setChecked(self._model.user_settings.stream_enabled)
-        self._enable_streaming.stateChanged.connect(lambda x: self._update_stream_enabled(x))
+        self._enable_streaming.stateChanged.connect(lambda x: self._enable_data_stream(x))
         record_layout.addWidget(self._enable_streaming)
 
         self._record = QCheckBox("Save measurements")
@@ -233,13 +233,13 @@ class MainContent(QWidget):
         if not self._ignore_port_changes and len(self._port_combobox.currentText()) > 0:
             self._model.user_settings.set_port(self._port_combobox.currentText())
 
-    def _update_position(self):
-        self._model.update_position(self._position.value())
+    def _set_position(self):
+        self._model.set_position(self._position.value())
 
     def _update_record_enabled(self, b: bool):
         self._model.user_settings.record_enabled = b
 
-    def _update_stream_enabled(self, b: bool):
+    def _enable_data_stream(self, b: bool):
         self._model.set_stream_enabled(b)
 
     def _connect(self):
@@ -282,7 +282,8 @@ class MainContent(QWidget):
         self._browse_button.setEnabled(not self._model.is_connected)
 
     def _browse_for_location(self):
-        dirname = QFileDialog.getExistingDirectory(self, "Select Directory", self._record_location.text())
+        dirname = QFileDialog.getExistingDirectory(self, "Select Directory",
+                                                   self._record_location.text())
 
         if len(dirname) > 0:
             self._record_location.setText(dirname)
