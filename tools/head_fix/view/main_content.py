@@ -85,7 +85,7 @@ class MainContent(QWidget):
 
         self._update_position_button = QPushButton("Set Position")
         self._update_position_button.setEnabled(False)
-        self._update_position_button.clicked.connect(self._update_position)
+        self._update_position_button.clicked.connect(self._set_position)
         position_layout.addWidget(self._update_position_button, 0)
 
         position_layout.addStretch(1)
@@ -257,9 +257,10 @@ class MainContent(QWidget):
             self._plot5.reset()
 
             if self._record.isChecked():
-                self._model.head_fix_reader.project_info = ProjectInfo(root=self._record_location.text(),
-                                                                       device_id="HeadFixUI",
-                                                                       ensure_exists=True)
+                self._model.head_fix_reader.project_info = ProjectInfo(
+                    root=self._record_location.text(),
+                    device_id="HeadFixUI",
+                    ensure_exists=True)
             else:
                 self._model.head_fix_reader.project_info = None
 
