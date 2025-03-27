@@ -64,7 +64,7 @@ class MainContent(ContentWidget):
         self._layout.addWidget(self._pellet_delivery_content, 3, 0, 1, 3)
         self._content_widgets.append(self._pellet_delivery_content)
 
-        analysis_content = BehaviorContent(self._model.behavior, self._model.inference)
+        analysis_content = BehaviorContent(self._model.behavior, self._model.inference, self._model.head_fix)
         self._layout.addWidget(analysis_content, 1, 0, 2, 3)
         self._content_widgets.append(analysis_content)
 

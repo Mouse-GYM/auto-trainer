@@ -24,6 +24,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._head_fixation_enabled = False
 
         self._baseline_intensity = limits.min_baseline_intensity
+        self._auto_clamp_intensity = 100
         self._day_pellet_count = 0
 
         self._is_in_session = False
@@ -101,7 +102,7 @@ class BehaviorAlgorithm(ObservableObject):
     @head_fixation_enabled.setter
     def head_fixation_enabled(self, value: bool):
         self._head_fixation_enabled = self._on_property_changed("head_fixation_enabled", value,
-                                                               self._head_fixation_enabled)
+                                                                self._head_fixation_enabled)
 
     @property
     def baseline_intensity(self):
@@ -111,6 +112,16 @@ class BehaviorAlgorithm(ObservableObject):
     def baseline_intensity(self, value):
         self._baseline_intensity = value
         EventManager.post_event(BehaviorEventKind.headfixBaselineChanged, context=value)
+
+    @property
+    def auto_clamp_intensity(self):
+        return self._auto_clamp_intensity
+
+    @auto_clamp_intensity.setter
+    def auto_clamp_intensity(self, value):
+        self._auto_clamp_intensity = self._on_property_changed("auto_clamp_intensity", value,
+                                                               self._auto_clamp_intensity)
+        EventManager.post_event(BehaviorEventKind.autoClampIntensityChanged, context=value)
 
     @property
     def pellet_last_seen(self) -> float:

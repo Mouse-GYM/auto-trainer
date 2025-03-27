@@ -1,8 +1,9 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QCheckBox, QFileDialog, QWidget, QVBoxLayout, \
-    QHBoxLayout, QStackedLayout, QGridLayout
+    QHBoxLayout, QStackedLayout, QGridLayout, QSpinBox
 
 from autotrainer.pyside import CardWidget, QSwitch
+from tools.acquisition.model.head_fix_model import HeadFixModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.view.content_widget import ContentWidget
@@ -11,11 +12,12 @@ from tools.acquisition.view.content_widget import ContentWidget
 class BehaviorContent(ContentWidget):
     status_changed = Signal(str)
 
-    def __init__(self, behavior_model: BehaviorModel, inference_model: InferenceModel):
+    def __init__(self, behavior_model: BehaviorModel, inference_model: InferenceModel, head_fix_model: HeadFixModel):
         super().__init__()
 
         self._behavior_model = behavior_model
         self._inference_model = inference_model
+        self._head_fix_model = head_fix_model
 
         self._card_widget = CardWidget()
 
@@ -44,10 +46,19 @@ class BehaviorContent(ContentWidget):
         self._intersession_toggle.stateChanged.connect(self._intersession_toggle_state_changed)
         content_layout.addWidget(self._intersession_toggle, 0, 3)
 
-        content_layout.addWidget(QLabel("Head Fixation (100%):"), 0, 4)
+        content_layout.addWidget(QLabel("Auto-Clamp:"), 0, 4)
         self._head_fixation_toggle = QSwitch()
         self._head_fixation_toggle.stateChanged.connect(self._head_fixation_toggle_state_changed)
         content_layout.addWidget(self._head_fixation_toggle, 0, 5)
+
+        content_layout.addWidget(QLabel("Auto-Clamp Threshold:"), 1, 4)
+        self._auto_clamp_threshold = QSpinBox()
+        self._auto_clamp_threshold.setValue(self._head_fix_model.head_fix_reader.force_detector.threshold)
+        self._auto_clamp_threshold.setMinimum(0)
+        self._auto_clamp_threshold.setMaximum(1023)
+        self._auto_clamp_threshold.setWrapping(False)
+        self._auto_clamp_threshold.valueChanged.connect(self._update_auto_clamp_intensity)
+        content_layout.addWidget(self._auto_clamp_threshold, 1, 5)
 
         content.setLayout(content_layout)
         self._card_widget.setContentWidget(content)
@@ -121,6 +132,7 @@ class BehaviorContent(ContentWidget):
         self._pellet_cover_toggle.setChecked(self._behavior_model.algorithm.pellet_cover_enabled)
         self._intersession_toggle.setChecked(self._behavior_model.is_intersession_enabled)
         self._behavior_model.algorithm.property_changed += self._algorithm_property_changed
+        self._head_fix_model.head_fix_reader.force_detector.property_changed += self._force_detector_property_changed
 
         self._behavior_model.property_changed += self._behavior_model_property_changed
 
@@ -158,6 +170,9 @@ class BehaviorContent(ContentWidget):
     def _location_changed(self):
         self._inference_model.model_location = self._location.text()
 
+    def _update_auto_clamp_intensity(self, value):
+        self._head_fix_model.head_fix_reader.force_detector.threshold = value
+
     def _browse_for_location(self):
         dirname = QFileDialog.getExistingDirectory(self, "Select Directory", self._location.text())
 
@@ -174,6 +189,10 @@ class BehaviorContent(ContentWidget):
     def _behavior_model_property_changed(self, name, value, _):
         if name == "is_intersession_enabled":
             self._intersession_toggle.setChecked(value)
+
+    def _force_detector_property_changed(self, name, value, _):
+        if name == "threshold":
+            self._auto_clamp_threshold.setValue(value)
 
     def _inference_model_property_changed(self, name, value, _):
         if name == "is_enabled":

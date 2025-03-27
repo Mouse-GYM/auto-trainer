@@ -50,12 +50,15 @@ class BehaviorModel(ObservableObject):
             self.is_intersession_enabled = configuration["isIntersessionAnalysisEnabled"]
         if "defaultBaselineIntensity" in configuration:
             self._machine.algorithm.baseline_intensity = configuration["defaultBaselineIntensity"]
+        if "autoClampIntensity" in configuration:
+            self._machine.algorithm.auto_clamp_intensity = configuration["autoClampIntensity"]
 
     def save_configuration(self) -> dict:
         limits = self._machine.algorithm.limits.to_dictionary()
         limits.update({"isDeliverPelletEnabled": self._machine.algorithm.pellet_delivery_enabled,
                        "isCoverPelletEnabled": self._machine.algorithm.pellet_cover_enabled,
-                       "isIntersessionAnalysisEnabled": self._is_intersession_enabled})
+                       "isIntersessionAnalysisEnabled": self._is_intersession_enabled,
+                       "autoClampIntensity": self._machine.algorithm.auto_clamp_intensity})
         return limits
 
     def on_prepare_capture(self):
