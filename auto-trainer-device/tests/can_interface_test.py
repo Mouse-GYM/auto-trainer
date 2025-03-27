@@ -72,7 +72,7 @@ def test_write_servo_config(interface: CanInterface, motor: Motor = Motor.MAGNET
 
     config.min_position -= 10
     config.max_position += 10
-    assert interface.write_servo_config(config)
+    assert interface._write_servo_config(config)
 
     new_config = _read_config(interface, config.motor)
     assert new_config.min_position == config.min_position
@@ -81,11 +81,11 @@ def test_write_servo_config(interface: CanInterface, motor: Motor = Motor.MAGNET
     config.min_position = orig_min
     config.max_position = orig_max
 
-    assert interface.write_servo_config(config)
+    assert interface._write_servo_config(config)
 
 
 def _write_stepper_config(interface: CanInterface, config: StepperConfig) -> bool:
-    if not interface.write_stepper_config(config):
+    if not interface._write_stepper_config(config):
         return False
 
     new_config = _read_config(interface, config.motor)

@@ -36,33 +36,33 @@ pellet:
     steps_per_revolution: 48.0
     max_vel: 20.0
     max_acc: 1000.0
-  actions:
-    load:
-      - type: load
-        value: 100.0
-      - type: delay
-        value: 1.0
-      - type: z
+actions:
+  load:
+    - type: load
+      value: 100.0
+    - type: delay
+      value: 1.0
+    - type: z
       value: 5.0
-      - type: load
-        value: 0.0
-      - type: delay
-        value: 1.0
-      - type: z
-        value: 0.0
-      - type: delay
-        value: 1.0
-    home:
-      - type: x
-        value: 0.0
-      - type: y
-        value: 0.0
-      - type: z
-        value: 0.0
-    send:
-      - type: z
+    - type: load
+      value: 0.0
+    - type: delay
+      value: 1.0
+    - type: z
+      value: 0.0
+    - type: delay
+      value: 1.0
+  home:
+    - type: x
+      value: 0.0
+    - type: y
+      value: 0.0
+    - type: z
+      value: 0.0
+  send:
+    - type: z
       value: .5
-      - type: x
+    - type: x
       value: -1.6
-      - type: y
+    - type: y
       value: 2.0

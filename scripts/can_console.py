@@ -265,6 +265,7 @@ def run_monitor():
                 print("e <motor> <trips>  ::Stepper round trip test")
                 print("h                  ::Home Position")
                 print("l                  ::Load Pellet")
+                print("L <file>           ::Load Motor & Motion Configuration")
                 print("m <pos>            ::Move Magnet Servo [0:180] (deg)")
                 print("n <pos>            ::Move Load Servo [0:110] (deg)")
                 print("o <pos>            ::Move Cover Servo [0:180] (deg)")
@@ -300,6 +301,8 @@ def run_monitor():
                 device_thread.send_message(PelletDeliveryMessageKind.SEND_HOME)
             elif cmd == 'l':
                 device_thread.send_message(PelletDeliveryMessageKind.LOAD_PELLET)
+            elif cmd == 'L':
+                device_thread.send_message(GymDeviceMessageKind.LOAD_CONFIG_FILE, params[0])
             elif cmd == 'm':
                 device_thread.send_message(HeadFixMessageKind.SET_MAGNET_INTENSITY,
                                            data=float(params[0]))

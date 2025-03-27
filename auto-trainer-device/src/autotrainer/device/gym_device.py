@@ -20,7 +20,8 @@ class GymDeviceMessageKind(IntEnum):
     VERSION = -1,
     ACK = -2,
     READ_CONFIG = -3,
-    WRITE_CONFIG = -4
+    WRITE_CONFIG = -4,
+    LOAD_CONFIG_FILE = -5
 
     @classmethod
     def is_member(cls, value):

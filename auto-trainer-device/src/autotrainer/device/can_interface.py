@@ -162,189 +162,6 @@ def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
     return Motor.NONE
 
 
-'''
-Translate from a JerryCANCmd class to a class specific to the data type received
-'''
-
-
-def _translate(message) -> typing.Any:
-    global _audio
-
-    # print (message.type, message.dst_id)
-    if message.type == JerryCANCmdType.HEARTBEAT:
-        # print("HEARTBEAT")
-        heartbeat = Heartbeat()
-        heartbeat.target = _addr2tgt(message.dst_id)
-        return heartbeat
-
-    elif (message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type ==
-          JerryCANCfgMsg.Type.SERVO):
-        # print("SERVO CONFIG")
-        config = ServoConfig()
-        config.target = _addr2tgt(message.dst_id)
-
-        config.motor = _id_to_motor(config.target, True, message.cfg_response.servo.motor_id)
-        config.error = message.cfg_response.servo.error == 1
-
-        config.min_position = message.cfg_response.servo.min_position
-        config.max_position = message.cfg_response.servo.max_position
-        config.min_pwm = message.cfg_response.servo.min_pwm_duration_us
-        config.max_pwm = message.cfg_response.servo.max_pwm_duration_us
-
-        return config
-
-    elif (message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type ==
-          JerryCANCfgMsg.Type.STEPPER):
-        # print("STEPPER CONFIG")
-        config = StepperConfig()
-        config.target = _addr2tgt(message.dst_id)
-
-        config.motor = _id_to_motor(config.target, False, message.cfg_response.stepper.motor_id)
-        config.error = message.cfg_response.stepper.error
-
-        config.min_step_inverse = message.cfg_response.stepper.min_step_inverse
-        config.steps_per_revolution = message.cfg_response.stepper.steps_per_revolution
-        return config
-
-    elif message.type == JerryCANCmdType.GPIO_READ:
-        # print("GPIO READ")
-        if _is_magnet_by_addr(message.dst_id):
-            gpios = MagnetDigitalInputs()
-            gpios.target = message.dst_id
-
-            gpios.continuity_0 = ((message.gpio_read.state & 0x10) != 0)
-            gpios.continuity_1 = ((message.gpio_read.state & 0x20) != 0)
-
-            return gpios
-        else:
-            gpios = PelletDigitalInputs()
-            gpios.target = _addr2tgt(message.dst_id)
-
-            gpios.stimulus_1 = ((message.gpio_read.state & 0x010) != 0)
-            gpios.stimulus_2 = ((message.gpio_read.state & 0x020) != 0)
-            gpios.stimulus_3 = ((message.gpio_read.state & 0x040) != 0)
-            gpios.stimulus_4 = ((message.gpio_read.state & 0x080) != 0)
-
-            return gpios
-
-    elif message.type == JerryCANCmdType.TONE:
-        # print("TONE")
-        tone = Tone()
-
-        tone.target = _addr2tgt(message.dst_id)
-        tone.time_remaining_ms = message.tone.duration_ms
-        tone.frequency_hz = message.tone.frequency_hz
-
-        return tone
-
-    elif message.type == JerryCANCmdType.ANALOG_OUT:
-        # print("ANALOG_OUT")
-        if message.analog_out.instance == 0 and _is_pellet_by_addr(message.dst_id):
-            analog = AnalogOutput()
-
-            analog.target = _addr2tgt(message.dst_id)
-            analog.status_out_mv = message.analog_out.value_mv
-            return analog
-
-    elif message.type == JerryCANCmdType.LOAD_CELL_READ:
-        # print("LOAD CELL")
-        loadcell = LoadCellReading()
-
-        loadcell.target = _addr2tgt(message.dst_id)
-        loadcell.load_mv = float(message.load_cell_read.load_mv) / 100.0
-
-        return loadcell
-
-    elif message.type == JerryCANCmdType.PRESSURE_READ:
-        # print("PRESSURE")
-        pressure = PressureReading()
-
-        pressure.target = _addr2tgt(message.dst_id)
-        if message.pressure_read.error != 0:
-            pressure.pressure_mv = float(message.pressure_read.pressure_mv) / 100.0
-        else:
-            pressure.pressure = 0
-
-        return pressure
-
-    elif message.type == JerryCANCmdType.RGB_LED:
-        # print("RGB LED")
-        led = ColorLed()
-
-        led.target = _addr2tgt(message.dst_id)
-        led.red = message.rgb_led.red
-        led.green = message.rgb_led.green
-        led.blue = message.rgb_led.blue
-
-        return led
-
-    elif message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_BEGIN:
-        # print("AUDIO BEGIN")
-        _audio.magnitudes.clear()
-        _audio.target = _addr2tgt(message.dst_id)
-        _audio.packet_id = message.audio_data_cmd.stream_id
-
-    elif message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_CONT:
-        # print("AUDIO CONT")
-        if _audio.packet_id != 0 and _audio.target is _addr2tgt(message.dst_id):
-            _audio.magnitudes.extend(message.audio_data.magnitudes)
-
-    elif message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_END:
-        # print("AUDIO END")
-        a = None
-        if len(_audio.magnitudes) == 32 and message.audio_data_cmd.stream_id == _audio.packet_id:
-            a = AudioData()
-            a.magnitudes = _audio.magnitudes.copy()
-            a.packet_id = _audio.packet_id
-            a.target = _audio.target
-
-        _audio.magnitudes.clear()
-        _audio.packet_id = 0
-
-        return a
-
-    elif message.type == JerryCANCmdType.DOOR_SENSOR:
-        # print("DOOR")
-        door = DoorData()
-        door.target = _addr2tgt(message.dst_id)
-
-        door.open_state = [
-            message.doors.opened & 0x1 != 0,
-            message.doors.opened & 0x2 != 0,
-            message.doors.opened & 0x4 != 0,
-        ]
-
-        return door
-
-    elif message.type == JerryCANCmdType.SERVO_STATUS:
-        # print("SERVO STAT")
-        target = _addr2tgt(message.dst_id)
-        motor = _id_to_motor(target, True, message.servo_status.motor_id)
-        status = ServoStatus(target, motor, message.servo_status.position)
-
-        return status
-
-    elif message.type == JerryCANCmdType.STEPPER_STATUS:
-        # print("STEPPER STAT")
-        target = _addr2tgt(message.dst_id)
-        motor = _id_to_motor(target, False, message.servo_status.motor_id)
-
-        status = StepperStatus(target, motor, message.stepper_status.position,
-                               message.stepper_status.limit_switch)
-
-        return status
-
-    elif message.type == JerryCANCmdType.TEMP_HUM_READ:
-        status = SensorStatus()
-        status.target = _addr2tgt(message.dst_id)
-        status.temperature_c = float(message.temp_hum_read.temperature) / 100.0
-        status.humidity_percent = float(message.temp_hum_read.humidity) / 100.0
-
-        return status
-
-    return None
-
-
 class CanInterface(DeviceInterface):
     """
     CanInterface implements the details of
@@ -367,23 +184,72 @@ class CanInterface(DeviceInterface):
         self._pellet_addr: typing.Optional[int] = None
         self._magnet_addr: typing.Optional[int] = None
 
-        self._magnet_config = ServoConfig()
+        self.magnet_config = ServoConfig()
+        self.load_config = ServoConfig()
+        self.barrier_config = ServoConfig()
+        self.x_config = StepperConfig()
+        self.y_config = StepperConfig()
+        self.z_config = StepperConfig()
+
+    @property
+    def magnet_config(self):
+        return self._magnet_config
+
+    @magnet_config.setter
+    def magnet_config(self, config: ServoConfig):
+        self._magnet_config = config if config is not None else ServoConfig()
         self._magnet_config.motor = Motor.MAGNET_SERVO
+        self._magnet_config.target = target_of_motor(self._magnet_config.motor)
 
-        self._load_arm_config = ServoConfig()
-        self._load_arm_config.motor = Motor.PELLET_LOAD_SERVO
+    @property
+    def load_config(self):
+        return self._load_config
 
-        self._barrier_config = ServoConfig()
+    @load_config.setter
+    def load_config(self, config: ServoConfig):
+        self._load_config = config if config is not None else ServoConfig()
+        self._load_config.motor = Motor.PELLET_LOAD_SERVO
+        self._load_config.target = target_of_motor(self._load_config.motor)
+
+    @property
+    def barrier_config(self):
+        return self._barrier_config
+
+    @barrier_config.setter
+    def barrier_config(self, config: ServoConfig):
+        self._barrier_config = config if config is not None else ServoConfig()
         self._barrier_config.motor = Motor.PELLET_COVER_SERVO
+        self._barrier_config.target = target_of_motor(self._barrier_config.motor)
 
-        self._x_config = StepperConfig()
+    @property
+    def x_config(self):
+        return self._x_config
+
+    @x_config.setter
+    def x_config(self, config: StepperConfig):
+        self._x_config = config if config is not None else StepperConfig()
         self._x_config.motor = Motor.PELLET_X_MOTOR
+        self._x_config.target = target_of_motor(self._x_config.motor)
 
-        self._y_config = StepperConfig()
+    @property
+    def y_config(self):
+        return self._y_config
+
+    @y_config.setter
+    def y_config(self, config: StepperConfig):
+        self._y_config = config if config is not None else StepperConfig()
         self._y_config.motor = Motor.PELLET_Y_MOTOR
+        self._y_config.target = target_of_motor(self._y_config.motor)
 
-        self._z_config = StepperConfig()
+    @property
+    def z_config(self):
+        return self._z_config
+
+    @z_config.setter
+    def z_config(self, config: StepperConfig):
+        self._z_config = config if config is not None else StepperConfig()
         self._z_config.motor = Motor.PELLET_Z_MOTOR
+        self._z_config.target = target_of_motor(self._z_config.motor)
 
     '''
     Set the pellet CAN address. Used primarily for testing, as after data is received
@@ -426,11 +292,9 @@ class CanInterface(DeviceInterface):
     def _assign_address(self, message):
         if self._pellet_addr is None and _is_pellet_by_addr(message.dst_id):
             self._set_pellet_address(message.dst_id)
-            self._configure_pellet()
 
         if self._magnet_addr is None and _is_magnet_by_addr(message.dst_id):
             self._set_magnet_address(message.dst_id)
-            self._configure_magnet()
 
     '''
     Flag: interface to hardware is open (true) or closed (false)
@@ -484,7 +348,7 @@ class CanInterface(DeviceInterface):
                     self._assign_address(message)
                 time.sleep(0.0001)
 
-        return [x for x in map(_translate, messages) if x is not None]
+        return [x for x in map(self._translate, messages) if x is not None]
 
     '''
     Do not allow the application to write unknown messages to the CANbus
@@ -522,44 +386,32 @@ class CanInterface(DeviceInterface):
     should be set.
     '''
 
-    def set_motor_configuration(self, motor: Motor, servo_config=None,
-                                stepper_config=None) -> bool:
-        if servo_config is None:
-            servo_config = ServoConfig()
-        if stepper_config is None:
-            stepper_config = StepperConfig()
-
+    def set_motor_configuration(self, motor: Motor, config) -> bool:
         rc = False
 
         if motor is Motor.MAGNET_SERVO:
-            self._magnet_config = servo_config
-            self._magnet_config.motor = motor
-            rc = self.write_servo_config(self._magnet_config)
+            self.magnet_config = config
+            rc = self._write_servo_config(self.magnet_config)
 
         elif motor is Motor.PELLET_X_MOTOR:
-            self._x_config = stepper_config
-            self._x_config.motor = motor
-            rc = self.write_stepper_config(self._x_config)
+            self.x_config = config
+            rc = self._write_stepper_config(self.x_config)
 
         elif motor is Motor.PELLET_Y_MOTOR:
-            self._y_config = stepper_config
-            self._y_config.motor = motor
-            rc = self.write_stepper_config(self._y_config)
+            self.y_config = config
+            rc = self._write_stepper_config(self.y_config)
 
         elif motor is Motor.PELLET_Z_MOTOR:
-            self._z_config = stepper_config
-            self._z_config.motor = motor
-            rc = self.write_stepper_config(self._z_config)
+            self.z_config = config
+            rc = self._write_stepper_config(self.z_config)
 
         elif motor is Motor.PELLET_COVER_SERVO:
-            self._barrier_config = servo_config
-            self._barrier_config.motor = motor
-            rc = self.write_servo_config(self._barrier_config)
+            self.barrier_config = config
+            rc = self._write_servo_config(self.barrier_config)
 
         elif motor is Motor.PELLET_LOAD_SERVO:
-            self._load_arm_config = servo_config
-            self._load_arm_config.motor = motor
-            rc = self.write_servo_config(self._load_arm_config)
+            self.load_config = config
+            rc = self._write_servo_config(self.load_config)
 
         # wait for write to complete
         if rc:
@@ -571,19 +423,19 @@ class CanInterface(DeviceInterface):
     Write the currently-known configuration for each of the pellet board's motors. 
     '''
 
-    def _configure_pellet(self):
-        self.set_motor_configuration(Motor.PELLET_LOAD_SERVO, servo_config=self._load_arm_config)
-        self.set_motor_configuration(Motor.PELLET_COVER_SERVO, servo_config=self._barrier_config)
-        self.set_motor_configuration(Motor.PELLET_X_MOTOR, stepper_config=self._x_config)
-        self.set_motor_configuration(Motor.PELLET_Y_MOTOR, stepper_config=self._y_config)
-        self.set_motor_configuration(Motor.PELLET_Z_MOTOR, stepper_config=self._z_config)
+    def configure_pellet(self):
+        self._write_servo_config(self.load_config)
+        self._write_servo_config(self.barrier_config)
+        self._write_stepper_config(self.x_config)
+        self._write_stepper_config(self.y_config)
+        self._write_stepper_config(self.z_config)
 
     '''
     Write the currently-known configuration for each of the magnet board's motors. 
     '''
 
-    def _configure_magnet(self):
-        self.set_motor_configuration(Motor.MAGNET_SERVO, servo_config=self._magnet_config)
+    def configure_magnet(self):
+        self._write_servo_config(self.magnet_config)
 
     '''
     Tare the load cell so the current reading is 0.
@@ -614,8 +466,8 @@ class CanInterface(DeviceInterface):
         logger.info(f"set magnet position {position}")
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
         return addr is not None and self._jc.ServoMove(addr, _MAGNET_SERVO_ID,
-                                                       position, self._magnet_config.max_velocity,
-                                                       self._magnet_config.max_acceleration,
+                                                       position, self.magnet_config.max_velocity,
+                                                       self.magnet_config.max_acceleration,
                                                        AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -632,8 +484,8 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.StepperMove(addr, _PELLET_X_MOTOR_ID,
                                                          position,
-                                                         self._x_config.max_velocity,
-                                                         self._x_config.max_acceleration,
+                                                         self.x_config.max_velocity,
+                                                         self.x_config.max_acceleration,
                                                          AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -650,8 +502,8 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.StepperMove(addr, _PELLET_Y_MOTOR_ID,
                                                          position,
-                                                         self._y_config.max_velocity,
-                                                         self._y_config.max_acceleration,
+                                                         self.y_config.max_velocity,
+                                                         self.y_config.max_acceleration,
                                                          AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -669,8 +521,8 @@ class CanInterface(DeviceInterface):
 
         return addr is not None and self._jc.StepperMove(addr, _PELLET_Z_MOTOR_ID,
                                                          position,
-                                                         self._z_config.max_velocity,
-                                                         self._z_config.max_acceleration,
+                                                         self.z_config.max_velocity,
+                                                         self.z_config.max_acceleration,
                                                          AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -687,8 +539,8 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.ServoMove(addr, _PELLET_LOAD_SERVO_ID,
                                                        position,
-                                                       self._load_arm_config.max_velocity,
-                                                       self._load_arm_config.max_acceleration,
+                                                       self.load_config.max_velocity,
+                                                       self.load_config.max_acceleration,
                                                        AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -705,8 +557,8 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.ServoMove(addr, _PELLET_COVER_SERVO_ID,
                                                        position,
-                                                       self._barrier_config.max_velocity,
-                                                       self._barrier_config.max_acceleration,
+                                                       self.barrier_config.max_velocity,
+                                                       self.barrier_config.max_acceleration,
                                                        AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -716,7 +568,7 @@ class CanInterface(DeviceInterface):
     def release_pellet(self) -> bool:
         addr = self._tgt2addr(Target.PELLET_DEVICE)
 
-        return addr is not None and self.set_barrier(self._barrier_config.min_position) and \
+        return addr is not None and self.set_barrier(self.barrier_config.min_position) and \
             self.emit_tone(addr, 6000)
 
     '''
@@ -724,8 +576,8 @@ class CanInterface(DeviceInterface):
     '''
 
     def cover_pellet(self) -> bool:
-        logger.info(f"cover pellet {self._barrier_config.max_position}")
-        return self.set_barrier(self._barrier_config.max_position)
+        logger.info(f"cover pellet {self.barrier_config.max_position}")
+        return self.set_barrier(self.barrier_config.max_position)
 
     '''
     Send the given motor (X, Y, or Z) to the 0 position
@@ -746,7 +598,7 @@ class CanInterface(DeviceInterface):
     Update a stepper motor configuration on the target
     '''
 
-    def write_stepper_config(self, config: StepperConfig) -> bool:
+    def _write_stepper_config(self, config: StepperConfig) -> bool:
         motor_id = _motor_to_id(config.motor)
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         if addr is None:
@@ -767,7 +619,7 @@ class CanInterface(DeviceInterface):
     Update a servo motor configuration on the target
     '''
 
-    def write_servo_config(self, config: ServoConfig) -> bool:
+    def _write_servo_config(self, config: ServoConfig) -> bool:
         motor_id = _motor_to_id(config.motor)
         target = target_of_motor(config.motor)
 
@@ -865,3 +717,210 @@ class CanInterface(DeviceInterface):
     # NOTE: E-Stop is not implemented in the target
     # def emergency_stop(self) -> bool:
     #  return self.is_open and self._jc.EStop() == 0
+
+    '''
+    Translate from a JerryCANCmd class to a class specific to the data type received
+    '''
+
+    def _translate(self, message) -> typing.Any:
+        global _audio
+
+        # print (message.type, message.dst_id)
+        if message.type == JerryCANCmdType.HEARTBEAT:
+            # print("HEARTBEAT")
+            heartbeat = Heartbeat()
+            heartbeat.target = _addr2tgt(message.dst_id)
+            return heartbeat
+
+        elif (message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type ==
+              JerryCANCfgMsg.Type.SERVO):
+            # print("SERVO CONFIG")
+            target = _addr2tgt(message.dst_id)
+            motor = _id_to_motor(target, True, message.cfg_response.servo.motor_id)
+
+            # Not all configuration items get pushed/pulled to the target
+
+            if motor is Motor.PELLET_COVER_SERVO:
+                config = self.barrier_config
+            elif motor is Motor.PELLET_LOAD_SERVO:
+                config = self.load_config
+            elif motor is Motor.MAGNET_SERVO:
+                config = self.magnet_config
+            else:
+                config = ServoConfig()
+
+            config.target = target
+            config.motor = motor
+            config.error = message.cfg_response.servo.error == 1
+
+            config.min_position = message.cfg_response.servo.min_position
+            config.max_position = message.cfg_response.servo.max_position
+            config.min_pwm = message.cfg_response.servo.min_pwm_duration_us
+            config.max_pwm = message.cfg_response.servo.max_pwm_duration_us
+
+            return config
+
+        elif (message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type ==
+              JerryCANCfgMsg.Type.STEPPER):
+            # print("STEPPER CONFIG")
+
+            target = _addr2tgt(message.dst_id)
+            motor = _id_to_motor(target, False, message.cfg_response.stepper.motor_id)
+
+            # Not all configuration items get pushed/pulled to the target
+            if motor is Motor.PELLET_X_MOTOR:
+                config = self.x_config
+            elif motor is Motor.PELLET_Y_MOTOR:
+                config = self.y_config
+            elif motor is Motor.PELLET_Z_MOTOR:
+                config = self.z_config
+            else:
+                config = StepperConfig()
+
+            config.target = target
+            config.motor = motor
+            config.error = message.cfg_response.stepper.error
+
+            config.min_step_inverse = message.cfg_response.stepper.min_step_inverse
+            config.steps_per_revolution = message.cfg_response.stepper.steps_per_revolution
+
+            return config
+
+        elif message.type == JerryCANCmdType.GPIO_READ:
+            # print("GPIO READ")
+            if _is_magnet_by_addr(message.dst_id):
+                gpios = MagnetDigitalInputs()
+                gpios.target = message.dst_id
+
+                gpios.continuity_0 = ((message.gpio_read.state & 0x10) != 0)
+                gpios.continuity_1 = ((message.gpio_read.state & 0x20) != 0)
+
+                return gpios
+            else:
+                gpios = PelletDigitalInputs()
+                gpios.target = _addr2tgt(message.dst_id)
+
+                gpios.stimulus_1 = ((message.gpio_read.state & 0x010) != 0)
+                gpios.stimulus_2 = ((message.gpio_read.state & 0x020) != 0)
+                gpios.stimulus_3 = ((message.gpio_read.state & 0x040) != 0)
+                gpios.stimulus_4 = ((message.gpio_read.state & 0x080) != 0)
+
+                return gpios
+
+        elif message.type == JerryCANCmdType.TONE:
+            # print("TONE")
+            tone = Tone()
+
+            tone.target = _addr2tgt(message.dst_id)
+            tone.time_remaining_ms = message.tone.duration_ms
+            tone.frequency_hz = message.tone.frequency_hz
+
+            return tone
+
+        elif message.type == JerryCANCmdType.ANALOG_OUT:
+            # print("ANALOG_OUT")
+            if message.analog_out.instance == 0 and _is_pellet_by_addr(message.dst_id):
+                analog = AnalogOutput()
+
+                analog.target = _addr2tgt(message.dst_id)
+                analog.status_out_mv = message.analog_out.value_mv
+                return analog
+
+        elif message.type == JerryCANCmdType.LOAD_CELL_READ:
+            # print("LOAD CELL")
+            loadcell = LoadCellReading()
+
+            loadcell.target = _addr2tgt(message.dst_id)
+            loadcell.load_mv = float(message.load_cell_read.load_mv) / 100.0
+
+            return loadcell
+
+        elif message.type == JerryCANCmdType.PRESSURE_READ:
+            # print("PRESSURE")
+            pressure = PressureReading()
+
+            pressure.target = _addr2tgt(message.dst_id)
+            if message.pressure_read.error != 0:
+                pressure.pressure_mv = float(message.pressure_read.pressure_mv) / 100.0
+            else:
+                pressure.pressure = 0
+
+            return pressure
+
+        elif message.type == JerryCANCmdType.RGB_LED:
+            # print("RGB LED")
+            led = ColorLed()
+
+            led.target = _addr2tgt(message.dst_id)
+            led.red = message.rgb_led.red
+            led.green = message.rgb_led.green
+            led.blue = message.rgb_led.blue
+
+            return led
+
+        elif message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_BEGIN:
+            # print("AUDIO BEGIN")
+            _audio.magnitudes.clear()
+            _audio.target = _addr2tgt(message.dst_id)
+            _audio.packet_id = message.audio_data_cmd.stream_id
+
+        elif message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_CONT:
+            # print("AUDIO CONT")
+            if _audio.packet_id != 0 and _audio.target is _addr2tgt(message.dst_id):
+                _audio.magnitudes.extend(message.audio_data.magnitudes)
+
+        elif message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_END:
+            # print("AUDIO END")
+            a = None
+            if len(
+                _audio.magnitudes) == 32 and message.audio_data_cmd.stream_id == _audio.packet_id:
+                a = AudioData()
+                a.magnitudes = _audio.magnitudes.copy()
+                a.packet_id = _audio.packet_id
+                a.target = _audio.target
+
+            _audio.magnitudes.clear()
+            _audio.packet_id = 0
+
+            return a
+
+        elif message.type == JerryCANCmdType.DOOR_SENSOR:
+            # print("DOOR")
+            door = DoorData()
+            door.target = _addr2tgt(message.dst_id)
+
+            door.open_state = [
+                message.doors.opened & 0x1 != 0,
+                message.doors.opened & 0x2 != 0,
+                message.doors.opened & 0x4 != 0,
+            ]
+
+            return door
+
+        elif message.type == JerryCANCmdType.SERVO_STATUS:
+            # print("SERVO STAT")
+            target = _addr2tgt(message.dst_id)
+            motor = _id_to_motor(target, True, message.servo_status.motor_id)
+            status = ServoStatus(target, motor, message.servo_status.position)
+
+            return status
+
+        elif message.type == JerryCANCmdType.STEPPER_STATUS:
+            # print("STEPPER STAT")
+            target = _addr2tgt(message.dst_id)
+            motor = _id_to_motor(target, False, message.servo_status.motor_id)
+
+            status = StepperStatus(target, motor, message.stepper_status.position,
+                                   message.stepper_status.limit_switch)
+
+            return status
+
+        elif message.type == JerryCANCmdType.TEMP_HUM_READ:
+            status = SensorStatus()
+            status.target = _addr2tgt(message.dst_id)
+            status.temperature_c = float(message.temp_hum_read.temperature) / 100.0
+            status.humidity_percent = float(message.temp_hum_read.humidity) / 100.0
+
+            return status
+
+        return None
