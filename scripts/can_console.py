@@ -7,7 +7,7 @@ from threading import Thread
 from autotrainer.core import SystemStatusMessageKind
 from autotrainer.device import CanDevice, DeviceThread, DeviceThreadMessageKind, \
     HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, \
-    StepperConfig, ServoConfig, motor_to_str, target_to_str, target_of_motor
+    StepperConfig, ServoConfig, motor_to_str, target_to_str, target_of_motor, is_servo, is_stepper
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
@@ -92,6 +92,7 @@ def monitor_message_queue():
                 print(f"STEPPER\n"
                       f"- target={target_to_str(data.target)}\n"
                       f"- motor={motor_to_str(data.motor)}\n"
+                      f"- invert direction={data.inverted_direction}\n"
                       f"- max vel={data.max_velocity}\n"
                       f"- max accel={data.max_acceleration}\n"
                       f"- min step={data.min_step_inverse}\n"
@@ -164,12 +165,11 @@ def write_config(motor: Motor, device_thread):
     if motor is None:
         return
 
-    if motor is Motor.PELLET_X_MOTOR or \
-        motor is Motor.PELLET_Y_MOTOR or \
-        motor is Motor.PELLET_Z_MOTOR:
+    if is_stepper(motor):
         config = StepperConfig()
         config.motor = motor
         config.target = target_of_motor(motor)
+        config.inverted_direction = int(input("Invert Motor Direction [0, 1] ="))
         config.max_velocity = float(input("Max Velocity = "))
         config.max_acceleration = float(input("Max Acceleration = "))
         config.min_step_inverse = int(input("Min Step (inverted) = "))
@@ -200,8 +200,6 @@ def wait_for_move(kind, position):
 def round_trip_test(motor: Motor, trips: int, device_thread):
     global print_status, positions
 
-    min_pos = 0.0
-    max_pos = -10.0 if motor is Motor.PELLET_X_MOTOR else 10.0
     kind = None
 
     if motor is Motor.PELLET_X_MOTOR:
@@ -216,12 +214,12 @@ def round_trip_test(motor: Motor, trips: int, device_thread):
         return
 
     for i in range(trips):
-        device_thread.send_message(kind, data=max_pos)
+        device_thread.send_message(kind, data=10)
         time.sleep(2)
         print_status = motor
         time.sleep(1)
 
-        device_thread.send_message(kind, data=min_pos)
+        device_thread.send_message(kind, data=0)
         time.sleep(2)
         print_status = motor
         time.sleep(1)
@@ -265,16 +263,16 @@ def run_monitor():
                 print("e <motor> <trips>  ::Stepper round trip test")
                 print("h                  ::Home Position")
                 print("l                  ::Load Pellet")
-                print("m <pos>            ::Move Magnet Servo [0:180] (deg)")
-                print("n <pos>            ::Move Load Servo [0:110] (deg)")
-                print("o <pos>            ::Move Cover Servo [0:180] (deg)")
+                print("m <pos>            ::Move Magnet Servo [0:120] (deg)")
+                print("n <pos>            ::Move Load Servo [0:120] (deg)")
+                print("o <pos>            ::Move Cover Servo [0:120] (deg)")
                 print("q                  ::Quit")
                 print("r                  ::Release Pellet")
                 print("s                  ::Send Pellet")
                 print("t                  ::Tare Load Cell/Pressure Sensors")
                 print("v                  ::Version (not available yet)")
                 print("w <motor>          ::Motor Status")
-                print("x <pos>            ::Move X [-12.0,0.0] (turns)")
+                print("x <pos>            ::Move X [0:12] (turns)")
                 print("y <pos>            ::Move Y [0:12] (turns)")
                 print("z <pos>            ::Move Z [0:12] (turns)")
                 print("X                  ::Home X to Limit")
