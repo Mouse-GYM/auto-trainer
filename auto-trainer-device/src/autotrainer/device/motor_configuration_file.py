@@ -61,13 +61,15 @@ class MotorConfigurationFile:
 
             except Exception as e:
                 logger.error(f"ERROR: Alogus Motor Configuration file {config_file}: {e}")
+        else:
+            logger.error(f"ERROR: Alogus Motor Configuration file {config_file}: No such file")
 
-            self._load_config = load_config
-            self._cover_config = cover_config
-            self._x_config = x_config
-            self._y_config = y_config
-            self._z_config = z_config
-            self._magnet_config = magnet_config
+        self._load_config = load_config
+        self._cover_config = cover_config
+        self._x_config = x_config
+        self._y_config = y_config
+        self._z_config = z_config
+        self._magnet_config = magnet_config
 
     '''
     Implement MotorConfigurations Protocol

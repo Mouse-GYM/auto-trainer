@@ -43,6 +43,8 @@ class CompoundMovementFile:
 
             except Exception as e:
                 logger.error(f"ERROR: Alogus Compound Movement file {filename}: {e}")
+        else:
+            logger.error(f"ERROR: Alogus Motor Configuration file {filename}: No such File")
 
         self._load_movement = load_movement
         self._home_movement = home_movement

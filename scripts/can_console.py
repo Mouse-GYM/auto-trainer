@@ -7,7 +7,8 @@ from threading import Thread
 from autotrainer.core import SystemStatusMessageKind
 from autotrainer.device import CanDevice, DeviceThread, DeviceThreadMessageKind, \
     HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, \
-    StepperConfig, ServoConfig, motor_to_str, target_to_str, target_of_motor, is_servo, is_stepper
+    StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
+    CompoundMovementFile, MotorConfigurationFile
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
@@ -81,21 +82,21 @@ def monitor_message_queue():
                     f"SERVO\n"
                     f"- target={target_to_str(data.target)}\n"
                     f"- motor={motor_to_str(data.motor)}\n"
-                    f"- max vel={data.max_velocity}\n"
-                    f"- max accel={data.max_acceleration}\n"
-                    f"- min pos={data.min_position}\n"
-                    f"- min pwm={data.min_pwm_duration_us}\n"
-                    f"- max pos={data.max_position}\n"
-                    f"- max pwm={data.max_pwm_duration_us}\n"
+                    f"- max vel={data.maximum_velocity}\n"
+                    f"- max accel={data.maximum_acceleration}\n"
+                    f"- min pos={data.minimum_position}\n"
+                    f"- max pos={data.maximum_position}\n"
+                    f"- min pwm={data.minimum_pwm_duration}\n"
+                    f"- max pwm={data.maximum_pwm_duration}\n"
                 )
             elif isinstance(data, StepperConfig):
                 print(f"STEPPER\n"
                       f"- target={target_to_str(data.target)}\n"
                       f"- motor={motor_to_str(data.motor)}\n"
+                      f"- max vel={data.maximum_velocity}\n"
+                      f"- max accel={data.maximum_acceleration}\n"
                       f"- invert direction={data.inverted_direction}\n"
-                      f"- max vel={data.max_velocity}\n"
-                      f"- max accel={data.max_acceleration}\n"
-                      f"- min step={data.min_step_inverse}\n"
+                      f"- min step={data.minimum_step_inverted}\n"
                       f"- step/rev={data.steps_per_revolution}\n"
                       )
 
@@ -168,19 +169,19 @@ def write_config(motor: Motor, device_thread):
     if is_stepper(motor):
         config = StepperConfig()
 
-        config.maximum_velocity = float(input("Max Velocity = "))
-        config.maximum_acceleration = float(input("Max Acceleration = "))
-        config.min_step_inverse = int(input("Min Step (inverted) = "))
+        config.maximum_velocity = float(input("Max Velocity (turns) = "))
+        config.maximum_acceleration = float(input("Max Acceleration (turns) = "))
+        config.flip_limit_orientation = int(input("Flip Limit Location [0, 1] = "))
         config.minimum_step_inverted = int(input("Min Step (inverted) = "))
         config.steps_per_revolution = float(input("Steps/Revolution = "))
         device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, (motor, config))
     else:
         config = ServoConfig()
 
-        config.maximum_velocity = float(input("Max Velocity = "))
-        config.maximum_acceleration = float(input("Max Acceleration = "))
-        config.minimum_position = float(input("Min Position = "))
-        config.maximum_position = float(input("Max Position = "))
+        config.maximum_velocity = float(input("Max Velocity (deg/sec) = "))
+        config.maximum_acceleration = float(input("Max Acceleration (deg/sec^2) = "))
+        config.minimum_position = float(input("Min Position (deg) = "))
+        config.maximum_position = float(input("Max Position (deg) = "))
         config.minimum_pwm_duration = float(input("Min PWM Duration (usec) = "))
         config.maximum_pwm_duration = float(input("Max PWM Duration (usec) = "))
         device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, (motor, config))
@@ -295,9 +296,11 @@ def run_monitor():
             elif cmd == 'e':
                 round_trip_test(str_to_motor(params[0]), int(params[1]), device_thread)
             elif cmd == 'f':
-                device_thread.use_motor_configuration(params[0])
+                file = MotorConfigurationFile(params[0])
+                device_thread.use_motor_configuration(file)
             elif cmd == 'F':
-                device_thread.use_compound_movement(params[0])
+                file = CompoundMovementFile(params[0])
+                device_thread.use_compound_movement(file)
             elif cmd == 'h':
                 device_thread.send_message(PelletDeliveryMessageKind.SEND_HOME)
             elif cmd == 'l':

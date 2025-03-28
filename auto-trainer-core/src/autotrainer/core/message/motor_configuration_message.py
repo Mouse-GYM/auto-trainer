@@ -57,6 +57,14 @@ class StepperConfigMessage(Protocol):
     @property
     def steps_per_revolution(self) -> float: ...
 
+    """
+    0 - Do no invert motor direction
+    1 - Invert motor direction
+    """
+
+    @property
+    def flip_limit_orientation(selfs) -> int: ...
+
 
 """
 Protocol for the interface for obtaining servo motor configuration entities

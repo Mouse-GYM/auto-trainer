@@ -75,8 +75,8 @@ def test_write_servo_config(interface: CanInterface, motor: Motor = Motor.MAGNET
     assert interface.set_motor_configuration(motor, config)
 
     new_config = _read_config(interface, config.motor)
-    assert new_config.min_position == config.minimum_position
-    assert new_config.max_position == config.maximum_position
+    assert new_config.minimum_position == config.minimum_position
+    assert new_config.maximum_position == config.maximum_position
 
     config.minimum_position = orig_min
     config.maximum_position = orig_max
@@ -90,7 +90,9 @@ def _write_stepper_config(interface: CanInterface, motor: Motor, config: Stepper
 
     new_config = _read_config(interface, motor)
 
-    return new_config.min_step_inverse == config.minimum_step_inverted and \
+    assert new_config is not None
+
+    return new_config.minimum_step_inverted == config.minimum_step_inverted and \
         new_config.steps_per_revolution == config.steps_per_revolution
 
 

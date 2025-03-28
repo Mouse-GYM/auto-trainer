@@ -435,14 +435,14 @@ class CanDevice(Device):
         elif config.motor is Motor.PELLET_X_MOTOR:
             config.max_velocity = self._interface.x_config.maximum_velocity
             config.max_acceleration = self._interface.x_config.maximum_acceleration
-            config.inverted_direction = self._x_config.inverted_direction
+            config.flip_limit_orientation = self._interface.x_config.flip_limit_orientation
 
         elif config.motor is Motor.PELLET_Y_MOTOR:
             config.max_velocity = self._interface.y_config.maximum_velocity
             config.max_acceleration = self._interface.y_config.maximum_acceleration
-            config.inverted_direction = self._y_config.inverted_direction
+            config.flip_limit_orientation = self._interface.y_config.flip_limit_orientation
 
         elif config.motor is Motor.PELLET_Z_MOTOR:
             config.max_velocity = self._interface.z_config.maximum_velocity
             config.max_acceleration = self._interface.z_config.maximum_acceleration
-            config.inverted_direction = self._z_config.inverted_direction
+            config.flip_limit_orientation = self._interface.z_config.flip_limit_orientation
