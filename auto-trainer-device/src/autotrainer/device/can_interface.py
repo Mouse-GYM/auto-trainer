@@ -430,15 +430,15 @@ class CanInterface(DeviceInterface):
         return rc
 
     def direction_of_motor(self, motor: Motor):
-        inverted_direction = 0
+        flip_orientation = 0
         if motor is Motor.PELLET_X_MOTOR:
-            inverted_direction = self.x_config.flip_limit_orientation
+            flip_orientation = self.x_config.flip_limit_orientation
         elif motor is Motor.PELLET_Y_MOTOR:
-            inverted_direction = self.y_config.flip_limit_orientation
+            flip_orientation = self.y_config.flip_limit_orientation
         elif motor is Motor.PELLET_Z_MOTOR:
-            inverted_direction = self.z_config.flip_limit_orientation
+            flip_orientation = self.z_config.flip_limit_orientation
 
-        return 1 if inverted_direction == 0 else -1
+        return 1 if flip_orientation else -1
 
     '''
     Write the currently-known configuration for each of the pellet board's motors. 

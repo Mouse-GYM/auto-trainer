@@ -171,7 +171,7 @@ def write_config(motor: Motor, device_thread):
 
         config.maximum_velocity = float(input("Max Velocity (turns) = "))
         config.maximum_acceleration = float(input("Max Acceleration (turns) = "))
-        config.flip_limit_orientation = int(input("Flip Limit Location [0, 1] = "))
+        config.flip_limit_orientation = int(input("Flip Limit Location [0, 1] = ")) == 1
         config.minimum_step_inverted = int(input("Min Step (inverted) = "))
         config.steps_per_revolution = float(input("Steps/Revolution = "))
         device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, (motor, config))

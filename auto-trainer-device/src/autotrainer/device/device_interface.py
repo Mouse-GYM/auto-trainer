@@ -196,7 +196,7 @@ class StepperConfig(Source):
         if "max_acc" in data:
             config.max_acceleration = data["max_acc"]
         if "flip_limit_orientation" in data:
-            config.inverted_direction = data["flip_limit_orientation"]
+            config.flip_limit_orientation = data["flip_limit_orientation"] == 1
 
         return config
 
