@@ -181,6 +181,7 @@ class StepperConfig(Source):
     _steps_per_revolution: float = 48.0
     _max_velocity: float = 25.0
     _max_acceleration: float = 100.0
+    inverted_direction: int = 0
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -194,6 +195,8 @@ class StepperConfig(Source):
             config.max_velocity = data["max_vel"]
         if "max_acc" in data:
             config.max_acceleration = data["max_acc"]
+        if "invert_direction" in data:
+            config.inverted_direction = data["invert_direction"]
 
         return config
 

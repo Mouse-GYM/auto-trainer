@@ -123,6 +123,11 @@ class HeadFixModel(ObservableObject):
     @property
     def position(self) -> float:
         return self._position
+    
+    # Deprecated
+    def update_position(self, value: float):
+        logger.warning("update_position() is deprecated.  Use set_position().")
+        return self.set_position(value)
 
     def set_position(self, value: float):
         if value == self._position:

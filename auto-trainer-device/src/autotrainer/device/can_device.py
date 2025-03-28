@@ -316,7 +316,7 @@ class CanDevice(Device):
                         f":{message.motor.value} position: {message.position}")
 
             elif isinstance(message, StepperConfig):
-                self.add_vel_and_accel_to_config(message)
+                self.copy_local_configuration_values(message)
 
                 if self._api is not None:
                     self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
@@ -325,7 +325,7 @@ class CanDevice(Device):
                     f" {message.steps_per_revolution}")
 
             elif isinstance(message, ServoConfig):
-                self.add_vel_and_accel_to_config(message)
+                self.copy_local_configuration_values(message)
 
                 if self._api is not None:
                     self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
@@ -419,7 +419,7 @@ class CanDevice(Device):
     needs to update the received configuration with those values.
     '''
 
-    def add_vel_and_accel_to_config(self, config):
+    def copy_local_configuration_values(self, config):
         if config.motor is Motor.MAGNET_SERVO:
             config.max_velocity = self._interface.magnet_config.maximum_velocity
             config.max_acceleration = self._interface.magnet_config.maximum_acceleration
@@ -435,11 +435,14 @@ class CanDevice(Device):
         elif config.motor is Motor.PELLET_X_MOTOR:
             config.max_velocity = self._interface.x_config.maximum_velocity
             config.max_acceleration = self._interface.x_config.maximum_acceleration
+            config.inverted_direction = self._x_config.inverted_direction
 
         elif config.motor is Motor.PELLET_Y_MOTOR:
             config.max_velocity = self._interface.y_config.maximum_velocity
             config.max_acceleration = self._interface.y_config.maximum_acceleration
+            config.inverted_direction = self._y_config.inverted_direction
 
         elif config.motor is Motor.PELLET_Z_MOTOR:
             config.max_velocity = self._interface.z_config.maximum_velocity
             config.max_acceleration = self._interface.z_config.maximum_acceleration
+            config.inverted_direction = self._z_config.inverted_direction

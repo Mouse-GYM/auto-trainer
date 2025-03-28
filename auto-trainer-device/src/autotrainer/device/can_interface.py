@@ -432,6 +432,17 @@ class CanInterface(DeviceInterface):
 
         return rc
 
+    def direction_of_motor(self, motor: Motor):
+        inverted_direction = 0
+        if motor is Motor.PELLET_X_MOTOR:
+            inverted_direction = self._x_config.inverted_direction
+        elif motor is Motor.PELLET_Y_MOTOR:
+            inverted_direction = self._y_config.inverted_direction
+        elif motor is Motor.PELLET_Z_MOTOR:
+            inverted_direction = self._z_config.inverted_direction
+
+        return 1 if inverted_direction == 0 else -1
+
     '''
     Write the currently-known configuration for each of the pellet board's motors. 
     '''
@@ -468,114 +479,81 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
         return addr is not None and self._jc.PressureSensorTare(addr, 0) == 0
 
+    def set_servo_position(self, position, config):
+        assert isinstance(config, ServoConfig)
+        if position < 0:
+            position = 0
+        elif position > 120:
+            position = 120
+
+        addr = self._tgt2addr(target_of_motor(config.motor))
+        return addr is not None and self._jc.ServoMove(addr, _motor_to_id(config.motor),
+                                                       position, config.max_velocity,
+                                                       config.max_acceleration,
+                                                       AbsOrRel.ABSOLUTE) == 0
+
+    def set_stepper_position(self, position, config):
+        if position < 0:
+            position = 0
+        elif position > 12:
+            position = 12
+
+        position *= self.direction_of_motor(config.motor)
+
+        addr = self._tgt2addr(target_of_motor(config.motor))
+        return addr is not None and self._jc.StepperMove(addr, _motor_to_id(config.motor),
+                                                         position,
+                                                         config.max_velocity,
+                                                         config.max_acceleration,
+                                                         AbsOrRel.ABSOLUTE) == 0
+
     '''
     Set the position of the magnet motor
     '''
 
     def set_magnet(self, position: int) -> bool:
-        if position < 0:
-            position = 0
-        elif position > 180:
-            position = 180
-
         logger.info(f"set magnet position {position}")
-        addr = self._tgt2addr(Target.MAGNET_DEVICE)
-        return addr is not None and self._jc.ServoMove(addr, _MAGNET_SERVO_ID,
-                                                       position,
-                                                       self.magnet_config.maximum_velocity,
-                                                       self.magnet_config.maximum_acceleration,
-                                                       AbsOrRel.ABSOLUTE) == 0
+        return self.set_servo_position(position, self._magnet_config)
 
     '''
     Set the position of the X-direction motor
     '''
 
     def set_x(self, position: float) -> bool:
-        if position > 0:
-            position = 0
-        elif position < -12:
-            position = -12
-
-        logger.info(f"set pellet absolute x {position}")
-        addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and self._jc.StepperMove(addr, _PELLET_X_MOTOR_ID,
-                                                         position,
-                                                         self.x_config.maximum_velocity,
-                                                         self.x_config.maximum_acceleration,
-                                                         AbsOrRel.ABSOLUTE) == 0
+        logger.info(f"set pellet X stepper to {position}")
+        self.set_stepper_position(position, self._x_config)
 
     '''
     Set the position of the Y-direction motor
     '''
 
     def set_y(self, position: float):
-        if position < 0:
-            position = 0
-        elif position > 12:
-            position = 12
-
-        logger.info(f"set pellet absolute y {position}")
-        addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and self._jc.StepperMove(addr, _PELLET_Y_MOTOR_ID,
-                                                         position,
-                                                         self.y_config.maximum_velocity,
-                                                         self.y_config.maximum_acceleration,
-                                                         AbsOrRel.ABSOLUTE) == 0
+        logger.info(f"set pellet Y stepper to {position}")
+        self.set_stepper_position(position, self._y_config)
 
     '''
     Set the position of the Z-direction motor
     '''
 
     def set_z(self, position: float):
-        if position < 0:
-            position = 0
-        elif position > 12:
-            position = 12
-
-        logger.info(f"set pellet absolute z {position}")
-        addr = self._tgt2addr(Target.PELLET_DEVICE)
-
-        return addr is not None and self._jc.StepperMove(addr, _PELLET_Z_MOTOR_ID,
-                                                         position,
-                                                         self.z_config.maximum_velocity,
-                                                         self.z_config.maximum_acceleration,
-                                                         AbsOrRel.ABSOLUTE) == 0
+        logger.info(f"set pellet Z stepper to {position}")
+        self.set_stepper_position(position, self._z_config)
 
     '''
     Set the position of the load arm
     '''
 
     def set_load(self, position: float):
-        if position < 0:
-            position = 0
-        elif position > 120:
-            position = 120
-
-        logger.info(f"set load arm {position}")
-        addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and self._jc.ServoMove(addr, _PELLET_LOAD_SERVO_ID,
-                                                       position,
-                                                       self.load_config.maximum_velocity,
-                                                       self.load_config.maximum_acceleration,
-                                                       AbsOrRel.ABSOLUTE) == 0
+        logger.info(f"set load servo position {position}")
+        return self.set_servo_position(position, self._load_arm_config)
 
     '''
     Set the position of the barrier/cover for pellet delivery
     '''
 
     def set_barrier(self, position):
-        if position < 0:
-            position = 0
-        elif position > 180:
-            position = 180
-
-        logger.info(f"set barrier arm {position}")
-        addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and self._jc.ServoMove(addr, _PELLET_COVER_SERVO_ID,
-                                                       position,
-                                                       self.barrier_config.maximum_velocity,
-                                                       self.barrier_config.maximum_acceleration,
-                                                       AbsOrRel.ABSOLUTE) == 0
+        logger.info(f"set cover servo position {position}")
+        return self.set_servo_position(position, self._barrier_config)
 
     '''
     Open the cover so the pellet is visible to the animal
@@ -606,9 +584,11 @@ class CanInterface(DeviceInterface):
 
         addr = self._tgt2addr(Target.PELLET_DEVICE)
 
-        # Third arg - forward/rev. Only X is fwd; others are reverse
+        direction = self.direction_of_motor(motor)
+
+        # Third arg - forward/rev. Go in forward direction if the non-zero locations are negative
         return addr is not None and self._jc.StepperHome(addr, _motor_to_id(motor),
-                                                         motor == Motor.PELLET_X_MOTOR) == 0
+                                                         direction == -1) == 0
 
     '''
     Update a stepper motor configuration on the target
@@ -921,7 +901,8 @@ class CanInterface(DeviceInterface):
             # print("SERVO STAT")
             target = _addr2tgt(message.dst_id)
             motor = _id_to_motor(target, True, message.servo_status.motor_id)
-            status = ServoStatus(target, motor, message.servo_status.position)
+            
+						status = ServoStatus(target, motor, message.servo_status.position)
 
             return status
 
@@ -930,7 +911,8 @@ class CanInterface(DeviceInterface):
             target = _addr2tgt(message.dst_id)
             motor = _id_to_motor(target, False, message.servo_status.motor_id)
 
-            status = StepperStatus(target, motor, message.stepper_status.position,
+            status = StepperStatus(target, motor,
+                                   message.stepper_status.position * self.direction_of_motor(motor),
                                    message.stepper_status.limit_switch)
 
             return status

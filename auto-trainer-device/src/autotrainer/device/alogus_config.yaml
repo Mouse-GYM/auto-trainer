@@ -22,16 +22,19 @@ pellet:
     max_vel: 200.0
     max_acc: 100.0
   x:
+    invert_direction: 1
     min_step_inverse: 8
     steps_per_revolution: 48.0
     max_vel: 20.0
     max_acc: 1000.0
   y:
+    invert_direction: 0
     min_step_inverse: 8
     steps_per_revolution: 48.0
     max_vel: 20.0
     max_acc: 1000.0
   z:
+    invert_direction: 0
     min_step_inverse: 8
     steps_per_revolution: 48.0
     max_vel: 20.0
