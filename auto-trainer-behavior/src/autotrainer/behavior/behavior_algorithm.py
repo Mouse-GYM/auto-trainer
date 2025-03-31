@@ -1,3 +1,4 @@
+import logging
 import time
 from datetime import datetime
 
@@ -6,6 +7,8 @@ from autotrainer.core import ObservableObject, EventManager, TriggerManager, CAP
 from .behavior_event_kind import BehaviorEventKind
 from .behavior_limits import BehaviorLimits
 from .system_machine_state import SystemState
+
+logger = logging.getLogger(__name__)
 
 
 class BehaviorAlgorithm(ObservableObject):
@@ -101,8 +104,13 @@ class BehaviorAlgorithm(ObservableObject):
 
     @head_fixation_enabled.setter
     def head_fixation_enabled(self, value: bool):
+        old_value = self._head_fixation_enabled
+
         self._head_fixation_enabled = self._on_property_changed("head_fixation_enabled", value,
                                                                 self._head_fixation_enabled)
+
+        if old_value != self._head_fixation_enabled:
+            logger.info(f"auto-clamp enabled changed to: {self._head_fixation_enabled}")
 
     @property
     def baseline_intensity(self):
