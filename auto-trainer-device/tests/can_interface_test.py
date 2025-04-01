@@ -45,12 +45,14 @@ def test_heartbeat(interface: CanInterface, target: Target = Target.PELLET_DEVIC
 def _read_config(interface: CanInterface, motor: Motor):
     target = target_of_motor(motor)
 
-    """Verify servo configuration can be read"""
-    assert interface.request_motor_config(motor)
+    config = None
+    while config is None:
+        """Verify servo configuration can be read"""
+        assert interface.request_motor_config(motor)
 
-    config = get_response(interface,
-                          ServoConfig if is_servo(motor) else StepperConfig,
-                          target)
+        config = get_response(interface,
+                              ServoConfig if is_servo(motor) else StepperConfig,
+                              target)
 
     return config
 
@@ -92,7 +94,7 @@ def _write_stepper_config(interface: CanInterface, motor: Motor, config: Stepper
 
     assert new_config is not None
 
-    return new_config.minimum_step_inverted == config.minimum_step_inverted and \
+    return new_config.microsteps == config.microsteps and \
         new_config.steps_per_revolution == config.steps_per_revolution
 
 
@@ -100,14 +102,14 @@ def _write_stepper_config(interface: CanInterface, motor: Motor, config: Stepper
 def test_write_stepper_config(interface: CanInterface, motor: Motor = Motor.PELLET_Z_MOTOR):
     config = _read_config(interface, motor)
 
-    orig_min = config.minimum_step_inverted
+    orig_min = config.microsteps
     orig_steps = config.steps_per_revolution
 
-    config.minimum_step_inverted *= 2
+    config.microsteps *= 2
     config.steps_per_revolution *= 2
     assert _write_stepper_config(interface, motor, config)
 
-    config.minimum_step_inverted = orig_min
+    config.microsteps = orig_min
     config.steps_per_revolution = orig_steps
     assert _write_stepper_config(interface, motor, config)
 
@@ -247,6 +249,8 @@ def get_response(interface: CanInterface, typeof, target: Target, timeout: float
 
 
 if __name__ == '__main__':
+    # This test should NOT control the motors. Testing of the motors should
+    # be done manually.
     iface = _connect()
 
     test_heartbeat(iface, Target.PELLET_DEVICE)

@@ -74,7 +74,7 @@ class ServoConfig(Source):
     _max_position: float = 120  # (deg)
     _min_pwm_duration: float = 1000  # (us)
     _max_pwm_duration: float = 2000  # (us)
-    _max_velocity: float = 25.0  # (deg/sec)
+    _max_velocity: float = 200  # (deg/sec)
     _max_acceleration: float = 100.0  # (deg/sec^2)
 
     @classmethod
@@ -177,7 +177,7 @@ class ServoStatus(Source):
 @dataclass
 class StepperConfig(Source):
     _motor: Motor = Motor.NONE
-    _min_step_inverse: int = 64
+    _micro_steps: int = 64
     _steps_per_revolution: float = 48.0
     _max_velocity: float = 25.0
     _max_acceleration: float = 100.0
@@ -187,8 +187,8 @@ class StepperConfig(Source):
     def from_dict(cls, data: dict):
         config = StepperConfig()
 
-        if "min_step_inverse" in data:
-            config.min_step_inverted = data["min_step_inverse"]
+        if "microsteps" in data:
+            config.min_step_inverted = data["microsteps"]
         if "steps_per_revolution" in data:
             config.steps_per_revolution = data["steps_per_revolution"]
         if "max_vel" in data:
@@ -225,12 +225,12 @@ class StepperConfig(Source):
         self._max_acceleration = value
 
     @property
-    def minimum_step_inverted(self) -> int:
-        return self._min_step_inverse
+    def microsteps(self) -> int:
+        return self._micro_steps
 
-    @minimum_step_inverted.setter
-    def minimum_step_inverted(self, value: int):
-        self._min_step_inverse = value
+    @microsteps.setter
+    def microsteps(self, value: int):
+        self._micro_steps = value
 
     @property
     def steps_per_revolution(self) -> float:

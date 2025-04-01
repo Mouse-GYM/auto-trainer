@@ -122,14 +122,29 @@ def _motor_to_id(motor: Motor) -> int:
     return 0
 
 
+"""
+Return - Indication if the motor is a servo motor type
+"""
+
+
 def is_servo(motor: Motor) -> bool:
     return motor is Motor.MAGNET_SERVO or \
         motor is Motor.PELLET_LOAD_SERVO or \
         motor is Motor.PELLET_COVER_SERVO
 
 
+"""
+Return - Indication if the motor is a stepper motor type
+"""
+
+
 def is_stepper(motor: Motor) -> bool:
     return not is_servo(motor)
+
+
+"""
+Return - Given the motor, determines which physical board the motor is associated with
+"""
 
 
 def target_of_motor(motor: Motor) -> Target:
@@ -187,7 +202,7 @@ class CanInterface(DeviceInterface):
 
         self.magnet_config = ServoConfig()
         self.load_config = ServoConfig()
-        self.barrier_config = ServoConfig()
+        self.cover_config = ServoConfig()
         self.x_config = StepperConfig()
         self.y_config = StepperConfig()
         self.z_config = StepperConfig()
@@ -213,14 +228,14 @@ class CanInterface(DeviceInterface):
         self._load_config.target = target_of_motor(self._load_config.motor)
 
     @property
-    def barrier_config(self):
-        return self._barrier_config
+    def cover_config(self):
+        return self._cover_config
 
-    @barrier_config.setter
-    def barrier_config(self, config: ServoConfig):
-        self._barrier_config = config if config is not None else ServoConfig()
-        self._barrier_config.motor = Motor.PELLET_COVER_SERVO
-        self._barrier_config.target = target_of_motor(self._barrier_config.motor)
+    @cover_config.setter
+    def cover_config(self, config: ServoConfig):
+        self._cover_config = config if config is not None else ServoConfig()
+        self._cover_config.motor = Motor.PELLET_COVER_SERVO
+        self._cover_config.target = target_of_motor(self._cover_config.motor)
 
     @property
     def x_config(self):
@@ -315,6 +330,8 @@ class CanInterface(DeviceInterface):
 
         self._is_open = self._jc.Open() == 0
 
+        self._query_configuration()
+
         return self._is_open
 
     '''
@@ -383,6 +400,35 @@ class CanInterface(DeviceInterface):
         return None
 
     '''
+    Return the configuration for the given motor
+    '''
+
+    def get_motor_configuration(self, motor: Motor):
+        if is_servo(motor):
+
+            # Not all configuration items get pushed/pulled to the target
+            # Reminder: config points to same object after assignment
+            if motor is Motor.PELLET_COVER_SERVO:
+                config = self.cover_config
+            elif motor is Motor.PELLET_LOAD_SERVO:
+                config = self.load_config
+            elif motor is Motor.MAGNET_SERVO:
+                config = self.magnet_config
+            else:
+                config = ServoConfig()
+        else:
+            if motor is Motor.PELLET_X_MOTOR:
+                config = self.x_config
+            elif motor is Motor.PELLET_Y_MOTOR:
+                config = self.y_config
+            elif motor is Motor.PELLET_Z_MOTOR:
+                config = self.z_config
+            else:
+                config = StepperConfig()
+
+        return config
+
+    '''
     Set a motor's configuration.
     
     motor - Motor associated with the configuration
@@ -390,37 +436,40 @@ class CanInterface(DeviceInterface):
     write - Indication to push data to target (True), or locally store new configuration (False)
     '''
 
-    def set_motor_configuration(self, motor: Motor, config, write: bool = True) -> bool:
+    def set_motor_configuration(self, motor: Motor, config, write_to_remote: bool = True) -> bool:
+        if config is None:
+            return False
+
         rc = False
 
         if motor is Motor.MAGNET_SERVO:
             self.magnet_config = config
-            if write:
+            if write_to_remote:
                 rc = self._write_servo_config(self.magnet_config)
 
         elif motor is Motor.PELLET_X_MOTOR:
             self.x_config = config
-            if write:
+            if write_to_remote:
                 rc = self._write_stepper_config(self.x_config)
 
         elif motor is Motor.PELLET_Y_MOTOR:
             self.y_config = config
-            if write:
+            if write_to_remote:
                 rc = self._write_stepper_config(self.y_config)
 
         elif motor is Motor.PELLET_Z_MOTOR:
             self.z_config = config
-            if write:
+            if write_to_remote:
                 rc = self._write_stepper_config(self.z_config)
 
         elif motor is Motor.PELLET_COVER_SERVO:
-            self.barrier_config = config
-            if write:
-                rc = self._write_servo_config(self.barrier_config)
+            self.cover_config = config
+            if write_to_remote:
+                rc = self._write_servo_config(self.cover_config)
 
         elif motor is Motor.PELLET_LOAD_SERVO:
             self.load_config = config
-            if write:
+            if write_to_remote:
                 rc = self._write_servo_config(self.load_config)
 
         # wait for write to complete
@@ -429,36 +478,28 @@ class CanInterface(DeviceInterface):
 
         return rc
 
-    def direction_of_motor(self, motor: Motor):
-        flip_orientation = 0
-        if motor is Motor.PELLET_X_MOTOR:
-            flip_orientation = self.x_config.flip_limit_orientation
-        elif motor is Motor.PELLET_Y_MOTOR:
-            flip_orientation = self.y_config.flip_limit_orientation
-        elif motor is Motor.PELLET_Z_MOTOR:
-            flip_orientation = self.z_config.flip_limit_orientation
-
-        return 1 if flip_orientation else -1
-
     '''
-    Write the currently-known configuration for each of the pellet board's motors. 
+    Read the configurations from the remote device 
     '''
 
-    # Deprecated - do not use; alternate is to individually write configurations
-    def configure_pellet(self):
-        self._write_servo_config(self.load_config)
-        self._write_servo_config(self.barrier_config)
-        self._write_stepper_config(self.x_config)
-        self._write_stepper_config(self.y_config)
-        self._write_stepper_config(self.z_config)
+    def _query_motor_configuration(self, motor: Motor, config_type):
+        config = None
+        while config is None:
+            self.request_motor_config(motor)
+            config = self.get_response(config_type, target_of_motor(motor), 2)
+            if config is not None and config.motor == motor:
+                self.set_motor_configuration(motor, config, False)
+            else:
+                logger.info(f"Failed to get configuration for {motor_to_str(motor)}")
+                config = None
 
-    '''
-    Write the currently-known configuration for each of the magnet board's motors. 
-    '''
-
-    # Deprecated - do not use; alternate is to individually write configurations
-    def configure_magnet(self):
-        self._write_servo_config(self.magnet_config)
+    def _query_configuration(self):
+        self._query_motor_configuration(Motor.PELLET_X_MOTOR, StepperConfig)
+        self._query_motor_configuration(Motor.PELLET_Y_MOTOR, StepperConfig)
+        self._query_motor_configuration(Motor.PELLET_Z_MOTOR, StepperConfig)
+        self._query_motor_configuration(Motor.PELLET_LOAD_SERVO, ServoConfig)
+        self._query_motor_configuration(Motor.PELLET_COVER_SERVO, ServoConfig)
+        self._query_motor_configuration(Motor.MAGNET_SERVO, ServoConfig)
 
     '''
     Tare the load cell so the current reading is 0.
@@ -494,8 +535,6 @@ class CanInterface(DeviceInterface):
             position = 0
         elif position > 12:
             position = 12
-
-        position *= self.direction_of_motor(config.motor)
 
         addr = self._tgt2addr(target_of_motor(config.motor))
         return addr is not None and self._jc.StepperMove(addr, _motor_to_id(config.motor),
@@ -545,12 +584,12 @@ class CanInterface(DeviceInterface):
         return self.set_servo_position(position, self.load_config)
 
     '''
-    Set the position of the barrier/cover for pellet delivery
+    Set the position of the cover for pellet delivery
     '''
 
-    def set_barrier(self, position):
+    def set_cover(self, position):
         logger.info(f"set cover servo position {position}")
-        return self.set_servo_position(position, self.barrier_config)
+        return self.set_servo_position(position, self.cover_config)
 
     '''
     Open the cover so the pellet is visible to the animal
@@ -559,7 +598,7 @@ class CanInterface(DeviceInterface):
     def release_pellet(self) -> bool:
         addr = self._tgt2addr(Target.PELLET_DEVICE)
 
-        return addr is not None and self.set_barrier(self.barrier_config.minimum_position) and \
+        return addr is not None and self.set_cover(self.cover_config.minimum_position) and \
             self.emit_tone(addr, 6000)
 
     '''
@@ -567,25 +606,22 @@ class CanInterface(DeviceInterface):
     '''
 
     def cover_pellet(self) -> bool:
-        logger.info(f"cover pellet {self.barrier_config.maximum_position}")
-        return self.set_barrier(self.barrier_config.maximum_position)
+        logger.info(f"cover pellet {self.cover_config.maximum_position}")
+        return self.set_cover(self.cover_config.maximum_position)
 
     '''
     Send the given motor (X, Y, or Z) to the 0 position
     '''
 
     def stepper_home(self, motor: Motor) -> bool:
-        logger.info(f"Homing Stepper Motor {motor.value}")
+        logger.info(f"Homing Stepper Motor {motor_to_str(motor)}")
         if is_servo(motor):
             return False
 
         addr = self._tgt2addr(Target.PELLET_DEVICE)
 
-        direction = self.direction_of_motor(motor)
-
         # Third arg - forward/rev. Go in forward direction if the non-zero locations are negative
-        return addr is not None and self._jc.StepperHome(addr, _motor_to_id(motor),
-                                                         direction == -1) == 0
+        return addr is not None and self._jc.StepperHome(addr, _motor_to_id(motor)) == 0
 
     '''
     Update a stepper motor configuration on the target
@@ -598,11 +634,19 @@ class CanInterface(DeviceInterface):
             return False
 
         if self._jc.StepperCfgWrite(addr, motor_id,
-                                    config.minimum_step_inverted,
-                                    config.steps_per_revolution) == 0:
+                                    config.microsteps,
+                                    config.steps_per_revolution,
+                                    config.maximum_velocity,
+                                    config.maximum_acceleration,
+                                    config.flip_limit_orientation) == 0:
             logger.debug(
-                f"stepper {addr} {motor_id} config write: {config.minimum_step_inverted}"
-                f" {config.steps_per_revolution}")
+                f"stepper {addr} {motor_id} config write:\n"
+                f"microsteps = {config.microsteps}\n"
+                f"step/rev = {config.steps_per_revolution}\n"
+                f"max velocity = {config.maximum_velocity}\n"
+                f"max accel = {config.maximum_acceleration}\n"
+                f"flip limit orientation = {config.flip_limit_orientation}\n"
+            )
             return True
         else:
             logger.error(
@@ -625,11 +669,17 @@ class CanInterface(DeviceInterface):
                                   config.minimum_position,
                                   config.maximum_position,
                                   config.minimum_pwm_duration,
-                                  config.maximum_pwm_duration) == 0:
+                                  config.maximum_pwm_duration,
+                                  config.maximum_velocity,
+                                  config.maximum_acceleration) == 0:
             logger.debug(
-                f"servo {addr} {motor_id} config write: {config.minimum_position}"
-                f" {config.maximum_position} {config.minimum_pwm_duration} "
-                f"{config.maximum_pwm_duration}")
+                f"servo {addr} {motor_id} config write:\n"
+                f"- min pos = {config.minimum_position}\n"
+                f"- max pos = {config.maximum_position}\n"
+                f"- min pwm = {config.minimum_pwm_duration}\n"
+                f"- max pwm = {config.maximum_pwm_duration}\n"
+                f"- max vel = {config.maximum_velocity}\n"
+                f"- max acc = {config.maximum_acceleration}")
             return True
         else:
             logger.error(
@@ -734,19 +784,14 @@ class CanInterface(DeviceInterface):
 
             # Not all configuration items get pushed/pulled to the target
             # Reminder: config points to same object after assignment
-            if motor is Motor.PELLET_COVER_SERVO:
-                config = self.barrier_config
-            elif motor is Motor.PELLET_LOAD_SERVO:
-                config = self.load_config
-            elif motor is Motor.MAGNET_SERVO:
-                config = self.magnet_config
-            else:
-                config = ServoConfig()
+            config = self.get_motor_configuration(motor)
 
-            config.min_position = message.cfg_response.servo.min_position
-            config.max_position = message.cfg_response.servo.max_position
-            config.min_pwm = message.cfg_response.servo.min_pwm_duration_us
-            config.max_pwm = message.cfg_response.servo.max_pwm_duration_us
+            config.minimum_position = message.cfg_response.servo.min_position
+            config.maximum_position = message.cfg_response.servo.max_position
+            config.minimum_pwm_duration = message.cfg_response.servo.min_pwm_duration_us
+            config.maximum_pwm_duration = message.cfg_response.servo.max_pwm_duration_us
+            config.maximum_velocity = message.cfg_response.servo.motor_max_velocity
+            config.maximum_acceleration = message.cfg_response.servo.motor_max_acceleration
 
             return config
 
@@ -757,20 +802,13 @@ class CanInterface(DeviceInterface):
             target = _addr2tgt(message.dst_id)
             motor = _id_to_motor(target, False, message.cfg_response.stepper.motor_id)
 
-            # Not all configuration items get pushed/pulled to the target
-            # Reminder: config points to same object after assignment
-            if motor is Motor.PELLET_X_MOTOR:
-                config = self.x_config
-            elif motor is Motor.PELLET_Y_MOTOR:
-                config = self.y_config
-            elif motor is Motor.PELLET_Z_MOTOR:
-                config = self.z_config
-            else:
-                config = StepperConfig()
+            config = self.get_motor_configuration(motor)
 
-            config.min_step_inverse = message.cfg_response.stepper.min_step_inverse
+            config.microsteps = message.cfg_response.stepper.microsteps
             config.steps_per_revolution = message.cfg_response.stepper.steps_per_revolution
-
+            config.flip_limit_orientation = message.cfg_response.stepper.flip_limit_orientation
+            config.maximum_velocity = message.cfg_response.stepper.motor_max_velocity
+            config.maximum_acceleration = message.cfg_response.stepper.motor_max_acceleration
             return config
 
         elif message.type == JerryCANCmdType.GPIO_READ:
@@ -899,7 +937,7 @@ class CanInterface(DeviceInterface):
             motor = _id_to_motor(target, False, message.servo_status.motor_id)
 
             status = StepperStatus(target, motor,
-                                   message.stepper_status.position * self.direction_of_motor(motor),
+                                   message.stepper_status.position,
                                    message.stepper_status.limit_switch)
 
             return status

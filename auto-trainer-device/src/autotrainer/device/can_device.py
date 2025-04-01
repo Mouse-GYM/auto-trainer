@@ -34,7 +34,7 @@ from .device_api import DeviceApi
 from .gym_device import GymDeviceMessageKind, GymDeviceEventKind
 from .head_fix import HeadFixMeasurement, HeadFixMessageKind
 from .pellet_delivery import PelletDeliveryMessageKind
-from .can_interface import CanInterface
+from .can_interface import CanInterface, target_to_str, motor_to_str
 from .device_interface import *
 
 
@@ -146,7 +146,7 @@ class CanDevice(Device):
 
         elif kind == PelletDeliveryMessageKind.SET_COVER_SERVO:
             assert isinstance(data, float) or isinstance(data, int)
-            self._interface.set_barrier(float(data))
+            self._interface.set_cover(float(data))
             self._complete_command(context)
 
         elif kind == PelletDeliveryMessageKind.SET_X:
@@ -316,25 +316,12 @@ class CanDevice(Device):
                         f":{message.motor.value} position: {message.position}")
 
             elif isinstance(message, StepperConfig):
-                self.copy_local_configuration_values(message)
-
                 if self._api is not None:
                     self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
-                logger.debug(
-                    f"stepper {message.target.value}|{message.motor}: {message.minimum_step_inverted}"
-                    f" {message.steps_per_revolution}")
 
             elif isinstance(message, ServoConfig):
-                self.copy_local_configuration_values(message)
-
                 if self._api is not None:
                     self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
-                logger.debug(
-                    f"servo {message.target.value}|{message.motor.value}:"
-                    f" {message.minimum_position} {message.minimum_pwm_duration}"
-                    f" {message.maximum_position} {message.maximum_pwm_duration}"
-                    f" {message.maximum_velocity} {message.maximum_acceleration}"
-                )
 
         # Check for any delay requests
         if self._delay_desired is not None:
@@ -412,37 +399,3 @@ class CanDevice(Device):
                 self._pending_move_token = None
                 self._complete_command(token)
                 self._compound_movement = None
-
-    '''
-    Max velocity and acceleration was not intended to be a global configuration
-    item, so it's not stored remotely. When receiving the data, the local system
-    needs to update the received configuration with those values.
-    '''
-
-    def copy_local_configuration_values(self, config):
-        if config.motor is Motor.MAGNET_SERVO:
-            config.max_velocity = self._interface.magnet_config.maximum_velocity
-            config.max_acceleration = self._interface.magnet_config.maximum_acceleration
-
-        elif config.motor is Motor.PELLET_COVER_SERVO:
-            config.max_velocity = self._interface.barrier_config.maximum_velocity
-            config.max_acceleration = self._interface.barrier_config.maximum_acceleration
-
-        elif config.motor is Motor.PELLET_LOAD_SERVO:
-            config.max_velocity = self._interface.load_config.maximum_velocity
-            config.max_acceleration = self._interface.load_config.maximum_acceleration
-
-        elif config.motor is Motor.PELLET_X_MOTOR:
-            config.max_velocity = self._interface.x_config.maximum_velocity
-            config.max_acceleration = self._interface.x_config.maximum_acceleration
-            config.flip_limit_orientation = self._interface.x_config.flip_limit_orientation
-
-        elif config.motor is Motor.PELLET_Y_MOTOR:
-            config.max_velocity = self._interface.y_config.maximum_velocity
-            config.max_acceleration = self._interface.y_config.maximum_acceleration
-            config.flip_limit_orientation = self._interface.y_config.flip_limit_orientation
-
-        elif config.motor is Motor.PELLET_Z_MOTOR:
-            config.max_velocity = self._interface.z_config.maximum_velocity
-            config.max_acceleration = self._interface.z_config.maximum_acceleration
-            config.flip_limit_orientation = self._interface.z_config.flip_limit_orientation

@@ -201,7 +201,7 @@ def test_stepper_config():
     global _expected
 
     config = StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, 0, 0,
-                           0, 0)
+                           0, 0, False)
     _expected = [
         (GymDeviceMessageKind.READ_CONFIG, config),
     ]
