@@ -66,14 +66,6 @@ class DeviceThread(Thread):
 
             file = CompoundMovementFile(config_file)
             self.use_compound_movement(file)
-            self.load_default_motor_configuration()
-
-    # Deprecated - in use until the higher-level applications can manage configurations
-    def load_default_motor_configuration(self):
-        config_file = Path.home().joinpath(".alogus_config.yaml")
-
-        file = MotorConfigurationFile(config_file)
-        self.use_motor_configuration(file)
 
     @property
     def name(self) -> str:

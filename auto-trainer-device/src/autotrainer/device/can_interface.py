@@ -489,6 +489,7 @@ class CanInterface(DeviceInterface):
             config = self.get_response(config_type, target_of_motor(motor), 2)
             if config is not None and config.motor == motor:
                 self.set_motor_configuration(motor, config, False)
+                logger.info(f"Pulled configuration for {motor_to_str(motor)}")
             else:
                 logger.info(f"Failed to get configuration for {motor_to_str(motor)}")
                 config = None
