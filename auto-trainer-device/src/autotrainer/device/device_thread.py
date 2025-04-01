@@ -65,7 +65,7 @@ class DeviceThread(Thread):
             config_file = Path.home().joinpath(".alogus_config.yaml")
 
             file = CompoundMovementFile(config_file)
-            self.use_compound_movement(file)
+            self.use_compound_movements(file)
 
     @property
     def name(self) -> str:
@@ -87,12 +87,12 @@ class DeviceThread(Thread):
         if self._cmd_queue is not None:
             self._cmd_queue.put_nowait((kind, data, context))
 
-    def use_compound_movement(self, data: CompoundMovementDataSet):
+    def use_compound_movements(self, data: CompoundMovementDataSet):
         self.send_message(GymDeviceMessageKind.SET_LOAD_PROCEDURE, data.load)
         self.send_message(GymDeviceMessageKind.SET_HOME_PROCEDURE, data.home)
         self.send_message(GymDeviceMessageKind.SET_SEND_PROCEDURE, data.send)
 
-    def use_motor_configuration(self, data: MotorConfigurations):
+    def use_motor_configurations(self, data: MotorConfigurations):
         self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.x_config)
         self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.y_config)
         self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.z_config)

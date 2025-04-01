@@ -336,10 +336,10 @@ def run_monitor():
                 round_trip_test(str_to_motor(params[0]), int(params[1]), device_thread)
             elif cmd == 'f':
                 file = MotorConfigurationFile(params[0])
-                device_thread.use_motor_configuration(file)
+                device_thread.use_motor_configurations(file)
             elif cmd == 'F':
                 file = CompoundMovementFile(params[0])
-                device_thread.use_compound_movement(file)
+                device_thread.use_compound_movements(file)
             elif cmd == 'h':
                 device_thread.send_message(PelletDeliveryMessageKind.SEND_HOME)
             elif cmd == 'l':
