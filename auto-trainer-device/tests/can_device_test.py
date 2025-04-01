@@ -13,6 +13,7 @@ from autotrainer.device import (CanDevice, DeviceApi, CanInterface, GymDeviceMes
                                 MagnetDigitalInputs, Motor, StepperStatus, ServoStatus,
                                 ServoConfig, StepperConfig
                                 )
+from autotrainer.core.message import SystemStatusMessageKind
 
 _expected = []
 
@@ -77,22 +78,22 @@ def test_notify_tare_load_cell():
 
 @pytest.mark.canbus
 def test_notify_set_magnet():
-    notify_command(HeadFixMessageKind.MAGNET_INTENSITY, 103, data=3)
+    notify_command(HeadFixMessageKind.SET_MAGNET_INTENSITY, 103, data=3.0)
 
 
 @pytest.mark.canbus
 def test_notify_set_x():
-    notify_command(PelletDeliveryMessageKind.SET_X, 104, data=4, repeat=2)
+    notify_command(PelletDeliveryMessageKind.SET_X, 10.4, data=4, repeat=2)
 
 
 @pytest.mark.canbus
 def test_notify_set_y():
-    notify_command(PelletDeliveryMessageKind.SET_Y, 105, data=5, repeat=2)
+    notify_command(PelletDeliveryMessageKind.SET_Y, 10.5, data=5, repeat=2)
 
 
 @pytest.mark.canbus
 def test_notify_set_z():
-    notify_command(PelletDeliveryMessageKind.SET_Z, 105, data=5, repeat=2)
+    notify_command(PelletDeliveryMessageKind.SET_Z, 10.6, data=6, repeat=2)
 
 
 @pytest.mark.canbus
@@ -150,17 +151,17 @@ def test_stepper_status():
     global _expected
 
     _expected = [
-        (PelletDeliveryMessageKind.UPDATE_X, 10),
+        (SystemStatusMessageKind.PELLET_X, 10),
     ]
     notify_data(StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, 10, False))
 
     _expected = [
-        (PelletDeliveryMessageKind.UPDATE_Y, 20),
+        (SystemStatusMessageKind.PELLET_Y, 20),
     ]
     notify_data(StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Y_MOTOR, 20, True))
 
     _expected = [
-        (PelletDeliveryMessageKind.UPDATE_Z, 30),
+        (SystemStatusMessageKind.PELLET_Z, 30),
     ]
     notify_data(StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR, 30, False))
 
@@ -171,8 +172,8 @@ def test_load_servo_status():
 
     status = ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, 40)
     _expected = [
-        (PelletDeliveryMessageKind.UPDATE_LOAD_SERVO, 40),
-        (PelletDeliveryMessageKind.UPDATE_LOAD_SERVO, 40)
+        (SystemStatusMessageKind.PELLET_LOAD, 40),
+        (SystemStatusMessageKind.PELLET_LOAD, 40)
     ]
     notify_data(status)
 

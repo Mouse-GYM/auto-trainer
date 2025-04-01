@@ -2,67 +2,70 @@ magnet:
   head:
     min_pos: 10
     max_pos: 110
-    min_pwm: 1000
-    max_pwm: 1500
-    max_vel: 25.0
+    min_pwm: 900
+    max_pwm: 2100
+    max_vel: 200.0
     max_acc: 100.0
 pellet:
   load:
     min_pos: 0
     max_pos: 100
-    min_pwm: 1300
-    max_pwm: 2300
-    max_vel: 500.0
-    max_acc: 500.0
+    min_pwm: 900
+    max_pwm: 2100
+    max_vel: 200.0
+    max_acc: 100.0
   barrier:
-    min_pos: 50
-    max_pos: 51
-    min_pwm: 1500
-    max_pwm: 1700
-    max_vel: 500.0
-    max_acc: 500.0
+    min_pos: 0
+    max_pos: 120
+    min_pwm: 900
+    max_pwm: 2100
+    max_vel: 200.0
+    max_acc: 100.0
   x:
+    invert_direction: 1
     min_step_inverse: 8
     steps_per_revolution: 48.0
     max_vel: 20.0
     max_acc: 1000.0
   y:
+    invert_direction: 0
     min_step_inverse: 8
     steps_per_revolution: 48.0
     max_vel: 20.0
     max_acc: 1000.0
   z:
+    invert_direction: 0
     min_step_inverse: 8
     steps_per_revolution: 48.0
     max_vel: 20.0
     max_acc: 1000.0
-  actions:
-    load:
-      - type: load
-        value: 100.0
-      - type: delay
-        value: 1.0
-      - type: z
-        value: 50.0
-      - type: load
-        value: 0.0
-      - type: delay
-        value: 1.0
-      - type: z
-        value: 0.0
-      - type: delay
-        value: 1.0
-    home:
-      - type: x
-        value: 0.0
-      - type: y
-        value: 0.0
-      - type: z
-        value: 0.0
-    send:
-      - type: z
-        value: 5.0
-      - type: x
-        value: -16.0
-      - type: y
-        value: 20.0
+actions:
+  load:
+    - type: load
+      value: 100.0
+    - type: delay
+      value: 1.0
+    - type: z
+      value: 5.0
+    - type: load
+      value: 0.0
+    - type: delay
+      value: 1.0
+    - type: z
+      value: 0.0
+    - type: delay
+      value: 1.0
+  home:
+    - type: x
+      value: 0.0
+    - type: y
+      value: 0.0
+    - type: z
+      value: 0.0
+  send:
+    - type: z
+      value: .5
+    - type: x
+      value: -1.6
+    - type: y
+      value: 2.0

@@ -4,6 +4,8 @@ from PySide6.QtWidgets import QMainWindow, QStatusBar
 from tools.head_fix.model.app_model import AppModel
 from tools.head_fix.view.main_content import MainContent
 
+from autotrainer.core import DeviceReader
+
 
 class MainWindow(QMainWindow):
     def __init__(self, app_view_model: AppModel):
@@ -21,7 +23,8 @@ class MainWindow(QMainWindow):
 
         self.setStatusBar(QStatusBar(self))
 
-        self.main_content.connecting.connect(lambda: self.update_status("Head Fix Version: Waiting for response..."))
+        self.main_content.connecting.connect(
+            lambda: self.update_status("Head Fix Version: Waiting for response..."))
 
         self.main_content.disconnected.connect(lambda: self.update_status("Not connected"))
 
@@ -42,5 +45,5 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def _model_property_changed(self, name: str, value, _old_value):
-        if name == "firmware_version":
+        if name == DeviceReader.FIRMWARE_VERSION:
             self.update_status(f"Head Fix Version: {value}")

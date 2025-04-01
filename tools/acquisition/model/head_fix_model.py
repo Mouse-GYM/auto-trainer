@@ -28,7 +28,7 @@ class HeadFixModel(ObservableObject):
 
         self._baseline_intensity = 0
 
-        self._position = 0
+        self._position = 0.0
 
         self._is_headbar_engaged = False
 
@@ -121,10 +121,15 @@ class HeadFixModel(ObservableObject):
         self._baseline_intensity = self._on_property_changed("baseline_intensity", value, self._baseline_intensity)
 
     @property
-    def position(self) -> int:
+    def position(self) -> float:
         return self._position
+    
+    # Deprecated
+    def update_position(self, value: float):
+        logger.warning("update_position() is deprecated.  Use set_position().")
+        return self.set_position(value)
 
-    def update_position(self, value: int):
+    def set_position(self, value: float):
         if value == self._position:
             return None
 
@@ -133,7 +138,7 @@ class HeadFixModel(ObservableObject):
 
         self._position = self._on_property_changed("position", value, self._position)
 
-        return self._send_with_token(HeadFixMessageKind.MAGNET_INTENSITY, value)
+        return self._send_with_token(HeadFixMessageKind.SET_MAGNET_INTENSITY, value)
 
     def set_current_as_baseline(self):
         self.baseline_intensity = self.position
@@ -158,7 +163,7 @@ class HeadFixModel(ObservableObject):
 
         self._send_command(DeviceThreadMessageKind.CONNECT)
 
-        self._send_command(HeadFixMessageKind.MAGNET_INTENSITY, self._position)
+        self._send_command(HeadFixMessageKind.SET_MAGNET_INTENSITY, self._position)
 
         self._send_command(HeadFixMessageKind.STREAM_START)
 
@@ -196,7 +201,7 @@ class HeadFixModel(ObservableObject):
         if "port" in configuration:
             self.port = configuration["port"]
         if "position" in configuration:
-            self.update_position(configuration["position"])
+            self.set_position(configuration["position"])
         if "loadTrigger" in configuration:
             logger.warning("the 'loadTrigger' property has been moved to a sub-property of the 'loadCell' property")
             self.load_trigger = configuration["loadTrigger"]

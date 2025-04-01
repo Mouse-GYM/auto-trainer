@@ -117,6 +117,16 @@ class ServoStatus(Source):
         self.motor = motor
         self.position = position
 
+    @property
+    def location(self) -> float:
+        """Current servo position in degrees."""
+        return self.position
+
+    @property
+    def status(self) -> int:
+        """Current servo status value."""
+        return 0
+
 
 @dataclass
 class StepperConfig(Source):
@@ -127,6 +137,7 @@ class StepperConfig(Source):
 
     max_velocity: float = 25.0
     max_acceleration: float = 100.0
+    inverted_direction: int = 0
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -140,6 +151,8 @@ class StepperConfig(Source):
             config.max_velocity = data["max_vel"]
         if "max_acc" in data:
             config.max_acceleration = data["max_acc"]
+        if "invert_direction" in data:
+            config.inverted_direction = data["invert_direction"]
 
         return config
 
@@ -156,6 +169,19 @@ class StepperStatus(Source):
         self.motor = motor
         self.position = position
         self.limit_switch = limit_switch
+
+    @property
+    def location(self) -> float:
+        """Current motor position in turns."""
+        return self.position
+
+    @property
+    def status(self) -> int:
+        return 0
+
+    @property
+    def limit_hi(self) -> bool:
+        return self.limit_switch
 
 
 @dataclass
