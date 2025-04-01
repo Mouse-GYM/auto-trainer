@@ -1,7 +1,7 @@
 magnet:
   head:
-    min_pos: 10
-    max_pos: 110
+    min_pos: 0
+    max_pos: 120
     min_pwm: 900
     max_pwm: 2100
     max_vel: 200.0
@@ -9,7 +9,7 @@ magnet:
 pellet:
   load:
     min_pos: 0
-    max_pos: 100
+    max_pos: 120
     min_pwm: 900
     max_pwm: 2100
     max_vel: 200.0
@@ -23,19 +23,19 @@ pellet:
     max_acc: 100.0
   x:
     flip_limit_orientation: 1
-    min_step_inverse: 8
+    microsteps: 8
     steps_per_revolution: 48.0
     max_vel: 20.0
     max_acc: 1000.0
   y:
     flip_limit_orientation: 0
-    min_step_inverse: 8
+    microsteps: 8
     steps_per_revolution: 48.0
     max_vel: 20.0
     max_acc: 1000.0
   z:
     flip_limit_orientation: 0
-    min_step_inverse: 8
+    microsteps: 8
     steps_per_revolution: 48.0
     max_vel: 20.0
     max_acc: 1000.0
