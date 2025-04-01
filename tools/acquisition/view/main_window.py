@@ -295,8 +295,7 @@ class MainWindow(QMainWindow):
 
     def _internal_set_force_detector_seen(self):
         new_value = self.force_detector_action.isChecked()
-        self._app_view_model.head_fix.head_fix_reader.property_changed("is_force_detector_engaged", new_value,
-                                                                       not new_value)
+        self._app_view_model.head_fix.head_fix_reader.is_headbar_pressure_engaged = new_value
 
     def _internal_set_pellet_seen(self):
         self._app_view_model.behavior.algorithm.pellet_seen(True)

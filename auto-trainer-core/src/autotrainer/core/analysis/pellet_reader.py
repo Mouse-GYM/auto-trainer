@@ -6,6 +6,9 @@ from .device_reader import DeviceReader
 
 
 class PelletReader(DeviceReader):
+    # This class responds to messages coming from the hardware that are specific to pellet delivery.
+
+    # TODO: This ony responds to the deprecated pellet delivery messages at this time.
     def __init__(self, input_queue: Queue):
         super().__init__(input_queue, name="PelletReader")
 
