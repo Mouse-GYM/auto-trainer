@@ -9,6 +9,11 @@ from ..message.measurement_message import MeasurementMessage
 
 @dataclass
 class MeasurementData(MeasurementMessage):
+    """
+    Default class that implements the MeasurementMessage protocol.  Actual hardware devices will likely deliver their
+    own object that implements the protocol.  However, this class can be used to read back data from the "monitor" CSV
+    output files for playback, reprocessing, or other tasks.
+    """
     when_val: float
     index_val: int
     weight_val: float

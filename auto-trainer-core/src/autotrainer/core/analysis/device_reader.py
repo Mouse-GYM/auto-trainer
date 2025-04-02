@@ -11,6 +11,20 @@ TERMINATE = -1001
 
 
 class DeviceReader(ObservableObject):
+    """
+    Base class for handling messages that come from the hardware.  It has two primary purposes.
+
+    The first is to ensure that any middle-management of information or data happens in a separate thread from both the
+    hardware interfacing and any downstream consumers without requiring either the hardware code or the downstream code
+    to know whether that is taken care of or not - other than knowing to call start() on this object when ready to
+    receive messages.
+
+    The second is to insulate downstream consumers from any specifics of the hardware implementation such as how
+    commands are acknowledged, what capabilities different versions of the hardware may have, etc.  Subclasses for
+    elements such as pellet delivery, tunnel behavior, and sensor measurements present properties (with change
+    notification), callbacks, and other means of making the data available in a consistent format that downstream
+    consumers care about rather than as specifically implemented the hardware.
+    """
     FIRMWARE_VERSION = "firmware_version"
 
     def __init__(self, input_queue: Queue, name: str = "DeviceReader", event_names=()):

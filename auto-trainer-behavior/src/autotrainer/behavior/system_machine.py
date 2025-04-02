@@ -26,7 +26,7 @@ class SystemMachine:
 
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
-         "before": "before_enter_tunnel"},
+         "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
         {"trigger": "exit_tunnel", "source": SystemState.tunnel, "dest": SystemState.cage,
          "before": "before_exit_tunnel", "after": "after_exit_tunnel"},
         {"trigger": "enter_intersession", "source": SystemState.cage, "dest": SystemState.intersession,
@@ -112,6 +112,10 @@ class SystemMachine:
 
         self._algorithm.system_state = SystemState.tunnel
 
+    def after_enter_tunnel(self):
+        if self._head_fix_reader is not None:
+            self._evaluate_auto_clamp(self._head_fix_reader.is_headbar_pressure_engaged)
+
     def before_exit_tunnel(self):
         self._algorithm.system_state = SystemState.cage
 
@@ -160,17 +164,31 @@ class SystemMachine:
                     EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                             context=self.state)
         elif name == "is_force_detector_engaged":
-            logger.warning(f"Force detector engaged: {value}")
-            logger.warning(f"\tsystem state: {self.state}")
-            logger.warning(f"\tauto-clamp enabled: {self.algorithm.head_fixation_enabled}")
-            if value and self.state == SystemState.tunnel and self.algorithm.head_fixation_enabled:
-                logger.warning(f"\thead fix command available: {self._head_fix_command is not None}")
-                if self._head_fix_command is not None:
-                    logger.warning(f"\tsetting position to {self.algorithm.auto_clamp_intensity}")
-                    self._head_fix_command.update_position(self.algorithm.auto_clamp_intensity)
-                EventManager.post_event(BehaviorEventKind.headFixationEnabled)
-
             EventManager.post_event(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
+            self._evaluate_auto_clamp(value)
+
+    def _evaluate_auto_clamp(self, is_headbar_pressure_engaged: bool):
+        if not self.algorithm.head_fixation_enabled:
+            logger.info(f"auto-clamp disabled (no action taken)")
+            return
+
+        logger.info(f"headbar pressure engaged: {is_headbar_pressure_engaged}")
+
+        if not is_headbar_pressure_engaged:
+            logger.info(f"auto-clamp force detector not engaged (no action taken)")
+            return
+
+        logger.info(f"\tsystem state: {self.state}")
+
+        if self.state == SystemState.tunnel:
+            if self._head_fix_command is not None:
+                logger.info(f"\tauto-clamp setting position to {self.algorithm.auto_clamp_intensity}")
+                self._head_fix_command.update_position(self.algorithm.auto_clamp_intensity)
+                EventManager.post_event(BehaviorEventKind.headFixationEnabled)
+            else:
+                logger.warning("\tauto-clamp position not sent (head fix command is none)")
+        else:
+            logger.debug("\tauto-clamp position not sent (not in tunnel)")
 
     def _head_fix_command_property_changed(self, name: str, value, _):
         if name == "baseline_intensity":
@@ -192,6 +210,7 @@ class SystemMachine:
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     def _algorithm_property_changed(self, name: str, value, _):
+        # Always back off to the baseline intensity when the auto-clamp is disabled.
         if name == "head_fixation_enabled":
             if self._head_fix_command is not None and not value:
                 self._head_fix_command.update_position(self.algorithm.baseline_intensity)

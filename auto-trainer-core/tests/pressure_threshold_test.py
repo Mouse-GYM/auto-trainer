@@ -1,10 +1,11 @@
 from pathlib import Path
 from typing import List
 
-from autotrainer.core import ForceDetector, MeasurementData
+from autotrainer.core import MeasurementData
+from autotrainer.core import HeadbarPressureMonitor
 
 
-def _count_detections(detector: ForceDetector, measurements: List[MeasurementData], batch_size: int = 20) -> int:
+def _count_detections(detector: HeadbarPressureMonitor, measurements: List[MeasurementData], batch_size: int = 20) -> int:
     detection_count = 0
 
     measurement_buffer = []
@@ -27,7 +28,7 @@ def test_headbar_detection():
     measurements = MeasurementData.from_file(str(path))
 
     # Default behavior with the known fixture
-    detector = ForceDetector()
+    detector = HeadbarPressureMonitor()
     detection_count = _count_detections(detector, measurements)
     assert detection_count == 19
 

@@ -11,10 +11,16 @@ class MockHeadfix(ObservableObject):
 
         self._is_load_cell_engaged = False
 
+        self._is_headbar_pressure_engaged = False
+
         self._current_position = 0
 
     def mock_load_cell_engaged(self, b: bool):
         self._is_load_cell_engaged = self._on_property_changed("is_load_cell_engaged", b, self._is_load_cell_engaged)
+
+    def mock_headbar_pressure_engaged(self, b: bool):
+        self._is_headbar_pressure_engaged = self._on_property_changed("is_headbar_pressure_engaged", b,
+                                                                      self._is_headbar_pressure_engaged)
 
     @property
     def head_fix_reader(self) -> HeadFixReader:
@@ -23,6 +29,10 @@ class MockHeadfix(ObservableObject):
     @property
     def current_position(self):
         return self._current_position
+
+    @property
+    def is_headbar_pressure_engaged(self):
+        return self._is_headbar_pressure_engaged
 
     def update_position(self, value: int):
         self._current_position = value
