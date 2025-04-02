@@ -1,3 +1,6 @@
+from typing import Protocol
+
+
 class MotorSteps:
     @classmethod
     def from_dict(cls, name: str, data: dict):
@@ -19,3 +22,15 @@ class MotorSteps:
     @property
     def steps(self):
         return self._steps.copy()
+
+
+class CompoundMovementDataSet(Protocol):
+
+    @property
+    def load(self) -> MotorSteps: ...
+
+    @property
+    def home(self) -> MotorSteps: ...
+
+    @property
+    def send(self) -> MotorSteps: ...

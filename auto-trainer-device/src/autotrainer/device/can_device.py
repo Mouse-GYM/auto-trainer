@@ -10,9 +10,8 @@ protocols from the file ~/.alogus_config.yaml.
 
 import logging
 import time
-import yaml
-from pathlib import Path
 from datetime import datetime
+from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ from .device_api import DeviceApi
 from .gym_device import GymDeviceMessageKind, GymDeviceEventKind
 from .head_fix import HeadFixMeasurement, HeadFixMessageKind
 from .pellet_delivery import PelletDeliveryMessageKind
-from .can_interface import CanInterface
+from .can_interface import CanInterface, target_to_str, motor_to_str
 from .device_interface import *
 
 
@@ -72,7 +71,7 @@ class CanDevice(Device):
 
         self._pending_move_token = None
 
-        self._compound_movement = None
+        self._compound_movement = None  # Current compound movement
 
         self._home_movement = None
         self._load_movement = None
@@ -81,15 +80,6 @@ class CanDevice(Device):
         self._delay_start = None
         self._delay_desired = None
 
-        self._x_config = None
-        self._y_config = None
-        self._z_config = None
-        self._load_config = None
-        self._barrier_config = None
-        self._magnet_config = None
-
-        self.load_defaults()  # should be last line in __init__()
-
     @property
     def api(self):
         return self._api
@@ -97,67 +87,6 @@ class CanDevice(Device):
     @api.setter
     def api(self, value: DeviceApi):
         self._api = value
-
-    '''
-    Load the default configurations and motor control sequences from ~/.alogus_config.yaml
-    '''
-
-    def load_defaults(self):
-
-        config = Path.home().joinpath(".alogus_config.yaml")
-        logger.info(f"looking for configuration alogus file: {config}")
-
-        if config.exists():
-            try:
-                with open(config, "r") as file:
-                    conf = yaml.safe_load(file)
-                    logging.info("alogus configuration loaded")
-                    if "pellet" in conf:
-                        if "load" in conf["pellet"]:
-                            self._load_config = ServoConfig.from_dict(conf["pellet"]["load"])
-                            logger.info(f"load configuration: {self._load_config}")
-                        if "barrier" in conf["pellet"]:
-                            self._barrier_config = ServoConfig.from_dict(conf["pellet"]["barrier"])
-                            logger.info(f"barrier configuration: {self._barrier_config}")
-                        if "x" in conf["pellet"]:
-                            self._x_config = StepperConfig.from_dict(conf["pellet"]["x"])
-                            logger.info(f"X stepper configuration: {self._x_config}")
-                        if "y" in conf["pellet"]:
-                            self._y_config = StepperConfig.from_dict(conf["pellet"]["y"])
-                            logger.info(f"Y stepper configuration: {self._y_config}")
-                        if "z" in conf["pellet"]:
-                            self._z_config = StepperConfig.from_dict(conf["pellet"]["z"])
-                            logger.info(f"Z stepper configuration: {self._z_config}")
-                    if "magnet" in conf:
-                        if "head" in conf["magnet"]:
-                            self._magnet_config = ServoConfig.from_dict(conf["magnet"]["head"])
-                            logger.info(f"Magnet stepper configuration: {self._magnet_config}")
-                    if "actions" in conf:
-                        if "load" in conf["actions"]:
-                            self._load_movement = MotorSteps.from_dict("load",
-                                                                       conf["actions"]["load"])
-                        if "home" in conf["actions"]:
-                            self._home_movement = MotorSteps.from_dict("home",
-                                                                       conf["actions"]["home"])
-                        if "send" in conf["actions"]:
-                            self._send_movement = MotorSteps.from_dict("send",
-                                                                       conf["actions"]["send"])
-            except Exception as e:
-                logger.error(f"error loading config: {e}")
-                assert False
-
-            self._interface.set_motor_configuration(Motor.PELLET_LOAD_SERVO,
-                                                    servo_config=self._load_config)
-            self._interface.set_motor_configuration(Motor.PELLET_COVER_SERVO,
-                                                    servo_config=self._barrier_config)
-            self._interface.set_motor_configuration(Motor.PELLET_X_MOTOR,
-                                                    stepper_config=self._x_config)
-            self._interface.set_motor_configuration(Motor.PELLET_Y_MOTOR,
-                                                    stepper_config=self._y_config)
-            self._interface.set_motor_configuration(Motor.PELLET_Z_MOTOR,
-                                                    stepper_config=self._z_config)
-            self._interface.set_motor_configuration(Motor.MAGNET_SERVO,
-                                                    servo_config=self._magnet_config)
 
     '''
     This method is called when a command to a target is requested. This method
@@ -178,9 +107,27 @@ class CanDevice(Device):
             self._interface.request_motor_config(data)
 
         elif kind == GymDeviceMessageKind.WRITE_CONFIG:
-            assert isinstance(data, ServoConfig) or isinstance(data, StepperConfig)
-            self._interface.set_motor_configuration(data.motor, data)
-            self._interface.request_motor_config(data.motor)
+            assert isinstance(data, Tuple)
+            motor = data[0]
+            config = data[1]
+            assert isinstance(motor, Motor)
+            assert isinstance(config, ServoConfig) or isinstance(config, StepperConfig)
+            self._interface.set_motor_configuration(motor, config)
+
+        elif kind == GymDeviceMessageKind.SET_HOME_PROCEDURE:
+            assert isinstance(data, MotorSteps)
+            logger.info(f"Setting HOME procedure to: \n{data.steps}")
+            self._home_movement = data
+
+        elif kind == GymDeviceMessageKind.SET_LOAD_PROCEDURE:
+            assert isinstance(data, MotorSteps)
+            logger.info(f"Setting LOAD procedure to: \n{data.steps}")
+            self._load_movement = data
+
+        elif kind == GymDeviceMessageKind.SET_SEND_PROCEDURE:
+            assert isinstance(data, MotorSteps)
+            logger.info(f"Setting SEND procedure to: \n{data.steps}")
+            self._send_movement = data
 
         elif kind == HeadFixMessageKind.UPDATE_SCALE_TARE:
             self._interface.tare_load_cell()
@@ -199,7 +146,7 @@ class CanDevice(Device):
 
         elif kind == PelletDeliveryMessageKind.SET_COVER_SERVO:
             assert isinstance(data, float) or isinstance(data, int)
-            self._interface.set_barrier(float(data))
+            self._interface.set_cover(float(data))
             self._complete_command(context)
 
         elif kind == PelletDeliveryMessageKind.SET_X:
@@ -369,25 +316,12 @@ class CanDevice(Device):
                         f":{message.motor.value} position: {message.position}")
 
             elif isinstance(message, StepperConfig):
-                self.copy_local_configuration_values(message)
-
                 if self._api is not None:
                     self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
-                logger.debug(
-                    f"stepper {message.target.value}|{message.motor}: {message.min_step_inverse}"
-                    f" {message.steps_per_revolution}")
 
             elif isinstance(message, ServoConfig):
-                self.copy_local_configuration_values(message)
-
                 if self._api is not None:
                     self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
-                logger.debug(
-                    f"servo {message.target.value}|{message.motor.value}:"
-                    f" {message.min_position} {message.min_pwm_duration_us}"
-                    f" {message.max_position} {message.max_pwm_duration_us}"
-                    f" {message.max_velocity} {message.max_acceleration}"
-                )
 
         # Check for any delay requests
         if self._delay_desired is not None:
@@ -465,37 +399,3 @@ class CanDevice(Device):
                 self._pending_move_token = None
                 self._complete_command(token)
                 self._compound_movement = None
-
-    '''
-    Max velocity and acceleration was not intended to be a global configuration
-    item, so it's not stored remotely. When receiving the data, the local system
-    needs to update the received configuration with those values.
-    '''
-
-    def copy_local_configuration_values(self, config):
-        if config.motor is Motor.MAGNET_SERVO:
-            config.max_velocity = self._magnet_config.max_velocity
-            config.max_acceleration = self._magnet_config.max_acceleration
-
-        elif config.motor is Motor.PELLET_COVER_SERVO:
-            config.max_velocity = self._barrier_config.max_velocity
-            config.max_acceleration = self._barrier_config.max_acceleration
-
-        elif config.motor is Motor.PELLET_LOAD_SERVO:
-            config.max_velocity = self._load_config.max_velocity
-            config.max_acceleration = self._load_config.max_acceleration
-
-        elif config.motor is Motor.PELLET_X_MOTOR:
-            config.max_velocity = self._x_config.max_velocity
-            config.max_acceleration = self._x_config.max_acceleration
-            config.inverted_direction = self._x_config.inverted_direction
-
-        elif config.motor is Motor.PELLET_Y_MOTOR:
-            config.max_velocity = self._y_config.max_velocity
-            config.max_acceleration = self._y_config.max_acceleration
-            config.inverted_direction = self._y_config.inverted_direction
-
-        elif config.motor is Motor.PELLET_Z_MOTOR:
-            config.max_velocity = self._z_config.max_velocity
-            config.max_acceleration = self._z_config.max_acceleration
-            config.inverted_direction = self._z_config.inverted_direction

@@ -45,12 +45,14 @@ def test_heartbeat(interface: CanInterface, target: Target = Target.PELLET_DEVIC
 def _read_config(interface: CanInterface, motor: Motor):
     target = target_of_motor(motor)
 
-    """Verify servo configuration can be read"""
-    assert interface.request_motor_config(motor)
+    config = None
+    while config is None:
+        """Verify servo configuration can be read"""
+        assert interface.request_motor_config(motor)
 
-    config = get_response(interface,
-                          ServoConfig if is_servo(motor) else StepperConfig,
-                          target)
+        config = get_response(interface,
+                              ServoConfig if is_servo(motor) else StepperConfig,
+                              target)
 
     return config
 
@@ -67,30 +69,32 @@ def test_read_config(interface: CanInterface, motor: Motor = Motor.MAGNET_SERVO)
 def test_write_servo_config(interface: CanInterface, motor: Motor = Motor.MAGNET_SERVO):
     config = _read_config(interface, motor)
 
-    orig_min = config.min_position
-    orig_max = config.max_position
+    orig_min = config.minimum_position
+    orig_max = config.maximum_position
 
-    config.min_position -= 10
-    config.max_position += 10
-    assert interface.write_servo_config(config)
+    config.maximum_position -= 10
+    config.minimum_position += 10
+    assert interface.set_motor_configuration(motor, config)
 
     new_config = _read_config(interface, config.motor)
-    assert new_config.min_position == config.min_position
-    assert new_config.max_position == config.max_position
+    assert new_config.minimum_position == config.minimum_position
+    assert new_config.maximum_position == config.maximum_position
 
-    config.min_position = orig_min
-    config.max_position = orig_max
+    config.minimum_position = orig_min
+    config.maximum_position = orig_max
 
-    assert interface.write_servo_config(config)
+    assert interface.set_motor_configuration(motor, config)
 
 
-def _write_stepper_config(interface: CanInterface, config: StepperConfig) -> bool:
-    if not interface.write_stepper_config(config):
+def _write_stepper_config(interface: CanInterface, motor: Motor, config: StepperConfig) -> bool:
+    if not interface.set_motor_configuration(motor, config):
         return False
 
-    new_config = _read_config(interface, config.motor)
+    new_config = _read_config(interface, motor)
 
-    return new_config.min_step_inverse == config.min_step_inverse and \
+    assert new_config is not None
+
+    return new_config.microsteps == config.microsteps and \
         new_config.steps_per_revolution == config.steps_per_revolution
 
 
@@ -98,16 +102,16 @@ def _write_stepper_config(interface: CanInterface, config: StepperConfig) -> boo
 def test_write_stepper_config(interface: CanInterface, motor: Motor = Motor.PELLET_Z_MOTOR):
     config = _read_config(interface, motor)
 
-    orig_min = config.min_step_inverse
+    orig_min = config.microsteps
     orig_steps = config.steps_per_revolution
 
-    config.min_step_inverse *= 2
+    config.microsteps *= 2
     config.steps_per_revolution *= 2
-    assert _write_stepper_config(interface, config)
+    assert _write_stepper_config(interface, motor, config)
 
-    config.min_step_inverse = orig_min
+    config.microsteps = orig_min
     config.steps_per_revolution = orig_steps
-    assert _write_stepper_config(interface, config)
+    assert _write_stepper_config(interface, motor, config)
 
 
 def _write_gpio(interface: CanInterface, state: bool):
@@ -245,6 +249,8 @@ def get_response(interface: CanInterface, typeof, target: Target, timeout: float
 
 
 if __name__ == '__main__':
+    # This test should NOT control the motors. Testing of the motors should
+    # be done manually.
     iface = _connect()
 
     test_heartbeat(iface, Target.PELLET_DEVICE)

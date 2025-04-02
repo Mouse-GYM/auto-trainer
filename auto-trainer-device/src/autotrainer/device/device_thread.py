@@ -5,11 +5,17 @@ from queue import Queue, Empty
 from enum import IntEnum
 from threading import Thread
 from typing import Callable
+from pathlib import Path
 
 from .device_interface import DeviceInterface
 from .device import Device
 from .can_device import HAVE_CAN_DEVICE
 from .device_api import DeviceApi
+from .gym_device import GymDeviceMessageKind
+from .compound_movement_file import CompoundMovementFile
+from .motor_configuration_file import MotorConfigurationFile
+from .motor_steps import CompoundMovementDataSet
+from autotrainer.core.message import MotorConfigurations
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +60,13 @@ class DeviceThread(Thread):
 
         self._read_limit: int = 1 if HAVE_CAN_DEVICE else math.inf
 
+        # Load a default set of configurations
+        if HAVE_CAN_DEVICE:
+            config_file = Path.home().joinpath(".alogus_config.yaml")
+
+            file = CompoundMovementFile(config_file)
+            self.use_compound_movement(file)
+
     @property
     def name(self) -> str:
         return self._name
@@ -73,6 +86,19 @@ class DeviceThread(Thread):
     def send_message(self, kind: int, data: object = None, context: object = None):
         if self._cmd_queue is not None:
             self._cmd_queue.put_nowait((kind, data, context))
+
+    def use_compound_movement(self, data: CompoundMovementDataSet):
+        self.send_message(GymDeviceMessageKind.SET_LOAD_PROCEDURE, data.load)
+        self.send_message(GymDeviceMessageKind.SET_HOME_PROCEDURE, data.home)
+        self.send_message(GymDeviceMessageKind.SET_SEND_PROCEDURE, data.send)
+
+    def use_motor_configuration(self, data: MotorConfigurations):
+        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.x_config)
+        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.y_config)
+        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.z_config)
+        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.load_config)
+        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.magnet_config)
+        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.cover_config)
 
     def run(self) -> None:
         logger.debug(f"<{self._name}> thread started")
