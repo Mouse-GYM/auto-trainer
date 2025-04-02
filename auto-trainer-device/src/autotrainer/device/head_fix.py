@@ -5,6 +5,7 @@ import typing
 from enum import IntEnum
 
 from autotrainer.core import PerfMonitor
+from .serial_interface import SerialInterface
 from .gym_device import GymDevice, GymDeviceMessageKind
 from .device_api import DeviceApi
 
@@ -50,8 +51,8 @@ class HeadFixMessageKind(IntEnum):
 
 
 class HeadFix(GymDevice):
-    def __init__(self, api: DeviceApi = None, buffer_size: int = 50):
-        super().__init__(api)
+    def __init__(self, port: str, api: DeviceApi = None, buffer_size: int = 50):
+        super().__init__(SerialInterface(port), api)
 
         self._identifier = "H"
 

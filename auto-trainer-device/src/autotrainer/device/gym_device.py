@@ -6,6 +6,8 @@ from queue import Queue
 
 from autotrainer.core import EventManager
 
+from .device_interface import DeviceInterface
+
 from .device import Device, DeviceApi
 
 logger = logging.getLogger(__name__)
@@ -33,8 +35,8 @@ class GymDeviceMessageKind(IntEnum):
 
 
 class GymDevice(Device):
-    def __init__(self, api: DeviceApi = None):
-        super().__init__(api)
+    def __init__(self, dev_interface: DeviceInterface, api: DeviceApi = None):
+        super().__init__(dev_interface, api)
 
         self._read_buffer = ""
         self._is_waiting_ack = False

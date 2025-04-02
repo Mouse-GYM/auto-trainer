@@ -92,13 +92,9 @@ class AppModel(ObservableObject):
             return
 
         if self._user_settings.port == "CAN bus":
-            device = CanDevice()
-            self._device_thread = DeviceThread(device, device._interface,
-                                               self._msg_queue)
+            self._device_thread = DeviceThread(CanDevice(buffer_size=10), self._msg_queue)
         else:
-            self._device_thread = DeviceThread(HeadFix(buffer_size=10),
-                                               SerialInterface(self._user_settings.port),
-                                               self._msg_queue)
+            self._device_thread = DeviceThread(HeadFix(port=self._user_settings.port, buffer_size=10), self._msg_queue)
 
         self._device_thread.name = "head-fix"
 

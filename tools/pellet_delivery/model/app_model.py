@@ -139,12 +139,9 @@ class AppModel(ObservableObject):
             return
 
         if self._user_settings.port == "CAN bus":
-            device = CanDevice()
-            self._device_thread = DeviceThread(device, device._interface, self._msg_queue)
+            self._device_thread = DeviceThread(CanDevice(), self._msg_queue)
         else:
-            self._device_thread = DeviceThread(PelletDelivery(),
-                                               SerialInterface(self._user_settings.port),
-                                               self._msg_queue)
+            self._device_thread = DeviceThread(PelletDelivery(self._user_settings.port), self._msg_queue)
 
         self._device_thread.name = "pellet"
 

@@ -2,6 +2,7 @@ import logging
 import typing
 from enum import IntEnum
 
+from .serial_interface import SerialInterface
 from .gym_device import GymDevice, GymDeviceMessageKind
 from .device_api import DeviceApi
 from autotrainer.core.message import SystemStatusMessageKind
@@ -37,8 +38,8 @@ class PelletDeliveryMessageKind(IntEnum):
 
 
 class PelletDelivery(GymDevice):
-    def __init__(self, api: DeviceApi = None):
-        super().__init__(api)
+    def __init__(self, port: str, api: DeviceApi = None):
+        super().__init__(SerialInterface(port), api)
 
         self._identifier = "P"
 

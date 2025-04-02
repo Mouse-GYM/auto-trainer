@@ -40,12 +40,12 @@ class DeviceThread(Thread):
 
     """
 
-    def __init__(self, device: Device, interface: DeviceInterface, message_queue: Queue = None,
+    def __init__(self, device: Device, message_queue: Queue = None,
                  message_callback: Callable[[int, object], None] = None):
         super().__init__()
 
         self._device = device
-        self._interface = interface
+        self._interface = device.device_interface
         self._message_callback = message_callback
         self._message_queue = message_queue
         self._cmd_queue: Queue = Queue()
