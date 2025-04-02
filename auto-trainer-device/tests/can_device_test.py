@@ -60,10 +60,6 @@ def _construction():
     interface._set_pellet_address(0x01)
     device.api = DeviceApi(interface=interface, message_callback=data_callback)
 
-    device.notify_message(GymDeviceMessageKind.SET_HOME_PROCEDURE, MotorSteps("home", [{"x": 0}]))
-    device.notify_message(GymDeviceMessageKind.SET_SEND_PROCEDURE, MotorSteps("send", [{"y": 0}]))
-    device.notify_message(GymDeviceMessageKind.SET_LOAD_PROCEDURE, MotorSteps("load", [{"z": 0}]))
-
     return device
 
 
@@ -103,7 +99,8 @@ def test_notify_set_z():
 
 @pytest.mark.canbus
 def test_notify_set_home():
-    notify_command(PelletDeliveryMessageKind.SEND_HOME, 106, repeat=2)
+    device = _construction()
+    device.notify_message(PelletDeliveryMessageKind.SEND_HOME, None)
 
 
 @pytest.mark.canbus

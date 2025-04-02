@@ -9,7 +9,7 @@ from autotrainer.core import SystemStatusMessageKind
 from autotrainer.device import CanDevice, DeviceThread, DeviceThreadMessageKind, \
     HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
-    CompoundMovementFile, MotorConfigurationFile
+    CompoundMovementFile, MotorConfigurationFile, StepperStatus, ServoStatus
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
@@ -109,7 +109,7 @@ def monitor_message_queue():
                print_status is Motor.MAGNET_SERVO)):
 
             # TODO deliver full packet. See can_device at or around line 328
-            # if isinstance(data, ServoStatus):
+            assert isinstance(data, ServoStatus)
             print(
                 f"SERVO:\n"
                 # f"- target={target_to_str(data.target)}\n"
@@ -123,13 +123,13 @@ def monitor_message_queue():
                print_status is Motor.PELLET_Y_MOTOR) or
               (kind == SystemStatusMessageKind.PELLET_Z and
                print_status is Motor.PELLET_Z_MOTOR)):
-            # if isinstance(StepperStatus, data):
+            assert isinstance(data, StepperStatus)
             print(
                 f"STEPPER:\n"
                 # f"target={target_to_str(data.target)}\n"
                 f"- motor={motor_to_str(print_status)}\n"
                 f"- position={data}\n"
-                # f"at limit={data.limit_switch}\n"
+                f"- limit={data.is_at_limit}\n"
             )
             print_status = Motor.NONE
 

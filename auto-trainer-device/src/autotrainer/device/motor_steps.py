@@ -11,8 +11,6 @@ class MotorSteps:
             if "type" in step and "value" in step:
                 steps.append({step['type']: step['value']})
 
-        # print(f"{name}: {steps}")
-
         return MotorSteps(name, steps)
 
     def __init__(self, name: str, steps: list):
@@ -28,9 +26,6 @@ class CompoundMovementDataSet(Protocol):
 
     @property
     def load(self) -> MotorSteps: ...
-
-    @property
-    def home(self) -> MotorSteps: ...
 
     @property
     def send(self) -> MotorSteps: ...

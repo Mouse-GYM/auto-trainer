@@ -20,7 +20,6 @@ class CompoundMovementFile:
         logger.info(f"LOADING: Alogus Compound Movement file: {filename}")
 
         load_movement = MotorSteps("load", [])
-        home_movement = MotorSteps("home", [])
         send_movement = MotorSteps("send", [])
 
         if filename.exists():
@@ -32,9 +31,6 @@ class CompoundMovementFile:
                         if "load" in conf["actions"]:
                             load_movement = MotorSteps.from_dict("load",
                                                                  conf["actions"]["load"])
-                        if "home" in conf["actions"]:
-                            home_movement = MotorSteps.from_dict("home",
-                                                                 conf["actions"]["home"])
                         if "send" in conf["actions"]:
                             send_movement = MotorSteps.from_dict("send",
                                                                  conf["actions"]["send"])
@@ -47,7 +43,6 @@ class CompoundMovementFile:
             logger.error(f"ERROR: Alogus Motor Configuration file {filename}: No such File")
 
         self._load_movement = load_movement
-        self._home_movement = home_movement
         self._send_movement = send_movement
 
     '''
@@ -57,10 +52,6 @@ class CompoundMovementFile:
     @property
     def load(self) -> MotorSteps:
         return self._load_movement
-
-    @property
-    def home(self) -> MotorSteps:
-        return self._home_movement
 
     @property
     def send(self) -> MotorSteps:

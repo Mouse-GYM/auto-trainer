@@ -90,7 +90,6 @@ class HeadFix(GymDevice):
         elif kind == HeadFixMessageKind.STREAM_STOP:
             self._send_data("Tx", context)
         elif kind == GymDeviceMessageKind.SET_SEND_PROCEDURE or \
-            kind == GymDeviceMessageKind.SET_HOME_PROCEDURE or \
             kind == GymDeviceMessageKind.SET_LOAD_PROCEDURE or \
             kind == GymDeviceMessageKind.READ_CONFIG or \
             kind == GymDeviceMessageKind.WRITE_CONFIG:

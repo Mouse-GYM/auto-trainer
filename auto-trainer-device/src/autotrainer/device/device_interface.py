@@ -245,35 +245,39 @@ class StepperConfig(Source):
         return self._flip_limit_orientation
 
     @flip_limit_orientation.setter
-    def flip_limit_orientation(self, value: int):
+    def flip_limit_orientation(self, value: bool):
         self._flip_limit_orientation = value
 
 
 @dataclass
 class StepperStatus(Source):
-    motor: Motor = Motor.NONE
-    position: float = 0
-    limit_switch: bool = False
+    _motor: Motor = Motor.NONE
+    _position: float = 0
+    _limit_switch: bool = False
 
     def __init__(self, target: Target, motor: Motor, position: float, limit_switch: bool):
         super().__init__(target)
 
-        self.motor = motor
-        self.position = position
-        self.limit_switch = limit_switch
+        self._motor = motor
+        self._position = position
+        self._limit_switch = limit_switch
 
     @property
-    def location(self) -> float:
+    def motor(self) -> Motor:
+        return self._motor
+
+    @property
+    def position(self) -> float:
         """Current motor position in turns."""
-        return self.position
+        return self._position
 
     @property
     def status(self) -> int:
         return 0
 
     @property
-    def limit_hi(self) -> bool:
-        return self.limit_switch
+    def is_at_limit(self) -> bool:
+        return self._limit_switch
 
 
 @dataclass
