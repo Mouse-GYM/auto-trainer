@@ -399,10 +399,10 @@ def default_load_procedure() -> MotorSteps:
                       [
                           {'load': 100},
                           {'delay': 1.0},
-                          {'z': 5.0},
+                          {'z': 12.2},  # in mm
                           {'load': 0.0},
                           {'delay': 1.0},
-                          {'z': 0.0},
+                          {'z': 0.0},  # in mm
                           {'delay': 1.0},
                       ]
                       )
@@ -411,8 +411,8 @@ def default_load_procedure() -> MotorSteps:
 def default_send_procedure() -> MotorSteps:
     return MotorSteps("send",
                       [
-                          {'z': 0.5},
-                          {'x': 1.6},
-                          {'y': 2.0}
+                          {'z': 1.22},  # in mm
+                          {'x': 3.9},  # in mm
+                          {'y': 4.88}  # in mm
                       ]
                       )

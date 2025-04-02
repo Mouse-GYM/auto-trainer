@@ -83,10 +83,10 @@ def monitor_message_queue():
                     f"SERVO\n"
                     f"- target={target_to_str(data.target)}\n"
                     f"- motor={motor_to_str(data.motor)}\n"
-                    f"- max vel={data.maximum_velocity}\n"
-                    f"- max accel={data.maximum_acceleration}\n"
-                    f"- min pos={data.minimum_position}\n"
-                    f"- max pos={data.maximum_position}\n"
+                    f"- max vel (deg/sec)={data.maximum_velocity}\n"
+                    f"- max accel (deg/sec^2)={data.maximum_acceleration}\n"
+                    f"- min pos (deg)={data.minimum_position}\n"
+                    f"- max pos (deg)={data.maximum_position}\n"
                     f"- min pwm={data.minimum_pwm_duration}\n"
                     f"- max pwm={data.maximum_pwm_duration}\n"
                 )
@@ -94,8 +94,8 @@ def monitor_message_queue():
                 print(f"STEPPER\n"
                       f"- target={target_to_str(data.target)}\n"
                       f"- motor={motor_to_str(data.motor)}\n"
-                      f"- max vel={data.maximum_velocity}\n"
-                      f"- max accel={data.maximum_acceleration}\n"
+                      f"- max vel (mm/sec)={data.maximum_velocity}\n"
+                      f"- max accel (mm/sec^2)={data.maximum_acceleration}\n"
                       f"- flip limit orientation={data.flip_limit_orientation}\n"
                       f"- microsteps={data.microsteps}\n"
                       f"- step/rev={data.steps_per_revolution}\n"
@@ -114,7 +114,7 @@ def monitor_message_queue():
                 f"SERVO:\n"
                 # f"- target={target_to_str(data.target)}\n"
                 f"- motor={motor_to_str(print_status)}\n"
-                f"- position={data}\n"
+                f"- position (deg)={data}\n"
             )
             print_status = Motor.NONE
         elif ((kind == SystemStatusMessageKind.PELLET_X and
@@ -128,7 +128,7 @@ def monitor_message_queue():
                 f"STEPPER:\n"
                 # f"target={target_to_str(data.target)}\n"
                 f"- motor={motor_to_str(print_status)}\n"
-                f"- position={data}\n"
+                f"- position (mm) ={data}\n"
                 # f"- limit={data.is_at_limit}\n"
             )
             print_status = Motor.NONE
@@ -173,11 +173,11 @@ def write_config(motor: Motor, device_thread):
         assert isinstance(orig_config, StepperConfig)
         config = copy(orig_config)
 
-        resp = input(f"Max Velocity (turns/sec) [{orig_config.maximum_velocity}] = ")
+        resp = input(f"Max Velocity (mm/sec) [{orig_config.maximum_velocity}] = ")
         if resp != '':
             config.maximum_velocity = float(resp)
 
-        resp = input(f"Max Acceleration (turns/sec^2) [{orig_config.maximum_acceleration}]= ")
+        resp = input(f"Max Acceleration (mm/sec^2) [{orig_config.maximum_acceleration}]= ")
         if resp != '':
             config.maximum_acceleration = float(resp)
 
@@ -252,7 +252,7 @@ def round_trip_test(motor: Motor, trips: int, device_thread):
         return
 
     for i in range(trips):
-        device_thread.send_message(kind, data=10)
+        device_thread.send_message(kind, data=22.0)
         time.sleep(2)
         print_status = motor
         time.sleep(1)
@@ -312,9 +312,9 @@ def run_monitor():
                 print("t                  ::Tare Load Cell/Pressure Sensors")
                 print("v                  ::Version (not available yet)")
                 print("w <motor>          ::Motor Status")
-                print("x <pos>            ::Move X [0:12] (turns)")
-                print("y <pos>            ::Move Y [0:12] (turns)")
-                print("z <pos>            ::Move Z [0:12] (turns)")
+                print("x <pos>            ::Move X [0:27] (mm)")
+                print("y <pos>            ::Move Y [0:27] (mm)")
+                print("z <pos>            ::Move Z [0:27] (mm)")
                 print("X                  ::Home X to Limit")
                 print("Y                  ::Home Y to Limit")
                 print("Z                  ::Home Z to Limit")
