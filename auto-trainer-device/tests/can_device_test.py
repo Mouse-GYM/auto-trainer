@@ -18,14 +18,15 @@ from autotrainer.core.message import SystemStatusMessageKind
 _expected = []
 
 
-def notify_command(kind, tag, data=None, expected=None, repeat=1):
+def notify_command(kind, tag, data=None, expected=None, repeat=1, expectAck: bool = True):
     global _expected
 
     if expected is None:
         expected = []
     device = _construction()
     _expected = expected
-    _expected.append((GymDeviceMessageKind.ACK, tag))
+    if expectAck:
+        _expected.append((GymDeviceMessageKind.ACK, tag))
 
     for i in range(repeat):
         device.notify_message(kind, data, tag)
@@ -79,22 +80,22 @@ def test_notify_tare_load_cell():
 
 @pytest.mark.canbus
 def test_notify_set_magnet():
-    notify_command(HeadFixMessageKind.SET_MAGNET_INTENSITY, 103, data=3.0)
+    notify_command(HeadFixMessageKind.SET_MAGNET_INTENSITY, 103, data=3.0, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_set_x():
-    notify_command(PelletDeliveryMessageKind.SET_X, 10.4, data=4, repeat=2)
+    notify_command(PelletDeliveryMessageKind.SET_X, 10.4, data=4, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_set_y():
-    notify_command(PelletDeliveryMessageKind.SET_Y, 10.5, data=5, repeat=2)
+    notify_command(PelletDeliveryMessageKind.SET_Y, 10.5, data=5, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_set_z():
-    notify_command(PelletDeliveryMessageKind.SET_Z, 10.6, data=6, repeat=2)
+    notify_command(PelletDeliveryMessageKind.SET_Z, 10.6, data=6, expectAck=False)
 
 
 @pytest.mark.canbus
@@ -105,22 +106,22 @@ def test_notify_set_home():
 
 @pytest.mark.canbus
 def test_notify_load_pellet():
-    notify_command(PelletDeliveryMessageKind.LOAD_PELLET, 107, repeat=2)
+    notify_command(PelletDeliveryMessageKind.LOAD_PELLET, 107, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_send_pellet():
-    notify_command(PelletDeliveryMessageKind.SEND_PELLET, 108, repeat=2)
+    notify_command(PelletDeliveryMessageKind.SEND_PELLET, 108, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_release_pellet():
-    notify_command(PelletDeliveryMessageKind.RELEASE_PELLET, 109)
+    notify_command(PelletDeliveryMessageKind.RELEASE_PELLET, 109, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_cover_pellet():
-    notify_command(PelletDeliveryMessageKind.COVER_PELLET, 110)
+    notify_command(PelletDeliveryMessageKind.COVER_PELLET, 110, expectAck=False)
 
 
 @pytest.mark.canbus

@@ -582,6 +582,7 @@ class CanInterface(DeviceInterface):
 
     '''
     Set the position of the cover for pellet delivery
+    DEPRECATED
     '''
 
     def set_cover(self, position):
@@ -589,13 +590,14 @@ class CanInterface(DeviceInterface):
 
     '''
     Open the cover so the pellet is visible to the animal
+    DEPRECATED
     '''
 
     def release_pellet(self) -> bool:
         addr = self._tgt2addr(Target.PELLET_DEVICE)
 
         return addr is not None and self.set_cover(self.cover_config.minimum_position) and \
-            self.emit_tone(addr, 6000)
+            self.emit_tone(2000, 6000)
 
     '''
     Open the cover so the pellet is visible to the animal

@@ -164,12 +164,15 @@ class CanDevice(Device):
             self._perform_next_compound_step()
 
         elif kind == PelletDeliveryMessageKind.RELEASE_PELLET:
-            self._interface.release_pellet()
-            self._complete_command(context)
+            self._move_motor(Motor.PELLET_COVER_SERVO,
+                             self._interface.cover_config.minimum_position, context,
+                             self._interface.set_cover)
+            self._interface.emit_tone(2000, 6000)
 
         elif kind == PelletDeliveryMessageKind.COVER_PELLET:
-            self._interface.cover_pellet()
-            self._complete_command(context)
+            self._move_motor(Motor.PELLET_COVER_SERVO,
+                             self._interface.cover_config.maximum_position, context,
+                             self._interface.set_cover)
 
         elif kind == PelletDeliveryMessageKind.PLAY_TONE:
             assert isinstance(data, tuple)
@@ -275,7 +278,7 @@ class CanDevice(Device):
     def _move_motor(self, motor: Motor, location, context, method):
         assert isinstance(location, float) or isinstance(location, int)
 
-        if self._pending_move_token is not None:
+        if self._desired_location is not None:
             self._complete_command(context)
         else:
             self._pending_move_token = context
