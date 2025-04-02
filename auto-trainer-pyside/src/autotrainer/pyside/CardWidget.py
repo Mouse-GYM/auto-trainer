@@ -8,7 +8,7 @@ from .CardHeader import CardHeader
 
 
 class CardWidget(QWidget):
-    def __init__(self):
+    def __init__(self, background_color: str = "#cfb87c"):
         super().__init__()
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -20,7 +20,7 @@ class CardWidget(QWidget):
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(0)
 
-        self._header = CardHeader()
+        self._header = CardHeader(background_color=background_color)
         self._layout.addWidget(self._header, 0, 0)
 
         self._footer = CardFooter()

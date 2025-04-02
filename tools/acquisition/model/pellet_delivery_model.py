@@ -4,9 +4,9 @@ import uuid
 from typing import Optional
 
 from autotrainer.core import ObservableObject, ProjectInfo, PelletReader
-from autotrainer.device import SerialInterface
-from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
-from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import PelletDeliveryMessageKind
+from autotrainer.device import PelletDelivery
+from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
 logger = logging.getLogger(__name__)
 
@@ -104,11 +104,9 @@ class PelletDeliveryModel(ObservableObject):
         if not self.port or len(self.port) == 0:
             return
 
-        device_interface = SerialInterface(self.port)
+        pellet_delivery = PelletDelivery(self.port)
 
-        pellet_delivery = PelletDelivery()
-
-        self._device_thread = DeviceThread(pellet_delivery, device_interface, self._message_queue)
+        self._device_thread = DeviceConnection(pellet_delivery, self._message_queue)
         self._device_thread.name = "pellet"
 
         self._device_thread.start()

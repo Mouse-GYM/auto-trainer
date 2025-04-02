@@ -1,13 +1,15 @@
 import typing
 
+from .device_interface import DeviceInterface
 from .device_api import DeviceApi
 
 
 class Device:
     """Defines the required methods to represent a device."""
 
-    def __init__(self, api: DeviceApi = None):
+    def __init__(self, dev_interface: DeviceInterface = None, api: DeviceApi = None):
         self._api = api
+        self._interface = dev_interface
 
     def connect(self):
         pass
@@ -43,3 +45,11 @@ class Device:
     @api.setter
     def api(self, value: DeviceApi):
         self._api = value
+
+    @property
+    def device_interface(self) -> DeviceInterface:
+        return self._interface
+
+    @device_interface.setter
+    def device_interface(self, value: DeviceInterface):
+        self._interface = value

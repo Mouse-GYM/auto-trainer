@@ -13,7 +13,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Pellet Delivery")
 
-        self.setMinimumSize(QSize(640, 480))
+        self.setMinimumSize(QSize(800, 480))
 
         self.main_content = MainContent(app_view_model)
 

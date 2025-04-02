@@ -25,11 +25,19 @@ class EmulationInterface(DeviceInterface):
 
         self._magnet_pos = 0.0
 
+        self._servo_configs = {
+            Motor.PELLET_LOAD_SERVO: ServoConfig(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO),
+            Motor.PELLET_COVER_SERVO: ServoConfig(Target.PELLET_DEVICE, Motor.PELLET_COVER_SERVO),
+            Motor.MAGNET_SERVO: ServoConfig(Target.MAGNET_DEVICE, Motor.MAGNET_SERVO)}
+
     def open(self) -> bool:
         return self._is_open
 
     def close(self):
         pass
+
+    def can_read(self) -> bool:
+        return self._is_open
 
     def read(self, max_count: int = 1) -> typing.Any:
         messages = []
@@ -37,16 +45,16 @@ class EmulationInterface(DeviceInterface):
         if now - self._last_message > 1:
             self._last_message = now
             messages.append(
-                StepperStatus(Motor.PELLET_X_MOTOR, self._pellet_x, self._pellet_x == 0))
+                StepperStatus(0, Motor.PELLET_X_MOTOR, self._pellet_x, self._pellet_x == 0))
             messages.append(
-                StepperStatus(Motor.PELLET_Y_MOTOR, self._pellet_y, self._pellet_y == 0))
+                StepperStatus(0, Motor.PELLET_Y_MOTOR, self._pellet_y, self._pellet_y == 0))
             messages.append(
-                StepperStatus(Motor.PELLET_Z_MOTOR, self._pellet_z, self._pellet_z == 0))
+                StepperStatus(0, Motor.PELLET_Z_MOTOR, self._pellet_z, self._pellet_z == 0))
 
-            messages.append(ServoStatus(Motor.PELLET_COVER_SERVO, 0, self._barrier_pos))
-            messages.append(ServoStatus(Motor.PELLET_LOAD_SERVO, 1, self._load_pos))
+            messages.append(ServoStatus(0, Motor.PELLET_COVER_SERVO, self._barrier_pos))
+            messages.append(ServoStatus(0, Motor.PELLET_LOAD_SERVO, self._load_pos))
 
-            messages.append(ServoStatus(Motor.MAGNET_SERVO, 0, self._magnet_pos))
+            messages.append(ServoStatus(1, Motor.MAGNET_SERVO, self._magnet_pos))
         return messages
 
     def write(self, value: typing.Any) -> int:
@@ -54,6 +62,10 @@ class EmulationInterface(DeviceInterface):
             return 1
 
         return 0
+
+    @property
+    def cover_config(self):
+        return self._servo_configs[Motor.PELLET_COVER_SERVO]
 
     def set_motor_configuration(self, motor: Motor, servo_config=typing.Optional[ServoConfig],
                                 stepper_config=typing.Optional[StepperConfig]) -> bool:
@@ -105,22 +117,23 @@ class EmulationInterface(DeviceInterface):
             self._load_pos = position + 0.000001
         return self._is_open
 
-    def set_barrier(self, position) -> bool:
+    def set_cover(self, position) -> bool:
         if self._is_open:
             logger.info(f"set barrier arm {position}")
+            self._barrier_pos = position + 0.00000001
         return self._is_open
 
     def release_pellet(self) -> bool:
         if self._is_open:
             logger.info("release pellet")
-        return self.set_barrier(0)
+        return self.set_cover(self._servo_configs[Motor.PELLET_COVER_SERVO].minimum_position)
 
     def cover_pellet(self) -> bool:
         if self._is_open:
             logger.info("cover pellet")
-        return self.set_barrier(100)
+        return self.set_cover(self._servo_configs[Motor.PELLET_COVER_SERVO].maximum_position)
 
-    def emit_tone(self, dst: int, frequency, duration) -> bool:
+    def emit_tone(self, frequency, duration) -> bool:
         if self._is_open:
             logger.info(f"play tone f{frequency} d{duration}")
         return self._is_open
@@ -153,3 +166,8 @@ class EmulationInterface(DeviceInterface):
         if self._is_open:
             logger.info(f"Set color LED ({red_percent}, {green_percent}, {blue_percent})")
         return self._is_open
+
+    def stepper_home(self, motor):
+        self._pellet_x = 0.0
+        self._pellet_y = 0.0
+        self._pellet_z = 0.0

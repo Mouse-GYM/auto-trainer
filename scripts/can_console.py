@@ -6,7 +6,7 @@ from threading import Thread
 from copy import copy
 
 from autotrainer.core import SystemStatusMessageKind
-from autotrainer.device import CanDevice, DeviceThread, DeviceThreadMessageKind, \
+from autotrainer.device import CanDevice, DeviceConnection, DeviceThreadMessageKind, \
     HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
     CompoundMovementFile, MotorConfigurationFile, StepperStatus, ServoStatus
@@ -268,7 +268,7 @@ def run_monitor():
     global print_status
 
     device = CanDevice()
-    device_thread = DeviceThread(device, device._interface, msg_queue)
+    device_thread = DeviceConnection(device, msg_queue)
 
     device_thread.start()
 
@@ -289,7 +289,7 @@ def run_monitor():
             params = line[1:]
 
             if cmd == 'q':
-                device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
+                device_thread.request_terminate()
                 msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
                 break
             elif cmd == '?':
@@ -383,7 +383,7 @@ def run_monitor():
                                            data=Motor.PELLET_Z_MOTOR)
         else:
             if not mon_thread.is_alive():
-                device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
+                device_thread.request_terminate()
                 break
             else:
                 time.sleep(0.1)

@@ -36,6 +36,10 @@ class DeviceReader(ObservableObject):
 
         self._current_thread = None
 
+    @property
+    def input_queue(self) -> Queue:
+        return self._input_queue
+
     def start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
             self._current_thread = Thread(target=self.run)
@@ -64,3 +68,11 @@ class DeviceReader(ObservableObject):
 
     def message_received(self, msg, _data):
         pass
+
+    def request_terminate(self):
+        """
+        Sends a termination request to the device reader queue.  The thread may have not yet terminated when this call
+        returns.
+        """
+        if self._input_queue is not None:
+            self._input_queue.put((TERMINATE, None))

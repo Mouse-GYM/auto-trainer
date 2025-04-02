@@ -924,6 +924,9 @@ class CanInterface(DeviceInterface):
             target = _addr2tgt(message.dst_id)
             motor = _id_to_motor(target, True, message.servo_status.motor_id)
 
+            if motor is Motor.NONE:
+                return None
+
             status = ServoStatus(target, motor, message.servo_status.position)
 
             return status
@@ -932,6 +935,9 @@ class CanInterface(DeviceInterface):
             # print("STEPPER STAT")
             target = _addr2tgt(message.dst_id)
             motor = _id_to_motor(target, False, message.servo_status.motor_id)
+
+            if motor is Motor.NONE:
+                return None
 
             status = StepperStatus(target, motor,
                                    message.stepper_status.position,

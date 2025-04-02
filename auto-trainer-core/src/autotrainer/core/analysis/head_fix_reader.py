@@ -118,7 +118,9 @@ class HeadFixReader(DeviceReader):
     def message_received(self, msg, data):
         if msg == SystemStatusMessageKind.STREAM_START:
             self._perf_monitor.reset()
-        elif msg == SystemStatusMessageKind.MEASUREMENT:
+        elif msg == SystemStatusMessageKind.HEAD_MAGNET:
+            pass
+        elif msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
             weights = list()
             switch = list()
             pressure = list()

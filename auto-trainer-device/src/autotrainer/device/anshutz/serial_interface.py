@@ -6,7 +6,7 @@ import typing
 import serial
 import serial.tools.list_ports
 
-from .device_interface import DeviceInterface
+from ..device_interface import DeviceInterface
 
 logger = logging.getLogger(__name__)
 

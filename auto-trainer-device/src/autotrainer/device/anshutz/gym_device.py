@@ -1,40 +1,21 @@
 import logging
 import queue
 import typing
-from enum import IntEnum, Enum
 from queue import Queue
 
 from autotrainer.core import EventManager
 
-from .device import Device, DeviceApi
+from ..device_event_kind import GymDeviceEventKind
+from ..device_interface import DeviceInterface
+from ..device import Device, DeviceApi
+from ..device_message_kind import GymDeviceMessageKind
 
 logger = logging.getLogger(__name__)
 
 
-class GymDeviceEventKind(IntEnum, Enum):
-    deviceCommandSend = 2001,
-    deviceCommandAcknowledge = 2002
-
-
-class GymDeviceMessageKind(IntEnum):
-    VERSION = -1,
-    ACK = -2,
-    READ_CONFIG = -3,
-    WRITE_CONFIG = -4,
-    SET_LOAD_PROCEDURE = -6,
-    SET_SEND_PROCEDURE = -7,
-
-    # deprecated
-    SET_HOME_PROCEDURE = -5,
-
-    @classmethod
-    def is_member(cls, value):
-        return value in cls._value2member_map_
-
-
 class GymDevice(Device):
-    def __init__(self, api: DeviceApi = None):
-        super().__init__(api)
+    def __init__(self, dev_interface: DeviceInterface, api: DeviceApi = None):
+        super().__init__(dev_interface, api)
 
         self._read_buffer = ""
         self._is_waiting_ack = False
@@ -78,9 +59,7 @@ class GymDevice(Device):
                 self._last_command = ""
                 self._read_buffer = ""
 
-                EventManager.post_event(GymDeviceEventKind.deviceCommandAcknowledge,
-                                        context=self._last_command_token)
-                self._api.send_message(GymDeviceMessageKind.ACK, self._last_command_token)
+                self._command_acknowledged(self._last_command_token)
 
                 self._is_busy = False
 
@@ -92,13 +71,17 @@ class GymDevice(Device):
             else:
                 self._read_buffer += resp.strip()
 
+    def _command_acknowledged(self, token: object):
+        EventManager.post_event(GymDeviceEventKind.deviceCommandAcknowledge, context=token)
+        self._api.send_message(GymDeviceMessageKind.ACK, token)
+
     def _send_data(self, data: str, token: object = None):
         if not self._is_busy:
             self._is_waiting_ack = True
             self._is_busy = True
             self._last_command = data[0:-1]
             self._last_command_token = token
-            self._api.send_data_str(data)
+            self._interface.write_str(data)
             EventManager.post_event(GymDeviceEventKind.deviceCommandSend,
                                     context=f"{data}({self._last_command_token})")
         else:
