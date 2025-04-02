@@ -83,22 +83,22 @@ def monitor_message_queue():
                     f"SERVO\n"
                     f"- target={target_to_str(data.target)}\n"
                     f"- motor={motor_to_str(data.motor)}\n"
-                    f"- max vel (deg/sec)={data.maximum_velocity}\n"
-                    f"- max accel (deg/sec^2)={data.maximum_acceleration}\n"
-                    f"- min pos (deg)={data.minimum_position}\n"
-                    f"- max pos (deg)={data.maximum_position}\n"
-                    f"- min pwm={data.minimum_pwm_duration}\n"
-                    f"- max pwm={data.maximum_pwm_duration}\n"
+                    f"- max vel (deg/sec)={data.maximum_velocity:.2f}\n"
+                    f"- max accel (deg/sec^2)={data.maximum_acceleration:.2f}\n"
+                    f"- min pos (deg)={data.minimum_position:.1f}\n"
+                    f"- max pos (deg)={data.maximum_position:.1f}\n"
+                    f"- min pwm={data.minimum_pwm_duration:.1f}\n"
+                    f"- max pwm={data.maximum_pwm_duration:.1f}\n"
                 )
             elif isinstance(data, StepperConfig):
                 print(f"STEPPER\n"
                       f"- target={target_to_str(data.target)}\n"
                       f"- motor={motor_to_str(data.motor)}\n"
-                      f"- max vel (mm/sec)={data.maximum_velocity}\n"
-                      f"- max accel (mm/sec^2)={data.maximum_acceleration}\n"
+                      f"- max vel (mm/sec)={data.maximum_velocity:.2f}\n"
+                      f"- max accel (mm/sec^2)={data.maximum_acceleration:.2f}\n"
                       f"- flip limit orientation={data.flip_limit_orientation}\n"
                       f"- microsteps={data.microsteps}\n"
-                      f"- step/rev={data.steps_per_revolution}\n"
+                      f"- step/rev={data.steps_per_revolution:.0f}\n"
                       )
 
         elif ((kind == SystemStatusMessageKind.PELLET_COVER and
@@ -173,11 +173,11 @@ def write_config(motor: Motor, device_thread):
         assert isinstance(orig_config, StepperConfig)
         config = copy(orig_config)
 
-        resp = input(f"Max Velocity (mm/sec) [{orig_config.maximum_velocity}] = ")
+        resp = input(f"Max Velocity (mm/sec) [{orig_config.maximum_velocity:.2f}] = ")
         if resp != '':
             config.maximum_velocity = float(resp)
 
-        resp = input(f"Max Acceleration (mm/sec^2) [{orig_config.maximum_acceleration}]= ")
+        resp = input(f"Max Acceleration (mm/sec^2) [{orig_config.maximum_acceleration:.2f}]= ")
         if resp != '':
             config.maximum_acceleration = float(resp)
 
@@ -189,7 +189,7 @@ def write_config(motor: Motor, device_thread):
         if resp != '':
             config.microsteps = int(resp)
 
-        resp = input(f"Steps/Revolution [{orig_config.steps_per_revolution}]= ")
+        resp = input(f"Steps/Revolution [{orig_config.steps_per_revolution:.0f}]= ")
         if resp != '':
             config.steps_per_revolution = float(resp)
 
@@ -199,27 +199,27 @@ def write_config(motor: Motor, device_thread):
 
         config = copy(orig_config)
 
-        resp = input(f"Max Velocity (deg/sec) [{orig_config.maximum_velocity}]= ")
+        resp = input(f"Max Velocity (deg/sec) [{orig_config.maximum_velocity:.2f}]= ")
         if resp != '':
             config.maximum_velocity = float(resp)
 
-        resp = input(f"Max Acceleration (deg/sec^2) [{orig_config.maximum_acceleration}]= ")
+        resp = input(f"Max Acceleration (deg/sec^2) [{orig_config.maximum_acceleration:.2f}]= ")
         if resp != '':
             config.maximum_acceleration = float(resp)
 
-        resp = input(f"Min Position (deg) [{orig_config.minimum_position}]= ")
+        resp = input(f"Min Position (deg) [{orig_config.minimum_position:.1f}]= ")
         if resp != '':
             config.minimum_position = float(resp)
 
-        resp = input(f"Max Position (deg) [{orig_config.maximum_position}]= ")
+        resp = input(f"Max Position (deg) [{orig_config.maximum_position:.1f}]= ")
         if resp != '':
             config.maximum_position = float(resp)
 
-        resp = input(f"Min PWM Duration (usec) [{orig_config.minimum_pwm_duration}]= ")
+        resp = input(f"Min PWM Duration (usec) [{orig_config.minimum_pwm_duration:.1f}]= ")
         if resp != '':
             config.minimum_pwm_duration = float(resp)
 
-        resp = input(f"Max PWM Duration (usec) [{orig_config.maximum_pwm_duration}]= ")
+        resp = input(f"Max PWM Duration (usec) [{orig_config.maximum_pwm_duration:.1f}]= ")
         if resp != '':
             config.maximum_pwm_duration = float(resp)
 

@@ -22,8 +22,8 @@ except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
 from .device_interface import *
+from .stepper_motor import mm_to_turns, turns_to_mm
 from autotrainer.core.message import Motor
-from stepper_motor import mm_to_turns, turns_to_mm
 
 logger = logging.getLogger(__name__)
 
@@ -647,8 +647,8 @@ class CanInterface(DeviceInterface):
                 f"stepper {addr} {motor_id} config write:\n"
                 f"microsteps = {config.microsteps}\n"
                 f"step/rev = {config.steps_per_revolution}\n"
-                f"max velocity = {config.maximum_velocity(max_vel)}\n"
-                f"max accel = {config.maximum_acceleration(max_acc)}\n"
+                f"max velocity = {config.maximum_velocity} ({max_vel})\n"
+                f"max accel = {config.maximum_acceleration} ({max_acc})\n"
                 f"flip limit orientation = {config.flip_limit_orientation}\n"
             )
             return True

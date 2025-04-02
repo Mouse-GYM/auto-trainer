@@ -17,3 +17,4 @@ from .can_device import CanDevice, HAVE_CAN_DEVICE
 from .motor_steps import MotorSteps
 from .compound_movement_file import CompoundMovementFile
 from .motor_configuration_file import MotorConfigurationFile
+from .stepper_motor import turns_to_mm, mm_to_turns

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 from autotrainer.core.message import Motor
-from stepper_motor import turns_to_mm
+from .stepper_motor import turns_to_mm
 
 
 class Target(IntEnum):
