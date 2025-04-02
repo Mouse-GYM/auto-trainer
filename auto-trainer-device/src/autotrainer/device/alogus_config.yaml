@@ -55,17 +55,10 @@ actions:
       value: 0.0
     - type: delay
       value: 1.0
-  home:
-    - type: x
-      value: 0.0
-    - type: y
-      value: 0.0
-    - type: z
-      value: 0.0
   send:
     - type: z
       value: .5
     - type: x
-      value: -1.6
+      value: 1.6
     - type: y
       value: 2.0

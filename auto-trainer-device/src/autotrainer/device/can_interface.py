@@ -557,7 +557,6 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_x(self, position: float) -> bool:
-        logger.info(f"set pellet X stepper to {position}")
         return self.set_stepper_position(position, self.x_config)
 
     '''
@@ -565,7 +564,6 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_y(self, position: float) -> bool:
-        logger.info(f"set pellet Y stepper to {position}")
         return self.set_stepper_position(position, self.y_config)
 
     '''
@@ -573,7 +571,6 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_z(self, position: float) -> bool:
-        logger.info(f"set pellet Z stepper to {position}")
         return self.set_stepper_position(position, self.z_config)
 
     '''
@@ -581,33 +578,32 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_load(self, position: float):
-        logger.info(f"set load servo position {position}")
         return self.set_servo_position(position, self.load_config)
 
     '''
     Set the position of the cover for pellet delivery
+    DEPRECATED
     '''
 
     def set_cover(self, position):
-        logger.info(f"set cover servo position {position}")
         return self.set_servo_position(position, self.cover_config)
 
     '''
     Open the cover so the pellet is visible to the animal
+    DEPRECATED
     '''
 
     def release_pellet(self) -> bool:
         addr = self._tgt2addr(Target.PELLET_DEVICE)
 
         return addr is not None and self.set_cover(self.cover_config.minimum_position) and \
-            self.emit_tone(addr, 6000)
+            self.emit_tone(2000, 6000)
 
     '''
     Open the cover so the pellet is visible to the animal
     '''
 
     def cover_pellet(self) -> bool:
-        logger.info(f"cover pellet {self.cover_config.maximum_position}")
         return self.set_cover(self.cover_config.maximum_position)
 
     '''
