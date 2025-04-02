@@ -58,6 +58,13 @@ class DeviceThread(Thread):
 
         self._read_limit: int = 1 if HAVE_CAN_DEVICE else math.inf
 
+        # Load a default set of configurations
+        if HAVE_CAN_DEVICE:
+            config_file = Path.home().joinpath(".alogus_config.yaml")
+
+            file = CompoundMovementFile(config_file)
+            self.use_compound_movement(file)
+
     @property
     def name(self) -> str:
         return self._name
