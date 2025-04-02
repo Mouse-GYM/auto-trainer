@@ -557,7 +557,6 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_x(self, position: float) -> bool:
-        logger.info(f"set pellet X stepper to {position}")
         return self.set_stepper_position(position, self.x_config)
 
     '''
@@ -565,7 +564,6 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_y(self, position: float) -> bool:
-        logger.info(f"set pellet Y stepper to {position}")
         return self.set_stepper_position(position, self.y_config)
 
     '''
@@ -573,7 +571,6 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_z(self, position: float) -> bool:
-        logger.info(f"set pellet Z stepper to {position}")
         return self.set_stepper_position(position, self.z_config)
 
     '''
@@ -581,7 +578,6 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_load(self, position: float):
-        logger.info(f"set load servo position {position}")
         return self.set_servo_position(position, self.load_config)
 
     '''
@@ -589,7 +585,6 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_cover(self, position):
-        logger.info(f"set cover servo position {position}")
         return self.set_servo_position(position, self.cover_config)
 
     '''
@@ -607,7 +602,6 @@ class CanInterface(DeviceInterface):
     '''
 
     def cover_pellet(self) -> bool:
-        logger.info(f"cover pellet {self.cover_config.maximum_position}")
         return self.set_cover(self.cover_config.maximum_position)
 
     '''
