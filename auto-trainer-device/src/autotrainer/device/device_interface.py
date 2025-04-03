@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 from autotrainer.core.message import Motor
-from .stepper_motor import turns_to_mm
 
 
 class Target(IntEnum):
@@ -180,8 +179,8 @@ class StepperConfig(Source):
     _motor: Motor = Motor.NONE
     _micro_steps: int = 64
     _steps_per_revolution: float = 48.0
-    _max_velocity: float = turns_to_mm(25.0)
-    _max_acceleration: float = turns_to_mm(100.0)
+    _max_velocity: float = 61
+    _max_acceleration: float = 244
     _flip_limit_orientation: bool = False
 
     @classmethod

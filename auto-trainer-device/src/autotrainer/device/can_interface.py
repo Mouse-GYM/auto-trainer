@@ -647,8 +647,8 @@ class CanInterface(DeviceInterface):
                 f"stepper {addr} {motor_id} config write:\n"
                 f"microsteps = {config.microsteps}\n"
                 f"step/rev = {config.steps_per_revolution}\n"
-                f"max velocity = {config.maximum_velocity} ({max_vel})\n"
-                f"max accel = {config.maximum_acceleration} ({max_acc})\n"
+                f"max velocity = {config.maximum_velocity}\n"
+                f"max accel = {config.maximum_acceleration}\n"
                 f"flip limit orientation = {config.flip_limit_orientation}\n"
             )
             return True
@@ -668,9 +668,6 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(target)
         if addr is None:
             return False
-
-        min_pos = mm_to_turns(config.minimum_position)
-        max_pos = mm_to_turns(config.maximum_position)
 
         if self._jc.ServoCfgWrite(addr, motor_id,
                                   config.minimum_position,
