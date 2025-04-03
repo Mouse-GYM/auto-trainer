@@ -21,7 +21,6 @@ class PelletDeliveryModel(ObservableObject):
 
         self._device_thread = None
 
-        self._pellet_reader = None
         self._pellet_reader = PelletReader(self._message_queue)
 
         self._is_connected = False
@@ -104,11 +103,8 @@ class PelletDeliveryModel(ObservableObject):
         if not self.port or len(self.port) == 0:
             return
 
-        device_interface = SerialInterface(self.port)
-
-        pellet_delivery = PelletDelivery()
-
-        self._device_thread = DeviceThread(pellet_delivery, device_interface, self._message_queue)
+        self._device_thread = DeviceThread(PelletDelivery(self.port),
+                                           message_queue=self._message_queue)
         self._device_thread.name = "pellet"
 
         self._device_thread.start()

@@ -268,7 +268,7 @@ def run_monitor():
     global print_status
 
     device = CanDevice()
-    device_thread = DeviceThread(device, device._interface, msg_queue)
+    device_thread = DeviceThread(device, msg_queue)
 
     device_thread.start()
 

@@ -20,11 +20,7 @@ def message_queue_callback(kind, context):
 
 
 def run_monitor(port: str):
-    device_interface = SerialInterface(port)
-
-    pellet_delivery = PelletDelivery()
-
-    device_thread = DeviceThread(pellet_delivery, device_interface, message_callback=message_queue_callback)
+    device_thread = DeviceThread(PelletDelivery(port), message_callback=message_queue_callback)
 
     device_thread.start()
 
