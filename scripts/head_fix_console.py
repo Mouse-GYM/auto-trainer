@@ -4,9 +4,9 @@ import queue
 import time
 from threading import Thread
 
-from autotrainer.device import SerialInterface, GymDeviceMessageKind
+from autotrainer.device import GymDeviceMessageKind
 from autotrainer.device import HeadFix, HeadFixMessageKind
-from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import DeviceThread, DeviceApi, DeviceThreadMessageKind
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('autotrainer').setLevel(logging.DEBUG)
@@ -66,7 +66,7 @@ def monitor_message_queue():
 def run_monitor(port: str):
     global perf_count
 
-    device_thread = DeviceThread(HeadFix(port), message_queue=msg_queue)
+    device_thread = DeviceThread(HeadFix(port, DeviceApi(message_queue=msg_queue)))
 
     device_thread.start()
 

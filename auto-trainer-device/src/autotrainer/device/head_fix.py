@@ -51,7 +51,7 @@ class HeadFixMessageKind(IntEnum):
 
 
 class HeadFix(GymDevice):
-    def __init__(self, port: str, api: DeviceApi = None, buffer_size: int = 50):
+    def __init__(self, port: str, api: DeviceApi, buffer_size: int = 50):
         super().__init__(SerialInterface(port), api)
 
         self._identifier = "H"

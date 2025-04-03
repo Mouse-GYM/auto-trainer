@@ -38,7 +38,7 @@ class PelletDeliveryMessageKind(IntEnum):
 
 
 class PelletDelivery(GymDevice):
-    def __init__(self, port: str, api: DeviceApi = None):
+    def __init__(self, port: str, api: DeviceApi):
         super().__init__(SerialInterface(port), api)
 
         self._identifier = "P"

@@ -39,8 +39,9 @@ from .device_interface import *
 
 class CanDevice(Device):
 
-    def __init__(self, api: DeviceApi = None, buffer_size: int = 50):
-        super().__init__(CanInterface() if HAVE_CAN_DEVICE else EmulationInterface(), api)
+    def __init__(self, api: DeviceApi, buffer_size: int = 50):
+        self._interface = CanInterface() if HAVE_CAN_DEVICE else EmulationInterface()
+        super().__init__(self._interface, api)
 
         self._measurement_buffer_count = buffer_size
         self._measurements: typing.List[HeadFixMeasurement] = []
@@ -53,8 +54,6 @@ class CanDevice(Device):
 
         self._pellet_dst: typing.Optional[int] = None
         self._magnet_dst: typing.Optional[int] = None
-
-        self._interface = self.device_interface
 
         self._desired_location = None
         self._active_motor = None
@@ -70,7 +69,8 @@ class CanDevice(Device):
         self._delay_period = None
 
         if not HAVE_CAN_DEVICE:
-            logger.warning("Alogus hardware or hardware support not found.  Using emulation interface.")
+            logger.warning(
+                "Alogus hardware or hardware support not found.  Using emulation interface.")
 
     @property
     def api(self):
@@ -182,7 +182,7 @@ class CanDevice(Device):
             self._complete_command(context)
 
         elif kind == HeadFixMessageKind.STREAM_START or \
-                kind == HeadFixMessageKind.STREAM_STOP:
+            kind == HeadFixMessageKind.STREAM_STOP:
             pass
 
         else:
@@ -319,8 +319,8 @@ class CanDevice(Device):
         # print(f"desired={self._desired_location}/{position} motor="
         #       f"{self._active_motor}/{motor}")
         if self._desired_location is not None and \
-                motor == self._active_motor and \
-                abs(position - self._desired_location) < 0.01:
+            motor == self._active_motor and \
+            abs(position - self._desired_location) < 0.01:
             if self._compound_movement is not None:
                 self._perform_next_compound_step()
             else:
@@ -329,8 +329,8 @@ class CanDevice(Device):
                 self._complete_command(self._pending_move_token)
 
         if self._desired_location is not None and \
-                motor == self._active_motor and \
-                self._pending_move_token is not None:
+            motor == self._active_motor and \
+            self._pending_move_token is not None:
             logger.debug(
                 f"[{datetime.now()}] "
                 f"motor: {motor_to_str(motor)} "

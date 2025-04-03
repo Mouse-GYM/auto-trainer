@@ -9,7 +9,8 @@ from autotrainer.core import SystemStatusMessageKind
 from autotrainer.device import CanDevice, DeviceThread, DeviceThreadMessageKind, \
     HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
-    CompoundMovementFile, MotorConfigurationFile, StepperStatus, ServoStatus
+    CompoundMovementFile, MotorConfigurationFile, StepperStatus, ServoStatus, DeviceInterface, \
+    DeviceApi
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
@@ -267,8 +268,7 @@ def run_monitor():
     global perf_count
     global print_status
 
-    device = CanDevice()
-    device_thread = DeviceThread(device, msg_queue)
+    device_thread = DeviceThread(CanDevice(DeviceApi(message_queue=msg_queue)))
 
     device_thread.start()
 

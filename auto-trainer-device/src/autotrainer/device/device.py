@@ -1,4 +1,5 @@
 import typing
+import math
 
 from .device_interface import DeviceInterface
 from .device_api import DeviceApi
@@ -7,8 +8,9 @@ from .device_api import DeviceApi
 class Device:
     """Defines the required methods to represent a device."""
 
-    def __init__(self, dev_interface: DeviceInterface = None, api: DeviceApi = None):
+    def __init__(self, dev_interface: DeviceInterface, api: DeviceApi):
         self._api = api
+        self._api.interface = dev_interface
         self._interface = dev_interface
 
     def connect(self):
@@ -53,3 +55,19 @@ class Device:
     @device_interface.setter
     def device_interface(self, value: DeviceInterface):
         self._interface = value
+
+    @property
+    def is_open(self) -> bool:
+        return self._interface.is_open
+
+    def open(self) -> bool:
+        return self._interface.open()
+
+    def can_read(self) -> bool:
+        return self._interface.can_read()
+
+    def read(self, max_count: int = math.inf) -> typing.Any:
+        return self._interface.read(max_count)
+
+    def close(self):
+        self._interface.close()

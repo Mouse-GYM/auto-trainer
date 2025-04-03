@@ -4,12 +4,9 @@ import time
 from queue import Queue, Empty
 from enum import IntEnum
 from threading import Thread
-from typing import Callable
 
-from .device_interface import DeviceInterface
 from .device import Device
 from .can_device import HAVE_CAN_DEVICE
-from .device_api import DeviceApi
 from .device_interface import ServoConfig, StepperConfig
 from .gym_device import GymDeviceMessageKind
 from .motor_steps import CompoundMovementDataSet, MotorSteps
@@ -40,19 +37,11 @@ class DeviceThread(Thread):
 
     """
 
-    def __init__(self, device: Device, message_queue: Queue = None,
-                 message_callback: Callable[[int, object], None] = None):
+    def __init__(self, device: Device):
         super().__init__()
 
         self._device = device
-        self._interface = device.device_interface
-        self._message_callback = message_callback
-        self._message_queue = message_queue
         self._cmd_queue: Queue = Queue()
-
-        self._api = DeviceApi(self._interface, message_callback=message_callback,
-                              message_queue=message_queue)
-        self._device.api = self._api
 
         self._name = "device-thread"
 
@@ -128,9 +117,9 @@ class DeviceThread(Thread):
             except Empty:
                 time.sleep(0.0001)
 
-        if not self._interface.is_open:
+        if not self._device.is_open:
             try:
-                success = self._interface.open()
+                success = self._device.open()
 
                 if success:
                     logger.debug(f"<{self._name}> interface open")
@@ -151,8 +140,8 @@ class DeviceThread(Thread):
         while True:
             # Data from the device for the device listener to process.
             heartbeat = 0
-            while self._interface.can_read():
-                self._device.notify_data(self._interface.read(self._read_limit))
+            while self._device.can_read():
+                self._device.notify_data(self._device.read(self._read_limit))
                 heartbeat += 1
                 if heartbeat > 5:
                     break
@@ -172,10 +161,10 @@ class DeviceThread(Thread):
             except Empty:
                 time.sleep(0.0001)
 
-        if self._interface.is_open:
+        if self._device.is_open:
             self._device.disconnect()
 
-            self._interface.close()
+            self._device.close()
 
             logger.debug(f"<{self._name}> interface closed")
         else:

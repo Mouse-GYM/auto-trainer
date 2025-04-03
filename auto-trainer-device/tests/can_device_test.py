@@ -51,7 +51,7 @@ def data_callback(kind: int, response: object):
 
 def _construction():
     try:
-        device = CanDevice()
+        device = CanDevice(DeviceApi(message_callback=data_callback))
     except (ModuleNotFoundError, TypeError, AttributeError):
         assert False
 
@@ -59,7 +59,6 @@ def _construction():
     # for these tests, do NOT open interface
     interface._set_magnet_address(0x40)
     interface._set_pellet_address(0x01)
-    device.api = DeviceApi(interface=interface, message_callback=data_callback)
 
     return device
 

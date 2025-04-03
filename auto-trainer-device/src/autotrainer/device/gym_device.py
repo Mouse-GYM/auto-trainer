@@ -35,7 +35,7 @@ class GymDeviceMessageKind(IntEnum):
 
 
 class GymDevice(Device):
-    def __init__(self, dev_interface: DeviceInterface, api: DeviceApi = None):
+    def __init__(self, dev_interface: DeviceInterface, api: DeviceApi):
         super().__init__(dev_interface, api)
 
         self._read_buffer = ""

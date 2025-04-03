@@ -1,9 +1,9 @@
 import argparse
 import logging
 
-from autotrainer.device import SerialInterface, GymDeviceMessageKind
+from autotrainer.device import GymDeviceMessageKind
 from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
-from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import DeviceThread, DeviceApi, DeviceThreadMessageKind
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('autotrainer').setLevel(logging.DEBUG)
@@ -20,7 +20,8 @@ def message_queue_callback(kind, context):
 
 
 def run_monitor(port: str):
-    device_thread = DeviceThread(PelletDelivery(port), message_callback=message_queue_callback)
+    device_thread = DeviceThread(PelletDelivery(port,
+                                                DeviceApi(message_callback=message_queue_callback)))
 
     device_thread.start()
 

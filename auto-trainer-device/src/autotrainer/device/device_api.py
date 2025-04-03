@@ -16,7 +16,8 @@ class DeviceApi:
     Other implementations could use different methods.
     """
 
-    def __init__(self, interface: DeviceInterface = None, message_callback: Callable[[int, object], None] = None,
+    def __init__(self, interface: DeviceInterface = None,
+                 message_callback: Callable[[int, object], None] = None,
                  message_queue: Queue = None):
         self._interface = interface
         self._message_callback = message_callback
@@ -25,6 +26,10 @@ class DeviceApi:
     @property
     def interface(self) -> DeviceInterface:
         return self._interface
+
+    @interface.setter
+    def interface(self, iface):
+        self._interface = iface
 
     def send_data(self, value: typing.Any):
         """Sends data to the device"""

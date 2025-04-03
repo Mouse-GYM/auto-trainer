@@ -5,7 +5,7 @@ in the head fix device.
 """
 import pytest
 
-from autotrainer.device import parse_measurement, parse_measurements, HeadFix
+from autotrainer.device import parse_measurement, parse_measurements, HeadFix, DeviceApi
 
 
 def _assert_incomplete(data: str) -> None:
@@ -44,7 +44,8 @@ def test_parse_incomplete_measurement():
     _assert_incomplete("2d0a18t238h55")
 
 
-def _assert_measurement_list(measurements: list, expected_count: int, residual: str, expected_residual: str) -> None:
+def _assert_measurement_list(measurements: list, expected_count: int, residual: str,
+                             expected_residual: str) -> None:
     assert len(measurements) == expected_count
     assert residual == expected_residual
 
@@ -71,12 +72,13 @@ def test_multiple_measurements():
     measurements, residual = parse_measurements("s32d0a18t238h557n\ns32d0a18t238h557n")
     _assert_measurement_list(measurements, 2, residual, "")
 
-    measurements, residual = parse_measurements("s32d0a18t238h557n\ns32d0a18t238h557n\r\ns32d0a18t238h557n")
+    measurements, residual = parse_measurements(
+        "s32d0a18t238h557n\ns32d0a18t238h557n\r\ns32d0a18t238h557n")
     _assert_measurement_list(measurements, 3, residual, "")
 
 
 def test_device_measurements():
-    device = HeadFix(None)
+    device = HeadFix(None, DeviceApi())
 
     assert device is not None
 

@@ -2,7 +2,7 @@ import logging
 import time
 import typing
 
-from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
+from .device_interface import (DeviceInterface,
                                StepperStatus, ServoStatus, Target, DigitalOutputs,
                                Motor, AnalogOutputs)
 
@@ -37,16 +37,21 @@ class EmulationInterface(DeviceInterface):
         if now - self._last_message > 1:
             self._last_message = now
             messages.append(
-                StepperStatus(Motor.PELLET_X_MOTOR, self._pellet_x, self._pellet_x == 0))
+                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, self._pellet_x,
+                              self._pellet_x == 0))
             messages.append(
-                StepperStatus(Motor.PELLET_Y_MOTOR, self._pellet_y, self._pellet_y == 0))
+                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Y_MOTOR, self._pellet_y,
+                              self._pellet_y == 0))
             messages.append(
-                StepperStatus(Motor.PELLET_Z_MOTOR, self._pellet_z, self._pellet_z == 0))
+                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR, self._pellet_z,
+                              self._pellet_z == 0))
 
-            messages.append(ServoStatus(Motor.PELLET_COVER_SERVO, 0, self._barrier_pos))
-            messages.append(ServoStatus(Motor.PELLET_LOAD_SERVO, 1, self._load_pos))
+            messages.append(ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_COVER_SERVO,
+                                        self._barrier_pos))
+            messages.append(
+                ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, self._load_pos))
 
-            messages.append(ServoStatus(Motor.MAGNET_SERVO, 0, self._magnet_pos))
+            messages.append(ServoStatus(Target.MAGNET_DEVICE, Motor.MAGNET_SERVO, self._magnet_pos))
         return messages
 
     def write(self, value: typing.Any) -> int:
@@ -55,8 +60,7 @@ class EmulationInterface(DeviceInterface):
 
         return 0
 
-    def set_motor_configuration(self, motor: Motor, servo_config=typing.Optional[ServoConfig],
-                                stepper_config=typing.Optional[StepperConfig]) -> bool:
+    def set_motor_configuration(self, motor: Motor, config, write_to_remote: bool = True) -> bool:
         if self._is_open:
             logger.info(f"Set motor configuration {int(motor.value)}")
         return self._is_open
@@ -120,7 +124,7 @@ class EmulationInterface(DeviceInterface):
             logger.info("cover pellet")
         return self.set_barrier(100)
 
-    def emit_tone(self, dst: int, frequency, duration) -> bool:
+    def emit_tone(self, frequency, duration) -> bool:
         if self._is_open:
             logger.info(f"play tone f{frequency} d{duration}")
         return self._is_open

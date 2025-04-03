@@ -5,7 +5,7 @@ import uuid
 from autotrainer.core import ObservableObject, DeviceReader, PelletReader
 from autotrainer.device import SerialInterface, GymDeviceMessageKind, CanDevice, HAVE_CAN_DEVICE
 from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
-from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import DeviceThread, DeviceApi, DeviceThreadMessageKind
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
@@ -139,10 +139,12 @@ class AppModel(ObservableObject):
             return
 
         if self._user_settings.port == "CAN bus":
-            self._device_thread = DeviceThread(CanDevice(), message_queue=self._msg_queue)
+            self._device_thread = DeviceThread(CanDevice(
+                DeviceApi(message_queue=self._msg_queue)))
         else:
-            self._device_thread = DeviceThread(PelletDelivery(self._user_settings.port),
-                                               message_queue=self._msg_queue)
+            self._device_thread = DeviceThread(
+                PelletDelivery(self._user_settings.port,
+                               DeviceApi(message_queue=self._msg_queue)))
 
         self._device_thread.name = "pellet"
 

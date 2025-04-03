@@ -1,12 +1,10 @@
 import logging
 import queue
 
-from autotrainer.core import ObservableObject
-from autotrainer.core.project import ProjectInterval
 from autotrainer.core import ObservableObject, ProjectInterval, DeviceReader, HeadFixReader
 from autotrainer.device import SerialInterface, GymDeviceMessageKind, CanDevice, HAVE_CAN_DEVICE
 from autotrainer.device import HeadFix, HeadFixMessageKind
-from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import DeviceThread, DeviceApi, DeviceThreadMessageKind
 
 from tools.head_fix.model.user_settings import UserSettings
 
@@ -92,12 +90,13 @@ class AppModel(ObservableObject):
             return
 
         if self._user_settings.port == "CAN bus":
-            self._device_thread = DeviceThread(CanDevice(buffer_size=10),
-                                               message_queue=self._msg_queue)
+            self._device_thread = DeviceThread(CanDevice(DeviceApi(
+                message_queue=self._msg_queue), buffer_size=10))
+
         else:
             self._device_thread = DeviceThread(HeadFix(port=self._user_settings.port,
-                                                       buffer_size=10),
-                                               message_queue=self._msg_queue)
+                                                       api=DeviceApi(message_queue=self._msg_queue),
+                                                       buffer_size=10))
 
         self._device_thread.name = "head-fix"
 
