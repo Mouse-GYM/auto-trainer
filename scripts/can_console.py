@@ -263,6 +263,14 @@ def round_trip_test(motor: Motor, trips: int, device_thread):
         time.sleep(1)
 
 
+# Generate either just a position value or a tuple of (position, rate)
+def move_parameter(params):
+    if len(params) == 1:
+        return float(params[0])
+    else:
+        return float(params[0]), float(params[1])
+
+
 def run_monitor():
     global perf_count
     global print_status
@@ -304,18 +312,21 @@ def run_monitor():
                     print("F <file>           ::Load Compound Movement Configuration")
                     print("h                  ::Home Position")
                     print("l                  ::Load Pellet")
-                    print("m <pos>            ::Move Magnet Servo [0:120] (deg)")
-                    print("n <pos>            ::Move Load Servo [0:120] (deg)")
-                    print("o <pos>            ::Move Cover Servo [0:120] (deg)")
+                    print(
+                        "m <pos> [<rate>]   ::Move Magnet Servo pos => [0:120] (deg) rate=->[0:100]")
+                    print(
+                        "n <pos> [<rate>]   ::Move Load Servo pos => [0:120] (deg) rate=->[0:100]")
+                    print(
+                        "o <pos> [<rate>]   ::Move Cover Servo pos => [0:120] (deg) rate=->[0:100]")
                     print("q                  ::Quit")
                     print("r                  ::Release Pellet")
                     print("s                  ::Send Pellet")
                     print("t                  ::Tare Load Cell/Pressure Sensors")
                     print("v                  ::Version (not available yet)")
                     print("w <motor>          ::Motor Status")
-                    print("x <pos>            ::Move X [0:27] (mm)")
-                    print("y <pos>            ::Move Y [0:27] (mm)")
-                    print("z <pos>            ::Move Z [0:27] (mm)")
+                    print("x <pos> [<rate>]   ::Move X pos => [0:27] (mm) rate=->[0:100] (%)")
+                    print("y <pos> [<rate>]   ::Move Y pos => [0:27] (mm) rate=->[0:100] (%)")
+                    print("z <pos> [<rate>]   ::Move Z pos => [0:27] (mm) rate=->[0:100] (%)")
                     print("X                  ::Home X to Limit")
                     print("Y                  ::Home Y to Limit")
                     print("Z                  ::Home Z to Limit")
@@ -347,13 +358,14 @@ def run_monitor():
                     device_thread.send_message(PelletDeliveryMessageKind.LOAD_PELLET)
                 elif cmd == 'm':
                     device_thread.send_message(HeadFixMessageKind.SET_MAGNET_INTENSITY,
-                                               data=float(params[0]))
+                                               data=move_parameter(params))
                 elif cmd == 'n':
+
                     device_thread.send_message(PelletDeliveryMessageKind.SET_LOAD_SERVO,
-                                               data=float(params[0]))
+                                               data=move_parameter(params))
                 elif cmd == 'o':
                     device_thread.send_message(PelletDeliveryMessageKind.SET_COVER_SERVO,
-                                               data=float(params[0]))
+                                               data=move_parameter(params))
                 elif cmd == 'r':
                     device_thread.send_message(PelletDeliveryMessageKind.RELEASE_PELLET)
                 elif cmd == 's':
@@ -366,13 +378,13 @@ def run_monitor():
                     print_status = str_to_motor(params[0])
                 elif cmd == 'x':
                     device_thread.send_message(PelletDeliveryMessageKind.SET_X,
-                                               data=float(params[0]))
+                                               data=move_parameter(params))
                 elif cmd == 'y':
                     device_thread.send_message(PelletDeliveryMessageKind.SET_Y,
-                                               data=float(params[0]))
+                                               data=move_parameter(params))
                 elif cmd == 'z':
                     device_thread.send_message(PelletDeliveryMessageKind.SET_Z,
-                                               data=float(params[0]))
+                                               data=move_parameter(params))
                 elif cmd == 'X':
                     device_thread.send_message(PelletDeliveryMessageKind.SEND_TO_LIMITS,
                                                data=Motor.PELLET_X_MOTOR)

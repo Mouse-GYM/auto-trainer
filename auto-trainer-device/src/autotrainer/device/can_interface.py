@@ -519,23 +519,41 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
         return addr is not None and self._jc.PressureSensorTare(addr, 0) == 0
 
-    def _set_servo_position(self, position, config):
-        assert isinstance(config, ServoConfig)
+    def _set_servo_position(self, position, config: ServoConfig):
+        # The location is either a position or a (position, rate) pair
+
+        if isinstance(position, float) or isinstance(position, int):
+            velocity = config.maximum_velocity
+        elif isinstance(position, tuple):
+            velocity = float(position[1]) / 100.0 * config.maximum_velocity
+            position = float(position[0])
+
         if position < 0:
             position = 0
         elif position > 120:
             position = 120
 
+        acceleration = config.maximum_acceleration
+        
         addr = self._tgt2addr(target_of_motor(config.motor))
         return addr is not None and self._jc.ServoMove(addr, _motor_to_id(config.motor),
-                                                       position, config.maximum_velocity,
-                                                       config.maximum_acceleration,
+                                                       position, 
+                                                       velocity,
+                                                       acceleration,
                                                        AbsOrRel.ABSOLUTE) == 0
 
-    def _set_stepper_position(self, position, config):
+    def _set_stepper_position(self, position, config: StepperConfig):
+        # The location is either a position or a (position, rate) pair
+
+        if isinstance(position, float) or isinstance(position, int):
+            velocity = config.maximum_velocity
+        elif isinstance(position, tuple):
+            velocity = float(position[1]) / 100.0 * config.maximum_velocity
+            position = float(position[0])
+
         position = mm_to_turns(position)
-        max_vel = mm_to_turns(config.maximum_velocity)
-        max_acc = mm_to_turns(config.maximum_acceleration)
+        velocity = mm_to_turns(velocity)
+        acceleration = mm_to_turns(config.maximum_acceleration)
 
         if position < 0:
             position = 0
@@ -545,8 +563,8 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(target_of_motor(config.motor))
         return addr is not None and self._jc.StepperMove(addr, _motor_to_id(config.motor),
                                                          position,
-                                                         max_vel,
-                                                         max_acc,
+                                                         velocity,
+                                                         acceleration,
                                                          AbsOrRel.ABSOLUTE) == 0
 
     '''
