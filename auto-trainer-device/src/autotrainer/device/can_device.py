@@ -276,15 +276,19 @@ class CanDevice(Device):
             self._homing_motors = motors
 
     def _move_motor(self, motor: Motor, location, context, method):
-        assert isinstance(location, float) or isinstance(location, int)
+        # The location is either a position or a (position, rate) pair
+        if isinstance(location, float) or isinstance(location, int):
+            position = location
+        else:
+            position = location[0]
 
         if self._desired_location is not None:
             self._complete_command(context)
         else:
             self._pending_move_token = context
-            self._desired_location = float(location)
+            self._desired_location = float(position)
             self._active_motor = motor
-            method(self._desired_location)
+            method(location)
 
             logger.debug(
                 f"[{datetime.now()}]"
