@@ -252,7 +252,7 @@ def round_trip_test(motor: Motor, trips: int, device_thread):
         return
 
     for i in range(trips):
-        device_thread.send_message(kind, data=22.0)
+        device_thread.send_message(kind, data=22.0)  # in mm
         time.sleep(2)
         print_status = motor
         time.sleep(1)

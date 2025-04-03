@@ -179,8 +179,8 @@ class StepperConfig(Source):
     _motor: Motor = Motor.NONE
     _micro_steps: int = 64
     _steps_per_revolution: float = 48.0
-    _max_velocity: float = 61
-    _max_acceleration: float = 244
+    _max_velocity: float = 61		# mm/sec
+    _max_acceleration: float = 244   # mm/sec^2
     _flip_limit_orientation: bool = False
 
     @classmethod
