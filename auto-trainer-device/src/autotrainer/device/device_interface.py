@@ -156,7 +156,7 @@ class ServoConfig(Source):
 @dataclass
 class ServoStatus(Source):
     motor: Motor = Motor.NONE
-    position: float = 0
+    position: float = 0  # (deg)
 
     def __init__(self, target: Target, motor: Motor, position: float):
         super().__init__(target)
@@ -179,8 +179,8 @@ class StepperConfig(Source):
     _motor: Motor = Motor.NONE
     _micro_steps: int = 64
     _steps_per_revolution: float = 48.0
-    _max_velocity: float = 25.0
-    _max_acceleration: float = 100.0
+    _max_velocity: float = 61  # mm/sec
+    _max_acceleration: float = 244  # mm/sec^2
     _flip_limit_orientation: bool = False
 
     @classmethod
@@ -252,7 +252,7 @@ class StepperConfig(Source):
 @dataclass
 class StepperStatus(Source):
     _motor: Motor = Motor.NONE
-    _position: float = 0
+    _position: float = 0  # (mm)
     _limit_switch: bool = False
 
     def __init__(self, target: Target, motor: Motor, position: float, limit_switch: bool):

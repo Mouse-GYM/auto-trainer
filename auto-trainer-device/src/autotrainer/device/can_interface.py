@@ -22,6 +22,7 @@ except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
 from .device_interface import *
+from .stepper_motor import mm_to_turns, turns_to_mm
 from autotrainer.core.message import Motor
 
 logger = logging.getLogger(__name__)
@@ -518,7 +519,7 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
         return addr is not None and self._jc.PressureSensorTare(addr, 0) == 0
 
-    def set_servo_position(self, position, config):
+    def _set_servo_position(self, position, config):
         assert isinstance(config, ServoConfig)
         if position < 0:
             position = 0
@@ -531,7 +532,11 @@ class CanInterface(DeviceInterface):
                                                        config.maximum_acceleration,
                                                        AbsOrRel.ABSOLUTE) == 0
 
-    def set_stepper_position(self, position, config):
+    def _set_stepper_position(self, position, config):
+        position = mm_to_turns(position)
+        max_vel = mm_to_turns(config.maximum_velocity)
+        max_acc = mm_to_turns(config.maximum_acceleration)
+
         if position < 0:
             position = 0
         elif position > 12:
@@ -540,8 +545,8 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(target_of_motor(config.motor))
         return addr is not None and self._jc.StepperMove(addr, _motor_to_id(config.motor),
                                                          position,
-                                                         config.maximum_velocity,
-                                                         config.maximum_acceleration,
+                                                         max_vel,
+                                                         max_acc,
                                                          AbsOrRel.ABSOLUTE) == 0
 
     '''
@@ -549,44 +554,42 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_magnet(self, position: int) -> bool:
-        logger.info(f"set magnet position {position}")
-        return self.set_servo_position(position, self.magnet_config)
+        return self._set_servo_position(position, self.magnet_config)
 
     '''
     Set the position of the X-direction motor
     '''
 
     def set_x(self, position: float) -> bool:
-        return self.set_stepper_position(position, self.x_config)
+        return self._set_stepper_position(position, self.x_config)
 
     '''
     Set the position of the Y-direction motor
     '''
 
     def set_y(self, position: float) -> bool:
-        return self.set_stepper_position(position, self.y_config)
+        return self._set_stepper_position(position, self.y_config)
 
     '''
     Set the position of the Z-direction motor
     '''
 
     def set_z(self, position: float) -> bool:
-        return self.set_stepper_position(position, self.z_config)
+        return self._set_stepper_position(position, self.z_config)
 
     '''
     Set the position of the load arm
     '''
 
     def set_load(self, position: float):
-        return self.set_servo_position(position, self.load_config)
+        return self._set_servo_position(position, self.load_config)
 
     '''
     Set the position of the cover for pellet delivery
-    DEPRECATED
     '''
 
     def set_cover(self, position):
-        return self.set_servo_position(position, self.cover_config)
+        return self._set_servo_position(position, self.cover_config)
 
     '''
     Open the cover so the pellet is visible to the animal
@@ -601,6 +604,7 @@ class CanInterface(DeviceInterface):
 
     '''
     Open the cover so the pellet is visible to the animal
+    DEPRECATED
     '''
 
     def cover_pellet(self) -> bool:
@@ -630,11 +634,14 @@ class CanInterface(DeviceInterface):
         if addr is None:
             return False
 
+        max_vel = mm_to_turns(config.maximum_velocity)
+        max_acc = mm_to_turns(config.maximum_acceleration)
+
         if self._jc.StepperCfgWrite(addr, motor_id,
                                     config.microsteps,
                                     config.steps_per_revolution,
-                                    config.maximum_velocity,
-                                    config.maximum_acceleration,
+                                    max_vel,
+                                    max_acc,
                                     config.flip_limit_orientation) == 0:
             logger.debug(
                 f"stepper {addr} {motor_id} config write:\n"
@@ -804,8 +811,9 @@ class CanInterface(DeviceInterface):
             config.microsteps = message.cfg_response.stepper.microsteps
             config.steps_per_revolution = message.cfg_response.stepper.steps_per_revolution
             config.flip_limit_orientation = message.cfg_response.stepper.flip_limit_orientation
-            config.maximum_velocity = message.cfg_response.stepper.motor_max_velocity
-            config.maximum_acceleration = message.cfg_response.stepper.motor_max_acceleration
+            config.maximum_velocity = turns_to_mm(message.cfg_response.stepper.motor_max_velocity)
+            config.maximum_acceleration = turns_to_mm(
+                message.cfg_response.stepper.motor_max_acceleration)
             return config
 
         elif message.type == JerryCANCmdType.GPIO_READ:
@@ -940,7 +948,7 @@ class CanInterface(DeviceInterface):
                 return None
 
             status = StepperStatus(target, motor,
-                                   message.stepper_status.position,
+                                   turns_to_mm(message.stepper_status.position),
                                    message.stepper_status.limit_switch)
 
             return status
