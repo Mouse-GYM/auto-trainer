@@ -21,8 +21,12 @@ class PelletDelivery(GymDevice):
 
         self._commands_with_status = {}
 
+        # This hardware does not report motor positions.  The tracks the last X, Y, Z command values, which translate
+        # to the send location on the hardware.  This allows a crude form of reporting positions.  It is less for the
+        # accuracy of the position with the hardware and more to fulfill the position status behavior to avoid
+        # special casing all users for differences in hardware.
         self._send_x = 0
-        self._send_y = 2
+        self._send_y = 0
         self._send_z = 0
 
     def notify_message(self, kind: int, data: object, context: object = None):
@@ -74,10 +78,10 @@ class PelletDelivery(GymDevice):
         else:
             logger.warning(f"unknown message kind: {kind}")
 
-    def _command_acknowledged(self, token: object):
+    def _acknowledge_command(self, token: object):
         response = self._commands_with_status.pop(token, None)
 
-        super()._command_acknowledged(token)
+        super()._acknowledge_command(token)
 
         if response is not None:
             if response[0] == PelletDeliveryMessageKind.SEND_HOME:

@@ -63,7 +63,8 @@ class AppModel(ObservableObject):
         return self._ports
 
     def set_position(self, value: float):
-        self._device_connection.send_message(HeadFixMessageKind.SET_MAGNET_INTENSITY, value)
+        if self._device_connection is not None:
+            self._device_connection.send_message(HeadFixMessageKind.SET_MAGNET_INTENSITY, value)
 
     def tare(self):
         if self._device_connection is not None:

@@ -59,7 +59,7 @@ class GymDevice(Device):
                 self._last_command = ""
                 self._read_buffer = ""
 
-                self._command_acknowledged(self._last_command_token)
+                self._acknowledge_command(self._last_command_token)
 
                 self._is_busy = False
 
@@ -70,10 +70,6 @@ class GymDevice(Device):
                     pass
             else:
                 self._read_buffer += resp.strip()
-
-    def _command_acknowledged(self, token: object):
-        EventManager.post_event(GymDeviceEventKind.deviceCommandAcknowledge, context=token)
-        self._api.send_message(GymDeviceMessageKind.ACK, token)
 
     def _send_data(self, data: str, token: object = None):
         if not self._is_busy:

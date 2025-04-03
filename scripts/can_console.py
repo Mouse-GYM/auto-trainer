@@ -267,8 +267,7 @@ def run_monitor():
     global perf_count
     global print_status
 
-    device = CanDevice()
-    device_thread = DeviceConnection(device, msg_queue)
+    device_thread = DeviceConnection(CanDevice(), msg_queue)
 
     device_thread.start()
 

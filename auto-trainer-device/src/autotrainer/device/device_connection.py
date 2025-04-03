@@ -44,7 +44,7 @@ class DeviceConnection:
     """
 
     def __init__(self, device: Device, message_queue: Queue = None,
-                 message_callback: Callable[[int, object], None] = None, name=None):
+                 message_callback: Callable[[int, object], None] = None, name="device-connection"):
         super().__init__()
 
         # The message queue and the callback are ways to get data from the device back to the client script or
@@ -59,7 +59,7 @@ class DeviceConnection:
         self._api = DeviceApi(message_callback=message_callback, message_queue=message_queue)
         self._device.api = self._api
 
-        self._name = name if name is not None else "device-thread"
+        self._name = name
 
         self._read_limit: int = 1 if HAVE_CAN_DEVICE else math.inf
 

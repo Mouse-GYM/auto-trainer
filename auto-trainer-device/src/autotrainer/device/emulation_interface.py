@@ -45,16 +45,16 @@ class EmulationInterface(DeviceInterface):
         if now - self._last_message > 1:
             self._last_message = now
             messages.append(
-                StepperStatus(0, Motor.PELLET_X_MOTOR, self._pellet_x, self._pellet_x == 0))
+                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, self._pellet_x, self._pellet_x == 0))
             messages.append(
-                StepperStatus(0, Motor.PELLET_Y_MOTOR, self._pellet_y, self._pellet_y == 0))
+                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Y_MOTOR, self._pellet_y, self._pellet_y == 0))
             messages.append(
-                StepperStatus(0, Motor.PELLET_Z_MOTOR, self._pellet_z, self._pellet_z == 0))
+                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR, self._pellet_z, self._pellet_z == 0))
 
-            messages.append(ServoStatus(0, Motor.PELLET_COVER_SERVO, self._barrier_pos))
-            messages.append(ServoStatus(0, Motor.PELLET_LOAD_SERVO, self._load_pos))
+            messages.append(ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_COVER_SERVO, self._barrier_pos))
+            messages.append(ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, self._load_pos))
 
-            messages.append(ServoStatus(1, Motor.MAGNET_SERVO, self._magnet_pos))
+            messages.append(ServoStatus(Target.MAGNET_DEVICE, Motor.MAGNET_SERVO, self._magnet_pos))
         return messages
 
     def write(self, value: typing.Any) -> int:

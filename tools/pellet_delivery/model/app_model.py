@@ -142,7 +142,7 @@ class AppModel(ObservableObject):
                                                           self._command_pending)
 
     def refresh_ports(self):
-        self._ports = get_available_hardware()
+        self._ports = get_available_hardware(allow_can_emulation=True)
 
         return self._ports
 

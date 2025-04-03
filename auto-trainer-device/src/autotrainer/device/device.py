@@ -1,7 +1,11 @@
 import typing
 
+from autotrainer.core import EventManager
+
 from .device_interface import DeviceInterface
 from .device_api import DeviceApi
+from .device_event_kind import GymDeviceEventKind
+from .device_message_kind import GymDeviceMessageKind
 
 
 class Device:
@@ -37,6 +41,12 @@ class Device:
         :param context: A value to be returned to caller upon completion of the message
         """
         pass
+
+    def _acknowledge_command(self, token: object):
+        EventManager.post_event(GymDeviceEventKind.deviceCommandAcknowledge, context=token)
+
+        if self._api is not None:
+            self._api.send_message(GymDeviceMessageKind.ACK, token)
 
     @property
     def api(self):

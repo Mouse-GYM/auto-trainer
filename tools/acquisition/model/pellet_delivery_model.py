@@ -104,9 +104,7 @@ class PelletDeliveryModel(ObservableObject):
         if not self.port or len(self.port) == 0:
             return
 
-        pellet_delivery = PelletDelivery(self.port)
-
-        self._device_thread = DeviceConnection(pellet_delivery, self._message_queue)
+        self._device_thread = DeviceConnection(PelletDelivery(self.port), self._message_queue)
         self._device_thread.name = "pellet"
 
         self._device_thread.start()
