@@ -167,7 +167,7 @@ def test_tare_load_cell(interface: CanInterface):
     for tries in range(3):
         loadcell = get_response(interface, LoadCellReading, Target.MAGNET_DEVICE)
         assert loadcell is not None
-        if abs(loadcell.load_mv) <= 0.1:
+        if abs(loadcell.load) <= 0.1:
             return
 
     assert False
