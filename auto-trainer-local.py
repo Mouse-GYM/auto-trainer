@@ -54,13 +54,18 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--configuration", help="configuration file", default=None, type=str)
     parser.add_argument("-t", "--telemetry", help="telemetry endpoint", default=None, type=str)
     parser.add_argument("-d", "--dev", help="enable development mode and options", action="store_true")
+    parser.add_argument("-e", "--allow-can-emulation", help="include CAN emulation as a connection option",
+                        default="", type=str)
 
     args = parser.parse_args()
+
+    # strtobool compatibility is all over the place.
+    allow_emulation = args.allow_can_emulation.lower() in ["true", "yes", "1"]
 
     if args.telemetry:
         configure_telemetry(args.telemetry)
 
-    if run_acquisition(args.configuration, args.dev):
+    if run_acquisition(args.configuration, args.dev, allow_emulation):
         sys.exit(0)
     else:
         sys.exit(1)

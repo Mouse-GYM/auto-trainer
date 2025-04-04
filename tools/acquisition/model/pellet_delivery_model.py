@@ -3,8 +3,8 @@ import queue
 import uuid
 from typing import Optional
 
-from autotrainer.core import ObservableObject, ProjectInfo, PelletReader
-from autotrainer.device import PelletDeliveryMessageKind
+from autotrainer.core import ObservableObject, ProjectInfo, PelletReader, SystemMessageHandler, MessageHandler
+from autotrainer.device import PelletDeliveryMessageKind, get_available_hardware
 from autotrainer.device import PelletDelivery
 from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
@@ -12,8 +12,10 @@ logger = logging.getLogger(__name__)
 
 
 class PelletDeliveryModel(ObservableObject):
-    def __init__(self):
+    def __init__(self, allow_can_emulation: bool = False):
         super().__init__()
+
+        self._allow_can_emulation = allow_can_emulation
 
         self._message_queue = queue.Queue()
 
@@ -21,8 +23,8 @@ class PelletDeliveryModel(ObservableObject):
 
         self._device_thread = None
 
-        self._pellet_reader = None
-        self._pellet_reader = PelletReader(self._message_queue)
+        self._message_handler = None
+        self._message_handler = SystemMessageHandler(self._message_queue)
 
         self._is_connected = False
 
@@ -67,8 +69,8 @@ class PelletDeliveryModel(ObservableObject):
         return self._z
 
     @property
-    def pellet_reader(self) -> PelletReader:
-        return self._pellet_reader
+    def pellet_reader(self) -> MessageHandler:
+        return self._message_handler
 
     def set_x(self, value: int) -> object:
         self._x = self._on_property_changed("x", value, self._x)
@@ -100,6 +102,9 @@ class PelletDeliveryModel(ObservableObject):
     def cover_pellet(self) -> object:
         return self._send_with_token(PelletDeliveryMessageKind.COVER_PELLET)
 
+    def refresh_ports(self):
+        return get_available_hardware(allow_can_emulation=self._allow_can_emulation)
+
     def connect_to_device(self):
         if not self.port or len(self.port) == 0:
             return
@@ -129,7 +134,7 @@ class PelletDeliveryModel(ObservableObject):
         self._is_connected = False
 
     def on_activated(self):
-        self._pellet_reader.start()
+        self._message_handler.start()
 
     def on_close(self):
         self.disconnect_from_device()
