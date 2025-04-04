@@ -45,8 +45,8 @@ class CanDevice(Device):
 
         self._measurement_buffer_count = buffer_size
         self._measurements: typing.List[HeadFixMeasurement] = []
-        self._current_measurement = None
 
+        self._current_pressure = 0
         self._current_digital = 0
         self._current_temperature = 0
         self._current_humidity = 0
@@ -89,7 +89,7 @@ class CanDevice(Device):
             return
 
         if kind == GymDeviceMessageKind.VERSION:
-            self._api.send_message(GymDeviceMessageKind.VERSION, "1.0")
+            self._interface.request_version()
             self._complete_command(context)
 
         elif kind == GymDeviceMessageKind.READ_CONFIG:
@@ -179,6 +179,21 @@ class CanDevice(Device):
             self._interface.emit_tone(data[0], data[1])
             self._complete_command(context)
 
+        elif kind == GymDeviceMessageKind.SET_DIGITAL_OUTPUT:
+            assert isinstance(data, tuple)  # channel, state
+            self._interface.set_digital_output(DigitalOutputs(data[0]), data[1] != 0)
+            self._complete_command(context)
+
+        elif kind == GymDeviceMessageKind.SET_ANALOG_OUTPUT:
+            assert isinstance(data, tuple)  # channel, voltage
+            self._interface.set_analog_output(AnalogOutputs(data[0]), data[1])
+            self._complete_command(context)
+
+        elif kind == GymDeviceMessageKind.SET_RGB_LED:
+            assert isinstance(data, tuple)
+            self._interface.set_color_led(data[0], data[1], data[2])
+            self._complete_command(context)
+
         elif kind == HeadFixMessageKind.STREAM_START or \
             kind == HeadFixMessageKind.STREAM_STOP:
             pass
@@ -197,24 +212,24 @@ class CanDevice(Device):
                 pass
 
             elif isinstance(message, LoadCellReading):
-                self._current_measurement = HeadFixMeasurement(time.time(),
-                                                               time.perf_counter_ns(),
-                                                               message.load_mv,
-                                                               self._current_digital, 0,
-                                                               self._current_temperature,
-                                                               self._current_humidity,
-                                                               self._current_audio)
+                measurement = HeadFixMeasurement(time.time(),
+                                                 time.perf_counter_ns(),
+                                                 message.load,
+                                                 self._current_digital,
+                                                 self._current_pressure,
+                                                 self._current_temperature,
+                                                 self._current_humidity,
+                                                 self._current_audio)
 
-            elif isinstance(message, PressureReading):
-                if self._current_measurement is not None:
-                    self._current_measurement.pressure = message.pressure_mv
-                    self._measurements.append(self._current_measurement)
-                    self._current_measurement = None
+                self._measurements.append(measurement)
 
                 if len(self._measurements) >= self._measurement_buffer_count:
-                    self._api.send_message(HeadFixMessageKind.MEASUREMENT,
+                    self._api.send_message(SystemStatusMessageKind.MEASUREMENTS,
                                            self._measurements.copy())
                     self._measurements = list()
+
+            elif isinstance(message, PressureReading):
+                self._current_pressure = message.pressure
 
             elif isinstance(message, SensorStatus):
                 self._current_temperature = message.temperature_c * (9.0 / 5) + 32
@@ -222,6 +237,15 @@ class CanDevice(Device):
 
             elif isinstance(message, MagnetDigitalInputs):
                 self._current_digital = message.continuity_0
+
+            elif isinstance(message, PelletDigitalInputs):
+                if self._api is not None:
+                    self.api.send_message(SystemStatusMessageKind.STIMULUS_INPUTS,
+                                          [message.stimulus_1,
+                                           message.stimulus_2,
+                                           message.stimulus_3,
+                                           message.stimulus_4]
+                                          )
 
             elif isinstance(message, AudioData):
                 self._current_audio = message.magnitudes
@@ -241,6 +265,17 @@ class CanDevice(Device):
             elif isinstance(message, ServoConfig):
                 if self._api is not None:
                     self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
+
+            elif isinstance(message, Version):
+                if self._api is not None:
+                    self.api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version)
+
+            elif isinstance(message, DoorData):
+                if self._api is not None:
+                    self.api.send_message(SystemStatusMessageKind.FRONT_DOOR,
+                                          message.open_state[0])
+                    self.api.send_message(SystemStatusMessageKind.DRAWER_DOOR,
+                                          message.open_state[1])
 
         # Check for any delay requests
         if self._delay_period is not None:

@@ -4,6 +4,7 @@ import queue
 import time
 from threading import Thread
 from copy import copy
+from enum import IntEnum
 
 from autotrainer.core import SystemStatusMessageKind
 from autotrainer.device import CanDevice, DeviceThread, DeviceThreadMessageKind, \
@@ -20,7 +21,8 @@ output_file = None
 perf_start = None
 perf_count = -1
 perf_print = False
-print_status = Motor.NONE
+print_motor_status = Motor.NONE
+print_status = None
 positions = {
     PelletDeliveryMessageKind.SET_X: 0,
     PelletDeliveryMessageKind.SET_Y: 0,
@@ -28,8 +30,15 @@ positions = {
 }
 
 
+class StatusType(IntEnum):
+    FRONT_DOOR = 1,
+    DRAWER_DOOR = 2,
+    SENSORS = 3,
+    STIMULUS = 4,
+
+
 def monitor_message_queue():
-    global perf_start, perf_count, print_status, positions
+    global perf_start, perf_count, print_motor_status, positions, print_status
     logger.info("starting message queue thread")
 
     measurement_count = 0
@@ -50,10 +59,19 @@ def monitor_message_queue():
         if kind == DeviceThreadMessageKind.TERMINATE:
             break
 
-        elif kind == GymDeviceMessageKind.VERSION:
+        elif kind == SystemStatusMessageKind.FIRMWARE_VERSION:
             print(data)
 
-        elif kind == HeadFixMessageKind.MEASUREMENT:
+        elif kind == SystemStatusMessageKind.MEASUREMENTS:
+            if print_status is StatusType.SENSORS:
+                d = data[0]
+                print(f"- Head Detect:     {d.switch}")
+                print(f"- Load Weight (v): {d.weight:.3f}")
+                print(f"- Pressure (v):    {d.pressure:.3f}")
+                print(f"- Temperature (F): {d.temperature:.1f}")
+                print(f"- Humidity (%):    {d.humidity:.1f}")
+                print_status = StatusType.DRAWER_DOOR
+
             if perf_start is None:
                 perf_start = time.perf_counter_ns()
 
@@ -102,36 +120,52 @@ def monitor_message_queue():
                       )
 
         elif ((kind == SystemStatusMessageKind.PELLET_COVER and
-               print_status is Motor.PELLET_COVER_SERVO) or
+               print_motor_status is Motor.PELLET_COVER_SERVO) or
               (kind == SystemStatusMessageKind.PELLET_LOAD and
-               print_status is Motor.PELLET_LOAD_SERVO) or
+               print_motor_status is Motor.PELLET_LOAD_SERVO) or
               (kind == SystemStatusMessageKind.HEAD_MAGNET and
-               print_status is Motor.MAGNET_SERVO)):
+               print_motor_status is Motor.MAGNET_SERVO)):
 
             # TODO deliver full packet. See can_device at or around line 328
             # assert isinstance(data, ServoStatus)
             print(
                 f"SERVO:\n"
                 # f"- target={target_to_str(data.target)}\n"
-                f"- motor={motor_to_str(print_status)}\n"
+                f"- motor={motor_to_str(print_motor_status)}\n"
                 f"- position (deg)={data:.2f}\n"
             )
-            print_status = Motor.NONE
+            print_motor_status = Motor.NONE
         elif ((kind == SystemStatusMessageKind.PELLET_X and
-               print_status is Motor.PELLET_X_MOTOR) or
+               print_motor_status is Motor.PELLET_X_MOTOR) or
               (kind == SystemStatusMessageKind.PELLET_Y and
-               print_status is Motor.PELLET_Y_MOTOR) or
+               print_motor_status is Motor.PELLET_Y_MOTOR) or
               (kind == SystemStatusMessageKind.PELLET_Z and
-               print_status is Motor.PELLET_Z_MOTOR)):
+               print_motor_status is Motor.PELLET_Z_MOTOR)):
             # assert isinstance(data, StepperStatus)
             print(
                 f"STEPPER:\n"
                 # f"target={target_to_str(data.target)}\n"
-                f"- motor={motor_to_str(print_status)}\n"
+                f"- motor={motor_to_str(print_motor_status)}\n"
                 f"- position (mm) ={data:.2f}\n"
                 # f"- limit={data.is_at_limit}\n"
             )
-            print_status = Motor.NONE
+            print_motor_status = Motor.NONE
+
+        elif kind == SystemStatusMessageKind.DRAWER_DOOR:
+            if print_status is StatusType.DRAWER_DOOR:
+                print(f"- Drawer Door:     {'Open' if data else 'Closed'}")
+                print_status = StatusType.FRONT_DOOR
+
+        elif kind == SystemStatusMessageKind.FRONT_DOOR:
+            if print_status is StatusType.FRONT_DOOR:
+                print(f"- Front Door:      {'Open' if data else 'Closed'}")
+                print_status = StatusType.STIMULUS
+
+        elif kind == SystemStatusMessageKind.STIMULUS_INPUTS:
+            if print_status is StatusType.STIMULUS:
+                for i in range(4):
+                    print(f"- Stimulus #{i + 1}:     {data[i]}")
+                print_status = None
 
         if kind == SystemStatusMessageKind.PELLET_X or \
             kind == SystemStatusMessageKind.PELLET_Y or \
@@ -153,11 +187,11 @@ def str_to_motor(motor_name: str):
         return Motor.PELLET_Y_MOTOR
     elif motor_name == 'z':
         return Motor.PELLET_Z_MOTOR
-    elif motor_name == 'load':
+    elif motor_name == 'load' or motor_name == 'l':
         return Motor.PELLET_LOAD_SERVO
-    elif motor_name == 'cover':
+    elif motor_name == 'cover' or motor_name == 'c':
         return Motor.PELLET_COVER_SERVO
-    elif motor_name == 'magnet':
+    elif motor_name == 'magnet' or motor_name == 'm':
         return Motor.MAGNET_SERVO
     else:
         return None
@@ -236,30 +270,19 @@ def wait_for_move(kind, position):
 
 
 def round_trip_test(motor: Motor, trips: int, device_thread):
-    global print_status, positions
+    global print_motor_status, positions
 
-    kind = None
-
-    if motor is Motor.PELLET_X_MOTOR:
-        kind = PelletDeliveryMessageKind.SET_X
-    elif motor is Motor.PELLET_Y_MOTOR:
-        kind = PelletDeliveryMessageKind.SET_Y
-    elif motor is Motor.PELLET_Z_MOTOR:
-        kind = PelletDeliveryMessageKind.SET_Z
-
-    if kind is None:
-        print("Test only supports Stepper Motors")
-        return
+    cmd = motor_to_set_command[motor]
 
     for i in range(trips):
-        device_thread.send_message(kind, data=22.0)  # in mm
+        device_thread.send_message(cmd, data=22.0 if is_stepper(motor) else 100)  # in mm or deg
         time.sleep(2)
-        print_status = motor
+        print_motor_status = motor
         time.sleep(1)
 
-        device_thread.send_message(kind, data=0)
+        device_thread.send_message(cmd, data=0)
         time.sleep(2)
-        print_status = motor
+        print_motor_status = motor
         time.sleep(1)
 
 
@@ -273,6 +296,7 @@ def move_parameter(params):
 
 def run_monitor():
     global perf_count
+    global print_motor_status
     global print_status
 
     device = CanDevice()
@@ -296,108 +320,76 @@ def run_monitor():
             cmd = line[0]
             params = line[1:]
 
-            try:
-                if cmd == 'q':
-                    device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
-                    msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
-                    break
-                elif cmd == '?':
-                    print("?                  ::help")
-                    print("a <motor>          ::Read Configuration")
-                    print("b <motor>          ::Write Configuration")
-                    print("c                  ::Cover Pellet")
-                    print("d <freq> <period>  ::Tone (hz, sec)")
-                    print("e <motor> <trips>  ::Stepper round trip test")
-                    print("f <file>           ::Load Motor Configuration")
-                    print("F <file>           ::Load Compound Movement Configuration")
-                    print("h                  ::Home Position")
-                    print("l                  ::Load Pellet")
-                    print(
-                        "m <pos> [<rate>]   ::Move Magnet Servo pos => [0:120] (deg) rate=->[0:100]")
-                    print(
-                        "n <pos> [<rate>]   ::Move Load Servo pos => [0:120] (deg) rate=->[0:100]")
-                    print(
-                        "o <pos> [<rate>]   ::Move Cover Servo pos => [0:120] (deg) rate=->[0:100]")
-                    print("q                  ::Quit")
-                    print("r                  ::Release Pellet")
-                    print("s                  ::Send Pellet")
-                    print("t                  ::Tare Load Cell/Pressure Sensors")
-                    print("v                  ::Version (not available yet)")
-                    print("w <motor>          ::Motor Status")
-                    print("x <pos> [<rate>]   ::Move X pos => [0:27] (mm) rate=->[0:100] (%)")
-                    print("y <pos> [<rate>]   ::Move Y pos => [0:27] (mm) rate=->[0:100] (%)")
-                    print("z <pos> [<rate>]   ::Move Z pos => [0:27] (mm) rate=->[0:100] (%)")
-                    print("X                  ::Home X to Limit")
-                    print("Y                  ::Home Y to Limit")
-                    print("Z                  ::Home Z to Limit")
-                    print()
-                    print("<motor> is one of [x, y, z, load, cover, magnet]")
+            motor = str_to_motor(cmd)
 
-                elif cmd == 'a':
-                    device_thread.send_message(GymDeviceMessageKind.READ_CONFIG,
-                                               str_to_motor(params[0]))
-                elif cmd == 'b':
-                    write_config(str_to_motor(params[0]), device_thread)
-                elif cmd == 'c':
-                    device_thread.send_message(PelletDeliveryMessageKind.COVER_PELLET)
-                elif cmd == 'd':
+            # 'a' - audio
+            # 'c' - cover servo
+            # 'f' - load-from-files
+            # 'h' - help
+            # 'l' - load servo
+            # 'm' - magnet servo
+            # 'o' - set output
+            # 'p' - pellet move commands
+            # 'r' - RGB LED
+            # 's' - System status
+            # 't' - Tare scales
+            # 'v' - version
+            # 'x' - x motor
+            # 'y' - y motor
+            # 'z' - z motor
+            try:
+                if cmd == '?':
+                    print_help()
+
+                elif motor is not None:
+                    handle_motor_command(motor, params, device_thread)
+
+                elif cmd == 'a' or cmd == 'audio':
                     device_thread.send_message(PelletDeliveryMessageKind.PLAY_TONE,
                                                # period from sec to msec
                                                data=(int(params[0]), int(params[1]) * 1000))
-                elif cmd == 'e':
-                    round_trip_test(str_to_motor(params[0]), int(params[1]), device_thread)
-                elif cmd == 'f':
-                    file = MotorConfigurationFile(params[0])
-                    device_thread.use_motor_configurations(file)
-                elif cmd == 'F':
-                    file = CompoundMovementFile(params[0])
-                    device_thread.use_compound_movements(file)
-                elif cmd == 'h':
-                    device_thread.send_message(PelletDeliveryMessageKind.SEND_HOME)
-                elif cmd == 'l':
-                    device_thread.send_message(PelletDeliveryMessageKind.LOAD_PELLET)
-                elif cmd == 'm':
-                    device_thread.send_message(HeadFixMessageKind.SET_MAGNET_INTENSITY,
-                                               data=move_parameter(params))
-                elif cmd == 'n':
 
-                    device_thread.send_message(PelletDeliveryMessageKind.SET_LOAD_SERVO,
-                                               data=move_parameter(params))
-                elif cmd == 'o':
-                    device_thread.send_message(PelletDeliveryMessageKind.SET_COVER_SERVO,
-                                               data=move_parameter(params))
-                elif cmd == 'r':
-                    device_thread.send_message(PelletDeliveryMessageKind.RELEASE_PELLET)
-                elif cmd == 's':
-                    device_thread.send_message(PelletDeliveryMessageKind.SEND_PELLET)
-                elif cmd == 't':
+                elif cmd == 'f' or cmd == 'file':
+                    if params[0] == 'motor':
+                        file = MotorConfigurationFile(params[1])
+                        device_thread.use_motor_configurations(file)
+                    elif cmd == 'move':
+                        file = CompoundMovementFile(params[1])
+                        device_thread.use_compound_movements(file)
+                    else:
+                        print(f"Unknown file request: {params[0]}")
+
+                elif cmd == 'h' or cmd == 'home':
+                    device_thread.send_message(PelletDeliveryMessageKind.SEND_HOME)
+
+                elif cmd == 'o' or cmd == 'output':
+                    handle_output_command(params, device_thread)
+
+                elif cmd == 'p' or cmd == 'pellet':
+                    handle_pellet_command(params, device_thread)
+
+                elif cmd == 'q' or cmd == 'quit':
+                    device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
+                    msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+                    break
+
+                elif cmd == 'r' or cmd == 'rgb':
+                    device_thread.send_message(GymDeviceMessageKind.SET_RGB_LED,
+                                               (int(params[0]), int(params[1]), int(params[2])))
+
+                elif cmd == 's' or cmd == 'status':
+                    print_status = StatusType.SENSORS
+
+                elif cmd == 't' or cmd == 'tare':
                     device_thread.send_message(HeadFixMessageKind.UPDATE_SCALE_TARE)
-                elif cmd == 'v':
+
+                elif cmd == 'v' or cmd == 'version':
                     device_thread.send_message(GymDeviceMessageKind.VERSION)
-                elif cmd == 'w':
-                    print_status = str_to_motor(params[0])
-                elif cmd == 'x':
-                    device_thread.send_message(PelletDeliveryMessageKind.SET_X,
-                                               data=move_parameter(params))
-                elif cmd == 'y':
-                    device_thread.send_message(PelletDeliveryMessageKind.SET_Y,
-                                               data=move_parameter(params))
-                elif cmd == 'z':
-                    device_thread.send_message(PelletDeliveryMessageKind.SET_Z,
-                                               data=move_parameter(params))
-                elif cmd == 'X':
-                    device_thread.send_message(PelletDeliveryMessageKind.SEND_TO_LIMITS,
-                                               data=Motor.PELLET_X_MOTOR)
-                elif cmd == 'Y':
-                    device_thread.send_message(PelletDeliveryMessageKind.SEND_TO_LIMITS,
-                                               data=Motor.PELLET_Y_MOTOR)
-                elif cmd == 'Z':
-                    device_thread.send_message(PelletDeliveryMessageKind.SEND_TO_LIMITS,
-                                               data=Motor.PELLET_Z_MOTOR)
+
             except ValueError:
                 print("Invalid numeric value in command")
             except IndexError:
-                print("Invalid command protocol")
+                print(f"Invalid command: {cmd} {params}")
         else:
             if not mon_thread.is_alive():
                 device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
@@ -410,6 +402,141 @@ def run_monitor():
     device_thread.join()
 
     logger.info("done")
+
+
+motor_to_set_command = {
+    Motor.PELLET_X_MOTOR: PelletDeliveryMessageKind.SET_X,
+    Motor.PELLET_Y_MOTOR: PelletDeliveryMessageKind.SET_Y,
+    Motor.PELLET_Z_MOTOR: PelletDeliveryMessageKind.SET_Z,
+    Motor.MAGNET_SERVO: HeadFixMessageKind.SET_MAGNET_INTENSITY,
+    Motor.PELLET_COVER_SERVO: PelletDeliveryMessageKind.SET_COVER_SERVO,
+    Motor.PELLET_LOAD_SERVO: PelletDeliveryMessageKind.SET_LOAD_SERVO
+}
+
+
+def handle_motor_command(motor: Motor, params, device_thread):
+    global print_motor_status
+    try:
+        float(params[0])
+        numeric = True
+    except ValueError:
+        numeric = False
+    except IndexError:
+        numeric = False
+
+    # query stepper status
+    if len(params) == 0:
+        print_motor_status = motor
+
+    # set position
+    elif params[0] == 'set':
+        device_thread.send_message(motor_to_set_command[motor],
+                                   data=move_parameter(params[1:]))
+
+    # set position (no 'set')
+    elif numeric:
+        device_thread.send_message(motor_to_set_command[motor],
+                                   data=move_parameter(params[0:]))
+
+    # sent to home position
+    elif params[0] == 'home':
+        device_thread.send_message(PelletDeliveryMessageKind.SEND_TO_LIMITS, data=motor)
+
+    elif params[0] == 'trip':
+        round_trip_test(motor, int(params[1]), device_thread)
+
+    # read or write configuration
+    elif params[0] == 'config':
+        if params[1] == 'read':
+            device_thread.send_message(GymDeviceMessageKind.READ_CONFIG, data=motor)
+        elif params[1] == 'write':
+            write_config(motor, device_thread)
+        else:
+            print(f"Unrecognized configuration request: {params[1]}")
+    else:
+        print(f"Unrecognized motor command: {params[0]}")
+
+
+def handle_pellet_command(params, device_thread):
+    """
+    Handle a pellet control sequence
+    """
+    cmd = params[0]
+
+    if cmd == 'cover' or cmd == 'c':
+        device_thread.send_message(PelletDeliveryMessageKind.COVER_PELLET)
+    elif cmd == 'load' or cmd == 'l':
+        device_thread.send_message(PelletDeliveryMessageKind.LOAD_PELLET)
+    elif cmd == 'release' or cmd == 'r':
+        device_thread.send_message(PelletDeliveryMessageKind.RELEASE_PELLET)
+    elif cmd == 'send' or cmd == 's':
+        device_thread.send_message(PelletDeliveryMessageKind.SEND_PELLET)
+    else:
+        print(f"Unrecognized pellet command: {cmd}")
+
+
+def handle_output_command(params, device_thread):
+    cmd = params[0]
+
+    if cmd == 'd' or cmd == 'digital':
+        device_thread.send_message(GymDeviceMessageKind.SET_DIGITAL_OUTPUT,
+                                   (int(params[1]), int(params[2])))
+    elif cmd == 'a' or cmd == 'analog':
+        device_thread.send_message(GymDeviceMessageKind.SET_ANALOG_OUTPUT,
+                                   (int(params[1]), float(params[2])))
+
+
+def print_help():
+    print("?                                 "
+          " ::help")
+    print("q[uit]                            "
+          " ::Quit")
+    print("v[ersion]                         "
+          " ::Version")
+    print("<motor>                           "
+          " ::Motor status")
+    print("<motor> [set] <pos> [<rate>]      "
+          " ::Move servo pos [0:120] (deg) rate [0:100] (%)\n"
+          "                                  "
+          " ::Move stepper pos [0:27] (mm) rate [0:100] (%)")
+    print("<motor> config read               "
+          " ::Read Configuration")
+    print("<motor> config write              "
+          " ::Write Configuration")
+    print("<motor> trip <cnt>                "
+          " :: <cnt> Round trips")
+    print("<motor> is one of: {x, y, z, l[oad], c[over], m[agnet]}")
+    print()
+
+    print("p[ellet] c[over]                  "
+          " ::Cover Pellet")
+    print("p[ellet] l[oad]                   "
+          " ::Load Pellet")
+    print("p[ellet] r[elease]                "
+          " ::Release Pellet")
+    print("p[ellet] s[end]                   "
+          " ::Send Pellet")
+    print()
+
+    print("a[udio] <freq> <period>           "
+          " ::Audio sound (hz) (sec)")
+    print("h[ome]                            "
+          " ::Home Position")
+    print("f[ile] motor <file>               "
+          " ::Load Motor Configuration")
+    print("f[ile] move <file>                "
+          " ::Load Compound Movement Configuration")
+    print("o[utput] d[igital] <chan> <state> "
+          " ::Set digital output on pellet chan [1:4] state [0:1]")
+    print("o[utput] a[nalog] <chan> <mvolts> "
+          " ::Set analog output on pellet chan [0] mvolts [0:5000]")
+    print("s[tatus]                          "
+          " ::Show Status")
+    print("r[gb] <red> <green> <blue>        "
+          " :: Set RGB LED. Values in %")
+    print("t[are]                            "
+          " ::Tare Load Cell/Pressure Sensors")
+    print()
 
 
 if __name__ == '__main__':
