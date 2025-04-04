@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import os
 import logging
+import time
 from datetime import datetime
 from typing import Callable, Optional
 
 import numpy
 
-from autotrainer.core import ObservableObject, ProjectInfo, ProjectInterval, PerfMonitor
+from autotrainer.core import ObservableObject, ProjectInfo, ProjectInterval, PerfMonitor, AudioSpectrumMessage
 from .headbar_pressure_monitor import HeadbarPressureMonitor
 
 from .load_cell_monitor import LoadCellMonitor
@@ -16,16 +17,23 @@ from .load_cell_tare_monitor import LoadCellTareMonitor
 logger = logging.getLogger(__name__)
 
 
+# TODO: Separate true analysis from data recording to file(s) for post-analysis.
 class SensorAnalysis(ObservableObject):
     def __init__(self):
         super().__init__()
 
         self._project_info: Optional[ProjectInfo] = None
         self._interval = ProjectInterval.HOUR
+
+        # The "monitor" CSV file with the bulk of the sensor data.
         self._record_file = None
         self._current_record_interval = -1
-
         self._had_write_error = False
+
+        # The audio spectrum file.
+        self._audio_record_file = None
+        self._current_audio_record_interval = -1
+        self._audio_had_write_error = False
 
         self._is_headbar_engaged = False
 
@@ -52,6 +60,7 @@ class SensorAnalysis(ObservableObject):
 
         self._project_info = value
         self._update_record_file()
+        self._update_audio_file()
 
         self._perf_monitor.reset()
 
@@ -157,6 +166,31 @@ class SensorAnalysis(ObservableObject):
 
         return weights, switch, pressure, temperature, humidity
 
+    def audio_spectrum_received(self, spectrum: AudioSpectrumMessage):
+        if spectrum is None or not spectrum.magnitudes:
+            return
+
+        if self._audio_record_file is not None:
+            file_timestamp = datetime.now()
+
+            needs_update = file_timestamp.hour != self._current_audio_record_interval \
+                if self._interval == ProjectInterval.HOUR \
+                else file_timestamp.minute != self._current_audio_record_interval
+
+            if needs_update:
+                self._update_audio_file()
+
+        # May or may not exist after the above.
+        if self._audio_record_file is not None:
+            try:
+                self._audio_record_file.write(f"{spectrum.when}, {spectrum.index}," +
+                                              f"{','.join([str(s) for s in spectrum.magnitudes])}\n")
+            except Exception as e:
+                # This could be too much if something major is wrong.  Just output once per file rotation.
+                if not self._audio_had_write_error:
+                    logger.error(f"<sensor-analysis>: unable to write: {e}")
+                    self._audio_had_write_error = True
+
     def _load_cell_property_changed(self, _name, value, _):
         self._is_load_cell_engaged = self._on_property_changed("is_load_cell_engaged", value,
                                                                self._is_load_cell_engaged)
@@ -189,6 +223,39 @@ class SensorAnalysis(ObservableObject):
                 self._record_file = location
                 logger.info(f"<sensor-analysis>: saving to {interval_file_info.file}")
                 self._had_write_error = False
+            except:
+                logger.error(f"<sensor-analysis>: unable to write to {interval_file_info.file}")
+
+        return None
+
+    def _update_audio_file(self) -> None:
+        if self._audio_record_file is not None:
+            try:
+                self._audio_record_file.close()
+            except:
+                pass
+
+            self._audio_record_file = None
+
+        if self._project_info is not None:
+            interval_file_info = self._project_info.get_audio_spectrum_file(interval=self._interval)
+
+            if interval_file_info is None:
+                logger.error("<sensor-analysis>: unable to write to expected audio file location")
+                return
+
+            try:
+                file_existed = os.path.exists(interval_file_info.file)
+
+                location = open(interval_file_info.file, "a")
+
+                if not file_existed:
+                    location.write(f"Time, Index, {','.join(['Bin ' + str(s) for s in range(32)])}\n")
+
+                self._current_audio_record_interval = interval_file_info.current_interval
+                self._audio_record_file = location
+                logger.info(f"<sensor-analysis>: saving audio spectrum to {interval_file_info.file}")
+                self._audio_had_write_error = False
             except:
                 logger.error(f"<sensor-analysis>: unable to write to {interval_file_info.file}")
 

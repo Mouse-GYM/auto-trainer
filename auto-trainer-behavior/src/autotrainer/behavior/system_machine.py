@@ -4,7 +4,7 @@ from threading import Timer
 from opentelemetry import trace
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager, PelletReader, MessageHandler
+from autotrainer.core import ProjectInfo, EventManager, MessageHandler
 from autotrainer.inference import PoseResponse
 
 from .system_machine_state import SystemState

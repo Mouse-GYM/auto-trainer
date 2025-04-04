@@ -1,4 +1,4 @@
-from autotrainer.core import ObservableObject, HeadFixReader, SensorAnalysis
+from autotrainer.core import ObservableObject, SensorAnalysis
 
 
 class MockHeadfix(ObservableObject):

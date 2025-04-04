@@ -46,16 +46,16 @@ class MessageHandler(ObservableObject):
             self._current_thread.start()
 
     def run(self):
-        logger.debug(f"<{self._name}>: entering run loop")
+        logger.debug(f"<{self._name}>: entering message event loop")
 
         while True:
             msg, data = self._input_queue.get()
 
             if msg == TERMINATE:
                 break
-            elif msg == SystemStatusMessageKind.ACK:
+            elif msg == SystemStatusMessageKind.ACKNOWLEDGE:
                 self.ack_received(data)
-            elif msg == SystemStatusMessageKind.VERSION:
+            elif msg == SystemStatusMessageKind.FIRMWARE_VERSION:
                 self.property_changed(MessageHandler.FIRMWARE_VERSION, data, None)
             else:
                 self.message_received(msg, data)
@@ -64,7 +64,7 @@ class MessageHandler(ObservableObject):
 
         self._current_thread = None
 
-        logger.debug(f"<{self._name}>: exiting run loop")
+        logger.debug(f"<{self._name}>: exiting message event loop")
 
     def request_terminate(self):
         """

@@ -1,4 +1,4 @@
-from typing import Protocol, List
+from typing import Protocol
 
 
 class MeasurementMessage(Protocol):
@@ -58,9 +58,4 @@ class MeasurementMessage(Protocol):
     @property
     def head_contact(self) -> bool:
         """The head contact DIO value state.  True if contact is made, False otherwise."""
-        pass
-
-    @property
-    def spectrum(self) -> List[float]:
-        """A list of frequency spectrum values in dB."""
         pass

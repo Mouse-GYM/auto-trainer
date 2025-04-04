@@ -311,6 +311,8 @@ class ColorLed(Source):
 @dataclass
 class AudioData(Source):
     packet_id: int = 0
+    when: float = 0
+    index: int = 0
     magnitudes = []
 
 

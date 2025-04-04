@@ -4,8 +4,7 @@ import os
 import time
 from queue import Queue
 
-from autotrainer.core import MeasurementData, HeadFixReader, SystemStatusMessageKind, EventManager
-from autotrainer.core.analysis.device_reader import TERMINATE
+from autotrainer.core import MeasurementData, SystemStatusMessageKind, EventManager, SystemMessageHandler
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("root").setLevel(logging.WARNING)
@@ -22,7 +21,7 @@ def process_data(file: str, batch_size: int = 20):
 
     queue = Queue()
 
-    reader = HeadFixReader(queue)
+    reader = SystemMessageHandler(queue)
 
     reader.start()
 
@@ -37,7 +36,7 @@ def process_data(file: str, batch_size: int = 20):
             queue.put((SystemStatusMessageKind.MEASUREMENT, measurement_buffer))
             measurement_buffer = []
 
-    queue.put((TERMINATE, None))
+    reader.request_terminate()
 
     print("waiting for processing to complete")
 

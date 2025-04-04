@@ -4,7 +4,7 @@ import queue
 import time
 from threading import Thread
 
-from autotrainer.device import GymDeviceMessageKind, HeadFixMessageKind
+from autotrainer.core import SystemStatusMessageKind, SystemCommandKind
 from autotrainer.device import HeadFix
 from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
@@ -41,7 +41,7 @@ def monitor_message_queue():
         if msg[0] == DeviceThreadMessageKind.TERMINATE:
             break
 
-        if msg[0] == HeadFixMessageKind.MEASUREMENT and output_fd is not None:
+        if msg[0] == SystemStatusMessageKind.MEASUREMENT and output_fd is not None:
             if perf_start is None:
                 perf_start = time.perf_counter_ns()
             for measurement in msg[1]:
@@ -92,17 +92,17 @@ def run_monitor(port: str, timeout: int):
                 msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
                 break
             elif cmd.startswith("A"):
-                device_thread.send_message(HeadFixMessageKind.RAW_COMMAND, cmd + "x")
+                device_thread.send_message(SystemCommandKind.RAW_COMMAND, cmd + "x")
             elif cmd.startswith("O"):
-                device_thread.send_message(HeadFixMessageKind.SETTINGS)
+                device_thread.send_message(SystemCommandKind.SETTINGS)
             elif cmd.startswith("F"):
-                device_thread.send_message(GymDeviceMessageKind.VERSION)
+                device_thread.send_message(SystemCommandKind.REQUEST_VERSION)
             elif cmd.startswith("M"):
-                device_thread.send_message(HeadFixMessageKind.UPDATE_SCALE_TARE)
+                device_thread.send_message(SystemCommandKind.UPDATE_SCALE_TARE)
             elif cmd.startswith("S"):
-                device_thread.send_message(HeadFixMessageKind.STREAM_START)
+                device_thread.send_message(SystemCommandKind.STREAM_START)
             elif cmd.startswith("T"):
-                device_thread.send_message(HeadFixMessageKind.STREAM_STOP)
+                device_thread.send_message(SystemCommandKind.STREAM_STOP)
         else:
             # Perform performance calculation and exit.
             if not mon_thread.is_alive():

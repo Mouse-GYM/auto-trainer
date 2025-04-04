@@ -21,7 +21,6 @@ class MeasurementData(MeasurementMessage):
     temperature_val: float
     humidity_val: float
     head_contact_val: bool
-    spectrum_val: List[float]
 
     @property
     def when(self) -> float:
@@ -59,10 +58,6 @@ class MeasurementData(MeasurementMessage):
     def head_contact(self) -> bool:
         return self.head_contact_val
 
-    @property
-    def spectrum(self) -> List[float]:
-        return self.spectrum_val
-
     @classmethod
     def from_file(cls, path: str) -> List[Self]:
         measurements = []
@@ -78,7 +73,7 @@ class MeasurementData(MeasurementMessage):
                                   weight_val=float(line[2]),
                                   head_contact_val=int(line[3]) == 1, pressure_val=int(line[4]),
                                   temperature_val=float(line[5]),
-                                  humidity_val=float(line[6]), spectrum_val=[])
+                                  humidity_val=float(line[6]))
 
                 measurements.append(measurement)
 

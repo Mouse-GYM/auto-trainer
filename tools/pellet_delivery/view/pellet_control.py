@@ -1,10 +1,12 @@
 from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, QLayout, QVBoxLayout, \
     QFormLayout
 
-from autotrainer.pyside import CardWidget
+from autotrainer.pyside import CardWidget, ATSeparator
 from tools.pellet_delivery.model.app_model import AppModel
 
 _NO_UPDATES = "(no updates)"
+
+_MIN_CONTROL_BUTTON_WIDTH = 120
 
 
 def add_position(label: str, s_min: int, s_max: int) -> (QLayout, QSpinBox):
@@ -15,6 +17,7 @@ def add_position(label: str, s_min: int, s_max: int) -> (QLayout, QSpinBox):
     position_layout.addWidget(QLabel(label), 0)
 
     pos = QSpinBox()
+    pos.setMinimumWidth(140)
     pos.setMinimum(s_min)
     pos.setMaximum(s_max)
     pos.setWrapping(False)
@@ -31,80 +34,83 @@ class PelletControl(QWidget):
 
         self._app_model.property_changed += self._model_property_changed
 
-        control_widget = CardWidget(background_color="#00b6de")
+        control_widget = CardWidget(background_color=None, header_background_color="#00b6de")
 
-        layout = QGridLayout()
+        layout = QVBoxLayout()
 
+        layout.addLayout(self._create_button_layout())
+
+        layout.addWidget(ATSeparator("#dedede"))
+
+        layout.addLayout(self._create_move_layout())
+
+        control_widget.setContentLayout(layout)
+        control_widget.header.setTitle("Control", "white")
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(control_widget)
+        self.setLayout(layout)
+
+        self.setEnabled(False)
+
+    def _create_button_layout(self):
         b_layout = QHBoxLayout()
+        b_layout.setContentsMargins(12, 12, 12, 12)
         b_layout.setSpacing(8)
 
         self._home_button = QPushButton("Home")
+        self._home_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
         self._home_button.clicked.connect(lambda: self._app_model.send_home())
         b_layout.addWidget(self._home_button)
 
+        b_layout.addStretch(1)
+
         self._load_button = QPushButton("Load")
+        self._load_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
         self._load_button.clicked.connect(lambda: self._app_model.load_pellet())
         b_layout.addWidget(self._load_button)
 
         self._send_button = QPushButton("Send")
+        self._send_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
         self._send_button.clicked.connect(lambda: self._app_model.send_pellet())
         b_layout.addWidget(self._send_button)
 
+        b_layout.addStretch(1)
+
         self._release_button = QPushButton("Release")
+        self._release_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
         self._release_button.clicked.connect(lambda: self._app_model.release_pellet())
         b_layout.addWidget(self._release_button)
 
         self._cover_button = QPushButton("Cover")
+        self._cover_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
         self._cover_button.clicked.connect(lambda: self._app_model.cover_pellet())
         b_layout.addWidget(self._cover_button)
 
-        layout.addLayout(b_layout, 0, 0, 1, 3)
+        return b_layout
+
+    def _create_move_layout(self):
+        s_layout = QHBoxLayout()
+        s_layout.setContentsMargins(4, 8, 4, 8)
 
         p_layout, self._x_pos = add_position("X (mm):", -10, 10)
         self._x_pos.valueChanged.connect(self._update_x)
-        layout.addLayout(p_layout, 1, 0)
+        s_layout.addLayout(p_layout)
+
+        s_layout.addStretch(1)
 
         p_layout, self._y_pos = add_position("Y (mm):", -10, 10)
         self._y_pos.valueChanged.connect(self._update_y)
-        layout.addLayout(p_layout, 1, 1)
+        s_layout.addLayout(p_layout)
+
+        s_layout.addStretch(1)
 
         p_layout, self._z_pos = add_position("Z (mm):", -10, 10)
         self._z_pos.valueChanged.connect(self._update_z)
-        layout.addLayout(p_layout, 1, 2)
+        s_layout.addLayout(p_layout)
 
-        content = QWidget()
-        content.setLayout(layout)
-        control_widget.setContentWidget(content)
-
-        # Header
-        self._header = QWidget()
-        h_layout = QHBoxLayout()
-        h_layout.setContentsMargins(0, 0, 0, 0)
-
-        title = QLabel("Control")
-        title.setStyleSheet("font-weight: bold; color: white")
-        h_layout.addWidget(title)
-
-        h_layout.addStretch(1)
-
-        self._header.setLayout(h_layout)
-
-        control_widget.header.setContent(self._header)
-
-        self._x_device = QLabel(_NO_UPDATES)
-        self._y_device = QLabel(_NO_UPDATES)
-        self._z_device = QLabel(_NO_UPDATES)
-
-        self._load_arm = QLabel(_NO_UPDATES)
-        self._cover_arm = QLabel(_NO_UPDATES)
-
-        # Final layout
-        layout = QGridLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(control_widget, 0, 0, 1, 2)
-        self.setLayout(layout)
-
-        self.setEnabled(False)
+        return s_layout
 
     def _update_x(self):
         self._app_model.set_x(self._x_pos.value())

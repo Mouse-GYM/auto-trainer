@@ -7,13 +7,12 @@ try:
 except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
-from autotrainer.device import (CanDevice, DeviceApi, CanInterface, GymDeviceMessageKind,
-                                HeadFixMessageKind, PelletDeliveryMessageKind, Status,
-                                Target, LoadCellReading, PressureReading, SensorStatus,
+from autotrainer.core.message import SystemStatusMessageKind, SystemCommandKind
+from autotrainer.device import (CanDevice, DeviceApi, CanInterface,
+                                Status, Target, LoadCellReading, PressureReading, SensorStatus,
                                 MagnetDigitalInputs, Motor, StepperStatus, ServoStatus,
-                                ServoConfig, StepperConfig, MotorSteps
+                                ServoConfig, StepperConfig, MotorSteps, HAVE_CAN_DEVICE, EmulationInterface
                                 )
-from autotrainer.core.message import SystemStatusMessageKind
 
 _expected = []
 
@@ -26,7 +25,7 @@ def notify_command(kind, tag, data=None, expected=None, repeat=1, expectAck: boo
     device = _construction()
     _expected = expected
     if expectAck:
-        _expected.append((GymDeviceMessageKind.ACK, tag))
+        _expected.append((SystemStatusMessageKind.ACKNOWLEDGE, tag))
 
     for i in range(repeat):
         device.notify_message(kind, data, tag)
@@ -55,10 +54,14 @@ def _construction():
     except (ModuleNotFoundError, TypeError, AttributeError):
         assert False
 
-    interface = CanInterface()
-    # for these tests, do NOT open interface
-    interface._set_magnet_address(0x40)
-    interface._set_pellet_address(0x01)
+    if HAVE_CAN_DEVICE:
+        interface = CanInterface()
+        # for these tests, do NOT open interface
+        interface._set_magnet_address(0x40)
+        interface._set_pellet_address(0x01)
+    else:
+        interface = EmulationInterface()
+
     device.api = DeviceApi(message_callback=data_callback)
 
     return device
@@ -66,58 +69,58 @@ def _construction():
 
 @pytest.mark.canbus
 def test_notify_version():
-    notify_command(GymDeviceMessageKind.VERSION, 101)
+    notify_command(SystemCommandKind.REQUEST_VERSION, 101)
 
 
 @pytest.mark.canbus
 def test_notify_tare_load_cell():
-    notify_command(HeadFixMessageKind.UPDATE_SCALE_TARE, 102)
+    notify_command(SystemCommandKind.UPDATE_SCALE_TARE, 102)
 
 
 @pytest.mark.canbus
 def test_notify_set_magnet():
-    notify_command(HeadFixMessageKind.SET_MAGNET_INTENSITY, 103, data=3.0, expectAck=False)
+    notify_command(SystemCommandKind.SET_MAGNET_INTENSITY, 103, data=3.0, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_set_x():
-    notify_command(PelletDeliveryMessageKind.SET_X, 10.4, data=4, expectAck=False)
+    notify_command(SystemCommandKind.SET_X, 10.4, data=4, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_set_y():
-    notify_command(PelletDeliveryMessageKind.SET_Y, 10.5, data=5, expectAck=False)
+    notify_command(SystemCommandKind.SET_Y, 10.5, data=5, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_set_z():
-    notify_command(PelletDeliveryMessageKind.SET_Z, 10.6, data=6, expectAck=False)
+    notify_command(SystemCommandKind.SET_Z, 10.6, data=6, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_set_home():
     device = _construction()
-    device.notify_message(PelletDeliveryMessageKind.SEND_HOME, None)
+    device.notify_message(SystemCommandKind.SEND_HOME, None)
 
 
 @pytest.mark.canbus
 def test_notify_load_pellet():
-    notify_command(PelletDeliveryMessageKind.LOAD_PELLET, 107, expectAck=False)
+    notify_command(SystemCommandKind.LOAD_PELLET, 107, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_send_pellet():
-    notify_command(PelletDeliveryMessageKind.SEND_PELLET, 108, expectAck=False)
+    notify_command(SystemCommandKind.SEND_PELLET, 108, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_release_pellet():
-    notify_command(PelletDeliveryMessageKind.RELEASE_PELLET, 109, expectAck=False)
+    notify_command(SystemCommandKind.RELEASE_PELLET, 109, expectAck=False)
 
 
 @pytest.mark.canbus
 def test_notify_cover_pellet():
-    notify_command(PelletDeliveryMessageKind.COVER_PELLET, 110, expectAck=False)
+    notify_command(SystemCommandKind.COVER_PELLET, 110, expectAck=False)
 
 
 @pytest.mark.canbus
@@ -185,7 +188,7 @@ def test_servo_config():
                          0, 0, 0)
 
     _expected = [
-        (GymDeviceMessageKind.READ_CONFIG, config)
+        (SystemStatusMessageKind.MOTOR_CONFIGURATION, config)
     ]
     notify_data(config)
 
@@ -197,7 +200,7 @@ def test_stepper_config():
     config = StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, 0, 0,
                            0, 0, False)
     _expected = [
-        (GymDeviceMessageKind.READ_CONFIG, config),
+        (SystemStatusMessageKind.MOTOR_CONFIGURATION, config),
     ]
     notify_data(config)
 

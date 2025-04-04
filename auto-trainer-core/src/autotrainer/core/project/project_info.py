@@ -177,6 +177,14 @@ class ProjectInfo:
                                                           os.path.join(path.location, f"{path.prefix}.{ext}"),
                                                           path.interval)
 
+    def get_audio_spectrum_file(self, name: str = "spectrum", ext: str = "csv",
+                         interval: ProjectInterval = ProjectInterval.HOUR) -> IntervalFileInfo | None:
+        path = self.get_interval_path(name, interval)
+
+        return None if path is None else IntervalFileInfo(path.location,
+                                                          os.path.join(path.location, f"{path.prefix}.{ext}"),
+                                                          path.interval)
+
     def get_video_path(self, name: str = "",
                        interval: ProjectInterval = ProjectInterval.NONE, session: int = -1,
                        allow_overwrite: bool = False) -> Tuple[str | None, str | None]:

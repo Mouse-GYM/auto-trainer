@@ -30,7 +30,7 @@ class PelletStatus(QWidget):
 
     # noinspection PyMethodMayBeStatic
     def _create_motor_panel(self, x, y, z) -> QWidget:
-        panel = CardWidget(background_color="#00b6de")
+        panel = CardWidget(header_background_color="#00b6de")
 
         layout = QFormLayout()
         layout.addRow("X (mm):", x)
@@ -58,7 +58,7 @@ class PelletStatus(QWidget):
 
     # noinspection PyMethodMayBeStatic
     def _create_servo_panel(self, load, cover) -> QWidget:
-        panel = CardWidget(background_color="#00b6de")
+        panel = CardWidget(header_background_color="#00b6de")
 
         layout = QFormLayout()
         layout.addRow("Load Arm (\u00b0):", load)

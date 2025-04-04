@@ -24,18 +24,13 @@ try:
 except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
-from autotrainer.core import EventManager
-from autotrainer.core.message import SystemStatusMessageKind
+from autotrainer.core import EventManager, SystemStatusMessageKind, SystemCommandKind, AudioSpectrumData
 
 from .motor_steps import MotorSteps
 from .device import Device
 from .emulation_interface import EmulationInterface
 from .device_api import DeviceApi
-from .device_message_kind import GymDeviceMessageKind
-from .device_event_kind import GymDeviceEventKind
 from .head_fix_measurement import HeadFixMeasurement
-from .pellet_delivery_message_kind import PelletDeliveryMessageKind
-from .head_fix_message_kind import HeadFixMessageKind
 from .can_interface import CanInterface, motor_to_str
 from .device_interface import *
 
@@ -94,15 +89,15 @@ class CanDevice(Device):
         if self._interface is None:
             return
 
-        if kind == GymDeviceMessageKind.VERSION:
+        if kind == SystemCommandKind.REQUEST_VERSION:
             self._interface.request_version()
             self._acknowledge_command(context)
 
-        elif kind == GymDeviceMessageKind.READ_CONFIG:
+        elif kind == SystemCommandKind.READ_MOTOR_CONFIGURATION:
             assert isinstance(data, Motor)
             self._interface.request_motor_config(data)
 
-        elif kind == GymDeviceMessageKind.WRITE_CONFIG:
+        elif kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
             assert isinstance(data, Tuple)
             motor = data[0]
             config = data[1]
@@ -110,48 +105,48 @@ class CanDevice(Device):
             assert isinstance(config, ServoConfig) or isinstance(config, StepperConfig)
             self._interface.set_motor_configuration(motor, config)
 
-        elif kind == GymDeviceMessageKind.SET_LOAD_PROCEDURE:
+        elif kind == SystemCommandKind.SET_LOAD_PROCEDURE:
             assert isinstance(data, MotorSteps)
             logger.info(f"Setting LOAD procedure to: \n{data.steps}")
             self._load_movement = data
 
-        elif kind == GymDeviceMessageKind.SET_SEND_PROCEDURE:
+        elif kind == SystemCommandKind.SET_SEND_PROCEDURE:
             assert isinstance(data, MotorSteps)
             logger.info(f"Setting SEND procedure to: \n{data.steps}")
             self._send_movement = data
 
-        elif kind == HeadFixMessageKind.UPDATE_SCALE_TARE:
+        elif kind == SystemCommandKind.UPDATE_SCALE_TARE:
             self._interface.tare_load_cell()
             self._interface.tare_pressure_sensor()
             self._acknowledge_command(context)
 
-        elif kind == HeadFixMessageKind.SET_MAGNET_INTENSITY:
+        elif kind == SystemCommandKind.SET_MAGNET_INTENSITY:
             self._move_motor(Motor.MAGNET_SERVO, data, context, self._interface.set_magnet)
 
-        elif kind == PelletDeliveryMessageKind.SET_LOAD_SERVO:
+        elif kind == SystemCommandKind.SET_LOAD_SERVO:
             self._move_motor(Motor.PELLET_LOAD_SERVO, data, context, self._interface.set_load)
 
-        elif kind == PelletDeliveryMessageKind.SET_COVER_SERVO:
+        elif kind == SystemCommandKind.SET_COVER_SERVO:
             self._move_motor(Motor.PELLET_COVER_SERVO, data, context, self._interface.set_cover)
 
-        elif kind == PelletDeliveryMessageKind.SET_X:
+        elif kind == SystemCommandKind.SET_X:
             self._move_motor(Motor.PELLET_X_MOTOR, data, context, self._interface.set_x)
 
-        elif kind == PelletDeliveryMessageKind.SET_Y:
+        elif kind == SystemCommandKind.SET_Y:
             self._move_motor(Motor.PELLET_Y_MOTOR, data, context, self._interface.set_y)
 
-        elif kind == PelletDeliveryMessageKind.SET_Z:
+        elif kind == SystemCommandKind.SET_Z:
             self._move_motor(Motor.PELLET_Z_MOTOR, data, context, self._interface.set_z)
 
-        elif kind == PelletDeliveryMessageKind.SEND_TO_LIMITS:
+        elif kind == SystemCommandKind.SEND_TO_LIMITS:
             motor = typing.cast(Motor, data)
             self._home([motor], context)
 
-        elif kind == PelletDeliveryMessageKind.SEND_HOME:
+        elif kind == SystemCommandKind.SEND_HOME:
             self._home([Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR],
                        context)
 
-        elif kind == PelletDeliveryMessageKind.LOAD_PELLET:
+        elif kind == SystemCommandKind.LOAD_PELLET:
             if self._pending_move_token is not None or self._load_movement is None:
                 self._acknowledge_command(context)
                 return
@@ -160,7 +155,7 @@ class CanDevice(Device):
             logger.info(f"performing compound action: {self._compound_movement}")
             self._perform_next_compound_step()
 
-        elif kind == PelletDeliveryMessageKind.SEND_PELLET:
+        elif kind == SystemCommandKind.SEND_PELLET:
             if self._pending_move_token is not None or self._send_movement is None:
                 self._acknowledge_command(context)
                 return
@@ -169,39 +164,39 @@ class CanDevice(Device):
             logger.info(f"performing compound action: {self._compound_movement}")
             self._perform_next_compound_step()
 
-        elif kind == PelletDeliveryMessageKind.RELEASE_PELLET:
+        elif kind == SystemCommandKind.RELEASE_PELLET:
             self._move_motor(Motor.PELLET_COVER_SERVO,
                              self._interface.cover_config.minimum_position, context,
                              self._interface.set_cover)
             self._interface.emit_tone(2000, 6000)
 
-        elif kind == PelletDeliveryMessageKind.COVER_PELLET:
+        elif kind == SystemCommandKind.COVER_PELLET:
             self._move_motor(Motor.PELLET_COVER_SERVO,
                              self._interface.cover_config.maximum_position, context,
                              self._interface.set_cover)
 
-        elif kind == PelletDeliveryMessageKind.PLAY_TONE:
+        elif kind == SystemCommandKind.PLAY_TONE:
             assert isinstance(data, tuple)
             self._interface.emit_tone(data[0], data[1])
             self._acknowledge_command(context)
 
-        elif kind == GymDeviceMessageKind.SET_DIGITAL_OUTPUT:
+        elif kind == SystemCommandKind.SET_DIGITAL_OUTPUT:
             assert isinstance(data, tuple)  # channel, state
             self._interface.set_digital_output(DigitalOutputs(data[0]), data[1] != 0)
             self._acknowledge_command(context)
 
-        elif kind == GymDeviceMessageKind.SET_ANALOG_OUTPUT:
+        elif kind == SystemCommandKind.SET_ANALOG_OUTPUT:
             assert isinstance(data, tuple)  # channel, voltage
             self._interface.set_analog_output(AnalogOutputs(data[0]), data[1])
             self._acknowledge_command(context)
 
-        elif kind == GymDeviceMessageKind.SET_RGB_LED:
+        elif kind == SystemCommandKind.SET_RGB_LED:
             assert isinstance(data, tuple)
             self._interface.set_color_led(data[0], data[1], data[2])
             self._acknowledge_command(context)
 
-        elif kind == HeadFixMessageKind.STREAM_START or \
-            kind == HeadFixMessageKind.STREAM_STOP:
+        elif kind == SystemCommandKind.STREAM_START or \
+                kind == SystemCommandKind.STREAM_STOP:
             pass
 
         else:
@@ -224,8 +219,7 @@ class CanDevice(Device):
                                                  self._current_digital,
                                                  self._current_pressure,
                                                  self._current_temperature,
-                                                 self._current_humidity,
-                                                 self._current_audio)
+                                                 self._current_humidity)
 
                 self._measurements.append(measurement)
 
@@ -238,7 +232,7 @@ class CanDevice(Device):
                 self._current_pressure = message.pressure
 
             elif isinstance(message, SensorStatus):
-                self._current_temperature = message.temperature_c * (9.0 / 5) + 32
+                self._current_temperature = message.temperature_c
                 self._current_humidity = message.humidity_percent
 
             elif isinstance(message, MagnetDigitalInputs):
@@ -254,7 +248,9 @@ class CanDevice(Device):
                                           )
 
             elif isinstance(message, AudioData):
-                self._current_audio = message.magnitudes
+                self.api.send_message(SystemStatusMessageKind.AUDIO_SPECTRUM,
+                                      AudioSpectrumData(when_val=message.when, index_val=message.index,
+                                                        magnitudes_val=message.magnitudes))
 
             elif isinstance(message, StepperStatus):
                 self._manage_next_move(message.motor,
@@ -266,11 +262,11 @@ class CanDevice(Device):
 
             elif isinstance(message, StepperConfig):
                 if self._api is not None:
-                    self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
+                    self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message)
 
             elif isinstance(message, ServoConfig):
                 if self._api is not None:
-                    self.api.send_message(GymDeviceMessageKind.READ_CONFIG, message)
+                    self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message)
 
             elif isinstance(message, Version):
                 if self._api is not None:
@@ -290,7 +286,10 @@ class CanDevice(Device):
                 logger.debug("delay end")
                 self._perform_next_compound_step()
 
-        # Breath on Linux
+        # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
+        # significantly slow down the system without explicitly yielding, despite being in its own thread.  This is
+        # not the case for other platforms/combinations of the above so may not be apparent when not on the
+        # deployment current platform.
         time.sleep(0.001)
 
     '''
@@ -331,7 +330,6 @@ class CanDevice(Device):
             method(location)
 
             logger.debug(
-                f"[{datetime.now()}]"
                 f" motor: {motor_to_str(self._active_motor)}"
                 f" desired: {self._desired_location}"
                 f" token: {self._pending_move_token}")
@@ -361,8 +359,8 @@ class CanDevice(Device):
         # print(f"desired={self._desired_location}/{position} motor="
         #       f"{self._active_motor}/{motor}")
         if self._desired_location is not None and \
-            motor == self._active_motor and \
-            abs(position - self._desired_location) < 0.01:
+                motor == self._active_motor and \
+                abs(position - self._desired_location) < 0.01:
             if self._compound_movement is not None:
                 self._perform_next_compound_step()
             else:
