@@ -15,9 +15,12 @@ a list of data sets that are then propagated to the rest of the application.
 
 import logging
 import time
+from symbol import and_expr
 
 try:
-    from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel
+    from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
+        JerryCANBootloaderCmd
+
 except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
@@ -527,6 +530,8 @@ class CanInterface(DeviceInterface):
         elif isinstance(position, tuple):
             velocity = float(position[1]) / 100.0 * config.maximum_velocity
             position = float(position[0])
+        else:
+            return
 
         if position < 0:
             position = 0
@@ -534,10 +539,10 @@ class CanInterface(DeviceInterface):
             position = 120
 
         acceleration = config.maximum_acceleration
-        
+
         addr = self._tgt2addr(target_of_motor(config.motor))
         return addr is not None and self._jc.ServoMove(addr, _motor_to_id(config.motor),
-                                                       position, 
+                                                       position,
                                                        velocity,
                                                        acceleration,
                                                        AbsOrRel.ABSOLUTE) == 0
@@ -550,6 +555,8 @@ class CanInterface(DeviceInterface):
         elif isinstance(position, tuple):
             velocity = float(position[1]) / 100.0 * config.maximum_velocity
             position = float(position[0])
+        else:
+            return
 
         position = mm_to_turns(position)
         velocity = mm_to_turns(velocity)
@@ -767,8 +774,13 @@ class CanInterface(DeviceInterface):
     '''
 
     def set_analog_output(self, channel: AnalogOutputs, millivolts: int) -> bool:
+        if channel is AnalogOutputs.STATUS_OUT:
+            channel = 0
+        else:
+            return False
+
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and self._jc.AnalogOutWrite(addr, int(channel.value),
+        return addr is not None and self._jc.AnalogOutWrite(addr, channel,
                                                             millivolts) == 0
 
     '''
@@ -779,6 +791,19 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         return addr is not None and self._jc.RGBLEDWrite(addr, red_percent, green_percent,
                                                          blue_percent) == 0
+
+    def request_version(self) -> bool:
+        pellet = self._tgt2addr(Target.PELLET_DEVICE)
+        magnet = self._tgt2addr(Target.MAGNET_DEVICE)
+
+        pellet = pellet is not None and \
+                 self._jc.BootloaderCommand(pellet,
+                                            JerryCANBootloaderCmd.SubCommand.VERSION)
+        magnet = magnet is not None and \
+                 self._jc.BootloaderCommand(magnet,
+                                            JerryCANBootloaderCmd.SubCommand.VERSION)
+
+        return pellet & magnet
 
     # NOTE: E-Stop is not implemented in the target
     # def emergency_stop(self) -> bool:
@@ -797,6 +822,17 @@ class CanInterface(DeviceInterface):
             heartbeat = Heartbeat()
             heartbeat.target = _addr2tgt(message.dst_id)
             return heartbeat
+
+        elif message.type == JerryCANCmdType.BOOTLOADER_RESPONSE:
+            # print("BOOTLOADER")
+            if (message.bootloader_response.type ==
+                JerryCANBootloaderCmd.SubCommand.VERSION):
+                target = _addr2tgt(message.dst_id)
+                return Version(target,
+                               target_to_str(target) + ': ' + \
+                               str(message.bootloader_response.version.running_major) + '.' + \
+                               str(message.bootloader_response.version.running_minor) + '.' + \
+                               str(message.bootloader_response.version.running_patch) + '.')
 
         elif (message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type ==
               JerryCANCfgMsg.Type.SERVO):
@@ -937,10 +973,11 @@ class CanInterface(DeviceInterface):
             door = DoorData()
             door.target = _addr2tgt(message.dst_id)
 
+            # reported state is inverse of requested state. See gym_device.py
             door.open_state = [
-                message.doors.opened & 0x1 != 0,
-                message.doors.opened & 0x2 != 0,
-                message.doors.opened & 0x4 != 0,
+                message.doors.opened & 0x1 == 0,
+                message.doors.opened & 0x2 == 0,
+                message.doors.opened & 0x4 == 0,
             ]
 
             return door

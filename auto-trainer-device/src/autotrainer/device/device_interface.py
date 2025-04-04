@@ -293,12 +293,12 @@ class AnalogOutput(Source):
 
 @dataclass
 class LoadCellReading(Source):
-    load_mv: float = 0
+    load: float = 0
 
 
 @dataclass
 class PressureReading(Source):
-    pressure_mv: float = 0
+    pressure: float = 0
 
 
 @dataclass
@@ -328,6 +328,11 @@ class Status(Source):
 class SensorStatus(Source):
     temperature_c: float = 0
     humidity_percent: float = 0
+
+
+@dataclass
+class Version(Source):
+    version: str = "Unknown"
 
 
 class DeviceInterface:
