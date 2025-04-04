@@ -1,10 +1,9 @@
 from PySide6.QtCore import QSize
 from PySide6.QtWidgets import QMainWindow, QStatusBar
 
+from autotrainer.core import MessageHandler
 from tools.head_fix.model.app_model import AppModel
 from tools.head_fix.view.main_content import MainContent
-
-from autotrainer.core import DeviceReader
 
 
 class MainWindow(QMainWindow):
@@ -45,5 +44,5 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def _model_property_changed(self, name: str, value, _old_value):
-        if name == DeviceReader.FIRMWARE_VERSION:
+        if name == MessageHandler.FIRMWARE_VERSION:
             self.update_status(f"Head Fix Version: {value}")

@@ -1,4 +1,4 @@
-from autotrainer.core import ObservableObject, HeadFixReader
+from autotrainer.core import ObservableObject, HeadFixReader, SensorAnalysis
 
 
 class MockHeadfix(ObservableObject):
@@ -23,7 +23,7 @@ class MockHeadfix(ObservableObject):
                                                                       self._is_headbar_pressure_engaged)
 
     @property
-    def head_fix_reader(self) -> HeadFixReader:
+    def head_fix_reader(self) -> SensorAnalysis:
         return self
 
     @property

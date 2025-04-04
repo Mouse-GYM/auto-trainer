@@ -50,12 +50,12 @@ def verify_log_location(log_location: str = "", device_name: str = ""):
     logging.root.addHandler(file_handler)
 
 
-def run_pellet_delivery_ui():
+def run_pellet_delivery_ui(allow_can_emulation: bool = False) -> int:
     verify_log_location()
 
     app = QApplication(sys.argv)
 
-    model = AppModel()
+    model = AppModel(allow_can_emulation)
 
     window = MainWindow(model)
 

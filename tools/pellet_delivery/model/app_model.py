@@ -2,7 +2,7 @@ import logging
 import queue
 import uuid
 
-from autotrainer.core import ObservableObject, DeviceReader, PelletReader
+from autotrainer.core import ObservableObject, SystemMessageHandler
 from autotrainer.device import GymDeviceMessageKind, CanDevice, get_available_hardware, PelletDeliveryMessageKind, \
     CAN_IDENTIFIER
 from autotrainer.device import PelletDelivery
@@ -28,16 +28,18 @@ _alogus_travel_limits = {
 
 
 class AppModel(ObservableObject):
-    def __init__(self):
+    def __init__(self, allow_can_emulation: bool = False):
         super().__init__()
+
+        self._allow_can_emulation = allow_can_emulation
 
         self._user_settings = UserSettings()
 
         self._device_connection = None
 
-        self._pellet_reader = PelletReader(queue.Queue())
-        self._pellet_reader.property_changed += self.reader_property_changed
-        self._pellet_reader.ack_received += self.reader_ack_received
+        self._message_handler = SystemMessageHandler(queue.Queue())
+        self._message_handler.property_changed += self.reader_property_changed
+        self._message_handler.ack_received += self.reader_ack_received
 
         self._is_connected = False
 
@@ -142,7 +144,7 @@ class AppModel(ObservableObject):
                                                           self._command_pending)
 
     def refresh_ports(self):
-        self._ports = get_available_hardware(allow_can_emulation=True)
+        self._ports = get_available_hardware(allow_can_emulation=self._allow_can_emulation)
 
         return self._ports
 
@@ -175,11 +177,11 @@ class AppModel(ObservableObject):
             return
 
         if self._user_settings.port == CAN_IDENTIFIER:
-            self._device_connection = DeviceConnection(CanDevice(), self._pellet_reader.input_queue, name="pellet-can")
+            self._device_connection = DeviceConnection(CanDevice(), self._message_handler.input_queue, name="pellet-can")
             self.travel_limits = _alogus_travel_limits
         else:
             self._device_connection = DeviceConnection(PelletDelivery(self._user_settings.port),
-                                                       self._pellet_reader.input_queue, name="pellet_serial")
+                                                       self._message_handler.input_queue, name="pellet_serial")
             self.travel_limits = _anshutz_travel_limits
 
         self._device_connection.start()
@@ -192,7 +194,7 @@ class AppModel(ObservableObject):
 
     def disconnect_from_device(self):
         if self._is_connected:
-            # End DeviceConnection for this connection.  Do not kill pellet reader which is connection agnostic.
+            # End DeviceConnection for this connection.  Do not kill the message handler which is connection agnostic.
             if self._device_connection is not None:
                 self._send_command(DeviceThreadMessageKind.DISCONNECT)
                 self._device_connection.request_terminate()
@@ -203,7 +205,7 @@ class AppModel(ObservableObject):
         self.firmware_version = ""
 
     def on_activated(self):
-        self._pellet_reader.start()
+        self._message_handler.start()
 
     def on_close(self):
         self.disconnect_from_device()
@@ -211,11 +213,11 @@ class AppModel(ObservableObject):
         # End all threads so application exits cleanly.
         if self._device_connection is not None:
             self._device_connection.request_terminate()
-        if self._pellet_reader is not None:
-            self._pellet_reader.request_terminate()
+        if self._message_handler is not None:
+            self._message_handler.request_terminate()
 
     def reader_property_changed(self, name: str, value, _old_value):
-        if name == DeviceReader.FIRMWARE_VERSION:
+        if name == SystemMessageHandler.FIRMWARE_VERSION:
             self.firmware_version = value
         elif name == "device_x":
             self.x = value

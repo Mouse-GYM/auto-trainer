@@ -30,7 +30,7 @@ def _failed_camera_template(name: str, error: str):
 
 
 class AppModel(ObservableObject):
-    def __init__(self, preferences: UserPreferences, app_version: str = ""):
+    def __init__(self, preferences: UserPreferences, app_version: str = "", allow_can_emulation: bool = False):
         super().__init__(("on_error",))
 
         self._preferences = preferences
@@ -43,9 +43,9 @@ class AppModel(ObservableObject):
 
         self._cameras = list([self._left_camera, self._right_camera, self._top_camera])
 
-        self._head_fix = HeadFixModel()
+        self._head_fix = HeadFixModel(allow_can_emulation)
 
-        self._pellet_delivery = PelletDeliveryModel()
+        self._pellet_delivery = PelletDeliveryModel(allow_can_emulation)
 
         self._inference_queue = None
 

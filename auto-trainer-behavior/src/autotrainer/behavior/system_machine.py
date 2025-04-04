@@ -4,7 +4,7 @@ from threading import Timer
 from opentelemetry import trace
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager, PelletReader
+from autotrainer.core import ProjectInfo, EventManager, PelletReader, MessageHandler
 from autotrainer.inference import PoseResponse
 
 from .system_machine_state import SystemState
@@ -36,7 +36,7 @@ class SystemMachine:
     ]
 
     def __init__(self, algorithm: BehaviorAlgorithm = None,
-                 head_fix_command: HeadFixProtocol = None, pellet_reader: PelletReader = None, pellet_command=None,
+                 head_fix_command: HeadFixProtocol = None, pellet_reader: MessageHandler = None, pellet_command=None,
                  inference: InferenceProtocol = None, project_info: ProjectInfo = None):
 
         self.state = SystemState.cage

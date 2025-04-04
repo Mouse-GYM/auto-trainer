@@ -3,17 +3,18 @@ import queue
 import uuid
 from typing import Optional
 
-from autotrainer.core import ObservableObject, ProjectInfo, HeadFixReader
-from autotrainer.device import HeadFixMessageKind
-from autotrainer.device import HeadFix
+from autotrainer.core import ObservableObject, ProjectInfo, SystemMessageHandler
+from autotrainer.device import HeadFixMessageKind, HeadFix, get_available_hardware
 from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
 logger = logging.getLogger(__name__)
 
 
 class HeadFixModel(ObservableObject):
-    def __init__(self):
+    def __init__(self, allow_can_emulation: bool = False):
         super().__init__()
+
+        self._allow_can_emulation = allow_can_emulation
 
         self._port = None
 
@@ -21,8 +22,9 @@ class HeadFixModel(ObservableObject):
 
         self._reader_queue = queue.Queue()
 
-        self._head_fix_reader = HeadFixReader(self._reader_queue)
-        self._head_fix_reader.property_changed += self._head_fix_reader_property_changed
+        self._message_handler = SystemMessageHandler(self._reader_queue)
+        self._message_handler.property_changed += self._head_fix_reader_property_changed
+        self._analysis = self._message_handler.analysis
 
         self._is_connected = False
 
@@ -40,7 +42,7 @@ class HeadFixModel(ObservableObject):
 
         self._output_location = ""
 
-        self._head_fix_reader.load_cell_monitor.threshold = self._load_cell_threshold
+        self._analysis.load_cell_monitor.threshold = self._load_cell_threshold
 
         self._project: Optional[ProjectInfo] = None
 
@@ -57,8 +59,12 @@ class HeadFixModel(ObservableObject):
         return self._is_connected
 
     @property
-    def head_fix_reader(self) -> HeadFixReader:
-        return self._head_fix_reader
+    def message_handler(self) -> SystemMessageHandler:
+        return self._message_handler
+
+    @property
+    def head_fix_reader(self):
+        return self._analysis
 
     @property
     def port(self) -> str:
@@ -75,7 +81,7 @@ class HeadFixModel(ObservableObject):
     @load_trigger.setter
     def load_trigger(self, value: int):
         self._load_cell_threshold = self._on_property_changed("load_trigger", value, self._load_cell_threshold)
-        self._head_fix_reader.load_cell_monitor.threshold = self._load_cell_threshold
+        self._analysis.load_cell_monitor.threshold = self._load_cell_threshold
 
     @property
     def output_location(self) -> str:
@@ -149,8 +155,11 @@ class HeadFixModel(ObservableObject):
 
         return self._send_with_token(HeadFixMessageKind.UPDATE_SCALE_TARE)
 
+    def refresh_ports(self):
+        return get_available_hardware(allow_can_emulation=self._allow_can_emulation)
+
     def connect_to_device(self):
-        self._head_fix_reader.project_info = self._project
+        self._analysis.project_info = self._project
 
         if not self.port or len(self.port) == 0:
             return
@@ -173,21 +182,23 @@ class HeadFixModel(ObservableObject):
         if not self._is_connected:
             return
 
-        if self._head_fix_reader is not None:
-            self._head_fix_reader.project_info = None
+        if self._analysis is not None:
+            self._analysis.project_info = None
 
-        self._send_command(DeviceThreadMessageKind.TERMINATE)
+        # End connection thread, but do not kill the message handler.  It is connection agnostic.
+        self._device_thread.request_terminate()
 
         self._device_thread = None
 
         self._is_connected = False
 
     def on_activated(self):
-        self._head_fix_reader.start()
+        self._message_handler.start()
 
     def on_close(self):
+        # End all threads so application exits cleanly.
         self.disconnect_from_device()
-        self._reader_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+        self._message_handler.request_terminate()
 
     def _head_fix_reader_property_changed(self, name: str, value, _):
         if name == "is_headbar_engaged":
@@ -210,39 +221,39 @@ class HeadFixModel(ObservableObject):
             if "loadTrigger" in load_cell_conf:
                 self.load_trigger = load_cell_conf["loadTrigger"]
             if "minLoadOnDuration" in load_cell_conf:
-                self._head_fix_reader.load_cell_monitor.threshold_duration = load_cell_conf["minLoadOnDuration"]
+                self._analysis.load_cell_monitor.threshold_duration = load_cell_conf["minLoadOnDuration"]
             if "minEventDuration" in load_cell_conf:
-                self._head_fix_reader.load_cell_monitor.min_hold_duration = load_cell_conf["minEventDuration"]
+                self._analysis.load_cell_monitor.min_hold_duration = load_cell_conf["minEventDuration"]
             if "minLoadOffDuration" in load_cell_conf:
-                self._head_fix_reader.load_cell_monitor.post_hold_duration = load_cell_conf["minLoadOffDuration"]
+                self._analysis.load_cell_monitor.post_hold_duration = load_cell_conf["minLoadOffDuration"]
         if "headbarPressure" in configuration:
             force_detector_conf = configuration["headbarPressure"]
             if "threshold" in force_detector_conf:
-                self._head_fix_reader.force_detector.threshold = force_detector_conf["threshold"]
+                self._analysis.force_detector.threshold = force_detector_conf["threshold"]
             if "duration" in force_detector_conf:
-                self._head_fix_reader.force_detector.duration = force_detector_conf["duration"]
+                self._analysis.force_detector.duration = force_detector_conf["duration"]
         if "autoTare" in configuration:
             auto_tare_conf = configuration["autoTare"]
             if "threshold" in auto_tare_conf:
-                self._head_fix_reader.tare_detector.threshold = auto_tare_conf["threshold"]
+                self._analysis.tare_detector.threshold = auto_tare_conf["threshold"]
             if "rangeThreshold" in auto_tare_conf:
-                self._head_fix_reader.tare_detector.range_threshold = auto_tare_conf["rangeThreshold"]
+                self._analysis.tare_detector.range_threshold = auto_tare_conf["rangeThreshold"]
             if "duration" in auto_tare_conf:
-                self._head_fix_reader.tare_detector.duration = auto_tare_conf["duration"]
+                self._analysis.tare_detector.duration = auto_tare_conf["duration"]
 
     def save_configuration(self) -> dict:
-        load_cell = {"loadTrigger": self._head_fix_reader.load_cell_monitor.threshold,
-                     "minLoadOnDuration": self._head_fix_reader.load_cell_monitor.threshold_duration,
-                     "minEventDuration": self._head_fix_reader.load_cell_monitor.min_hold_duration,
-                     "minLoadOffDuration": self._head_fix_reader.load_cell_monitor.post_hold_duration}
+        load_cell = {"loadTrigger": self._analysis.load_cell_monitor.threshold,
+                     "minLoadOnDuration": self._analysis.load_cell_monitor.threshold_duration,
+                     "minEventDuration": self._analysis.load_cell_monitor.min_hold_duration,
+                     "minLoadOffDuration": self._analysis.load_cell_monitor.post_hold_duration}
 
-        force_detector = {"threshold": self._head_fix_reader.force_detector.threshold,
-                          "duration": self._head_fix_reader.force_detector.duration}
+        force_detector = {"threshold": self._analysis.force_detector.threshold,
+                          "duration": self._analysis.force_detector.duration}
 
         auto_tare = {
-            "threshold": self._head_fix_reader.tare_detector.threshold,
-            "rangeThreshold": self._head_fix_reader.tare_detector.range_threshold,
-            "duration": self._head_fix_reader.tare_detector.duration
+            "threshold": self._analysis.tare_detector.threshold,
+            "rangeThreshold": self._analysis.tare_detector.range_threshold,
+            "duration": self._analysis.tare_detector.duration
         }
 
         return {"port": self.port, "position": self._position, "loadCell": load_cell, "headbarPressure": force_detector,

@@ -4,7 +4,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
 
 from autotrainer.core import PerfMonitor
-from autotrainer.device import get_available_hardware
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget, QtIndicator
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -143,7 +142,7 @@ class HeadFixContent(ContentWidget):
 
     def on_activated(self):
         self._model.on_activated()
-        self._model.head_fix_reader.measurement_callback = self._weight_received
+        self._model.message_handler.measurement_callback = self._weight_received
 
     def set_is_editable(self, is_editable: bool):
         self._port_combobox.setVisible(is_editable)
@@ -171,7 +170,10 @@ class HeadFixContent(ContentWidget):
         self._plot1.cache_data(values)
 
     def _refresh_ports(self):
-        ports = get_available_hardware()
+        if self._model is not None:
+            ports = self._model.refresh_ports()
+        else:
+            ports = []
 
         self._port_combobox.refresh_ports(ports)
 

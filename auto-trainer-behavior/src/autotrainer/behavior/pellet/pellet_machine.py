@@ -5,7 +5,7 @@ from events import Events
 from opentelemetry import trace
 from transitions import Machine
 
-from autotrainer.core import EventManager, PelletReader
+from autotrainer.core import EventManager, MessageHandler
 
 from ..system_machine_state import SystemState
 from ..behavior_algorithm import BehaviorAlgorithm, BehaviorLimits
@@ -50,7 +50,7 @@ class PelletMachine:
          "conditions": "can_move_home"}
     ]
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None, pellet_device: PelletReader = None, pellet_command=None):
+    def __init__(self, algorithm: BehaviorAlgorithm = None, pellet_device: MessageHandler = None, pellet_command=None):
         self.state = PelletState.covering
 
         self.machine = Machine(model=self, states=PelletMachine.states,

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 TERMINATE = -1001
 
 
-class DeviceReader(ObservableObject):
+class MessageHandler(ObservableObject):
     """
     Base class for handling messages that come from the hardware.  It has two primary purposes.
 
@@ -27,7 +27,7 @@ class DeviceReader(ObservableObject):
     """
     FIRMWARE_VERSION = "firmware_version"
 
-    def __init__(self, input_queue: Queue, name: str = "DeviceReader", event_names=()):
+    def __init__(self, input_queue: Queue, name: str = "message-handler", event_names=()):
         super().__init__(event_names=event_names + ("ack_received",))
 
         self._input_queue = input_queue
@@ -56,7 +56,7 @@ class DeviceReader(ObservableObject):
             elif msg == SystemStatusMessageKind.ACK:
                 self.ack_received(data)
             elif msg == SystemStatusMessageKind.VERSION:
-                self.property_changed(DeviceReader.FIRMWARE_VERSION, data, None)
+                self.property_changed(MessageHandler.FIRMWARE_VERSION, data, None)
             else:
                 self.message_received(msg, data)
 
@@ -66,9 +66,6 @@ class DeviceReader(ObservableObject):
 
         logger.debug(f"<{self._name}>: exiting run loop")
 
-    def message_received(self, msg, _data):
-        pass
-
     def request_terminate(self):
         """
         Sends a termination request to the device reader queue.  The thread may have not yet terminated when this call
@@ -76,3 +73,6 @@ class DeviceReader(ObservableObject):
         """
         if self._input_queue is not None:
             self._input_queue.put((TERMINATE, None))
+
+    def message_received(self, msg, _data):
+        pass
