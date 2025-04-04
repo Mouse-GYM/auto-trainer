@@ -1,12 +1,13 @@
+import typing
+
 from .device import Device
 from .device_api import DeviceApi
 from .can_interface import CanInterface, motor_to_str, target_to_str, is_stepper, is_servo, \
     target_of_motor
-from .device_thread import DeviceThread, DeviceThreadMessageKind
-from .gym_device import GymDevice, GymDeviceMessageKind
-from .head_fix import HeadFix, HeadFixMessageKind, parse_measurements, parse_measurement
-from .pellet_delivery import PelletDelivery, PelletDeliveryMessageKind
-from .serial_interface import SerialInterface
+from .device_connection import DeviceConnection, DeviceThreadMessageKind
+from .device_message_kind import GymDeviceMessageKind
+from .head_fix_message_kind import HeadFixMessageKind
+from .pellet_delivery_message_kind import PelletDeliveryMessageKind
 from .device_interface import (DeviceInterface, Target, Motor, ServoConfig, StepperConfig,
                                Heartbeat, DigitalOutputs, MagnetDigitalInputs, PelletDigitalInputs,
                                Tone, AnalogOutput, AnalogOutputs, LoadCellReading, PressureReading,
@@ -17,3 +18,15 @@ from .can_device import CanDevice, HAVE_CAN_DEVICE
 from .motor_steps import MotorSteps
 from .compound_movement_file import CompoundMovementFile
 from .motor_configuration_file import MotorConfigurationFile
+from .anshutz import HeadFix, PelletDelivery, parse_measurement, parse_measurements
+
+CAN_IDENTIFIER = "CAN"
+
+
+def get_available_hardware(can_name: str = CAN_IDENTIFIER, allow_can_emulation: bool = False) -> typing.List[str]:
+    ports = anshutz.get_available_hardware()
+
+    if HAVE_CAN_DEVICE or allow_can_emulation:
+        ports.insert(0, can_name)
+
+    return ports

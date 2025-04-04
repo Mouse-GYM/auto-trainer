@@ -65,7 +65,7 @@ def verify_log_location(log_location: str, device_name: str):
     logging.root.addHandler(file_handler)
 
 
-def run_acquisition(configuration: str = None, is_dev: bool = False):
+def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_emulation: bool = False) -> int:
     from PySide6.QtWidgets import QApplication
 
     from tools.acquisition.view.main_window import MainWindow
@@ -82,7 +82,7 @@ def run_acquisition(configuration: str = None, is_dev: bool = False):
 
     verify_log_location(preferences.log_location, preferences.serial_number)
 
-    window = MainWindow(app, preferences, configuration, "1.1.36", is_dev)
+    window = MainWindow(app, preferences, configuration, "1.1.37", is_dev, allow_can_emulation)
 
     window.show()
 

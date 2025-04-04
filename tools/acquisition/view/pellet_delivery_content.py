@@ -2,7 +2,6 @@ import logging
 
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget, QHBoxLayout, QPushButton
 
-from autotrainer.device import SerialInterface
 from autotrainer.pyside import ATSerialPortComboBox, CardWidget
 from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
 from tools.acquisition.view.content_widget import ContentWidget
@@ -103,7 +102,10 @@ class PelletDeliveryContent(ContentWidget):
         self._port_combobox.setEnabled(not is_active)
 
     def _refresh_ports(self):
-        ports = SerialInterface.refresh_ports()
+        if self._model is not None:
+            ports = self._model.refresh_ports()
+        else:
+            ports = []
 
         self._port_combobox.refresh_ports(ports)
 

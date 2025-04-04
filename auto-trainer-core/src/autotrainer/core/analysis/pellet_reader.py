@@ -1,21 +1,13 @@
+import logging
 from queue import Queue
 
-from autotrainer.core import SystemStatusMessageKind
+from .system_message_handler import SystemMessageHandler
 
-from .device_reader import DeviceReader
+logger = logging.getLogger(__name__)
 
 
-class PelletReader(DeviceReader):
-    # This class responds to messages coming from the hardware that are specific to pellet delivery.
-
-    # TODO: This ony responds to the deprecated pellet delivery messages at this time.
+class PelletReader(SystemMessageHandler):
     def __init__(self, input_queue: Queue):
-        super().__init__(input_queue, name="PelletReader")
+        super().__init__(input_queue)
 
-    def message_received(self, msg, data):
-        if msg == SystemStatusMessageKind.UPDATE_X:
-            self.property_changed("device_x", data, None)
-        if msg == SystemStatusMessageKind.UPDATE_Y:
-            self.property_changed("device_y", data, None)
-        if msg == SystemStatusMessageKind.UPDATE_Z:
-            self.property_changed("device_z", data, None)
+        logger.warning("PelletReader is deprecated. Use SystemMessageHandler instead.")

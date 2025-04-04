@@ -1,12 +1,10 @@
 import logging
 import queue
 
-from autotrainer.core import ObservableObject
-from autotrainer.core.project import ProjectInterval
-from autotrainer.core import ObservableObject, ProjectInterval, DeviceReader, HeadFixReader
-from autotrainer.device import SerialInterface, GymDeviceMessageKind, CanDevice, HAVE_CAN_DEVICE
-from autotrainer.device import HeadFix, HeadFixMessageKind
-from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.core import ObservableObject, ProjectInterval, SystemMessageHandler
+from autotrainer.device import GymDeviceMessageKind, CanDevice, get_available_hardware, HeadFixMessageKind
+from autotrainer.device import HeadFix
+from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
 from tools.head_fix.model.user_settings import UserSettings
 
@@ -14,19 +12,22 @@ logger = logging.getLogger(__name__)
 
 
 class AppModel(ObservableObject):
-    def __init__(self):
+    def __init__(self, allow_can_emulation: bool = False):
         super().__init__()
+
+        self._allow_can_emulation = allow_can_emulation
+
         self._user_settings = UserSettings()
 
-        self._msg_queue = queue.Queue()
+        self._device_connection = None
 
-        self._device_thread = None
+        self._message_handler = SystemMessageHandler(queue.Queue())
+        self._message_handler.ack_received += self.reader_ack_received
 
-        self._head_fix_reader = HeadFixReader(self._msg_queue)
-        self._head_fix_reader.interval = ProjectInterval.HOUR
-        self._head_fix_reader.property_changed += self.reader_property_changed
-        self._head_fix_reader.ack_received += self.reader_ack_received
-        self._head_fix_reader.tare_callback = self.tare
+        self._analysis = self._message_handler.analysis
+        self._analysis.interval = ProjectInterval.HOUR
+        self._analysis.property_changed += self.reader_property_changed
+        self._analysis.tare_callback = self.tare
 
         self._is_connected = False
 
@@ -54,27 +55,29 @@ class AppModel(ObservableObject):
 
     @firmware_version.setter
     def firmware_version(self, value):
-        self._firmware_version = self._on_property_changed(DeviceReader.FIRMWARE_VERSION, value,
+        self._firmware_version = self._on_property_changed(SystemMessageHandler.FIRMWARE_VERSION, value,
                                                            self._firmware_version)
 
     @property
-    def head_fix_reader(self):
-        return self._head_fix_reader
+    def message_handler(self):
+        return self._message_handler
+
+    @property
+    def analysis(self):
+        return self._analysis
 
     def refresh_ports(self):
-        self._ports = SerialInterface.refresh_ports()
-
-        if HAVE_CAN_DEVICE:
-            self._ports.insert(0, "CAN bus")
+        self._ports = get_available_hardware(allow_can_emulation=self._allow_can_emulation)
 
         return self._ports
 
     def set_position(self, value: float):
-        self._device_thread.send_message(HeadFixMessageKind.SET_MAGNET_INTENSITY, value)
+        if self._device_connection is not None:
+            self._device_connection.send_message(HeadFixMessageKind.SET_MAGNET_INTENSITY, value)
 
     def tare(self):
-        if self._device_thread is not None:
-            self._device_thread.send_message(HeadFixMessageKind.UPDATE_SCALE_TARE)
+        if self._device_connection is not None:
+            self._device_connection.send_message(HeadFixMessageKind.UPDATE_SCALE_TARE)
         else:
             logger.warning("attempt to tare when device thread is not initialized")
 
@@ -82,8 +85,8 @@ class AppModel(ObservableObject):
         if enable:
             self._enable_data_stream()
         else:
-            if self._device_thread is not None:
-                self._device_thread.send_message(HeadFixMessageKind.STREAM_STOP)
+            if self._device_connection is not None:
+                self._device_connection.send_message(HeadFixMessageKind.STREAM_STOP)
 
         self._user_settings.stream_enabled = enable
 
@@ -92,21 +95,18 @@ class AppModel(ObservableObject):
             return
 
         if self._user_settings.port == "CAN bus":
-            device = CanDevice()
-            self._device_thread = DeviceThread(device, device._interface,
-                                               self._msg_queue)
+            self._device_connection = DeviceConnection(CanDevice(buffer_size=10), self._message_handler.input_queue)
         else:
-            self._device_thread = DeviceThread(HeadFix(buffer_size=10),
-                                               SerialInterface(self._user_settings.port),
-                                               self._msg_queue)
+            self._device_connection = DeviceConnection(HeadFix(port=self._user_settings.port, buffer_size=10),
+                                                       self._message_handler.input_queue)
 
-        self._device_thread.name = "head-fix"
+        self._device_connection.name = "head-fix"
 
-        self._device_thread.start()
+        self._device_connection.start()
 
-        self._device_thread.send_message(DeviceThreadMessageKind.CONNECT)
+        self._device_connection.send_message(DeviceThreadMessageKind.CONNECT)
 
-        self._device_thread.send_message(GymDeviceMessageKind.VERSION)
+        self._device_connection.send_message(GymDeviceMessageKind.VERSION)
 
         if self._user_settings.stream_enabled:
             self._enable_data_stream()
@@ -115,24 +115,28 @@ class AppModel(ObservableObject):
 
     def disconnect_from_device(self):
         if self._is_connected:
-            if self._device_thread is not None:
-                self._device_thread.send_message(DeviceThreadMessageKind.DISCONNECT)
-                self._device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
-                self._device_thread = None
+            # End DeviceConnection for this connection.  Do not kill the message handler which is connection agnostic.
+            if self._device_connection is not None:
+                self._device_connection.send_message((DeviceThreadMessageKind.DISCONNECT, None, None))
+                self._device_connection.request_terminate()
+                self._device_connection = None
 
             self._is_connected = False
 
     def on_activated(self):
-        self._head_fix_reader.start()
+        self._message_handler.start()
 
     def on_close(self):
         self.disconnect_from_device()
-        self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
-        if self._device_thread is not None:
-            self._device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
+
+        # End all threads so application exits cleanly.
+        if self._device_connection is not None:
+            self._device_connection.request_terminate()
+        if self._message_handler is not None:
+            self._message_handler.request_terminate()
 
     def reader_property_changed(self, name: str, value, _old_value):
-        if name == DeviceReader.FIRMWARE_VERSION:
+        if name == SystemMessageHandler.FIRMWARE_VERSION:
             self.firmware_version = value
 
     @staticmethod
@@ -140,7 +144,7 @@ class AppModel(ObservableObject):
         logger.info(f"ack context received: {ack}")
 
     def _enable_data_stream(self):
-        if self._device_thread is not None:
-            self._device_thread.send_message(HeadFixMessageKind.STREAM_START)
-        if self._head_fix_reader is not None:
-            self._msg_queue.put((HeadFixMessageKind.STREAM_START, None))
+        if self._device_connection is not None:
+            self._device_connection.send_message(HeadFixMessageKind.STREAM_START)
+        if self._message_handler is not None and self._message_handler.input_queue is not None:
+            self._message_handler.input_queue.put((HeadFixMessageKind.STREAM_START, None))

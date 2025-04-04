@@ -6,9 +6,10 @@ from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QL
 
 import qtawesome as qta
 
-from autotrainer.pyside import TextBoxHandler, ATSerialPortComboBox
+from autotrainer.pyside import TextBoxHandler, ATSerialPortComboBox, CardWidget
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.pellet_delivery.view.pellet_control import PelletControl
+from tools.pellet_delivery.view.pellet_status import PelletStatus
 
 
 class MainContent(QWidget):
@@ -37,6 +38,7 @@ class MainContent(QWidget):
         port_layout.addWidget(QLabel("Port:"))
 
         self._port_combobox = ATSerialPortComboBox(port=self._app_view_model.user_settings.port)
+        self._port_combobox.setMinimumWidth(140)
         self._port_combobox.currentIndexChanged.connect(self._port_selection_changed)
 
         port_layout.addWidget(self._port_combobox, 0)
@@ -58,16 +60,37 @@ class MainContent(QWidget):
         self._pellet_control = PelletControl(self._app_view_model)
         layout.addWidget(self._pellet_control, 1, 0)
 
+        self._pellet_status = PelletStatus(self._app_view_model)
+        layout.addWidget(self._pellet_status, 2, 0)
+
         log_output = QPlainTextEdit()
         log_output.setReadOnly(True)
-        layout.addWidget(log_output, 3, 0)
+
+        panel = CardWidget(background_color="#00b6de")
+        panel.setContentWidget(log_output)
+
+        header = QWidget()
+        h_layout = QHBoxLayout()
+        h_layout.setContentsMargins(0, 0, 0, 0)
+
+        title = QLabel("Logs")
+        title.setStyleSheet("font-weight: bold; color: white")
+        h_layout.addWidget(title)
+
+        h_layout.addStretch(1)
+
+        header.setLayout(h_layout)
+        panel.header.setContent(header)
+
+        layout.addWidget(panel, 3, 0)
+
         handler = TextBoxHandler(log_output)
         handler.setFormatter(logging.Formatter(fmt="%(asctime)s: %(levelname)s: %(name)s: %(message)s"))
         logging.getLogger("autotrainer").addHandler(handler)
 
         layout.setContentsMargins(8, 8, 8, 8)
 
-        layout.setRowStretch(2, 1)
+        layout.setRowStretch(3, 1)
 
         self.setLayout(layout)
 
@@ -101,7 +124,7 @@ class MainContent(QWidget):
 
     def _model_property_changed(self, name: str, value: object, _: object):
         if name == "command_pending":
-            self._pellet_control.setEnabled(not value)
-            self._port_combobox.setEnabled(not value)
-            self._refresh_button.setEnabled(not value)
-            self._connect_button.setEnabled(not value)
+            self._pellet_control.setEnabled((not value) and self._app_view_model.is_connected)
+            self._port_combobox.setEnabled((not value) and self._app_view_model.is_connected)
+            self._refresh_button.setEnabled((not value) and self._app_view_model.is_connected)
+            self._connect_button.setEnabled((not value) and self._app_view_model.is_connected)

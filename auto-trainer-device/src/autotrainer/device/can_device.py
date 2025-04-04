@@ -22,18 +22,20 @@ try:
 
     HAVE_CAN_DEVICE = True
 except (ModuleNotFoundError, TypeError, AttributeError):
-    logger.warning("Alogus hardware support not found")
     pass
 
 from autotrainer.core import EventManager
 from autotrainer.core.message import SystemStatusMessageKind
+
 from .motor_steps import MotorSteps
 from .device import Device
 from .emulation_interface import EmulationInterface
 from .device_api import DeviceApi
-from .gym_device import GymDeviceMessageKind, GymDeviceEventKind
-from .head_fix import HeadFixMeasurement, HeadFixMessageKind
-from .pellet_delivery import PelletDeliveryMessageKind
+from .device_message_kind import GymDeviceMessageKind
+from .device_event_kind import GymDeviceEventKind
+from .head_fix_measurement import HeadFixMeasurement
+from .pellet_delivery_message_kind import PelletDeliveryMessageKind
+from .head_fix_message_kind import HeadFixMessageKind
 from .can_interface import CanInterface, motor_to_str
 from .device_interface import *
 
@@ -41,7 +43,7 @@ from .device_interface import *
 class CanDevice(Device):
 
     def __init__(self, api: DeviceApi = None, buffer_size: int = 50):
-        super().__init__(api)
+        super().__init__(CanInterface() if HAVE_CAN_DEVICE else EmulationInterface(), api)
 
         self._measurement_buffer_count = buffer_size
         self._measurements: typing.List[HeadFixMeasurement] = []
@@ -55,7 +57,7 @@ class CanDevice(Device):
         self._pellet_dst: typing.Optional[int] = None
         self._magnet_dst: typing.Optional[int] = None
 
-        self._interface = CanInterface() if HAVE_CAN_DEVICE else EmulationInterface()
+        self._interface = self.device_interface
 
         self._desired_location = None
         self._active_motor = None
@@ -69,6 +71,10 @@ class CanDevice(Device):
 
         self._delay_start = None
         self._delay_period = None
+
+        if not HAVE_CAN_DEVICE:
+            logger.warning(
+                "Alogus hardware or hardware support not found.  Using emulation interface.")
 
     @property
     def api(self):
@@ -90,7 +96,7 @@ class CanDevice(Device):
 
         if kind == GymDeviceMessageKind.VERSION:
             self._interface.request_version()
-            self._complete_command(context)
+            self._acknowledge_command(context)
 
         elif kind == GymDeviceMessageKind.READ_CONFIG:
             assert isinstance(data, Motor)
@@ -117,7 +123,7 @@ class CanDevice(Device):
         elif kind == HeadFixMessageKind.UPDATE_SCALE_TARE:
             self._interface.tare_load_cell()
             self._interface.tare_pressure_sensor()
-            self._complete_command(context)
+            self._acknowledge_command(context)
 
         elif kind == HeadFixMessageKind.SET_MAGNET_INTENSITY:
             self._move_motor(Motor.MAGNET_SERVO, data, context, self._interface.set_magnet)
@@ -147,7 +153,7 @@ class CanDevice(Device):
 
         elif kind == PelletDeliveryMessageKind.LOAD_PELLET:
             if self._pending_move_token is not None or self._load_movement is None:
-                self._complete_command(context)
+                self._acknowledge_command(context)
                 return
             self._pending_move_token = context
             self._compound_movement = self._load_movement.steps
@@ -156,7 +162,7 @@ class CanDevice(Device):
 
         elif kind == PelletDeliveryMessageKind.SEND_PELLET:
             if self._pending_move_token is not None or self._send_movement is None:
-                self._complete_command(context)
+                self._acknowledge_command(context)
                 return
             self._pending_move_token = context
             self._compound_movement = self._send_movement.steps
@@ -177,22 +183,22 @@ class CanDevice(Device):
         elif kind == PelletDeliveryMessageKind.PLAY_TONE:
             assert isinstance(data, tuple)
             self._interface.emit_tone(data[0], data[1])
-            self._complete_command(context)
+            self._acknowledge_command(context)
 
         elif kind == GymDeviceMessageKind.SET_DIGITAL_OUTPUT:
             assert isinstance(data, tuple)  # channel, state
             self._interface.set_digital_output(DigitalOutputs(data[0]), data[1] != 0)
-            self._complete_command(context)
+            self._acknowledge_command(context)
 
         elif kind == GymDeviceMessageKind.SET_ANALOG_OUTPUT:
             assert isinstance(data, tuple)  # channel, voltage
             self._interface.set_analog_output(AnalogOutputs(data[0]), data[1])
-            self._complete_command(context)
+            self._acknowledge_command(context)
 
         elif kind == GymDeviceMessageKind.SET_RGB_LED:
             assert isinstance(data, tuple)
             self._interface.set_color_led(data[0], data[1], data[2])
-            self._complete_command(context)
+            self._acknowledge_command(context)
 
         elif kind == HeadFixMessageKind.STREAM_START or \
             kind == HeadFixMessageKind.STREAM_STOP:
@@ -293,9 +299,8 @@ class CanDevice(Device):
     target, not that the target is complete in executing the command.
     '''
 
-    def _complete_command(self, token: object) -> None:
-        EventManager.post_event(GymDeviceEventKind.deviceCommandAcknowledge, context=token)
-        self._api.send_message(GymDeviceMessageKind.ACK, token)
+    def _acknowledge_command(self, token: object) -> None:
+        super()._acknowledge_command(token)
         self._pending_move_token = None
 
     """
@@ -304,7 +309,7 @@ class CanDevice(Device):
 
     def _home(self, motors, context):
         if len(motors) == 0:
-            self._complete_command(context)
+            self._acknowledge_command(context)
         else:
             self._interface.stepper_home(motors[0])
             self._pending_move_token = context
@@ -318,7 +323,7 @@ class CanDevice(Device):
             position = location[0]
 
         if self._desired_location is not None:
-            self._complete_command(context)
+            self._acknowledge_command(context)
         else:
             self._pending_move_token = context
             self._desired_location = float(position)
@@ -338,7 +343,7 @@ class CanDevice(Device):
 
     def _manage_next_move(self, motor, position, at_limit: bool = False):
         if self._api is not None:
-            kind = SystemStatusMessageKind.ACK
+            kind = None
             if motor is Motor.PELLET_X_MOTOR:
                 kind = SystemStatusMessageKind.PELLET_X
             elif motor is Motor.PELLET_Y_MOTOR:
@@ -351,8 +356,8 @@ class CanDevice(Device):
                 kind = SystemStatusMessageKind.PELLET_COVER
             elif motor is Motor.MAGNET_SERVO:
                 kind = SystemStatusMessageKind.HEAD_MAGNET
-
-            self.api.send_message(kind, position)
+            if kind is not None:
+                self.api.send_message(kind, position)
         # print(f"desired={self._desired_location}/{position} motor="
         #       f"{self._active_motor}/{motor}")
         if self._desired_location is not None and \
@@ -363,18 +368,17 @@ class CanDevice(Device):
             else:
                 self._desired_location = None
                 self._active_motor = None
-                self._complete_command(self._pending_move_token)
+                self._acknowledge_command(self._pending_move_token)
 
-        if self._desired_location is not None and \
-            motor == self._active_motor and \
-            self._pending_move_token is not None:
-            logger.debug(
-                f"[{datetime.now()}] "
-                f"motor: {motor_to_str(motor)} "
-                f"position: {position} "
-                f"desired: {self._desired_location}"
-                f"limit switch: {at_limit}")
-
+        # if self._desired_location is not None and \
+        #         motor == self._active_motor and \
+        #         self._pending_move_token is not None:
+        #     logger.debug(
+        #         f"[{datetime.now()}] "
+        #         f"motor: {motor_to_str(motor)} "
+        #         f"position: {position} "
+        #         f"desired: {self._desired_location}"
+        #         f"limit switch: {at_limit}")
 
         elif len(self._homing_motors) > 0 and self._homing_motors[0] == motor and at_limit:
             self._homing_motors.pop(0)
@@ -430,7 +434,7 @@ class CanDevice(Device):
             else:
                 logger.debug("sequence complete")
                 self._compound_movement = None
-                self._complete_command(self._pending_move_token)
+                self._acknowledge_command(self._pending_move_token)
 
 
 def default_load_procedure() -> MotorSteps:

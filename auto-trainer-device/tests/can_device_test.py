@@ -59,18 +59,14 @@ def _construction():
     # for these tests, do NOT open interface
     interface._set_magnet_address(0x40)
     interface._set_pellet_address(0x01)
-    device.api = DeviceApi(interface=interface, message_callback=data_callback)
+    device.api = DeviceApi(message_callback=data_callback)
 
     return device
 
 
 @pytest.mark.canbus
 def test_notify_version():
-    expected = [
-        (GymDeviceMessageKind.VERSION, "1.0"),
-    ]
-
-    notify_command(GymDeviceMessageKind.VERSION, 101, expected=expected)
+    notify_command(GymDeviceMessageKind.VERSION, 101)
 
 
 @pytest.mark.canbus

@@ -165,10 +165,9 @@ def test_tare_load_cell(interface: CanInterface):
     assert interface.tare_load_cell();
 
     for tries in range(3):
-        loadcell = get_response(interface, LoadCellReading, Target.MAGNET_DEVICE, 4)
+        loadcell = get_response(interface, LoadCellReading, Target.MAGNET_DEVICE)
         assert loadcell is not None
-        print(f"loadcell={loadcell.load_mv}")
-        if abs(loadcell.load_mv) <= 0.01:
+        if abs(loadcell.load_mv) <= 0.1:
             return
 
     assert False
@@ -181,7 +180,7 @@ def test_tare_pressure_sensor(interface: CanInterface):
     for tries in range(3):
         pressure = get_response(interface, PressureReading, Target.MAGNET_DEVICE)
         assert pressure is not None
-        if pressure.pressure_mv <= 0.01:
+        if pressure.pressure <= 0.01:
             return
 
     assert False

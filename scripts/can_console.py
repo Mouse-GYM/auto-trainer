@@ -7,7 +7,7 @@ from copy import copy
 from enum import IntEnum
 
 from autotrainer.core import SystemStatusMessageKind
-from autotrainer.device import CanDevice, DeviceThread, DeviceThreadMessageKind, \
+from autotrainer.device import CanDevice, DeviceConnection, DeviceThreadMessageKind, \
     HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
     CompoundMovementFile, MotorConfigurationFile, StepperStatus, ServoStatus
@@ -299,8 +299,7 @@ def run_monitor():
     global print_motor_status
     global print_status
 
-    device = CanDevice()
-    device_thread = DeviceThread(device, device._interface, msg_queue)
+    device_thread = DeviceConnection(CanDevice(), msg_queue)
 
     device_thread.start()
 
@@ -392,7 +391,7 @@ def run_monitor():
                 print(f"Invalid command: {cmd} {params}")
         else:
             if not mon_thread.is_alive():
-                device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
+                device_thread.request_terminate()
                 break
             else:
                 time.sleep(0.1)
@@ -489,6 +488,7 @@ def handle_output_command(params, device_thread):
 def print_help():
     print("?                                 "
           " ::help")
+    print("For the commands, you can either use the letter or full command name (e.g. q or quit)\n")
     print("q[uit]                            "
           " ::Quit")
     print("v[ersion]                         "
@@ -504,8 +504,8 @@ def print_help():
     print("<motor> config write              "
           " ::Write Configuration")
     print("<motor> trip <cnt>                "
-          " :: <cnt> Round trips")
-    print("<motor> is one of: {x, y, z, l[oad], c[over], m[agnet]}")
+          " ::<cnt> Round trips")
+    print("<motor> is one of: x, y, z, l[oad], c[over], m[agnet]")
     print()
 
     print("p[ellet] c[over]                  "
@@ -533,7 +533,7 @@ def print_help():
     print("s[tatus]                          "
           " ::Show Status")
     print("r[gb] <red> <green> <blue>        "
-          " :: Set RGB LED. Values in %")
+          " ::Set RGB LED. Values in %")
     print("t[are]                            "
           " ::Tare Load Cell/Pressure Sensors")
     print()

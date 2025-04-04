@@ -9,7 +9,6 @@ import qtawesome as qta
 
 from autotrainer.core import PerfMonitor
 from autotrainer.core.project import ProjectInfo
-from autotrainer.device import SerialInterface
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox
 from autotrainer.pyside import ATSeparator
 
@@ -196,7 +195,8 @@ class MainContent(QWidget):
         self._plot5.use_cache()
 
     def on_activated(self):
-        self._model.head_fix_reader.measurement_callback = self._measurements_received
+        self._model.message_handler.measurement_callback = self._measurements_received
+        self._model.analysis.property_changed += self._model_property_changed
 
     def _model_property_changed(self, name, value, _):
         if name == "is_load_cell_engaged":
@@ -245,7 +245,7 @@ class MainContent(QWidget):
     def _connect(self):
         if self._model.is_connected:
             self._model.disconnect_from_device()
-            self._model.head_fix_reader.project_info = None
+            self._model.analysis.project_info = None
             self._connect_button.setText("Connect")
             self.disconnected.emit()
         else:
@@ -257,12 +257,12 @@ class MainContent(QWidget):
             self._plot5.reset()
 
             if self._record.isChecked():
-                self._model.head_fix_reader.project_info = ProjectInfo(
+                self._model.analysis.project_info = ProjectInfo(
                     root=self._record_location.text(),
                     device_id="HeadFixUI",
                     ensure_exists=True)
             else:
-                self._model.head_fix_reader.project_info = None
+                self._model.analysis.project_info = None
 
             self._model.connect_to_device()
             self._perf_monitor.reset()

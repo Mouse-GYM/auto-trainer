@@ -4,9 +4,9 @@ import queue
 import time
 from threading import Thread
 
-from autotrainer.device import SerialInterface, GymDeviceMessageKind
-from autotrainer.device import HeadFix, HeadFixMessageKind
-from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import GymDeviceMessageKind, HeadFixMessageKind
+from autotrainer.device import HeadFix
+from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('autotrainer').setLevel(logging.DEBUG)
@@ -61,14 +61,10 @@ def monitor_message_queue():
         logger.info(f"{perf_count} samples at {(1.0e9 * perf_count) / (perf_end - perf_start)} samples/s")
 
 
-def run_monitor(port: str):
+def run_monitor(port: str, timeout: int):
     global perf_count
 
-    device_interface = SerialInterface(port)
-
-    head_fix = HeadFix()
-
-    device_thread = DeviceThread(head_fix, device_interface, msg_queue)
+    device_thread = DeviceConnection(HeadFix(port), msg_queue)
 
     device_thread.start()
 
@@ -79,11 +75,20 @@ def run_monitor(port: str):
     device_thread.send_message(DeviceThreadMessageKind.CONNECT)
 
     while True:
-        if perf_count <= 0:
+        if timeout > 0:
+            # Run for the request time and exit.  Primarily supports automated testing by ensuring can launch and close
+            # cleanly.
+            time.sleep(timeout)
+            device_thread.request_terminate()
+            msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+            logger.debug("timeout reached, terminating")
+            break
+        elif perf_count <= 0:
+            # Interactive mode.
             cmd = input("Enter command: ")
 
             if cmd.startswith("q"):
-                device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
+                device_thread.request_terminate()
                 msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
                 break
             elif cmd.startswith("A"):
@@ -99,8 +104,9 @@ def run_monitor(port: str):
             elif cmd.startswith("T"):
                 device_thread.send_message(HeadFixMessageKind.STREAM_STOP)
         else:
+            # Perform performance calculation and exit.
             if not mon_thread.is_alive():
-                device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
+                device_thread.request_terminate()
                 break
             else:
                 time.sleep(0.1)
@@ -120,6 +126,8 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--perf",
                         help="performance measurement with specified number of samples",
                         type=int, default=-1)
+    parser.add_argument("-t", "--timeout", help="run for the specified number of seconds and exit",
+                        type=int, default=0)
 
     args = parser.parse_args()
 
@@ -127,4 +135,4 @@ if __name__ == '__main__':
 
     perf_count = args.perf
 
-    run_monitor(args.port)
+    run_monitor(args.port, args.timeout)

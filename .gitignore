@@ -164,6 +164,9 @@ cython_debug/
 
 profile.*
 
+tests/.mocks.local.json
+tests/run_consoles.bat
+
 cameras.txt
 
 # pixi environments

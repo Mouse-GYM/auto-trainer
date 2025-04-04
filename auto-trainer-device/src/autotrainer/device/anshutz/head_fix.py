@@ -2,56 +2,23 @@ import logging
 import time
 import re
 import typing
-from enum import IntEnum
 
 from autotrainer.core import PerfMonitor
-from .gym_device import GymDevice, GymDeviceMessageKind
-from .device_api import DeviceApi
+
+from ..device_api import DeviceApi
+from ..head_fix_message_kind import HeadFixMessageKind
+from ..head_fix_measurement import HeadFixMeasurement
+
+from .serial_interface import SerialInterface
+from .gym_device import GymDevice
+from ..device_message_kind import GymDeviceMessageKind
 
 logger = logging.getLogger(__name__)
 
 
-class HeadFixMeasurement:
-    when: float = 0
-    timestamp: int = 0
-    weight: float = 0
-    switch: float = 0
-    pressure: float = 0
-    temperature: float = 0
-    humidity: float = 0
-    spectrum: typing.List[float] = []
-    head_contact: bool = False
-
-    def __init__(self, when: float = 0, timestamp: int = 0, weight: float = 0, switch: float = 0,
-                 pressure: float = 0,
-                 temperature: float = 0, humidity: float = 0,
-                 spectrum: typing.Optional[typing.List[float]] = None):
-        self.when = when
-        self.timestamp = timestamp
-        self.weight = weight
-        self.switch = switch
-        self.pressure = pressure
-        self.temperature = temperature
-        self.humidity = humidity
-        self.spectrum = spectrum if spectrum is not None else []
-
-
-class HeadFixMessageKind(IntEnum):
-    RAW_COMMAND = 1,
-    MEASUREMENT = -101,  # Deprecated
-    SET_MAGNET_INTENSITY = 3,
-    SETTINGS = 4,
-    UPDATE_SCALE_TARE = 5,
-    STREAM_START = 6,
-    STREAM_STOP = 7,
-
-    UPDATE_MAGNET = -1100,  # Deprecated
-    AUDIO_DATA = -1101,  # Deprecated
-
-
 class HeadFix(GymDevice):
-    def __init__(self, api: DeviceApi = None, buffer_size: int = 50):
-        super().__init__(api)
+    def __init__(self, port: str, api: DeviceApi = None, buffer_size: int = 50):
+        super().__init__(SerialInterface(port), api)
 
         self._identifier = "H"
 
@@ -90,9 +57,9 @@ class HeadFix(GymDevice):
         elif kind == HeadFixMessageKind.STREAM_STOP:
             self._send_data("Tx", context)
         elif kind == GymDeviceMessageKind.SET_SEND_PROCEDURE or \
-            kind == GymDeviceMessageKind.SET_LOAD_PROCEDURE or \
-            kind == GymDeviceMessageKind.READ_CONFIG or \
-            kind == GymDeviceMessageKind.WRITE_CONFIG:
+                kind == GymDeviceMessageKind.SET_LOAD_PROCEDURE or \
+                kind == GymDeviceMessageKind.READ_CONFIG or \
+                kind == GymDeviceMessageKind.WRITE_CONFIG:
             pass
         else:
             logger.warning(f"unknown message kind: {kind}")
