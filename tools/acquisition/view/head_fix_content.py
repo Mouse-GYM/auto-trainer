@@ -4,7 +4,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
 
 from autotrainer.core import PerfMonitor
-from autotrainer.device import SerialInterface
+from autotrainer.device import get_available_hardware
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget, QtIndicator
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -171,7 +171,7 @@ class HeadFixContent(ContentWidget):
         self._plot1.cache_data(values)
 
     def _refresh_ports(self):
-        ports = SerialInterface.refresh_ports()
+        ports = get_available_hardware()
 
         self._port_combobox.refresh_ports(ports)
 

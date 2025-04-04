@@ -1,13 +1,19 @@
 import typing
 
+from autotrainer.core import EventManager
+
+from .device_interface import DeviceInterface
 from .device_api import DeviceApi
+from .device_event_kind import GymDeviceEventKind
+from .device_message_kind import GymDeviceMessageKind
 
 
 class Device:
     """Defines the required methods to represent a device."""
 
-    def __init__(self, api: DeviceApi = None):
+    def __init__(self, dev_interface: DeviceInterface = None, api: DeviceApi = None):
         self._api = api
+        self._interface = dev_interface
 
     def connect(self):
         pass
@@ -36,6 +42,12 @@ class Device:
         """
         pass
 
+    def _acknowledge_command(self, token: object):
+        EventManager.post_event(GymDeviceEventKind.deviceCommandAcknowledge, context=token)
+
+        if self._api is not None:
+            self._api.send_message(GymDeviceMessageKind.ACK, token)
+
     @property
     def api(self):
         return self._api
@@ -43,3 +55,11 @@ class Device:
     @api.setter
     def api(self, value: DeviceApi):
         self._api = value
+
+    @property
+    def device_interface(self) -> DeviceInterface:
+        return self._interface
+
+    @device_interface.setter
+    def device_interface(self, value: DeviceInterface):
+        self._interface = value

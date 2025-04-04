@@ -1,6 +1,10 @@
-from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, QLayout
+from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, QLayout, QVBoxLayout, \
+    QFormLayout
 
+from autotrainer.pyside import CardWidget
 from tools.pellet_delivery.model.app_model import AppModel
+
+_NO_UPDATES = "(no updates)"
 
 
 def add_position(label: str, s_min: int, s_max: int) -> (QLayout, QSpinBox):
@@ -26,6 +30,8 @@ class PelletControl(QWidget):
         self._app_model: AppModel = app_model
 
         self._app_model.property_changed += self._model_property_changed
+
+        control_widget = CardWidget(background_color="#00b6de")
 
         layout = QGridLayout()
 
@@ -66,15 +72,36 @@ class PelletControl(QWidget):
         self._z_pos.valueChanged.connect(self._update_z)
         layout.addLayout(p_layout, 1, 2)
 
-        self._x_device = QLabel("Device X: ?")
-        layout.addWidget(self._x_device, 2, 0)
+        content = QWidget()
+        content.setLayout(layout)
+        control_widget.setContentWidget(content)
 
-        self._y_device = QLabel("Device Y: ?")
-        layout.addWidget(self._y_device, 2, 1)
+        # Header
+        self._header = QWidget()
+        h_layout = QHBoxLayout()
+        h_layout.setContentsMargins(0, 0, 0, 0)
 
-        self._z_device = QLabel("Device Z: ?")
-        layout.addWidget(self._z_device, 2, 2)
+        title = QLabel("Control")
+        title.setStyleSheet("font-weight: bold; color: white")
+        h_layout.addWidget(title)
 
+        h_layout.addStretch(1)
+
+        self._header.setLayout(h_layout)
+
+        control_widget.header.setContent(self._header)
+
+        self._x_device = QLabel(_NO_UPDATES)
+        self._y_device = QLabel(_NO_UPDATES)
+        self._z_device = QLabel(_NO_UPDATES)
+
+        self._load_arm = QLabel(_NO_UPDATES)
+        self._cover_arm = QLabel(_NO_UPDATES)
+
+        # Final layout
+        layout = QGridLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(control_widget, 0, 0, 1, 2)
         self.setLayout(layout)
 
         self.setEnabled(False)
@@ -89,9 +116,10 @@ class PelletControl(QWidget):
         self._app_model.set_z(self._z_pos.value())
 
     def _model_property_changed(self, name: str, value, _old_value):
-        if name == "x":
-            self._x_device.setText(f"Device X: {round(value, 3)}")
-        elif name == "y":
-            self._y_device.setText(f"Device Y: {round(value, 3)}")
-        elif name == "z":
-            self._z_device.setText(f"Device Z: {round(value, 3)}")
+        if name == "travel_limits":
+            self._x_pos.setMinimum(value["x"][0])
+            self._x_pos.setMaximum(value["x"][1])
+            self._y_pos.setMinimum(value["y"][0])
+            self._y_pos.setMaximum(value["y"][1])
+            self._z_pos.setMinimum(value["z"][0])
+            self._z_pos.setMaximum(value["z"][1])

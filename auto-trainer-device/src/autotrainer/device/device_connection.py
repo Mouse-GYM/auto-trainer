@@ -6,14 +6,14 @@ from enum import IntEnum
 from threading import Thread
 from typing import Callable
 
-from .device_interface import DeviceInterface
+from autotrainer.core.message import MotorConfigurations
+
 from .device import Device
 from .can_device import HAVE_CAN_DEVICE
 from .device_api import DeviceApi
 from .device_interface import ServoConfig, StepperConfig
-from .gym_device import GymDeviceMessageKind
+from .device_message_kind import GymDeviceMessageKind
 from .motor_steps import CompoundMovementDataSet, MotorSteps
-from autotrainer.core.message import MotorConfigurations
 
 logger = logging.getLogger(__name__)
 
@@ -25,38 +25,46 @@ class DeviceThreadMessageKind(IntEnum):
     DISCONNECT = -1003
 
 
-class DeviceThread(Thread):
-    """ Convenience class to merges a device, device interface, and queues for a client to control the device.
+_REQUEST_TERMINATE = DeviceThreadMessageKind.TERMINATE
 
-    This class defines a Thread for managing communication between a device and a client script or application.
 
-    The Device is responsible for interpreting data from the device to message the client and interpreting
-    messages from the client to send data to the device.
-
-    The DeviceInterface is responsible for low-level communication with the device over a specific protocol.
-
-    Optional command and message queues are interfaces for the client script or application to exchange data with
+class DeviceConnection:
+    """
+    Convenience class to connect a hardware device and a responder for a client to control and receive information from
     the device.
 
+    The Device object is responsible for interpreting data from the device to message the client, and interpreting
+    messages from the client to send data to the device.
+
+    The optional command and message queues are interfaces for the client script or application to exchange data with
+    the device.
+
+    It is this class's responsibility to enable one- or two-way communication with the device, depending on the
+    arguments provided, in a non-blocking fashion.
     """
 
-    def __init__(self, device: Device, interface: DeviceInterface, message_queue: Queue = None,
-                 message_callback: Callable[[int, object], None] = None):
+    def __init__(self, device: Device, message_queue: Queue = None,
+                 message_callback: Callable[[int, object], None] = None, name="device-connection"):
         super().__init__()
 
+        # The message queue and the callback are ways to get data from the device back to the client script or
+        # application that created this object.  Commands and data to the device are sent through send message.
+
         self._device = device
-        self._interface = interface
+        self._interface = device.device_interface
         self._message_callback = message_callback
         self._message_queue = message_queue
         self._cmd_queue: Queue = Queue()
 
-        self._api = DeviceApi(self._interface, message_callback=message_callback,
-                              message_queue=message_queue)
+        self._api = DeviceApi(message_callback=message_callback, message_queue=message_queue)
         self._device.api = self._api
 
-        self._name = "device-thread"
+        self._name = name
 
         self._read_limit: int = 1 if HAVE_CAN_DEVICE else math.inf
+
+        # The means of providing non-blocking access to the device.
+        self._current_thread = None
 
     @property
     def name(self) -> str:
@@ -73,6 +81,36 @@ class DeviceThread(Thread):
     @read_limit.setter
     def read_limit(self, value: int):
         self._read_limit = value
+
+    def start(self):
+        if self._current_thread is None or not self._current_thread.is_alive():
+            self._current_thread = Thread(target=self.run)
+            self._current_thread.start()
+
+    def join(self):
+        if self._current_thread is not None:
+            self._current_thread.join()
+            self._current_thread = None
+
+    def run(self) -> None:
+        logger.debug(f"<{self._name}> thread started")
+
+        while True:
+            if not self._run_unconnected():
+                break
+
+            if not self._run_connected():
+                break
+
+        logger.debug(f"<{self._name}> thread terminated")
+
+    def request_terminate(self):
+        """
+        Sends a termination request to the device connection queue.  The thread may have not yet terminated when this call
+        returns.
+        """
+        if self._cmd_queue is not None:
+            self._cmd_queue.put((_REQUEST_TERMINATE, None, None))
 
     def send_message(self, kind: int, data: object = None, context: object = None):
         if self._cmd_queue is not None:
@@ -100,24 +138,12 @@ class DeviceThread(Thread):
         assert isinstance(config, ServoConfig) or isinstance(config, StepperConfig)
         self.send_message(GymDeviceMessageKind.WRITE_CONFIG, config)
 
-    def run(self) -> None:
-        logger.debug(f"<{self._name}> thread started")
-
-        while True:
-            if not self._run_unconnected():
-                break
-
-            if not self._run_connected():
-                break
-
-        logger.debug(f"<{self._name}> thread terminated")
-
     def _run_unconnected(self) -> bool:
         while True:
             try:
                 cmd, data, context = self._cmd_queue.get_nowait()
 
-                if cmd == DeviceThreadMessageKind.TERMINATE:
+                if cmd == _REQUEST_TERMINATE:
                     logger.debug(f"<{self._name}> message: {DeviceThreadMessageKind(cmd).name}")
                     return False
                 elif cmd == DeviceThreadMessageKind.CONNECT:
@@ -161,7 +187,7 @@ class DeviceThread(Thread):
             try:
                 cmd, data, context = self._cmd_queue.get_nowait()
 
-                if cmd == DeviceThreadMessageKind.TERMINATE:
+                if cmd == _REQUEST_TERMINATE:
                     logger.debug(f"<{self._name}> message: {DeviceThreadMessageKind(cmd).name}")
                     return False
                 elif cmd == DeviceThreadMessageKind.DISCONNECT:

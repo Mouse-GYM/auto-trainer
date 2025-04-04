@@ -3,13 +3,28 @@ import queue
 import uuid
 
 from autotrainer.core import ObservableObject, DeviceReader, PelletReader
-from autotrainer.device import SerialInterface, GymDeviceMessageKind, CanDevice, HAVE_CAN_DEVICE
-from autotrainer.device import PelletDelivery, PelletDeliveryMessageKind
-from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import GymDeviceMessageKind, CanDevice, get_available_hardware, PelletDeliveryMessageKind, \
+    CAN_IDENTIFIER
+from autotrainer.device import PelletDelivery
+from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
 logger = logging.getLogger(__name__)
+
+# TODO: This is just to see if the behavior is correct.  They should end up somewhere that any application or script can
+#  access.
+_anshutz_travel_limits = {
+    "x": (-10, 10),
+    "y": (-10, 10),
+    "z": (-10, 10),
+}
+
+_alogus_travel_limits = {
+    "x": (0, 27),
+    "y": (0, 27),
+    "z": (0, 27),
+}
 
 
 class AppModel(ObservableObject):
@@ -18,11 +33,9 @@ class AppModel(ObservableObject):
 
         self._user_settings = UserSettings()
 
-        self._msg_queue = queue.Queue()
+        self._device_connection = None
 
-        self._device_thread = None
-
-        self._pellet_reader = PelletReader(self._msg_queue)
+        self._pellet_reader = PelletReader(queue.Queue())
         self._pellet_reader.property_changed += self.reader_property_changed
         self._pellet_reader.ack_received += self.reader_ack_received
 
@@ -30,15 +43,21 @@ class AppModel(ObservableObject):
 
         self._firmware_version = ""
 
+        # The values the device is reporting - not a requested value.
         self._x = None
         self._y = None
         self._z = None
+        self._load_arm = None
+        self._cover_arm = None
 
         self._command_pending = False
+        self._last_command = None
 
         self._ports = list()
 
         self.refresh_ports()
+
+        self._travel_limits = _anshutz_travel_limits
 
     @property
     def user_settings(self) -> UserSettings:
@@ -51,6 +70,10 @@ class AppModel(ObservableObject):
     @property
     def is_connected(self):
         return self._is_connected
+
+    @is_connected.setter
+    def is_connected(self, value):
+        self._is_connected = self._on_property_changed("is_connected", value, self._is_connected)
 
     @property
     def firmware_version(self) -> str:
@@ -86,6 +109,30 @@ class AppModel(ObservableObject):
         self._z = self._on_property_changed("z", value, self._z)
 
     @property
+    def load_arm(self):
+        return self._load_arm
+
+    @load_arm.setter
+    def load_arm(self, value):
+        self._load_arm = self._on_property_changed("load_arm", value, self._load_arm)
+
+    @property
+    def cover_arm(self):
+        return self._cover_arm
+
+    @cover_arm.setter
+    def cover_arm(self, value):
+        self._cover_arm = self._on_property_changed("cover_arm", value, self._cover_arm)
+
+    @property
+    def travel_limits(self):
+        return self._travel_limits
+
+    @travel_limits.setter
+    def travel_limits(self, value):
+        self._travel_limits = self._on_property_changed("travel_limits", value, self._travel_limits)
+
+    @property
     def command_pending(self):
         return self._command_pending
 
@@ -95,83 +142,77 @@ class AppModel(ObservableObject):
                                                           self._command_pending)
 
     def refresh_ports(self):
-        self._ports = SerialInterface.refresh_ports()
-
-        if HAVE_CAN_DEVICE:
-            self._ports.insert(0, "CAN bus")
+        self._ports = get_available_hardware(allow_can_emulation=True)
 
         return self._ports
 
     def send_home(self):
-        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.SEND_HOME, context=uuid.uuid4())
 
     def load_pellet(self):
-        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.LOAD_PELLET, context=uuid.uuid4())
 
     def send_pellet(self):
-        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.SEND_PELLET, context=uuid.uuid4())
 
     def release_pellet(self):
-        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.RELEASE_PELLET, context=uuid.uuid4())
 
     def cover_pellet(self):
-        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.COVER_PELLET, context=uuid.uuid4())
 
     def set_x(self, value: int):
-        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.SET_X, value, context=uuid.uuid4())
 
     def set_y(self, value: int):
-        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.SET_Y, value, context=uuid.uuid4())
 
     def set_z(self, value: int):
-        self.command_pending = True
         self._send_command(PelletDeliveryMessageKind.SET_Z, value, context=uuid.uuid4())
 
     def connect_to_device(self):
         if len(self._user_settings.port) == 0:
             return
 
-        if self._user_settings.port == "CAN bus":
-            device = CanDevice()
-            self._device_thread = DeviceThread(device, device._interface, self._msg_queue)
+        if self._user_settings.port == CAN_IDENTIFIER:
+            self._device_connection = DeviceConnection(CanDevice(), self._pellet_reader.input_queue, name="pellet-can")
+            self.travel_limits = _alogus_travel_limits
         else:
-            self._device_thread = DeviceThread(PelletDelivery(),
-                                               SerialInterface(self._user_settings.port),
-                                               self._msg_queue)
+            self._device_connection = DeviceConnection(PelletDelivery(self._user_settings.port),
+                                                       self._pellet_reader.input_queue, name="pellet_serial")
+            self.travel_limits = _anshutz_travel_limits
 
-        self._device_thread.name = "pellet"
-
-        self._device_thread.start()
+        self._device_connection.start()
 
         self._send_command(DeviceThreadMessageKind.CONNECT)
 
         self._send_command(GymDeviceMessageKind.VERSION)
 
-        self._is_connected = True
+        self.is_connected = True
 
     def disconnect_from_device(self):
         if self._is_connected:
-            if self._device_thread is not None:
+            # End DeviceConnection for this connection.  Do not kill pellet reader which is connection agnostic.
+            if self._device_connection is not None:
                 self._send_command(DeviceThreadMessageKind.DISCONNECT)
-                self._send_command(DeviceThreadMessageKind.TERMINATE)
-                self._device_thread = None
+                self._device_connection.request_terminate()
+                self._device_connection = None
 
-            self._is_connected = False
+            self.is_connected = False
+
+        self.firmware_version = ""
 
     def on_activated(self):
         self._pellet_reader.start()
 
     def on_close(self):
         self.disconnect_from_device()
-        self._send_command(DeviceThreadMessageKind.TERMINATE)
-        self._msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+
+        # End all threads so application exits cleanly.
+        if self._device_connection is not None:
+            self._device_connection.request_terminate()
+        if self._pellet_reader is not None:
+            self._pellet_reader.request_terminate()
 
     def reader_property_changed(self, name: str, value, _old_value):
         if name == DeviceReader.FIRMWARE_VERSION:
@@ -182,15 +223,31 @@ class AppModel(ObservableObject):
             self.y = value
         elif name == "device_z":
             self.z = value
+        elif name == "load_angle":
+            self.load_arm = value
+        elif name == "cover_angle":
+            self.cover_arm = value
 
-    # noinspection PyMethodMayBeStatic
     def reader_ack_received(self, ack):
         logger.info(f"ack context received: {ack}")
-        self.command_pending = False
+
+        if self._last_command is not None and ack == self._last_command:
+            self._last_command = None
+            self.command_pending = False
 
     def _send_command(self, message, data=None, context=None):
+        if self._last_command is not None:
+            logger.debug("ignoring command while existing command is in process")
+            return
+
+        if context is not None:
+            # If not planning to confirm the response token, don't block the UI.
+            self.command_pending = True
+
+        self._last_command = context
+
         if context is not None:
             logger.debug(f"sending message with context: {context}")
 
-        if self._device_thread is not None:
-            self._device_thread.send_message(message, data, context)
+        if self._device_connection is not None:
+            self._device_connection.send_message(message, data, context)

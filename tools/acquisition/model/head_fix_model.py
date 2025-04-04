@@ -4,9 +4,9 @@ import uuid
 from typing import Optional
 
 from autotrainer.core import ObservableObject, ProjectInfo, HeadFixReader
-from autotrainer.device import SerialInterface
-from autotrainer.device import HeadFix, HeadFixMessageKind
-from autotrainer.device import DeviceThread, DeviceThreadMessageKind
+from autotrainer.device import HeadFixMessageKind
+from autotrainer.device import HeadFix
+from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +155,7 @@ class HeadFixModel(ObservableObject):
         if not self.port or len(self.port) == 0:
             return
 
-        self._device_thread = DeviceThread(HeadFix(buffer_size=20), SerialInterface(self.port), self._reader_queue)
+        self._device_thread = DeviceConnection(HeadFix(self.port, buffer_size=20), self._reader_queue)
 
         self._device_thread.name = "head-fix"
 

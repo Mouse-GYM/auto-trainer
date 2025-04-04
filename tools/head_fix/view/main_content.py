@@ -9,7 +9,6 @@ import qtawesome as qta
 
 from autotrainer.core import PerfMonitor
 from autotrainer.core.project import ProjectInfo
-from autotrainer.device import SerialInterface
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox
 from autotrainer.pyside import ATSeparator
 
