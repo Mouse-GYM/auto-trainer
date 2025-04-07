@@ -15,7 +15,6 @@ a list of data sets that are then propagated to the rest of the application.
 
 import logging
 import time
-from symbol import and_expr
 
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
@@ -915,7 +914,7 @@ class CanInterface(DeviceInterface):
             loadcell = LoadCellReading()
 
             loadcell.target = _addr2tgt(message.dst_id)
-            loadcell.load_mv = float(message.load_cell_read.load_mv) / 100.0
+            loadcell.load = float(message.load_cell_read.load_mv) / 100.0
 
             return loadcell
 

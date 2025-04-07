@@ -24,7 +24,6 @@ try:
 except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
-from autotrainer.core import EventManager
 from autotrainer.core.message import SystemStatusMessageKind
 
 from .motor_steps import MotorSteps
@@ -32,7 +31,6 @@ from .device import Device
 from .emulation_interface import EmulationInterface
 from .device_api import DeviceApi
 from .device_message_kind import GymDeviceMessageKind
-from .device_event_kind import GymDeviceEventKind
 from .head_fix_measurement import HeadFixMeasurement
 from .pellet_delivery_message_kind import PelletDeliveryMessageKind
 from .head_fix_message_kind import HeadFixMessageKind
@@ -43,7 +41,8 @@ from .device_interface import *
 class CanDevice(Device):
 
     def __init__(self, api: DeviceApi = None, buffer_size: int = 50):
-        super().__init__(CanInterface() if HAVE_CAN_DEVICE else EmulationInterface(), api)
+        self._interface = CanInterface() if HAVE_CAN_DEVICE else EmulationInterface()
+        super().__init__(self._interface, api)
 
         self._measurement_buffer_count = buffer_size
         self._measurements: typing.List[HeadFixMeasurement] = []
@@ -56,8 +55,6 @@ class CanDevice(Device):
 
         self._pellet_dst: typing.Optional[int] = None
         self._magnet_dst: typing.Optional[int] = None
-
-        self._interface = self.device_interface
 
         self._desired_location = None
         self._active_motor = None
