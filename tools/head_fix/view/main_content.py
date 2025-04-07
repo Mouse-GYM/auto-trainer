@@ -3,14 +3,13 @@ import logging
 from PySide6.QtCore import Qt, Signal, QTimer, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
-    QCheckBox, QLineEdit, QFileDialog
+    QCheckBox, QLineEdit, QFileDialog, QPlainTextEdit, QVBoxLayout
 
 import qtawesome as qta
 
 from autotrainer.core import PerfMonitor
 from autotrainer.core.project import ProjectInfo
-from autotrainer.pyside import PGWidget, ATSerialPortComboBox
-from autotrainer.pyside import ATSeparator
+from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget, TextBoxHandler
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +25,69 @@ class MainContent(QWidget):
 
         self._ignore_port_changes = False
 
-        layout = QGridLayout()
+        self._is_diagnostics_visible = True
 
-        layout.setContentsMargins(0, 0, 0, 0)
+        self._plots = []
 
-        # Row 1
+        layout = QVBoxLayout()
 
+        layout.addWidget(self._create_connection_panel())
+
+        layout.addWidget(self._create_control_panel())
+
+        layout.addWidget(self._create_sensor_panel())
+
+        layout.addWidget(self._create_diagnostics_panel())
+
+        layout.setStretch(3, 1)
+
+        self._layout = layout
+
+        self.setLayout(layout)
+
+        self._refresh_ports()
+
+        # The combination of PySide6/Qt signals and slots and the Jetson has reasonable performance, but with a basic
+        # implementation does not keep up with 100Hz updates.  We don't need to see 100Hz updates on screen, so rather
+        # than optimize that pipeline, just use a timer to refresh the data at an acceptable rate.
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self.refresh_data)
+        self._timer.start(100)
+
+        self._perf_monitor = PerfMonitor(name="<HeadFixUI>", units="mps", report_count=3000)
+
+        handler = TextBoxHandler(self._diagnostics)
+        handler.setFormatter(logging.Formatter(fmt="%(asctime)s: %(levelname)s: %(name)s: %(message)s"))
+        logging.getLogger("autotrainer").addHandler(handler)
+
+    @Slot()
+    def refresh_data(self):
+        for plot in self._plots:
+            plot.use_cache()
+
+    @property
+    def is_diagnostics_visible(self) -> bool:
+        return self._is_diagnostics_visible
+
+    def on_activated(self):
+        self._model.property_changed += self._model_property_changed
+        self._model.message_handler.measurement_callback = self._measurements_received
+        self._model.message_handler.audio_callback = self._audio_spectrum_received
+        self._model.analysis.property_changed += self._analysis_property_changed
+
+    def set_diagnostics_visible(self, is_visible: bool):
+        self._diagnostics_panel.setVisible(is_visible)
+        self._is_diagnostics_visible = is_visible
+
+        if is_visible:
+            self._layout.setStretch(3, 1)
+            self._layout.setStretch(2, 0)
+        else:
+            self._layout.setStretch(3, 0)
+            self._layout.setStretch(2, 1)
+
+    # noinspection PyMethodMayBeStatic
+    def _create_connection_panel(self):
         port_layout = QHBoxLayout()
 
         port_layout.setContentsMargins(8, 8, 8, 8)
@@ -57,14 +113,13 @@ class MainContent(QWidget):
         self._connect_button.clicked.connect(self._connect)
         port_layout.addWidget(self._connect_button, 0, Qt.AlignRight)
 
-        layout.addLayout(port_layout, 0, 0, 1, 2)
+        panel = CardWidget(background_color=None, header_background_color="#00b6de")
+        panel.setContentLayout(port_layout)
+        panel.header.setTitle("Connection", "white")
 
-        # Row 1
+        return panel
 
-        layout.addWidget(ATSeparator("#b9b9b9"), 1, 0, 1, 2)
-
-        # Row 2
-
+    def _create_control_panel(self):
         row_layout = QHBoxLayout()
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(32)
@@ -73,7 +128,10 @@ class MainContent(QWidget):
         position_layout.setContentsMargins(8, 8, 8, 8)
         position_layout.setSpacing(8)
 
-        position_layout.addWidget(QLabel("Position:"), 0)
+        self._update_position_button = QPushButton("Set Intensity")
+        self._update_position_button.setEnabled(False)
+        self._update_position_button.clicked.connect(self._set_position)
+        position_layout.addWidget(self._update_position_button, 0)
 
         self._position = QSpinBox()
         self._position.setMaximum(100)
@@ -81,11 +139,6 @@ class MainContent(QWidget):
         self._position.setWrapping(False)
         self._position.setEnabled(False)
         position_layout.addWidget(self._position, 0, Qt.AlignLeft)
-
-        self._update_position_button = QPushButton("Set Position")
-        self._update_position_button.setEnabled(False)
-        self._update_position_button.clicked.connect(self._set_position)
-        position_layout.addWidget(self._update_position_button, 0)
 
         position_layout.addStretch(1)
 
@@ -123,106 +176,128 @@ class MainContent(QWidget):
 
         row_layout.addLayout(record_layout, 1.0)
 
-        layout.addLayout(row_layout, 2, 0, 1, 2)
+        panel = CardWidget(background_color=None, header_background_color="#00b6de")
+        panel.setContentLayout(row_layout)
 
-        # Row 3
+        header = QWidget()
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        layout.addWidget(ATSeparator("#b9b9b9"), 3, 0, 1, 2)
+        title = QLabel("Control")
+        title.setStyleSheet("font-weight: bold; color: white")
+        layout.addWidget(title)
 
-        # Row 4
+        layout.addStretch(1)
 
+        label = QLabel("Current Intensity:")
+        label.setStyleSheet("color: white")
+        layout.addWidget(label)
+        self._current_intensity = QLabel("(no updates)")
+        self._current_intensity.setStyleSheet("color: white")
+        self._current_intensity.setContentsMargins(0, 0, 4, 0)
+        layout.addWidget(self._current_intensity)
+
+        header.setLayout(layout)
+
+        panel.header.setContent(header)
+
+        return panel
+
+    def _create_sensor_panel(self):
         plot_layout = QGridLayout()
         plot_layout.setContentsMargins(8, 0, 8, 0)
 
-        self._plot1 = PGWidget()
-        self._plot1.setBackground(None)
-        self._plot1.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
-        self._plot1.setMaximumHeight(150)
-        self._plot1.setTitle("Weight")
-        self._plot1.getViewBox().setRange(yRange=[0, 50])
-        plot_layout.addWidget(self._plot1, 4, 0, 1, 2)
+        self._load_cell_plot, widget = self._create_plot_widget("Load Cell (g)")
+        self._load_cell_plot.setYRange(0, 50)
+        plot_layout.addWidget(widget, 0, 0)
 
-        self._plot2 = PGWidget()
-        self._plot2.setBackground(None)
-        self._plot2.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
-        self._plot2.setMaximumHeight(150)
-        self._plot2.setTitle("Switch")
-        plot_layout.addWidget(self._plot2, 5, 0)
+        self._headbar_pressure_plot, widget = self._create_plot_widget("Headbar Pressure (Raw A/D)")
+        self._headbar_pressure_plot.setYRange(0, 1024)
+        plot_layout.addWidget(widget, 0, 1)
 
-        self._plot3 = PGWidget()
-        self._plot3.setBackground(None)
-        self._plot3.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
-        self._plot3.setMaximumHeight(150)
-        self._plot3.setTitle("Pressure")
-        plot_layout.addWidget(self._plot3, 6, 0)
+        self._head_contact_plot, widget = self._create_plot_widget("Head Contact (On/Off)")
+        self._head_contact_plot.setYRange(0, 1)
+        plot_layout.addWidget(widget, 2, 0)
 
-        self._plot4 = PGWidget()
-        self._plot4.setBackground(None)
-        self._plot4.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
-        self._plot4.setMaximumHeight(150)
-        self._plot4.setTitle("Temperature")
-        plot_layout.addWidget(self._plot4, 5, 1)
+        self._audio_spectrum_plot, widget = self._create_plot_widget("Audio Spectrum (dB)")
+        plot_layout.addWidget(widget, 2, 1)
 
-        self._plot5 = PGWidget()
-        self._plot5.setBackground(None)
-        self._plot5.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
-        self._plot5.setMaximumHeight(150)
-        self._plot5.setTitle("Humidity")
-        plot_layout.addWidget(self._plot5, 6, 1)
+        self._temperature_plot, widget = self._create_plot_widget("Temperature (\u00b0C)")
+        self._temperature_plot.setYRange(0, 50)
+        plot_layout.addWidget(widget, 3, 0)
 
-        layout.addLayout(plot_layout, 4, 0, 1, 2)
+        self._humidity_plot, widget = self._create_plot_widget("Relative Humidity (%)")
+        self._humidity_plot.setYRange(0, 100)
+        plot_layout.addWidget(widget, 3, 1)
 
-        layout.setRowStretch(5, 1)
+        panel = CardWidget(background_color=None, header_background_color="#00b6de")
+        panel.setContentLayout(plot_layout)
+        panel.header.setTitle("Sensor Data", "white")
 
-        layout.addWidget(ATSeparator("#b9b9b9"), 6, 0, 1, 2)
+        return panel
 
-        self.setLayout(layout)
+    # noinspection PyMethodMayBeStatic
+    def _create_plot_widget(self, title: str):
+        plot = PGWidget()
+        plot.setBackground(None)
+        plot.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
+        plot.setMaximumHeight(150)
+        plot.setTitle(title)
 
-        self._refresh_ports()
+        self._plots.append(plot)
 
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self.refresh_data)
-        self._timer.start(100)
+        # pyqtgraph is not always well-behaved with layouts.  Rather than fight it, use a QWidget for normal behavior.
+        widget = QWidget()
+        widget.setLayout(QHBoxLayout())
+        widget.layout().addWidget(plot)
 
-        self._perf_monitor = PerfMonitor(name="<HeadFixUI>", units="mps", report_count=3000)
+        return plot, widget
 
-    @Slot()
-    def refresh_data(self):
-        self._plot1.use_cache()
-        self._plot2.use_cache()
-        self._plot3.use_cache()
-        self._plot4.use_cache()
-        self._plot5.use_cache()
+    def _create_diagnostics_panel(self):
+        self._diagnostics = QPlainTextEdit()
+        self._diagnostics.setReadOnly(True)
+        self._diagnostics.setStyleSheet("border: none")
 
-    def on_activated(self):
-        self._model.message_handler.measurement_callback = self._measurements_received
-        self._model.analysis.property_changed += self._model_property_changed
+        panel = CardWidget(header_background_color="#00b6de")
+        panel.setContentWidget(self._diagnostics)
+        panel.header.setTitle("Logs", "white")
+
+        self._diagnostics_panel = panel
+
+        return panel
 
     def _model_property_changed(self, name, value, _):
+        if name == "magnet_intensity":
+            self._current_intensity.setText(f"{value}")
+
+    def _analysis_property_changed(self, name, value, _):
         if name == "is_load_cell_engaged":
             if value:
-                self._plot1.getPlotItem().getViewBox().setBackgroundColor((0, 250, 154))
+                self._load_cell_plot.getPlotItem().getViewBox().setBackgroundColor((0, 250, 154))
             else:
-                self._plot1.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
+                self._load_cell_plot.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
         elif name == "is_headbar_engaged":
             if value:
-                self._plot2.getPlotItem().getViewBox().setBackgroundColor((0, 250, 154))
+                self._head_contact_plot.getPlotItem().getViewBox().setBackgroundColor((0, 250, 154))
             else:
-                self._plot2.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
+                self._head_contact_plot.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
         elif name == "is_force_detector_engaged":
             if value:
-                self._plot3.getPlotItem().getViewBox().setBackgroundColor((0, 250, 154))
+                self._headbar_pressure_plot.getPlotItem().getViewBox().setBackgroundColor((0, 250, 154))
             else:
-                self._plot3.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
+                self._headbar_pressure_plot.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
 
     def _measurements_received(self, measurements):
-        self._plot1.cache_data(measurements[0])
-        self._plot2.cache_data(measurements[1])
-        self._plot3.cache_data(measurements[2])
-        self._plot4.cache_data(measurements[3])
-        self._plot5.cache_data(measurements[4])
+        self._load_cell_plot.cache_data(measurements[0])
+        self._head_contact_plot.cache_data(measurements[1])
+        self._headbar_pressure_plot.cache_data(measurements[2])
+        self._temperature_plot.cache_data(measurements[3])
+        self._humidity_plot.cache_data(measurements[4])
 
         self._perf_monitor.add_cycles(len(measurements[0]))
+
+    def _audio_spectrum_received(self, spectrum):
+        self._audio_spectrum_plot.replace(spectrum)
 
     def _refresh_ports(self):
         ports = self._model.refresh_ports()
@@ -250,11 +325,11 @@ class MainContent(QWidget):
             self.disconnected.emit()
         else:
             self.connecting.emit()
-            self._plot1.reset()
-            self._plot2.reset()
-            self._plot3.reset()
-            self._plot4.reset()
-            self._plot5.reset()
+            self._load_cell_plot.reset()
+            self._head_contact_plot.reset()
+            self._headbar_pressure_plot.reset()
+            self._temperature_plot.reset()
+            self._humidity_plot.reset()
 
             if self._record.isChecked():
                 self._model.analysis.project_info = ProjectInfo(
@@ -267,15 +342,16 @@ class MainContent(QWidget):
             self._model.connect_to_device()
             self._perf_monitor.reset()
             self._connect_button.setText("Disconnect")
+            self._current_intensity.setText("(no updates)")
 
         self._position.setEnabled(self._model.is_connected)
         self._tare_button.setEnabled(self._model.is_connected)
         self._update_position_button.setEnabled(self._model.is_connected)
-        self._plot1.setEnabled(self._model.is_connected)
-        self._plot2.setEnabled(self._model.is_connected)
-        self._plot3.setEnabled(self._model.is_connected)
-        self._plot4.setEnabled(self._model.is_connected)
-        self._plot5.setEnabled(self._model.is_connected)
+        self._load_cell_plot.setEnabled(self._model.is_connected)
+        self._head_contact_plot.setEnabled(self._model.is_connected)
+        self._headbar_pressure_plot.setEnabled(self._model.is_connected)
+        self._temperature_plot.setEnabled(self._model.is_connected)
+        self._humidity_plot.setEnabled(self._model.is_connected)
         self._port_combobox.setEnabled(not self._model.is_connected)
         self._refresh_button.setEnabled(not self._model.is_connected)
         self._record.setEnabled(not self._model.is_connected)

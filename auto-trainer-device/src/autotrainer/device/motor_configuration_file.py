@@ -17,13 +17,15 @@ from autotrainer.core.message import ServoConfigMessage, StepperConfigMessage
 
 logger = logging.getLogger(__name__)
 
-
+# TODO Have a way to provide a dictionary with the data being loaded from conf = yaml.safe_load(file) below and skip
+#  the file reading for when this information is subset of a larger configuration file or the changes have been made
+#  in memory.
 class MotorConfigurationFile:
     def __init__(self, config_file):
         if isinstance(config_file, str):
             config_file = Path(config_file)
 
-        logger.info(f"LOADING: Alogus Motor Configuration file: {config_file}")
+        logger.info(f"loading Alogus motor configuration file: {config_file}")
 
         magnet_config = ServoConfig()
         load_config = ServoConfig()
@@ -57,12 +59,12 @@ class MotorConfigurationFile:
                             magnet_config = ServoConfig.from_dict(conf["magnet"]["head"])
                             logger.info(f"Magnet stepper configuration: {magnet_config}")
 
-                logger.info(f"LOADED: Alogus Motor Configuration file: {config_file}")
+                logger.info(f"loaded Alogus motor configuration file: {config_file}")
 
             except Exception as e:
-                logger.error(f"ERROR: Alogus Motor Configuration file {config_file}: {e}")
+                logger.error(f"Alogus motor configuration file {config_file}: {e}")
         else:
-            logger.error(f"ERROR: Alogus Motor Configuration file {config_file}: No such file")
+            logger.error(f"Alogus motor configuration file {config_file}: No such file")
 
         self._load_config = load_config
         self._cover_config = cover_config

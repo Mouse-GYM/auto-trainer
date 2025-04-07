@@ -11,7 +11,7 @@ def run_head_fix_ui(allow_can_emulation: bool = False) -> int:
 
     model = AppModel(allow_can_emulation)
 
-    window = MainWindow(model)
+    window = MainWindow(app, model)
 
     window.show()
 

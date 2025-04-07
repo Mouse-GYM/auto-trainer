@@ -3,8 +3,8 @@ import queue
 import uuid
 from typing import Optional
 
-from autotrainer.core import ObservableObject, ProjectInfo, PelletReader, SystemMessageHandler, MessageHandler
-from autotrainer.device import PelletDeliveryMessageKind, get_available_hardware
+from autotrainer.core import ObservableObject, ProjectInfo, SystemMessageHandler, MessageHandler, SystemCommandKind
+from autotrainer.device import get_available_hardware
 from autotrainer.device import PelletDelivery
 from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
@@ -75,32 +75,32 @@ class PelletDeliveryModel(ObservableObject):
     def set_x(self, value: int) -> object:
         self._x = self._on_property_changed("x", value, self._x)
 
-        return self._send_with_token(PelletDeliveryMessageKind.SET_X, value)
+        return self._send_with_token(SystemCommandKind.SET_X, value)
 
     def set_y(self, value: int) -> object:
         self._y = self._on_property_changed("y", value, self._y)
 
-        return self._send_with_token(PelletDeliveryMessageKind.SET_Y, value)
+        return self._send_with_token(SystemCommandKind.SET_Y, value)
 
     def set_z(self, value: int) -> object:
         self._z = self._on_property_changed("z", value, self._z)
 
-        return self._send_with_token(PelletDeliveryMessageKind.SET_Z, value)
+        return self._send_with_token(SystemCommandKind.SET_Z, value)
 
     def send_home(self) -> object:
-        return self._send_with_token(PelletDeliveryMessageKind.SEND_HOME)
+        return self._send_with_token(SystemCommandKind.SEND_HOME)
 
     def load_pellet(self) -> object:
-        return self._send_with_token(PelletDeliveryMessageKind.LOAD_PELLET)
+        return self._send_with_token(SystemCommandKind.LOAD_PELLET)
 
     def send_pellet(self) -> object:
-        return self._send_with_token(PelletDeliveryMessageKind.SEND_PELLET)
+        return self._send_with_token(SystemCommandKind.SEND_PELLET)
 
     def release_pellet(self) -> object:
-        return self._send_with_token(PelletDeliveryMessageKind.RELEASE_PELLET)
+        return self._send_with_token(SystemCommandKind.RELEASE_PELLET)
 
     def cover_pellet(self) -> object:
-        return self._send_with_token(PelletDeliveryMessageKind.COVER_PELLET)
+        return self._send_with_token(SystemCommandKind.COVER_PELLET)
 
     def refresh_ports(self):
         return get_available_hardware(allow_can_emulation=self._allow_can_emulation)

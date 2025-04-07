@@ -3,8 +3,26 @@ from typing import Protocol
 
 
 class SystemStatusMessageKind(IntEnum):
+    """
+    This class defines the messages types that are sent by the device.  If there is a request/command that generates
+    a response, the command will be defined in the SystemCommandKind class.
+
+    A message type is sent to the caller with an optional context/data value.  This value is dependent on the message
+    type.
+
+    This is implemented and represented in the send_message() method in the DeviceApi class.
+    """
+
+    ACKNOWLEDGE = 1,
+    """
+    This message should be send when a command completes along with the context that is provided with the command.  It
+    should not be sent with status messages that are generated independently by the hardware.  The is the mechanism by
+    which callers determine if and when specific commands are completed.
+    """
     FIRMWARE_VERSION = 101,
     """Message will contain the firmware version of the device as a string."""
+    # TODO: This needs to be more complex than a string now that different modules are part of the same device and
+    #  connection.
     PELLET_X = 201
     """Message will contain the pellet X motor status as a StepperStatusMessage."""
     PELLET_Y = 202,
@@ -25,15 +43,17 @@ class SystemStatusMessageKind(IntEnum):
     """Message will contain a list of 4 states as True/False"""
     MEASUREMENTS = 401,
     """Message will contain a list of MeasurementMessage objects."""
+    AUDIO_SPECTRUM = 402,
+    """Message will contain the audio spectrum data as an array list of float values."""
+    MOTOR_CONFIGURATION = 501,
 
-    # Deprecated
-    VERSION = -1,
-    ACK = -2
-    MEASUREMENT = -101,
-    STREAM_START = 6,
-    UPDATE_X = -2001,
-    UPDATE_Y = -2002,
-    UPDATE_Z = -2003
+    MEASUREMENT = -101
+    """This value is deprecated.  Use MEASUREMENTS if the object you are passing with this identifier conforms to the
+    MeasurementMessage protocol."""
+
+    @classmethod
+    def is_member(cls, value):
+        return value in cls._value2member_map_
 
 
 class StepperStatusMessage(Protocol):

@@ -4,7 +4,7 @@ import sys
 
 from tools.head_fix.run_head_fix_ui import run_head_fix_ui
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s: %(levelname)s: %(name)s: %(message)s")
 logging.getLogger('autotrainer').setLevel(logging.DEBUG)
 logging.getLogger('tools').setLevel(logging.DEBUG)
 

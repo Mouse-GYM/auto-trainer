@@ -3,8 +3,8 @@ import queue
 import uuid
 from typing import Optional
 
-from autotrainer.core import ObservableObject, ProjectInfo, SystemMessageHandler
-from autotrainer.device import HeadFixMessageKind, HeadFix, get_available_hardware
+from autotrainer.core import ObservableObject, ProjectInfo, SystemMessageHandler, SystemCommandKind
+from autotrainer.device import HeadFix, get_available_hardware
 from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
 logger = logging.getLogger(__name__)
@@ -144,7 +144,7 @@ class HeadFixModel(ObservableObject):
 
         self._position = self._on_property_changed("position", value, self._position)
 
-        return self._send_with_token(HeadFixMessageKind.SET_MAGNET_INTENSITY, value)
+        return self._send_with_token(SystemCommandKind.SET_MAGNET_INTENSITY, value)
 
     def set_current_as_baseline(self):
         self.baseline_intensity = self.position
@@ -153,7 +153,7 @@ class HeadFixModel(ObservableObject):
         if not self._is_connected:
             return
 
-        return self._send_with_token(HeadFixMessageKind.UPDATE_SCALE_TARE)
+        return self._send_with_token(SystemCommandKind.UPDATE_SCALE_TARE)
 
     def refresh_ports(self):
         return get_available_hardware(allow_can_emulation=self._allow_can_emulation)
@@ -172,9 +172,9 @@ class HeadFixModel(ObservableObject):
 
         self._send_command(DeviceThreadMessageKind.CONNECT)
 
-        self._send_command(HeadFixMessageKind.SET_MAGNET_INTENSITY, self._position)
+        self._send_command(SystemCommandKind.SET_MAGNET_INTENSITY, self._position)
 
-        self._send_command(HeadFixMessageKind.STREAM_START)
+        self._send_command(SystemCommandKind.STREAM_START)
 
         self._is_connected = True
 

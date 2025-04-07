@@ -1,8 +1,8 @@
 import logging
 import queue
 
-from autotrainer.core import ObservableObject, ProjectInterval, SystemMessageHandler
-from autotrainer.device import GymDeviceMessageKind, CanDevice, get_available_hardware, HeadFixMessageKind
+from autotrainer.core import ObservableObject, ProjectInterval, SystemMessageHandler, SystemCommandKind
+from autotrainer.device import CanDevice, get_available_hardware, CAN_IDENTIFIER, HAVE_CAN_DEVICE
 from autotrainer.device import HeadFix
 from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
@@ -22,16 +22,18 @@ class AppModel(ObservableObject):
         self._device_connection = None
 
         self._message_handler = SystemMessageHandler(queue.Queue())
+        self._message_handler.property_changed += self.message_handler_property_changed
         self._message_handler.ack_received += self.reader_ack_received
 
         self._analysis = self._message_handler.analysis
         self._analysis.interval = ProjectInterval.HOUR
-        self._analysis.property_changed += self.reader_property_changed
         self._analysis.tare_callback = self.tare
 
         self._is_connected = False
 
         self._firmware_version = ""
+
+        self._magnet_intensity = -1.0
 
         self._ports = list()
 
@@ -55,8 +57,17 @@ class AppModel(ObservableObject):
 
     @firmware_version.setter
     def firmware_version(self, value):
-        self._firmware_version = self._on_property_changed(SystemMessageHandler.FIRMWARE_VERSION, value,
+        self._firmware_version = self._on_property_changed("firmware_version", value,
                                                            self._firmware_version)
+
+    @property
+    def magnet_intensity(self) -> float:
+        return self._magnet_intensity
+
+    @magnet_intensity.setter
+    def magnet_intensity(self, value: float):
+        self._magnet_intensity = self._on_property_changed("magnet_intensity", value,
+                                                           self._magnet_intensity)
 
     @property
     def message_handler(self):
@@ -73,11 +84,11 @@ class AppModel(ObservableObject):
 
     def set_position(self, value: float):
         if self._device_connection is not None:
-            self._device_connection.send_message(HeadFixMessageKind.SET_MAGNET_INTENSITY, value)
+            self._device_connection.send_message(SystemCommandKind.SET_MAGNET_INTENSITY, value)
 
     def tare(self):
         if self._device_connection is not None:
-            self._device_connection.send_message(HeadFixMessageKind.UPDATE_SCALE_TARE)
+            self._device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE)
         else:
             logger.warning("attempt to tare when device thread is not initialized")
 
@@ -86,7 +97,7 @@ class AppModel(ObservableObject):
             self._enable_data_stream()
         else:
             if self._device_connection is not None:
-                self._device_connection.send_message(HeadFixMessageKind.STREAM_STOP)
+                self._device_connection.send_message(SystemCommandKind.STREAM_STOP)
 
         self._user_settings.stream_enabled = enable
 
@@ -94,8 +105,12 @@ class AppModel(ObservableObject):
         if len(self._user_settings.port) == 0:
             return
 
-        if self._user_settings.port == "CAN bus":
-            self._device_connection = DeviceConnection(CanDevice(buffer_size=10), self._message_handler.input_queue)
+        if self._user_settings.port == CAN_IDENTIFIER:
+            # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
+            # configured to generate messages as frequently as the real device.
+            buffer_size = 10 if HAVE_CAN_DEVICE else 1
+            self._device_connection = DeviceConnection(CanDevice(buffer_size=buffer_size),
+                                                       self._message_handler.input_queue)
         else:
             self._device_connection = DeviceConnection(HeadFix(port=self._user_settings.port, buffer_size=10),
                                                        self._message_handler.input_queue)
@@ -106,7 +121,7 @@ class AppModel(ObservableObject):
 
         self._device_connection.send_message(DeviceThreadMessageKind.CONNECT)
 
-        self._device_connection.send_message(GymDeviceMessageKind.VERSION)
+        self._device_connection.send_message(SystemCommandKind.REQUEST_VERSION)
 
         if self._user_settings.stream_enabled:
             self._enable_data_stream()
@@ -123,6 +138,8 @@ class AppModel(ObservableObject):
 
             self._is_connected = False
 
+            self._firmware_version = ""
+
     def on_activated(self):
         self._message_handler.start()
 
@@ -135,9 +152,11 @@ class AppModel(ObservableObject):
         if self._message_handler is not None:
             self._message_handler.request_terminate()
 
-    def reader_property_changed(self, name: str, value, _old_value):
+    def message_handler_property_changed(self, name: str, value, _old_value):
         if name == SystemMessageHandler.FIRMWARE_VERSION:
             self.firmware_version = value
+        elif name == "head_magnet_intensity":
+            self.magnet_intensity = value
 
     @staticmethod
     def reader_ack_received(ack):
@@ -145,6 +164,6 @@ class AppModel(ObservableObject):
 
     def _enable_data_stream(self):
         if self._device_connection is not None:
-            self._device_connection.send_message(HeadFixMessageKind.STREAM_START)
+            self._device_connection.send_message(SystemCommandKind.STREAM_START)
         if self._message_handler is not None and self._message_handler.input_queue is not None:
-            self._message_handler.input_queue.put((HeadFixMessageKind.STREAM_START, None))
+            self._message_handler.input_queue.put((SystemCommandKind.STREAM_START, None))

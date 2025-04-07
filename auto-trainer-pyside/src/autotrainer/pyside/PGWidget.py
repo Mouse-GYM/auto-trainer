@@ -19,9 +19,23 @@ class PGWidget(PlotWidget):
 
         self._cache = list()
 
-    def reset(self):
+    def reset(self, default=0, length=0):
         self.x = []
         self.y = []
+
+        for idx in range(length):
+            self.x.append(idx)
+            self.y.append(default)
+
+        self._data_line.setData(self.x, self.y)
+
+    def replace(self, values):
+        self.x = []
+        self.y = []
+
+        self.x.extend(range(len(values)))
+        self.y.extend(values)
+
         self._data_line.setData(self.x, self.y)
 
     def update_plot(self, values):

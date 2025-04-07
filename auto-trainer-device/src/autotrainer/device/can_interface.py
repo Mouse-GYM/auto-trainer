@@ -368,6 +368,11 @@ class CanInterface(DeviceInterface):
                 else:
                     messages.append(message)
                     self._assign_address(message)
+
+                # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
+                # significantly slow down the system without explicitly yielding, despite being in its own thread.  This
+                # is not the case for other platforms/combinations of the above so may not be apparent when not on the
+                # deployment current platform.
                 time.sleep(0.0001)
 
         return [x for x in map(self._translate, messages) if x is not None]
@@ -947,6 +952,8 @@ class CanInterface(DeviceInterface):
             _audio.magnitudes.clear()
             _audio.target = _addr2tgt(message.dst_id)
             _audio.packet_id = message.audio_data_cmd.stream_id
+            _audio.when = time.time()
+            _audio.index = time.perf_counter_ns()
 
         elif message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_CONT:
             # print("AUDIO CONT")

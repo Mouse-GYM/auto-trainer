@@ -1,31 +1,55 @@
-from PySide6.QtCore import QSize
-from PySide6.QtWidgets import QMainWindow, QStatusBar
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtWidgets import QMainWindow, QStatusBar, QApplication, QVBoxLayout, QWidget
 
-from autotrainer.core import MessageHandler
+from autotrainer.pyside import ATSeparator
 from tools.head_fix.model.app_model import AppModel
 from tools.head_fix.view.main_content import MainContent
 
+_MIN_WIDTH = 800
+_DEFAULT_WIDTH = 1300
+_HEIGHT_WITH_DIAGNOSTICS = 950
+_HEIGHT_WITHOUT_DIAGNOSTICS = 700
+
 
 class MainWindow(QMainWindow):
-    def __init__(self, app_view_model: AppModel):
+    def __init__(self, app: QApplication, app_view_model: AppModel):
         super().__init__()
+
+        self._app = app
 
         self._app_view_model = app_view_model
 
-        self.setWindowTitle("Head Fix")
+        self.setWindowTitle("Tunnel & Sensor Module")
 
-        self.setMinimumSize(QSize(1300, 650))
+        self.setMinimumSize(_MIN_WIDTH, _HEIGHT_WITH_DIAGNOSTICS)
+        self.resize(QSize(_DEFAULT_WIDTH, _HEIGHT_WITH_DIAGNOSTICS))
 
         self.main_content = MainContent(app_view_model)
 
-        self.setCentralWidget(self.main_content)
+        container = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(ATSeparator("#b9b9b9"))
+        layout.addWidget(self.main_content)
+        layout.addWidget(ATSeparator("#b9b9b9"))
+        layout.setStretch(1, 1)
+        container.setLayout(layout)
+
+        self.setCentralWidget(container)
+
+        self._configure_actions()
+
+        self._configure_menubar()
 
         self.setStatusBar(QStatusBar(self))
 
         self.main_content.connecting.connect(
-            lambda: self.update_status("Head Fix Version: Waiting for response..."))
+            lambda: self.update_status("Tunnel Module Version: Waiting for response..."))
 
         self.main_content.disconnected.connect(lambda: self.update_status("Not connected"))
+
+        self.statusBar().setContentsMargins(4, 4, 0, 0)
 
         self.update_status("Not connected")
 
@@ -43,6 +67,43 @@ class MainWindow(QMainWindow):
 
         event.accept()
 
+    def _configure_actions(self):
+        self.quit_action = QAction("Quit")
+        self.quit_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_Q))
+        self.quit_action.triggered.connect(lambda: self._app.quit())
+
+        self.view_diagnostics_action = QAction("Diagnostics", self)
+        self.view_diagnostics_action.setToolTip("Show or hide diagnostics panel")
+        self.view_diagnostics_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_D))
+        self.view_diagnostics_action.setCheckable(True)
+        self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
+        self.view_diagnostics_action.triggered.connect(lambda: self._toggle_diagnostics_view())
+
+    def _configure_menubar(self):
+        menu_bar = self.menuBar()
+
+        menu_bar.setObjectName("MenuBar")
+        menu_bar.setStyleSheet("#MenuBar {background-color: #eee}")
+
+        file_menu = menu_bar.addMenu("File")
+        file_menu.addAction(self.quit_action)
+
+        view_menu = menu_bar.addMenu("View")
+        view_menu.addAction(self.view_diagnostics_action)
+
+    def _toggle_diagnostics_view(self):
+        width = self.width()
+        height = self.height()
+        if not self.main_content.is_diagnostics_visible:
+            self.resize(width, max(_HEIGHT_WITH_DIAGNOSTICS, height))
+            self.setMinimumSize(_MIN_WIDTH, _HEIGHT_WITH_DIAGNOSTICS)
+        else:
+            self.resize(width, max(_HEIGHT_WITHOUT_DIAGNOSTICS, height))
+            self.setMinimumSize(_MIN_WIDTH, _HEIGHT_WITHOUT_DIAGNOSTICS)
+
+        self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
+        self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
+
     def _model_property_changed(self, name: str, value, _old_value):
-        if name == MessageHandler.FIRMWARE_VERSION:
-            self.update_status(f"Head Fix Version: {value}")
+        if name == "firmware_version":
+            self.update_status(f"Tunnel Module Version: {value}")

@@ -142,6 +142,10 @@ class PoseProcess(Process):
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:
                     self._set_process_offline()
             except Empty:
+                # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
+                # massively slow down the system without explicitly yielding, despite being in its own thread.  This not
+                # the case for other platforms/combinations of the above so may not be apparent when not on the current
+                # deployment platform.
                 time.sleep(0.0001)
 
         return True
@@ -177,4 +181,5 @@ class PoseProcess(Process):
                         self._set_process_live()
                         self._process_live_when_ready = False
             else:
+                # See sleep comment above.
                 time.sleep(0.001)
