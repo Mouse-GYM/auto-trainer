@@ -1,7 +1,7 @@
 import logging
 import os
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s: %(levelname)s: %(name)s: %(message)s")
 logging.getLogger("transitions").setLevel(logging.WARNING)
 logging.getLogger("tools").setLevel(logging.WARNING)
 logging.getLogger("autotrainer").setLevel(logging.WARNING)

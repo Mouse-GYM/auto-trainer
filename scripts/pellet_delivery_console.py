@@ -2,7 +2,7 @@ import argparse
 import logging
 import time
 
-from autotrainer.device import GymDeviceMessageKind, PelletDeliveryMessageKind
+from autotrainer.core import SystemCommandKind
 from autotrainer.device import PelletDelivery
 from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
@@ -12,10 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 def message_queue_callback(kind, context):
-    if PelletDeliveryMessageKind.is_member(kind):
-        logger.info(f"device-message {PelletDeliveryMessageKind(kind).name}: {context}")
-    elif GymDeviceMessageKind.is_member(kind):
-        logger.info(f"device-message {GymDeviceMessageKind(kind).name}: {context}")
+    if SystemCommandKind.is_member(kind):
+        logger.info(f"device-message {SystemCommandKind(kind).name}: {context}")
     else:
         logger.info(f"device-message {kind}: {context}")
 
@@ -42,7 +40,7 @@ def run_monitor(port: str, timeout: int):
                 device_connection.request_terminate()
                 break
             else:
-                device_connection.send_message(PelletDeliveryMessageKind.RAW_COMMAND, cmd + "x")
+                device_connection.send_message(SystemCommandKind.RAW_COMMAND, cmd + "x")
 
     logger.info("waiting for device thread to terminate")
 

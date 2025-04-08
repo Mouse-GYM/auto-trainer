@@ -1,5 +1,5 @@
 from PySide6 import QtCore
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
 
 
 class CardHeader(QWidget):
@@ -13,6 +13,18 @@ class CardHeader(QWidget):
             "; padding: 8px; border-top-left-radius: 6px; border-top-right-radius: 6px}")
 
         self._layout = None
+
+    def setTitle(self, title: str, color: str = "black"):
+        layout = QHBoxLayout()
+        layout.setContentsMargins(6, 4, 4, 6)
+
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"font-weight: bold; color: {color}")
+        layout.addWidget(title_label)
+
+        layout.addStretch(1)
+
+        self.setLayout(layout)
 
     def setContent(self, widget: QWidget):
         self._layout = QVBoxLayout()

@@ -1,26 +1,35 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from PySide6 import QtCore
 from PySide6.QtWidgets import QWidget, QGridLayout, QLayout
 
 from .CardFooter import CardFooter
 from .CardHeader import CardHeader
 
+_DEFAULT_STYLE = "border-color: #ddd; border-width: 1px; border-style: solid; border-radius: 6px;"
+
 
 class CardWidget(QWidget):
-    def __init__(self, background_color: str = "#cfb87c"):
+    def __init__(self, background_color: Optional[str] = "white", header_background_color: str = "#cfb87c"):
         super().__init__()
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("CardWidget")
-        self.setStyleSheet(
-            "#CardWidget {background-color: white; border-color: #eee; border-width: 1px; border-style: solid; border-radius: 6px}")
+
+        style = _DEFAULT_STYLE
+
+        if background_color is not None:
+            style = f"background-color: {background_color}; {style}"
+
+        self.setStyleSheet(f"#CardWidget {{{style}}}")
 
         self._layout = QGridLayout()
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(0)
 
-        self._header = CardHeader(background_color=background_color)
+        self._header = CardHeader(background_color=header_background_color)
         self._layout.addWidget(self._header, 0, 0)
 
         self._footer = CardFooter()

@@ -49,6 +49,10 @@ class VideoReader(Thread):
                         self._update_fcn(data)
                     count += 1
                 else:
+                    # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
+                    # massively slow down the system without explicitly yielding, despite being in its own thread.  This
+                    # is not the case for other platforms/combinations of the above so may not be apparent when not on
+                    # the current deployment platform.
                     time.sleep(0.001)
             except queue.Empty:
                 pass

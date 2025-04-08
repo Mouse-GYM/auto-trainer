@@ -219,6 +219,10 @@ class VideoCapture(Process):
                         pass
 
                 if not self._is_capturing:
+                    # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
+                    # massively slow down the system without explicitly yielding, despite being in its own thread.  This
+                    # not the case for other platforms/combinations of the above so may not be apparent when not on the
+                    # current deployment platform.
                     time.sleep(0.001)
                     continue
 

@@ -3,12 +3,11 @@ import queue
 import typing
 from queue import Queue
 
-from autotrainer.core import EventManager
+from autotrainer.core import EventManager, SystemStatusMessageKind
 
 from ..device_event_kind import GymDeviceEventKind
 from ..device_interface import DeviceInterface
 from ..device import Device, DeviceApi
-from ..device_message_kind import GymDeviceMessageKind
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +102,7 @@ class GymDevice(Device):
             else:
                 self._set_firmware_version("unknown device id response")
 
-            self._api.send_message(GymDeviceMessageKind.VERSION, self._firmware_version)
+            self._api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, self._firmware_version)
 
             return ""
 

@@ -6,9 +6,8 @@ from threading import Thread
 from copy import copy
 from enum import IntEnum
 
-from autotrainer.core import SystemStatusMessageKind
-from autotrainer.device import CanDevice, DeviceConnection, DeviceThreadMessageKind, \
-    HeadFixMessageKind, GymDeviceMessageKind, PelletDeliveryMessageKind, Motor, \
+from autotrainer.core import SystemStatusMessageKind, SystemCommandKind
+from autotrainer.device import CanDevice, DeviceConnection, DeviceThreadMessageKind, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
     CompoundMovementFile, MotorConfigurationFile, StepperStatus, ServoStatus
 
@@ -24,9 +23,9 @@ perf_print = False
 print_motor_status = Motor.NONE
 print_status = None
 positions = {
-    PelletDeliveryMessageKind.SET_X: 0,
-    PelletDeliveryMessageKind.SET_Y: 0,
-    PelletDeliveryMessageKind.SET_Z: 0,
+    SystemCommandKind.SET_X: 0,
+    SystemCommandKind.SET_Y: 0,
+    SystemCommandKind.SET_Z: 0,
 }
 
 
@@ -95,7 +94,7 @@ def monitor_message_queue():
                 perf_end = time.perf_counter_ns()
                 break
 
-        elif kind == GymDeviceMessageKind.READ_CONFIG:
+        elif kind == SystemStatusMessageKind.MOTOR_CONFIGURATION:
             if isinstance(data, ServoConfig):
                 print(
                     f"SERVO\n"
@@ -168,8 +167,8 @@ def monitor_message_queue():
                 print_status = None
 
         if kind == SystemStatusMessageKind.PELLET_X or \
-            kind == SystemStatusMessageKind.PELLET_Y or \
-            kind == SystemStatusMessageKind.PELLET_Z:
+                kind == SystemStatusMessageKind.PELLET_Y or \
+                kind == SystemStatusMessageKind.PELLET_Z:
             positions[kind] = int(data)
 
     if output_fd is not None:
@@ -227,7 +226,7 @@ def write_config(motor: Motor, device_thread):
         if resp != '':
             config.steps_per_revolution = float(resp)
 
-        device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, (motor, config))
+        device_thread.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, (motor, config))
     else:
         assert isinstance(orig_config, ServoConfig)
 
@@ -257,7 +256,7 @@ def write_config(motor: Motor, device_thread):
         if resp != '':
             config.maximum_pwm_duration = float(resp)
 
-        device_thread.send_message(GymDeviceMessageKind.WRITE_CONFIG, (motor, config))
+        device_thread.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, (motor, config))
 
 
 def wait_for_move(kind, position):
@@ -344,7 +343,7 @@ def run_monitor():
                     handle_motor_command(motor, params, device_thread)
 
                 elif cmd == 'a' or cmd == 'audio':
-                    device_thread.send_message(PelletDeliveryMessageKind.PLAY_TONE,
+                    device_thread.send_message(SystemCommandKind.PLAY_TONE,
                                                # period from sec to msec
                                                data=(int(params[0]), int(params[1]) * 1000))
 
@@ -359,7 +358,7 @@ def run_monitor():
                         print(f"Unknown file request: {params[0]}")
 
                 elif cmd == 'h' or cmd == 'home':
-                    device_thread.send_message(PelletDeliveryMessageKind.SEND_HOME)
+                    device_thread.send_message(SystemCommandKind.SEND_HOME)
 
                 elif cmd == 'o' or cmd == 'output':
                     handle_output_command(params, device_thread)
@@ -373,17 +372,17 @@ def run_monitor():
                     break
 
                 elif cmd == 'r' or cmd == 'rgb':
-                    device_thread.send_message(GymDeviceMessageKind.SET_RGB_LED,
+                    device_thread.send_message(SystemCommandKind.SET_RGB_LED,
                                                (int(params[0]), int(params[1]), int(params[2])))
 
                 elif cmd == 's' or cmd == 'status':
                     print_status = StatusType.SENSORS
 
                 elif cmd == 't' or cmd == 'tare':
-                    device_thread.send_message(HeadFixMessageKind.UPDATE_SCALE_TARE)
+                    device_thread.send_message(SystemCommandKind.UPDATE_SCALE_TARE)
 
                 elif cmd == 'v' or cmd == 'version':
-                    device_thread.send_message(GymDeviceMessageKind.VERSION)
+                    device_thread.send_message(SystemCommandKind.REQUEST_VERSION)
 
             except ValueError:
                 print("Invalid numeric value in command")
@@ -404,12 +403,12 @@ def run_monitor():
 
 
 motor_to_set_command = {
-    Motor.PELLET_X_MOTOR: PelletDeliveryMessageKind.SET_X,
-    Motor.PELLET_Y_MOTOR: PelletDeliveryMessageKind.SET_Y,
-    Motor.PELLET_Z_MOTOR: PelletDeliveryMessageKind.SET_Z,
-    Motor.MAGNET_SERVO: HeadFixMessageKind.SET_MAGNET_INTENSITY,
-    Motor.PELLET_COVER_SERVO: PelletDeliveryMessageKind.SET_COVER_SERVO,
-    Motor.PELLET_LOAD_SERVO: PelletDeliveryMessageKind.SET_LOAD_SERVO
+    Motor.PELLET_X_MOTOR: SystemCommandKind.SET_X,
+    Motor.PELLET_Y_MOTOR: SystemCommandKind.SET_Y,
+    Motor.PELLET_Z_MOTOR: SystemCommandKind.SET_Z,
+    Motor.MAGNET_SERVO: SystemCommandKind.SET_MAGNET_INTENSITY,
+    Motor.PELLET_COVER_SERVO: SystemCommandKind.SET_COVER_SERVO,
+    Motor.PELLET_LOAD_SERVO: SystemCommandKind.SET_LOAD_SERVO
 }
 
 
@@ -439,7 +438,7 @@ def handle_motor_command(motor: Motor, params, device_thread):
 
     # sent to home position
     elif params[0] == 'home':
-        device_thread.send_message(PelletDeliveryMessageKind.SEND_TO_LIMITS, data=motor)
+        device_thread.send_message(SystemCommandKind.SEND_TO_LIMITS, data=motor)
 
     elif params[0] == 'trip':
         round_trip_test(motor, int(params[1]), device_thread)
@@ -447,7 +446,7 @@ def handle_motor_command(motor: Motor, params, device_thread):
     # read or write configuration
     elif params[0] == 'config':
         if params[1] == 'read':
-            device_thread.send_message(GymDeviceMessageKind.READ_CONFIG, data=motor)
+            device_thread.send_message(SystemCommandKind.READ_MOTOR_CONFIGURATION, data=motor)
         elif params[1] == 'write':
             write_config(motor, device_thread)
         else:
@@ -463,13 +462,13 @@ def handle_pellet_command(params, device_thread):
     cmd = params[0]
 
     if cmd == 'cover' or cmd == 'c':
-        device_thread.send_message(PelletDeliveryMessageKind.COVER_PELLET)
+        device_thread.send_message(SystemCommandKind.COVER_PELLET)
     elif cmd == 'load' or cmd == 'l':
-        device_thread.send_message(PelletDeliveryMessageKind.LOAD_PELLET)
+        device_thread.send_message(SystemCommandKind.LOAD_PELLET)
     elif cmd == 'release' or cmd == 'r':
-        device_thread.send_message(PelletDeliveryMessageKind.RELEASE_PELLET)
+        device_thread.send_message(SystemCommandKind.RELEASE_PELLET)
     elif cmd == 'send' or cmd == 's':
-        device_thread.send_message(PelletDeliveryMessageKind.SEND_PELLET)
+        device_thread.send_message(SystemCommandKind.SEND_PELLET)
     else:
         print(f"Unrecognized pellet command: {cmd}")
 
@@ -478,10 +477,10 @@ def handle_output_command(params, device_thread):
     cmd = params[0]
 
     if cmd == 'd' or cmd == 'digital':
-        device_thread.send_message(GymDeviceMessageKind.SET_DIGITAL_OUTPUT,
+        device_thread.send_message(SystemCommandKind.SET_DIGITAL_OUTPUT,
                                    (int(params[1]), int(params[2])))
     elif cmd == 'a' or cmd == 'analog':
-        device_thread.send_message(GymDeviceMessageKind.SET_ANALOG_OUTPUT,
+        device_thread.send_message(SystemCommandKind.SET_ANALOG_OUTPUT,
                                    (int(params[1]), float(params[2])))
 
 

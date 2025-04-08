@@ -1,10 +1,21 @@
 import logging
 import time
+import typing
+from random import uniform, random
 
-from .device_interface import *
+from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
+                               StepperStatus, ServoStatus, Target, DigitalOutputs,
+                               Motor, AnalogOutputs, SensorStatus, MagnetDigitalInputs,
+                               AudioData, PressureReading, LoadCellReading, Version
+                               )
 from .can_interface import motor_to_str
 
 logger = logging.getLogger(__name__)
+
+# Slower than the real hardware to be more forgiving in emulation.
+_STATUS_MESSAGE_INTERVAL = 2.0
+_AUDIO_MESSAGE_INTERVAL = 0.5
+_DATA_MESSAGE_INTERVAL = 0.1
 
 
 class EmulationInterface(DeviceInterface):
@@ -12,7 +23,11 @@ class EmulationInterface(DeviceInterface):
 
         self._is_open = False
 
-        self._last_message = 0.0
+        self._last_status_message = 0.0
+        self._last_audio_message = 0.0
+        self._last_data_message = 0.0
+
+        self._version_requested = False
 
         self._positions = {
             Motor.PELLET_LOAD_SERVO: 0.0,
@@ -44,9 +59,17 @@ class EmulationInterface(DeviceInterface):
 
     def read(self, max_count: int = 1) -> typing.Any:
         messages = []
+
+        if self._version_requested:
+            messages.append(Version(Target.PELLET_DEVICE, "Pellet Emulator v0.1.0"))
+            messages.append(Version(Target.MAGNET_DEVICE, "Magnet Emulator v0.1.0"))
+            self._version_requested = False
+
         now = time.perf_counter()
-        if now - self._last_message > 1:
-            self._last_message = now
+
+        # Just to do one type, even if all should be updated.  Do not want this to be taking up much time.
+        if now - self._last_status_message > _STATUS_MESSAGE_INTERVAL:
+            self._last_status_message = now
             messages.append(
                 StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR,
                               self._positions[Motor.PELLET_X_MOTOR],
@@ -73,23 +96,29 @@ class EmulationInterface(DeviceInterface):
             messages.append(ServoStatus(Target.MAGNET_DEVICE, Motor.MAGNET_SERVO,
                                         self._positions[Motor.MAGNET_SERVO]))
 
-            messages.append(Version(Target.PELLET_DEVICE, "v1.0.0"))
-
             messages.append(self.cover_config)
             messages.append(self.load_config)
             messages.append(self.magnet_config)
             messages.append(self.x_config)
             messages.append(self.y_config)
             messages.append(self.z_config)
-            messages.append(MagnetDigitalInputs(Target.MAGNET_DEVICE, True, False))
+            messages.append(MagnetDigitalInputs(continuity_0=random() < 0.1, continuity_1=False))
             messages.append(PelletDigitalInputs(Target.PELLET_DEVICE, True, False, True, False))
-
-            messages.append(PressureReading())
             messages.append(DoorData())
-            messages.append(SensorStatus())
+            messages.append(SensorStatus(temperature_c=28.0 + uniform(-2, 2), humidity_percent=50.0 + uniform(-2, 2)))
 
-            # keep this one last; see can_device
-            messages.append(LoadCellReading(Target.MAGNET_DEVICE, 0.25))
+				elif now - self._last_audio_message > _AUDIO_MESSAGE_INTERVAL:
+            self._last_audio_message = now
+            audio = AudioData(target=Target.MAGNET_DEVICE, packet_id=1, when=time.time(), index=time.perf_counter_ns())
+            spectrum = []
+            for _ in range(32):
+                spectrum.append(uniform(0, 20))
+            audio.magnitudes = spectrum
+            messages.append(audio)
+        elif now - self._last_data_message > _DATA_MESSAGE_INTERVAL:
+            self._last_data_message = now
+            messages.append(PressureReading(pressure=512 + uniform(-10, 10), ))
+            messages.append(LoadCellReading(load=uniform(0, 20)))
 
         return messages
 
@@ -216,5 +245,8 @@ class EmulationInterface(DeviceInterface):
             logger.info(f"Set color LED ({red_percent}, {green_percent}, {blue_percent})")
         return self._is_open
 
-    def request_version(self) -> bool:
+    def request_version(self):
+        if self._is_open:
+            self._version_requested = True
+            logger.info(f"request version")
         return self._is_open

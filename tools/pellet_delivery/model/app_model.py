@@ -1,10 +1,10 @@
 import logging
 import queue
 import uuid
+from pathlib import Path
 
-from autotrainer.core import ObservableObject, SystemMessageHandler
-from autotrainer.device import GymDeviceMessageKind, CanDevice, get_available_hardware, PelletDeliveryMessageKind, \
-    CAN_IDENTIFIER
+from autotrainer.core import ObservableObject, SystemMessageHandler, SystemCommandKind
+from autotrainer.device import CanDevice, get_available_hardware, CAN_IDENTIFIER, MotorConfigurationFile
 from autotrainer.device import PelletDelivery
 from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
@@ -34,6 +34,8 @@ class AppModel(ObservableObject):
         self._allow_can_emulation = allow_can_emulation
 
         self._user_settings = UserSettings()
+
+        self._hardware_configuration = None
 
         self._device_connection = None
 
@@ -68,6 +70,15 @@ class AppModel(ObservableObject):
     @property
     def ports(self):
         return self._ports
+
+    @property
+    def hardware_configuration(self):
+        return self._hardware_configuration
+
+    @hardware_configuration.setter
+    def hardware_configuration(self, value):
+        self._hardware_configuration = self._on_property_changed("hardware_configuration", value,
+                                                                 self._hardware_configuration)
 
     @property
     def is_connected(self):
@@ -149,35 +160,36 @@ class AppModel(ObservableObject):
         return self._ports
 
     def send_home(self):
-        self._send_command(PelletDeliveryMessageKind.SEND_HOME, context=uuid.uuid4())
+        self._send_command(SystemCommandKind.SEND_HOME, context=uuid.uuid4())
 
     def load_pellet(self):
-        self._send_command(PelletDeliveryMessageKind.LOAD_PELLET, context=uuid.uuid4())
+        self._send_command(SystemCommandKind.LOAD_PELLET, context=uuid.uuid4())
 
     def send_pellet(self):
-        self._send_command(PelletDeliveryMessageKind.SEND_PELLET, context=uuid.uuid4())
+        self._send_command(SystemCommandKind.SEND_PELLET, context=uuid.uuid4())
 
     def release_pellet(self):
-        self._send_command(PelletDeliveryMessageKind.RELEASE_PELLET, context=uuid.uuid4())
+        self._send_command(SystemCommandKind.RELEASE_PELLET, context=uuid.uuid4())
 
     def cover_pellet(self):
-        self._send_command(PelletDeliveryMessageKind.COVER_PELLET, context=uuid.uuid4())
+        self._send_command(SystemCommandKind.COVER_PELLET, context=uuid.uuid4())
 
     def set_x(self, value: int):
-        self._send_command(PelletDeliveryMessageKind.SET_X, value, context=uuid.uuid4())
+        self._send_command(SystemCommandKind.SET_X, value, context=uuid.uuid4())
 
     def set_y(self, value: int):
-        self._send_command(PelletDeliveryMessageKind.SET_Y, value, context=uuid.uuid4())
+        self._send_command(SystemCommandKind.SET_Y, value, context=uuid.uuid4())
 
     def set_z(self, value: int):
-        self._send_command(PelletDeliveryMessageKind.SET_Z, value, context=uuid.uuid4())
+        self._send_command(SystemCommandKind.SET_Z, value, context=uuid.uuid4())
 
     def connect_to_device(self):
         if len(self._user_settings.port) == 0:
             return
 
         if self._user_settings.port == CAN_IDENTIFIER:
-            self._device_connection = DeviceConnection(CanDevice(), self._message_handler.input_queue, name="pellet-can")
+            self._device_connection = DeviceConnection(CanDevice(), self._message_handler.input_queue,
+                                                       name="pellet-can")
             self.travel_limits = _alogus_travel_limits
         else:
             self._device_connection = DeviceConnection(PelletDelivery(self._user_settings.port),
@@ -188,7 +200,22 @@ class AppModel(ObservableObject):
 
         self._send_command(DeviceThreadMessageKind.CONNECT)
 
-        self._send_command(GymDeviceMessageKind.VERSION)
+        self._send_command(SystemCommandKind.REQUEST_VERSION)
+
+        if self._hardware_configuration is None or not Path.exists(self._hardware_configuration):
+            if Path.home().joinpath(".alogus_config.yaml").exists():
+                self.hardware_configuration = str(Path.home().joinpath(".alogus_config.yaml"))
+            elif Path.home().joinpath("alogus_config.yaml").exists():
+                self.hardware_configuration = str(Path.home().joinpath("alogus_config.yaml"))
+            else:
+                self.hardware_configuration = None
+
+        if self._hardware_configuration is not None:
+            try:
+                self._device_connection.use_motor_configurations(MotorConfigurationFile(self._hardware_configuration))
+            except:
+                logger.error(f"failed to read motor configuration file: {self._hardware_configuration}")
+                self.hardware_configuration = None
 
         self.is_connected = True
 

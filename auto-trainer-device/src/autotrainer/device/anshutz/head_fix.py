@@ -3,15 +3,13 @@ import time
 import re
 import typing
 
-from autotrainer.core import PerfMonitor
+from autotrainer.core import PerfMonitor, SystemCommandKind, SystemStatusMessageKind
 
 from ..device_api import DeviceApi
-from ..head_fix_message_kind import HeadFixMessageKind
 from ..head_fix_measurement import HeadFixMeasurement
 
 from .serial_interface import SerialInterface
 from .gym_device import GymDevice
-from ..device_message_kind import GymDeviceMessageKind
 
 logger = logging.getLogger(__name__)
 
@@ -41,25 +39,25 @@ class HeadFix(GymDevice):
         self._send_data("Tx")
 
     def notify_message(self, kind: int, data: object, context: object = None):
-        if kind == HeadFixMessageKind.RAW_COMMAND:
+        if kind == SystemCommandKind.RAW_COMMAND:
             self._send_data(typing.cast(str, data), context)
-        elif kind == GymDeviceMessageKind.VERSION:
+        elif kind == SystemCommandKind.REQUEST_VERSION:
             self._send_data("Fx", context)
-        elif kind == HeadFixMessageKind.SET_MAGNET_INTENSITY:
+        elif kind == SystemCommandKind.SET_MAGNET_INTENSITY:
             self._send_data(f"A{typing.cast(int, data)}x", context)
-        elif kind == HeadFixMessageKind.SETTINGS:
+            self.api.send_message(SystemStatusMessageKind.HEAD_MAGNET, typing.cast(int, data))
+        elif kind == SystemCommandKind.SETTINGS:
             self._send_data("Ox", context)
-        elif kind == HeadFixMessageKind.UPDATE_SCALE_TARE:
+        elif kind == SystemCommandKind.UPDATE_SCALE_TARE:
             self._send_data("Mx", context)
-        elif kind == HeadFixMessageKind.STREAM_START:
+        elif kind == SystemCommandKind.STREAM_START:
             self._perf_monitor.reset()
             self._send_data("Sx", context)
-        elif kind == HeadFixMessageKind.STREAM_STOP:
+        elif kind == SystemCommandKind.STREAM_STOP:
             self._send_data("Tx", context)
-        elif kind == GymDeviceMessageKind.SET_SEND_PROCEDURE or \
-                kind == GymDeviceMessageKind.SET_LOAD_PROCEDURE or \
-                kind == GymDeviceMessageKind.READ_CONFIG or \
-                kind == GymDeviceMessageKind.WRITE_CONFIG:
+        elif kind == SystemCommandKind.SET_SEND_PROCEDURE or \
+                kind == SystemCommandKind.SET_LOAD_PROCEDURE or \
+                kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
             pass
         else:
             logger.warning(f"unknown message kind: {kind}")
@@ -77,7 +75,7 @@ class HeadFix(GymDevice):
                 self._measurements.append(measurement)
 
                 if len(self._measurements) >= self._measurement_buffer_count:
-                    self._api.send_message(HeadFixMessageKind.MEASUREMENT,
+                    self._api.send_message(SystemStatusMessageKind.MEASUREMENT,
                                            self._measurements.copy())
                     self._measurements = list()
 

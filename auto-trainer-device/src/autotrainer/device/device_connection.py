@@ -12,8 +12,8 @@ from .device import Device
 from .can_device import HAVE_CAN_DEVICE
 from .device_api import DeviceApi
 from .device_interface import ServoConfig, StepperConfig
-from .device_message_kind import GymDeviceMessageKind
 from .motor_steps import CompoundMovementDataSet, MotorSteps
+from ..core import SystemCommandKind
 
 logger = logging.getLogger(__name__)
 
@@ -117,26 +117,26 @@ class DeviceConnection:
             self._cmd_queue.put_nowait((kind, data, context))
 
     def use_compound_movements(self, data: CompoundMovementDataSet):
-        self.send_message(GymDeviceMessageKind.SET_LOAD_PROCEDURE, data.load)
-        self.send_message(GymDeviceMessageKind.SET_SEND_PROCEDURE, data.send)
+        self.send_message(SystemCommandKind.SET_LOAD_PROCEDURE, data.load)
+        self.send_message(SystemCommandKind.SET_SEND_PROCEDURE, data.send)
 
     def use_motor_configurations(self, data: MotorConfigurations):
-        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.x_config)
-        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.y_config)
-        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.z_config)
-        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.load_config)
-        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.magnet_config)
-        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, data.cover_config)
+        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.x_config)
+        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.y_config)
+        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.z_config)
+        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.load_config)
+        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.magnet_config)
+        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.cover_config)
 
     def set_load_procedure(self, load_steps: MotorSteps):
-        self.send_message(GymDeviceMessageKind.SET_LOAD_PROCEDURE, load_steps)
+        self.send_message(SystemCommandKind.SET_LOAD_PROCEDURE, load_steps)
 
     def set_send_procedure(self, send_steps: MotorSteps):
-        self.send_message(GymDeviceMessageKind.SET_SEND_PROCEDURE, send_steps)
+        self.send_message(SystemCommandKind.SET_SEND_PROCEDURE, send_steps)
 
     def set_motor_configuration(self, config):
         assert isinstance(config, ServoConfig) or isinstance(config, StepperConfig)
-        self.send_message(GymDeviceMessageKind.WRITE_CONFIG, config)
+        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
 
     def _run_unconnected(self) -> bool:
         while True:
@@ -152,6 +152,10 @@ class DeviceConnection:
                 else:
                     logger.debug(f"<{self._name}> message: {cmd} ignored")
             except Empty:
+                # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
+                # significantly slow down the system without explicitly yielding, despite being in its own thread.  This
+                # is not the case for other platforms/combinations of the above so may not be apparent when not on the
+                # deployment current platform.
                 time.sleep(0.0001)
 
         if not self._interface.is_open:
@@ -196,6 +200,7 @@ class DeviceConnection:
                 else:
                     self._device.notify_message(cmd, data, context)
             except Empty:
+                # See sleep comment above.
                 time.sleep(0.0001)
 
         if self._interface.is_open:
