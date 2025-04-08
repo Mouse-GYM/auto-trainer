@@ -6,7 +6,8 @@ from random import uniform, random
 from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
                                StepperStatus, ServoStatus, Target, DigitalOutputs,
                                Motor, AnalogOutputs, SensorStatus, MagnetDigitalInputs,
-                               AudioData, PressureReading, LoadCellReading, Version
+                               AudioData, PressureReading, LoadCellReading, Version,
+                               PelletDigitalInputs, DoorData
                                )
 from .can_interface import motor_to_str
 
@@ -96,20 +97,23 @@ class EmulationInterface(DeviceInterface):
             messages.append(ServoStatus(Target.MAGNET_DEVICE, Motor.MAGNET_SERVO,
                                         self._positions[Motor.MAGNET_SERVO]))
 
-            messages.append(self.cover_config)
-            messages.append(self.load_config)
-            messages.append(self.magnet_config)
-            messages.append(self.x_config)
-            messages.append(self.y_config)
-            messages.append(self.z_config)
+            messages.append(self._configs[Motor.PELLET_COVER_SERVO])
+            messages.append(self._configs[Motor.PELLET_LOAD_SERVO])
+            messages.append(self._configs[Motor.MAGNET_SERVO])
+            messages.append(self._configs[Motor.PELLET_X_MOTOR])
+            messages.append(self._configs[Motor.PELLET_Y_MOTOR])
+            messages.append(self._configs[Motor.PELLET_Z_MOTOR])
+
             messages.append(MagnetDigitalInputs(continuity_0=random() < 0.1, continuity_1=False))
             messages.append(PelletDigitalInputs(Target.PELLET_DEVICE, True, False, True, False))
             messages.append(DoorData())
-            messages.append(SensorStatus(temperature_c=28.0 + uniform(-2, 2), humidity_percent=50.0 + uniform(-2, 2)))
+            messages.append(SensorStatus(temperature_c=28.0 + uniform(-2, 2),
+                                         humidity_percent=50.0 + uniform(-2, 2)))
 
-				elif now - self._last_audio_message > _AUDIO_MESSAGE_INTERVAL:
+        elif now - self._last_audio_message > _AUDIO_MESSAGE_INTERVAL:
             self._last_audio_message = now
-            audio = AudioData(target=Target.MAGNET_DEVICE, packet_id=1, when=time.time(), index=time.perf_counter_ns())
+            audio = AudioData(target=Target.MAGNET_DEVICE, packet_id=1, when=time.time(),
+                              index=time.perf_counter_ns())
             spectrum = []
             for _ in range(32):
                 spectrum.append(uniform(0, 20))
@@ -214,8 +218,10 @@ class EmulationInterface(DeviceInterface):
             logger.info("cover pellet")
         return self.set_cover(self._configs[Motor.PELLET_COVER_SERVO].maximum_position)
 
-    def stepper_home(self, motor: Motor):
-        self._positions[motor] = 0.0
+    def emit_tone(self, frequency, duration) -> bool:
+        if self._is_open:
+            logger.info(f"play tone f={frequency} d={duration}")
+        return self._is_open
 
     def request_motor_config(self, motor: Motor) -> bool:
         if self._is_open:
@@ -230,11 +236,6 @@ class EmulationInterface(DeviceInterface):
             logger.info(f"Set digital output {int(gpio.value)} -> {state}")
         return self._is_open
 
-    def emit_tone(self, frequency, duration) -> bool:
-        if self._is_open:
-            logger.info(f"play tone f={frequency} d={duration}")
-        return self._is_open
-
     def set_analog_output(self, channel: AnalogOutputs, millivolts: int) -> bool:
         if self._is_open:
             logger.info(f"Set analog output {int(channel.value)} -> {millivolts}")
@@ -244,6 +245,9 @@ class EmulationInterface(DeviceInterface):
         if self._is_open:
             logger.info(f"Set color LED ({red_percent}, {green_percent}, {blue_percent})")
         return self._is_open
+
+    def stepper_home(self, motor: Motor):
+        self._positions[motor] = 0.0
 
     def request_version(self):
         if self._is_open:

@@ -24,7 +24,7 @@ def notify_command(kind, tag, data=None, expected=None, repeat=1, expect_ack: bo
         expected = []
     device = _construction()
     _expected = expected
-    if expectAck:
+    if expect_ack:
         _expected.append((SystemStatusMessageKind.ACKNOWLEDGE, tag))
 
     for i in range(repeat):
