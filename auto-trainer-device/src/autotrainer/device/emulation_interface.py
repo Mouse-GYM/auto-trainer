@@ -175,37 +175,37 @@ class EmulationInterface(DeviceInterface):
     def set_magnet(self, position: float) -> bool:
         if self._is_open:
             logger.info(f"set magnet position {position}")
-            self._positions[Motor.MAGNET_SERVO] = position + 0.01
+            self._positions[Motor.MAGNET_SERVO] = position + 0.00001
         return self._is_open
 
     def set_x(self, position: float) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute x {position}")
-            self._positions[Motor.PELLET_X_MOTOR] = position + 0.01
+            self._positions[Motor.PELLET_X_MOTOR] = position + 0.00001
         return self._is_open
 
     def set_y(self, position: float) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute y {position}")
-            self._positions[Motor.PELLET_Y_MOTOR] = position + 0.01
+            self._positions[Motor.PELLET_Y_MOTOR] = position + 0.00001
         return self._is_open
 
     def set_z(self, position: float) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute z {position}")
-            self._positions[Motor.PELLET_Z_MOTOR] = position + 0.01
+            self._positions[Motor.PELLET_Z_MOTOR] = position + 0.00001
         return self._is_open
 
     def set_load(self, position: float) -> bool:
         if self._is_open:
             logger.info(f"set load arm {position}")
-            self._positions[Motor.PELLET_LOAD_SERVO] = position + 0.01
+            self._positions[Motor.PELLET_LOAD_SERVO] = position + 0.00001
         return self._is_open
 
     def set_cover(self, position) -> bool:
         if self._is_open:
             logger.info(f"set barrier arm {position}")
-            self._positions[Motor.PELLET_COVER_SERVO] = position + 0.01
+            self._positions[Motor.PELLET_COVER_SERVO] = position + 0.00001
         return self._is_open
 
     def release_pellet(self) -> bool:

@@ -24,7 +24,8 @@ try:
 except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
-from autotrainer.core import EventManager, SystemStatusMessageKind, SystemCommandKind, AudioSpectrumData
+from autotrainer.core import SystemStatusMessageKind, SystemCommandKind, \
+    AudioSpectrumData
 
 from .motor_steps import MotorSteps
 from .device import Device
@@ -195,7 +196,7 @@ class CanDevice(Device):
             self._acknowledge_command(context)
 
         elif kind == SystemCommandKind.STREAM_START or \
-                kind == SystemCommandKind.STREAM_STOP:
+            kind == SystemCommandKind.STREAM_STOP:
             pass
 
         else:
@@ -248,7 +249,8 @@ class CanDevice(Device):
 
             elif isinstance(message, AudioData):
                 self.api.send_message(SystemStatusMessageKind.AUDIO_SPECTRUM,
-                                      AudioSpectrumData(when_val=message.when, index_val=message.index,
+                                      AudioSpectrumData(when_val=message.when,
+                                                        index_val=message.index,
                                                         magnitudes_val=message.magnitudes))
 
             elif isinstance(message, StepperStatus):
@@ -358,8 +360,8 @@ class CanDevice(Device):
         # print(f"desired={self._desired_location}/{position} motor="
         #       f"{self._active_motor}/{motor}")
         if self._desired_location is not None and \
-                motor == self._active_motor and \
-                abs(position - self._desired_location) < 0.01:
+            motor == self._active_motor and \
+            abs(position - self._desired_location) < 0.01:
             if self._compound_movement is not None:
                 self._perform_next_compound_step()
             else:
