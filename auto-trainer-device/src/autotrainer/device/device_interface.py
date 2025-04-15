@@ -44,10 +44,6 @@ class Source:
     """
     target: Target = None
 
-    def __init(self, target: Target = None):
-        self.target = target
-
-
 @dataclass
 class Heartbeat(Source):
     unused: bool = False
