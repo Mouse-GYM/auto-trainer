@@ -1,8 +1,10 @@
-from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, QLayout, QVBoxLayout, \
+from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
+    QLayout, QVBoxLayout, \
     QFormLayout
 
-from autotrainer.pyside import CardWidget, ATSeparator
+from autotrainer.pyside import ATSeparator
 from tools.pellet_delivery.model.app_model import AppModel
+from tools.view.basic_panel import create_panel
 
 _NO_UPDATES = "(no updates)"
 
@@ -34,24 +36,19 @@ class PelletControl(QWidget):
 
         self._app_model.property_changed += self._model_property_changed
 
-        control_widget = CardWidget(background_color=None, header_background_color="#00b6de")
-
-        layout = QVBoxLayout()
-
-        layout.addLayout(self._create_button_layout())
-
-        layout.addWidget(ATSeparator("#dedede"))
-
-        layout.addLayout(self._create_move_layout())
-
-        control_widget.setContentLayout(layout)
-        control_widget.header.setTitle("Control", "white")
-
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(control_widget)
-        self.setLayout(layout)
 
+        panel = create_panel("Control", layout)
+        layout.addLayout(self._create_button_layout())
+        layout.addWidget(ATSeparator("#dedede"))
+        layout.addLayout(self._create_move_layout())
+
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(panel)
+
+        self.setLayout(layout)
         self.setEnabled(False)
 
     def _create_button_layout(self):

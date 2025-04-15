@@ -59,7 +59,14 @@ class SystemMessageHandler(MessageHandler):
             if self._audio_callback is not None:
                 self._audio_callback(data.magnitudes)
         elif msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
-            weights, switch, pressure, temperature, humidity = self._analysis.measurements_received(data)
+            weights, switch, pressure, temperature, humidity = self._analysis.measurements_received(
+                data)
 
             if self._measurement_callback is not None:
                 self._measurement_callback((weights, switch, pressure, temperature, humidity))
+        elif msg == SystemStatusMessageKind.FRONT_DOOR:
+            self.property_changed("front_door", data, None)
+        elif msg == SystemStatusMessageKind.DRAWER_DOOR:
+            self.property_changed("drawer_door", data, None)
+        elif msg == SystemStatusMessageKind.STIMULUS_INPUTS:
+            self._on_property_changed("stimuli", data, None)
