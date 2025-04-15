@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QL
 from autotrainer.core import PerfMonitor
 from autotrainer.core.project import ProjectInfo
 from autotrainer.pyside import PGWidget, CardWidget, TextBoxHandler
-from tools.view.basic_panel import ConnectionPanel
+from tools.view.connection_panel import ConnectionPanel
 
 logger = logging.getLogger(__name__)
 
