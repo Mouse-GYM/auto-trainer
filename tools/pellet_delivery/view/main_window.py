@@ -43,7 +43,7 @@ class MainWindow(QMainWindow):
 
         self.setStatusBar(QStatusBar(self))
 
-        self.main_content.disconnected.connect(lambda: self.update_status(""))
+        self.main_content.on_disconnect(lambda: self.update_status(""))
 
         self.update_status("")
 

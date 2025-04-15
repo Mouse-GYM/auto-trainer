@@ -1,5 +1,7 @@
 from PySide6.QtCore import QCoreApplication, QSettings
 
+from autotrainer.device import CAN_IDENTIFIER
+
 
 class UserSettings:
     def __init__(self):
@@ -16,7 +18,11 @@ class UserSettings:
 
     @property
     def port(self) -> str:
-        return self._settings.value("port", "")
+        p = self._settings.value("port", "")
+        if p.find(CAN_IDENTIFIER) >= 0:
+            p = CAN_IDENTIFIER
+
+        return p
 
     @port.setter
     def port(self, value: str):

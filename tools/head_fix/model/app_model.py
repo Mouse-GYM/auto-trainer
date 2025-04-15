@@ -1,8 +1,9 @@
 import logging
 import queue
 
-from autotrainer.core import ObservableObject, ProjectInterval, SystemMessageHandler, SystemCommandKind
-from autotrainer.device import CanDevice, get_available_hardware, CAN_IDENTIFIER, HAVE_CAN_DEVICE
+from autotrainer.core import ObservableObject, ProjectInterval, SystemMessageHandler, \
+    SystemCommandKind
+from autotrainer.device import CanDevice, CAN_IDENTIFIER, HAVE_CAN_DEVICE
 from autotrainer.device import HeadFix
 from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
@@ -35,17 +36,9 @@ class AppModel(ObservableObject):
 
         self._magnet_intensity = -1.0
 
-        self._ports = list()
-
-        self.refresh_ports()
-
     @property
     def user_settings(self) -> UserSettings:
         return self._user_settings
-
-    @property
-    def ports(self):
-        return self._ports
 
     @property
     def is_connected(self):
@@ -77,11 +70,6 @@ class AppModel(ObservableObject):
     def analysis(self):
         return self._analysis
 
-    def refresh_ports(self):
-        self._ports = get_available_hardware(allow_can_emulation=self._allow_can_emulation)
-
-        return self._ports
-
     def set_position(self, value: float):
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.SET_MAGNET_INTENSITY, value)
@@ -112,8 +100,9 @@ class AppModel(ObservableObject):
             self._device_connection = DeviceConnection(CanDevice(buffer_size=buffer_size),
                                                        self._message_handler.input_queue)
         else:
-            self._device_connection = DeviceConnection(HeadFix(port=self._user_settings.port, buffer_size=10),
-                                                       self._message_handler.input_queue)
+            self._device_connection = DeviceConnection(
+                HeadFix(port=self._user_settings.port, buffer_size=10),
+                self._message_handler.input_queue)
 
         self._device_connection.name = "head-fix"
 
@@ -132,7 +121,8 @@ class AppModel(ObservableObject):
         if self._is_connected:
             # End DeviceConnection for this connection.  Do not kill the message handler which is connection agnostic.
             if self._device_connection is not None:
-                self._device_connection.send_message((DeviceThreadMessageKind.DISCONNECT, None, None))
+                self._device_connection.send_message(
+                    (DeviceThreadMessageKind.DISCONNECT, None, None))
                 self._device_connection.request_terminate()
                 self._device_connection = None
 

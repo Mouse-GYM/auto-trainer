@@ -4,7 +4,8 @@ import uuid
 from pathlib import Path
 
 from autotrainer.core import ObservableObject, SystemMessageHandler, SystemCommandKind
-from autotrainer.device import CanDevice, get_available_hardware, CAN_IDENTIFIER, MotorConfigurationFile
+from autotrainer.device import CanDevice, get_available_hardware, CAN_IDENTIFIER, \
+    MotorConfigurationFile
 from autotrainer.device import PelletDelivery
 from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
 
@@ -54,22 +55,19 @@ class AppModel(ObservableObject):
         self._load_arm = None
         self._cover_arm = None
 
+        self._front_door = None
+        self._panel_door = None
+
+        self._stimuli = None
+
         self._command_pending = False
         self._last_command = None
-
-        self._ports = list()
-
-        self.refresh_ports()
 
         self._travel_limits = _anshutz_travel_limits
 
     @property
     def user_settings(self) -> UserSettings:
         return self._user_settings
-
-    @property
-    def ports(self):
-        return self._ports
 
     @property
     def hardware_configuration(self):
@@ -154,10 +152,29 @@ class AppModel(ObservableObject):
         self._command_pending = self._on_property_changed("command_pending", value,
                                                           self._command_pending)
 
-    def refresh_ports(self):
-        self._ports = get_available_hardware(allow_can_emulation=self._allow_can_emulation)
+    @property
+    def front_door(self):
+        return self._front_door
 
-        return self._ports
+    @front_door.setter
+    def front_door(self, value):
+        self._front_door = self._on_property_changed("front_door", value, self._front_door)
+
+    @property
+    def panel_door(self):
+        return self._panel_door
+
+    @panel_door.setter
+    def panel_door(self, value):
+        self._panel_door = self._on_property_changed("panel_door", value, self._panel_door)
+
+    @property
+    def stimuli(self):
+        return self._stimuli
+
+    @stimuli.setter
+    def stimuli(self, value):
+        self._stimuli = self._on_property_changed("stimuli", value, self._stimuli)
 
     def send_home(self):
         self._send_command(SystemCommandKind.SEND_HOME, context=uuid.uuid4())
@@ -188,12 +205,14 @@ class AppModel(ObservableObject):
             return
 
         if self._user_settings.port == CAN_IDENTIFIER:
-            self._device_connection = DeviceConnection(CanDevice(), self._message_handler.input_queue,
+            self._device_connection = DeviceConnection(CanDevice(),
+                                                       self._message_handler.input_queue,
                                                        name="pellet-can")
             self.travel_limits = _alogus_travel_limits
         else:
             self._device_connection = DeviceConnection(PelletDelivery(self._user_settings.port),
-                                                       self._message_handler.input_queue, name="pellet_serial")
+                                                       self._message_handler.input_queue,
+                                                       name="pellet_serial")
             self.travel_limits = _anshutz_travel_limits
 
         self._device_connection.start()
@@ -212,9 +231,11 @@ class AppModel(ObservableObject):
 
         if self._hardware_configuration is not None:
             try:
-                self._device_connection.use_motor_configurations(MotorConfigurationFile(self._hardware_configuration))
+                self._device_connection.use_motor_configurations(
+                    MotorConfigurationFile(self._hardware_configuration))
             except:
-                logger.error(f"failed to read motor configuration file: {self._hardware_configuration}")
+                logger.error(
+                    f"failed to read motor configuration file: {self._hardware_configuration}")
                 self.hardware_configuration = None
 
         self.is_connected = True
@@ -256,6 +277,12 @@ class AppModel(ObservableObject):
             self.load_arm = value
         elif name == "cover_angle":
             self.cover_arm = value
+        elif name == "front_door":
+            self.front_door = value
+        elif name == "panel_door":
+            self.panel_door = value
+        elif name == "stimuli":
+            self.stimuli = value
 
     def reader_ack_received(self, ack):
         logger.info(f"ack context received: {ack}")
