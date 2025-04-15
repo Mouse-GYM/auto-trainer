@@ -102,6 +102,9 @@ class PelletDeliveryModel(ObservableObject):
     def cover_pellet(self) -> object:
         return self._send_with_token(SystemCommandKind.COVER_PELLET)
 
+    def play_tone(self, frequency: int, duration: float) -> object:
+        return self._send_with_token(SystemCommandKind.PLAY_TONE, frequency)
+
     def refresh_ports(self):
         return get_available_hardware(allow_can_emulation=self._allow_can_emulation)
 
