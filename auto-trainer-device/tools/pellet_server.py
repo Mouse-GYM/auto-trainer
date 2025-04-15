@@ -103,7 +103,7 @@ class DeviceState:
             self.deliver_pellet()
             self.play_tone(6000)
         elif cmd == "N":
-            pass
+            logger.info(f"play tone {int(msg)}")
         elif cmd == "O":
             self.println("2000")
         elif cmd == "P":

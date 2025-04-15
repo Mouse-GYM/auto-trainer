@@ -68,6 +68,8 @@ class PelletDelivery(GymDevice):
             self._send_data(f"K{self._send_z + 10}x", context)
             if context is not None:
                 self._commands_with_status[context] = (SystemCommandKind.SET_Z, data)
+        elif kind == SystemCommandKind.PLAY_TONE:
+            self._send_data(f"N7000x", context)
         elif kind == SystemCommandKind.SET_SEND_PROCEDURE or \
                 kind == SystemCommandKind.SET_LOAD_PROCEDURE or \
                 kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:

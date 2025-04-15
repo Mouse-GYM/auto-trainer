@@ -39,6 +39,8 @@ def run_monitor(port: str, timeout: int):
             if cmd.startswith("q"):
                 device_connection.request_terminate()
                 break
+            elif cmd.startswith("t"):
+                device_connection.send_message(SystemCommandKind.PLAY_TONE, 7000)
             else:
                 device_connection.send_message(SystemCommandKind.RAW_COMMAND, cmd + "x")
 
