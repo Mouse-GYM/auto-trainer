@@ -5,7 +5,8 @@ from tools.pellet_delivery.model.app_model import AppModel
 from tools.pellet_delivery.view.pellet_control import PelletControl
 from tools.pellet_delivery.view.pellet_status import PelletStatus
 from tools.pellet_delivery.view.pellet_state import PelletState
-from tools.view.basic_panel import create_panel, ConnectionPanel
+from tools.view.basic_panel import create_panel
+from tools.view.connection_panel import ConnectionPanel
 
 from autotrainer.pyside import TextBoxHandler
 
