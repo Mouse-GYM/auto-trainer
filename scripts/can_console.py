@@ -167,8 +167,8 @@ def monitor_message_queue():
                 print_status = None
 
         if kind == SystemStatusMessageKind.PELLET_X or \
-                kind == SystemStatusMessageKind.PELLET_Y or \
-                kind == SystemStatusMessageKind.PELLET_Z:
+            kind == SystemStatusMessageKind.PELLET_Y or \
+            kind == SystemStatusMessageKind.PELLET_Z:
             positions[kind] = int(data)
 
     if output_fd is not None:
@@ -451,6 +451,14 @@ def handle_motor_command(motor: Motor, params, device_thread):
             write_config(motor, device_thread)
         else:
             print(f"Unrecognized configuration request: {params[1]}")
+
+    elif params[0] == 'step':
+        start = int(params[1])
+        stop = int(params[2])
+        for position in range(start, stop, 1 if start < stop else -1):
+            device_thread.send_message(motor_to_set_command[motor],
+                                       data=float(position))
+            time.sleep(1)
     else:
         print(f"Unrecognized motor command: {params[0]}")
 
@@ -498,6 +506,8 @@ def print_help():
           " ::Move servo pos [0:120] (deg) rate [0:100] (%)\n"
           "                                  "
           " ::Move stepper pos [0:27] (mm) rate [0:100] (%)")
+    print("<motor> step <start> <end>        "
+          " :: Step 1 degree or mm at a time")
     print("<motor> config read               "
           " ::Read Configuration")
     print("<motor> config write              "
