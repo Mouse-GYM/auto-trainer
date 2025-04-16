@@ -5,9 +5,9 @@ from autotrainer.pyside import CardWidget
 def create_panel(title, layout, status=None) -> QWidget:
     panel = CardWidget(header_background_color="#00b6de")
 
-    content = QWidget()
-    content.setLayout(layout)
-    panel.setContentWidget(content)
+    layout.setContentsMargins(8, 8, 8, 8)
+    layout.setSpacing(6)
+    panel.setContentLayout(layout)
 
     header = QWidget()
     layout = QHBoxLayout()
