@@ -323,6 +323,7 @@ class CanDevice(Device):
             position = location[0]
 
         if self._desired_location is not None:
+            logger.warning("Trying to command a motor motion when one already is active")
             self._acknowledge_command(context)
         else:
             self._pending_move_token = context
@@ -357,8 +358,9 @@ class CanDevice(Device):
                 kind = SystemStatusMessageKind.HEAD_MAGNET
             if kind is not None:
                 self.api.send_message(kind, position)
-        # print(f"desired={self._desired_location}/{position} motor="
-        #       f"{self._active_motor}/{motor}")
+        # if self._desired_location is not None and motor == self._active_motor:
+        #     print(f"desired={self._desired_location}/{position} motor="
+        #           f"{self._active_motor}/{motor}")
         if self._desired_location is not None and \
             motor == self._active_motor and \
             abs(position - self._desired_location) < 0.01:

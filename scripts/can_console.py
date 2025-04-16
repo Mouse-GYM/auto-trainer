@@ -167,8 +167,8 @@ def monitor_message_queue():
                 print_status = None
 
         if kind == SystemStatusMessageKind.PELLET_X or \
-                kind == SystemStatusMessageKind.PELLET_Y or \
-                kind == SystemStatusMessageKind.PELLET_Z:
+            kind == SystemStatusMessageKind.PELLET_Y or \
+            kind == SystemStatusMessageKind.PELLET_Z:
             positions[kind] = int(data)
 
     if output_fd is not None:
@@ -451,6 +451,16 @@ def handle_motor_command(motor: Motor, params, device_thread):
             write_config(motor, device_thread)
         else:
             print(f"Unrecognized configuration request: {params[1]}")
+
+    elif params[0] == 'step':
+        start = int(params[1])
+        stop = int(params[2])
+        step = int(params[3]) if len(params) > 3 else 1
+
+        for position in range(start, stop, step if start < stop else -step):
+            device_thread.send_message(motor_to_set_command[motor],
+                                       data=float(position))
+            time.sleep(1 + .25 * step)
     else:
         print(f"Unrecognized motor command: {params[0]}")
 
@@ -485,55 +495,57 @@ def handle_output_command(params, device_thread):
 
 
 def print_help():
-    print("?                                 "
+    print("?                                  "
           " ::help")
     print("For the commands, you can either use the letter or full command name (e.g. q or quit)\n")
-    print("q[uit]                            "
+    print("q[uit]                             "
           " ::Quit")
-    print("v[ersion]                         "
+    print("v[ersion]                          "
           " ::Version")
-    print("<motor>                           "
+    print("<motor>                            "
           " ::Motor status")
-    print("<motor> [set] <pos> [<rate>]      "
+    print("<motor> [set] <pos> [<rate>]       "
           " ::Move servo pos [0:120] (deg) rate [0:100] (%)\n"
-          "                                  "
+          "                                   "
           " ::Move stepper pos [0:27] (mm) rate [0:100] (%)")
-    print("<motor> config read               "
+    print("<motor> step <start> <end> [<step>]"
+          " ::Step degrees or mms at a time")
+    print("<motor> config read                "
           " ::Read Configuration")
-    print("<motor> config write              "
+    print("<motor> config write               "
           " ::Write Configuration")
-    print("<motor> trip <cnt>                "
+    print("<motor> trip <cnt>                 "
           " ::<cnt> Round trips")
     print("<motor> is one of: x, y, z, l[oad], c[over], m[agnet]")
     print()
 
-    print("p[ellet] c[over]                  "
+    print("p[ellet] c[over]                   "
           " ::Cover Pellet")
-    print("p[ellet] l[oad]                   "
+    print("p[ellet] l[oad]                    "
           " ::Load Pellet")
-    print("p[ellet] r[elease]                "
+    print("p[ellet] r[elease]                 "
           " ::Release Pellet")
-    print("p[ellet] s[end]                   "
+    print("p[ellet] s[end]                    "
           " ::Send Pellet")
     print()
 
-    print("a[udio] <freq> <period>           "
+    print("a[udio] <freq> <period>            "
           " ::Audio sound (hz) (sec)")
-    print("h[ome]                            "
+    print("h[ome]                             "
           " ::Home Position")
-    print("f[ile] motor <file>               "
+    print("f[ile] motor <file>                "
           " ::Load Motor Configuration")
-    print("f[ile] move <file>                "
+    print("f[ile] move <file>                 "
           " ::Load Compound Movement Configuration")
-    print("o[utput] d[igital] <chan> <state> "
+    print("o[utput] d[igital] <chan> <state>  "
           " ::Set digital output on pellet chan [1:4] state [0:1]")
-    print("o[utput] a[nalog] <chan> <mvolts> "
+    print("o[utput] a[nalog] <chan> <mvolts>  "
           " ::Set analog output on pellet chan [0] mvolts [0:5000]")
-    print("s[tatus]                          "
+    print("s[tatus]                           "
           " ::Show Status")
-    print("r[gb] <red> <green> <blue>        "
+    print("r[gb] <red> <green> <blue>         "
           " ::Set RGB LED. Values in %")
-    print("t[are]                            "
+    print("t[are]                             "
           " ::Tare Load Cell/Pressure Sensors")
     print()
 
