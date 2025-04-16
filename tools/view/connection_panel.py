@@ -2,7 +2,6 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QPushButton
 from autotrainer.pyside import ATSerialPortComboBox
 from PySide6.QtGui import QIcon
-from tools.pellet_delivery.model.app_model import AppModel
 from autotrainer.device import get_available_hardware, HAVE_CAN_DEVICE
 from tools.view.basic_panel import create_panel
 
@@ -13,7 +12,7 @@ class ConnectionPanel(QWidget):
     connecting = Signal()
     disconnected = Signal()
 
-    def __init__(self, app_view_model: AppModel, connect_to: str):
+    def __init__(self, app_view_model, connect_to: str):
         super().__init__()
 
         self._app_view_model = app_view_model
