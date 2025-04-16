@@ -202,7 +202,7 @@ class AppModel(ObservableObject):
 
         self._send_command(SystemCommandKind.REQUEST_VERSION)
 
-        if self._hardware_configuration is None or not Path.exists(self._hardware_configuration):
+        if self._hardware_configuration is None or not Path.exists(Path(self._hardware_configuration)):
             if Path.home().joinpath(".alogus_config.yaml").exists():
                 self.hardware_configuration = str(Path.home().joinpath(".alogus_config.yaml"))
             elif Path.home().joinpath("alogus_config.yaml").exists():
