@@ -28,6 +28,9 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._baseline_intensity = limits.min_baseline_intensity
         self._auto_clamp_intensity = 100
+        self._auto_clamp_release_tone_freq = 7000
+        self._auto_clamp_release_delay = 0.1
+
         self._day_pellet_count = 0
 
         self._is_in_session = False
@@ -132,6 +135,27 @@ class BehaviorAlgorithm(ObservableObject):
         EventManager.post_event(BehaviorEventKind.autoClampIntensityChanged, context=value)
 
     @property
+    def auto_clamp_release_tone_freq(self):
+        """Frequency of the tone played when auto-clamp is released in Hz"""
+        return self._auto_clamp_release_tone_freq
+
+    @auto_clamp_release_tone_freq.setter
+    def auto_clamp_release_tone_freq(self, value):
+        self._auto_clamp_release_tone_freq = self._on_property_changed("auto_clamp_release_tone_freq", value,
+                                                                       self._auto_clamp_release_tone_freq)
+        EventManager.post_event(BehaviorEventKind.autoClampReleaseToneFreqChanged, context=value)
+
+    @property
+    def auto_clamp_release_delay(self):
+        return self._auto_clamp_release_delay
+
+    @auto_clamp_release_delay.setter
+    def auto_clamp_release_delay(self, value):
+        self._auto_clamp_release_delay = self._on_property_changed("auto_clamp_release_delay", value,
+                                                                   self._auto_clamp_release_delay)
+        EventManager.post_event(BehaviorEventKind.autoClampReleaseDelayChanged, context=value)
+
+    @property
     def pellet_last_seen(self) -> float:
         return self._pellet_last_seen
 
@@ -216,6 +240,33 @@ class BehaviorAlgorithm(ObservableObject):
             self._session_mouse_seen = self._on_property_changed("session_mouse_seen", seen, self._session_mouse_seen)
             if not was_seen:
                 EventManager.post_event(BehaviorEventKind.sessionMouseSeen)
+
+    def load_configuration(self, configuration: dict):
+        self.limits = BehaviorLimits.from_dictionary(configuration)
+
+        if "isDeliverPelletEnabled" in configuration:
+            self.pellet_delivery_enabled = configuration["isDeliverPelletEnabled"]
+        if "isCoverPelletEnabled" in configuration:
+            self.pellet_cover_enabled = configuration["isCoverPelletEnabled"]
+        if "defaultBaselineIntensity" in configuration:
+            self.baseline_intensity = configuration["defaultBaselineIntensity"]
+        if "autoClampIntensity" in configuration:
+            self.auto_clamp_intensity = configuration["autoClampIntensity"]
+        if "autoClampReleaseToneFreq" in configuration:
+            self.auto_clamp_release_tone_freq = configuration["autoClampReleaseToneFreq"]
+        if "autoClampReleaseToneDelay" in configuration:
+            self.auto_clamp_release_delay = configuration["autoClampReleaseToneDelay"]
+
+    def save_configuration(self) -> dict:
+        limits = self.limits.to_dictionary()
+
+        limits.update({"isDeliverPelletEnabled": self.pellet_delivery_enabled,
+                       "isCoverPelletEnabled": self.pellet_cover_enabled,
+                       "isIntersessionAnalysisEnabled": self.intersession_enabled,
+                       "autoClampIntensity": self.auto_clamp_intensity,
+                       "autoClampReleaseToneFreq": self.auto_clamp_release_tone_freq,
+                       "autoClampReleaseToneDelay": self.auto_clamp_release_delay})
+        return limits
 
     def _start_day(self):
         self._day_pellet_count = 0

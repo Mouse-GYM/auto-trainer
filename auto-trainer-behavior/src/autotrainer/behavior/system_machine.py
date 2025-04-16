@@ -66,6 +66,8 @@ class SystemMachine:
         if inference is not None and inference.pose_algorithm is not None:
             inference.pose_algorithm.pose_changed += self._pose_changed
 
+        self._pellet_command = pellet_command
+
         self._pellet_machine = PelletMachine(self.algorithm, pellet_reader, pellet_command)
         self._pellet_machine.events.pellet_loading += self._pellet_loading
         self._pellet_machine.events.pellet_sending += self._pellet_sending
@@ -137,6 +139,9 @@ class SystemMachine:
         self._pellet_machine.environment_changed()
 
     def _session_ended(self):
+        if self._head_fix_command is not None:
+            self._head_fix_command.update_position(self.algorithm.baseline_intensity)
+
         if self.algorithm.can_perform_intersession_analysis() and self.state == SystemState.cage:
             self.enter_intersession()
 
@@ -210,10 +215,19 @@ class SystemMachine:
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     def _algorithm_property_changed(self, name: str, value, _):
-        # Always back off to the baseline intensity when the auto-clamp is disabled.
+        # Always back off to the baseline intensity when auto-clamp is disabled.
         if name == "head_fixation_enabled":
-            if self._head_fix_command is not None and not value:
-                self._head_fix_command.update_position(self.algorithm.baseline_intensity)
+            if not value:
+                logger.debug("auto-clamp disabled (backing off to baseline intensity)")
+                if self.algorithm.is_in_session:
+                    logger.debug("\tsending tone to indicate auto-clamp disabled")
+                    self._pellet_command.play_tone(self.algorithm.auto_clamp_release_tone_freq, 0.5)
+                if self._head_fix_command is not None:
+                    logger.debug(
+                        f"\tchanging magnet intensity to baseline in {self.algorithm.auto_clamp_release_delay} seconds")
+                    timer = Timer(self.algorithm.auto_clamp_release_delay,
+                                  lambda: self._head_fix_command.update_position(self.algorithm.baseline_intensity))
+                    timer.start()
 
     def _pellet_loading(self):
         self._timer1 = Timer(2, self._consider_end_session)

@@ -11,20 +11,21 @@ from autotrainer.core.message import SystemStatusMessageKind, SystemCommandKind
 from autotrainer.device import (CanDevice, DeviceApi, CanInterface,
                                 Status, Target, LoadCellReading, PressureReading, SensorStatus,
                                 MagnetDigitalInputs, Motor, StepperStatus, ServoStatus,
-                                ServoConfig, StepperConfig, MotorSteps, HAVE_CAN_DEVICE, EmulationInterface
+                                ServoConfig, StepperConfig, MotorSteps, HAVE_CAN_DEVICE,
+                                EmulationInterface
                                 )
 
 _expected = []
 
 
-def notify_command(kind, tag, data=None, expected=None, repeat=1, expectAck: bool = True):
+def notify_command(kind, tag, data=None, expected=None, repeat=1, expect_ack: bool = True):
     global _expected
 
     if expected is None:
         expected = []
     device = _construction()
     _expected = expected
-    if expectAck:
+    if expect_ack:
         _expected.append((SystemStatusMessageKind.ACKNOWLEDGE, tag))
 
     for i in range(repeat):
@@ -79,22 +80,22 @@ def test_notify_tare_load_cell():
 
 @pytest.mark.canbus
 def test_notify_set_magnet():
-    notify_command(SystemCommandKind.SET_MAGNET_INTENSITY, 103, data=3.0, expectAck=False)
+    notify_command(SystemCommandKind.SET_MAGNET_INTENSITY, 103, data=3.0, expect_ack=False)
 
 
 @pytest.mark.canbus
 def test_notify_set_x():
-    notify_command(SystemCommandKind.SET_X, 10.4, data=4, expectAck=False)
+    notify_command(SystemCommandKind.SET_X, 10.4, data=4, expect_ack=False)
 
 
 @pytest.mark.canbus
 def test_notify_set_y():
-    notify_command(SystemCommandKind.SET_Y, 10.5, data=5, expectAck=False)
+    notify_command(SystemCommandKind.SET_Y, 10.5, data=5, expect_ack=False)
 
 
 @pytest.mark.canbus
 def test_notify_set_z():
-    notify_command(SystemCommandKind.SET_Z, 10.6, data=6, expectAck=False)
+    notify_command(SystemCommandKind.SET_Z, 10.6, data=6, expect_ack=False)
 
 
 @pytest.mark.canbus
@@ -105,22 +106,22 @@ def test_notify_set_home():
 
 @pytest.mark.canbus
 def test_notify_load_pellet():
-    notify_command(SystemCommandKind.LOAD_PELLET, 107, expectAck=False)
+    notify_command(SystemCommandKind.LOAD_PELLET, 107, expect_ack=False)
 
 
 @pytest.mark.canbus
 def test_notify_send_pellet():
-    notify_command(SystemCommandKind.SEND_PELLET, 108, expectAck=False)
+    notify_command(SystemCommandKind.SEND_PELLET, 108, expect_ack=False)
 
 
 @pytest.mark.canbus
 def test_notify_release_pellet():
-    notify_command(SystemCommandKind.RELEASE_PELLET, 109, expectAck=False)
+    notify_command(SystemCommandKind.RELEASE_PELLET, 109, expect_ack=False)
 
 
 @pytest.mark.canbus
 def test_notify_cover_pellet():
-    notify_command(SystemCommandKind.COVER_PELLET, 110, expectAck=False)
+    notify_command(SystemCommandKind.COVER_PELLET, 110, expect_ack=False)
 
 
 @pytest.mark.canbus

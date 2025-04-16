@@ -1,6 +1,6 @@
 from typing import Optional
 
-from autotrainer.behavior import SystemMachine, BehaviorLimits, InferenceProtocol
+from autotrainer.behavior import SystemMachine, InferenceProtocol
 from autotrainer.core import ObservableObject, ProjectInfo
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -15,7 +15,9 @@ class BehaviorModel(ObservableObject):
 
         self._project: Optional[ProjectInfo] = None
 
-        self._is_intersession_enabled = False
+        self._machine.algorithm.property_changed += self._on_algorithm_property_changed
+
+        self._is_intersession_enabled = self._machine.algorithm.intersession_enabled
 
     @property
     def project(self) -> ProjectInfo:
@@ -40,35 +42,29 @@ class BehaviorModel(ObservableObject):
         self._machine.algorithm.intersession_enabled = self._is_intersession_enabled
 
     def load_configuration(self, configuration: dict):
-        self._machine.algorithm.limits = BehaviorLimits.from_dictionary(configuration)
-
-        if "isDeliverPelletEnabled" in configuration:
-            self._machine.algorithm.pellet_delivery_enabled = configuration["isDeliverPelletEnabled"]
-        if "isCoverPelletEnabled" in configuration:
-            self._machine.algorithm.pellet_cover_enabled = configuration["isCoverPelletEnabled"]
         if "isIntersessionAnalysisEnabled" in configuration:
             self.is_intersession_enabled = configuration["isIntersessionAnalysisEnabled"]
-        if "defaultBaselineIntensity" in configuration:
-            self._machine.algorithm.baseline_intensity = configuration["defaultBaselineIntensity"]
-        if "autoClampIntensity" in configuration:
-            self._machine.algorithm.auto_clamp_intensity = configuration["autoClampIntensity"]
+
+        self._machine.algorithm.load_configuration(configuration)
 
     def save_configuration(self) -> dict:
-        limits = self._machine.algorithm.limits.to_dictionary()
-        limits.update({"isDeliverPelletEnabled": self._machine.algorithm.pellet_delivery_enabled,
-                       "isCoverPelletEnabled": self._machine.algorithm.pellet_cover_enabled,
-                       "isIntersessionAnalysisEnabled": self._is_intersession_enabled,
-                       "autoClampIntensity": self._machine.algorithm.auto_clamp_intensity})
-        return limits
+        return self._machine.algorithm.save_configuration()
 
     def on_prepare_capture(self):
         self._machine.project = self._project
 
+    def _on_algorithm_property_changed(self, property_name: str, new_value, _):
+        if property_name == "intersession_enabled":
+            self._is_intersession_enabled = new_value
+
     def trigger_tunnel(self, value: bool):
         """
         Provides the ability to manually trigger tunnel enter/exit state changes independent of load cell events.
-        Future load cell events will still have the expected behavior.
+        Future load cell events will still have the expected behavior.  This is primarily supported for testing and
+        diagnostics.
+
         :param value: True to enter tunnel, False to exit.
+
         :return:
         """
         if value:
