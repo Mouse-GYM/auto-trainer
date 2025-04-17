@@ -55,9 +55,11 @@ class HeadFix(GymDevice):
             self._send_data("Sx", context)
         elif kind == SystemCommandKind.STREAM_STOP:
             self._send_data("Tx", context)
-        elif kind == SystemCommandKind.SET_SEND_PROCEDURE or \
-                kind == SystemCommandKind.SET_LOAD_PROCEDURE or \
-                kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
+        elif kind == SystemCommandKind.SET_SEND_PELLET_PROCEDURE or \
+            kind == SystemCommandKind.SET_LOAD_PELLET_PROCEDURE or \
+            kind == SystemCommandKind.SET_COVER_PELLET_PROCEDURE or \
+            kind == SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE or \
+            kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
             pass
         else:
             logger.warning(f"unknown message kind: {kind}")

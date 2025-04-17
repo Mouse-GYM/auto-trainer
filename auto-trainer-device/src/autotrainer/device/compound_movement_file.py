@@ -3,6 +3,8 @@ Class to manage compound movement configuration file.
 """
 
 import logging
+from enum import IntEnum
+
 import yaml
 from pathlib import Path
 
@@ -12,15 +14,26 @@ logger = logging.getLogger(__name__)
 
 
 class CompoundMovementFile:
+    class _Movement(IntEnum):
+        LOAD_PELLET = 0
+        SEND_PELLET = 1
+        COVER_PELLET = 2
+        RELEASE_PELLET = 3
+
+    _mapping = {
+        _Movement.LOAD_PELLET: "load_pellet",
+        _Movement.SEND_PELLET: "send_pellet",
+        _Movement.COVER_PELLET: "cover_pellet",
+        _Movement.RELEASE_PELLET: "release_pellet"
+    }
 
     def __init__(self, filename):
+        self._movements = [MotorSteps(), MotorSteps(), MotorSteps(), MotorSteps()]
+
         if isinstance(filename, str):
             filename = Path(filename)
 
         logger.info(f"LOADING: Alogus Compound Movement file: {filename}")
-
-        load_movement = MotorSteps("load", [])
-        send_movement = MotorSteps("send", [])
 
         if filename.exists():
             try:
@@ -28,12 +41,10 @@ class CompoundMovementFile:
                     conf = yaml.safe_load(file)
 
                     if "actions" in conf:
-                        if "load" in conf["actions"]:
-                            load_movement = MotorSteps.from_dict("load",
-                                                                 conf["actions"]["load"])
-                        if "send" in conf["actions"]:
-                            send_movement = MotorSteps.from_dict("send",
-                                                                 conf["actions"]["send"])
+                        for idx, name in CompoundMovementFile._mapping:
+                            if name in conf["actions"]:
+                                self._movements[idx.value] = \
+                                    MotorSteps.from_dict(name, conf["actions"][name])
 
                 logging.info("LOADED: Alogus Compound Movement file")
 
@@ -42,17 +53,22 @@ class CompoundMovementFile:
         else:
             logger.error(f"ERROR: Alogus Motor Configuration file {filename}: No such File")
 
-        self._load_movement = load_movement
-        self._send_movement = send_movement
-
     '''
     Meet the CompoundMovementDataSet Protocol
     '''
+    
+    @property
+    def load_pellet(self) -> MotorSteps:
+        return self._movements[CompoundMovementFile._Movement.LOAD_PELLET.value]
 
     @property
-    def load(self) -> MotorSteps:
-        return self._load_movement
+    def send_pellet(self) -> MotorSteps:
+        return self._movements[CompoundMovementFile._Movement.SEND_PELLET.value]
 
     @property
-    def send(self) -> MotorSteps:
-        return self._send_movement
+    def cover_pellet(self) -> MotorSteps:
+        return self._movements[CompoundMovementFile._Movement.COVER_PELLET.value]
+
+    @property
+    def release_pellet(self) -> MotorSteps:
+        return self._movements[CompoundMovementFile._Movement.RELEASE_PELLET.value]

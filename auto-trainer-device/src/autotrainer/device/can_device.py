@@ -60,8 +60,10 @@ class CanDevice(Device):
 
         self._homing_motors = []
 
-        self._load_movement = default_load_procedure()
-        self._send_movement = default_send_procedure()
+        self._load_pellet = default_load_pellet()
+        self._send_pellet = default_send_pellet()
+        self._cover_pellet = default_cover_pellet()
+        self._release_pellet = default_release_pellet()
         self._compound_movement = None  # Current compound movement
 
         self._delay_start = None
@@ -78,6 +80,20 @@ class CanDevice(Device):
     @api.setter
     def api(self, value: DeviceApi):
         self._api = value
+
+    '''
+    Start a sequence of activities
+    '''
+
+    def _start_sequence(self, movements: MotorSteps, context):
+        logger.info(f"performing compound action: {movements}")
+
+        if self._pending_move_token is not None or movements is None:
+            self._acknowledge_command(context)
+        else:
+            self._pending_move_token = context
+            self._compound_movement = movements.steps
+            self._perform_next_compound_step()
 
     '''
     This method is called when a command to a target is requested. This method
@@ -105,15 +121,29 @@ class CanDevice(Device):
             assert isinstance(config, ServoConfig) or isinstance(config, StepperConfig)
             self._interface.set_motor_configuration(motor, config)
 
-        elif kind == SystemCommandKind.SET_LOAD_PROCEDURE:
+        elif kind == SystemCommandKind.SET_LOAD_PELLET_PROCEDURE:
             assert isinstance(data, MotorSteps)
-            logger.info(f"Setting LOAD procedure to: \n{data.steps}")
-            self._load_movement = data
+            if not data.is_empty():
+                logger.info(f"Setting LOAD procedure to: \n{data.steps}")
+                self._load_pellet = data
 
-        elif kind == SystemCommandKind.SET_SEND_PROCEDURE:
+        elif kind == SystemCommandKind.SET_SEND_PELLET_PROCEDURE:
             assert isinstance(data, MotorSteps)
-            logger.info(f"Setting SEND procedure to: \n{data.steps}")
-            self._send_movement = data
+            if not data.is_empty():
+                logger.info(f"Setting SEND procedure to: \n{data.steps}")
+                self._send_pellet = data
+
+        elif kind == SystemCommandKind.SET_COVER_PELLET_PROCEDURE:
+            assert isinstance(data, MotorSteps)
+            if not data.is_empty():
+                logger.info(f"Setting COVER procedure to: \n{data.steps}")
+                self._cover_pellet = data
+
+        elif kind == SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE:
+            assert isinstance(data, MotorSteps)
+            if not data.is_empty():
+                logger.info(f"Setting RELEASE procedure to: \n{data.steps}")
+                self._release_pellet = data
 
         elif kind == SystemCommandKind.UPDATE_SCALE_TARE:
             self._interface.tare_load_cell()
@@ -124,19 +154,20 @@ class CanDevice(Device):
             self._move_motor(Motor.MAGNET_SERVO, data, context, self._interface.set_magnet)
 
         elif kind == SystemCommandKind.SET_LOAD_SERVO:
-            self._move_motor(Motor.PELLET_LOAD_SERVO, data, context, self._interface.set_load)
+            self._move_motor(Motor.PELLET_LOAD_SERVO, data, context, self._interface.set_load_servo)
 
         elif kind == SystemCommandKind.SET_COVER_SERVO:
-            self._move_motor(Motor.PELLET_COVER_SERVO, data, context, self._interface.set_cover)
+            self._move_motor(Motor.PELLET_COVER_SERVO, data, context,
+                             self._interface.set_cover_servo)
 
         elif kind == SystemCommandKind.SET_X:
-            self._move_motor(Motor.PELLET_X_MOTOR, data, context, self._interface.set_x)
+            self._move_motor(Motor.PELLET_X_MOTOR, data, context, self._interface.set_x, True)
 
         elif kind == SystemCommandKind.SET_Y:
-            self._move_motor(Motor.PELLET_Y_MOTOR, data, context, self._interface.set_y)
+            self._move_motor(Motor.PELLET_Y_MOTOR, data, context, self._interface.set_y, True)
 
         elif kind == SystemCommandKind.SET_Z:
-            self._move_motor(Motor.PELLET_Z_MOTOR, data, context, self._interface.set_z)
+            self._move_motor(Motor.PELLET_Z_MOTOR, data, context, self._interface.set_z, True)
 
         elif kind == SystemCommandKind.SEND_TO_LIMITS:
             motor = typing.cast(Motor, data)
@@ -147,33 +178,16 @@ class CanDevice(Device):
                        context)
 
         elif kind == SystemCommandKind.LOAD_PELLET:
-            if self._pending_move_token is not None or self._load_movement is None:
-                self._acknowledge_command(context)
-                return
-            self._pending_move_token = context
-            self._compound_movement = self._load_movement.steps
-            logger.info(f"performing compound action: {self._compound_movement}")
-            self._perform_next_compound_step()
+            self._start_sequence(self._load_pellet, context)
 
         elif kind == SystemCommandKind.SEND_PELLET:
-            if self._pending_move_token is not None or self._send_movement is None:
-                self._acknowledge_command(context)
-                return
-            self._pending_move_token = context
-            self._compound_movement = self._send_movement.steps
-            logger.info(f"performing compound action: {self._compound_movement}")
-            self._perform_next_compound_step()
+            self._start_sequence(self._send_pellet, context)
 
         elif kind == SystemCommandKind.RELEASE_PELLET:
-            self._move_motor(Motor.PELLET_COVER_SERVO,
-                             self._interface.cover_config.minimum_position, context,
-                             self._interface.set_cover)
-            self._interface.emit_tone(2000, 6000)
+            self._start_sequence(self._release_pellet, context)
 
         elif kind == SystemCommandKind.COVER_PELLET:
-            self._move_motor(Motor.PELLET_COVER_SERVO,
-                             self._interface.cover_config.maximum_position, context,
-                             self._interface.set_cover)
+            self._start_sequence(self._cover_pellet, context)
 
         elif kind == SystemCommandKind.PLAY_TONE:
             assert isinstance(data, tuple)
@@ -315,7 +329,7 @@ class CanDevice(Device):
             self._pending_move_token = context
             self._homing_motors = motors
 
-    def _move_motor(self, motor: Motor, location, context, method):
+    def _move_motor(self, motor: Motor, location, context, method, fixed_location: bool = False):
         # The location is either a position or a (position, rate) pair
         if isinstance(location, float) or isinstance(location, int):
             position = location
@@ -413,15 +427,15 @@ class CanDevice(Device):
                     self._move_motor(Motor.PELLET_Z_MOTOR, location, self._pending_move_token,
                                      self._interface.set_z)
 
-                elif "load" in step:
-                    location = step["load"]
+                elif "load_arm" in step:
+                    location = step["load_arm"]
                     self._move_motor(Motor.PELLET_LOAD_SERVO, location, self._pending_move_token,
-                                     self._interface.set_load)
+                                     self._interface.set_load_servo)
 
-                elif "cover" in step:
-                    location = step["cover"]
+                elif "barrier_arm" in step:
+                    location = step["barrier_arm"]
                     self._move_motor(Motor.PELLET_COVER_SERVO, location, self._pending_move_token,
-                                     self._interface.set_cover)
+                                     self._interface.set_cover_servo)
 
                 elif "magnet" in step:
                     location = step["magnet"]
@@ -432,19 +446,37 @@ class CanDevice(Device):
                     self._delay_start = time.time()
                     self._delay_period = step["delay"]
                     logger.debug("delay start")
+
+                elif "tone" in step:
+                    freq, duration = step["tone"].split(',')  # (hz), (sec)
+                    self._interface.emit_tone(freq, duration * 1000)
+
+                elif "predefined":
+                    predefined = step["predefined"]
+                    if predefined == "send":
+                        self._interface.fixed_position()
+                    elif predefined == "cover":
+                        self._interface.cover_pellet()
+                    elif predefined == "release":
+                        self._interface.release_pellet()
+                    elif predefined == "retrieve":
+                        self._interface.retrieve_pellet()
+                    elif predefined == "scoop":
+                        self._interface.scoop_pellet()
             else:
                 logger.debug("sequence complete")
                 self._compound_movement = None
                 self._acknowledge_command(self._pending_move_token)
 
 
-def default_load_procedure() -> MotorSteps:
-    return MotorSteps("load",
+def default_load_pellet() -> MotorSteps:
+    return MotorSteps("load_pellet",
                       [
-                          {'load': 100},
-                          {'delay': 1.0},
-                          {'z': 12.2},  # in mm
-                          {'load': 0.0},
+                          {'x': 0.0},
+                          {'predefined': 'retrieve'},
+                          {'delay': 1.0},  # in sec
+                          {'z': 5.0},
+                          {'predefined': 'scoop'},
                           {'delay': 1.0},
                           {'z': 0.0},  # in mm
                           {'delay': 1.0},
@@ -452,11 +484,25 @@ def default_load_procedure() -> MotorSteps:
                       )
 
 
-def default_send_procedure() -> MotorSteps:
-    return MotorSteps("send",
+def default_send_pellet() -> MotorSteps:
+    return MotorSteps("send_pellet",
                       [
-                          {'z': 1.22},  # in mm
-                          {'x': 3.9},  # in mm
-                          {'y': 4.88}  # in mm
+                          {'predefined': 'send'},
+                      ]
+                      )
+
+
+def default_cover_pellet() -> MotorSteps:
+    return MotorSteps("cover_pellet",
+                      [
+                          {'predefined': 'cover'},
+                      ]
+                      )
+
+
+def default_release_pellet() -> MotorSteps:
+    return MotorSteps("release_pellet",
+                      [
+                          {'predefined': 'release'},
                       ]
                       )

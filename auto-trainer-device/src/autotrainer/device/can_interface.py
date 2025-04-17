@@ -608,37 +608,53 @@ class CanInterface(DeviceInterface):
         return self._set_stepper_position(position, self.z_config)
 
     '''
+    Move the X, Y, Z motor to a fixed location, known by the device
+    '''
+
+    def fixed_position(self) -> bool:
+        pass
+
+    '''
     Set the position of the load arm
     '''
 
-    def set_load(self, position: float):
+    def set_load_servo(self, position: float):
         return self._set_servo_position(position, self.load_config)
+
+    '''
+    Move to scoop a pellet
+    '''
+
+    def scoop_pellet(self) -> bool:
+        return self.set_load_servo(self.load_config.minimum_position)
+
+    '''
+    Move to retrieve a pellet
+    '''
+
+    def retrieve_pellet(self) -> bool:
+        return self.set_load_servo(self.load_config.maximum_position)
 
     '''
     Set the position of the cover for pellet delivery
     '''
 
-    def set_cover(self, position):
+    def set_cover_servo(self, position):
         return self._set_servo_position(position, self.cover_config)
 
     '''
     Open the cover so the pellet is visible to the animal
-    DEPRECATED
     '''
 
     def release_pellet(self) -> bool:
-        addr = self._tgt2addr(Target.PELLET_DEVICE)
-
-        return addr is not None and self.set_cover(self.cover_config.minimum_position) and \
-            self.emit_tone(2000, 6000)
+        return self.set_cover_servo(self.cover_config.minimum_position)
 
     '''
     Open the cover so the pellet is visible to the animal
-    DEPRECATED
     '''
 
     def cover_pellet(self) -> bool:
-        return self.set_cover(self.cover_config.maximum_position)
+        return self.set_cover_servo(self.cover_config.maximum_position)
 
     '''
     Send the given motor (X, Y, or Z) to the 0 position

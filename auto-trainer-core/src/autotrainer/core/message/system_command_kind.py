@@ -24,8 +24,8 @@ class SystemCommandKind(IntEnum):
     # Actions nominally considered part of the pellet delivery unit.
     READ_MOTOR_CONFIGURATION = 201,
     WRITE_MOTOR_CONFIGURATION = 202,
-    SET_LOAD_PROCEDURE = 203,
-    SET_SEND_PROCEDURE = 204,
+    SET_LOAD_PELLET_PROCEDURE = 203,
+    SET_SEND_PELLET_PROCEDURE = 204,
     SET_X = 205,
     SET_Y = 206,
     SET_Z = 207,
@@ -37,6 +37,8 @@ class SystemCommandKind(IntEnum):
     RELEASE_PELLET = 213,
     COVER_PELLET = 214,
     SEND_TO_LIMITS = 215,
+    SET_COVER_PELLET_PROCEDURE = 216,
+    SET_RELEASE_PELLET_PROCEDURE = 217,
 
     # General actions.
     PLAY_TONE = 301,

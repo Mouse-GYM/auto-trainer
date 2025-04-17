@@ -117,8 +117,10 @@ class DeviceConnection:
             self._cmd_queue.put_nowait((kind, data, context))
 
     def use_compound_movements(self, data: CompoundMovementDataSet):
-        self.send_message(SystemCommandKind.SET_LOAD_PROCEDURE, data.load)
-        self.send_message(SystemCommandKind.SET_SEND_PROCEDURE, data.send)
+        self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, data.load_pellet)
+        self.send_message(SystemCommandKind.SET_SEND_PELLET_PROCEDURE, data.send_pellet)
+        self.send_message(SystemCommandKind.SET_COVER_PELLET_PROCEDURE, data.cover_pellet)
+        self.send_message(SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, data.release_pellet)
 
     def use_motor_configurations(self, data: MotorConfigurations):
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.x_config)
@@ -129,10 +131,16 @@ class DeviceConnection:
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.cover_config)
 
     def set_load_procedure(self, load_steps: MotorSteps):
-        self.send_message(SystemCommandKind.SET_LOAD_PROCEDURE, load_steps)
+        self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, load_steps)
 
     def set_send_procedure(self, send_steps: MotorSteps):
-        self.send_message(SystemCommandKind.SET_SEND_PROCEDURE, send_steps)
+        self.send_message(SystemCommandKind.SET_SEND_PELLET_PROCEDURE, send_steps)
+
+    def set_cover_procedure(self, cover_steps: MotorSteps):
+        self.send_message(SystemCommandKind.SET_COVER_PELLET_PROCEDURE, cover_steps)
+
+    def set_release_procedure(self, release_steps: MotorSteps):
+        self.send_message(SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, release_steps)
 
     def set_motor_configuration(self, config):
         assert isinstance(config, ServoConfig) or isinstance(config, StepperConfig)
