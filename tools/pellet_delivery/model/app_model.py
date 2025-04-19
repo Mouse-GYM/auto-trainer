@@ -70,6 +70,10 @@ class AppModel(ObservableObject):
         return self._user_settings
 
     @property
+    def allow_can_emulation(self) -> bool:
+        return self._allow_can_emulation
+
+    @property
     def hardware_configuration(self):
         return self._hardware_configuration
 
@@ -92,6 +96,9 @@ class AppModel(ObservableObject):
 
     @firmware_version.setter
     def firmware_version(self, value):
+        if self._user_settings.port == CAN_IDENTIFIER:
+            if value is None or value.find("Pellet") == -1:
+                return
         self._firmware_version = self._on_property_changed("firmware_version", value,
                                                            self._firmware_version)
 

@@ -1,9 +1,11 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QPushButton
-from autotrainer.pyside import ATSerialPortComboBox
 from PySide6.QtGui import QIcon
-from autotrainer.device import get_available_hardware, HAVE_CAN_DEVICE
-from tools.view.basic_panel import create_panel
+
+from autotrainer.device import get_available_hardware
+from autotrainer.pyside import ATSerialPortComboBox
+
+from .basic_panel import create_panel
 
 import qtawesome as qta
 
@@ -12,13 +14,13 @@ class ConnectionPanel(QWidget):
     connecting = Signal()
     disconnected = Signal()
 
-    def __init__(self, app_view_model, connect_to: str):
+    def __init__(self, app_view_model, allow_emulation: bool = False):
         super().__init__()
 
         self._app_view_model = app_view_model
         self._app_view_model.property_changed += self._model_property_changed
 
-        self.connect_to = connect_to
+        self._allow_emulation = allow_emulation
 
         self._ignore_port_changes = False
 
@@ -64,7 +66,7 @@ class ConnectionPanel(QWidget):
             self._app_view_model.user_settings.set_port(self._port_combobox.currentText())
 
     def _refresh_ports(self):
-        ports = get_available_hardware(allow_can_emulation=not HAVE_CAN_DEVICE)
+        ports = get_available_hardware(allow_can_emulation=self._allow_emulation)
         self._port_combobox.refresh_ports(ports)
 
     def _connect(self):
@@ -89,5 +91,4 @@ class ConnectionPanel(QWidget):
             self._connect_button.setEnabled((not value) and self._app_view_model.is_connected)
         elif name == "firmware_version":
             assert isinstance(value, str)
-            if value.find(self.connect_to) >= 0:
-                self._connection_status.setText(f"{value}")
+            self._connection_status.setText(f"Firmware: {value}")

@@ -27,7 +27,7 @@ class MainContent(QWidget):
 
         layout = QVBoxLayout()
 
-        self._connection_panel = ConnectionPanel(model, "Magnet")
+        self._connection_panel = ConnectionPanel(model, model.allow_can_emulation)
         self._connection_panel.connecting.connect(self._connected)
         self._connection_panel.disconnected.connect(self._disconnected)
         layout.addWidget(self._connection_panel)
