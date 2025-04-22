@@ -23,10 +23,6 @@ class MockHeadfix(ObservableObject):
                                                                       self._is_headbar_pressure_engaged)
 
     @property
-    def head_fix_reader(self) -> SensorAnalysis:
-        return self
-
-    @property
     def current_position(self):
         return self._current_position
 
@@ -34,7 +30,7 @@ class MockHeadfix(ObservableObject):
     def is_headbar_pressure_engaged(self):
         return self._is_headbar_pressure_engaged
 
-    def update_position(self, value: int):
+    def set_position(self, value: int):
         self._current_position = value
 
     def tare(self):

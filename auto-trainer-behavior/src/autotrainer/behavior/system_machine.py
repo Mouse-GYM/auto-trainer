@@ -1,10 +1,9 @@
 import logging
 from threading import Timer
 
-from opentelemetry import trace
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager, MessageHandler
+from autotrainer.core import ProjectInfo, EventManager, MessageHandler, SensorAnalysis
 from autotrainer.inference import PoseResponse
 
 from .system_machine_state import SystemState
@@ -17,8 +16,6 @@ from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine
 
 logger = logging.getLogger(__name__)
-
-tracer = trace.get_tracer("behavior")
 
 
 class SystemMachine:
@@ -35,9 +32,9 @@ class SystemMachine:
          "before": "before_exit_intersession"}
     ]
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None,
-                 head_fix_command: HeadFixProtocol = None, pellet_reader: MessageHandler = None, pellet_command=None,
-                 inference: InferenceProtocol = None, project_info: ProjectInfo = None):
+    def __init__(self, algorithm: BehaviorAlgorithm = None, project_info: ProjectInfo = None,
+                 msg_handler: MessageHandler = None, analysis: SensorAnalysis = None,
+                 head_fix_command: HeadFixProtocol = None, pellet_command=None, inference: InferenceProtocol = None):
 
         self.state = SystemState.cage
 
@@ -51,10 +48,7 @@ class SystemMachine:
 
         self._head_fix_command = head_fix_command
 
-        if self._head_fix_command is not None:
-            self._head_fix_reader = self._head_fix_command.head_fix_reader
-        else:
-            self._head_fix_reader = None
+        self._head_fix_reader = analysis
 
         if self._head_fix_reader is not None:
             self._head_fix_reader.property_changed += self._head_fix_property_changed
@@ -68,7 +62,7 @@ class SystemMachine:
 
         self._pellet_command = pellet_command
 
-        self._pellet_machine = PelletMachine(self.algorithm, pellet_reader, pellet_command)
+        self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_command)
         self._pellet_machine.events.pellet_loading += self._pellet_loading
         self._pellet_machine.events.pellet_sending += self._pellet_sending
 
@@ -109,8 +103,7 @@ class SystemMachine:
         if self._pellet_machine.state == PelletState.sending or self._pellet_machine.state == PelletState.covering or self._pellet_machine.state == PelletState.releasing or self._pellet_machine.state == PelletState.monitoring:
             self.algorithm.start_session()
 
-        if self._head_fix_command is not None:
-            self._head_fix_command.update_position(self.algorithm.baseline_intensity)
+        self._update_magnet_position(self.algorithm.baseline_intensity)
 
         self._algorithm.system_state = SystemState.tunnel
 
@@ -122,8 +115,7 @@ class SystemMachine:
         self._algorithm.system_state = SystemState.cage
 
     def after_exit_tunnel(self):
-        if self._head_fix_command is not None:
-            self._head_fix_command.update_position(self.algorithm.baseline_intensity)
+        self._update_magnet_position(self.algorithm.baseline_intensity)
 
         EventManager.post_event(BehaviorEventKind.tunnelExit)
         self.algorithm.end_session()
@@ -140,7 +132,7 @@ class SystemMachine:
 
     def _session_ended(self):
         if self._head_fix_command is not None:
-            self._head_fix_command.update_position(self.algorithm.baseline_intensity)
+            self._update_magnet_position(self.algorithm.baseline_intensity)
 
         if self.algorithm.can_perform_intersession_analysis() and self.state == SystemState.cage:
             self.enter_intersession()
@@ -188,7 +180,7 @@ class SystemMachine:
         if self.state == SystemState.tunnel:
             if self._head_fix_command is not None:
                 logger.info(f"\tauto-clamp setting position to {self.algorithm.auto_clamp_intensity}")
-                self._head_fix_command.update_position(self.algorithm.auto_clamp_intensity)
+                self._update_magnet_position(self.algorithm.auto_clamp_intensity)
                 EventManager.post_event(BehaviorEventKind.headFixationEnabled)
             else:
                 logger.warning("\tauto-clamp position not sent (head fix command is none)")
@@ -226,8 +218,12 @@ class SystemMachine:
                     logger.debug(
                         f"\tchanging magnet intensity to baseline in {self.algorithm.auto_clamp_release_delay} seconds")
                     timer = Timer(self.algorithm.auto_clamp_release_delay,
-                                  lambda: self._head_fix_command.update_position(self.algorithm.baseline_intensity))
+                                  lambda: self._update_magnet_position(self.algorithm.baseline_intensity))
                     timer.start()
+
+    def _update_magnet_position(self, position: int):
+        if self._head_fix_command is not None:
+            self._head_fix_command.set_position(position)
 
     def _pellet_loading(self):
         self._timer1 = Timer(2, self._consider_end_session)

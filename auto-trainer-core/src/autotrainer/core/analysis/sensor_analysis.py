@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import os
 import logging
-import time
 from datetime import datetime
 from typing import Callable, Optional
 
 import numpy
 
-from autotrainer.core import ObservableObject, ProjectInfo, ProjectInterval, PerfMonitor, AudioSpectrumMessage
-from .headbar_pressure_monitor import HeadbarPressureMonitor
+from ..project import ProjectInfo, ProjectInterval
+from ..perf_monitor import PerfMonitor
+from ..observable_object import ObservableObject
+from ..message import AudioSpectrumMessage
 
+from .headbar_pressure_monitor import HeadbarPressureMonitor
 from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
 

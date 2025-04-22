@@ -1,30 +1,21 @@
 import logging
-import queue
 import uuid
 from typing import Optional
 
-from autotrainer.core import ObservableObject, ProjectInfo, SystemMessageHandler, MessageHandler, SystemCommandKind
-from autotrainer.device import get_available_hardware
-from autotrainer.device import PelletDelivery
-from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
+from autotrainer.core import ObservableObject, ProjectInfo, SystemCommandKind
+from autotrainer.device import get_available_hardware, DeviceConnectionProtocol
+from autotrainer.model import EnvironmentProvider
 
 logger = logging.getLogger(__name__)
 
 
 class PelletDeliveryModel(ObservableObject):
-    def __init__(self, allow_can_emulation: bool = False):
+    def __init__(self):
         super().__init__()
 
-        self._allow_can_emulation = allow_can_emulation
-
-        self._message_queue = queue.Queue()
+        self._device = None
 
         self._port = None
-
-        self._device_thread = None
-
-        self._message_handler = None
-        self._message_handler = SystemMessageHandler(self._message_queue)
 
         self._is_connected = False
 
@@ -35,6 +26,14 @@ class PelletDeliveryModel(ObservableObject):
         self._z = 0
 
         self._project: Optional[ProjectInfo] = None
+
+    @property
+    def device(self) -> Optional[DeviceConnectionProtocol]:
+        return self._device
+
+    @device.setter
+    def device(self, value: Optional[DeviceConnectionProtocol]) -> None:
+        self._device = value
 
     @property
     def project(self) -> ProjectInfo:
@@ -67,10 +66,6 @@ class PelletDeliveryModel(ObservableObject):
     @property
     def z(self) -> int:
         return self._z
-
-    @property
-    def pellet_reader(self) -> MessageHandler:
-        return self._message_handler
 
     def set_x(self, value: int) -> object:
         self._x = self._on_property_changed("x", value, self._x)
@@ -106,42 +101,20 @@ class PelletDeliveryModel(ObservableObject):
         return self._send_with_token(SystemCommandKind.PLAY_TONE, frequency)
 
     def refresh_ports(self):
-        return get_available_hardware(allow_can_emulation=self._allow_can_emulation)
+        return get_available_hardware(allow_can_emulation=EnvironmentProvider.allow_can_emulation())
 
-    def connect_to_device(self):
-        if not self.port or len(self.port) == 0:
-            return
+    def on_connect(self, device: DeviceConnectionProtocol):
+        self._device = device
 
-        self._device_thread = DeviceConnection(PelletDelivery(self.port), self._message_queue)
-        self._device_thread.name = "pellet"
-
-        self._device_thread.start()
-
-        self._device_thread.send_message(DeviceThreadMessageKind.CONNECT)
-
-        # For the v1 hardware, this value is retained by the device as a pellet send location.  If it was requested in
-        # UI or from a configuration file prior to connection, having called set_(x/y/z) at some point will have not had
-        # any effect on the hardware.
         self.set_x(self.x)
         self.set_y(self.y)
         self.set_z(self.z)
 
         self._is_connected = True
 
-    def disconnect_from_device(self):
-        if not self._is_connected:
-            return
-
-        self._send_command(DeviceThreadMessageKind.TERMINATE)
-
+    def on_disconnect(self):
+        self._device = None
         self._is_connected = False
-
-    def on_activated(self):
-        self._message_handler.start()
-
-    def on_close(self):
-        self.disconnect_from_device()
-        self._message_queue.put((DeviceThreadMessageKind.TERMINATE, None))
 
     def load_configuration(self, configuration: dict):
         if "port" in configuration:
@@ -165,8 +138,8 @@ class PelletDeliveryModel(ObservableObject):
             return None
 
     def _send_command(self, message, data=None, context=None) -> bool:
-        if self._device_thread is not None:
-            self._device_thread.send_message(message, data, context)
+        if self._device is not None:
+            self._device.send_message(message, data, context)
             return True
 
         return False
