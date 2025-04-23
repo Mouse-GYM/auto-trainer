@@ -34,7 +34,7 @@ class DigitalOutputs(IntEnum):
 
 
 class AnalogOutputs(IntEnum):
-    STATUS_OUT = 0
+    STATUS_OUT = 1
 
 
 @dataclass
@@ -331,6 +331,10 @@ class SensorStatus(Source):
 @dataclass
 class Version(Source):
     version: str = "Unknown"
+
+@dataclass
+class Acknowledge(Source):
+    uuid = 0
 
 
 class DeviceInterface:

@@ -10,7 +10,6 @@ protocols from the file ~/.alogus_config.yaml.
 
 import logging
 import time
-from datetime import datetime
 from typing import Tuple
 
 logger = logging.getLogger(__name__)
@@ -54,9 +53,7 @@ class CanDevice(Device):
         self._pellet_dst: typing.Optional[int] = None
         self._magnet_dst: typing.Optional[int] = None
 
-        self._desired_location = None
-        self._active_motor = None
-        self._pending_move_token = None
+        self._pending_context = None
 
         self._homing_motors = []
 
@@ -65,9 +62,6 @@ class CanDevice(Device):
         self._cover_pellet = default_cover_pellet()
         self._release_pellet = default_release_pellet()
         self._compound_movement = None  # Current compound movement
-
-        self._delay_start = None
-        self._delay_period = None
 
         if not HAVE_CAN_DEVICE:
             logger.warning(
@@ -85,13 +79,13 @@ class CanDevice(Device):
     Start a sequence of activities
     '''
 
-    def _start_sequence(self, movements: MotorSteps, context):
+    def _start_sequence(self, movements: MotorSteps):
         logger.info(f"performing compound action: {movements}")
 
-        if self._pending_move_token is not None or movements is None:
-            self._acknowledge_command(context)
+        if self._pending_context is not None or movements is None or \
+            movements.is_empty:
+            self._command_complete()
         else:
-            self._pending_move_token = context
             self._compound_movement = movements.steps
             self._perform_next_compound_step()
 
@@ -105,9 +99,10 @@ class CanDevice(Device):
         if self._interface is None:
             return
 
+        self._pending_context = context
+
         if kind == SystemCommandKind.REQUEST_VERSION:
             self._interface.request_version()
-            self._acknowledge_command(context)
 
         elif kind == SystemCommandKind.READ_MOTOR_CONFIGURATION:
             assert isinstance(data, Motor)
@@ -148,66 +143,66 @@ class CanDevice(Device):
         elif kind == SystemCommandKind.UPDATE_SCALE_TARE:
             self._interface.tare_load_cell()
             self._interface.tare_pressure_sensor()
-            self._acknowledge_command(context)
 
         elif kind == SystemCommandKind.SET_MAGNET_INTENSITY:
-            self._move_motor(Motor.MAGNET_SERVO, data, context, self._interface.set_magnet)
+            self._move_motor(Motor.MAGNET_SERVO, data, self._interface.set_magnet)
 
         elif kind == SystemCommandKind.SET_LOAD_SERVO:
-            self._move_motor(Motor.PELLET_LOAD_SERVO, data, context, self._interface.set_load_servo)
+            self._move_motor(Motor.PELLET_LOAD_SERVO, data, self._interface.set_load_servo)
 
         elif kind == SystemCommandKind.SET_COVER_SERVO:
-            self._move_motor(Motor.PELLET_COVER_SERVO, data, context,
+            self._move_motor(Motor.PELLET_COVER_SERVO, data,
                              self._interface.set_cover_servo)
 
         elif kind == SystemCommandKind.SET_X:
-            self._move_motor(Motor.PELLET_X_MOTOR, data, context, self._interface.set_x, True)
+            self._move_motor(Motor.PELLET_X_MOTOR, data, self._interface.set_x, True)
 
         elif kind == SystemCommandKind.SET_Y:
-            self._move_motor(Motor.PELLET_Y_MOTOR, data, context, self._interface.set_y, True)
+            self._move_motor(Motor.PELLET_Y_MOTOR, data, self._interface.set_y, True)
 
         elif kind == SystemCommandKind.SET_Z:
-            self._move_motor(Motor.PELLET_Z_MOTOR, data, context, self._interface.set_z, True)
+            self._move_motor(Motor.PELLET_Z_MOTOR, data, self._interface.set_z, True)
 
         elif kind == SystemCommandKind.SEND_TO_LIMITS:
             motor = typing.cast(Motor, data)
-            self._home([motor], context)
+            self._home([motor])
 
         elif kind == SystemCommandKind.SEND_HOME:
-            self._home([Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR],
-                       context)
+            self._home([Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR])
+
+        elif kind == SystemCommandKind.SEND_FIXED_XYZ:
+            self._interface.fixed_position()
 
         elif kind == SystemCommandKind.LOAD_PELLET:
-            self._start_sequence(self._load_pellet, context)
+            self._start_sequence(self._load_pellet)
 
         elif kind == SystemCommandKind.SEND_PELLET:
-            self._start_sequence(self._send_pellet, context)
+            self._start_sequence(self._send_pellet)
 
         elif kind == SystemCommandKind.RELEASE_PELLET:
-            self._start_sequence(self._release_pellet, context)
+            self._start_sequence(self._release_pellet)
 
         elif kind == SystemCommandKind.COVER_PELLET:
-            self._start_sequence(self._cover_pellet, context)
+            self._start_sequence(self._cover_pellet)
 
         elif kind == SystemCommandKind.PLAY_TONE:
             assert isinstance(data, tuple)
             self._interface.emit_tone(data[0], data[1])
-            self._acknowledge_command(context)
 
         elif kind == SystemCommandKind.SET_DIGITAL_OUTPUT:
             assert isinstance(data, tuple)  # channel, state
             self._interface.set_digital_output(DigitalOutputs(data[0]), data[1] != 0)
-            self._acknowledge_command(context)
 
         elif kind == SystemCommandKind.SET_ANALOG_OUTPUT:
             assert isinstance(data, tuple)  # channel, voltage
             self._interface.set_analog_output(AnalogOutputs(data[0]), data[1])
-            self._acknowledge_command(context)
 
         elif kind == SystemCommandKind.SET_RGB_LED:
             assert isinstance(data, tuple)
             self._interface.set_color_led(data[0], data[1], data[2])
-            self._acknowledge_command(context)
+
+        elif kind == SystemCommandKind.DELAY:
+            self._interface.delay(data)
 
         elif kind == SystemCommandKind.STREAM_START or \
             kind == SystemCommandKind.STREAM_STOP:
@@ -222,6 +217,9 @@ class CanDevice(Device):
     '''
 
     def notify_data(self, data: typing.Any) -> None:
+        if self._api is None:
+            return
+
         for message in data:
             if isinstance(message, Status):
                 pass
@@ -268,24 +266,24 @@ class CanDevice(Device):
                                                         magnitudes_val=message.magnitudes))
 
             elif isinstance(message, StepperStatus):
-                self._manage_next_move(message.motor,
-                                       message.position,
-                                       message.is_at_limit)
+                self._report_motor_status(message.motor,
+                                          message.position,
+                                          message.is_at_limit)
 
             elif isinstance(message, ServoStatus):
-                self._manage_next_move(message.motor, message.position)
+                self._report_motor_status(message.motor, message.position)
 
             elif isinstance(message, StepperConfig):
-                if self._api is not None:
-                    self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message)
+                self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message)
+                self._perform_next_compound_step()
 
             elif isinstance(message, ServoConfig):
-                if self._api is not None:
-                    self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message)
+                self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message)
+                self._perform_next_compound_step()
 
             elif isinstance(message, Version):
-                if self._api is not None:
-                    self.api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version)
+                self.api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version)
+                self._perform_next_compound_step()
 
             elif isinstance(message, DoorData):
                 if self._api is not None:
@@ -294,12 +292,10 @@ class CanDevice(Device):
                     self.api.send_message(SystemStatusMessageKind.DRAWER_DOOR,
                                           message.open_state[1])
 
-        # Check for any delay requests
-        if self._delay_period is not None:
-            if time.time() - self._delay_start > self._delay_period:
-                self._delay_period = None
-                logger.debug("delay end")
-                self._perform_next_compound_step()
+            elif isinstance(message, Acknowledge):
+                print(f"Msg uuid {message.uuid} vs {CanInterface.uuid()}")
+                if message.uuid == CanInterface.uuid():
+                    self._perform_next_compound_step()
 
         # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
         # significantly slow down the system without explicitly yielding, despite being in its own thread.  This is
@@ -313,49 +309,34 @@ class CanDevice(Device):
     target, not that the target is complete in executing the command.
     '''
 
-    def _acknowledge_command(self, token: object) -> None:
-        super()._acknowledge_command(token)
-        self._pending_move_token = None
+    def _command_complete(self) -> None:
+        super()._acknowledge_command(self._pending_context)
+        self._pending_context = None
 
     """
     Transition a stepper motor to its home position, at the limit switch
     """
 
-    def _home(self, motors, context):
-        if len(motors) == 0:
-            self._acknowledge_command(context)
-        else:
+    def _home(self, motors):
+        if len(motors) > 0:
             self._interface.stepper_home(motors[0])
-            self._pending_move_token = context
             self._homing_motors = motors
 
-    def _move_motor(self, motor: Motor, location, context, method, fixed_location: bool = False):
-        # The location is either a position or a (position, rate) pair
-        if isinstance(location, float) or isinstance(location, int):
-            position = location
-        else:
-            position = location[0]
+    def _move_motor(self, motor: Motor, location, method, save_as_fixed: bool = False):
+        method(location, save_as_fixed)
 
-        if self._desired_location is not None:
-            logger.warning("Trying to command a motor motion when one already is active")
-            self._acknowledge_command(context)
-        else:
-            self._pending_move_token = context
-            self._desired_location = float(position)
-            self._active_motor = motor
-            method(location)
-
-            logger.debug(
-                f" motor: {motor_to_str(self._active_motor)}"
-                f" desired: {self._desired_location}"
-                f" token: {self._pending_move_token}")
+        logger.debug(
+            f"Moving motor: {motor_to_str(motor)}"
+            f" to, [% speed]: {location}"
+            f" saving: {save_as_fixed}"
+            f" token: {self._pending_context}")
 
     '''
     On a multi-step motor sequence, handle the next step of the sequence when its
     detected that the current motor movement is complete
     '''
 
-    def _manage_next_move(self, motor, position, at_limit: bool = False):
+    def _report_motor_status(self, motor, position, at_limit: bool = False):
         if self._api is not None:
             kind = None
             if motor is Motor.PELLET_X_MOTOR:
@@ -372,101 +353,77 @@ class CanDevice(Device):
                 kind = SystemStatusMessageKind.HEAD_MAGNET
             if kind is not None:
                 self.api.send_message(kind, position)
-        # if self._desired_location is not None and motor == self._active_motor:
-        #     print(f"desired={self._desired_location}/{position} motor="
-        #           f"{self._active_motor}/{motor}")
-        if self._desired_location is not None and \
-            motor == self._active_motor and \
-            abs(position - self._desired_location) < 0.01:
-            if self._compound_movement is not None:
-                self._perform_next_compound_step()
-            else:
-                self._desired_location = None
-                self._active_motor = None
-                self._acknowledge_command(self._pending_move_token)
-
-        # if self._desired_location is not None and \
-        #         motor == self._active_motor and \
-        #         self._pending_move_token is not None:
-        #     logger.debug(
-        #         f"[{datetime.now()}] "
-        #         f"motor: {motor_to_str(motor)} "
-        #         f"position: {position} "
-        #         f"desired: {self._desired_location}"
-        #         f"limit switch: {at_limit}")
-
-        elif len(self._homing_motors) > 0 and self._homing_motors[0] == motor and at_limit:
-            self._homing_motors.pop(0)
-            self._home(self._homing_motors, self._pending_move_token)
 
     '''
     Issue the next step in a multi-step motor sequence
     '''
 
     def _perform_next_compound_step(self):
-        self._desired_location = None
-        self._delay_period = None
 
-        if self._compound_movement is not None:
-            if len(self._compound_movement) > 0:
-                step = self._compound_movement.pop(0)
+        if self._compound_movement is not None and \
+            len(self._compound_movement) > 0:
+            step = self._compound_movement.pop(0)
 
-                logger.debug(f"Next step: {step}")
-                if "x" in step:
-                    location = step["x"]
-                    self._move_motor(Motor.PELLET_X_MOTOR, location, self._pending_move_token,
-                                     self._interface.set_x)
+            logger.debug(f"Next step: {step}")
+            if "x" in step:
+                location = step["x"]
+                self._move_motor(Motor.PELLET_X_MOTOR, location,
+                                 self._interface.set_x)
 
-                elif "y" in step:
-                    location = step["y"]
-                    self._move_motor(Motor.PELLET_Y_MOTOR, location, self._pending_move_token,
-                                     self._interface.set_y)
+            elif "y" in step:
+                location = step["y"]
+                self._move_motor(Motor.PELLET_Y_MOTOR, location,
+                                 self._interface.set_y)
 
-                elif "z" in step:
-                    location = step["z"]
-                    self._move_motor(Motor.PELLET_Z_MOTOR, location, self._pending_move_token,
-                                     self._interface.set_z)
+            elif "z" in step:
+                location = step["z"]
+                self._move_motor(Motor.PELLET_Z_MOTOR, location,
+                                 self._interface.set_z)
 
-                elif "load_arm" in step:
-                    location = step["load_arm"]
-                    self._move_motor(Motor.PELLET_LOAD_SERVO, location, self._pending_move_token,
-                                     self._interface.set_load_servo)
+            elif "load_arm" in step:
+                location = step["load_arm"]
+                self._move_motor(Motor.PELLET_LOAD_SERVO, location,
+                                 self._interface.set_load_servo)
 
-                elif "barrier_arm" in step:
-                    location = step["barrier_arm"]
-                    self._move_motor(Motor.PELLET_COVER_SERVO, location, self._pending_move_token,
-                                     self._interface.set_cover_servo)
+            elif "barrier_arm" in step:
+                location = step["barrier_arm"]
+                self._move_motor(Motor.PELLET_COVER_SERVO, location,
+                                 self._interface.set_cover_servo)
 
-                elif "magnet" in step:
-                    location = step["magnet"]
-                    self._move_motor(Motor.MAGNET_SERVO, location, self._pending_move_token,
-                                     self._interface.set_magnet)
+            elif "magnet" in step:
+                location = step["magnet"]
+                self._move_motor(Motor.MAGNET_SERVO, location,
+                                 self._interface.set_magnet)
 
-                elif "delay" in step:
-                    self._delay_start = time.time()
-                    self._delay_period = step["delay"]
-                    logger.debug("delay start")
+            elif "delay" in step:
+                logger.debug("delay start")
+                self._interface.delay(step["delay"])
 
-                elif "tone" in step:
-                    freq, duration = step["tone"].split(',')  # (hz), (sec)
-                    self._interface.emit_tone(freq, duration * 1000)
+            elif "tone" in step:
+                freq, duration = step["tone"].split(',')  # (hz), (sec)
+                self._interface.emit_tone(freq, duration * 1000)
 
-                elif "predefined":
-                    predefined = step["predefined"]
-                    if predefined == "send":
-                        self._interface.fixed_position()
-                    elif predefined == "cover":
-                        self._interface.cover_pellet()
-                    elif predefined == "release":
-                        self._interface.release_pellet()
-                    elif predefined == "retrieve":
-                        self._interface.retrieve_pellet()
-                    elif predefined == "scoop":
-                        self._interface.scoop_pellet()
-            else:
+            elif "predefined":
+                predefined = step["predefined"]
+                if predefined == "send":
+                    self._interface.fixed_position()
+                elif predefined == "cover":
+                    self._interface.cover_pellet()
+                elif predefined == "release":
+                    self._interface.release_pellet()
+                elif predefined == "retrieve":
+                    self._interface.retrieve_pellet()
+                elif predefined == "scoop":
+                    self._interface.scoop_pellet()
+        elif len(self._homing_motors) > 1:
+            self._homing_motors.pop(0)
+            self._home(self._homing_motors)
+        else:
+            if self._compound_movement is not None:
                 logger.debug("sequence complete")
-                self._compound_movement = None
-                self._acknowledge_command(self._pending_move_token)
+            self._compound_movement = None
+            self._homing_motors = []
+            self._command_complete()
 
 
 def default_load_pellet() -> MotorSteps:

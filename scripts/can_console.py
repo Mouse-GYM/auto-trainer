@@ -9,7 +9,7 @@ from enum import IntEnum
 from autotrainer.core import SystemStatusMessageKind, SystemCommandKind
 from autotrainer.device import CanDevice, DeviceConnection, DeviceThreadMessageKind, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
-    CompoundMovementFile, MotorConfigurationFile, StepperStatus, ServoStatus
+    CompoundMovementFile, MotorConfigurationFile
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("autotrainer").setLevel(logging.DEBUG)
@@ -27,6 +27,7 @@ positions = {
     SystemCommandKind.SET_Y: 0,
     SystemCommandKind.SET_Z: 0,
 }
+get_input = True
 
 
 class StatusType(IntEnum):
@@ -38,6 +39,8 @@ class StatusType(IntEnum):
 
 def monitor_message_queue():
     global perf_start, perf_count, print_motor_status, positions, print_status
+    global get_input
+
     logger.info("starting message queue thread")
 
     measurement_count = 0
@@ -58,8 +61,12 @@ def monitor_message_queue():
         if kind == DeviceThreadMessageKind.TERMINATE:
             break
 
+        elif kind == SystemStatusMessageKind.ACKNOWLEDGE:
+            get_input = True
+
         elif kind == SystemStatusMessageKind.FIRMWARE_VERSION:
             print(data)
+            get_input = True
 
         elif kind == SystemStatusMessageKind.MEASUREMENTS:
             if print_status is StatusType.SENSORS:
@@ -117,6 +124,7 @@ def monitor_message_queue():
                       f"- microsteps={data.microsteps}\n"
                       f"- step/rev={data.steps_per_revolution:.0f}\n"
                       )
+            get_input = True
 
         elif ((kind == SystemStatusMessageKind.PELLET_COVER and
                print_motor_status is Motor.PELLET_COVER_SERVO) or
@@ -134,6 +142,7 @@ def monitor_message_queue():
                 f"- position (deg)={data:.2f}\n"
             )
             print_motor_status = Motor.NONE
+            get_input = True
         elif ((kind == SystemStatusMessageKind.PELLET_X and
                print_motor_status is Motor.PELLET_X_MOTOR) or
               (kind == SystemStatusMessageKind.PELLET_Y and
@@ -149,6 +158,7 @@ def monitor_message_queue():
                 # f"- limit={data.is_at_limit}\n"
             )
             print_motor_status = Motor.NONE
+            get_input = True
 
         elif kind == SystemStatusMessageKind.DRAWER_DOOR:
             if print_status is StatusType.DRAWER_DOOR:
@@ -165,6 +175,7 @@ def monitor_message_queue():
                 for i in range(4):
                     print(f"- Stimulus #{i + 1}:     {data[i]}")
                 print_status = None
+                get_input = True
 
         if kind == SystemStatusMessageKind.PELLET_X or \
             kind == SystemStatusMessageKind.PELLET_Y or \
@@ -294,6 +305,7 @@ def move_parameter(params):
 
 
 def run_monitor():
+    global get_input
     global perf_count
     global print_motor_status
     global print_status
@@ -310,7 +322,9 @@ def run_monitor():
 
     while True:
         if perf_count <= 0:
-            time.sleep(1)
+            while not get_input:
+                time.sleep(0.1)
+            get_input = False
             line = []
             while len(line) == 0:
                 line = input("Enter command (?=help): ").split()
@@ -338,6 +352,7 @@ def run_monitor():
             try:
                 if cmd == '?':
                     print_help()
+                    get_input = True
 
                 elif motor is not None:
                     handle_motor_command(motor, params, device_thread)
@@ -345,7 +360,10 @@ def run_monitor():
                 elif cmd == 'a' or cmd == 'audio':
                     device_thread.send_message(SystemCommandKind.PLAY_TONE,
                                                # period from sec to msec
-                                               data=(int(params[0]), int(params[1]) * 1000))
+                                               data=(int(params[0]), int(float(params[1]) * 1000)))
+
+                elif cmd == 'd' or cmd == 'delay':
+                    device_thread.send_message(SystemCommandKind.DELAY, float(params[0]))
 
                 elif cmd == 'f' or cmd == 'file':
                     if params[0] == 'motor':
@@ -356,6 +374,10 @@ def run_monitor():
                         device_thread.use_compound_movements(file)
                     else:
                         print(f"Unknown file request: {params[0]}")
+                    get_input = True
+
+                elif cmd == 'g' or cmd == 'go':
+                    device_thread.send_message(SystemCommandKind.SEND_FIXED_XYZ)
 
                 elif cmd == 'h' or cmd == 'home':
                     device_thread.send_message(SystemCommandKind.SEND_HOME)
@@ -386,8 +408,10 @@ def run_monitor():
 
             except ValueError:
                 print("Invalid numeric value in command")
+                get_input = True
             except IndexError:
                 print(f"Invalid command: {cmd} {params}")
+                get_input = True
         else:
             if not mon_thread.is_alive():
                 device_thread.request_terminate()
@@ -413,7 +437,7 @@ motor_to_set_command = {
 
 
 def handle_motor_command(motor: Motor, params, device_thread):
-    global print_motor_status
+    global print_motor_status, get_input
     try:
         float(params[0])
         numeric = True
@@ -442,6 +466,7 @@ def handle_motor_command(motor: Motor, params, device_thread):
 
     elif params[0] == 'trip':
         round_trip_test(motor, int(params[1]), device_thread)
+        get_input = True
 
     # read or write configuration
     elif params[0] == 'config':
@@ -451,6 +476,7 @@ def handle_motor_command(motor: Motor, params, device_thread):
             write_config(motor, device_thread)
         else:
             print(f"Unrecognized configuration request: {params[1]}")
+            get_input = True
 
     elif params[0] == 'step':
         start = int(params[1])
@@ -461,11 +487,14 @@ def handle_motor_command(motor: Motor, params, device_thread):
             device_thread.send_message(motor_to_set_command[motor],
                                        data=float(position))
             time.sleep(1 + .25 * step)
+        get_input = True
     else:
         print(f"Unrecognized motor command: {params[0]}")
+        get_input = True
 
 
 def handle_pellet_command(params, device_thread):
+    global get_input
     """
     Handle a pellet control sequence
     """
@@ -481,6 +510,7 @@ def handle_pellet_command(params, device_thread):
         device_thread.send_message(SystemCommandKind.SEND_PELLET)
     else:
         print(f"Unrecognized pellet command: {cmd}")
+        get_input = True
 
 
 def handle_output_command(params, device_thread):
@@ -491,17 +521,14 @@ def handle_output_command(params, device_thread):
                                    (int(params[1]), int(params[2])))
     elif cmd == 'a' or cmd == 'analog':
         device_thread.send_message(SystemCommandKind.SET_ANALOG_OUTPUT,
-                                   (int(params[1]), float(params[2])))
+                                   (int(params[1]), int(params[2])))
 
 
 def print_help():
     print("?                                  "
           " ::help")
     print("For the commands, you can either use the letter or full command name (e.g. q or quit)\n")
-    print("q[uit]                             "
-          " ::Quit")
-    print("v[ersion]                          "
-          " ::Version")
+
     print("<motor>                            "
           " ::Motor status")
     print("<motor> [set] <pos> [<rate>]       "
@@ -520,19 +547,23 @@ def print_help():
     print()
 
     print("p[ellet] c[over]                   "
-          " ::Cover Pellet")
+          " ::Cover Pellet Sequence")
     print("p[ellet] l[oad]                    "
-          " ::Load Pellet")
+          " ::Load Pellet Sequence")
     print("p[ellet] r[elease]                 "
-          " ::Release Pellet")
+          " ::Release Pellet Sequence")
     print("p[ellet] s[end]                    "
-          " ::Send Pellet")
+          " ::Send Pellet Sequence")
     print()
 
     print("a[udio] <freq> <period>            "
           " ::Audio sound (hz) (sec)")
+    print("d[elay] <sec>                      "
+          " ::Delay")
+    print("g[o]                               "
+          " ::Go to Send Position (X, Y, Z)")
     print("h[ome]                             "
-          " ::Home Position")
+          " ::Go to Home Position (0, 0, 0)")
     print("f[ile] motor <file>                "
           " ::Load Motor Configuration")
     print("f[ile] move <file>                 "
@@ -540,13 +571,17 @@ def print_help():
     print("o[utput] d[igital] <chan> <state>  "
           " ::Set digital output on pellet chan [1:4] state [0:1]")
     print("o[utput] a[nalog] <chan> <mvolts>  "
-          " ::Set analog output on pellet chan [0] mvolts [0:5000]")
-    print("s[tatus]                           "
-          " ::Show Status")
+          " ::Set analog output on pellet chan [1] mvolts [0:5000]")
+    print("q[uit]                             "
+          " ::Quit")
     print("r[gb] <red> <green> <blue>         "
           " ::Set RGB LED. Values in %")
+    print("s[tatus]                           "
+          " ::Show Status")
     print("t[are]                             "
           " ::Tare Load Cell/Pressure Sensors")
+    print("v[ersion]                          "
+          " ::Version")
     print()
 
 

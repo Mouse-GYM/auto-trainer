@@ -39,6 +39,8 @@ class SystemCommandKind(IntEnum):
     SEND_TO_LIMITS = 215,
     SET_COVER_PELLET_PROCEDURE = 216,
     SET_RELEASE_PELLET_PROCEDURE = 217,
+    DELAY = 218,
+    SEND_FIXED_XYZ = 219,
 
     # General actions.
     PLAY_TONE = 301,
