@@ -48,6 +48,12 @@ class EmulationInterface(DeviceInterface):
             Motor.PELLET_Z_MOTOR: StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR),
         }
 
+    def _set_pellet_addr(self, addr):
+        pass
+
+    def _set_magnet_addr(self, addr):
+        pass
+
     def open(self) -> bool:
         self._is_open = True
         return self._is_open

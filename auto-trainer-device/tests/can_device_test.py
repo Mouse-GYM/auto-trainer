@@ -70,12 +70,12 @@ def _construction():
 
 @pytest.mark.canbus
 def test_notify_version():
-    notify_command(SystemCommandKind.REQUEST_VERSION, 101)
+    notify_command(SystemCommandKind.REQUEST_VERSION, 101, expect_ack=False)
 
 
 @pytest.mark.canbus
 def test_notify_tare_load_cell():
-    notify_command(SystemCommandKind.UPDATE_SCALE_TARE, 102)
+    notify_command(SystemCommandKind.UPDATE_SCALE_TARE, 102, expect_ack=False)
 
 
 @pytest.mark.canbus
@@ -189,7 +189,8 @@ def test_servo_config():
                          0, 0, 0)
 
     _expected = [
-        (SystemStatusMessageKind.MOTOR_CONFIGURATION, config)
+        (SystemStatusMessageKind.MOTOR_CONFIGURATION, config),
+        (SystemStatusMessageKind.ACKNOWLEDGE, None)
     ]
     notify_data(config)
 
@@ -202,6 +203,7 @@ def test_stepper_config():
                            0, 0, False)
     _expected = [
         (SystemStatusMessageKind.MOTOR_CONFIGURATION, config),
+        (SystemStatusMessageKind.ACKNOWLEDGE, None)
     ]
     notify_data(config)
 

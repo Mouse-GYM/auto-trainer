@@ -529,7 +529,7 @@ class CanInterface(DeviceInterface):
         Tare the load cell so the current reading is 0.
         """
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
-        return addr is not None and self._jc.LoadCellTare(addr, 0) == 0
+        return addr is not None and self._jc.LoadCellTare(addr, 0, CanInterface.next_uuid()) == 0
 
     """
     Tare the pressure sensor so the current reading is 0.
@@ -537,7 +537,8 @@ class CanInterface(DeviceInterface):
 
     def tare_pressure_sensor(self) -> bool:
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
-        return addr is not None and self._jc.PressureSensorTare(addr, 0) == 0
+        return addr is not None and self._jc.PressureSensorTare(addr, 0, CanInterface.next_uuid()) \
+            == 0
 
     def _set_servo_position(self, position, config: ServoConfig):
         # The location is either a position or a (position, rate) pair
@@ -627,9 +628,9 @@ class CanInterface(DeviceInterface):
     """
 
     def fixed_position(self) -> bool:
-        return self._jc.SendToFixedXYZ(
-            self._tgt2addr(Target.PELLET_DEVICE),
-            CanInterface.next_uuid())
+        addr = self._tgt2addr(Target.PELLET_DEVICE)
+        return addr is not None and \
+            self._jc.SendToFixedXYZ(addr, CanInterface.next_uuid()) == 0
 
     """
     Set the position of the load arm

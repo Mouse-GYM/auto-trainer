@@ -23,7 +23,7 @@ class MotorSteps:
 
     @property
     def is_empty(self):
-        return self._steps is not None and len(self._steps) > 0
+        return self._steps is not None and len(self._steps) == 0
 
 
 class CompoundMovementDataSet(Protocol):

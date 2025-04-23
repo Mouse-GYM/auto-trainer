@@ -82,8 +82,7 @@ class CanDevice(Device):
     def _start_sequence(self, movements: MotorSteps):
         logger.info(f"performing compound action: {movements}")
 
-        if self._pending_context is not None or movements is None or \
-            movements.is_empty:
+        if movements is None or movements.is_empty:
             self._command_complete()
         else:
             self._compound_movement = movements.steps
@@ -421,9 +420,9 @@ class CanDevice(Device):
         else:
             if self._compound_movement is not None:
                 logger.debug("sequence complete")
+            self._command_complete()
             self._compound_movement = None
             self._homing_motors = []
-            self._command_complete()
 
 
 def default_load_pellet() -> MotorSteps:
