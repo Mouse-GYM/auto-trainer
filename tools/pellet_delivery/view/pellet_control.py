@@ -1,8 +1,10 @@
-from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, QLayout, QVBoxLayout, \
+from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
+    QLayout, QVBoxLayout, \
     QFormLayout
 
-from autotrainer.pyside import CardWidget, ATSeparator
+from autotrainer.pyside import ATSeparator
 from tools.pellet_delivery.model.app_model import AppModel
+from tools.view.basic_panel import create_panel
 
 _NO_UPDATES = "(no updates)"
 
@@ -34,29 +36,22 @@ class PelletControl(QWidget):
 
         self._app_model.property_changed += self._model_property_changed
 
-        control_widget = CardWidget(background_color=None, header_background_color="#00b6de")
-
         layout = QVBoxLayout()
-
+        panel = create_panel("Control", layout)
         layout.addLayout(self._create_button_layout())
-
         layout.addWidget(ATSeparator("#dedede"))
-
         layout.addLayout(self._create_move_layout())
 
-        control_widget.setContentLayout(layout)
-        control_widget.header.setTitle("Control", "white")
-
-        layout = QVBoxLayout()
+        layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(control_widget)
-        self.setLayout(layout)
+        layout.addWidget(panel)
 
+        self.setLayout(layout)
         self.setEnabled(False)
 
     def _create_button_layout(self):
         b_layout = QHBoxLayout()
-        b_layout.setContentsMargins(12, 12, 12, 12)
+        b_layout.setContentsMargins(2, 2, 2, 2)
         b_layout.setSpacing(8)
 
         self._home_button = QPushButton("Home")
@@ -92,7 +87,7 @@ class PelletControl(QWidget):
 
     def _create_move_layout(self):
         s_layout = QHBoxLayout()
-        s_layout.setContentsMargins(4, 8, 4, 8)
+        s_layout.setContentsMargins(2, 2, 2, 2)
 
         p_layout, self._x_pos = add_position("X (mm):", -10, 10)
         self._x_pos.valueChanged.connect(self._update_x)

@@ -867,7 +867,7 @@ class CanInterface(DeviceInterface):
                                target_to_str(target) + ': ' + \
                                str(message.bootloader_response.version.running_major) + '.' + \
                                str(message.bootloader_response.version.running_minor) + '.' + \
-                               str(message.bootloader_response.version.running_patch) + '.')
+                               str(message.bootloader_response.version.running_patch))
 
         elif (message.type == JerryCANCmdType.CFG_RESPONSE and message.cfg_response.type ==
               JerryCANCfgMsg.Type.SERVO):
