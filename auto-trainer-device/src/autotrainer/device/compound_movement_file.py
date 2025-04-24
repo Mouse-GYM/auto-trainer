@@ -33,30 +33,25 @@ class CompoundMovementFile:
         if isinstance(filename, str):
             filename = Path(filename)
 
-        logger.info(f"LOADING: Alogus Compound Movement file: {filename}")
-
         if filename.exists():
             try:
                 with open(filename, "r") as file:
                     conf = yaml.safe_load(file)
 
                     if "actions" in conf:
-                        for idx, name in CompoundMovementFile._mapping:
+                        for idx, name in CompoundMovementFile._mapping.items():
                             if name in conf["actions"]:
                                 self._movements[idx.value] = \
                                     MotorSteps.from_dict(name, conf["actions"][name])
-
-                logging.info("LOADED: Alogus Compound Movement file")
-
             except Exception as e:
                 logger.error(f"ERROR: Alogus Compound Movement file {filename}: {e}")
         else:
-            logger.error(f"ERROR: Alogus Motor Configuration file {filename}: No such File")
+            logger.error(f"ERROR: Alogus Compound Movement file {filename}: No such File")
 
     '''
     Meet the CompoundMovementDataSet Protocol
     '''
-    
+
     @property
     def load_pellet(self) -> MotorSteps:
         return self._movements[CompoundMovementFile._Movement.LOAD_PELLET.value]

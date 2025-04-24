@@ -270,13 +270,9 @@ def round_trip_test(motor: Motor, trips: int, device_thread):
     for i in range(trips):
         device_thread.send_message(cmd, data=22.0 if is_stepper(motor) else 100)  # in mm or deg
         time.sleep(2)
-        print_motor_status = motor
-        time.sleep(1)
 
         device_thread.send_message(cmd, data=0)
         time.sleep(2)
-        print_motor_status = motor
-        time.sleep(1)
 
 
 # Generate either just a position value or a tuple of (position, rate)
@@ -350,7 +346,7 @@ def run_monitor():
                     if params[0] == 'motor':
                         file = MotorConfigurationFile(params[1])
                         device_thread.use_motor_configurations(file)
-                    elif cmd == 'move':
+                    elif params[0] == 'move':
                         file = CompoundMovementFile(params[1])
                         device_thread.use_compound_movements(file)
                     else:

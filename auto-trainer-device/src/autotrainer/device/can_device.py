@@ -80,8 +80,6 @@ class CanDevice(Device):
     '''
 
     def _start_sequence(self, movements: MotorSteps):
-        logger.info(f"performing compound action: {movements}")
-
         if movements is None or movements.is_empty:
             self._command_complete()
         else:
@@ -118,26 +116,23 @@ class CanDevice(Device):
 
         elif kind == SystemCommandKind.SET_LOAD_PELLET_PROCEDURE:
             assert isinstance(data, MotorSteps)
-            if not data.is_empty():
+            if not data.is_empty:
                 logger.info(f"Setting LOAD procedure to: \n{data.steps}")
                 self._load_pellet = data
 
         elif kind == SystemCommandKind.SET_SEND_PELLET_PROCEDURE:
             assert isinstance(data, MotorSteps)
-            if not data.is_empty():
-                logger.info(f"Setting SEND procedure to: \n{data.steps}")
+            if not data.is_empty:
                 self._send_pellet = data
 
         elif kind == SystemCommandKind.SET_COVER_PELLET_PROCEDURE:
             assert isinstance(data, MotorSteps)
-            if not data.is_empty():
-                logger.info(f"Setting COVER procedure to: \n{data.steps}")
+            if not data.is_empty:
                 self._cover_pellet = data
 
         elif kind == SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE:
             assert isinstance(data, MotorSteps)
-            if not data.is_empty():
-                logger.info(f"Setting RELEASE procedure to: \n{data.steps}")
+            if not data.is_empty:
                 self._release_pellet = data
 
         elif kind == SystemCommandKind.UPDATE_SCALE_TARE:
@@ -301,7 +296,6 @@ class CanDevice(Device):
                                           message.open_state[1])
 
             elif isinstance(message, Acknowledge):
-                print(f"Msg uuid {message.uuid} vs {CanInterface.uuid()}")
                 if message.uuid == CanInterface.uuid():
                     self._perform_next_compound_step()
 
@@ -365,7 +359,6 @@ class CanDevice(Device):
             len(self._compound_movement) > 0:
             step = self._compound_movement.pop(0)
 
-            logger.debug(f"Next step: {step}")
             if "x" in step:
                 location = step["x"]
                 self._interface.set_x(location)
@@ -373,7 +366,6 @@ class CanDevice(Device):
             elif "y" in step:
                 location = step["y"]
                 self._interface.set_y(location)
-
 
             elif "z" in step:
                 location = step["z"]
@@ -398,9 +390,9 @@ class CanDevice(Device):
 
             elif "tone" in step:
                 freq, duration = step["tone"].split(',')  # (hz), (sec)
-                self._interface.emit_tone(freq, duration * 1000)
+                self._interface.emit_tone(int(freq), int(float(duration) * 1000))
 
-            elif "predefined":
+            elif "predefined" in step:
                 predefined = step["predefined"]
                 if predefined == "send":
                     self._interface.fixed_position()
@@ -412,9 +404,9 @@ class CanDevice(Device):
                     self._interface.retrieve_pellet()
                 elif predefined == "scoop":
                     self._interface.scoop_pellet()
+                elif predefined == "home":
+                    self._home([Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR])
         else:
-            if self._compound_movement is not None:
-                logger.debug("sequence complete")
             self._command_complete()
             self._compound_movement = None
             self._homing_motors = []

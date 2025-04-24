@@ -1,4 +1,5 @@
 from typing import Protocol
+from copy import copy
 
 
 class MotorSteps:
@@ -19,11 +20,11 @@ class MotorSteps:
 
     @property
     def steps(self):
-        return self._steps.copy()
+        return copy(self._steps)
 
     @property
     def is_empty(self):
-        return self._steps is not None and len(self._steps) == 0
+        return self._steps is None or len(self._steps) == 0
 
 
 class CompoundMovementDataSet(Protocol):

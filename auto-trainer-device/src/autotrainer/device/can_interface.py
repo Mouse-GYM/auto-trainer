@@ -565,7 +565,8 @@ class CanInterface(DeviceInterface):
                                                        position,
                                                        velocity,
                                                        acceleration,
-                                                       AbsOrRel.ABSOLUTE) == 0
+                                                       AbsOrRel.ABSOLUTE,
+                                                       CanInterface.next_uuid()) == 0
 
     def _set_stepper_position(self, motor: Motor, position, config: StepperConfig, save_as_fixed:
     bool):
