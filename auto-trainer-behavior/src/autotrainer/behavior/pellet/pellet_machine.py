@@ -2,7 +2,6 @@ import logging
 from enum import Enum
 
 from events import Events
-from opentelemetry import trace
 from transitions import Machine
 
 from autotrainer.core import EventManager, MessageHandler
@@ -12,8 +11,6 @@ from ..behavior_algorithm import BehaviorAlgorithm, BehaviorLimits
 from ..behavior_event_kind import BehaviorEventKind
 
 logger = logging.getLogger(__name__)
-
-tracer = trace.get_tracer("behavior")
 
 
 class PelletState(str, Enum):
@@ -50,7 +47,7 @@ class PelletMachine:
          "conditions": "can_move_home"}
     ]
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None, pellet_device: MessageHandler = None, pellet_command=None):
+    def __init__(self, algorithm: BehaviorAlgorithm = None, msg_handler: MessageHandler = None, pellet_command=None):
         self.state = PelletState.covering
 
         self.machine = Machine(model=self, states=PelletMachine.states,
@@ -62,10 +59,10 @@ class PelletMachine:
         self._algorithm.session_starting += self._session_starting
         self._algorithm.session_ending += self._session_ending
 
-        self.pellet_device = pellet_device
+        self._message_handler = msg_handler
 
-        if self.pellet_device is not None:
-            self.pellet_device.ack_received += self._pellet_device_ack_received
+        if self._message_handler is not None:
+            self._message_handler.ack_received += self._pellet_device_ack_received
 
         self.pellet_command = pellet_command
 
@@ -88,7 +85,6 @@ class PelletMachine:
 
     def before_move_home(self):
         if self.pellet_command is not None:
-            self._pellet_command_trace = tracer.start_span("move_home")
             self._api_status_token = self.pellet_command.send_home()
             EventManager.post_event(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
         else:
@@ -97,7 +93,6 @@ class PelletMachine:
     def before_load_pellet(self):
         if self.pellet_command is not None:
             self.events.pellet_loading()
-            self._pellet_command_trace = tracer.start_span("load_pellet")
             self._api_status_token = self.pellet_command.load_pellet()
             EventManager.post_event(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
         else:

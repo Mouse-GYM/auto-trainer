@@ -2,7 +2,7 @@ import logging
 from queue import Queue
 from typing import Callable, List
 
-from autotrainer.core import SystemStatusMessageKind
+from ..message import SystemStatusMessageKind
 
 from .message_handler import MessageHandler
 from .sensor_analysis import SensorAnalysis

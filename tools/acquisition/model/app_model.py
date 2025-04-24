@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import queue
 import time
 import typing
 from datetime import datetime
@@ -8,10 +9,12 @@ from pathlib import Path
 
 import yaml
 
-from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID, EventManager
+from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID, EventManager, SystemMessageHandler, \
+    MessageHandler
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
+from autotrainer.device import CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice, HeadFix, PelletDelivery
 from autotrainer.inference import PoseAlgorithm
 
 from tools.acquisition.model.inference_model import InferenceModel
@@ -30,7 +33,7 @@ def _failed_camera_template(name: str, error: str):
 
 
 class AppModel(ObservableObject):
-    def __init__(self, preferences: UserPreferences, app_version: str = "", allow_can_emulation: bool = False):
+    def __init__(self, preferences: UserPreferences, app_version: str = ""):
         super().__init__(("on_error",))
 
         self._preferences = preferences
@@ -43,9 +46,15 @@ class AppModel(ObservableObject):
 
         self._cameras = list([self._left_camera, self._right_camera, self._top_camera])
 
-        self._head_fix = HeadFixModel(allow_can_emulation)
+        self._message_queue = queue.Queue()
+        self._message_handler = SystemMessageHandler(self._message_queue)
 
-        self._pellet_delivery = PelletDeliveryModel(allow_can_emulation)
+        self._head_fix_device = None
+        self._pellet_device = None
+
+        self._head_fix = HeadFixModel(self._message_handler.analysis)
+
+        self._pellet_delivery = PelletDeliveryModel()
 
         self._inference_queue = None
 
@@ -53,7 +62,8 @@ class AppModel(ObservableObject):
 
         self._inference = InferenceModel(self._pose_algorithm)
 
-        self._behavior = BehaviorModel(self.head_fix, self._pellet_delivery, self._inference)
+        self._behavior = BehaviorModel(self._message_handler, self._message_handler.analysis, self.head_fix,
+                                       self._pellet_delivery, self._inference)
 
         self._output_location = ""
 
@@ -118,6 +128,10 @@ class AppModel(ObservableObject):
         return self._pellet_delivery
 
     @property
+    def message_handler(self) -> MessageHandler:
+        return self._message_handler
+
+    @property
     def output_location(self) -> str:
         return self._output_location
 
@@ -140,7 +154,7 @@ class AppModel(ObservableObject):
         if self._selected_animal is not None:
             self.property_changed("animal_name", self.animal_name, self.animal_name)
             self.head_fix.baseline_intensity = self._selected_animal.baseline_magnet_intensity
-            self.head_fix.update_position(self._selected_animal.baseline_magnet_intensity)
+            self.head_fix.set_position(self._selected_animal.baseline_magnet_intensity)
             self.pellet_delivery.set_x(self._selected_animal.pellet_x)
             self.pellet_delivery.set_y(self._selected_animal.pellet_y)
             self.pellet_delivery.set_z(self._selected_animal.pellet_z)
@@ -248,8 +262,10 @@ class AppModel(ObservableObject):
         if self._inference.is_enabled:
             self._inference.start(self._inference_queue)
 
-        self.head_fix.connect_to_device()
-        self._pellet_delivery.connect_to_device()
+        if self._message_handler.analysis is not None:
+            self._message_handler.analysis.project_info = self._project_info
+
+        self._connect_hardware()
 
         for camera in self._cameras:
             if camera.is_primary:
@@ -261,11 +277,57 @@ class AppModel(ObservableObject):
 
         return True
 
+    def _connect_hardware(self):
+        if self._head_fix.port == CAN_IDENTIFIER:
+            # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
+            # configured to generate messages as frequently as the real device.
+            buffer_size = 10 if HAVE_CAN_DEVICE else 1
+            self._head_fix_device = DeviceConnection(CanDevice(buffer_size=buffer_size),
+                                                     self._message_handler.input_queue)
+            self._head_fix_device.name = "can-tunnel"
+        else:
+            self._head_fix_device = DeviceConnection(HeadFix(port=self._head_fix.port, buffer_size=10),
+                                                     self._message_handler.input_queue)
+            self._head_fix_device.name = "serial-tunnel"
+
+        if self._pellet_delivery.port == CAN_IDENTIFIER:
+            if self._head_fix.port == CAN_IDENTIFIER:
+                self._pellet_device = self._head_fix_device
+                self._head_fix_device.name = "can-device"
+            else:
+                self._pellet_device = DeviceConnection(CanDevice(), self._message_handler.input_queue)
+                self._head_fix_device.name = "can-pellet"
+        else:
+            self._pellet_device = DeviceConnection(PelletDelivery(port=self._pellet_delivery.port),
+                                                   self._message_handler.input_queue)
+            self._head_fix_device.name = "serial-pellet"
+
+        self._head_fix_device.request_connect()
+
+        if self._pellet_device is not self._head_fix_device:
+            self._pellet_device.request_connect()
+
+        self._head_fix.on_connect(self._head_fix_device)
+        self._pellet_delivery.on_connect(self._pellet_device)
+
+    def _disconnect_from_hardware(self):
+        self._head_fix.on_disconnect()
+        self._pellet_delivery.on_disconnect()
+
+        # Device connections should be terminated.  The system message handler is connection agnostic and should not
+        # be terminated here.
+        if self._head_fix_device is not None:
+            self._head_fix_device.request_disconnect()
+        if self._pellet_device is not None:
+            self._pellet_device.request_disconnect()
+
+        self._head_fix_device = None
+        self._pellet_device = None
+
     def on_capture_stop(self):
         self._inference.stop()
 
-        self.head_fix.disconnect_from_device()
-        self._pellet_delivery.disconnect_from_device()
+        self._disconnect_from_hardware()
 
         for camera in self._cameras:
             if not camera.is_primary:
@@ -284,6 +346,9 @@ class AppModel(ObservableObject):
         for camera in self._cameras:
             if camera.is_primary:
                 camera.on_capture_stop()
+
+        if self._message_handler.analysis is not None:
+            self._message_handler.analysis.project_info = None
 
         self._is_recording_trigger = False
 
@@ -321,6 +386,8 @@ class AppModel(ObservableObject):
 
             if "outputLocation" in conf:
                 self.output_location = conf["outputLocation"]
+
+            self.preferences.load_configuration(conf)
         except Exception as ex:
             logger.error(ex)
             return False
@@ -339,6 +406,9 @@ class AppModel(ObservableObject):
 
         return True
 
+    def on_activated(self):
+        self._message_handler.start()
+
     def on_close(self):
         if self._inference is not None:
             self._inference.terminate()
@@ -348,8 +418,8 @@ class AppModel(ObservableObject):
 
         EventManager.close()
 
-        self.head_fix.on_close()
-        self._pellet_delivery.on_close()
+        self._disconnect_from_hardware()
+        self._message_handler.request_terminate()
 
     def _load_animals(self):
         animals = []

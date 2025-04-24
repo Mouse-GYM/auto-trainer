@@ -4,10 +4,9 @@ import uuid
 from pathlib import Path
 
 from autotrainer.core import ObservableObject, SystemMessageHandler, SystemCommandKind
-from autotrainer.device import CanDevice, get_available_hardware, CAN_IDENTIFIER, \
-    MotorConfigurationFile
+from autotrainer.device import CanDevice, CAN_IDENTIFIER, MotorConfigurationFile
 from autotrainer.device import PelletDelivery
-from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
+from autotrainer.device import DeviceConnection
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
@@ -222,9 +221,7 @@ class AppModel(ObservableObject):
                                                        name="pellet_serial")
             self.travel_limits = _anshutz_travel_limits
 
-        self._device_connection.start()
-
-        self._send_command(DeviceThreadMessageKind.CONNECT)
+        self._device_connection.request_connect()
 
         self._send_command(SystemCommandKind.REQUEST_VERSION)
 
@@ -251,8 +248,7 @@ class AppModel(ObservableObject):
         if self._is_connected:
             # End DeviceConnection for this connection.  Do not kill the message handler which is connection agnostic.
             if self._device_connection is not None:
-                self._send_command(DeviceThreadMessageKind.DISCONNECT)
-                self._device_connection.request_terminate()
+                self._device_connection.request_disconnect()
                 self._device_connection = None
 
             self.is_connected = False
@@ -267,7 +263,7 @@ class AppModel(ObservableObject):
 
         # End all threads so application exits cleanly.
         if self._device_connection is not None:
-            self._device_connection.request_terminate()
+            self._device_connection.request_disconnect()
         if self._message_handler is not None:
             self._message_handler.request_terminate()
 

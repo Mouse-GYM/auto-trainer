@@ -7,7 +7,7 @@ from copy import copy
 from enum import IntEnum
 
 from autotrainer.core import SystemStatusMessageKind, SystemCommandKind
-from autotrainer.device import CanDevice, DeviceConnection, DeviceThreadMessageKind, Motor, \
+from autotrainer.device import CanDevice, DeviceConnection, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
     CompoundMovementFile, MotorConfigurationFile
 
@@ -16,6 +16,7 @@ logging.getLogger("autotrainer").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 msg_queue = queue.Queue()
+msg_queue_active = True
 output_file = None
 perf_start = None
 perf_count = -1
@@ -55,8 +56,12 @@ def monitor_message_queue():
 
     next_heartbeat = 500
 
-    while True:
-        kind, data = msg_queue.get()
+    while msg_queue_active:
+        try:
+            kind, data = msg_queue.get_nowait()
+        except queue.Empty:
+            time.sleep(0.001)
+            continue
 
         if kind == DeviceThreadMessageKind.TERMINATE:
             break
@@ -178,8 +183,8 @@ def monitor_message_queue():
                 get_input = True
 
         if kind == SystemStatusMessageKind.PELLET_X or \
-            kind == SystemStatusMessageKind.PELLET_Y or \
-            kind == SystemStatusMessageKind.PELLET_Z:
+                kind == SystemStatusMessageKind.PELLET_Y or \
+                kind == SystemStatusMessageKind.PELLET_Z:
             positions[kind] = int(data)
 
     if output_fd is not None:
@@ -308,17 +313,15 @@ def run_monitor():
     global get_input
     global perf_count
     global print_motor_status
-    global print_status
-
-    device_thread = DeviceConnection(CanDevice(), msg_queue)
-
-    device_thread.start()
+    global print_status, msg_queue_active
 
     mon_thread = Thread(target=monitor_message_queue)
 
     mon_thread.start()
 
-    device_thread.send_message(DeviceThreadMessageKind.CONNECT)
+    device_thread = DeviceConnection(CanDevice(), msg_queue)
+
+    device_thread.request_connect()
 
     while True:
         if perf_count <= 0:
@@ -389,8 +392,7 @@ def run_monitor():
                     handle_pellet_command(params, device_thread)
 
                 elif cmd == 'q' or cmd == 'quit':
-                    device_thread.send_message(DeviceThreadMessageKind.TERMINATE)
-                    msg_queue.put((DeviceThreadMessageKind.TERMINATE, None))
+                    device_thread.request_disconnect()
                     break
 
                 elif cmd == 'r' or cmd == 'rgb':
@@ -414,12 +416,16 @@ def run_monitor():
                 get_input = True
         else:
             if not mon_thread.is_alive():
-                device_thread.request_terminate()
+                device_thread.request_disconnect()
                 break
             else:
                 time.sleep(0.1)
 
-    logger.info("waiting for device thread to terminate")
+    msg_queue_active = False
+
+    mon_thread.join()
+
+    logger.info("waiting for device connection to terminate")
 
     device_thread.join()
 

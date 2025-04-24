@@ -4,7 +4,7 @@ import time
 
 from autotrainer.core import SystemCommandKind
 from autotrainer.device import PelletDelivery
-from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
+from autotrainer.device import DeviceConnection
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('autotrainer').setLevel(logging.DEBUG)
@@ -21,23 +21,21 @@ def message_queue_callback(kind, context):
 def run_monitor(port: str, timeout: int):
     device_connection = DeviceConnection(PelletDelivery(port), message_callback=message_queue_callback)
 
-    device_connection.start()
-
-    device_connection.send_message(DeviceThreadMessageKind.CONNECT)
+    device_connection.request_connect()
 
     while True:
         if timeout > 0:
             # Run for the request time and exit.  Primarily supports automated testing by ensuring can launch and close
             # cleanly.
             time.sleep(timeout)
-            device_connection.request_terminate()
+            device_connection.request_disconnect()
             logger.debug("timeout reached, terminating")
             break
         else:
             cmd = input("Enter command: ")
 
             if cmd.startswith("q"):
-                device_connection.request_terminate()
+                device_connection.request_disconnect()
                 break
             elif cmd.startswith("t"):
                 device_connection.send_message(SystemCommandKind.PLAY_TONE, 7000)

@@ -54,6 +54,10 @@ class EmulationInterface(DeviceInterface):
     def _set_magnet_addr(self, addr):
         pass
 
+    @property
+    def is_open(self) -> bool:
+        return self._is_open
+
     def open(self) -> bool:
         self._is_open = True
         return self._is_open

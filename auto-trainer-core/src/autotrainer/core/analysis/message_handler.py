@@ -3,7 +3,8 @@ import time
 from queue import Queue
 from threading import Thread
 
-from autotrainer.core import ObservableObject, SystemStatusMessageKind
+from ..observable_object import ObservableObject
+from ..message import SystemStatusMessageKind
 
 logger = logging.getLogger(__name__)
 

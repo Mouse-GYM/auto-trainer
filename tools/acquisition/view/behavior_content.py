@@ -1,6 +1,7 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QCheckBox, QFileDialog, QWidget, QVBoxLayout, \
     QHBoxLayout, QStackedLayout, QGridLayout, QSpinBox
+from autotrainer.core import SensorAnalysis
 
 from autotrainer.pyside import CardWidget, QSwitch
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -12,12 +13,12 @@ from tools.acquisition.view.content_widget import ContentWidget
 class BehaviorContent(ContentWidget):
     status_changed = Signal(str)
 
-    def __init__(self, behavior_model: BehaviorModel, inference_model: InferenceModel, head_fix_model: HeadFixModel):
+    def __init__(self, behavior_model: BehaviorModel, inference_model: InferenceModel):
         super().__init__()
 
         self._behavior_model = behavior_model
         self._inference_model = inference_model
-        self._head_fix_model = head_fix_model
+        self._head_fix_model = behavior_model.analysis
 
         self._card_widget = CardWidget()
 
@@ -53,7 +54,7 @@ class BehaviorContent(ContentWidget):
 
         content_layout.addWidget(QLabel("Auto-Clamp Threshold:"), 1, 4)
         self._auto_clamp_threshold = QSpinBox()
-        self._auto_clamp_threshold.setValue(self._head_fix_model.head_fix_reader.force_detector.threshold)
+        self._auto_clamp_threshold.setValue(self._head_fix_model.force_detector.threshold)
         self._auto_clamp_threshold.setMinimum(0)
         self._auto_clamp_threshold.setMaximum(1023)
         self._auto_clamp_threshold.setWrapping(False)
@@ -132,7 +133,7 @@ class BehaviorContent(ContentWidget):
         self._pellet_cover_toggle.setChecked(self._behavior_model.algorithm.pellet_cover_enabled)
         self._intersession_toggle.setChecked(self._behavior_model.is_intersession_enabled)
         self._behavior_model.algorithm.property_changed += self._algorithm_property_changed
-        self._head_fix_model.head_fix_reader.force_detector.property_changed += self._force_detector_property_changed
+        self._head_fix_model.force_detector.property_changed += self._force_detector_property_changed
 
         self._behavior_model.property_changed += self._behavior_model_property_changed
 
@@ -171,7 +172,7 @@ class BehaviorContent(ContentWidget):
         self._inference_model.model_location = self._location.text()
 
     def _update_auto_clamp_intensity(self, value):
-        self._head_fix_model.head_fix_reader.force_detector.threshold = value
+        self._head_fix_model.force_detector.threshold = value
 
     def _browse_for_location(self):
         dirname = QFileDialog.getExistingDirectory(self, "Select Directory", self._location.text())

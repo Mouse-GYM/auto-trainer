@@ -6,7 +6,8 @@ from threading import Timer
 
 import numpy
 
-from autotrainer.core import ObservableObject, EventManager
+from ..observable_object import ObservableObject
+from ..event_manager import EventManager
 
 from .analysis_measurement_event_kind import AnalysisMeasurementEventKind
 
