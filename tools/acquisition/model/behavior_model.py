@@ -1,23 +1,30 @@
 from typing import Optional
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol
-from autotrainer.core import ObservableObject, ProjectInfo
+from autotrainer.core import ObservableObject, ProjectInfo, MessageHandler, SensorAnalysis
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
 from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
 
 
 class BehaviorModel(ObservableObject):
-    def __init__(self, head_fix: HeadFixModel, pellet: PelletDeliveryModel, inference: InferenceProtocol):
+    def __init__(self, msg_handler: MessageHandler, analysis: SensorAnalysis, head_fix: HeadFixModel,
+                 pellet: PelletDeliveryModel, inference: InferenceProtocol):
         super().__init__()
 
-        self._machine = SystemMachine(None, head_fix, pellet.pellet_reader, pellet, inference)
+        self._analysis = analysis
+
+        self._machine = SystemMachine(None, None, msg_handler, analysis, head_fix, pellet, inference)
 
         self._project: Optional[ProjectInfo] = None
 
         self._machine.algorithm.property_changed += self._on_algorithm_property_changed
 
         self._is_intersession_enabled = self._machine.algorithm.intersession_enabled
+
+    @property
+    def analysis(self) -> SensorAnalysis:
+        return self._analysis
 
     @property
     def project(self) -> ProjectInfo:

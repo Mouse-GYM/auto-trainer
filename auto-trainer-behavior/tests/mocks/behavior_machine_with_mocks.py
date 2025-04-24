@@ -25,8 +25,8 @@ class BehaviorMachineWithMocks(SystemMachine):
 
         algorithm = algorithm if algorithm is not None else BehaviorAlgorithm(limits)
 
-        super().__init__(algorithm, self._mock_headfix, self._mock_pellet, self._mock_pellet,
-                         self._mock_inference, self._project_info)
+        super().__init__(algorithm, self._project_info, self._mock_pellet, self._mock_headfix, self._mock_headfix,
+                         self._mock_pellet, self._mock_inference)
 
     @property
     def mock_headfix(self):

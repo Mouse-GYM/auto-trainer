@@ -3,7 +3,7 @@ import logging
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
 
-from autotrainer.core import PerfMonitor
+from autotrainer.core import PerfMonitor, MessageHandler
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget, QtIndicator
 
 from tools.acquisition.model.head_fix_model import HeadFixModel
@@ -18,7 +18,7 @@ _INACTIVE_LOAD_CELL_COLOR = (240, 240, 240)
 class HeadFixContent(ContentWidget):
     position_changed = Signal(int)
 
-    def __init__(self, model: HeadFixModel):
+    def __init__(self, model: HeadFixModel, msg_handler: MessageHandler):
         super().__init__()
 
         self._model = model
@@ -140,9 +140,11 @@ class HeadFixContent(ContentWidget):
 
         self.position_changed.connect(lambda x: self._current_position.setText(str(x)))
 
+        msg_handler.measurement_callback = self._weight_received
+
     def on_activated(self):
-        self._model.on_activated()
-        self._model.message_handler.measurement_callback = self._weight_received
+        # self._model.analysis.measurement_callback = self._weight_received
+        pass
 
     def set_is_editable(self, is_editable: bool):
         self._port_combobox.setVisible(is_editable)

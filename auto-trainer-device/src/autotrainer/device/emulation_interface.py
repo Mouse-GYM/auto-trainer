@@ -48,6 +48,10 @@ class EmulationInterface(DeviceInterface):
             Motor.PELLET_Z_MOTOR: StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR),
         }
 
+    @property
+    def is_open(self) -> bool:
+        return self._is_open
+
     def open(self) -> bool:
         self._is_open = True
         return self._is_open

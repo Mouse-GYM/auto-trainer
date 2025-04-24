@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class MainWindow(QMainWindow):
     def __init__(self, app: QApplication, user_preferences: UserPreferences, configuration: str = None,
-                 app_version: str = "", is_dev: bool = False, allow_can_emulation: bool = False):
+                 app_version: str = "", is_dev: bool = False):
         super().__init__()
 
         self._app = app
@@ -28,7 +28,7 @@ class MainWindow(QMainWindow):
         self._preferences = user_preferences
         self._update_log_level(self._preferences.log_level)
 
-        self._app_view_model = AppModel(self._preferences, app_version, allow_can_emulation)
+        self._app_view_model = AppModel(self._preferences, app_version)
 
         self.setWindowTitle(f"Auto Trainer - Acquisition v{app_version}")
 

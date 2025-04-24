@@ -64,11 +64,11 @@ class MainContent(ContentWidget):
         self._layout.addWidget(self._pellet_delivery_content, 3, 0, 1, 3)
         self._content_widgets.append(self._pellet_delivery_content)
 
-        analysis_content = BehaviorContent(self._model.behavior, self._model.inference, self._model.head_fix)
+        analysis_content = BehaviorContent(self._model.behavior, self._model.inference)
         self._layout.addWidget(analysis_content, 1, 0, 2, 3)
         self._content_widgets.append(analysis_content)
 
-        self._head_fix_content = HeadFixContent(self._model.head_fix)
+        self._head_fix_content = HeadFixContent(self._model.head_fix, self._model.message_handler)
         self._layout.addWidget(self._head_fix_content, 1, 3, 2, 3)
         self._content_widgets.append(self._head_fix_content)
 
@@ -128,6 +128,8 @@ class MainContent(ContentWidget):
             widget.set_is_capture_active(is_active)
 
     def on_activated(self):
+        self._model.on_activated()
+
         self._model.left_camera.set_display_fcn(self._left_camera_content.refresh_image)
         self._model.right_camera.set_display_fcn(self._right_camera_content.refresh_image)
         self._model.top_camera.set_display_fcn(self._top_camera_content.refresh_image)

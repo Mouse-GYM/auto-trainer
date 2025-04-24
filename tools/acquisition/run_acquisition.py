@@ -68,6 +68,8 @@ def verify_log_location(log_location: str, device_name: str):
 def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_emulation: bool = False) -> int:
     from PySide6.QtWidgets import QApplication
 
+    from autotrainer.model import EnvironmentProvider
+
     from tools.acquisition.view.main_window import MainWindow
     from tools.acquisition.model.user_preferences import UserPreferences
 
@@ -78,11 +80,13 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
     if not verify_configuration(configuration):
         return -1
 
+    EnvironmentProvider.enable_can_emulation(allow_can_emulation)
+
     preferences = UserPreferences()
 
     verify_log_location(preferences.log_location, preferences.serial_number)
 
-    window = MainWindow(app, preferences, configuration, "1.1.39", is_dev, allow_can_emulation)
+    window = MainWindow(app, preferences, configuration, "1.1.40", is_dev)
 
     window.show()
 

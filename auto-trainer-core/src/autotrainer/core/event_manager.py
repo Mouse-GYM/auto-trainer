@@ -9,7 +9,7 @@ from datetime import datetime
 from queue import Queue, Empty
 from typing import Optional
 
-from autotrainer.core import ProjectInfo, ProjectInterval
+from .project import ProjectInfo, ProjectInterval
 
 
 @dataclass(frozen=True)

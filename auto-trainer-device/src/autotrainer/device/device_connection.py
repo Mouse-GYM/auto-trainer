@@ -2,33 +2,25 @@ import logging
 import math
 import time
 from queue import Queue, Empty
-from enum import IntEnum
 from threading import Thread
 from typing import Callable
 
-from autotrainer.core.message import MotorConfigurations
+from autotrainer.core import MotorConfigurations, SystemCommandKind
 
-from .device import Device
 from .can_device import HAVE_CAN_DEVICE
+from .device import Device
 from .device_api import DeviceApi
 from .device_interface import ServoConfig, StepperConfig
+from .device_connection_protocol import DeviceConnectionProtocol
 from .motor_steps import CompoundMovementDataSet, MotorSteps
-from ..core import SystemCommandKind
 
 logger = logging.getLogger(__name__)
 
-
-# Thread message kind should be negative. Specific devices can use any positive value.
-class DeviceThreadMessageKind(IntEnum):
-    TERMINATE = -1001,
-    CONNECT = -1002,
-    DISCONNECT = -1003
+_REQUEST_CONNECT = -1002
+_REQUEST_DISCONNECT = -1003
 
 
-_REQUEST_TERMINATE = DeviceThreadMessageKind.TERMINATE
-
-
-class DeviceConnection:
+class DeviceConnection(DeviceConnectionProtocol):
     """
     Convenience class to connect a hardware device and a responder for a client to control and receive information from
     the device.
@@ -82,35 +74,37 @@ class DeviceConnection:
     def read_limit(self, value: int):
         self._read_limit = value
 
-    def start(self):
-        if self._current_thread is None or not self._current_thread.is_alive():
-            self._current_thread = Thread(target=self.run)
-            self._current_thread.start()
-
     def join(self):
+        # TODO this is for legacy compatibility when the connection was exposed directly as a thread for clients that
+        #  wanted to know when the connection was guaranteed to be terminated.  This should be accommodated a different
+        #  way - see TODOs in request_(dis)connect.
+
         if self._current_thread is not None:
             self._current_thread.join()
             self._current_thread = None
 
-    def run(self) -> None:
-        logger.debug(f"<{self._name}> thread started")
-
-        while True:
-            if not self._run_unconnected():
-                break
-
-            if not self._run_connected():
-                break
-
-        logger.debug(f"<{self._name}> thread terminated")
-
-    def request_terminate(self):
+    def request_connect(self):
         """
-        Sends a termination request to the device connection queue.  The thread may have not yet terminated when this call
-        returns.
+        Attempts to establish a connection to the device.  This is framed as a request for two reasons.  Even in the
+        case of a successful connection, it will not have been fully established at the time this call returns.  The
+        second reason is that the connection attempt may fail.
         """
+        # TODO provide a mechanism for the caller to be notified when a connection attempt succeeds or fails.  Could be
+        #  an optional callback provided in this call, a dedicated callback, an observable property, etc.
+        self._start()
+
         if self._cmd_queue is not None:
-            self._cmd_queue.put((_REQUEST_TERMINATE, None, None))
+            self._cmd_queue.put((_REQUEST_CONNECT, None, None))
+
+    def request_disconnect(self):
+        """
+        Sends a disconnect request to the device connection queue.  It is framed as a request because the device may not
+        be disconnected and relevant objects yet disposed when this call returns.  However, anything running and
+        allocated with be terminated and disposed.
+        """
+        # TODO provide a mechanism for the caller to be notified when disconnection is complete.
+        if self._cmd_queue is not None:
+            self._cmd_queue.put((_REQUEST_DISCONNECT, None, None))
 
     def send_message(self, kind: int, data: object = None, context: object = None):
         if self._cmd_queue is not None:
@@ -138,16 +132,33 @@ class DeviceConnection:
         assert isinstance(config, ServoConfig) or isinstance(config, StepperConfig)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
 
+    def _start(self):
+        if self._current_thread is None or not self._current_thread.is_alive():
+            self._current_thread = Thread(target=self._run)
+            self._current_thread.start()
+
+    def _run(self) -> None:
+        logger.debug(f"<{self._name}> thread started")
+
+        while True:
+            if not self._run_unconnected():
+                break
+
+            if not self._run_connected():
+                break
+
+        logger.debug(f"<{self._name}> thread terminated")
+
     def _run_unconnected(self) -> bool:
         while True:
             try:
                 cmd, data, context = self._cmd_queue.get_nowait()
 
-                if cmd == _REQUEST_TERMINATE:
-                    logger.debug(f"<{self._name}> message: {DeviceThreadMessageKind(cmd).name}")
+                if cmd == _REQUEST_DISCONNECT:
+                    logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
                     return False
-                elif cmd == DeviceThreadMessageKind.CONNECT:
-                    logger.debug(f"<{self._name}> message: {DeviceThreadMessageKind(cmd).name}")
+                elif cmd == _REQUEST_CONNECT:
+                    logger.debug(f"<{self._name}> message: _REQUEST_CONNECT")
                     break
                 else:
                     logger.debug(f"<{self._name}> message: {cmd} ignored")
@@ -191,11 +202,8 @@ class DeviceConnection:
             try:
                 cmd, data, context = self._cmd_queue.get_nowait()
 
-                if cmd == _REQUEST_TERMINATE:
-                    logger.debug(f"<{self._name}> message: {DeviceThreadMessageKind(cmd).name}")
-                    return False
-                elif cmd == DeviceThreadMessageKind.DISCONNECT:
-                    logger.debug(f"<{self._name}> message: {DeviceThreadMessageKind(cmd).name}")
+                if cmd == _REQUEST_DISCONNECT:
+                    logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
                     break
                 else:
                     self._device.notify_message(cmd, data, context)
@@ -212,4 +220,4 @@ class DeviceConnection:
         else:
             logger.warning(f"<{self._name} DISCONNECT cmd while device already disconnected")
 
-        return True
+        return False

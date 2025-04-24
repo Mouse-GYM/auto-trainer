@@ -1,30 +1,24 @@
 import logging
-import queue
 import uuid
 from typing import Optional
 
-from autotrainer.core import ObservableObject, ProjectInfo, SystemMessageHandler, SystemCommandKind
-from autotrainer.device import HeadFix, get_available_hardware
-from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
+from autotrainer.core import ObservableObject, ProjectInfo, SystemCommandKind, SensorAnalysis
+from autotrainer.device import get_available_hardware, DeviceConnectionProtocol
+from autotrainer.model import EnvironmentProvider
 
 logger = logging.getLogger(__name__)
 
 
 class HeadFixModel(ObservableObject):
-    def __init__(self, allow_can_emulation: bool = False):
+    def __init__(self, analysis: SensorAnalysis):
         super().__init__()
-
-        self._allow_can_emulation = allow_can_emulation
 
         self._port = None
 
-        self._device_thread = None
+        self._device = None
 
-        self._reader_queue = queue.Queue()
-
-        self._message_handler = SystemMessageHandler(self._reader_queue)
-        self._message_handler.property_changed += self._head_fix_reader_property_changed
-        self._analysis = self._message_handler.analysis
+        self._analysis = analysis
+        self._analysis.property_changed += self._head_fix_reader_property_changed
 
         self._is_connected = False
 
@@ -47,6 +41,18 @@ class HeadFixModel(ObservableObject):
         self._project: Optional[ProjectInfo] = None
 
     @property
+    def device(self) -> Optional[DeviceConnectionProtocol]:
+        return self._device
+
+    @device.setter
+    def device(self, value: Optional[DeviceConnectionProtocol]) -> None:
+        self._device = value
+
+    @property
+    def analysis(self) -> SensorAnalysis:
+        return self._analysis
+
+    @property
     def project(self) -> ProjectInfo:
         return self._project
 
@@ -57,14 +63,6 @@ class HeadFixModel(ObservableObject):
     @property
     def is_connected(self):
         return self._is_connected
-
-    @property
-    def message_handler(self) -> SystemMessageHandler:
-        return self._message_handler
-
-    @property
-    def head_fix_reader(self):
-        return self._analysis
 
     @property
     def port(self) -> str:
@@ -129,7 +127,7 @@ class HeadFixModel(ObservableObject):
     @property
     def position(self) -> float:
         return self._position
-    
+
     # Deprecated
     def update_position(self, value: float):
         logger.warning("update_position() is deprecated.  Use set_position().")
@@ -156,21 +154,10 @@ class HeadFixModel(ObservableObject):
         return self._send_with_token(SystemCommandKind.UPDATE_SCALE_TARE)
 
     def refresh_ports(self):
-        return get_available_hardware(allow_can_emulation=self._allow_can_emulation)
+        return get_available_hardware(allow_can_emulation=EnvironmentProvider.allow_can_emulation())
 
-    def connect_to_device(self):
-        self._analysis.project_info = self._project
-
-        if not self.port or len(self.port) == 0:
-            return
-
-        self._device_thread = DeviceConnection(HeadFix(self.port, buffer_size=20), self._reader_queue)
-
-        self._device_thread.name = "head-fix"
-
-        self._device_thread.start()
-
-        self._send_command(DeviceThreadMessageKind.CONNECT)
+    def on_connect(self, device: DeviceConnectionProtocol):
+        self._device = device
 
         self._send_command(SystemCommandKind.SET_MAGNET_INTENSITY, self._position)
 
@@ -178,27 +165,10 @@ class HeadFixModel(ObservableObject):
 
         self._is_connected = True
 
-    def disconnect_from_device(self):
-        if not self._is_connected:
-            return
-
-        if self._analysis is not None:
-            self._analysis.project_info = None
-
-        # End connection thread, but do not kill the message handler.  It is connection agnostic.
-        self._device_thread.request_terminate()
-
-        self._device_thread = None
+    def on_disconnect(self):
+        self._device = None
 
         self._is_connected = False
-
-    def on_activated(self):
-        self._message_handler.start()
-
-    def on_close(self):
-        # End all threads so application exits cleanly.
-        self.disconnect_from_device()
-        self._message_handler.request_terminate()
 
     def _head_fix_reader_property_changed(self, name: str, value, _):
         if name == "is_headbar_engaged":
@@ -268,8 +238,8 @@ class HeadFixModel(ObservableObject):
             return None
 
     def _send_command(self, message, data=None, context=None) -> bool:
-        if self._device_thread is not None:
-            self._device_thread.send_message(message, data, context)
+        if self._device is not None:
+            self._device.send_message(message, data, context)
             return True
 
         return False

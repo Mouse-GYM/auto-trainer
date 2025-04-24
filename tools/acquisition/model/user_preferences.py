@@ -25,6 +25,12 @@ class UserPreferences(ObservableObject):
 
         self._animal_location = self._settings.value("system/animal_location", "")
 
+        # Transient values that may come from individual configuration files, but are conveniently accessed from
+        # the user preferences.
+
+        self._tunnel_port = None
+        self._pellet_port = None
+
     def save(self):
         self._settings.sync()
 
@@ -82,3 +88,34 @@ class UserPreferences(ObservableObject):
     def log_level(self, value: int):
         self._log_level = self._on_property_changed("log_level", value, self.log_level)
         self._settings.setValue("system/log_level", self._log_level)
+
+    # Transient Values
+
+    @property
+    def pellet_port(self) -> str:
+        return self._pellet_port
+
+    @pellet_port.setter
+    def pellet_port(self, value: str):
+        self._pellet_port = self._on_property_changed("pellet_port", value, self.pellet_port)
+
+    @property
+    def tunnel_port(self) -> str:
+        return self._tunnel_port
+
+    @tunnel_port.setter
+    def tunnel_port(self, value: str):
+        self._tunnel_port = self._on_property_changed("tunnel_port", value, self.tunnel_port)
+
+    def load_configuration(self, conf: dict):
+        if "headFix" in conf and "port" in conf["headFix"]:
+            self._tunnel_port = conf["headFix"]["port"]
+        if "pelletDelivery" in conf and "port" in conf["pelletDelivery"]:
+            self._pellet_port = conf["pelletDelivery"]["port"]
+
+    def save_configuration(self, conf: dict):
+        if "headFix" in conf and "port" in conf["headFix"]:
+            conf["headFix"]["port"] = self._tunnel_port
+        if "pelletDelivery" in conf and "port" in conf["pelletDelivery"]:
+            conf["pelletDelivery"]["port"] = self._pellet_por
+

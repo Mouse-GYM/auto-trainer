@@ -5,7 +5,7 @@ from autotrainer.core import ObservableObject, ProjectInterval, SystemMessageHan
     SystemCommandKind
 from autotrainer.device import CanDevice, CAN_IDENTIFIER, HAVE_CAN_DEVICE
 from autotrainer.device import HeadFix
-from autotrainer.device import DeviceConnection, DeviceThreadMessageKind
+from autotrainer.device import DeviceConnection
 
 from tools.head_fix.model.user_settings import UserSettings
 
@@ -113,9 +113,7 @@ class AppModel(ObservableObject):
 
         self._device_connection.name = "head-fix"
 
-        self._device_connection.start()
-
-        self._device_connection.send_message(DeviceThreadMessageKind.CONNECT)
+        self._device_connection.request_connect()
 
         self._device_connection.send_message(SystemCommandKind.REQUEST_VERSION)
 
@@ -128,9 +126,7 @@ class AppModel(ObservableObject):
         if self._is_connected:
             # End DeviceConnection for this connection.  Do not kill the message handler which is connection agnostic.
             if self._device_connection is not None:
-                self._device_connection.send_message(
-                    (DeviceThreadMessageKind.DISCONNECT, None, None))
-                self._device_connection.request_terminate()
+                self._device_connection.request_disconnect()
                 self._device_connection = None
 
             self._is_connected = False
@@ -145,7 +141,7 @@ class AppModel(ObservableObject):
 
         # End all threads so application exits cleanly.
         if self._device_connection is not None:
-            self._device_connection.request_terminate()
+            self._device_connection.request_disconnect()
         if self._message_handler is not None:
             self._message_handler.request_terminate()
 

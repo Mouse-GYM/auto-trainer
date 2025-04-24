@@ -5,7 +5,8 @@ from datetime import datetime
 
 import numpy
 
-from autotrainer.core import ObservableObject, EventManager
+from ..observable_object import ObservableObject
+from ..event_manager import EventManager
 
 from .analysis_measurement_event_kind import AnalysisMeasurementEventKind
 
@@ -16,6 +17,7 @@ class HeadbarPressureMonitor(ObservableObject):
     determine if the headbar is considered sufficiently "engaged" or not.  At this time, this is specifically used
     downstream to allow for the tunnel auto-clamp behavior, when enabled.
     """
+
     def __init__(self):
         super().__init__()
 
