@@ -23,11 +23,6 @@ perf_count = -1
 perf_print = False
 print_motor_status = Motor.NONE
 print_status = None
-positions = {
-    SystemCommandKind.SET_X: 0,
-    SystemCommandKind.SET_Y: 0,
-    SystemCommandKind.SET_Z: 0,
-}
 get_input = True
 
 
@@ -39,7 +34,7 @@ class StatusType(IntEnum):
 
 
 def monitor_message_queue():
-    global perf_start, perf_count, print_motor_status, positions, print_status
+    global perf_start, perf_count, print_motor_status, print_status
     global get_input
 
     logger.info("starting message queue thread")
@@ -63,10 +58,7 @@ def monitor_message_queue():
             time.sleep(0.001)
             continue
 
-        if kind == DeviceThreadMessageKind.TERMINATE:
-            break
-
-        elif kind == SystemStatusMessageKind.ACKNOWLEDGE:
+        if kind == SystemStatusMessageKind.ACKNOWLEDGE:
             get_input = True
 
         elif kind == SystemStatusMessageKind.FIRMWARE_VERSION:
@@ -182,11 +174,6 @@ def monitor_message_queue():
                 print_status = None
                 get_input = True
 
-        if kind == SystemStatusMessageKind.PELLET_X or \
-                kind == SystemStatusMessageKind.PELLET_Y or \
-                kind == SystemStatusMessageKind.PELLET_Z:
-            positions[kind] = int(data)
-
     if output_fd is not None:
         output_fd.close()
 
@@ -275,19 +262,10 @@ def write_config(motor: Motor, device_thread):
         device_thread.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, (motor, config))
 
 
-def wait_for_move(kind, position):
-    now = time.time()
-
-    while time.time() - now < 2:
-        return position >= positions[kind] - 0.1 or position <= positions[kind] + 0.1
-
-    return None
-
-
 def round_trip_test(motor: Motor, trips: int, device_thread):
-    global print_motor_status, positions
+    global print_motor_status
 
-    cmd = motor_to_set_command[motor]
+    cmd = motor_to_move_command[motor]
 
     for i in range(trips):
         device_thread.send_message(cmd, data=22.0 if is_stepper(motor) else 100)  # in mm or deg
@@ -441,6 +419,15 @@ motor_to_set_command = {
     Motor.PELLET_LOAD_SERVO: SystemCommandKind.SET_LOAD_SERVO
 }
 
+motor_to_move_command = {
+    Motor.PELLET_X_MOTOR: SystemCommandKind.MOVE_X,
+    Motor.PELLET_Y_MOTOR: SystemCommandKind.MOVE_Y,
+    Motor.PELLET_Z_MOTOR: SystemCommandKind.MOVE_Z,
+    Motor.MAGNET_SERVO: SystemCommandKind.SET_MAGNET_INTENSITY,
+    Motor.PELLET_COVER_SERVO: SystemCommandKind.SET_COVER_SERVO,
+    Motor.PELLET_LOAD_SERVO: SystemCommandKind.SET_LOAD_SERVO
+}
+
 
 def handle_motor_command(motor: Motor, params, device_thread):
     global print_motor_status, get_input
@@ -487,10 +474,11 @@ def handle_motor_command(motor: Motor, params, device_thread):
     elif params[0] == 'step':
         start = int(params[1])
         stop = int(params[2])
-        step = int(params[3]) if len(params) > 3 else 1
+        step = int(params[3])
+        step = step if start < stop else -step
 
-        for position in range(start, stop, step if start < stop else -step):
-            device_thread.send_message(motor_to_set_command[motor],
+        for position in range(start, stop + step, step):
+            device_thread.send_message(motor_to_move_command[motor],
                                        data=float(position))
             time.sleep(1 + .25 * step)
         get_input = True
@@ -541,7 +529,7 @@ def print_help():
           " ::Move servo pos [0:120] (deg) rate [0:100] (%)\n"
           "                                   "
           " ::Move stepper pos [0:27] (mm) rate [0:100] (%)")
-    print("<motor> step <start> <end> [<step>]"
+    print("<motor> step <start> <end> <step>"
           " ::Step degrees or mms at a time")
     print("<motor> config read                "
           " ::Read Configuration")

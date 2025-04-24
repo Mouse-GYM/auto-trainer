@@ -463,6 +463,8 @@ class CanInterface(DeviceInterface):
 
         rc = False
 
+        config.motor = motor
+
         if motor is Motor.MAGNET_SERVO:
             self.magnet_config = config
             if write_to_remote:
@@ -540,7 +542,7 @@ class CanInterface(DeviceInterface):
         return addr is not None and self._jc.PressureSensorTare(addr, 0, CanInterface.next_uuid()) \
             == 0
 
-    def _set_servo_position(self, position, config: ServoConfig):
+    def _set_servo_position(self, motor: Motor, position, config: ServoConfig):
         # The location is either a position or a (position, rate) pair
 
         if isinstance(position, float) or isinstance(position, int):
@@ -558,15 +560,15 @@ class CanInterface(DeviceInterface):
 
         acceleration = config.maximum_acceleration
 
-        addr = self._tgt2addr(target_of_motor(config.motor))
-        return addr is not None and self._jc.ServoMove(addr, _motor_to_id(config.motor),
+        addr = self._tgt2addr(target_of_motor(motor))
+        return addr is not None and self._jc.ServoMove(addr, _motor_to_id(motor),
                                                        position,
                                                        velocity,
                                                        acceleration,
-                                                       AbsOrRel.ABSOLUTE,
-                                                       CanInterface.next_uuid()) == 0
+                                                       AbsOrRel.ABSOLUTE) == 0
 
-    def _set_stepper_position(self, position, config: StepperConfig, save_as_fixed: bool):
+    def _set_stepper_position(self, motor: Motor, position, config: StepperConfig, save_as_fixed:
+    bool):
         # The location is either a position or a (position, rate) pair
 
         if isinstance(position, float) or isinstance(position, int):
@@ -586,8 +588,8 @@ class CanInterface(DeviceInterface):
         elif position > 12:
             position = 12
 
-        addr = self._tgt2addr(target_of_motor(config.motor))
-        return addr is not None and self._jc.StepperMove(addr, _motor_to_id(config.motor),
+        addr = self._tgt2addr(target_of_motor(motor))
+        return addr is not None and self._jc.StepperMove(addr, _motor_to_id(motor),
                                                          position,
                                                          velocity,
                                                          acceleration,
@@ -600,28 +602,31 @@ class CanInterface(DeviceInterface):
     """
 
     def set_magnet(self, position: int, _unused: bool = False) -> bool:
-        return self._set_servo_position(position, self.magnet_config)
+        return self._set_servo_position(Motor.MAGNET_SERVO, position, self.magnet_config)
 
     """
     Set the position of the X-direction motor
     """
 
     def set_x(self, position: float, save_as_fixed: bool = False) -> bool:
-        return self._set_stepper_position(position, self.x_config, save_as_fixed)
+        return self._set_stepper_position(Motor.PELLET_X_MOTOR, position, self.x_config,
+                                          save_as_fixed)
 
     """
     Set the position of the Y-direction motor
     """
 
     def set_y(self, position: float, save_as_fixed: bool = False) -> bool:
-        return self._set_stepper_position(position, self.y_config, save_as_fixed)
+        return self._set_stepper_position(Motor.PELLET_Y_MOTOR, position, self.y_config,
+                                          save_as_fixed)
 
     """
     Set the position of the Z-direction motor
     """
 
     def set_z(self, position: float, save_as_fixed: bool = False) -> bool:
-        return self._set_stepper_position(position, self.z_config, save_as_fixed)
+        return self._set_stepper_position(Motor.PELLET_Z_MOTOR, position, self.z_config,
+                                          save_as_fixed)
 
     """
     Move the X, Y, Z motor to a fixed location, known by the device
@@ -637,7 +642,7 @@ class CanInterface(DeviceInterface):
     """
 
     def set_load_servo(self, position: float, _unused: bool = False):
-        return self._set_servo_position(position, self.load_config)
+        return self._set_servo_position(Motor.PELLET_LOAD_SERVO, position, self.load_config)
 
     """
     Move to scoop a pellet
@@ -658,7 +663,7 @@ class CanInterface(DeviceInterface):
     """
 
     def set_cover_servo(self, position, _unused: bool = False):
-        return self._set_servo_position(position, self.cover_config)
+        return self._set_servo_position(Motor.PELLET_COVER_SERVO, position, self.cover_config)
 
     """
     Open the cover so the pellet is visible to the animal
