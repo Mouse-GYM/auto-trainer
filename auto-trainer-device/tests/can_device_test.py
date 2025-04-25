@@ -51,31 +51,24 @@ def data_callback(kind: int, response: object):
 
 def _construction():
     try:
-        device = CanDevice()
+        device = CanDevice(api=DeviceApi(message_callback=data_callback), force_emulation=True)
     except (ModuleNotFoundError, TypeError, AttributeError):
         assert False
 
-    if HAVE_CAN_DEVICE:
-        interface = CanInterface()
-        # for these tests, do NOT open interface
-        interface._set_magnet_address(0x40)
-        interface._set_pellet_address(0x01)
-    else:
-        interface = EmulationInterface()
-
-    device.api = DeviceApi(message_callback=data_callback)
+    device._interface._set_magnet_address(0x40)
+    device._interface._set_pellet_address(0x01)
 
     return device
 
 
 @pytest.mark.canbus
 def test_notify_version():
-    notify_command(SystemCommandKind.REQUEST_VERSION, 101)
+    notify_command(SystemCommandKind.REQUEST_VERSION, 101, expect_ack=False)
 
 
 @pytest.mark.canbus
 def test_notify_tare_load_cell():
-    notify_command(SystemCommandKind.UPDATE_SCALE_TARE, 102)
+    notify_command(SystemCommandKind.UPDATE_SCALE_TARE, 102, expect_ack=False)
 
 
 @pytest.mark.canbus
@@ -189,7 +182,8 @@ def test_servo_config():
                          0, 0, 0)
 
     _expected = [
-        (SystemStatusMessageKind.MOTOR_CONFIGURATION, config)
+        (SystemStatusMessageKind.MOTOR_CONFIGURATION, config),
+        (SystemStatusMessageKind.ACKNOWLEDGE, None)
     ]
     notify_data(config)
 
@@ -202,6 +196,7 @@ def test_stepper_config():
                            0, 0, False)
     _expected = [
         (SystemStatusMessageKind.MOTOR_CONFIGURATION, config),
+        (SystemStatusMessageKind.ACKNOWLEDGE, None)
     ]
     notify_data(config)
 

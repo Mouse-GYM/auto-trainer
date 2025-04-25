@@ -15,7 +15,6 @@ a list of data sets that are then propagated to the rest of the application.
 
 import logging
 import time
-from symbol import and_expr
 
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
@@ -41,36 +40,36 @@ _PELLET_LOAD_SERVO_ID = 1
 
 _audio = AudioData()
 
-'''
+"""
 Pellet device CAN address board type is 0 (bits 2 and 3)
-'''
+"""
 
 
 def _is_pellet_by_addr(addr: int) -> bool:
     return addr & 0xC == 0
 
 
-'''
+"""
 Pellet device CAN address board type is 4 (bits 2 and 3)
-'''
+"""
 
 
 def _is_magnet_by_addr(addr: int) -> bool:
     return addr & 0xC == 0x04
 
 
-'''
+"""
 Convert a CANbus address to a target type
-'''
+"""
 
 
 def _addr2tgt(addr: int) -> Target:
     return Target.PELLET_DEVICE if _is_pellet_by_addr(addr) else Target.MAGNET_DEVICE
 
 
-'''
+"""
 Given a target type, return an equivalent human-readable string
-'''
+"""
 
 
 def target_to_str(target: Target) -> str:
@@ -82,9 +81,9 @@ def target_to_str(target: Target) -> str:
         return "Unknown"
 
 
-'''
+"""
 Given a motor type, return an equivalent human-readable string
-'''
+"""
 
 
 def motor_to_str(motor: Motor) -> str:
@@ -104,9 +103,9 @@ def motor_to_str(motor: Motor) -> str:
         return "Unknown"
 
 
-'''
+"""
 Given a motor type, return the Alagus hardware motor identification number
-'''
+"""
 
 
 def _motor_to_id(motor: Motor) -> int:
@@ -155,9 +154,9 @@ def target_of_motor(motor: Motor) -> Target:
     return Target.MAGNET_DEVICE if motor is Motor.MAGNET_SERVO else Target.PELLET_DEVICE
 
 
-'''
+"""
 Given a Alagus hardware motor identification number and target, return the motor type
-'''
+"""
 
 
 def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
@@ -190,6 +189,19 @@ class CanInterface(DeviceInterface):
     Applications and scripts would generally not interact with this class directly,
     but with the more generalized behavior in the CanDevice class.
     """
+
+    _uuid: int = 1
+
+    @classmethod
+    def next_uuid(cls) -> int:
+        cls._uuid = cls._uuid + 1 & 0xFF
+        if cls._uuid == 0:  # don't allow 0's
+            cls._uuid = 1
+        return cls._uuid
+
+    @classmethod
+    def uuid(cls) -> int:
+        return cls._uuid
 
     def __init__(self):
         super().__init__()
@@ -271,43 +283,43 @@ class CanInterface(DeviceInterface):
         self._z_config.motor = Motor.PELLET_Z_MOTOR
         self._z_config.target = target_of_motor(self._z_config.motor)
 
-    '''
+    """
     Set the pellet CAN address. Used primarily for testing, as after data is received
     from the device(s), the address for each target will be updated automatically.
-    '''
+    """
 
     def _set_pellet_address(self, addr: int):
         self._pellet_addr = addr
         logger.info(f"pellet module located at {self._pellet_addr}")
 
-    '''
+    """
     Set the magnet CAN address. Used primarily for testing, as after data is received
     from the device(s), the address for each target will be updated automatically.
-    '''
+    """
 
     def _set_magnet_address(self, addr: int):
         self._magnet_addr = addr
         logger.info(f"magnet module located at {self._magnet_addr}")
 
-    '''
+    """
     Determine if both the magnet and pellet CANbus addresses are valid
-    '''
+    """
 
     def are_addresses_valid(self) -> bool:
         return self._magnet_addr is not None and self._pellet_addr is not None
 
-    '''
+    """
     Return the CANbus address of the given target
-    '''
+    """
 
     def _tgt2addr(self, target: Target) -> int:
         dst = self._pellet_addr if target is Target.PELLET_DEVICE else self._magnet_addr
         return dst
 
-    '''
+    """
     Assign the pellet or magnet CANbus address based on an incoming message. Each
     target address is set only once.
-    '''
+    """
 
     def _assign_address(self, message):
         if self._pellet_addr is None and _is_pellet_by_addr(message.dst_id):
@@ -316,17 +328,17 @@ class CanInterface(DeviceInterface):
         if self._magnet_addr is None and _is_magnet_by_addr(message.dst_id):
             self._set_magnet_address(message.dst_id)
 
-    '''
+    """
     Flag: interface to hardware is open (true) or closed (false)
-    '''
+    """
 
     @property
     def is_open(self) -> bool:
         return self._is_open
 
-    '''
+    """
     Open the interface (CANbus) connection
-    '''
+    """
 
     def open(self) -> bool:
         if self._jc is None:
@@ -338,25 +350,25 @@ class CanInterface(DeviceInterface):
 
         return self._is_open
 
-    '''
+    """
     Close the interface (CANbus) connection
-    '''
+    """
 
     def close(self):
         if self._is_open:
             self._jc.Close()
 
-    '''
+    """
     Flag: Data can be read from the connection
-    '''
+    """
 
     def can_read(self) -> bool:
         return self._is_open
 
-    '''
+    """
     Read a set of packets from the CANbus.
     Returns a list of data classes (see device_interface.py for list of classes)
-    '''
+    """
 
     def read(self, max_count: int = 1) -> typing.Any:
         messages = []
@@ -377,23 +389,23 @@ class CanInterface(DeviceInterface):
 
         return [x for x in map(self._translate, messages) if x is not None]
 
-    '''
+    """
     Do not allow the application to write unknown messages to the CANbus
-    '''
+    """
 
     def write(self, value: typing.Any) -> int:
         raise NotImplementedError()
 
-    '''
+    """
     Do not allow the application to write unknown messages to the CANbus
-    '''
+    """
 
     def write_str(self, value: str) -> int:
         raise NotImplementedError()
 
-    '''
+    """
     Read data until a specific response is detected
-    '''
+    """
 
     def get_response(self, typeof, target: Target, timeout: float = 2.0):
         now = time.time()
@@ -408,9 +420,9 @@ class CanInterface(DeviceInterface):
 
         return None
 
-    '''
+    """
     Return the configuration for the given motor
-    '''
+    """
 
     def get_motor_configuration(self, motor: Motor):
         if is_servo(motor):
@@ -437,19 +449,21 @@ class CanInterface(DeviceInterface):
 
         return config
 
-    '''
+    """
     Set a motor's configuration.
     
     motor - Motor associated with the configuration
     config - Configuration data
     write - Indication to push data to target (True), or locally store new configuration (False)
-    '''
+    """
 
     def set_motor_configuration(self, motor: Motor, config, write_to_remote: bool = True) -> bool:
         if config is None:
             return False
 
         rc = False
+
+        config.motor = motor
 
         if motor is Motor.MAGNET_SERVO:
             self.magnet_config = config
@@ -481,15 +495,11 @@ class CanInterface(DeviceInterface):
             if write_to_remote:
                 rc = self._write_servo_config(self.load_config)
 
-        # wait for write to complete
-        if rc:
-            time.sleep(1)
-
         return rc
 
-    '''
+    """
     Read the configurations from the remote device 
-    '''
+    """
 
     def _query_motor_configuration(self, motor: Motor, config_type):
         config = None
@@ -511,23 +521,28 @@ class CanInterface(DeviceInterface):
         self._query_motor_configuration(Motor.PELLET_COVER_SERVO, ServoConfig)
         self._query_motor_configuration(Motor.MAGNET_SERVO, ServoConfig)
 
-    '''
-    Tare the load cell so the current reading is 0.
-    '''
+    def delay(self, delay_sec) -> bool:
+        addr = self._tgt2addr(Target.PELLET_DEVICE)
+        return addr is not None and \
+            self._jc.Delay(addr, int(delay_sec * 1000), CanInterface.next_uuid())
 
     def tare_load_cell(self) -> bool:
+        """
+        Tare the load cell so the current reading is 0.
+        """
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
-        return addr is not None and self._jc.LoadCellTare(addr, 0) == 0
+        return addr is not None and self._jc.LoadCellTare(addr, 0, CanInterface.next_uuid()) == 0
 
-    '''
+    """
     Tare the pressure sensor so the current reading is 0.
-    '''
+    """
 
     def tare_pressure_sensor(self) -> bool:
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
-        return addr is not None and self._jc.PressureSensorTare(addr, 0) == 0
+        return addr is not None and self._jc.PressureSensorTare(addr, 0, CanInterface.next_uuid()) \
+            == 0
 
-    def _set_servo_position(self, position, config: ServoConfig):
+    def _set_servo_position(self, motor: Motor, position, config: ServoConfig):
         # The location is either a position or a (position, rate) pair
 
         if isinstance(position, float) or isinstance(position, int):
@@ -545,14 +560,16 @@ class CanInterface(DeviceInterface):
 
         acceleration = config.maximum_acceleration
 
-        addr = self._tgt2addr(target_of_motor(config.motor))
-        return addr is not None and self._jc.ServoMove(addr, _motor_to_id(config.motor),
+        addr = self._tgt2addr(target_of_motor(motor))
+        return addr is not None and self._jc.ServoMove(addr, _motor_to_id(motor),
                                                        position,
                                                        velocity,
                                                        acceleration,
-                                                       AbsOrRel.ABSOLUTE) == 0
+                                                       AbsOrRel.ABSOLUTE,
+                                                       CanInterface.next_uuid()) == 0
 
-    def _set_stepper_position(self, position, config: StepperConfig):
+    def _set_stepper_position(self, motor: Motor, position, config: StepperConfig, save_as_fixed:
+    bool):
         # The location is either a position or a (position, rate) pair
 
         if isinstance(position, float) or isinstance(position, int):
@@ -572,77 +589,100 @@ class CanInterface(DeviceInterface):
         elif position > 12:
             position = 12
 
-        addr = self._tgt2addr(target_of_motor(config.motor))
-        return addr is not None and self._jc.StepperMove(addr, _motor_to_id(config.motor),
+        addr = self._tgt2addr(target_of_motor(motor))
+        return addr is not None and self._jc.StepperMove(addr, _motor_to_id(motor),
                                                          position,
                                                          velocity,
                                                          acceleration,
-                                                         AbsOrRel.ABSOLUTE) == 0
+                                                         AbsOrRel.ABSOLUTE,
+                                                         save_as_fixed,
+                                                         CanInterface.next_uuid()) == 0
 
-    '''
+    """
     Set the position of the magnet motor
-    '''
+    """
 
-    def set_magnet(self, position: int) -> bool:
-        return self._set_servo_position(position, self.magnet_config)
+    def set_magnet(self, position: int, _unused: bool = False) -> bool:
+        return self._set_servo_position(Motor.MAGNET_SERVO, position, self.magnet_config)
 
-    '''
+    """
     Set the position of the X-direction motor
-    '''
+    """
 
-    def set_x(self, position: float) -> bool:
-        return self._set_stepper_position(position, self.x_config)
+    def set_x(self, position: float, save_as_fixed: bool = False) -> bool:
+        return self._set_stepper_position(Motor.PELLET_X_MOTOR, position, self.x_config,
+                                          save_as_fixed)
 
-    '''
+    """
     Set the position of the Y-direction motor
-    '''
+    """
 
-    def set_y(self, position: float) -> bool:
-        return self._set_stepper_position(position, self.y_config)
+    def set_y(self, position: float, save_as_fixed: bool = False) -> bool:
+        return self._set_stepper_position(Motor.PELLET_Y_MOTOR, position, self.y_config,
+                                          save_as_fixed)
 
-    '''
+    """
     Set the position of the Z-direction motor
-    '''
+    """
 
-    def set_z(self, position: float) -> bool:
-        return self._set_stepper_position(position, self.z_config)
+    def set_z(self, position: float, save_as_fixed: bool = False) -> bool:
+        return self._set_stepper_position(Motor.PELLET_Z_MOTOR, position, self.z_config,
+                                          save_as_fixed)
 
-    '''
+    """
+    Move the X, Y, Z motor to a fixed location, known by the device
+    """
+
+    def fixed_position(self) -> bool:
+        addr = self._tgt2addr(Target.PELLET_DEVICE)
+        return addr is not None and \
+            self._jc.SendToFixedXYZ(addr, CanInterface.next_uuid()) == 0
+
+    """
     Set the position of the load arm
-    '''
+    """
 
-    def set_load(self, position: float):
-        return self._set_servo_position(position, self.load_config)
+    def set_load_servo(self, position: float, _unused: bool = False):
+        return self._set_servo_position(Motor.PELLET_LOAD_SERVO, position, self.load_config)
 
-    '''
+    """
+    Move to scoop a pellet
+    """
+
+    def scoop_pellet(self) -> bool:
+        return self.set_load_servo(self.load_config.minimum_position)
+
+    """
+    Move to retrieve a pellet
+    """
+
+    def retrieve_pellet(self) -> bool:
+        return self.set_load_servo(self.load_config.maximum_position)
+
+    """
     Set the position of the cover for pellet delivery
-    '''
+    """
 
-    def set_cover(self, position):
-        return self._set_servo_position(position, self.cover_config)
+    def set_cover_servo(self, position, _unused: bool = False):
+        return self._set_servo_position(Motor.PELLET_COVER_SERVO, position, self.cover_config)
 
-    '''
+    """
     Open the cover so the pellet is visible to the animal
-    DEPRECATED
-    '''
+    """
 
     def release_pellet(self) -> bool:
-        addr = self._tgt2addr(Target.PELLET_DEVICE)
+        return self.set_cover_servo(self.cover_config.minimum_position)
 
-        return addr is not None and self.set_cover(self.cover_config.minimum_position) and \
-            self.emit_tone(2000, 6000)
-
-    '''
+    """
     Open the cover so the pellet is visible to the animal
-    DEPRECATED
-    '''
+    """
 
     def cover_pellet(self) -> bool:
-        return self.set_cover(self.cover_config.maximum_position)
+        return self.set_cover_servo(self.cover_config.maximum_position)
 
-    '''
+    """
     Send the given motor (X, Y, or Z) to the 0 position
-    '''
+    """
 
     def stepper_home(self, motor: Motor) -> bool:
         logger.info(f"Homing Stepper Motor {motor_to_str(motor)}")
@@ -652,11 +692,12 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(Target.PELLET_DEVICE)
 
         # Third arg - forward/rev. Go in forward direction if the non-zero locations are negative
-        return addr is not None and self._jc.StepperHome(addr, _motor_to_id(motor)) == 0
+        return addr is not None and self._jc.StepperHome(addr, _motor_to_id(motor),
+                                                         CanInterface.next_uuid()) == 0
 
-    '''
+    """
     Update a stepper motor configuration on the target
-    '''
+    """
 
     def _write_stepper_config(self, config: StepperConfig) -> bool:
         motor_id = _motor_to_id(config.motor)
@@ -672,24 +713,17 @@ class CanInterface(DeviceInterface):
                                     config.steps_per_revolution,
                                     max_vel,
                                     max_acc,
-                                    config.flip_limit_orientation) == 0:
-            logger.debug(
-                f"stepper {addr} {motor_id} config write:\n"
-                f"microsteps = {config.microsteps}\n"
-                f"step/rev = {config.steps_per_revolution}\n"
-                f"max velocity = {config.maximum_velocity}\n"
-                f"max accel = {config.maximum_acceleration}\n"
-                f"flip limit orientation = {config.flip_limit_orientation}\n"
-            )
+                                    config.flip_limit_orientation,
+                                    CanInterface.next_uuid()) == 0:
             return True
         else:
             logger.error(
                 f"stepper {addr} {motor_id} config write failed")
             return False
 
-    '''
+    """
     Update a servo motor configuration on the target
-    '''
+    """
 
     def _write_servo_config(self, config: ServoConfig) -> bool:
         motor_id = _motor_to_id(config.motor)
@@ -705,24 +739,17 @@ class CanInterface(DeviceInterface):
                                   config.minimum_pwm_duration,
                                   config.maximum_pwm_duration,
                                   config.maximum_velocity,
-                                  config.maximum_acceleration) == 0:
-            logger.debug(
-                f"servo {addr} {motor_id} config write:\n"
-                f"- min pos = {config.minimum_position}\n"
-                f"- max pos = {config.maximum_position}\n"
-                f"- min pwm = {config.minimum_pwm_duration}\n"
-                f"- max pwm = {config.maximum_pwm_duration}\n"
-                f"- max vel = {config.maximum_velocity}\n"
-                f"- max acc = {config.maximum_acceleration}")
+                                  config.maximum_acceleration,
+                                  CanInterface.next_uuid()) == 0:
             return True
         else:
             logger.error(
                 f"servo {addr} {motor_id} config write failed")
             return False
 
-    '''
+    """
     Request a stepper motor configuration from a target
-    '''
+    """
 
     def request_motor_config(self, motor: Motor) -> bool:
         target = target_of_motor(motor)
@@ -737,16 +764,16 @@ class CanInterface(DeviceInterface):
         addr = self._tgt2addr(target)
         return addr is not None and self._jc.CfgRead(addr, msg) == 0
 
-    '''
+    """
     Send a heartbeat message to the target; causes an LED to blink briefly.
-    '''
+    """
 
     def send_heartbeat(self) -> bool:
         return self._jc.Heartbeat() == 0
 
-    '''
+    """
     Set a digital output value on the pellet device
-    '''
+    """
 
     def set_digital_output(self, gpio: DigitalOutputs, state: bool) -> bool:
         # These values are based on the order and listing in the DTS files for
@@ -763,20 +790,23 @@ class CanInterface(DeviceInterface):
             return False
 
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and self._jc.GPIOWrite(addr, 0, gpio_id, state) == 0
+        return addr is not None and self._jc.GPIOWrite(addr, 0, gpio_id, state,
+                                                       CanInterface.next_uuid()) == 0
 
-    '''
+    """
     Emit a tone for the animal to hear
-    '''
+    """
 
-    def emit_tone(self, frequency: int, duration_ms: int = 1000) -> bool:
+    def emit_tone(self, frequency: int, duration_ms: int) -> bool:
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and self._jc.ToneWrite(addr, 0, frequency,
-                                                       duration_ms) == 0
+        return addr is not None and self._jc.ToneWrite(addr, 0,
+                                                       frequency,
+                                                       duration_ms,
+                                                       CanInterface.next_uuid()) == 0
 
-    '''
+    """
     Set an analog output on the pellet device
-    '''
+    """
 
     def set_analog_output(self, channel: AnalogOutputs, millivolts: int) -> bool:
         if channel is AnalogOutputs.STATUS_OUT:
@@ -785,17 +815,23 @@ class CanInterface(DeviceInterface):
             return False
 
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and self._jc.AnalogOutWrite(addr, channel,
-                                                            millivolts) == 0
+        return addr is not None and self._jc.AnalogOutWrite(addr,
+                                                            channel,
+                                                            millivolts,
+                                                            CanInterface.next_uuid()) == 0
 
-    '''
+    """
     Set the colors of a 3-color LED.
-    '''
+    """
 
-    def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> bool:
+    def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> (
+        bool):
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and self._jc.RGBLEDWrite(addr, red_percent, green_percent,
-                                                         blue_percent) == 0
+        return addr is not None and self._jc.RGBLEDWrite(addr,
+                                                         red_percent,
+                                                         green_percent,
+                                                         blue_percent,
+                                                         CanInterface.next_uuid()) == 0
 
     def request_version(self) -> bool:
         pellet = self._tgt2addr(Target.PELLET_DEVICE)
@@ -814,9 +850,9 @@ class CanInterface(DeviceInterface):
     # def emergency_stop(self) -> bool:
     #  return self.is_open and self._jc.EStop() == 0
 
-    '''
+    """
     Translate from a JerryCANCmd class to a class specific to the data type received
-    '''
+    """
 
     def _translate(self, message) -> typing.Any:
         global _audio
@@ -1022,5 +1058,10 @@ class CanInterface(DeviceInterface):
             status.humidity_percent = float(message.temp_hum_read.humidity) / 100.0
 
             return status
+
+        elif message.type == JerryCANCmdType.ACKNOWLEDGE:
+            ack = Acknowledge()
+            ack.uuid = message.ack.uuid
+            return ack
 
         return None
