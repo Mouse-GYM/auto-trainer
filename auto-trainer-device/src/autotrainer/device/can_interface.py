@@ -15,6 +15,7 @@ a list of data sets that are then propagated to the rest of the application.
 
 import logging
 import time
+from enum import Enum
 
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
@@ -29,50 +30,54 @@ from autotrainer.core.message import Motor
 
 logger = logging.getLogger(__name__)
 
-_MAGNET_SERVO_ID = 0
-
-_PELLET_X_MOTOR_ID = 0
-_PELLET_Y_MOTOR_ID = 1
-_PELLET_Z_MOTOR_ID = 2
-
-_PELLET_COVER_SERVO_ID = 0
-_PELLET_LOAD_SERVO_ID = 1
-
-_audio = AudioData()
-
-"""
-Pellet device CAN address board type is 0 (bits 2 and 3)
-"""
-
 
 def _is_pellet_by_addr(addr: int) -> bool:
+    """
+    Pellet device CAN address board type is 0 (bits 2 and 3)
+
+    Args:
+        addr: Physical CAN address
+
+    Returns:
+        bool: True if the address is associated with a pellet device
+    """
     return addr & 0xC == 0
 
 
-"""
-Pellet device CAN address board type is 4 (bits 2 and 3)
-"""
-
-
 def _is_magnet_by_addr(addr: int) -> bool:
+    """
+    Pellet device CAN address board type is 4 (bits 2 and 3)
+
+    Args:
+        addr: Physical CAN address
+
+    Returns:
+        bool: True if the address is associated with a manget/head device
+    """
     return addr & 0xC == 0x04
 
 
-"""
-Convert a CANbus address to a target type
-"""
-
-
 def _addr2tgt(addr: int) -> Target:
+    """
+    Convert a CANbus address to a target
+
+    Args:
+        addr: Physical CAN address
+
+    Returns:
+        Target: Either PELLET_DEVICE or MAGNET_DEVICE
+    """
     return Target.PELLET_DEVICE if _is_pellet_by_addr(addr) else Target.MAGNET_DEVICE
 
 
-"""
-Given a target type, return an equivalent human-readable string
-"""
-
-
 def target_to_str(target: Target) -> str:
+    """
+    Args:
+        target: type of physical remote HW target
+
+    Returns:
+        str: Human-readable string identifier for the target
+    """
     if target is Target.PELLET_DEVICE:
         return "Pellet"
     elif target is Target.MAGNET_DEVICE:
@@ -81,101 +86,122 @@ def target_to_str(target: Target) -> str:
         return "Unknown"
 
 
-"""
-Given a motor type, return an equivalent human-readable string
-"""
+_MOTOR_TO_STR_MAP = {
+    Motor.PELLET_X_MOTOR: "X",
+    Motor.PELLET_Y_MOTOR: "Y",
+    Motor.PELLET_Z_MOTOR: "Z",
+    Motor.MAGNET_SERVO: "Magnet",
+    Motor.PELLET_LOAD_SERVO: "Load",
+    Motor.PELLET_COVER_SERVO: "Cover"
+}
 
 
 def motor_to_str(motor: Motor) -> str:
-    if motor is Motor.PELLET_X_MOTOR:
-        return "X"
-    elif motor is Motor.PELLET_Y_MOTOR:
-        return "Y"
-    elif motor is Motor.PELLET_Z_MOTOR:
-        return "Z"
-    elif motor is Motor.MAGNET_SERVO:
-        return "Magnet"
-    elif motor is Motor.PELLET_LOAD_SERVO:
-        return "Load"
-    elif motor is Motor.PELLET_COVER_SERVO:
-        return "Cover"
-    else:
-        return "Unknown"
+    """
+    Args:
+        motor: motor (servo or stepper) identifier
+
+    Returns:
+        str: Human-readable string identifier for the motor
+    """
+    return _MOTOR_TO_STR_MAP.get(motor, "Unknown")
 
 
-"""
-Given a motor type, return the Alagus hardware motor identification number
-"""
+class MotorInstance(Enum):
+    MAGNET_SERVO_ID = 0
+    PELLET_X_MOTOR_ID = 0
+    PELLET_Y_MOTOR_ID = 1
+    PELLET_Z_MOTOR_ID = 2
+    PELLET_COVER_SERVO_ID = 0
+    PELLET_LOAD_SERVO_ID = 1
+
+
+_MOTOR_TO_ID_MAP = {
+    Motor.PELLET_X_MOTOR: MotorInstance.PELLET_X_MOTOR_ID,
+    Motor.PELLET_Y_MOTOR: MotorInstance.PELLET_Y_MOTOR_ID,
+    Motor.PELLET_Z_MOTOR: MotorInstance.PELLET_Z_MOTOR_ID,
+    Motor.MAGNET_SERVO: MotorInstance.MAGNET_SERVO_ID,
+    Motor.PELLET_LOAD_SERVO: MotorInstance.PELLET_LOAD_SERVO_ID,
+    Motor.PELLET_COVER_SERVO: MotorInstance.PELLET_COVER_SERVO_ID
+}
 
 
 def _motor_to_id(motor: Motor) -> int:
-    if motor is Motor.PELLET_X_MOTOR:
-        return _PELLET_X_MOTOR_ID
-    elif motor is Motor.PELLET_Y_MOTOR:
-        return _PELLET_Y_MOTOR_ID
-    elif motor is Motor.PELLET_Z_MOTOR:
-        return _PELLET_Z_MOTOR_ID
-    elif motor is Motor.MAGNET_SERVO:
-        return _MAGNET_SERVO_ID
-    elif motor is Motor.PELLET_LOAD_SERVO:
-        return _PELLET_LOAD_SERVO_ID
-    elif motor is Motor.PELLET_COVER_SERVO:
-        return _PELLET_COVER_SERVO_ID
+    """
+    Args:
+        motor: Motor identifier
 
-    return 0
+    Returns:
+        int: Physical identifier for the motor
+    """
 
-
-"""
-Return - Indication if the motor is a servo motor type
-"""
+    motor_id = _MOTOR_TO_ID_MAP.get(motor.MotorInstance.PELLET_X_MOTOR_ID)
+    return motor_id.value
 
 
 def is_servo(motor: Motor) -> bool:
+    """
+    Args:
+        motor: motor identifier
+
+    Returns:
+        bool: True if the motor is a servo motor, False otherwise
+    """
     return motor is Motor.MAGNET_SERVO or \
         motor is Motor.PELLET_LOAD_SERVO or \
         motor is Motor.PELLET_COVER_SERVO
 
 
-"""
-Return - Indication if the motor is a stepper motor type
-"""
-
-
 def is_stepper(motor: Motor) -> bool:
+    """
+    Args:
+        motor: motor identifier
+
+    Returns:
+        bool: True if the motor is a stepper motor, False otherwise
+    """
     return not is_servo(motor)
 
 
-"""
-Return - Given the motor, determines which physical board the motor is associated with
-"""
-
-
 def target_of_motor(motor: Motor) -> Target:
+    """
+    Args:
+        motor: motor identifier
+
+    Returns:
+        Target: the hardware target that the motor resides on
+    """
     return Target.MAGNET_DEVICE if motor is Motor.MAGNET_SERVO else Target.PELLET_DEVICE
 
 
-"""
-Given a Alagus hardware motor identification number and target, return the motor type
-"""
-
-
 def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
+    """
+    Convert a motor identifier from a CAN message to a Motor identifier
+
+    Args:
+        target: target from whence the id came from
+        isa_servo: True if the motor is a servo
+        motor_id: CAN message motor id
+
+    Returns:
+        Motor: associated Motor identifier
+    """
     if target is Target.MAGNET_DEVICE:
         if isa_servo:
-            if motor_id is _MAGNET_SERVO_ID:
+            if motor_id is MotorInstance.MAGNET_SERVO_ID:
                 return Motor.MAGNET_SERVO
     else:
         if isa_servo:
-            if motor_id is _PELLET_COVER_SERVO_ID:
+            if motor_id is MotorInstance.PELLET_COVER_SERVO_ID:
                 return Motor.PELLET_COVER_SERVO
-            elif motor_id is _PELLET_LOAD_SERVO_ID:
+            elif motor_id is MotorInstance.PELLET_LOAD_SERVO_ID:
                 return Motor.PELLET_LOAD_SERVO
         else:
-            if motor_id is _PELLET_X_MOTOR_ID:
+            if motor_id is MotorInstance.PELLET_X_MOTOR_ID:
                 return Motor.PELLET_X_MOTOR
-            elif motor_id is _PELLET_Y_MOTOR_ID:
+            elif motor_id is MotorInstance.PELLET_Y_MOTOR_ID:
                 return Motor.PELLET_Y_MOTOR
-            elif motor_id is _PELLET_Z_MOTOR_ID:
+            elif motor_id is MotorInstance.PELLET_Z_MOTOR_ID:
                 return Motor.PELLET_Z_MOTOR
 
     return Motor.NONE
@@ -190,20 +216,40 @@ class CanInterface(DeviceInterface):
     but with the more generalized behavior in the CanDevice class.
     """
 
+    # UUIDs are used in a command/acknowledge protocol to know when a command is complete
+    # A UUID of 0 is an invalid UUID.
+    # UUIDs in the CAN message are 8 bits, so UUIDs here are maintined to 8 bits
     _uuid: int = 1
 
     @classmethod
     def next_uuid(cls) -> int:
-        cls._uuid = cls._uuid + 1 & 0xFF
+        """
+        Returns:
+            int: Next UUID to use
+        """
+        cls._uuid = cls._uuid + 1 & 0xFF  # maintain 8 bits
         if cls._uuid == 0:  # don't allow 0's
             cls._uuid = 1
         return cls._uuid
 
     @classmethod
     def uuid(cls) -> int:
+        """
+        Returns:
+            int: UUID of active command
+        """
         return cls._uuid
 
     def __init__(self):
+        """
+        Initialize the CanInterface Class.
+
+        Creates default Configurations for motors. Expected to be updated during
+        the connection protocol.
+
+        Sets known pellet and magnet address to None. Expected to be updated during
+        the connection protocol.
+        """
         super().__init__()
 
         try:
@@ -222,6 +268,8 @@ class CanInterface(DeviceInterface):
         self.x_config = StepperConfig()
         self.y_config = StepperConfig()
         self.z_config = StepperConfig()
+
+        self._audio = AudioData()
 
     @property
     def magnet_config(self):
@@ -855,8 +903,6 @@ class CanInterface(DeviceInterface):
     """
 
     def _translate(self, message) -> typing.Any:
-        global _audio
-
         # print (message.type, message.dst_id)
         if message.type == JerryCANCmdType.HEARTBEAT:
             # print("HEARTBEAT")
@@ -985,29 +1031,29 @@ class CanInterface(DeviceInterface):
 
         elif message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_BEGIN:
             # print("AUDIO BEGIN")
-            _audio.magnitudes.clear()
-            _audio.target = _addr2tgt(message.dst_id)
-            _audio.packet_id = message.audio_data_cmd.stream_id
-            _audio.when = time.time()
-            _audio.index = time.perf_counter_ns()
+            self._audio.magnitudes.clear()
+            self._audio.target = _addr2tgt(message.dst_id)
+            self._audio.packet_id = message.audio_data_cmd.stream_id
+            self._audio.when = time.time()
+            self._audio.index = time.perf_counter_ns()
 
         elif message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_CONT:
             # print("AUDIO CONT")
-            if _audio.packet_id != 0 and _audio.target is _addr2tgt(message.dst_id):
-                _audio.magnitudes.extend(message.audio_data.magnitudes)
+            if self._audio.packet_id != 0 and self._audio.target is _addr2tgt(message.dst_id):
+                self._audio.magnitudes.extend(message.audio_data.magnitudes)
 
         elif message.type == JerryCANCmdType.AUDIO_MAGNITUDE_DATA_END:
             # print("AUDIO END")
             a = None
             if len(
-                _audio.magnitudes) == 32 and message.audio_data_cmd.stream_id == _audio.packet_id:
+                self._audio.magnitudes) == 32 and message.audio_data_cmd.stream_id == self._audio.packet_id:
                 a = AudioData()
-                a.magnitudes = _audio.magnitudes.copy()
-                a.packet_id = _audio.packet_id
-                a.target = _audio.target
+                a.magnitudes = self._audio.magnitudes.copy()
+                a.packet_id = self._audio.packet_id
+                a.target = self._audio.target
 
-            _audio.magnitudes.clear()
-            _audio.packet_id = 0
+            self._audio.magnitudes.clear()
+            self._audio.packet_id = 0
 
             return a
 
