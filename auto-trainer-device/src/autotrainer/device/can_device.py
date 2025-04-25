@@ -37,8 +37,10 @@ from .device_interface import *
 
 class CanDevice(Device):
 
-    def __init__(self, api: DeviceApi = None, buffer_size: int = 50):
-        self._interface = CanInterface() if HAVE_CAN_DEVICE else EmulationInterface()
+    def __init__(self, api: DeviceApi = None, buffer_size: int = 50, force_emulation: bool = False):
+        self._interface = \
+            CanInterface() if HAVE_CAN_DEVICE and not force_emulation \
+                else EmulationInterface()
         super().__init__(self._interface, api)
 
         self._measurement_buffer_count = buffer_size

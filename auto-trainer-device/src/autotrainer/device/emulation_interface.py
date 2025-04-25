@@ -48,10 +48,10 @@ class EmulationInterface(DeviceInterface):
             Motor.PELLET_Z_MOTOR: StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR),
         }
 
-    def _set_pellet_addr(self, addr):
+    def _set_pellet_address(self, addr):
         pass
 
-    def _set_magnet_addr(self, addr):
+    def _set_magnet_address(self, addr):
         pass
 
     @property
@@ -182,37 +182,37 @@ class EmulationInterface(DeviceInterface):
             logger.info(f"tare pressure sensor")
         return self._is_open
 
-    def set_magnet(self, position: float) -> bool:
+    def set_magnet(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set magnet position {position}")
             self._positions[Motor.MAGNET_SERVO] = position + 0.00001
         return self._is_open
 
-    def set_x(self, position: float) -> bool:
+    def set_x(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute x {position}")
             self._positions[Motor.PELLET_X_MOTOR] = position + 0.00001
         return self._is_open
 
-    def set_y(self, position: float) -> bool:
+    def set_y(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute y {position}")
             self._positions[Motor.PELLET_Y_MOTOR] = position + 0.00001
         return self._is_open
 
-    def set_z(self, position: float) -> bool:
+    def set_z(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute z {position}")
             self._positions[Motor.PELLET_Z_MOTOR] = position + 0.00001
         return self._is_open
 
-    def set_load(self, position: float) -> bool:
+    def set_load(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set load arm {position}")
             self._positions[Motor.PELLET_LOAD_SERVO] = position + 0.00001
         return self._is_open
 
-    def set_cover(self, position) -> bool:
+    def set_cover(self, position, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set barrier arm {position}")
             self._positions[Motor.PELLET_COVER_SERVO] = position + 0.00001
@@ -227,6 +227,9 @@ class EmulationInterface(DeviceInterface):
         if self._is_open:
             logger.info("cover pellet")
         return self.set_cover(self._configs[Motor.PELLET_COVER_SERVO].maximum_position)
+
+    def fixed_position(self) -> bool:
+        pass
 
     def emit_tone(self, frequency, duration) -> bool:
         if self._is_open:
