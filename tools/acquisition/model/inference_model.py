@@ -13,12 +13,13 @@ import cv2
 import numpy
 
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
-    intersession_process
-from autotrainer.behavior.behavior_event_kind import BehaviorEventKind
-from autotrainer.core import FixedArrayMultiQueue, ObservableObject, ProjectInfo, EventManager, clear_queue
+    intersession_process, BehaviorEventKind, InferenceProtocol
+from autotrainer.core import FixedArrayMultiQueue, ObservableObject, ProjectInfo, EventManager, clear_queue, \
+    InferenceConfiguration
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     DlcPoseModel, MemoryPoseModel, InferenceMode
+from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class IntersessionDetection:
     configuration: DetectionConfiguration
 
 
-class InferenceModel(ObservableObject):
+class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol):
     def __init__(self, pose_algorithm: PoseAlgorithm):
         super().__init__(event_names=("pose_response_ready",))
 
@@ -138,7 +139,8 @@ class InferenceModel(ObservableObject):
 
     def perform_segmentation(self, configuration: SegmentationConfiguration):
         logger.info("performing segmentation")
-        self._intersession_block = IntersessionBlock(configuration=configuration, parts_count=self._algorithm.part_count)
+        self._intersession_block = IntersessionBlock(configuration=configuration,
+                                                     parts_count=self._algorithm.part_count)
         self._send_message(InferenceCommandMessageKind.ProcessOffline)
         self._offline_thread = Thread(target=self._feed_intersession_analysis)
         self._offline_thread.start()
@@ -188,6 +190,8 @@ class InferenceModel(ObservableObject):
 
         self._process.start()
 
+        return True
+
     def stop(self):
         if self._process is not None:
             self._set_status(InferenceStatus.stopping)
@@ -214,17 +218,17 @@ class InferenceModel(ObservableObject):
 
         self._is_running = False
 
-    def load_configuration(self, configuration: dict):
-        if "model" in configuration:
-            self.model_location = configuration["model"]
-        if "isEnabled" in configuration:
-            self.is_enabled = configuration["isEnabled"]
-        if "intersessionWaitTime" in configuration:
-            self.intersession_wait_time = configuration["intersessionWaitTime"]
+    def load_configuration(self, configuration: InferenceConfiguration):
+        self.model_location = configuration.pose_model_location
+        self.is_enabled = configuration.is_enabled
+        self.intersession_wait_time = configuration.intersession_wait_time
 
-    def save_configuration(self) -> dict:
-        return {"model": self.model_location, "isEnabled": self._is_enabled,
-                "intersessionWaitTime": self._intersession_wait_time}
+    def save_configuration(self) -> InferenceConfiguration:
+        return InferenceConfiguration(
+            pose_model_location=self.model_location,
+            is_enabled=self.is_enabled,
+            intersession_wait_time=self.intersession_wait_time
+        )
 
     def _set_status(self, status: InferenceStatus):
         self._status = self._on_property_changed("status", status, self._status)

@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QLabel
 
-ACTIVE_STYLE = "border: 1px solid gray; border-radius: 2; background-color: green;"
-INACTIVE_STYLE = "border: 1px solid gray; border-radius: 2; background-color: red;"
+ACTIVE_STYLE = "border: 1px solid gray; border-radius: 4; background-color: green;"
+INACTIVE_STYLE = "border: 1px solid gray; border-radius: 4; background-color: red;"
 
 
 class QtIndicator(QLabel):

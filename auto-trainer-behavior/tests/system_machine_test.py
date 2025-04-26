@@ -30,7 +30,7 @@ def test_enter_exit_tunnel():
     assert machine.algorithm._is_in_session is False
 
     # Should trigger enter tunnel, new session, and associated changes.
-    machine.mock_headfix.mock_load_cell_engaged(True)
+    machine.mock_analysis.mock_load_cell_engaged(True)
 
     assert machine.state == SystemState.tunnel
     assert machine.mock_headfix.current_position == machine.algorithm.baseline_intensity
@@ -38,7 +38,7 @@ def test_enter_exit_tunnel():
     assert is_capture_triggered is True
 
     # Exit tunnel and end session.
-    machine.mock_headfix.mock_load_cell_engaged(False)
+    machine.mock_analysis.mock_load_cell_engaged(False)
 
     assert machine.state == SystemState.cage
     assert machine.algorithm._is_in_session is False
@@ -53,12 +53,12 @@ def test_no_session_without_pellet():
     # Lose the pellet (pellet state machine initializes to monitoring).  Pellet machine will be in loading state.
     machine.mock_pose_response(False, False)
 
-    machine.mock_headfix.mock_load_cell_engaged(True)
+    machine.mock_analysis.mock_load_cell_engaged(True)
 
     # Pellet machine not sending/releasing/monitoring - should not start.
     assert machine.algorithm.is_in_session is False
 
-    machine.mock_headfix.mock_load_cell_engaged(False)
+    machine.mock_analysis.mock_load_cell_engaged(False)
 
     # Cycle through pellet loading cycle so at next entrance a pellet is present.  In all of these cases recording/the
     # session should start because the send command happened out of tunnel and will not have triggered it.
@@ -66,29 +66,29 @@ def test_no_session_without_pellet():
     # Acknowledge load command -> should go to sending.
     machine.mock_pellet.send_ack()
 
-    machine.mock_headfix.mock_load_cell_engaged(True)
+    machine.mock_analysis.mock_load_cell_engaged(True)
 
     assert machine.algorithm.is_in_session is True
 
-    machine.mock_headfix.mock_load_cell_engaged(False)
+    machine.mock_analysis.mock_load_cell_engaged(False)
 
     # Acknowledge send command -> should go to releasing.
     machine.mock_pellet.send_ack()
 
-    machine.mock_headfix.mock_load_cell_engaged(True)
+    machine.mock_analysis.mock_load_cell_engaged(True)
 
     assert machine.algorithm.is_in_session is True
 
-    machine.mock_headfix.mock_load_cell_engaged(False)
+    machine.mock_analysis.mock_load_cell_engaged(False)
 
     # Acknowledge release command -> should go to monitoring.
     machine.mock_pellet.send_ack()
 
-    machine.mock_headfix.mock_load_cell_engaged(True)
+    machine.mock_analysis.mock_load_cell_engaged(True)
 
     assert machine.algorithm.is_in_session is True
 
-    machine.mock_headfix.mock_load_cell_engaged(False)
+    machine.mock_analysis.mock_load_cell_engaged(False)
 
 
 def test_intersession_enabled():
@@ -101,11 +101,11 @@ def test_intersession_enabled():
 
     machine.algorithm.intersession_enabled = True
 
-    machine.mock_headfix.mock_load_cell_engaged(True)
+    machine.mock_analysis.mock_load_cell_engaged(True)
 
     machine.mock_inference.mock_send_response(False, True)
 
-    machine.mock_headfix.mock_load_cell_engaged(False)
+    machine.mock_analysis.mock_load_cell_engaged(False)
 
     assert machine.state == SystemState.intersession
 

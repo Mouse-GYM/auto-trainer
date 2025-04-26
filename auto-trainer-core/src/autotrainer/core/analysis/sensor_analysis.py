@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 # TODO: Separate true analysis from data recording to file(s) for post-analysis.
 class SensorAnalysis(ObservableObject):
+    IS_HEADBAR_SWITCH_ENGAGED_PROPERTY = "is_headbar_switch_engaged"
+
     def __init__(self):
         super().__init__()
 
@@ -37,14 +39,15 @@ class SensorAnalysis(ObservableObject):
         self._current_audio_record_interval = -1
         self._audio_had_write_error = False
 
-        self._is_headbar_engaged = False
-
         self._is_load_cell_engaged = False
         self._load_cell_monitor = LoadCellMonitor()
-        self._load_cell_monitor.property_changed += self._load_cell_property_changed
 
-        self._is_force_detector_engaged = False
-        self._force_detector = HeadbarPressureMonitor()
+        # The analog pressure sensor on the headbar.
+        self._is_headbar_pressure_engaged = False
+        self._headbar_pressure_monitor = HeadbarPressureMonitor()
+
+        # The digital i/o switch on the headbar.
+        self._is_headbar_switch_engaged = False
 
         self._tare_detector = LoadCellTareMonitor()
         self._tare_callback = None
@@ -75,37 +78,22 @@ class SensorAnalysis(ObservableObject):
         self._interval = value
 
     @property
-    def tare_callback(self):
-        return self._tare_callback
-
-    @tare_callback.setter
-    def tare_callback(self, tare_callback: Callable[[], None]) -> None:
-        self._tare_callback = tare_callback
-
-    @property
-    def is_headbar_engaged(self):
-        return self._is_headbar_engaged
-
-    @property
-    def is_headbar_pressure_engaged(self):
-        return self._is_force_detector_engaged
-
-    @is_headbar_pressure_engaged.setter
-    def is_headbar_pressure_engaged(self, value: bool):
-        self._is_force_detector_engaged = self._on_property_changed("is_force_detector_engaged", value,
-                                                                    self._is_force_detector_engaged)
-
-    @property
     def load_cell_monitor(self):
         return self._load_cell_monitor
 
     @property
-    def tare_detector(self):
+    def headbar_pressure_monitor(self):
+        return self._headbar_pressure_monitor
+
+    @property
+    def load_cell_tare_monitor(self):
         return self._tare_detector
 
     @property
-    def force_detector(self):
-        return self._force_detector
+    def is_headbar_switch_engaged(self):
+        # TODO - this signal is not currently encapsulated in an object for whatever analysis is needed like the others.
+        #  If it is used in the future, this should probably be refactored similar to the other sub-components.
+        return self._is_headbar_switch_engaged
 
     def stream_start(self):
         self._perf_monitor.reset()
@@ -148,20 +136,16 @@ class SensorAnalysis(ObservableObject):
         # Load cell monitor.
         self._load_cell_monitor.update(numpy.mean(weights), measurements[0].when, measurements[0].timestamp)
 
-        # Headbar monitor.
-        self._is_headbar_engaged = self._on_property_changed("is_headbar_engaged", numpy.mean(switch) > 0.5,
-                                                             self._is_headbar_engaged)
+        # Headbar analog pressure monitor.
+        self._headbar_pressure_monitor.update(pressure, measurements[0].when, measurements[0].timestamp)
 
-        # Force detector.
-        self._is_force_detector_engaged = self._on_property_changed("is_force_detector_engaged",
-                                                                    self._force_detector.update(pressure,
-                                                                                                measurements[0].when,
-                                                                                                measurements[
-                                                                                                    0].timestamp),
-                                                                    self._is_force_detector_engaged)
+        # Headbar digital switch - no real implementation at this time.
+        self._is_headbar_switch_engaged = self._on_property_changed(SensorAnalysis.IS_HEADBAR_SWITCH_ENGAGED_PROPERTY,
+                                                                    numpy.mean(switch) > 0.5,
+                                                                    self._is_headbar_switch_engaged)
 
-        if self._tare_detector.update(weights) and self._tare_callback is not None:
-            self._tare_callback()
+        # (Auto-)tare detection.
+        self._tare_detector.update(weights)
 
         # Performance monitoring.
         self._perf_monitor.add_cycles(len(measurements))
@@ -193,10 +177,6 @@ class SensorAnalysis(ObservableObject):
                     logger.error(f"<sensor-analysis>: unable to write: {e}")
                     self._audio_had_write_error = True
 
-    def _load_cell_property_changed(self, _name, value, _):
-        self._is_load_cell_engaged = self._on_property_changed("is_load_cell_engaged", value,
-                                                               self._is_load_cell_engaged)
-
     def _update_record_file(self) -> None:
         if self._record_file is not None:
             try:
@@ -211,7 +191,7 @@ class SensorAnalysis(ObservableObject):
 
             if interval_file_info is None:
                 logger.error("<sensor-analysis>: unable to write to expected monitor file location")
-                return
+                return None
 
             try:
                 file_existed = os.path.exists(interval_file_info.file)
@@ -244,7 +224,7 @@ class SensorAnalysis(ObservableObject):
 
             if interval_file_info is None:
                 logger.error("<sensor-analysis>: unable to write to expected audio file location")
-                return
+                return None
 
             try:
                 file_existed = os.path.exists(interval_file_info.file)

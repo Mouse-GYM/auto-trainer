@@ -19,14 +19,10 @@ class DetectionConfiguration:
 
 class InferenceProtocol(Protocol):
     @property
-    def pose_algorithm(self) -> PoseAlgorithm:
-        pass
+    def pose_algorithm(self) -> PoseAlgorithm: ...
 
-    def perform_segmentation(self, configuration: SegmentationConfiguration):
-        pass
+    def perform_segmentation(self, configuration: SegmentationConfiguration): ...
 
-    def perform_detection(self, configuration: DetectionConfiguration):
-        pass
+    def perform_detection(self, configuration: DetectionConfiguration): ...
 
-    def perform_live(self):
-        pass
+    def perform_live(self): ...

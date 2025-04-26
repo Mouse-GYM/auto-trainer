@@ -1,8 +1,10 @@
-from __future__ import annotations
-
+import time
+from dataclasses import dataclass
 from math import floor
 from datetime import datetime
+from typing_extensions import Self
 
+import yaml
 import numpy
 
 from ..observable_object import ObservableObject
@@ -11,12 +13,35 @@ from ..event_manager import EventManager
 from .analysis_measurement_event_kind import AnalysisMeasurementEventKind
 
 
+@dataclass
+class HeadbarPressureConfiguration:
+    threshold: float = 20
+    duration: float = 0.5
+
+    @classmethod
+    def from_version_zero(cls, content: dict) -> Self:
+        return cls(
+            threshold=content.get("threshold", 30),
+            duration=content.get("duration", 0.25)
+        )
+
+
+def headbar_pressure_configuration_representer(dumper: yaml.SafeDumper,
+                                               c: HeadbarPressureConfiguration) -> yaml.nodes.MappingNode:
+    return dumper.represent_mapping("!HeadbarPressureConfiguration", {
+        "threshold": c.threshold,
+        "duration": c.duration
+    })
+
+
 class HeadbarPressureMonitor(ObservableObject):
     """
     Monitor the headbar pressure data stream and perform any required analysis.  The current implementation is used to
     determine if the headbar is considered sufficiently "engaged" or not.  At this time, this is specifically used
     downstream to allow for the tunnel auto-clamp behavior, when enabled.
     """
+
+    IS_ENGAGED_PROPERTY = "is_engaged"
 
     def __init__(self):
         super().__init__()
@@ -72,6 +97,13 @@ class HeadbarPressureMonitor(ObservableObject):
     def is_engaged(self) -> bool:
         return self._is_engaged
 
+    def load_configuration(self, configuration: HeadbarPressureConfiguration):
+        self.threshold = configuration.threshold
+        self.duration = configuration.duration
+
+    def save_configuration(self) -> HeadbarPressureConfiguration:
+        return HeadbarPressureConfiguration(threshold=self._threshold, duration=self._duration)
+
     def update(self, values: list, when: float = 0.0, index: int = 0) -> bool:
         self._values = numpy.append(self._values, values)
         self._values = self._values[-self._retain_count:]
@@ -98,7 +130,7 @@ class HeadbarPressureMonitor(ObservableObject):
 
         if is_engaged != self._is_engaged:
             self._is_engaged = is_engaged
-            self.property_changed("is_engaged", self._is_engaged, not self._is_engaged)
+            self.property_changed(HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, self._is_engaged, not self._is_engaged)
             EventManager.post_event(AnalysisMeasurementEventKind.headbarPressureEngagedChanged,
                                     context=self._is_engaged,
                                     when=datetime.fromtimestamp(when), index=index)
@@ -117,3 +149,14 @@ class HeadbarPressureMonitor(ObservableObject):
 
         self._first_third = floor(self._window_count / 3)
         self._last_third = self._window_count - self._first_third
+
+    def force_engaged(self, engaged: bool) -> None:
+        """
+        Primarily used for testing.  This will force the headbar pressure monitor to be engaged or not engaged.
+        """
+        if engaged != self._is_engaged:
+            self._is_engaged = engaged
+            self.property_changed(HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, self._is_engaged, not self._is_engaged)
+            EventManager.post_event(AnalysisMeasurementEventKind.headbarPressureEngagedChanged,
+                                    context=self._is_engaged, when=datetime.fromtimestamp(time.time()),
+                                    index=time.perf_counter_ns())

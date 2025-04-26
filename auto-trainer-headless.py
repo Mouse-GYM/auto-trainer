@@ -36,9 +36,7 @@ def main(configuration: str):
 
     app_view_model = AppModel(preferences)
 
-    if app_view_model.load_configuration(configuration or preferences.last_configuration):
-        if configuration:
-            preferences.last_configuration = configuration
+    app_view_model.load_configuration(configuration)
 
     app_view_model.on_activated()
 

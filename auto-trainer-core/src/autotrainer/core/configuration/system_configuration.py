@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 from dataclasses import dataclass, field, asdict
@@ -21,8 +23,6 @@ from .persistence_configuration import PersistenceConfiguration, persistence_con
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 1
-
 
 @dataclass
 class SystemConfiguration:
@@ -31,13 +31,16 @@ class SystemConfiguration:
     manage transitions and maintain a consistent interface to applications.
     """
 
-    version: int = CURRENT_VERSION
+    version: int = 1
     cameras: List[CameraConfiguration] = field(default_factory=list)
     hardware: HardwareConfiguration = field(default_factory=HardwareConfiguration)
     inference: InferenceConfiguration = field(default_factory=InferenceConfiguration)
     behavior: BehaviorConfiguration = field(default_factory=BehaviorConfiguration)
     persistence: PersistenceConfiguration = field(default_factory=PersistenceConfiguration)
-    camera_map: Dict[CameraId, CameraConfiguration] = field(default_factory=dict)
+
+    _camera_map: Dict[CameraId, CameraConfiguration] = field(default_factory=dict)
+
+    _DEFAULT_NAME: str = "system_configuration"
 
     @classmethod
     def load_yaml(cls, data) -> Self:
@@ -53,7 +56,7 @@ class SystemConfiguration:
         return configuration
 
     @classmethod
-    def load_yaml_file(cls, path: Path) -> Optional[Self]:
+    def load_yaml_file(cls, path: Path | str) -> Optional[Self]:
         try:
             with open(path, "r") as file_contents:
                 return SystemConfiguration.load_yaml(file_contents)
@@ -62,10 +65,23 @@ class SystemConfiguration:
 
         return None
 
+    @classmethod
+    def load_default(cls, location: str) -> Optional[Self]:
+        path = Path(location).joinpath(SystemConfiguration._DEFAULT_NAME + ".yaml")
+
+        if path.is_file():
+            return SystemConfiguration.load_yaml_file(path)
+
+        return None
+
+    def save_default(self, location: str):
+        path = Path(location).joinpath(SystemConfiguration._DEFAULT_NAME)
+        self.save_file(path, as_yaml=True)
+
     def dump_yaml(self) -> str:
         return yaml.dump(self, Dumper=get_system_configuration_dumper(), sort_keys=False)
 
-    def dump_file(self, path: Path, as_yaml: bool = False, as_json: bool = False) -> None:
+    def save_file(self, path: Path | str, as_yaml: bool = False, as_json: bool = False) -> bool:
         try:
             if as_json:
                 with open(str(path) + ".json", "w") as file:
@@ -75,6 +91,16 @@ class SystemConfiguration:
                     file.write(self.dump_yaml())
         except Exception as ex:
             logger.error(ex)
+            return False
+
+        return True
+
+    def get_camera(self, camera_id: CameraId) -> Optional[CameraConfiguration]:
+        if len(self._camera_map) == 0:
+            for camera in self.cameras:
+                self._camera_map[camera.id] = camera
+
+        return self._camera_map.get(camera_id, None)
 
     def _deserialize_version_zero(self, content: Dict):
         self.version = 1
@@ -87,7 +113,7 @@ class SystemConfiguration:
 
         # Convenience lookup table.
         for camera in self.cameras:
-            self.camera_map[camera.id] = camera
+            self._camera_map[camera.id] = camera
 
         self.hardware = HardwareConfiguration.from_version_zero(content)
 
