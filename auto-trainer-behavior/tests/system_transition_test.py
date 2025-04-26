@@ -8,21 +8,10 @@ import logging
 import pytest
 from transitions import MachineError
 
-from autotrainer.behavior import SystemMachine, SystemState, BehaviorAlgorithm, BehaviorLimits
+from autotrainer.behavior import SystemMachine, SystemState
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('transitions').setLevel(logging.INFO)
-
-
-def test_constructor():
-    """
-    Simple validation of overriding default algorithm/limits.
-
-    :return: None
-    """
-    machine = SystemMachine(algorithm=BehaviorAlgorithm(BehaviorLimits(pellet_missing_time=0.1)))
-
-    assert machine.algorithm.limits.pellet_missing_time == 0.1
 
 
 def test_enter_exit_transitions():
@@ -79,6 +68,4 @@ def test_enter_exit_transitions():
 
 
 if __name__ == '__main__':
-    test_constructor()
-
     test_enter_exit_transitions()

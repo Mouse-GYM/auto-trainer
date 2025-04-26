@@ -64,7 +64,7 @@ def accept_user_commands():
 
 
 def handle_command(s, cmd: str, msg: str):
-    global fw_version, enable_streaming, samples_sent
+    global fw_version, enable_streaming, samples_sent, weight
 
     s.write(cmd.encode())
 
@@ -76,6 +76,7 @@ def handle_command(s, cmd: str, msg: str):
         pass
     elif cmd == "M":
         logger.info("tare scale")
+        weight = 0
     elif cmd == "N":
         pass
     elif cmd == "O":

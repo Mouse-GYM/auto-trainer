@@ -1,118 +1,50 @@
-# Auto Trainer
-
-*Work in Progress* - there may be out of date or missing information.
-
-## Requirements
-Absent specific camera support, *Auto Trainer* is independent of platform and Python version >= 3.8.  Choice of cameras may 
-place requirements on platform or Python version.
-
-### System Installs/Requirements
-#### Anaconda
-Anaconda is required for full feature support.  Tested with `Anaconda3-2023.09-0-Linux-aarch64.sh`.
-
-### Teledyne/Blackfly Camera Support
-
-* These cameras require installation of version 3 of the Spinnaker SDK/runtime for your platform.
-* Platforms are limited to Windows and Ubuntu 20.04
-* Python version is limited to 3.8
-
-#### arm64 example
-
-```
-gunzip spinnaker-3.2.0.57-arm64-pkg-20.04.tar.gz 
-tar -xvf spinnaker-3.2.0.57-arm64-pkg-20.04.tar 
-cd spinnaker-3.2.0.57-arm64/
-sudo apt-get install libusb-1.0-0 (no-op was already the most recent)
-sudo apt-get --fix-broken install
-sudo sh install_spinnaker_arm.sh
-```
-## Platform Specific Requirements 
-
-### Jetson
-
-* Ubuntu 20 and JetPack 5.1.2 installed from the SDK manager
-  * Later 5.1.x JetPack if that is all that is available may be ok, but is untested
-* Add user to `dialout` group `sudo usermod -a -G dialout [username]`.  Requires logout or reboot depending on UART.
-* Access to two UARTs for full feature support requires at least additional port via USB->serial interface
-* HDF5
-* xcb-cursor
-
-*HDF5*
-
-`sudo apt-get install libhdf5-serial-dev`
-
- *xcb-cursor*
-
-`sudo apt-get install libxcb-cursor0 `
+# Autotrainer
 
 
-## Package Installation
+* [Overview](#overview)
+* [Installation instructions](INSTALL.md)
+* [Applications](#applications)
+  * [Acquisition](#acquisition-application)
+  * [Tunnel Test](#tunnel-test-application)
+  * [Pellet Delivery Test](#pellet-delivery-test-application)
+* [Scripts](#scripts)
+* [Additional Tools](#additional-tools)
+* [Testing](#testing)
+* [Modules](#modules)
+  * [autotrainer.core](#autotrainercore)
+  * [autotrainer.video](#autotrainervideo)
+  * [autotrainer.device](#autotrainerdevice)
+  * [autotrainer.inference](#autotrainerinference)
+  * [autotrainer.behavior](#autotrainerbehavior)
+  * [autotrainer.model](#autotrainermodel)
+  * [autotrainer.pyside](#autotrainerpyside)
+* [Code Guidelines](#code-guidelines)
 
-Create a Conda environment if needed or activate an existing one:
-
-`conda create -n "auto-trainer-1" python=3.8`
-
-Clone https://github.com/Mouse-GYM/auto-trainer.
-
-`git clone https://github.com/Mouse-GYM/auto-trainer.git .`
-
-Activate an appropriate branch, *e.g.,*
-
-`git checkout develop`
-
-From the repository directory perform the following Python package installation steps.
-
-`pip install -r requirements.txt`
-
-`conda install --channel=conda-forge ffmpeg=6.0.0`
-
-### Tensorflow
-Fix the tensorflow install depending on the platform:
-
-*Jetson Only*
-
-`pip uninstall tensorflow`
-
-`pip install --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v512 tensorflow==2.12.0+nv23.06`
-
-*Note:* There will be a pip dependency error message that does not affect the current functionality.
-
-### FLIR
-
-To include support for Teledyne/Blackfly cameras, install the appropriate wheel for your platform, *e.g.,* 
-
-`pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_aarch64.whl`
-
-or 
-
-`pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_x86_64.whl`
-
-or
-
-`pip install .\library\spinnaker_python-3.2.0.57-cp38-cp38-win_amd64.whl`
-
-### LD_PRELOAD
-
-A command similar to following must be used or added to `.bashrc`/`.bash_profile`
-
-```shell
-export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libffi.so.7:/usr/lib/aarch64-linux-gnu/libgomp.so.1:/lib/aarch64-linux-gnu/libGLdispatch.so.0:/home/$USER/anaconda3/envs/auto-trainer-1/lib/python3.8/site-packages/sklearn/__check_build/../
-../scikit_learn.libs/libgomp-d22c30c5.so.1.0.0:/home/$USER/anaconda3/envs/auto-trainer-1/lib/python3.8/site-packages/torch/lib/libgomp-d22c30c5.so.1
-
-```
-
-The exact filenames of the last two in particular may be slightly different based on versioning.  There will be an
-error message in the console with the exact filename if it is different from the above.
+## Overview
+This repository contains the Autotrainer modules and applications that are primarily used on-device.  A monorepo
+is used here primarily as a development convenience.  Individual modules and applications can and are installed
+in on devices independently.  This loose-coupling should be assumed when managing dependencies or refactoring
+common code.
 
 ## Applications
 
-* Auto Trainer
+Applications currently use PySide6 for the user interface.  To the extent possible, this UI layer is isolated
+from the core logic of the applications for two reasons:
+* The core acquisition application must be able to run in a headless mode, i.e., not simply "hiding" the application window.
+* PySide6 may not be a suitable UI framework in the future.  Replacement should be as straightforward as possible.
+
+**Current Applications**
+
+* Acquisition Application
   *  The local user interface for integrated camera, head fix, pellet delivery, and pose inference modules 
   * `python auto-trainer-local.py`
-* Head Fix
-  * Standalone UI for interfacing with the head fix system
+    * [Detailed Instructions](tools/acquisition/README.md)
+  * Headless implementation for command line only
+    * `python auto-trainer-headless.py`
+* Tunnel Test Application
+  * Standalone UI for interfacing with the tunnel hardware components
   * `python head_fix.py`
-* Pellet Delivery
+* Pellet Delivery Test Application
   * Standalone UI for interfacing with the pellet delivery system
   * `python pellet_delivery.py`
 
@@ -121,24 +53,26 @@ error message in the console with the exact filename if it is different from the
 Most of the content in `scripts` are lightweight utilities to determine if various components of the system are working as expected.
 
 * acquire_image.py
-  * Captures a single image frame from the camera specified by the `cameraurl`
+  * Captures a single image frame from the camera specified by the `cameraurl`.
+* can_console.py
+  * A command line interface to the Alogus hardware.
 * capture_camera.py
-  * Captures 150 frames from the camera specified by the `cameraurl` argument to the location specified by `output`
+  * Captures 150 frames from the camera specified by the `cameraurl` argument to the location specified by `output`.
 * head_fix_console.py
-  * A command line interface to the head fix unit.  Will log data stream to a csv file.  Supports subset of device commands.
+  * A command line interface to the Anshutz tunnel unit.  Will log data stream to a csv file.  Supports subset of device commands.
 * list_cameras.py
   * List all cameras available in the system.
 * load_dlc_model.py
   * Validates loading of a DLC model with the network module
 * pellet_delivery_console.py
-  * A command line interface to the pellet delivery unit.  Supports a subset of device commands
+  * A command line interface to the Anshutz pellet delivery unit.  Supports a subset of device commands.
 * run_dlc_model.py
-  * Sends two saved files through a DLC model with the network module
+  * Sends two saved files through a DLC model with the network module.
 
 ## Additional Tools
 
 * auto-trainer-device\tools\head_fix_server.py
-  * Mock server for the head fix unit for testing w/o the physical device
+  * Mock server for the Anshutz tunnel unit for testing without the physical device
   * `python auto-trainer-device\tools\head_fix_server.py`
     * specify the serial port, `/dev/ttyACM1`, `COM4`, etc...
     * specify measurement update frequency `-f 100` for 100 Hz
@@ -146,40 +80,11 @@ Most of the content in `scripts` are lightweight utilities to determine if vario
     * specify firmware version to report `-v 3.0`
   * whether set to random or fixed data, use the `s`, `d`, `a`, `t`, or `h` commands followed by the value to change those measurement values
 * auto-trainer-device\tools\pellet_server.py
-  * Mock server for the pellet delivery unit for testing w/o the physical device
+  * Mock server for the Anshutz pellet delivery unit for testing without the physical device
   * `python auto-trainer-device\tools\pellet_server.py`
     * specify the serial port, `/dev/ttyACM1`, `COM4`, etc...
-    * specify firmware version to report `-v 3.0`
+    * specify firmware version to report `-v 3
 
-## Camera URLs
-Several scripts and tools use camera URLs to specify the camera and camera properties.  The URLs have the form
-
-`<cameratype>://<cameraid>?<properties>`
-
-`cameratype` is one of `opencv`, `spinnaker`, `playback`, or `random`.
-
-`cameraid` depends on the camera type.
-* Spinnaker - camera serial number
-* OpenCV - camera index
-* Playback - file name
-* Random Image - n/a, enter anything
-
-`properties` are URL query string parameters in the form `prop=value`.  Multiple properties are separated by `&`.
-
-Supported properties:
-* `fps` - frame rate
-* `width` - width in pixels
-* `height` - height in pixels
-* `offsetx` - x offset in pixels (FLIR only)
-* `offsety` - y offset in pixels (FLIR only)
-* `exposure` - exposure time (FLIR only)
-* `hbin` - horizontal binning (FLIR only)
-* `vbin` - vertical binning (FLIR only)
-* `primary` - marks as primary for hardware configuration (true/false) (FLIR only)
-* `secondary` - marks as secondary for hardware configuration (true/false) (FLIR only)
-
-All properties are optional and only applicable on cameras that support the property.  Spinnaker is currently the only
-camera type that supports primary/secondary where it is used to configure hardware triggering.
 
 ## Testing
 
@@ -190,6 +95,8 @@ tests for high-level functionality in the applications and that combine elements
 
 Tests that are longer or require additional configuration are marked as `@pytest.mark.functional` and are not run
 by default.
+
+Tests that require the Alogus hardware are marked as `@pytest.mark.canbus` and are not run by default.
 
 PyTest is not installed with via the default requirements.txt.  To enable testing use
 
@@ -205,10 +112,90 @@ Run all tests, including functional, from the root directory:
 
 To limit testing to an individual namespace package, change your working directory to that package and use the same commands
 
-## Known Issues (partial)
-* Most implementations do not provide any or provide only minimal error checking
-* Only a subset of settings is remembered between settings and configuration files are not yet supported
-* FLIR cameras are not always properly released if a script/UI crashes or is hard-killed
-* Acquisition UI uses a hardcoded list of cameras in `cameras.txt` in the root directory
-  * Entries are of the form `name, camera-url` *e.g.,* `Spinnaker 23199895, spinnaker://23199895?width=300&height=200`
-* There is no feedback during the long pause to start up and tear down camera capture processes; the UI appears blocked
+## Modules
+
+### autotrainer.core
+
+[Core](auto-trainer-core/README.md) is base module for functions and objects that used across most or all modules and applications.
+
+**Autotrainer Dependencies**
+* None
+
+### autotrainer.video
+[Video](auto-trainer-video/README.md) implements the camera interfaces for all supported cameras.
+
+**Autotrainer Dependencies**
+* Core
+
+
+### autotrainer.device
+
+[Device](auto-trainer-device/README.md) implements the hardware interfaces for most non-camera hardware for both existing
+and legacy hardware.  The primary purpose is to provide a consistent interface to the hardware for applications.
+
+
+**Autotrainer Dependencies**
+* Core
+
+### autotrainer.inference
+
+[Inference](auto-trainer-inference/README.md) implements pose inference and any other low-level machine learning elements.
+Its primary purpose is to provide a implementation-agnostic interface to inference, such as the current dependency
+on DeepLapCut.
+
+**Autotrainer Dependencies**
+* Core
+
+### autotrainer.behavior
+[Behavior](auto-trainer-behavior/README.md) implements the behavior training state machine, algorithm, and real-time analysis.
+
+**Autotrainer Dependencies**
+* Core
+
+### autotrainer.pyside
+[PySide](auto-trainer-pyside/README.md) provides convenience classes on top of PySide.
+
+**Autotrainer Dependencies**
+* Inference
+
+### autotrainer.model
+
+[Model](auto-trainer-model/README.md) is a collection of models and providers that simplify common elements of
+Autotrainer applications.  Generally, common code that bridges across multiple Autotrainer modules is contained
+here, rather than creating additional hard-coupling between the lower-level modules.
+
+**Autotrainer Dependencies**
+* Core
+* Device
+
+## Code Guidelines
+
+_Note that the original code came from a different structure is not yet fully consistent.  The following
+guidelines are in place for future additions and changes to help with and improve consistency._
+
+* Style generally follows PEP8.  This is the default in most editors or lint tools.
+  * An exception is made for `autotrainer.pyside`.  Classes derived from PySide follow PySide conventions.
+* All modules are defined as namespace packages to allow for separation of modules under the same `autotrainer` namespace.
+* Code, particularly in modules, should be as platform-agnostic as possible despite having a current target (Jetson->Ubuntu 20.04).
+  * Fallback support does not need to match the target platform behavior where is can not (e.g. CUDA), but allow the code to run as correctly as possible.
+  * This is primarily for automated testing in other environments such as GitHub Actions.
+  * Secondarily, it allows for development off-hardware when not available or not practical.
+* Modules should provide a well-defined interface to the rest of the system and not expose implementation details unless absolutely necessary.
+  * There are multiple scripts and applications that use the functionality in the modules.
+  * Exposure to implementation details has a cascading effect of requiring more frequent updates to consumers that generally don't care. 
+* Public interfaces to modules generally define a Protocol [1] for objects that fall into certain categories
+  * Objects that have multiple implementations, such as the different hardware implementations
+  * Objects that are likely to be mocked in automated testing.
+    * Particularly needed for environments where hardware, inference models, or other unique elements are not present.  One environment is GitHub Actions that run automated testing for Pull Requests.
+* `pip` and `requirements.txt` are currently used, but the goal is to move to something more robust.
+  * `project.toml` in modules should be kept up to date if possible.
+* Versions in `requirements.txt` generally need team-wide notification to update.
+  * There are several dependencies whose version traces back to the specific environment that is currently required on the Jetson.
+* Docstrings should be in the "Google" style.
+  * A lot of existing docstrings are in "reStructuredText" (Sphinx) style, which may be confusing.
+  * Documentation generation can be assumed to be using `mkdocs`.
+    * Note: there is no place configured to privately publish the documentation at this time, so modules have not been initialized with a `mkdocs` project yet.  This will change.
+
+
+[1] This is primarily to enhance static type checking and code analysis in general.  Protocols were chosen
+over Python ABCs or other options to allow as much flexibility as possible or needed in the implementation.

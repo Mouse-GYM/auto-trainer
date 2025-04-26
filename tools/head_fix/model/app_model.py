@@ -2,7 +2,7 @@ import logging
 import queue
 
 from autotrainer.core import ObservableObject, ProjectInterval, SystemMessageHandler, \
-    SystemCommandKind
+    SystemCommandKind, SensorAnalysis
 from autotrainer.device import CanDevice, CAN_IDENTIFIER, HAVE_CAN_DEVICE
 from autotrainer.device import HeadFix
 from autotrainer.device import DeviceConnection
@@ -28,7 +28,7 @@ class AppModel(ObservableObject):
 
         self._analysis = self._message_handler.analysis
         self._analysis.interval = ProjectInterval.HOUR
-        self._analysis.tare_callback = self.tare
+        self._analysis.load_cell_tare_monitor.tare_callback = self.tare
 
         self._is_connected = False
 
@@ -74,7 +74,7 @@ class AppModel(ObservableObject):
         return self._message_handler
 
     @property
-    def analysis(self):
+    def analysis(self) -> SensorAnalysis:
         return self._analysis
 
     def set_position(self, value: float):
@@ -146,7 +146,7 @@ class AppModel(ObservableObject):
             self._message_handler.request_terminate()
 
     def message_handler_property_changed(self, name: str, value, _old_value):
-        if name == SystemMessageHandler.FIRMWARE_VERSION:
+        if name == SystemMessageHandler.FIRMWARE_VERSION_PROPERTY:
             self.firmware_version = value
         elif name == "head_magnet_intensity":
             self.magnet_intensity = value

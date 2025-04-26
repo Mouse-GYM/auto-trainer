@@ -11,15 +11,17 @@ def _confirm_values(configuration: SystemConfiguration, version: int):
     assert len(configuration.cameras) == 3
     assert configuration.cameras[0].id == CameraId.Left
     assert configuration.cameras[0].name == "Random Image"
-    assert configuration.cameras[0].scheme == "random"
-    assert configuration.cameras[0].host == "0"
-    assert configuration.cameras[0].width == 300
-    assert configuration.cameras[0].height == 200
     assert configuration.cameras[0].is_enabled is True
     assert configuration.cameras[0].is_record_enabled is True
     assert configuration.cameras[0].record_mode == 1
     assert configuration.cameras[0].is_still_image_capture_enabled is True
     assert configuration.cameras[0].still_image_capture_interval == 10.5
+    assert configuration.cameras[0].scheme == "random"
+    assert configuration.cameras[0].host == "0"
+    assert configuration.cameras[0].port == 0
+    assert configuration.cameras[0].path == ""
+    assert configuration.cameras[0].params.get("width", -1) == 300
+    assert configuration.cameras[0].params.get("height", -1) == 200
 
     assert configuration.cameras[1].id == CameraId.Right
     assert configuration.cameras[2].id == CameraId.Web
@@ -33,6 +35,7 @@ def _confirm_values(configuration: SystemConfiguration, version: int):
 
     assert configuration.behavior.pellet_delivery.is_enabled is True
     assert configuration.behavior.pellet_delivery.is_pellet_cover_enabled is True
+    assert configuration.behavior.pellet_delivery.is_intersession_analysis_enabled is True
     assert configuration.behavior.pellet_delivery.max_pellets_per_session == 20
     assert configuration.behavior.pellet_delivery.max_pellets_per_day == 25
     assert configuration.behavior.pellet_delivery.max_pellet_missing_seconds == 10.0
@@ -44,10 +47,10 @@ def _confirm_values(configuration: SystemConfiguration, version: int):
     assert configuration.behavior.head_clamp.auto_clamp_release_tone_freq == 6000
     assert configuration.behavior.head_clamp.auto_clamp_release_tone_delay == 0.2
 
-    assert configuration.behavior.load_cell.load_trigger == 10
-    assert configuration.behavior.load_cell.min_load_on_duration == 0.20
+    assert configuration.behavior.load_cell.threshold == 10
+    assert configuration.behavior.load_cell.threshold_duration == 0.20
     assert configuration.behavior.load_cell.min_event_duration == 4.0
-    assert configuration.behavior.load_cell.min_load_off_duration == 3.0
+    assert configuration.behavior.load_cell.min_post_event_hold_duration == 3.0
 
     assert configuration.behavior.headbar_pressure.threshold == 10
     assert configuration.behavior.headbar_pressure.duration == 1.5

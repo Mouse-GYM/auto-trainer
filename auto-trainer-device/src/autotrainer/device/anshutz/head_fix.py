@@ -44,8 +44,12 @@ class HeadFix(GymDevice):
         elif kind == SystemCommandKind.REQUEST_VERSION:
             self._send_data("Fx", context)
         elif kind == SystemCommandKind.SET_MAGNET_INTENSITY:
-            self._send_data(f"A{typing.cast(int, data)}x", context)
-            self.api.send_message(SystemStatusMessageKind.HEAD_MAGNET, typing.cast(int, data))
+            if isinstance(data, float):
+                val = int(data)
+            else:
+                val = typing.cast(int, data)
+            self._send_data(f"A{typing.cast(int, val)}x", context)
+            self.api.send_message(SystemStatusMessageKind.HEAD_MAGNET, val)
         elif kind == SystemCommandKind.SETTINGS:
             self._send_data("Ox", context)
         elif kind == SystemCommandKind.UPDATE_SCALE_TARE:

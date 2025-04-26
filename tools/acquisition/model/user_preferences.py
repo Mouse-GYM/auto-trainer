@@ -1,8 +1,17 @@
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QSettings
 
 from autotrainer.core import ObservableObject
+
+
+def _find_default_configuration_location() -> str:
+    return str(Path.home().joinpath("Autotrainer"))
+
+
+def _find_default_data_location() -> str:
+    return str(Path.home().joinpath("Documents").joinpath("RawDataLocal"))
 
 
 class UserPreferences(ObservableObject):
@@ -17,13 +26,19 @@ class UserPreferences(ObservableObject):
             QCoreApplication.setApplicationName("Auto Trainer")
             self._settings = QSettings()
 
-        self._last_configuration = self._settings.value("system/last_configuration", "")
-        self._log_location: str = self._settings.value("system/log_location", "")
-        self._log_level = self._settings.value("system/log_level", 30, int)
         self._serial_number = self._settings.value("system/serial_number", "00000")
-        self._live_feed_refresh_rate = self._settings.value("display/refresh_rate", 15, int)
+
+        self._last_configuration = self._settings.value("system/last_configuration", "")
+
+        self._configuration_location = self._settings.value("system/configuration_location",
+                                                            _find_default_configuration_location())
 
         self._animal_location = self._settings.value("system/animal_location", "")
+
+        self._log_location: str = self._settings.value("system/log_location", "")
+        self._log_level = self._settings.value("system/log_level", 30, int)
+
+        self._live_feed_refresh_rate = self._settings.value("display/refresh_rate", 15, int)
 
         # Transient values that may come from individual configuration files, but are conveniently accessed from
         # the user preferences.
@@ -38,10 +53,15 @@ class UserPreferences(ObservableObject):
     def last_configuration(self) -> str:
         return self._last_configuration
 
-    @last_configuration.setter
-    def last_configuration(self, value: str) -> None:
-        self._last_configuration = self._on_property_changed("last_configuration", value, self.last_configuration)
-        self._settings.setValue("system/last_configuration", self._last_configuration)
+    @property
+    def configuration_location(self) -> str:
+        return self._configuration_location
+
+    @configuration_location.setter
+    def configuration_location(self, value: str) -> None:
+        self._configuration_location = self._on_property_changed("configuration_location", value,
+                                                                 self._configuration_location)
+        self._settings.setValue("system/configuration_location", self._configuration_location)
 
     @property
     def serial_number(self) -> str:
@@ -106,16 +126,3 @@ class UserPreferences(ObservableObject):
     @tunnel_port.setter
     def tunnel_port(self, value: str):
         self._tunnel_port = self._on_property_changed("tunnel_port", value, self.tunnel_port)
-
-    def load_configuration(self, conf: dict):
-        if "headFix" in conf and "port" in conf["headFix"]:
-            self._tunnel_port = conf["headFix"]["port"]
-        if "pelletDelivery" in conf and "port" in conf["pelletDelivery"]:
-            self._pellet_port = conf["pelletDelivery"]["port"]
-
-    def save_configuration(self, conf: dict):
-        if "headFix" in conf and "port" in conf["headFix"]:
-            conf["headFix"]["port"] = self._tunnel_port
-        if "pelletDelivery" in conf and "port" in conf["pelletDelivery"]:
-            conf["pelletDelivery"]["port"] = self._pellet_por
-

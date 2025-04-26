@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QFormLayout, QLabel
 
+from autotrainer.core import MessageHandler
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.view.basic_panel import create_panel
 
@@ -77,10 +78,10 @@ class PelletState(QWidget):
             if not value:
                 self._front_door.set_light(False)
                 self._drawer_door.set_light(False)
-        elif name == "front_door":
+        elif name == MessageHandler.FRONT_DOOR_PROPERTY:
             self._front_door.set_light(bool(value))
-        elif name == "drawer_door":
+        elif name == MessageHandler.DRAWER_DOOR_PROPERTY:
             self._drawer_door.set_light(bool(value))
-        elif name == "stimuli":
+        elif name == MessageHandler.STIMULI_PROPERTY:
             for v, box in zip(value, self._stimulus):
                 box.set_light(bool(v))

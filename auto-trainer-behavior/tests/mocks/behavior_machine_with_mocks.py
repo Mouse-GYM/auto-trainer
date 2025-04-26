@@ -1,9 +1,10 @@
 import tempfile
 import time
 
-from autotrainer.behavior import BehaviorAlgorithm, BehaviorLimits, SystemMachine, PelletState
+from autotrainer.behavior import BehaviorAlgorithm, SystemMachine, PelletState
 from autotrainer.core import ProjectInfo
 
+from .mock_sensor_analysis import MockSensorAnalysis
 from .mock_headfix import MockHeadfix
 from .mock_pellet_delivery import MockPelletDelivery
 from .mock_inference import MockInference
@@ -11,22 +12,25 @@ from .mock_inference import MockInference
 
 class BehaviorMachineWithMocks(SystemMachine):
     """
-    State machine that automatically creates mock interfaces for testing and provides convenience methods for multi-step
+    State machine that automatically creates mock interfaces for testing and provides convenience methods for multistep
     behavior.
     """
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None, limits: BehaviorLimits = None):
+    def __init__(self, algorithm: BehaviorAlgorithm = None):
+        self._mock_analysis = MockSensorAnalysis()
         self._mock_headfix = MockHeadfix()
         self._mock_pellet = MockPelletDelivery()
         self._mock_inference = MockInference()
         self._project_info = ProjectInfo(root=tempfile.gettempdir(), device_id="123456", ensure_exists=False)
 
-        limits = limits if limits is not None else BehaviorLimits()
+        algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
 
-        algorithm = algorithm if algorithm is not None else BehaviorAlgorithm(limits)
-
-        super().__init__(algorithm, self._project_info, self._mock_pellet, self._mock_headfix, self._mock_headfix,
+        super().__init__(algorithm, self._project_info, self._mock_pellet, self._mock_analysis, self._mock_headfix,
                          self._mock_pellet, self._mock_inference)
+
+    @property
+    def mock_analysis(self):
+        return self._mock_analysis
 
     @property
     def mock_headfix(self):

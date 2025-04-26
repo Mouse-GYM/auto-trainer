@@ -3,17 +3,18 @@ from threading import Timer
 
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager, MessageHandler, SensorAnalysis
+from autotrainer.core import ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor, \
+    HeadbarPressureMonitor
 from autotrainer.inference import PoseResponse
 
-from .system_machine_state import SystemState
 from .behavior_algorithm import BehaviorAlgorithm
-from .behavior_limits import BehaviorLimits
 from .behavior_event_kind import BehaviorEventKind
-from .pellet.pellet_machine import PelletMachine, PelletState
-from .head_fix_protocol import HeadFixProtocol
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine
+from .pellet import PelletMachine, PelletState
+from .pellet_device_protocol import PelletDeviceProtocol
+from .system_machine_state import SystemState
+from .tunnel_device_protocol import TunnelDeviceProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,8 @@ class SystemMachine:
 
     def __init__(self, algorithm: BehaviorAlgorithm = None, project_info: ProjectInfo = None,
                  msg_handler: MessageHandler = None, analysis: SensorAnalysis = None,
-                 head_fix_command: HeadFixProtocol = None, pellet_command=None, inference: InferenceProtocol = None):
+                 tunnel_device: TunnelDeviceProtocol = None, pellet_device: PelletDeviceProtocol = None,
+                 inference: InferenceProtocol = None):
 
         self.state = SystemState.cage
 
@@ -43,26 +45,24 @@ class SystemMachine:
 
         self._project_info = project_info
 
-        self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm(BehaviorLimits())
+        self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
         self._algorithm.project = self._project_info
 
-        self._head_fix_command = head_fix_command
+        self._tunnel_device = tunnel_device
 
-        self._head_fix_reader = analysis
+        self._analysis = analysis
 
-        if self._head_fix_reader is not None:
-            self._head_fix_reader.property_changed += self._head_fix_property_changed
-            self._head_fix_reader.tare_callback = self._head_fix_tare_requested
-
-        if self._head_fix_command is not None:
-            self._head_fix_command.property_changed += self._head_fix_command_property_changed
+        if self._analysis is not None:
+            self._analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
+            self._analysis.headbar_pressure_monitor.property_changed += self._headbar_pressure_monitor_property_changed
+            self._analysis.load_cell_tare_monitor.tare_callback = self._load_cell_tare_requested
 
         if inference is not None and inference.pose_algorithm is not None:
             inference.pose_algorithm.pose_changed += self._pose_changed
 
-        self._pellet_command = pellet_command
+        self._pellet_device = pellet_device
 
-        self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_command)
+        self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
         self._pellet_machine.events.pellet_loading += self._pellet_loading
         self._pellet_machine.events.pellet_sending += self._pellet_sending
 
@@ -108,8 +108,8 @@ class SystemMachine:
         self._algorithm.system_state = SystemState.tunnel
 
     def after_enter_tunnel(self):
-        if self._head_fix_reader is not None:
-            self._evaluate_auto_clamp(self._head_fix_reader.is_headbar_pressure_engaged)
+        if self._analysis is not None:
+            self._evaluate_auto_clamp(self._analysis.headbar_pressure_monitor.is_engaged)
 
     def before_exit_tunnel(self):
         self._algorithm.system_state = SystemState.cage
@@ -131,7 +131,7 @@ class SystemMachine:
         self._pellet_machine.environment_changed()
 
     def _session_ended(self):
-        if self._head_fix_command is not None:
+        if self._tunnel_device is not None:
             self._update_magnet_position(self.algorithm.baseline_intensity)
 
         if self.algorithm.can_perform_intersession_analysis() and self.state == SystemState.cage:
@@ -141,12 +141,22 @@ class SystemMachine:
         if self.state == SystemState.intersession:
             self.exit_intersession()
 
-    def _head_fix_property_changed(self, name: str, value, _):
+    def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
+        if self.state == SystemState.intersession:
+            # TODO new need event kind
+            # EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
+            return
+
+        if name == HeadbarPressureMonitor.IS_ENGAGED_PROPERTY:
+            EventManager.post_event(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
+            self._evaluate_auto_clamp(value)
+
+    def _load_cell_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
             EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
             return
 
-        if name == "is_load_cell_engaged":
+        if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
             EventManager.post_event(BehaviorEventKind.headfixLoadCellChanged, context=value)
             if value:
                 if self.state == SystemState.cage:
@@ -160,9 +170,6 @@ class SystemMachine:
                 else:
                     EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                             context=self.state)
-        elif name == "is_force_detector_engaged":
-            EventManager.post_event(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
-            self._evaluate_auto_clamp(value)
 
     def _evaluate_auto_clamp(self, is_headbar_pressure_engaged: bool):
         if not self.algorithm.head_fixation_enabled:
@@ -178,7 +185,7 @@ class SystemMachine:
         logger.info(f"\tsystem state: {self.state}")
 
         if self.state == SystemState.tunnel:
-            if self._head_fix_command is not None:
+            if self._tunnel_device is not None:
                 logger.info(f"\tauto-clamp setting position to {self.algorithm.auto_clamp_intensity}")
                 self._update_magnet_position(self.algorithm.auto_clamp_intensity)
                 EventManager.post_event(BehaviorEventKind.headFixationEnabled)
@@ -187,13 +194,9 @@ class SystemMachine:
         else:
             logger.debug("\tauto-clamp position not sent (not in tunnel)")
 
-    def _head_fix_command_property_changed(self, name: str, value, _):
-        if name == "baseline_intensity":
-            self.algorithm.baseline_intensity = value
-
-    def _head_fix_tare_requested(self):
+    def _load_cell_tare_requested(self):
         if self.state != SystemState.tunnel:
-            self._head_fix_command.tare()
+            self._tunnel_device.tare_load_cell()
             EventManager.post_event(BehaviorEventKind.headfixAutoTare)
 
     def _pose_changed(self, response: PoseResponse):
@@ -213,8 +216,8 @@ class SystemMachine:
                 logger.debug("auto-clamp disabled (backing off to baseline intensity)")
                 if self.algorithm.is_in_session:
                     logger.debug("\tsending tone to indicate auto-clamp disabled")
-                    self._pellet_command.play_tone(self.algorithm.auto_clamp_release_tone_freq, 0.5)
-                if self._head_fix_command is not None:
+                    self._pellet_device.play_tone(self.algorithm.auto_clamp_release_tone_freq, 0.5)
+                if self._tunnel_device is not None:
                     logger.debug(
                         f"\tchanging magnet intensity to baseline in {self.algorithm.auto_clamp_release_delay} seconds")
                     timer = Timer(self.algorithm.auto_clamp_release_delay,
@@ -222,8 +225,8 @@ class SystemMachine:
                     timer.start()
 
     def _update_magnet_position(self, position: int):
-        if self._head_fix_command is not None:
-            self._head_fix_command.set_position(position)
+        if self._tunnel_device is not None:
+            self._tunnel_device.update_head_magnet_intensity(position)
 
     def _pellet_loading(self):
         self._timer1 = Timer(2, self._consider_end_session)
