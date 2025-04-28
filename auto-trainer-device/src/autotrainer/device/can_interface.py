@@ -1061,7 +1061,7 @@ class CanInterface(DeviceInterface):
 
         elif message.type == JerryCANCmdType.ACKNOWLEDGE:
             ack = Acknowledge()
-            ack.uuid = message.ack.uuid
+            ack.uuid = message.uuid
             return ack
 
         return None
