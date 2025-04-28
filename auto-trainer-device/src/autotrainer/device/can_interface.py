@@ -126,7 +126,7 @@ _MOTOR_TO_ID_MAP = {
 }
 
 
-def _motor_to_id(motor: Motor) -> int:
+def _motor_to_id(motor: Motor):
     """
     Args:
         motor: Motor identifier
@@ -135,7 +135,7 @@ def _motor_to_id(motor: Motor) -> int:
         int: Physical identifier for the motor
     """
 
-    motor_id = _MOTOR_TO_ID_MAP.get(motor.MotorInstance.PELLET_X_MOTOR_ID)
+    motor_id = _MOTOR_TO_ID_MAP.get(motor)
     return motor_id.value
 
 
