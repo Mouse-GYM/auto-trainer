@@ -55,8 +55,8 @@ def _construction():
     except (ModuleNotFoundError, TypeError, AttributeError):
         assert False
 
-    device._interface._set_magnet_address(0x40)
-    device._interface._set_pellet_address(0x01)
+    device._interface.magnet_address = 0x40
+    device._interface.pellet_address = 0x01
 
     return device
 

@@ -44,6 +44,7 @@ class Source:
     """
     target: Target = None
 
+
 @dataclass
 class Heartbeat(Source):
     unused: bool = False
@@ -332,9 +333,10 @@ class SensorStatus(Source):
 class Version(Source):
     version: str = "Unknown"
 
+
 @dataclass
 class Acknowledge(Source):
-    uuid = 0
+    uuid: int = 0
 
 
 class DeviceInterface:
