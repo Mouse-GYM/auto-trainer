@@ -51,19 +51,12 @@ def data_callback(kind: int, response: object):
 
 def _construction():
     try:
-        device = CanDevice()
+        device = CanDevice(api=DeviceApi(message_callback=data_callback), force_emulation=True)
     except (ModuleNotFoundError, TypeError, AttributeError):
         assert False
 
-    if HAVE_CAN_DEVICE:
-        interface = CanInterface()
-        # for these tests, do NOT open interface
-        interface._set_magnet_address(0x40)
-        interface._set_pellet_address(0x01)
-    else:
-        interface = EmulationInterface()
-
-    device.api = DeviceApi(message_callback=data_callback)
+    device._interface._set_magnet_address(0x40)
+    device._interface._set_pellet_address(0x01)
 
     return device
 
