@@ -107,13 +107,6 @@ class EmulationInterface(DeviceInterface):
             messages.append(ServoStatus(Target.MAGNET_DEVICE, Motor.MAGNET_SERVO,
                                         self._positions[Motor.MAGNET_SERVO]))
 
-            messages.append(self._configs[Motor.PELLET_COVER_SERVO])
-            messages.append(self._configs[Motor.PELLET_LOAD_SERVO])
-            messages.append(self._configs[Motor.MAGNET_SERVO])
-            messages.append(self._configs[Motor.PELLET_X_MOTOR])
-            messages.append(self._configs[Motor.PELLET_Y_MOTOR])
-            messages.append(self._configs[Motor.PELLET_Z_MOTOR])
-
             messages.append(MagnetDigitalInputs(continuity_0=random() < 0.1, continuity_1=False))
             messages.append(PelletDigitalInputs(Target.PELLET_DEVICE, True, False, True, False))
             messages.append(DoorData())

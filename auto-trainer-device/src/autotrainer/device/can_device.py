@@ -288,7 +288,6 @@ class CanDevice(Device):
 
             elif isinstance(message, Version):
                 self.api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version)
-                self._perform_next_compound_step()
 
             elif isinstance(message, DoorData):
                 if self._api is not None:
