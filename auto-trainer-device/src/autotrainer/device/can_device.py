@@ -31,7 +31,7 @@ from .device import Device
 from .emulation_interface import EmulationInterface
 from .device_api import DeviceApi
 from .head_fix_measurement import HeadFixMeasurement
-from .can_interface import CanInterface, motor_to_str
+from .can_interface import CanInterface
 from .device_interface import *
 
 
@@ -298,7 +298,7 @@ class CanDevice(Device):
                                           message.open_state[1])
 
             elif isinstance(message, Acknowledge):
-                if message.uuid == CanInterface.uuid():
+                if message.uuid == self._interface.uuid():
                     self._perform_next_compound_step()
 
         # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
@@ -372,7 +372,6 @@ class CanDevice(Device):
             elif "z" in step:
                 location = step["z"]
                 self._interface.set_z(location)
-
 
             elif "load_arm" in step:
                 location = step["load_arm"]
