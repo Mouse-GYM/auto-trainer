@@ -446,7 +446,6 @@ class CanDevice(Device):
                 location = step["z"]
                 self._interface.set_z(location)
 
-
             elif "load_arm" in step:
                 location = step["load_arm"]
                 self._interface.set_load_servo(location)

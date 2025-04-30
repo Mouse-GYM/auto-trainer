@@ -278,17 +278,6 @@ class MainContent(QWidget):
         self._model.set_stream_enabled(b)
 
     def _connected(self):
-        self.enable_widgets(True)
-        self._model.analysis.project_info = None
-
-    def _disconnected(self):
-        self.enable_widgets(False)
-        self._load_cell_plot.reset()
-        self._head_contact_plot.reset()
-        self._headbar_pressure_plot.reset()
-        self._temperature_plot.reset()
-        self._humidity_plot.reset()
-
         if self._record.isChecked():
             self._model.analysis.project_info = ProjectInfo(
                 root=self._record_location.text(),
@@ -296,6 +285,17 @@ class MainContent(QWidget):
                 ensure_exists=True)
         else:
             self._model.analysis.project_info = None
+
+        self.enable_widgets(True)
+        self._load_cell_plot.reset()
+        self._head_contact_plot.reset()
+        self._headbar_pressure_plot.reset()
+        self._temperature_plot.reset()
+        self._humidity_plot.reset()
+
+    def _disconnected(self):
+        self.enable_widgets(False)
+        self._model.analysis.project_info = None
 
         self._perf_monitor.reset()
         self._current_intensity.setText("(no updates)")
