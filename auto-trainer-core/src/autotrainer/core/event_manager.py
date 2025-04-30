@@ -128,6 +128,10 @@ class EventManager:
             except Exception as e:
                 pass
 
+        if self._event_file is not None:
+            self._event_file.flush()
+            self._event_file = None
+
     def _write_event(self, info: EventInfo, repeat_count: int = 0):
         output = f"{info.when}, {info.index}, {info.kind}, {str(info.kind)}, {str(info.context)}, {repeat_count}"
 
@@ -147,6 +151,9 @@ class EventManager:
         if self._event_file is not None:
             self._event_file.close()
             self._event_file = None
+
+        if not self._write_active:
+            return
 
         if self._project_info is not None:
             event_file_info = self._project_info.get_monitor_file(name="events", interval=ProjectInterval.HOUR)
