@@ -20,6 +20,8 @@ class SystemCommandKind(IntEnum):
     # Actions nominally considered part of the tunnel/head fixation unit (magnet module in some nomenclature).
     SET_MAGNET_INTENSITY = 101,
     UPDATE_SCALE_TARE = 102,
+    OPEN_TUNNEL_GATE = 103,
+    CLOSE_TUNNEL_GATE = 104,
 
     # Actions nominally considered part of the pellet delivery unit.
     READ_MOTOR_CONFIGURATION = 201,

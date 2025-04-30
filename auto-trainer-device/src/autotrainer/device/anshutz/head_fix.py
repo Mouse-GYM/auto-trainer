@@ -2,6 +2,7 @@ import logging
 import time
 import re
 import typing
+from threading import Timer
 
 from autotrainer.core import PerfMonitor, SystemCommandKind, SystemStatusMessageKind
 
@@ -19,6 +20,11 @@ class HeadFix(GymDevice):
         super().__init__(SerialInterface(port), api)
 
         self._identifier = "H"
+
+        # This hardware does not support status messages for servo, stepper, or DIO.  For commands that may change these
+        # values, store the expected value, assumes it was successful, and send a status message after it completes and
+        # has been acknowledged.  This allows scripts/apps to see the updates they would expect from the new hardware.
+        self._commands_with_status = {}
 
         self._measurement_buffer_count = buffer_size
 
@@ -49,6 +55,8 @@ class HeadFix(GymDevice):
             else:
                 val = typing.cast(int, data)
             self._send_data(f"A{typing.cast(int, val)}x", context)
+            if context is not None:
+                self._commands_with_status[context] = (SystemCommandKind.SET_MAGNET_INTENSITY, val)
             self.api.send_message(SystemStatusMessageKind.HEAD_MAGNET, val)
         elif kind == SystemCommandKind.SETTINGS:
             self._send_data("Ox", context)
@@ -59,14 +67,29 @@ class HeadFix(GymDevice):
             self._send_data("Sx", context)
         elif kind == SystemCommandKind.STREAM_STOP:
             self._send_data("Tx", context)
+        elif kind == SystemCommandKind.OPEN_TUNNEL_GATE:
+            if context is not None:
+                Timer(0.5, lambda: self._acknowledge_command(context)).start()
+        elif kind == SystemCommandKind.CLOSE_TUNNEL_GATE:
+            if context is not None:
+                Timer(0.5, lambda: self._acknowledge_command(context)).start()
         elif kind == SystemCommandKind.SET_SEND_PELLET_PROCEDURE or \
-            kind == SystemCommandKind.SET_LOAD_PELLET_PROCEDURE or \
-            kind == SystemCommandKind.SET_COVER_PELLET_PROCEDURE or \
-            kind == SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE or \
-            kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
+                kind == SystemCommandKind.SET_LOAD_PELLET_PROCEDURE or \
+                kind == SystemCommandKind.SET_COVER_PELLET_PROCEDURE or \
+                kind == SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE or \
+                kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
             pass
         else:
             logger.warning(f"unknown message kind: {kind}")
+
+    def _acknowledge_command(self, token: object):
+        response = self._commands_with_status.pop(token, None)
+
+        super()._acknowledge_command(token)
+
+        if response is not None:
+            if response[0] == SystemCommandKind.SET_MAGNET_INTENSITY:
+                self.api.send_message(SystemStatusMessageKind.HEAD_MAGNET, response[1])
 
     def insert_measurements(self, data: str) -> str:
         return self._handle_response("", data)

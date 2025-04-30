@@ -17,6 +17,9 @@ class PelletDelivery(GymDevice):
 
         self._identifier = "P"
 
+        # This hardware does not support status messages for servo, stepper, or DIO.  For commands that may change these
+        # values, store the expected value, assumes it was successful, and send a status message after it completes and
+        # has been acknowledged.  This allows scripts/apps to see the updates they would expect from the new hardware.
         self._commands_with_status = {}
 
         # This hardware does not report motor positions.  The tracks the last X, Y, Z command values, which translate

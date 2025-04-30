@@ -40,3 +40,9 @@ class CompoundMovementDataSet(Protocol):
 
     @property
     def release_pellet(self) -> MotorSteps: ...
+
+    @property
+    def open_tunnel_gate(self) -> MotorSteps: ...
+
+    @property
+    def close_tunnel_gate(self) -> MotorSteps: ...

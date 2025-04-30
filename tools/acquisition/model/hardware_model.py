@@ -61,6 +61,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         return self._send_with_token(self._tunnel_device, SystemCommandKind.SET_MAGNET_INTENSITY, value)
 
+    def open_tunnel_gate(self) -> Optional[UUID]:
+        return self._send_with_token(self._tunnel_device, SystemCommandKind.OPEN_TUNNEL_GATE)
+
+    def close_tunnel_gate(self) -> Optional[UUID]:
+        return self._send_with_token(self._tunnel_device, SystemCommandKind.CLOSE_TUNNEL_GATE)
+
     def tare_load_cell(self) -> Optional[UUID]:
         return self._send_with_token(self._tunnel_device, SystemCommandKind.UPDATE_SCALE_TARE)
 

@@ -81,6 +81,14 @@ class AppModel(ObservableObject):
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.SET_MAGNET_INTENSITY, value)
 
+    def open_tunnel_gate(self):
+        if self._device_connection is not None:
+            self._device_connection.send_message(SystemCommandKind.OPEN_TUNNEL_GATE)
+
+    def close_tunnel_gate(self):
+        if self._device_connection is not None:
+            self._device_connection.send_message(SystemCommandKind.CLOSE_TUNNEL_GATE)
+
     def tare(self):
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE)
