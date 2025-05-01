@@ -4,10 +4,15 @@ from PySide6.QtCore import Qt, Signal, QTimer, Slot
 from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
     QCheckBox, QLineEdit, QFileDialog, QPlainTextEdit, QVBoxLayout
 
+import qtawesome as qta
+
 from autotrainer.core import PerfMonitor
+from autotrainer.core.message import Motor
 from autotrainer.core.project import ProjectInfo
+from autotrainer.device import is_servo
 from autotrainer.pyside import PGWidget, CardWidget, TextBoxHandler
 from tools.view.connection_panel import ConnectionPanel
+from tools.view.motor_config_dialog import MotorConfigDialog
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +92,7 @@ class MainContent(QWidget):
 
     def _create_control_panel(self):
         row_layout = QHBoxLayout()
-        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setContentsMargins(0, 0, 8, 0)
         row_layout.setSpacing(32)
 
         position_layout = QHBoxLayout()
@@ -141,6 +146,13 @@ class MainContent(QWidget):
         record_layout.addWidget(self._browse_button)
 
         row_layout.addLayout(record_layout, 1.0)
+        row_layout.addSpacing(40)
+
+        self._config_button = QPushButton("")
+        gear_icon = qta.icon('fa5s.cog')  # Font Awesome 5 Solid cog icon
+        self._config_button.setIcon(gear_icon)
+        self._config_button.clicked.connect(lambda: self._update_config())
+        row_layout.addWidget(self._config_button)
 
         panel = CardWidget(background_color=None, header_background_color="#00b6de")
         panel.setContentLayout(row_layout)
@@ -235,6 +247,31 @@ class MainContent(QWidget):
     def _model_property_changed(self, name, value, _):
         if name == "magnet_intensity":
             self._current_intensity.setText(f"{value}")
+        elif name == "config":
+            if self._config_dialog is not None:
+                if is_servo(value.motor):
+                    self._config_dialog.update_servo_config(value)
+                else:
+                    self._config_dialog.update_stepper_config(value)
+
+    def _update_config(self):
+        self._config_dialog = MotorConfigDialog(self)
+        self._config_dialog.motor_selected.connect(self._on_motor_selected)
+        self._config_dialog.accepted.connect(self._on_config_accepted)
+        self._config_dialog.rejected.connect(lambda: setattr(self, '_config_dialog', None))
+
+        self._config_dialog.setModal(True)
+        self._config_dialog.show()
+
+    def _on_config_accepted(self):
+        if self._config_dialog.config is not None:
+            self._model.set_config((self._config_dialog.config.motor,
+                                    self._config_dialog.config))
+
+        self._config_dialog = None
+
+    def _on_motor_selected(self, motor: Motor):
+        self._model.get_config(motor)
 
     def _analysis_property_changed(self, name, value, _):
         if name == "is_load_cell_engaged":

@@ -4,7 +4,8 @@ import uuid
 from pathlib import Path
 
 from autotrainer.core import ObservableObject, SystemMessageHandler, SystemCommandKind
-from autotrainer.device import CanDevice, CAN_IDENTIFIER, MotorConfigurationFile
+from autotrainer.core.message import Motor
+from autotrainer.device import CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, StepperConfig
 from autotrainer.device import PelletDelivery
 from autotrainer.device import DeviceConnection
 
@@ -58,6 +59,7 @@ class AppModel(ObservableObject):
         self._panel_door = None
 
         self._stimuli = None
+        self._config = None
 
         self._command_pending = False
         self._last_command = None
@@ -182,6 +184,14 @@ class AppModel(ObservableObject):
     def stimuli(self, value):
         self._stimuli = self._on_property_changed("stimuli", value, self._stimuli)
 
+    @property
+    def config(self):
+        return self._config
+
+    @config.setter
+    def config(self, value):
+        self._config = self._on_property_changed("config", value, self._config)
+
     def send_home(self):
         self._send_command(SystemCommandKind.SEND_HOME, context=uuid.uuid4())
 
@@ -205,6 +215,12 @@ class AppModel(ObservableObject):
 
     def set_z(self, value: int):
         self._send_command(SystemCommandKind.SET_Z, value, context=uuid.uuid4())
+
+    def set_config(self, config):
+        self._send_command(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
+
+    def get_config(self, motor: Motor):
+        self._send_command(SystemCommandKind.READ_MOTOR_CONFIGURATION, motor)
 
     def connect_to_device(self):
         if len(self._user_settings.port) == 0:
@@ -286,6 +302,8 @@ class AppModel(ObservableObject):
             self.panel_door = value
         elif name == "stimuli":
             self.stimuli = value
+        elif name == "config":
+            self.config = value
 
     def reader_ack_received(self, ack):
         logger.info(f"ack context received: {ack}")

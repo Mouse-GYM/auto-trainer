@@ -70,3 +70,5 @@ class SystemMessageHandler(MessageHandler):
             self.property_changed("drawer_door", data, None)
         elif msg == SystemStatusMessageKind.STIMULUS_INPUTS:
             self._on_property_changed("stimuli", data, None)
+        elif msg == SystemStatusMessageKind.MOTOR_CONFIGURATION:
+            self._on_property_changed("config", data, None)

@@ -132,7 +132,7 @@ class CanDevice(Device):
                 lambda data: self._interface.delay(data),
 
             SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
-                self._handle_write_motor_configuration,
+                lambda data: self._handle_write_motor_configuration(data),
 
             SystemCommandKind.SET_LOAD_PELLET_PROCEDURE:
                 lambda data: (
