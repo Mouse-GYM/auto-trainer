@@ -8,7 +8,7 @@ from .event_manager import EventManager, EventInfo
 from .fixed_array_multiqueue import FixedArrayMultiQueue
 from .fixed_array_queue import FixedArrayQueue
 from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessage, AudioSpectrumMessage
-from .message import MotorConfigurations
+from .message import MotorConfigurations, Motor
 from .observable_object import ObservableObject, ObservableObjectProtocol
 from .perf_monitor import PerfMonitor
 from .project import ProjectInfo, ProjectInterval, video_write_ext

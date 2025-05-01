@@ -1,14 +1,18 @@
 import logging
+import qtawesome as qta
 
 from PySide6.QtCore import Qt, Signal, QTimer, Slot
 from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
     QCheckBox, QLineEdit, QFileDialog, QPlainTextEdit, QVBoxLayout
 
-from autotrainer.core import PerfMonitor, LoadCellMonitor
-from autotrainer.core.project import ProjectInfo
+from autotrainer.core import PerfMonitor, LoadCellMonitor, ProjectInfo
+from autotrainer.core.message import Motor
+from autotrainer.device import is_servo
 from autotrainer.model import EnvironmentProvider, HardwareVersion
 from autotrainer.pyside import PGWidget, CardWidget, TextBoxHandler
+
 from tools.view.connection_panel import ConnectionPanel
+from tools.view.motor_config_dialog import MotorConfigDialog
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +132,13 @@ class MainContent(QWidget):
         self._close_gate.clicked.connect(self._model.close_tunnel_gate)
         if EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ:
             position_layout.addWidget(self._close_gate, 0)
+
+        self._config_button = QPushButton("")
+        gear_icon = qta.icon('fa5s.cog')  # Font Awesome 5 Solid cog icon
+        self._config_button.setIcon(gear_icon)
+        self._config_button.clicked.connect(lambda: self._update_config())
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            position_layout.addWidget(self._config_button)
 
         row_layout.addLayout(position_layout)
 
@@ -253,6 +264,31 @@ class MainContent(QWidget):
     def _model_property_changed(self, name, value, _):
         if name == "magnet_intensity":
             self._current_intensity.setText(f"{round(value, 1)}")
+        elif name == "config":
+            if self._config_dialog is not None:
+                if is_servo(value.motor):
+                    self._config_dialog.update_servo_config(value)
+                else:
+                    self._config_dialog.update_stepper_config(value)
+
+    def _update_config(self):
+        self._config_dialog = MotorConfigDialog(self)
+        self._config_dialog.motor_selected.connect(self._on_motor_selected)
+        self._config_dialog.accepted.connect(self._on_config_accepted)
+        self._config_dialog.rejected.connect(lambda: setattr(self, '_config_dialog', None))
+
+        self._config_dialog.setModal(True)
+        self._config_dialog.show()
+
+    def _on_config_accepted(self):
+        if self._config_dialog.config is not None:
+            self._model.set_config((self._config_dialog.config.motor,
+                                    self._config_dialog.config))
+
+        self._config_dialog = None
+
+    def _on_motor_selected(self, motor: Motor):
+        self._model.get_config(motor)
 
     def _load_cell_monitor_property_changed(self, name, value, _):
         if name == "is_load_cell_engaged":

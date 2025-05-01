@@ -1,10 +1,16 @@
-from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
-    QLayout, QVBoxLayout, \
-    QFormLayout
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
+    QLayout, QVBoxLayout
 
+import qtawesome as qta
+
+from autotrainer.core.message import Motor
+from autotrainer.device import is_servo
+from autotrainer.model import HardwareVersion, EnvironmentProvider
 from autotrainer.pyside import ATSeparator
+
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.view.basic_panel import create_panel
+from tools.view.motor_config_dialog import MotorConfigDialog
 
 _NO_UPDATES = "(no updates)"
 
@@ -83,6 +89,15 @@ class PelletControl(QWidget):
         self._cover_button.clicked.connect(lambda: self._app_model.cover_pellet())
         b_layout.addWidget(self._cover_button)
 
+        b_layout.addStretch(1)
+
+        self._config_button = QPushButton("")
+        gear_icon = qta.icon('fa5s.cog')  # Font Awesome 5 Solid cog icon
+        self._config_button.setIcon(gear_icon)
+        self._config_button.clicked.connect(lambda: self._update_config())
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            b_layout.addWidget(self._config_button)
+
         return b_layout
 
     def _create_move_layout(self):
@@ -124,3 +139,28 @@ class PelletControl(QWidget):
             self._y_pos.setMaximum(value["y"][1])
             self._z_pos.setMinimum(value["z"][0])
             self._z_pos.setMaximum(value["z"][1])
+        elif name == "config":
+            if self._config_dialog is not None:
+                if is_servo(value.motor):
+                    self._config_dialog.update_servo_config(value)
+                else:
+                    self._config_dialog.update_stepper_config(value)
+
+    def _update_config(self):
+        self._config_dialog = MotorConfigDialog(self)
+        self._config_dialog.motor_selected.connect(self._on_motor_selected)
+        self._config_dialog.accepted.connect(self._on_config_accepted)
+        self._config_dialog.rejected.connect(lambda: setattr(self, '_config_dialog', None))
+
+        self._config_dialog.setModal(True)
+        self._config_dialog.show()
+
+    def _on_config_accepted(self):
+        if self._config_dialog.config is not None:
+            self._app_model.set_config((self._config_dialog.config.motor,
+                                        self._config_dialog.config))
+
+        self._config_dialog = None
+
+    def _on_motor_selected(self, motor: Motor):
+        self._app_model.get_config(motor)
