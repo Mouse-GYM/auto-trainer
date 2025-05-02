@@ -1,4 +1,4 @@
-from autotrainer.core import ObservableObject, SensorAnalysis
+from autotrainer.core import ObservableObject, SensorAnalysis, LoadCellMonitor
 
 
 class MockHeadfix(ObservableObject):
@@ -9,28 +9,13 @@ class MockHeadfix(ObservableObject):
     def __init__(self):
         super().__init__()
 
-        self._is_load_cell_engaged = False
-
-        self._is_headbar_pressure_engaged = False
-
         self._current_position = 0
-
-    def mock_load_cell_engaged(self, b: bool):
-        self._is_load_cell_engaged = self._on_property_changed("is_load_cell_engaged", b, self._is_load_cell_engaged)
-
-    def mock_headbar_pressure_engaged(self, b: bool):
-        self._is_headbar_pressure_engaged = self._on_property_changed("is_headbar_pressure_engaged", b,
-                                                                      self._is_headbar_pressure_engaged)
 
     @property
     def current_position(self):
         return self._current_position
 
-    @property
-    def is_headbar_pressure_engaged(self):
-        return self._is_headbar_pressure_engaged
-
-    def set_position(self, value: int):
+    def update_head_magnet_intensity(self, value: float):
         self._current_position = value
 
     def tare(self):

@@ -1,11 +1,9 @@
 import logging
-import os
-from pathlib import Path
 
 from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QAction, QIcon, QKeySequence
-from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication, QFileDialog, \
-    QSizePolicy, QWidget, QComboBox
+from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication, \
+    QSizePolicy, QWidget, QComboBox, QLineEdit
 import qtawesome as qta
 
 from autotrainer.core import EventManager
@@ -20,7 +18,7 @@ logger = logging.getLogger(__name__)
 class MainWindow(QMainWindow):
     def __init__(self, app: QApplication, user_preferences: UserPreferences, configuration: str = None,
                  app_version: str = "", is_dev: bool = False):
-        super().__init__()
+        super(MainWindow, self).__init__(None)
 
         self._app = app
         self._is_dev = is_dev
@@ -28,11 +26,11 @@ class MainWindow(QMainWindow):
         self._preferences = user_preferences
         self._update_log_level(self._preferences.log_level)
 
-        self._app_view_model = AppModel(self._preferences, app_version)
+        self._model = AppModel(self._preferences, app_version)
 
         self.setWindowTitle(f"Auto Trainer - Acquisition v{app_version}")
 
-        self.main_content = MainContent(self._app_view_model)
+        self.main_content = MainContent(self._model)
 
         self.setContentsMargins(0, 0, 0, 0)
 
@@ -48,22 +46,17 @@ class MainWindow(QMainWindow):
 
         self._configure_statusbar()
 
-        # self.setWindowFlags(Qt.Dialog | Qt.MSWindowsFixedSizeDialogHint)
-
         self.setMaximumSize(1880, 1080)
 
-        self._app_view_model.property_changed += self._app_model_property_changed
+        self._model.property_changed += self._app_model_property_changed
 
-        self._app_view_model.on_error += self._show_error
+        self._model.on_error += self._show_error
 
         self._preferences.property_changed += self._preferences_property_changed
 
-        if self._app_view_model.load_configuration(configuration or self._preferences.last_configuration):
-            if configuration:
-                self._preferences.last_configuration = configuration
-            self._status_configuration.setText(self._preferences.last_configuration)
+        self._model.load_configuration(configuration)
 
-        self._reload_animals(self._app_view_model.animals)
+        self._reload_animals(self._model.animals)
 
     def on_capture_start_stop(self, is_toggled):
         if is_toggled:
@@ -73,7 +66,9 @@ class MainWindow(QMainWindow):
             self._status_label.setText("Starting subprocesses...")
             logger.info("starting subprocesses")
             QCoreApplication.processEvents()
-            if self._app_view_model.on_capture_start():
+            # This call should not really happen on the UI thread (takes too long).  Above hack to ensure UI elements
+            # update.
+            if self._model.on_capture_start():
                 self._status_label.setText("")
                 icon = qta.icon('ei.stop')
                 self.run_action.setText("Stop")
@@ -93,7 +88,9 @@ class MainWindow(QMainWindow):
             self._status_label.setText("Stopping subprocesses...")
             logger.info("stopping subprocesses")
             QCoreApplication.processEvents()
-            self._app_view_model.on_capture_stop()
+            # This call should not really happen on the UI thread (takes too long).  Above hack to ensure UI elements
+            # update.
+            self._model.on_capture_stop()
             self.main_content.set_is_capture_active(False)
             self.edit_configuration_action.setEnabled(True)
             self._status_label.setText("")
@@ -107,7 +104,7 @@ class MainWindow(QMainWindow):
         self.main_content.on_activated()
 
     def closeEvent(self, event):
-        self._app_view_model.on_close()
+        self._model.on_close()
 
         event.accept()
 
@@ -116,35 +113,6 @@ class MainWindow(QMainWindow):
         self._preferences.last_window_y = self.pos().y()
 
         super(MainWindow, self).moveEvent(e)
-
-    def open_configuration(self):
-        if self._preferences.last_configuration:
-            location = os.path.dirname(os.path.realpath(self._preferences.last_configuration))
-        else:
-            location = str(Path.home())
-
-        file_name, _ = QFileDialog.getOpenFileName(self, "Open Configuration", location, "Configuration Files (*.yaml)")
-
-        if file_name and self._app_view_model.load_configuration(file_name):
-            self._preferences.last_configuration = file_name
-
-    def _save_configuration(self):
-        file_name = self._preferences.last_configuration
-
-        if not file_name:
-            return self._save_configuration_as()
-
-        self._app_view_model.save_configuration(file_name)
-
-    def _save_configuration_as(self):
-        file_name, _ = QFileDialog.getSaveFileName(self, "Save Configuration", "", "Configuration Files (*.yaml)")
-
-        if file_name:
-            if not file_name.endswith(".yaml"):
-                file_name += ".yaml"
-
-        if file_name and self._app_view_model.save_configuration(file_name):
-            self._preferences.last_configuration = file_name
 
     def _edit_configuration(self):
         # isChecked() has already swapped to the new value by the time this is called
@@ -156,21 +124,10 @@ class MainWindow(QMainWindow):
             self.run_action.setEnabled(False)
 
     def _show_preferences(self):
-        dialog = PreferencesDialog(self._preferences)
+        dialog = PreferencesDialog(self._preferences, self._model)
         dialog.exec()
 
     def _create_actions(self):
-        self.open_configuration_action = QAction(QIcon(qta.icon("fa5s.folder-open")), "Open Configuration...", self)
-        self.open_configuration_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_O))
-        self.open_configuration_action.triggered.connect(self.open_configuration)
-
-        self.save_configuration_action = QAction(QIcon(qta.icon("fa5s.save")), "Save Configuration", self)
-        self.save_configuration_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_S))
-        self.save_configuration_action.triggered.connect(self._save_configuration)
-
-        self.save_configuration_as_action = QAction("Save Configuration As...", self)
-        self.save_configuration_as_action.triggered.connect(self._save_configuration_as)
-
         self.edit_configuration_action = QAction(QIcon(qta.icon("fa5s.edit")), "Edit Configuration", self)
         self.edit_configuration_action.setCheckable(True)
         self.edit_configuration_action.setChecked(False)
@@ -216,11 +173,6 @@ class MainWindow(QMainWindow):
         menu_bar.setStyleSheet("#MenuBar {background-color: #eee}")
 
         file_menu = menu_bar.addMenu("File")
-        file_menu.addAction(self.open_configuration_action)
-        file_menu.addSeparator()
-        file_menu.addAction(self.save_configuration_action)
-        file_menu.addAction(self.save_configuration_as_action)
-        file_menu.addSeparator()
         file_menu.addAction(self.quit_action)
 
         view_menu = menu_bar.addMenu("View")
@@ -249,6 +201,14 @@ class MainWindow(QMainWindow):
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         toolbar.addWidget(spacer)
 
+        toolbar.addWidget(QLabel("Notes:"))
+        self._notes = QLineEdit()
+        self._notes.setMinimumWidth(400)
+        self._notes.setText(self._model.notes)
+        self._notes.textChanged.connect(self.notes_changed)
+        self._notes.setContentsMargins(4, 0, 8, 0)
+        toolbar.addWidget(self._notes)
+
         toolbar.addWidget(QLabel("Subject:"))
         self._animal_dropdown = QComboBox()
         self._animal_dropdown.setMinimumWidth(200)
@@ -267,9 +227,6 @@ class MainWindow(QMainWindow):
         self._status_label = QLabel("")
         self._status_bar = QStatusBar(self)
         self._status_bar.addWidget(self._status_label)
-        self._status_configuration = QLabel("")
-        self._status_configuration.setContentsMargins(0, 0, 12, 0)
-        self._status_bar.addPermanentWidget(self._status_configuration)
         self.setStatusBar(self._status_bar)
 
         self._status_bar.setSizeGripEnabled(False)
@@ -285,32 +242,33 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _preferences_property_changed(self, name, value, _):
-        if name == "last_configuration":
-            self._status_configuration.setText(value)
-        elif name == "log_level":
+        if name == "log_level":
             self._update_log_level(value)
 
     def _internal_simulate_trigger(self):
-        self._app_view_model.behavior.trigger_tunnel(self.capture_trigger_action.isChecked())
+        self._model.behavior.trigger_tunnel(self.capture_trigger_action.isChecked())
 
     def _internal_set_force_detector_seen(self):
         new_value = self.force_detector_action.isChecked()
-        self._app_view_model.head_fix.head_fix_reader.is_headbar_pressure_engaged = new_value
+        self._model.analysis.headbar_pressure_monitor.force_engaged(new_value)
 
     def _internal_set_pellet_seen(self):
-        self._app_view_model.behavior.algorithm.pellet_seen(True)
+        self._model.behavior.algorithm.pellet_seen(True)
 
     def _internal_set_mouse_seen(self):
-        self._app_view_model.behavior.algorithm.mouse_seen(True)
+        self._model.behavior.algorithm.mouse_seen(True)
+
+    def notes_changed(self, value: str):
+        self._model.notes = value
 
     def _add_animal(self):
-        self._app_view_model.add_animal(self._animal_dropdown.currentText())
+        self._model.add_animal(self._animal_dropdown.currentText())
 
     def _animal_changed(self, index: int):
         if self._animal_dropdown.currentIndex() != -1:
-            self._app_view_model.selected_animal = self._animal_dropdown.currentData()
+            self._model.selected_animal = self._animal_dropdown.currentData()
         else:
-            self._app_view_model.selected_animal = None
+            self._model.selected_animal = None
 
     def _app_model_property_changed(self, name: str, value, _old_value):
         if name == "animals":
@@ -329,8 +287,8 @@ class MainWindow(QMainWindow):
         for animal in animals:
             self._animal_dropdown.addItem(animal.name, animal)
 
-        if self._app_view_model.selected_animal is not None:
-            index = self._animal_dropdown.findText(self._app_view_model.selected_animal.name)
+        if self._model.selected_animal is not None:
+            index = self._animal_dropdown.findText(self._model.selected_animal.name)
             if index != -1:
                 self._animal_dropdown.setCurrentIndex(index)
         else:

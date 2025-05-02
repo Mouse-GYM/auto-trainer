@@ -1,27 +1,26 @@
 import json
 import logging
-import os
 import queue
 import time
 import typing
-from datetime import datetime
+from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
-from autotrainer.core import ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID, EventManager, SystemMessageHandler, \
-    MessageHandler
+from autotrainer.core import (ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID, EventManager, SystemMessageHandler,
+                              MessageHandler, SystemConfiguration, CameraId, PersistenceConfiguration,
+                              HardwareConfiguration, get_system_configuration_dumper)
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
-from autotrainer.device import CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice, HeadFix, PelletDelivery
 from autotrainer.inference import PoseAlgorithm
+from tools.acquisition.model.hardware_model import HardwareModel
 
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
-from tools.acquisition.model.head_fix_model import HeadFixModel
-from tools.acquisition.model.model_protocol import ModelProtocol
-from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
+from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
@@ -49,12 +48,11 @@ class AppModel(ObservableObject):
         self._message_queue = queue.Queue()
         self._message_handler = SystemMessageHandler(self._message_queue)
 
-        self._head_fix_device = None
-        self._pellet_device = None
+        # Use the default analysis object created by the message handler.  Dereferenced here for use in the class in
+        # case that changes.
+        self._analysis = self._message_handler.analysis
 
-        self._head_fix = HeadFixModel(self._message_handler.analysis)
-
-        self._pellet_delivery = PelletDeliveryModel()
+        self._hardware = HardwareModel(self._message_handler)
 
         self._inference_queue = None
 
@@ -62,8 +60,7 @@ class AppModel(ObservableObject):
 
         self._inference = InferenceModel(self._pose_algorithm)
 
-        self._behavior = BehaviorModel(self._message_handler, self._message_handler.analysis, self.head_fix,
-                                       self._pellet_delivery, self._inference)
+        self._behavior = BehaviorModel(self._message_handler, self._analysis, self._hardware, self._inference)
 
         self._output_location = ""
 
@@ -75,9 +72,8 @@ class AppModel(ObservableObject):
 
         self._notes = ""
 
-        self._models: typing.List[ModelProtocol] = [self._left_camera, self._right_camera, self._top_camera,
-                                                    self._inference, self._behavior, self._head_fix,
-                                                    self._pellet_delivery]
+        self._models: typing.List[ProjectDependentProtol] = [self._left_camera, self._right_camera, self._top_camera,
+                                                             self._inference, self._behavior]
 
         self._animals: typing.List[AnimalSubject] = []
 
@@ -85,9 +81,9 @@ class AppModel(ObservableObject):
 
         TriggerManager.instance().register(self._trigger_received, CAPTURE_TRIGGER_ID)
 
-        self._head_fix.property_changed += self._on_head_fix_property_changed
+        self._message_handler.property_changed += self._on_message_handler_property_changed
 
-        self._pellet_delivery.property_changed += self._on_pellet_property_changed
+        self._behavior.algorithm.property_changed += self._on_behavior_property_changed
 
         self._load_animals()
 
@@ -116,16 +112,16 @@ class AppModel(ObservableObject):
         return self._behavior
 
     @property
+    def analysis(self):
+        return self._analysis
+
+    @property
     def inference(self):
         return self._inference
 
     @property
-    def head_fix(self):
-        return self._head_fix
-
-    @property
-    def pellet_delivery(self):
-        return self._pellet_delivery
+    def hardware(self):
+        return self._hardware
 
     @property
     def message_handler(self) -> MessageHandler:
@@ -153,11 +149,11 @@ class AppModel(ObservableObject):
 
         if self._selected_animal is not None:
             self.property_changed("animal_name", self.animal_name, self.animal_name)
-            self.head_fix.baseline_intensity = self._selected_animal.baseline_magnet_intensity
-            self.head_fix.set_position(self._selected_animal.baseline_magnet_intensity)
-            self.pellet_delivery.set_x(self._selected_animal.pellet_x)
-            self.pellet_delivery.set_y(self._selected_animal.pellet_y)
-            self.pellet_delivery.set_z(self._selected_animal.pellet_z)
+            self.behavior.algorithm.baseline_intensity = self._selected_animal.baseline_magnet_intensity
+            self.hardware.update_head_magnet_intensity(self._selected_animal.baseline_magnet_intensity)
+            self.hardware.set_x(self._selected_animal.pellet_x)
+            self.hardware.set_y(self._selected_animal.pellet_y)
+            self.hardware.set_z(self._selected_animal.pellet_z)
         else:
             self.property_changed("animal_name", "(none)", "(none)")
 
@@ -171,8 +167,6 @@ class AppModel(ObservableObject):
         self._output_location = value
 
         self.property_changed("output_location", value, old_value)
-
-        self._head_fix.output_location = value
 
     @property
     def animal_name(self) -> str:
@@ -262,10 +256,10 @@ class AppModel(ObservableObject):
         if self._inference.is_enabled:
             self._inference.start(self._inference_queue)
 
-        if self._message_handler.analysis is not None:
-            self._message_handler.analysis.project_info = self._project_info
+        if self._analysis is not None:
+            self._analysis.project_info = self._project_info
 
-        self._connect_hardware()
+        self.hardware.connect(self._message_handler.input_queue, self._selected_animal)
 
         for camera in self._cameras:
             if camera.is_primary:
@@ -277,57 +271,10 @@ class AppModel(ObservableObject):
 
         return True
 
-    def _connect_hardware(self):
-        if self._head_fix.port == CAN_IDENTIFIER:
-            # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
-            # configured to generate messages as frequently as the real device.
-            buffer_size = 10 if HAVE_CAN_DEVICE else 1
-            self._head_fix_device = DeviceConnection(CanDevice(buffer_size=buffer_size),
-                                                     self._message_handler.input_queue)
-            self._head_fix_device.name = "can-tunnel"
-        else:
-            self._head_fix_device = DeviceConnection(HeadFix(port=self._head_fix.port, buffer_size=10),
-                                                     self._message_handler.input_queue)
-            self._head_fix_device.name = "serial-tunnel"
-
-        if self._pellet_delivery.port == CAN_IDENTIFIER:
-            if self._head_fix.port == CAN_IDENTIFIER:
-                self._pellet_device = self._head_fix_device
-                self._head_fix_device.name = "can-device"
-            else:
-                self._pellet_device = DeviceConnection(CanDevice(), self._message_handler.input_queue)
-                self._head_fix_device.name = "can-pellet"
-        else:
-            self._pellet_device = DeviceConnection(PelletDelivery(port=self._pellet_delivery.port),
-                                                   self._message_handler.input_queue)
-            self._head_fix_device.name = "serial-pellet"
-
-        self._head_fix_device.request_connect()
-
-        if self._pellet_device is not self._head_fix_device:
-            self._pellet_device.request_connect()
-
-        self._head_fix.on_connect(self._head_fix_device)
-        self._pellet_delivery.on_connect(self._pellet_device)
-
-    def _disconnect_from_hardware(self):
-        self._head_fix.on_disconnect()
-        self._pellet_delivery.on_disconnect()
-
-        # Device connections should be terminated.  The system message handler is connection agnostic and should not
-        # be terminated here.
-        if self._head_fix_device is not None:
-            self._head_fix_device.request_disconnect()
-        if self._pellet_device is not None:
-            self._pellet_device.request_disconnect()
-
-        self._head_fix_device = None
-        self._pellet_device = None
-
     def on_capture_stop(self):
         self._inference.stop()
 
-        self._disconnect_from_hardware()
+        self.hardware.disconnect()
 
         for camera in self._cameras:
             if not camera.is_primary:
@@ -347,64 +294,66 @@ class AppModel(ObservableObject):
             if camera.is_primary:
                 camera.on_capture_stop()
 
-        if self._message_handler.analysis is not None:
-            self._message_handler.analysis.project_info = None
+        if self._analysis is not None:
+            self._analysis.project_info = None
 
         self._is_recording_trigger = False
 
     def load_configuration(self, location: str):
-        if not location or not os.path.isfile(location):
-            return False
+        if not location or not Path(location).is_file():
+            logger.info(f"did not receive explicit configuration file, trying default")
+            # Check to see if there is a file in the new default location.  If so, use it.
+            location = Path(self._preferences.configuration_location)
+            location.mkdir(parents=True, exist_ok=True)
+            configuration = SystemConfiguration.load_default(str(location))
 
-        logger.info(f"loading configuration from {location}")
+            # Fallback to the old last configuration preference if this device has not converted.
+            # TODO - remove this once all devices have migrated.
+            if configuration is None:
+                logger.info(f"default not yet in use, trying last configuration")
+                location = self._preferences.last_configuration
+                configuration = SystemConfiguration.load_yaml_file(location)
 
-        try:
-            with open(location, "r") as file:
-                conf = yaml.safe_load(file)
+                if configuration is not None:
+                    # Migrate to new default location.
+                    configuration.save_default(self._preferences.configuration_location)
+        else:
+            # Always allow for a custom configuration file if provided.
+            logger.info(f"using explicit configuration")
+            configuration: SystemConfiguration = SystemConfiguration.load_yaml_file(location)
 
-            if "camera1" in conf:
-                self._left_camera.load_configuration(conf["camera1"])
-            if "camera2" in conf:
-                self._right_camera.load_configuration(conf["camera2"])
-            if "camera3" in conf:
-                self._top_camera.load_configuration(conf["camera3"])
+        if configuration is None:
+            configuration = SystemConfiguration()
+            logger.info(f"using default configuration")
+        else:
+            logger.info(f"using configuration from {location}")
 
-            if "headFix" in conf:
-                self.head_fix.load_configuration(conf["headFix"])
-            if "pelletDelivery" in conf:
-                self._pellet_delivery.load_configuration(conf["pelletDelivery"])
+        if (camera := configuration.get_camera(CameraId.Left)) is not None:
+            self._left_camera.load_configuration(camera)
+        if (camera := configuration.get_camera(CameraId.Right)) is not None:
+            self._right_camera.load_configuration(camera)
+        if (camera := configuration.get_camera(CameraId.Web)) is not None:
+            self._top_camera.load_configuration(camera)
 
-            # TODO: renamed to "pellet".  Keep for backwards compatibility for a few iterations.
-            if "analysis" in conf:
-                self.inference.load_configuration(conf["analysis"])
+        self._hardware.tunnel_identifier = configuration.hardware.tunnel_identifier
+        self._hardware.pellet_identifier = configuration.hardware.pellet_identifier
 
-            if "pellet" in conf:
-                self.inference.load_configuration(conf["pellet"])
+        self.inference.load_configuration(configuration.inference)
 
-            if "behavior" in conf:
-                self._behavior.load_configuration(conf["behavior"])
+        self.behavior.load_configuration(configuration.behavior)
 
-            if "outputLocation" in conf:
-                self.output_location = conf["outputLocation"]
+        self._analysis.headbar_pressure_monitor.load_configuration(configuration.behavior.headbar_pressure)
+        self._analysis.load_cell_monitor.load_configuration(configuration.behavior.load_cell)
+        self._analysis.load_cell_tare_monitor.load_configuration(configuration.behavior.auto_tare)
 
-            self.preferences.load_configuration(conf)
-        except Exception as ex:
-            logger.error(ex)
-            return False
-
-        return True
-
-    def save_configuration(self, location: str):
-        conf = self._configuration_as_dict()
-
-        try:
-            with open(location, "w") as file:
-                yaml.dump(conf, file, sort_keys=False)
-        except Exception as ex:
-            logger.error(ex)
-            return False
+        self.output_location = configuration.persistence.output_location
 
         return True
+
+    def save_configuration(self):
+        conf = self._create_configuration()
+
+        return conf.save_default(self._preferences.configuration_location)
 
     def on_activated(self):
         self._message_handler.start()
@@ -418,13 +367,13 @@ class AppModel(ObservableObject):
 
         EventManager.close()
 
-        self._disconnect_from_hardware()
+        self.hardware.disconnect()
         self._message_handler.request_terminate()
+
+        self.save_configuration()
 
     def _load_animals(self):
         animals = []
-
-        current_animal = self.selected_animal
 
         if self._preferences.animal_location is None or len(self._preferences.animal_location) == 0:
             default_location = Path.home().joinpath("Documents").joinpath("RawDataLocal").joinpath("Animals")
@@ -448,22 +397,22 @@ class AppModel(ObservableObject):
     def _trigger_received(self, _sender, _trigger_id, value):
         self._is_recording_trigger = value
 
-        if value:
+        if value and self._project_info is not None:
             self._save_metadata(self._project_info.get_metadata_file(-1), self._project_info.session.value)
 
-    def _on_head_fix_property_changed(self, name: str, value, _):
+    def _on_behavior_property_changed(self, name: str, value, _):
         if name == "baseline_intensity" and self._selected_animal is not None:
             self._selected_animal.baseline_magnet_intensity = value
             self._save_animal_metadata()
 
-    def _on_pellet_property_changed(self, name: str, value, _):
-        if name == "x" and self._selected_animal is not None:
+    def _on_message_handler_property_changed(self, name: str, value, _):
+        if name == MessageHandler.DEVICE_X_PROPERTY and self._selected_animal is not None:
             self._selected_animal.pellet_x = value
             self._save_animal_metadata()
-        elif name == "y" and self._selected_animal is not None:
+        elif name == MessageHandler.DEVICE_Y_PROPERTY and self._selected_animal is not None:
             self._selected_animal.pellet_y = value
             self._save_animal_metadata()
-        elif name == "z" and self._selected_animal is not None:
+        elif name == MessageHandler.DEVICE_Z_PROPERTY and self._selected_animal is not None:
             self._selected_animal.pellet_z = value
             self._save_animal_metadata()
 
@@ -472,15 +421,21 @@ class AppModel(ObservableObject):
             self._selected_animal.to_file(
                 str(Path(self._preferences.animal_location).joinpath(f"{self._selected_animal.name}.json")))
 
-    def _configuration_as_dict(self) -> dict:
-        return {"camera1": self._left_camera.save_configuration(),
-                "camera2": self._right_camera.save_configuration(),
-                "camera3": self._top_camera.save_configuration(),
-                "headFix": self.head_fix.save_configuration(),
-                "pelletDelivery": self._pellet_delivery.save_configuration(),
-                "pellet": self._inference.save_configuration(),
-                "behavior": self._behavior.save_configuration(),
-                "outputLocation": self.output_location}
+    def _create_configuration(self) -> SystemConfiguration:
+        hardware_configuration = HardwareConfiguration(tunnel_identifier=self._hardware.tunnel_identifier,
+                                                       pellet_identifier=self._hardware.pellet_identifier)
+
+        cameras = []
+        for camera in self._cameras:
+            cameras.append(camera.save_configuration())
+
+        configuration = SystemConfiguration(cameras=cameras,
+                                            hardware=hardware_configuration,
+                                            inference=self._inference.save_configuration(),
+                                            behavior=self._behavior.save_configuration(),
+                                            persistence=PersistenceConfiguration(output_location=self.output_location))
+
+        return configuration
 
     def _save_project_metadata(self, project_info: ProjectInfo):
         file_name = project_info.get_metadata_file()
@@ -492,19 +447,25 @@ class AppModel(ObservableObject):
         info = {
             "date": now.strftime("%Y%m%d_%H%M%S"),
             "created": now.timestamp(),
-            "createdUtc": datetime.utcnow().timestamp(),
+            "createdUtc": datetime.now(timezone.utc).timestamp(),
             "serialNumber": self._preferences.serial_number or "",
             "appVersion": self._app_version,
             "animalName": self.animal_name,
             "notes": self.notes or "",
             "session": session,
-            "configuration": self._configuration_as_dict()
+            "configuration": None
         }
+
+        configuration = self._create_configuration()
 
         try:
             with open(file_name + ".json", "w") as file:
-                json.dump(info, file)
+                out = info.copy()
+                out["configuration"] = asdict(configuration)
+                json.dump(out, file)
             with open(file_name + ".yaml", "w") as file:
-                yaml.dump(info, file, sort_keys=False)
+                out = info.copy()
+                out["configuration"] = configuration
+                yaml.dump(out, file, Dumper=get_system_configuration_dumper(), sort_keys=False)
         except Exception as ex:
             logger.error(ex)

@@ -2,21 +2,19 @@ import logging
 import time
 from datetime import datetime
 
-from autotrainer.core import ObservableObject, EventManager, TriggerManager, CAPTURE_TRIGGER_ID
+from typing_extensions import Self
+
+from autotrainer.core import ObservableObject, EventManager, TriggerManager, CAPTURE_TRIGGER_ID, BehaviorConfiguration
 
 from .behavior_event_kind import BehaviorEventKind
-from .behavior_limits import BehaviorLimits
 from .system_machine_state import SystemState
 
 logger = logging.getLogger(__name__)
 
 
 class BehaviorAlgorithm(ObservableObject):
-    def __init__(self, limits: BehaviorLimits = None):
+    def __init__(self):
         super().__init__(event_names=("session_starting", "session_ending"))
-
-        self._limits = limits or BehaviorLimits()
-
         self._project_info = None
 
         self._pellet_delivery_enabled = True
@@ -26,7 +24,6 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._head_fixation_enabled = False
 
-        self._baseline_intensity = limits.min_baseline_intensity
         self._auto_clamp_intensity = 100
         self._auto_clamp_release_tone_freq = 7000
         self._auto_clamp_release_delay = 0.1
@@ -46,13 +43,18 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._start_day()
 
-    @property
-    def limits(self) -> BehaviorLimits:
-        return self._limits
+        self.min_baseline_intensity: float = 5.0
+        self.max_baseline_intensity: float = 90.0
+        self._baseline_intensity = self.min_baseline_intensity
+        self.baseline_intensity_increment: float = 15.0
+        self.max_pellets_per_session: int = 10
+        self.max_pellets_per_headfix_session: int = 10
+        self.max_pellets_per_day: int = 50
+        self.pellet_missing_time: float = 1.0
 
-    @limits.setter
-    def limits(self, limits: BehaviorLimits):
-        self._limits = limits
+    @property
+    def limits(self) -> Self:
+        return self
 
     @property
     def project(self):
@@ -121,7 +123,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @baseline_intensity.setter
     def baseline_intensity(self, value):
-        self._baseline_intensity = value
+        self._baseline_intensity = self._on_property_changed("baseline_intensity", value,
+                                                             self._baseline_intensity)
         EventManager.post_event(BehaviorEventKind.headfixBaselineChanged, context=value)
 
     @property
@@ -241,32 +244,35 @@ class BehaviorAlgorithm(ObservableObject):
             if not was_seen:
                 EventManager.post_event(BehaviorEventKind.sessionMouseSeen)
 
-    def load_configuration(self, configuration: dict):
-        self.limits = BehaviorLimits.from_dictionary(configuration)
+    def load_configuration(self, configuration: BehaviorConfiguration):
+        self.pellet_delivery_enabled = configuration.pellet_delivery.is_enabled
+        self.pellet_cover_enabled = configuration.pellet_delivery.is_pellet_cover_enabled
+        self.pellet_missing_time = configuration.pellet_delivery.max_pellet_missing_seconds
+        self.max_pellets_per_session = configuration.pellet_delivery.max_pellets_per_session
+        self.max_pellets_per_day = configuration.pellet_delivery.max_pellets_per_day
 
-        if "isDeliverPelletEnabled" in configuration:
-            self.pellet_delivery_enabled = configuration["isDeliverPelletEnabled"]
-        if "isCoverPelletEnabled" in configuration:
-            self.pellet_cover_enabled = configuration["isCoverPelletEnabled"]
-        if "defaultBaselineIntensity" in configuration:
-            self.baseline_intensity = configuration["defaultBaselineIntensity"]
-        if "autoClampIntensity" in configuration:
-            self.auto_clamp_intensity = configuration["autoClampIntensity"]
-        if "autoClampReleaseToneFreq" in configuration:
-            self.auto_clamp_release_tone_freq = configuration["autoClampReleaseToneFreq"]
-        if "autoClampReleaseToneDelay" in configuration:
-            self.auto_clamp_release_delay = configuration["autoClampReleaseToneDelay"]
+        self.min_baseline_intensity = configuration.head_clamp.min_baseline_intensity
+        self.max_baseline_intensity = configuration.head_clamp.max_baseline_intensity
+        self.baseline_intensity_increment = configuration.head_clamp.baseline_intensity_increment
 
-    def save_configuration(self) -> dict:
-        limits = self.limits.to_dictionary()
+        self.auto_clamp_intensity = configuration.head_clamp.auto_clamp_intensity
+        self.auto_clamp_release_tone_freq = configuration.head_clamp.auto_clamp_release_tone_freq
+        self.auto_clamp_release_delay = configuration.head_clamp.auto_clamp_release_tone_delay
 
-        limits.update({"isDeliverPelletEnabled": self.pellet_delivery_enabled,
-                       "isCoverPelletEnabled": self.pellet_cover_enabled,
-                       "isIntersessionAnalysisEnabled": self.intersession_enabled,
-                       "autoClampIntensity": self.auto_clamp_intensity,
-                       "autoClampReleaseToneFreq": self.auto_clamp_release_tone_freq,
-                       "autoClampReleaseToneDelay": self.auto_clamp_release_delay})
-        return limits
+    def update_configuration(self, configuration: BehaviorConfiguration):
+        configuration.pellet_delivery.is_enabled = self.pellet_delivery_enabled
+        configuration.pellet_delivery.is_pellet_cover_enabled = self.pellet_cover_enabled
+        configuration.pellet_delivery.max_pellet_missing_seconds = self.pellet_missing_time
+        configuration.pellet_delivery.max_pellets_per_session = self.max_pellets_per_session
+        configuration.pellet_delivery.max_pellets_per_day = self.max_pellets_per_day
+
+        configuration.head_clamp.min_baseline_intensity = self.min_baseline_intensity
+        configuration.head_clamp.max_baseline_intensity = self.max_baseline_intensity
+        configuration.head_clamp.baseline_intensity_increment = self.baseline_intensity_increment
+
+        configuration.head_clamp.auto_clamp_intensity = self.auto_clamp_intensity
+        configuration.head_clamp.auto_clamp_release_tone_freq = self.auto_clamp_release_tone_freq
+        configuration.head_clamp.auto_clamp_release_tone_delay = self.auto_clamp_release_delay
 
     def _start_day(self):
         self._day_pellet_count = 0

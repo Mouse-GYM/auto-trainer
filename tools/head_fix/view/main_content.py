@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt, Signal, QTimer, Slot
 from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
     QCheckBox, QLineEdit, QFileDialog, QPlainTextEdit, QVBoxLayout
 
-from autotrainer.core import PerfMonitor
+from autotrainer.core import PerfMonitor, SensorAnalysis, LoadCellMonitor
 from autotrainer.core.project import ProjectInfo
 from autotrainer.pyside import PGWidget, CardWidget, TextBoxHandler
 from tools.view.connection_panel import ConnectionPanel
@@ -73,6 +73,7 @@ class MainContent(QWidget):
         self._model.message_handler.measurement_callback = self._measurements_received
         self._model.message_handler.audio_callback = self._audio_spectrum_received
         self._model.analysis.property_changed += self._analysis_property_changed
+        self._model.analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
 
     def set_diagnostics_visible(self, is_visible: bool):
         self._diagnostics_panel.setVisible(is_visible)
@@ -236,13 +237,15 @@ class MainContent(QWidget):
         if name == "magnet_intensity":
             self._current_intensity.setText(f"{value}")
 
-    def _analysis_property_changed(self, name, value, _):
+    def _load_cell_monitor_property_changed(self, name, value, _):
         if name == "is_load_cell_engaged":
             if value:
                 self._load_cell_plot.getPlotItem().getViewBox().setBackgroundColor((0, 250, 154))
             else:
                 self._load_cell_plot.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
-        elif name == "is_headbar_engaged":
+
+    def _analysis_property_changed(self, name, value, _):
+        if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
             if value:
                 self._head_contact_plot.getPlotItem().getViewBox().setBackgroundColor((0, 250, 154))
             else:

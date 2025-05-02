@@ -1,0 +1,203 @@
+import logging
+
+from PySide6.QtCore import Signal, Qt
+from PySide6.QtWidgets import QLabel, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout
+
+from autotrainer.core import MessageHandler
+from autotrainer.model import EnvironmentProvider
+from autotrainer.pyside import CardWidget
+from tools.acquisition.model.hardware_model import HardwareModel
+
+from tools.acquisition.view.content_widget import ContentWidget
+
+logger = logging.getLogger(__name__)
+
+
+class HardwareControlContent(ContentWidget):
+    position_changed = Signal(int, name="position_changed")
+
+    def __init__(self, model: HardwareModel):
+        super().__init__()
+
+        self._model = model
+
+        self._card_widget = CardWidget()
+
+        layout = QGridLayout(None)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setHorizontalSpacing(16)
+
+        label = QLabel("Tunnel")
+        label.setStyleSheet("font-weight: bold")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label, 0, 0)
+        label = QLabel("Local Move")
+        label.setStyleSheet("font-weight: bold")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label, 0, 2)
+        label = QLabel("Compound Move")
+        label.setStyleSheet("font-weight: bold")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label, 0, 4)
+
+        form_layout = QFormLayout(None)
+        form_layout.setHorizontalSpacing(8)
+        form_layout.setVerticalSpacing(4)
+
+        self._position = QSpinBox(None)
+        self._position.setValue(0)
+        self._position.setMaximum(100)
+        self._position.setWrapping(False)
+        self._magnet_move_button = QPushButton("Move")
+        self._magnet_move_button.clicked.connect(
+            lambda: self._model.update_head_magnet_intensity(self._position.value()))
+        right_layout = QHBoxLayout()
+        right_layout.setSpacing(4)
+        right_layout.addWidget(self._position)
+        right_layout.addWidget(self._magnet_move_button)
+        form_layout.addRow("Head magnet intensity (%):", right_layout)
+
+        self._tare_button = QPushButton("Tare")
+        self._tare_button.setEnabled(False)
+        self._tare_button.clicked.connect(self._model.tare_load_cell)
+        form_layout.addRow(QLabel("Load cell:"), self._tare_button)
+
+        layout.addLayout(form_layout, 1, 0)
+
+        layout.setColumnStretch(1, 1)
+
+        form_layout = QFormLayout(None)
+        form_layout.setHorizontalSpacing(8)
+        form_layout.setVerticalSpacing(4)
+
+        self._x_pos = QSpinBox(None)
+        self._x_pos.setValue(0)
+        self._x_pos.setMinimum(-10)
+        self._x_pos.setMaximum(10)
+        self._x_pos.setWrapping(False)
+        self._x_pos.setMinimumWidth(50)
+        self._x_pos.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self._x_move_button = QPushButton("Move")
+        self._x_move_button.clicked.connect(lambda: self._model.set_x(self._x_pos.value()))
+        right_layout = QHBoxLayout()
+        right_layout.setSpacing(4)
+        right_layout.addWidget(self._x_pos)
+        right_layout.addWidget(self._x_move_button)
+        form_layout.addRow(QLabel("Pellet X (mm):"), right_layout)
+
+        self._y_pos = QSpinBox(None)
+        self._y_pos.setValue(0)
+        self._y_pos.setMinimum(-10)
+        self._y_pos.setMaximum(10)
+        self._y_pos.setWrapping(False)
+        self._y_pos.setMinimumWidth(50)
+        self._y_pos.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self._y_move_button = QPushButton("Move")
+        self._y_move_button.clicked.connect(lambda: self._model.set_y(self._y_pos.value()))
+        right_layout = QHBoxLayout()
+        right_layout.setSpacing(4)
+        right_layout.addWidget(self._y_pos)
+        right_layout.addWidget(self._y_move_button)
+        form_layout.addRow(QLabel("Pellet Y (mm):"), right_layout)
+
+        self._z_pos = QSpinBox(None)
+        self._z_pos.setValue(0)
+        self._z_pos.setMinimum(-10)
+        self._z_pos.setMaximum(10)
+        self._z_pos.setWrapping(False)
+        self._z_pos.setMinimumWidth(50)
+        self._z_pos.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self._z_move_button = QPushButton("Move")
+        self._z_move_button.clicked.connect(lambda: self._model.set_z(self._z_pos.value()))
+        right_layout = QHBoxLayout()
+        right_layout.setSpacing(4)
+        right_layout.addWidget(self._z_pos)
+        right_layout.addWidget(self._z_move_button)
+        form_layout.addRow(QLabel("Pellet Z (mm):"), right_layout)
+
+        layout.addLayout(form_layout, 1, 2)
+
+        layout.setColumnStretch(3, 1)
+
+        button_layout = QVBoxLayout()
+        button_layout.setSpacing(4)
+        self._home_button = QPushButton("Home")
+        self._home_button.clicked.connect(lambda: self._model.send_home())
+        button_layout.addWidget(self._home_button)
+        self._load_button = QPushButton("Load")
+        self._load_button.clicked.connect(lambda: self._model.load_pellet())
+        button_layout.addWidget(self._load_button)
+        self._send_button = QPushButton("Send")
+        self._send_button.clicked.connect(lambda: self._model.send_pellet())
+        button_layout.addWidget(self._send_button)
+        self._release_button = QPushButton("Release")
+        self._release_button.clicked.connect(lambda: self._model.release_pellet())
+        button_layout.addWidget(self._release_button)
+        self._cover_button = QPushButton("Cover")
+        self._cover_button.clicked.connect(lambda: self._model.cover_pellet())
+        button_layout.addWidget(self._cover_button)
+        button_layout.addStretch(1)
+
+        layout.addLayout(button_layout, 1, 4)
+
+        self._card_widget.setContentLayout(layout)
+
+        # Header
+        self._header = QWidget(None)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self._title = QLabel("Hardware Control")
+        self._title.setStyleSheet("font-weight: bold")
+        layout.addWidget(self._title)
+
+        layout.addStretch(1)
+
+        layout.addWidget(QLabel("Tunnel:"))
+        self._tunnel_version = QLabel("(unknown version)")
+        layout.addWidget(self._tunnel_version)
+
+        layout.addWidget(QLabel("Pellet:"))
+        self._pellet_version = QLabel("(unknown version)")
+        layout.addWidget(self._pellet_version)
+
+        self._header.setLayout(layout)
+
+        self._card_widget.header.setContent(self._header)
+
+        # Final layout
+        layout = QVBoxLayout()
+        layout.addWidget(self._card_widget)
+        self.setLayout(layout)
+
+        self._model.property_changed += self._model_property_changed
+
+    def set_is_capture_active(self, is_active: bool):
+        self._tare_button.setEnabled(is_active)
+
+    def _update_position(self):
+        self._model.update_head_magnet_intensity(self._position.value())
+
+    def _update_title(self, value: str):
+        if value:
+            if value.find("emulator") != -1:
+                self._title.setText(f"Hardware Control: Alogus Emulation")
+            else:
+                self._title.setText(f"Hardware Control: {EnvironmentProvider.hardware_version()}")
+        else:
+            self._title.setText("Hardware Control")
+
+    def _model_property_changed(self, property_name: str, value, _):
+        if property_name == HardwareModel.TUNNEL_VERSION_PROPERTY:
+            self._update_title(value)
+            if value:
+                self._tunnel_version.setText(value.replace("emulator", "").strip())
+            else:
+                self._tunnel_version.setText("(unknown version)")
+        elif property_name == HardwareModel.PELLET_VERSION_PROPERTY:
+            self._update_title(value)
+            if value:
+                self._pellet_version.setText(value.replace("emulator", "").strip())
+            else:
+                self._pellet_version.setText("(unknown version)")

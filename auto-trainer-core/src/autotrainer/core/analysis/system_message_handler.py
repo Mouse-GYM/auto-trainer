@@ -40,20 +40,28 @@ class SystemMessageHandler(MessageHandler):
         return self._analysis
 
     def message_received(self, msg, data):
-        # TODO: some simulated property changes events for the next ~6 messages to enable feedback in callers.  If this
-        # turns out to be the desired behavior, it should probably be formalized a bit better.
+        # TODO: These are treated as if the property has changed.  If the number of event listeners increase or their
+        #  behaviors are complex and do not check for change themselves, this could become a bottleneck.  This could be
+        #  updated to store previous values and only notify listeners on change, like a typical ObservableObject
+        #  implementation.  Keeping things simple for the time being.
         if msg == SystemStatusMessageKind.PELLET_X:
-            self.property_changed("device_x", data, None)
+            self.property_changed(MessageHandler.DEVICE_X_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.PELLET_Y:
-            self.property_changed("device_y", data, None)
+            self.property_changed(MessageHandler.DEVICE_Y_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.PELLET_Z:
-            self.property_changed("device_z", data, None)
+            self.property_changed(MessageHandler.DEVICE_Z_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.PELLET_LOAD:
-            self.property_changed("load_angle", data, None)
+            self.property_changed(MessageHandler.LOAD_ARM_ANGLE_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.PELLET_COVER:
-            self.property_changed("cover_angle", data, None)
+            self.property_changed(MessageHandler.COVER_ARM_ANGLE_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.HEAD_MAGNET:
-            self.property_changed("head_magnet_intensity", data, None)
+            self.property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.FRONT_DOOR:
+            self.property_changed(MessageHandler.FRONT_DOOR_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.DRAWER_DOOR:
+            self.property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.STIMULUS_INPUTS:
+            self.property_changed(MessageHandler.STIMULI_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.AUDIO_SPECTRUM:
             self._analysis.audio_spectrum_received(data)
             if self._audio_callback is not None:
@@ -61,12 +69,5 @@ class SystemMessageHandler(MessageHandler):
         elif msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
             weights, switch, pressure, temperature, humidity = self._analysis.measurements_received(
                 data)
-
             if self._measurement_callback is not None:
                 self._measurement_callback((weights, switch, pressure, temperature, humidity))
-        elif msg == SystemStatusMessageKind.FRONT_DOOR:
-            self.property_changed("front_door", data, None)
-        elif msg == SystemStatusMessageKind.DRAWER_DOOR:
-            self.property_changed("drawer_door", data, None)
-        elif msg == SystemStatusMessageKind.STIMULUS_INPUTS:
-            self._on_property_changed("stimuli", data, None)

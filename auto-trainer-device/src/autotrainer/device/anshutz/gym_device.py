@@ -96,7 +96,10 @@ class GymDevice(Device):
         if data.startswith("F0"):
             if len(data) > 2:
                 if data[2] == self._identifier:
-                    self._set_firmware_version(data[3:])
+                    if self._identifier == "H":
+                        self._set_firmware_version(f"Tunnel v{data[3:]}.0")
+                    else:
+                        self._set_firmware_version(f"Pellet v{data[3:]}.0")
                 else:
                     self._set_firmware_version("unknown device")
             else:

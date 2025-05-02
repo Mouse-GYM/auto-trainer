@@ -1,33 +1,31 @@
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QCheckBox, QFileDialog, QWidget, QVBoxLayout, \
-    QHBoxLayout, QStackedLayout, QGridLayout, QSpinBox
-from autotrainer.core import SensorAnalysis
+from PySide6.QtWidgets import QLabel, QFileDialog, QWidget, QVBoxLayout, \
+    QHBoxLayout, QStackedLayout, QGridLayout, QSpinBox, QPushButton
 
 from autotrainer.pyside import CardWidget, QSwitch
-from tools.acquisition.model.head_fix_model import HeadFixModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.view.content_widget import ContentWidget
 
 
 class BehaviorContent(ContentWidget):
-    status_changed = Signal(str)
+    status_changed = Signal(str, name="status_changed")
 
     def __init__(self, behavior_model: BehaviorModel, inference_model: InferenceModel):
         super().__init__()
 
         self._behavior_model = behavior_model
         self._inference_model = inference_model
-        self._head_fix_model = behavior_model.analysis
+        self._analysis = behavior_model.analysis
 
         self._card_widget = CardWidget()
 
-        content = QWidget()
-        content_layout = QGridLayout()
+        content = QWidget(None)
+        content_layout = QGridLayout(None)
         content_layout.setRowStretch(3, 1)
         content_layout.setColumnStretch(6, 1)
 
-        content_layout.addWidget(QLabel("Live Analysis:"))
+        content_layout.addWidget(QLabel("Live Analysis:"), 0, 0)
         self._inference_enabled = QSwitch()
         self._inference_enabled.stateChanged.connect(self._is_enabled_state_changed)
         content_layout.addWidget(self._inference_enabled, 0, 1)
@@ -53,19 +51,29 @@ class BehaviorContent(ContentWidget):
         content_layout.addWidget(self._head_fixation_toggle, 0, 5)
 
         content_layout.addWidget(QLabel("Auto-Clamp Threshold:"), 1, 4)
-        self._auto_clamp_threshold = QSpinBox()
-        self._auto_clamp_threshold.setValue(self._head_fix_model.force_detector.threshold)
+        self._auto_clamp_threshold = QSpinBox(None)
+        self._auto_clamp_threshold.setValue(self._analysis.headbar_pressure_monitor.threshold)
         self._auto_clamp_threshold.setMinimum(0)
         self._auto_clamp_threshold.setMaximum(1023)
         self._auto_clamp_threshold.setWrapping(False)
         self._auto_clamp_threshold.valueChanged.connect(self._update_auto_clamp_intensity)
         content_layout.addWidget(self._auto_clamp_threshold, 1, 5)
 
+        baseline_layout = QHBoxLayout()
+        baseline_layout.addWidget(QLabel("Head Magnet Baseline: "))
+        self._baseline = QLabel(f"{self._behavior_model.algorithm.baseline_intensity}%")
+        baseline_layout.addWidget(self._baseline)
+        self._make_baseline_button = QPushButton("Make Current Position Baseline")
+        self._make_baseline_button.clicked.connect(self._make_position_baseline)
+        baseline_layout.addWidget(self._make_baseline_button)
+        baseline_layout.addStretch(1)
+        content_layout.addLayout(baseline_layout, 4, 0, 1, 6)
+
         content.setLayout(content_layout)
         self._card_widget.setContentWidget(content)
 
         # Header
-        self._header = QWidget()
+        self._header = QWidget(None)
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -75,7 +83,7 @@ class BehaviorContent(ContentWidget):
 
         layout.addStretch(1)
 
-        self._inference_status = QLabel()
+        self._inference_status = QLabel("")
         layout.addWidget(self._inference_status)
 
         self._header.setLayout(layout)
@@ -83,28 +91,12 @@ class BehaviorContent(ContentWidget):
         self._card_widget.header.setContent(self._header)
 
         # Footer
-        self._editable_footer = QWidget()
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        layout.addWidget(QLabel("Inference Model:"))
-
-        self._location = QLineEdit()
-        self._location.editingFinished.connect(self._location_changed)
-        layout.addWidget(self._location, 1)
-
-        self._browse_button = QPushButton("Select...")
-        self._browse_button.clicked.connect(self._browse_for_location)
-        layout.addWidget(self._browse_button)
-
-        self._editable_footer.setLayout(layout)
-
-        self._basic_footer = QWidget()
+        self._basic_footer = QWidget(None)
 
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(QLabel("Inference model:"))
-        self._location_label = QLabel()
+        self._location_label = QLabel("")
         layout.addWidget(self._location_label)
         layout.addStretch(1)
 
@@ -112,9 +104,8 @@ class BehaviorContent(ContentWidget):
 
         self._stack_layout = QStackedLayout()
         self._stack_layout.addWidget(self._basic_footer)
-        self._stack_layout.addWidget(self._editable_footer)
 
-        widget = QWidget()
+        widget = QWidget(None)
         widget.setLayout(self._stack_layout)
 
         self._card_widget.footer.setContent(widget)
@@ -133,7 +124,7 @@ class BehaviorContent(ContentWidget):
         self._pellet_cover_toggle.setChecked(self._behavior_model.algorithm.pellet_cover_enabled)
         self._intersession_toggle.setChecked(self._behavior_model.is_intersession_enabled)
         self._behavior_model.algorithm.property_changed += self._algorithm_property_changed
-        self._head_fix_model.force_detector.property_changed += self._force_detector_property_changed
+        self._analysis.headbar_pressure_monitor.property_changed += self._force_detector_property_changed
 
         self._behavior_model.property_changed += self._behavior_model_property_changed
 
@@ -146,8 +137,6 @@ class BehaviorContent(ContentWidget):
 
     def set_is_capture_active(self, is_active: bool):
         self._inference_enabled.setEnabled(not is_active)
-        self._location.setEnabled(not is_active)
-        self._browse_button.setEnabled(not is_active)
 
     def _is_enabled_state_changed(self, x: int):
         self._inference_model.is_enabled = x != 0
@@ -172,7 +161,10 @@ class BehaviorContent(ContentWidget):
         self._inference_model.model_location = self._location.text()
 
     def _update_auto_clamp_intensity(self, value):
-        self._head_fix_model.force_detector.threshold = value
+        self._analysis.headbar_pressure_monitor.threshold = value
+
+    def _make_position_baseline(self):
+        self._behavior_model.use_current_head_magnet_position_as_baseline()
 
     def _browse_for_location(self):
         dirname = QFileDialog.getExistingDirectory(self, "Select Directory", self._location.text())
@@ -186,6 +178,8 @@ class BehaviorContent(ContentWidget):
             self._pellet_delivery_toggle.setChecked(value)
         elif name == "pellet_cover_enabled":
             self._pellet_cover_toggle.setChecked(value)
+        elif name == "baseline_intensity":
+            self._baseline.setText(f"{value}%")
 
     def _behavior_model_property_changed(self, name, value, _):
         if name == "is_intersession_enabled":
@@ -202,8 +196,6 @@ class BehaviorContent(ContentWidget):
             self.status_changed.emit(f"Inference: {value}")
         elif name == "model_location":
             if value is not None and len(value) > 0:
-                self._location.setText(value)
                 self._location_label.setText(value)
             else:
-                self._location.setText("Inference model not specified")
                 self._location_label.setText("Inference model not specified")

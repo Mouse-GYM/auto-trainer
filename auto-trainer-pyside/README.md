@@ -1,0 +1,3 @@
+# Autotrainer - Pyside
+
+Todo

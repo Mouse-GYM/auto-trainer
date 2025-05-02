@@ -1,23 +1,22 @@
-from __future__ import annotations
-
 import os
 import pathlib
 import time
 import logging
-import typing
-import urllib
+from typing import Optional, List
 from multiprocessing import Queue, Value, Array
 from threading import Event
+import urllib
 from urllib.parse import urlparse
 
 import numpy
 from numpy import ndarray
 
 from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, TriggerManager, ObservableObject, \
-    CAPTURE_TRIGGER_ID
+    CAPTURE_TRIGGER_ID, CameraConfiguration, CameraId
 from autotrainer.core.project import ProjectInfo
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
+from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
 from tools.acquisition.model.user_preferences import UserPreferences
 
@@ -43,15 +42,17 @@ def create_camera_list():
     return cameras
 
 
-class VideoCaptureModel(ObservableObject):
+class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
     def __init__(self, name, preferences: UserPreferences = None, inference_index: int = -1):
         super().__init__()
+
+        self._id = CameraId.Left
 
         self._name = name
         self._preferences = preferences
         self._inference_index = inference_index
 
-        self._camera_source: CaptureCameraAttrs | None = None
+        self._camera_source: Optional[CaptureCameraAttrs] = None
         self._camera_properties = dict()
 
         self._video_capture = None
@@ -87,7 +88,7 @@ class VideoCaptureModel(ObservableObject):
 
         self._is_trace_enabled = True
 
-        self._project: ProjectInfo | None = None
+        self._project: Optional[ProjectInfo] = None
 
         TriggerManager.instance().register(self._on_trigger, CAPTURE_TRIGGER_ID)
 
@@ -106,7 +107,7 @@ class VideoCaptureModel(ObservableObject):
         return self._name
 
     @property
-    def camera_list(self) -> typing.List[CaptureCameraAttrs]:
+    def camera_list(self) -> List[CaptureCameraAttrs]:
         return self._camera_list
 
     @property
@@ -325,101 +326,55 @@ class VideoCaptureModel(ObservableObject):
 
         self._video_reader_teardown()
 
-    def load_configuration(self, conf: dict):
-        if "id" in conf:
-            self._name = conf["id"]
-        if "isEnabled" in conf:
-            self.is_enabled = conf["isEnabled"]
-        if "isRecordEnabled" in conf:
-            self.is_recording_enabled = conf["isRecordEnabled"]
-        if "recordMode" in conf:
-            self.record_mode = VideoRecordMode(conf["recordMode"])
-        if "isStillImageCaptureEnabled" in conf:
-            self.is_still_capture_enabled = conf["isStillImageCaptureEnabled"]
-        if "stillImageCaptureInterval" in conf:
-            self.still_image_capture_interval = conf["stillImageCaptureInterval"]
+    def load_configuration(self, conf: CameraConfiguration):
+        self._id = conf.id
+        self._name = conf.name
+        self.is_enabled = conf.is_enabled
+        self.is_recording_enabled = conf.is_record_enabled
+        self.record_mode = VideoRecordMode(conf.record_mode)
+        self.is_still_capture_enabled = conf.is_still_image_capture_enabled
+        self.still_image_capture_interval = conf.still_image_capture_interval
 
-        url = None
+        url = f"{conf.scheme}://{conf.host}"
 
-        if "name" in conf:
-            name = conf["name"]
-        else:
-            name = "<unnamed>"
+        if conf.port > 0:
+            url += f":{conf.port}"
 
-        if "url" in conf:
-            url = conf["url"]
-        elif "camera" in conf:
-            camera = conf["camera"]
-            scheme = ""
-            host = ""
-            path = ""
-            port = ""
-            params = dict()
-            for key in camera:
-                if key == "scheme":
-                    scheme = camera[key] or ""
-                elif key == "host":
-                    host = camera[key] or ""
-                elif key == "path":
-                    path = camera[key] or ""
-                elif key == "port":
-                    port = camera[key] or ""
-                else:
-                    params[key] = camera[key]
+        if len(conf.path) > 0:
+            url += f"/{conf.path}"
 
-            url = f"{scheme}://{host}"
+        if len(conf.params) > 0:
+            url += "?" + urllib.parse.urlencode(conf.params)
 
-            if len(port) > 0:
-                url += f":{port}"
+        existing = list(filter(lambda m: m.url == url, self._camera_list))
 
-            if len(path) > 0:
-                url += f"/{path}"
+        name = self._name or "<unnamed>"
 
-            if len(params) > 0:
-                url += "?" + urllib.parse.urlencode(params)
-
-        if url is not None:
-            existing = list(filter(lambda m: m.url == url, self._camera_list))
-
-            if len(existing) == 0:
-                non_duplicate = name
-                idx = 1
+        if len(existing) == 0:
+            non_duplicate = name
+            idx = 1
+            same_name = list(filter(lambda m: m.name == non_duplicate, self._camera_list))
+            while len(same_name) > 0:
+                non_duplicate = f"{name} ({idx})"
                 same_name = list(filter(lambda m: m.name == non_duplicate, self._camera_list))
-                while len(same_name) > 0:
-                    non_duplicate = f"{name} ({idx})"
-                    same_name = list(filter(lambda m: m.name == non_duplicate, self._camera_list))
-                    idx += 1
-                source = CaptureCameraAttrs(name=non_duplicate, url=url)
-                self._camera_list.insert(0, source)
-                self.property_changed("camera_list", self._camera_list, self._camera_list)
-            else:
-                source = existing[0]
+                idx += 1
+            source = CaptureCameraAttrs(name=non_duplicate, url=url)
+            self._camera_list.insert(0, source)
+            self.property_changed("camera_list", self._camera_list, self._camera_list)
+        else:
+            source = existing[0]
 
-            self.camera_source = source
+        self.camera_source = source
 
-    def save_configuration(self) -> dict:
+    def save_configuration(self) -> CameraConfiguration:
         parsed = urlparse(self._camera_source.url)
-
-        camera = dict()
-
-        if parsed.scheme:
-            camera["scheme"] = parsed.scheme
-
-        if parsed.hostname:
-            camera["host"] = parsed.hostname
-
-        if parsed.path:
-            camera["path"] = parsed.path
-
-        if parsed.port:
-            camera["port"] = parsed.port
 
         params = VideoManager.parse_params(self._camera_source.url)
 
         for key in params:
             try:
                 val = float(params[key])
-                if abs(int(val) - val) < numpy.finfo(float).eps * 2:
+                if abs(int(val) - val) < 2.0 * float(numpy.finfo(float).eps):
                     val = int(val)
                 params[key] = val
             except:
@@ -428,12 +383,13 @@ class VideoCaptureModel(ObservableObject):
                 elif str(params[key]).lower() == "false":
                     params[key] = False
 
-        camera.update(params)
-
-        return {"id": self._name, "name": self._camera_source.name, "camera": camera,
-                "isEnabled": self._is_enabled, "isRecordEnabled": self._is_recording_enabled,
-                "recordMode": int(self._record_mode), "isStillImageCaptureEnabled": self._is_still_capture_enabled,
-                "stillImageCaptureInterval": self._still_image_capture_interval}
+        return CameraConfiguration(id=self._id, name=self._name, is_enabled=self._is_enabled,
+                                   is_record_enabled=self._is_recording_enabled,
+                                   record_mode=self._record_mode.value,
+                                   is_still_image_capture_enabled=self._is_still_capture_enabled,
+                                   still_image_capture_interval=self.still_image_capture_interval,
+                                   scheme=parsed.scheme, host=parsed.hostname, port=parsed.port or 0, path=parsed.path,
+                                   params=params)
 
     def _wait_for_capture_status(self, expected: CaptureProcessStatus, timeout: int):
         start_ns = time.perf_counter_ns()

@@ -26,7 +26,20 @@ class MessageHandler(ObservableObject):
     notification), callbacks, and other means of making the data available in a consistent format that downstream
     consumers care about rather than as specifically implemented the hardware.
     """
-    FIRMWARE_VERSION = "firmware_version"
+    FIRMWARE_VERSION_PROPERTY = "firmware_version"
+
+    HEAD_MAGNET_INTENSITY_PROPERTY = "head_magnet_intensity"
+
+    DEVICE_X_PROPERTY = "device_x"
+    DEVICE_Y_PROPERTY = "device_y"
+    DEVICE_Z_PROPERTY = "device_z"
+
+    LOAD_ARM_ANGLE_PROPERTY = "load_angle"
+    COVER_ARM_ANGLE_PROPERTY = "cover_angle"
+
+    FRONT_DOOR_PROPERTY = "front_door"
+    DRAWER_DOOR_PROPERTY = "drawer_door"
+    STIMULI_PROPERTY = "stimuli"
 
     def __init__(self, input_queue: Queue, name: str = "message-handler", event_names=()):
         super().__init__(event_names=event_names + ("ack_received",))
@@ -57,7 +70,7 @@ class MessageHandler(ObservableObject):
             elif msg == SystemStatusMessageKind.ACKNOWLEDGE:
                 self.ack_received(data)
             elif msg == SystemStatusMessageKind.FIRMWARE_VERSION:
-                self.property_changed(MessageHandler.FIRMWARE_VERSION, data, None)
+                self.property_changed(MessageHandler.FIRMWARE_VERSION_PROPERTY, data, None)
             else:
                 self.message_received(msg, data)
 

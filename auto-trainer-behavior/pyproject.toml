@@ -16,5 +16,6 @@ requires-python = ">=3.8"
 dependencies = [
     "numpy",
     "pandas",
-    "transitions"
+    "transitions",
+    "auto-trainer-core"
 ]

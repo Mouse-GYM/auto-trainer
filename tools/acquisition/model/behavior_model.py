@@ -1,26 +1,28 @@
 from typing import Optional
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol
-from autotrainer.core import ObservableObject, ProjectInfo, MessageHandler, SensorAnalysis
+from autotrainer.core import ObservableObject, ProjectInfo, MessageHandler, SensorAnalysis, BehaviorConfiguration
+from tools.acquisition.model.hardware_model import HardwareModel
 
-from tools.acquisition.model.head_fix_model import HeadFixModel
-from tools.acquisition.model.pellet_delivery_model import PelletDeliveryModel
+from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
 
-class BehaviorModel(ObservableObject):
-    def __init__(self, msg_handler: MessageHandler, analysis: SensorAnalysis, head_fix: HeadFixModel,
-                 pellet: PelletDeliveryModel, inference: InferenceProtocol):
+class BehaviorModel(ObservableObject, ProjectDependentProtol):
+    def __init__(self, msg_handler: MessageHandler, analysis: SensorAnalysis, hardware_model: HardwareModel,
+                 inference: InferenceProtocol):
         super().__init__()
 
         self._analysis = analysis
 
-        self._machine = SystemMachine(None, None, msg_handler, analysis, head_fix, pellet, inference)
+        self._machine = SystemMachine(None, None, msg_handler, analysis, hardware_model, hardware_model, inference)
 
         self._project: Optional[ProjectInfo] = None
 
         self._machine.algorithm.property_changed += self._on_algorithm_property_changed
 
         self._is_intersession_enabled = self._machine.algorithm.intersession_enabled
+
+        self._hardware_model = hardware_model
 
     @property
     def analysis(self) -> SensorAnalysis:
@@ -48,21 +50,33 @@ class BehaviorModel(ObservableObject):
                                                                   self._is_intersession_enabled)
         self._machine.algorithm.intersession_enabled = self._is_intersession_enabled
 
-    def load_configuration(self, configuration: dict):
-        if "isIntersessionAnalysisEnabled" in configuration:
-            self.is_intersession_enabled = configuration["isIntersessionAnalysisEnabled"]
+    def load_configuration(self, configuration: BehaviorConfiguration):
+        self.is_intersession_enabled = configuration.pellet_delivery.is_intersession_analysis_enabled
 
         self._machine.algorithm.load_configuration(configuration)
 
-    def save_configuration(self) -> dict:
-        return self._machine.algorithm.save_configuration()
+    def save_configuration(self) -> BehaviorConfiguration:
+        configuration = BehaviorConfiguration()
+        configuration.pellet_delivery.is_intersession_analysis_enabled = self._is_intersession_enabled
+
+        self._machine.algorithm.update_configuration(configuration)
+
+        configuration.load_cell = self._analysis.load_cell_monitor.save_configuration()
+        configuration.auto_tare = self._analysis.load_cell_tare_monitor.save_configuration()
+        configuration.headbar_pressure = self._analysis.headbar_pressure_monitor.save_configuration()
+
+        return configuration
 
     def on_prepare_capture(self):
         self._machine.project = self._project
 
-    def _on_algorithm_property_changed(self, property_name: str, new_value, _):
+    def use_current_head_magnet_position_as_baseline(self):
+        if self._hardware_model.head_magnet_intensity is not None:
+            self.algorithm.baseline_intensity = self._hardware_model.head_magnet_intensity
+
+    def _on_algorithm_property_changed(self, property_name: str, value, _):
         if property_name == "intersession_enabled":
-            self._is_intersession_enabled = new_value
+            self._is_intersession_enabled = value
 
     def trigger_tunnel(self, value: bool):
         """

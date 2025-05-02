@@ -3,4 +3,4 @@ from .camera_configuration import CameraConfiguration, CameraId
 from .hardware_configuration import HardwareConfiguration
 from .inference_configuration import InferenceConfiguration
 from .persistence_configuration import PersistenceConfiguration
-from .system_configuration import SystemConfiguration
+from .system_configuration import SystemConfiguration, get_system_configuration_dumper
