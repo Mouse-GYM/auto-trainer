@@ -27,10 +27,10 @@ get_input = True
 
 
 class StatusType(IntEnum):
-    FRONT_DOOR = 1,
-    DRAWER_DOOR = 2,
-    SENSORS = 3,
-    STIMULUS = 4,
+    FRONT_DOOR = 1
+    DRAWER_DOOR = 2
+    SENSORS = 3
+    STIMULUS = 4
 
 
 def monitor_message_queue():

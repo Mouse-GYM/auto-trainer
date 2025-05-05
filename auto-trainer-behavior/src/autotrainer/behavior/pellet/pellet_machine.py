@@ -15,12 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 class PelletState(str, Enum):
-    monitoring = "monitoring",
-    loading = "loading",
-    prerelease = "prerelease",
-    sending = "sending",
+    monitoring = "monitoring"
+    loading = "loading"
+    prerelease = "prerelease"
+    sending = "sending"
     releasing = "releasing"
-    covering = "covering",
+    covering = "covering"
     home = "home"
 
 

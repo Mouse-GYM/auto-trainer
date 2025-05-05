@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 class IntersessionState(str, Enum):
-    idle = "idle",
-    segmentation = "segmentation",
+    idle = "idle"
+    segmentation = "segmentation"
     detection = "detection"
 
 

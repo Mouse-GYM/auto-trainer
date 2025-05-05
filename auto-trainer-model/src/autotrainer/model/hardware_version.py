@@ -8,8 +8,8 @@ class HardwareVersion(IntEnum):
     Allow applications to identify hardware versions without knowing the specific techniques, function calls, or
     properties to make that identification.
     """
-    UNKNOWN = 0,
-    ANSHUTZ = 1,
+    UNKNOWN = 0
+    ANSHUTZ = 1
     ALOGUS_V1 = 2
 
     def __str__(self):
