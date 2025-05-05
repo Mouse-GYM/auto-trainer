@@ -62,6 +62,8 @@ class SystemMessageHandler(MessageHandler):
             self.property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.STIMULUS_INPUTS:
             self.property_changed(MessageHandler.STIMULI_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.MOTOR_CONFIGURATION:
+            self._on_property_changed("config", data, None)
         elif msg == SystemStatusMessageKind.AUDIO_SPECTRUM:
             self._analysis.audio_spectrum_received(data)
             if self._audio_callback is not None:

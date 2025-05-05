@@ -1,11 +1,9 @@
 import logging
 import queue
 
-from autotrainer.core import ObservableObject, ProjectInterval, SystemMessageHandler, \
-    SystemCommandKind, SensorAnalysis
-from autotrainer.device import CanDevice, CAN_IDENTIFIER, HAVE_CAN_DEVICE
-from autotrainer.device import HeadFix
-from autotrainer.device import DeviceConnection
+from autotrainer.core import (ObservableObject, ProjectInterval, SystemMessageHandler, SystemCommandKind,
+                              SensorAnalysis, Motor)
+from autotrainer.device import DeviceConnection, CanDevice, HeadFix, CAN_IDENTIFIER, HAVE_CAN_DEVICE
 
 from tools.head_fix.model.user_settings import UserSettings
 
@@ -35,6 +33,7 @@ class AppModel(ObservableObject):
         self._firmware_version = ""
 
         self._magnet_intensity = -1.0
+        self._config = None
 
     @property
     def user_settings(self) -> UserSettings:
@@ -70,6 +69,14 @@ class AppModel(ObservableObject):
                                                            self._magnet_intensity)
 
     @property
+    def config(self):
+        return self._config
+
+    @config.setter
+    def config(self, value):
+        self._config = self._on_property_changed("config", value, self._config)
+
+    @property
     def message_handler(self):
         return self._message_handler
 
@@ -88,6 +95,15 @@ class AppModel(ObservableObject):
     def close_tunnel_gate(self):
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.CLOSE_TUNNEL_GATE)
+
+    def set_config(self, config):
+        if self._device_connection is not None:
+            self._device_connection.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION,
+                                                 config)
+
+    def get_config(self, motor: Motor):
+        if self._device_connection is not None:
+            self._device_connection.send_message(SystemCommandKind.READ_MOTOR_CONFIGURATION, motor)
 
     def tare(self):
         if self._device_connection is not None:
@@ -158,6 +174,8 @@ class AppModel(ObservableObject):
             self.firmware_version = value
         elif name == "head_magnet_intensity":
             self.magnet_intensity = value
+        elif name == "config":
+            self.config = value
 
     @staticmethod
     def reader_ack_received(ack):
