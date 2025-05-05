@@ -40,7 +40,7 @@ class SystemMessageHandler(MessageHandler):
         return self._analysis
 
     def message_received(self, msg, data):
-        # TODO: These are treated as if the property has changed.  If the number of event listeners increase or their
+        # TODO: These are treated as if the property has changed.  If the number of event listeners increases or their
         #  behaviors are complex and do not check for change themselves, this could become a bottleneck.  This could be
         #  updated to store previous values and only notify listeners on change, like a typical ObservableObject
         #  implementation.  Keeping things simple for the time being.

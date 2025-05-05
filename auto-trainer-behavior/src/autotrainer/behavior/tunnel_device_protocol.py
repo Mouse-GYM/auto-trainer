@@ -11,17 +11,40 @@ class TunnelDeviceProtocol(ObservableObjectProtocol, Protocol):
     """
 
     def update_head_magnet_intensity(self, position: float) -> Optional[UUID]: ...
+
     """
     Request an update to the head magnet position.
     
-    :param position: The % position [0, 100] to set the head magnet.
-    
-    :return: A token to expect from the device message handler when the request is complete.
+    Args:
+        position: The % position [0, 100] to set the head magnet.
+        
+    Returns:
+        A token to expect from the device message handler when the request is complete.
+    """
+
+    def open_tunnel_gate(self) -> Optional[UUID]: ...
+
+    """
+    Request the tunnel gate to open.
+        
+    Returns:
+        A token to expect from the device message handler when the request is complete.
+    """
+
+    def close_tunnel_gate(self) -> Optional[UUID]: ...
+
+    """
+    Request the tunnel gate to close.
+        
+    Returns:
+        A token to expect from the device message handler when the request is complete.
     """
 
     def tare_load_cell(self) -> Optional[UUID]: ...
+
     """
     Request the load cell perform a tare operation.
-    
-    :return: A token to expect from the device message handler when the request is complete.
+        
+    Returns:
+        A token to expect from the device message handler when the request is complete.
     """

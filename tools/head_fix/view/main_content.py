@@ -4,8 +4,9 @@ from PySide6.QtCore import Qt, Signal, QTimer, Slot
 from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
     QCheckBox, QLineEdit, QFileDialog, QPlainTextEdit, QVBoxLayout
 
-from autotrainer.core import PerfMonitor, SensorAnalysis, LoadCellMonitor
+from autotrainer.core import PerfMonitor, LoadCellMonitor
 from autotrainer.core.project import ProjectInfo
+from autotrainer.model import EnvironmentProvider, HardwareVersion
 from autotrainer.pyside import PGWidget, CardWidget, TextBoxHandler
 from tools.view.connection_panel import ConnectionPanel
 
@@ -93,12 +94,9 @@ class MainContent(QWidget):
 
         position_layout = QHBoxLayout()
         position_layout.setContentsMargins(8, 8, 8, 8)
-        position_layout.setSpacing(8)
+        position_layout.setSpacing(12)
 
-        self._update_position_button = QPushButton("Set Intensity")
-        self._update_position_button.setEnabled(False)
-        self._update_position_button.clicked.connect(self._set_position)
-        position_layout.addWidget(self._update_position_button, 0)
+        position_layout.addWidget(QLabel("Intensity:"))
 
         self._position = QSpinBox()
         self._position.setMaximum(100)
@@ -107,6 +105,11 @@ class MainContent(QWidget):
         self._position.setEnabled(False)
         position_layout.addWidget(self._position, 0, Qt.AlignLeft)
 
+        self._update_position_button = QPushButton("Update")
+        self._update_position_button.setEnabled(False)
+        self._update_position_button.clicked.connect(self._set_position)
+        position_layout.addWidget(self._update_position_button, 0)
+
         position_layout.addStretch(1)
 
         self._tare_button = QPushButton("Tare")
@@ -114,34 +117,19 @@ class MainContent(QWidget):
         self._tare_button.clicked.connect(self._model.tare)
         position_layout.addWidget(self._tare_button, 0)
 
-        position_layout.addStretch(1)
+        self._open_gate = QPushButton("Open Gate")
+        self._open_gate.setEnabled(False)
+        self._open_gate.clicked.connect(self._model.open_tunnel_gate)
+        if EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ:
+            position_layout.addWidget(self._open_gate, 0)
+
+        self._close_gate = QPushButton("Close Gate")
+        self._close_gate.setEnabled(False)
+        self._close_gate.clicked.connect(self._model.close_tunnel_gate)
+        if EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ:
+            position_layout.addWidget(self._close_gate, 0)
 
         row_layout.addLayout(position_layout)
-
-        record_layout = QHBoxLayout()
-        record_layout.setContentsMargins(8, 8, 8, 8)
-        record_layout.setSpacing(8)
-
-        self._enable_streaming = QCheckBox("Stream measurements")
-        self._enable_streaming.setEnabled(True)
-        self._enable_streaming.setChecked(self._model.user_settings.stream_enabled)
-        self._enable_streaming.stateChanged.connect(lambda x: self._enable_data_stream(x))
-        record_layout.addWidget(self._enable_streaming)
-
-        self._record = QCheckBox("Save measurements")
-        self._record.setChecked(self._model.user_settings.record_enabled)
-        self._record.stateChanged.connect(lambda x: self._update_record_enabled(x))
-        record_layout.addWidget(self._record)
-
-        self._record_location = QLineEdit(self._model.user_settings.record_location)
-        self._record_location.setMinimumWidth(100)
-        record_layout.addWidget(self._record_location, 1)
-
-        self._browse_button = QPushButton("Select...")
-        self._browse_button.clicked.connect(self._browse_for_location)
-        record_layout.addWidget(self._browse_button)
-
-        row_layout.addLayout(record_layout, 1.0)
 
         panel = CardWidget(background_color=None, header_background_color="#00b6de")
         panel.setContentLayout(row_layout)
@@ -171,6 +159,33 @@ class MainContent(QWidget):
         return panel
 
     def _create_sensor_panel(self):
+        row_layout = QVBoxLayout()
+
+        record_layout = QHBoxLayout()
+        record_layout.setContentsMargins(8, 8, 8, 8)
+        record_layout.setSpacing(8)
+
+        self._enable_streaming = QCheckBox("Stream measurements")
+        self._enable_streaming.setEnabled(True)
+        self._enable_streaming.setChecked(self._model.user_settings.stream_enabled)
+        self._enable_streaming.stateChanged.connect(lambda x: self._enable_data_stream(x))
+        record_layout.addWidget(self._enable_streaming)
+
+        self._record = QCheckBox("Save measurements")
+        self._record.setChecked(self._model.user_settings.record_enabled)
+        self._record.stateChanged.connect(lambda x: self._update_record_enabled(x))
+        record_layout.addWidget(self._record)
+
+        self._record_location = QLineEdit(self._model.user_settings.record_location)
+        self._record_location.setMinimumWidth(100)
+        record_layout.addWidget(self._record_location, 1)
+
+        self._browse_button = QPushButton("Select...")
+        self._browse_button.clicked.connect(self._browse_for_location)
+        record_layout.addWidget(self._browse_button)
+
+        row_layout.addLayout(record_layout, 1.0)
+
         plot_layout = QGridLayout()
         plot_layout.setContentsMargins(8, 0, 8, 0)
 
@@ -197,8 +212,10 @@ class MainContent(QWidget):
         self._humidity_plot.setYRange(0, 100)
         plot_layout.addWidget(widget, 3, 1)
 
+        row_layout.addLayout(plot_layout, 1.0)
+
         panel = CardWidget(background_color=None, header_background_color="#00b6de")
-        panel.setContentLayout(plot_layout)
+        panel.setContentLayout(row_layout)
         panel.header.setTitle("Sensor Data", "white")
 
         return panel
@@ -235,7 +252,7 @@ class MainContent(QWidget):
 
     def _model_property_changed(self, name, value, _):
         if name == "magnet_intensity":
-            self._current_intensity.setText(f"{value}")
+            self._current_intensity.setText(f"{round(value, 1)}")
 
     def _load_cell_monitor_property_changed(self, name, value, _):
         if name == "is_load_cell_engaged":
@@ -284,7 +301,7 @@ class MainContent(QWidget):
         if self._record.isChecked():
             self._model.analysis.project_info = ProjectInfo(
                 root=self._record_location.text(),
-                device_id="HeadFixUI",
+                device_id="TunnelUI",
                 ensure_exists=True)
         else:
             self._model.analysis.project_info = None
@@ -306,6 +323,8 @@ class MainContent(QWidget):
     def enable_widgets(self, enable: bool):
         self._position.setEnabled(enable)
         self._tare_button.setEnabled(enable)
+        self._open_gate.setEnabled(enable)
+        self._close_gate.setEnabled(enable)
         self._update_position_button.setEnabled(enable)
         self._load_cell_plot.setEnabled(enable)
         self._head_contact_plot.setEnabled(enable)
