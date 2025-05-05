@@ -13,41 +13,41 @@ class SystemStatusMessageKind(IntEnum):
     This is implemented and represented in the send_message() method in the DeviceApi class.
     """
 
-    ACKNOWLEDGE = 1,
+    ACKNOWLEDGE = 1
     """
     This message should be send when a command completes along with the context that is provided with the command.  It
     should not be sent with status messages that are generated independently by the hardware.  The is the mechanism by
     which callers determine if and when specific commands are completed.
     """
-    FIRMWARE_VERSION = 101,
+    FIRMWARE_VERSION = 101
     """Message will contain the firmware version of the device as a string."""
     # TODO: This needs to be more complex than a string now that different modules are part of the same device and
     #  connection.
     PELLET_X = 201
     """Message will contain the pellet X motor status as a StepperStatusMessage."""
-    PELLET_Y = 202,
+    PELLET_Y = 202
     """Message will contain the pellet Y motor status as a StepperStatusMessage."""
-    PELLET_Z = 203,
+    PELLET_Z = 203
     """Message will contain the pellet Z motor status as a StepperStatusMessage."""
-    PELLET_LOAD = 204,
+    PELLET_LOAD = 204
     """Message will contain the pellet load arm servo status as a ServoStatusMessage."""
-    PELLET_COVER = 205,
+    PELLET_COVER = 205
     """Message will contain the pellet cover arm servo status as a ServoStatusMessage."""
-    HEAD_MAGNET = 206,
+    HEAD_MAGNET = 206
     """Message will contain the head fixation magnet servo status as a ServoStatusMessage."""
-    TUNNEL_GATE_SERVO = 207,
+    TUNNEL_GATE_SERVO = 207
     """Message will contain the tunnel gate servo status as a ServoStatusMessage."""
-    FRONT_DOOR = 301,
+    FRONT_DOOR = 301
     """Message will contain front door status as True (open) or False (closed)."""
-    DRAWER_DOOR = 302,
+    DRAWER_DOOR = 302
     """Message will contain drawer door status as True (open) or False (closed)."""
-    STIMULUS_INPUTS = 303,
+    STIMULUS_INPUTS = 303
     """Message will contain a list of 4 states as True/False"""
-    MEASUREMENTS = 401,
+    MEASUREMENTS = 401
     """Message will contain a list of MeasurementMessage objects."""
-    AUDIO_SPECTRUM = 402,
+    AUDIO_SPECTRUM = 402
     """Message will contain the audio spectrum data as an array list of float values."""
-    MOTOR_CONFIGURATION = 501,
+    MOTOR_CONFIGURATION = 501
 
     MEASUREMENT = -101
     """This value is deprecated.  Use MEASUREMENTS if the object you are passing with this identifier conforms to the

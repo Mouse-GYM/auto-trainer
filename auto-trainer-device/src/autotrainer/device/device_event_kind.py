@@ -5,5 +5,5 @@ from enum import IntEnum, Enum
 # event logs and other output in the desired format without needing to custom format everywhere.
 
 class GymDeviceEventKind(IntEnum, Enum):
-    deviceCommandSend = 2001,
+    deviceCommandSend = 2001
     deviceCommandAcknowledge = 2002

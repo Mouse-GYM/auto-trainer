@@ -25,11 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 class InferenceStatus(str, Enum):
-    stopped = "Stopped",
-    loading = "Loading",
-    waiting = "Waiting",
-    live = "Live",
-    intersession = "Intersession",
+    stopped = "Stopped"
+    loading = "Loading"
+    waiting = "Waiting"
+    live = "Live"
+    intersession = "Intersession"
     stopping = "Stopping"
 
 

@@ -13,7 +13,7 @@ class Motor(IntEnum):
     PELLET_Y_MOTOR = 3
     PELLET_Z_MOTOR = 4
     PELLET_COVER_SERVO = 5
-    PELLET_LOAD_SERVO = 6,
+    PELLET_LOAD_SERVO = 6
     TUNNEL_GATE_SERVO = 7
 
 
