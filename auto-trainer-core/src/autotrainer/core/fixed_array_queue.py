@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 class BufferResult(IntEnum):
-    Ok = 0,
-    Overflow = 1,
+    Ok = 0
+    Overflow = 1
 
 
 class FixedArrayQueue:
