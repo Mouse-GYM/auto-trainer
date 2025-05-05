@@ -14,6 +14,8 @@ class PGWidget(PlotWidget):
 
         self.scale_x = 1
 
+        self._replace = False
+        
         pen = pg.mkPen(color=(0, 0, 255), width=1)
         self._data_line = self.plot(self.x, self.y, pen=pen)
 
@@ -66,9 +68,17 @@ class PGWidget(PlotWidget):
 
     def cache_data(self, values):
         self._cache += values
+				self._replace = False
+
+    def replace_cache(self, values):
+        self._cache = values
+        self._replace = True
 
     def use_cache(self):
         if len(self._cache) > 0:
             values = self._cache
             self._cache = list()
-            self.update_plot(values)
+            if self._replace:
+                self.replace(values)
+            else:
+                self.update_plot(values)
