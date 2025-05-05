@@ -35,6 +35,8 @@ class SystemStatusMessageKind(IntEnum):
     """Message will contain the pellet cover arm servo status as a ServoStatusMessage."""
     HEAD_MAGNET = 206,
     """Message will contain the head fixation magnet servo status as a ServoStatusMessage."""
+    TUNNEL_GATE_SERVO = 207,
+    """Message will contain the tunnel gate servo status as a ServoStatusMessage."""
     FRONT_DOOR = 301,
     """Message will contain front door status as True (open) or False (closed)."""
     DRAWER_DOOR = 302,

@@ -17,6 +17,9 @@ class PelletDelivery(GymDevice):
 
         self._identifier = "P"
 
+        # This hardware does not support status messages for servo, stepper, or DIO.  For commands that may change these
+        # values, store the expected value, assumes it was successful, and send a status message after it completes and
+        # has been acknowledged.  This allows scripts/apps to see the updates they would expect from the new hardware.
         self._commands_with_status = {}
 
         # This hardware does not report motor positions.  The tracks the last X, Y, Z command values, which translate
@@ -54,27 +57,39 @@ class PelletDelivery(GymDevice):
             if context is not None:
                 self._commands_with_status[context] = (SystemCommandKind.COVER_PELLET, None)
         elif kind == SystemCommandKind.SET_X:
-            self._send_x = typing.cast(int, data)
+            if isinstance(data, float):
+                val = int(data)
+            else:
+                val = typing.cast(int, data)
+            self._send_x = val
             self._send_data(f"I{self._send_x + 10}x", context)
             if context is not None:
-                self._commands_with_status[context] = (SystemCommandKind.SET_X, data)
+                self._commands_with_status[context] = (SystemCommandKind.SET_X, val)
         elif kind == SystemCommandKind.SET_Y:
-            self._send_y = typing.cast(int, data)
+            if isinstance(data, float):
+                val = int(data)
+            else:
+                val = typing.cast(int, data)
+            self._send_y = val
             self._send_data(f"J{self._send_y + 20}x", context)
             if context is not None:
-                self._commands_with_status[context] = (SystemCommandKind.SET_Y, data)
+                self._commands_with_status[context] = (SystemCommandKind.SET_Y, val)
         elif kind == SystemCommandKind.SET_Z:
-            self._send_z = typing.cast(int, data)
+            if isinstance(data, float):
+                val = int(data)
+            else:
+                val = typing.cast(int, data)
+            self._send_z = typing.cast(int, val)
             self._send_data(f"K{self._send_z + 10}x", context)
             if context is not None:
-                self._commands_with_status[context] = (SystemCommandKind.SET_Z, data)
+                self._commands_with_status[context] = (SystemCommandKind.SET_Z, val)
         elif kind == SystemCommandKind.PLAY_TONE:
             self._send_data(f"N{typing.cast(int, data)}x", context)
         elif kind == SystemCommandKind.SET_SEND_PELLET_PROCEDURE or \
-            kind == SystemCommandKind.SET_LOAD_PELLET_PROCEDURE or \
-            kind == SystemCommandKind.SET_COVER_PELLET_PROCEDURE or \
-            kind == SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE or \
-            kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
+                kind == SystemCommandKind.SET_LOAD_PELLET_PROCEDURE or \
+                kind == SystemCommandKind.SET_COVER_PELLET_PROCEDURE or \
+                kind == SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE or \
+                kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
             pass
         else:
             logger.warning(f"unknown message kind: {kind}")

@@ -2,7 +2,7 @@ import logging
 import time
 from datetime import datetime
 
-from autotrainer.behavior import BehaviorLimits, PelletState
+from autotrainer.behavior import PelletState
 
 from mocks import BehaviorMachineWithMocks
 
@@ -11,7 +11,8 @@ logging.getLogger('transitions').setLevel(logging.INFO)
 
 
 def test_enter_exit_default():
-    machine = BehaviorMachineWithMocks(limits=BehaviorLimits(pellet_missing_time=0.1))
+    machine = BehaviorMachineWithMocks()
+    machine.algorithm.pellet_missing_time = 0.1
 
     pellet_machine = machine.pellet
 
@@ -49,7 +50,8 @@ def test_cover_pellet_enabled():
         Pellet is covered if present when leaving tunnel and released if present when entering tunnel
     :return: None
     """
-    machine = BehaviorMachineWithMocks(limits=BehaviorLimits(pellet_missing_time=0.1))
+    machine = BehaviorMachineWithMocks()
+    machine.algorithm.pellet_missing_time = 0.1
 
     pellet_machine = machine.pellet
 
@@ -103,7 +105,8 @@ def test_cover_pellet_disabled():
         Pellet is released under all conditions
     :return: None
     """
-    machine = BehaviorMachineWithMocks(limits=BehaviorLimits(pellet_missing_time=0.1))
+    machine = BehaviorMachineWithMocks()
+    machine.algorithm.pellet_missing_time = 0.1
 
     pellet_machine = machine.pellet
 
@@ -149,7 +152,8 @@ def test_cover_pellet_disabled():
 
 
 def test_pellet_seen():
-    machine = BehaviorMachineWithMocks(limits=BehaviorLimits(pellet_missing_time=0.25))
+    machine = BehaviorMachineWithMocks()
+    machine.algorithm.pellet_missing_time = 0.25
     pellet_machine = machine.pellet
     algorithm = machine.algorithm
 
@@ -196,7 +200,9 @@ def test_pellet_seen():
 
 
 def test_session_limit():
-    machine = BehaviorMachineWithMocks(limits=BehaviorLimits(pellet_missing_time=0.1, max_pellets_per_session=2))
+    machine = BehaviorMachineWithMocks()
+    machine.algorithm.pellet_missing_time = 0.1
+    machine.algorithm.max_pellets_per_session = 2
     pellet_machine = machine.pellet
     algorithm = machine.algorithm
 
@@ -243,7 +249,10 @@ def test_session_limit():
 
 # Disabled until day limit is implemented via reach detection.
 def day_limit():
-    machine = BehaviorMachineWithMocks(limits=BehaviorLimits(pellet_missing_time=0.1, max_pellets_per_day=2))
+    machine = BehaviorMachineWithMocks()
+    machine.algorithm.pellet_missing_time = 0.1
+    machine.algorithm.max_pellets_per_day = 2
+
     pellet_machine = machine.pellet
     algorithm = machine.algorithm
 

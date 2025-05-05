@@ -3,10 +3,8 @@ import queue
 import uuid
 from pathlib import Path
 
-from autotrainer.core import ObservableObject, SystemMessageHandler, SystemCommandKind
-from autotrainer.device import CanDevice, CAN_IDENTIFIER, MotorConfigurationFile
-from autotrainer.device import PelletDelivery
-from autotrainer.device import DeviceConnection
+from autotrainer.core import ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor
+from autotrainer.device import CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery, DeviceConnection
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
@@ -40,7 +38,7 @@ class AppModel(ObservableObject):
         self._device_connection = None
 
         self._message_handler = SystemMessageHandler(queue.Queue())
-        self._message_handler.property_changed += self.reader_property_changed
+        self._message_handler.property_changed += self._message_handler_property_changed
         self._message_handler.ack_received += self.reader_ack_received
 
         self._is_connected = False
@@ -58,6 +56,7 @@ class AppModel(ObservableObject):
         self._panel_door = None
 
         self._stimuli = None
+        self._config = None
 
         self._command_pending = False
         self._last_command = None
@@ -164,7 +163,7 @@ class AppModel(ObservableObject):
 
     @front_door.setter
     def front_door(self, value):
-        self._front_door = self._on_property_changed("front_door", value, self._front_door)
+        self._front_door = self._on_property_changed(MessageHandler.FRONT_DOOR_PROPERTY, value, self._front_door)
 
     @property
     def panel_door(self):
@@ -172,7 +171,7 @@ class AppModel(ObservableObject):
 
     @panel_door.setter
     def panel_door(self, value):
-        self._panel_door = self._on_property_changed("panel_door", value, self._panel_door)
+        self._panel_door = self._on_property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, value, self._panel_door)
 
     @property
     def stimuli(self):
@@ -180,7 +179,15 @@ class AppModel(ObservableObject):
 
     @stimuli.setter
     def stimuli(self, value):
-        self._stimuli = self._on_property_changed("stimuli", value, self._stimuli)
+        self._stimuli = self._on_property_changed(MessageHandler.STIMULI_PROPERTY, value, self._stimuli)
+
+    @property
+    def config(self):
+        return self._config
+
+    @config.setter
+    def config(self, value):
+        self._config = self._on_property_changed("config", value, self._config)
 
     def send_home(self):
         self._send_command(SystemCommandKind.SEND_HOME, context=uuid.uuid4())
@@ -205,6 +212,12 @@ class AppModel(ObservableObject):
 
     def set_z(self, value: int):
         self._send_command(SystemCommandKind.SET_Z, value, context=uuid.uuid4())
+
+    def set_config(self, config):
+        self._send_command(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
+
+    def get_config(self, motor: Motor):
+        self._send_command(SystemCommandKind.READ_MOTOR_CONFIGURATION, motor)
 
     def connect_to_device(self):
         if len(self._user_settings.port) == 0:
@@ -267,25 +280,27 @@ class AppModel(ObservableObject):
         if self._message_handler is not None:
             self._message_handler.request_terminate()
 
-    def reader_property_changed(self, name: str, value, _old_value):
-        if name == SystemMessageHandler.FIRMWARE_VERSION:
+    def _message_handler_property_changed(self, name: str, value, _old_value):
+        if name == SystemMessageHandler.FIRMWARE_VERSION_PROPERTY:
             self.firmware_version = value
-        elif name == "device_x":
+        elif name == MessageHandler.DEVICE_X_PROPERTY:
             self.x = value
-        elif name == "device_y":
+        elif name == MessageHandler.DEVICE_Y_PROPERTY:
             self.y = value
-        elif name == "device_z":
+        elif name == MessageHandler.DEVICE_Z_PROPERTY:
             self.z = value
-        elif name == "load_angle":
+        elif name == MessageHandler.LOAD_ARM_ANGLE_PROPERTY:
             self.load_arm = value
-        elif name == "cover_angle":
+        elif name == MessageHandler.COVER_ARM_ANGLE_PROPERTY:
             self.cover_arm = value
-        elif name == "front_door":
+        elif name == MessageHandler.FRONT_DOOR_PROPERTY:
             self.front_door = value
-        elif name == "panel_door":
+        elif name == MessageHandler.DRAWER_DOOR_PROPERTY:
             self.panel_door = value
-        elif name == "stimuli":
+        elif name == MessageHandler.STIMULI_PROPERTY:
             self.stimuli = value
+        elif name == "config":
+            self.config = value
 
     def reader_ack_received(self, ack):
         logger.info(f"ack context received: {ack}")

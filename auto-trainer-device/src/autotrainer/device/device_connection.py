@@ -28,7 +28,7 @@ class DeviceConnection(DeviceConnectionProtocol):
     The Device object is responsible for interpreting data from the device to message the client, and interpreting
     messages from the client to send data to the device.
 
-    The optional command and message queues are interfaces for the client script or application to exchange data with
+    The optional message queue and callback are interfaces for the client script or application to exchange data with
     the device.
 
     It is this class's responsibility to enable one- or two-way communication with the device, depending on the

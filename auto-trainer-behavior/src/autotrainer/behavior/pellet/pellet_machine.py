@@ -6,9 +6,10 @@ from transitions import Machine
 
 from autotrainer.core import EventManager, MessageHandler
 
-from ..system_machine_state import SystemState
-from ..behavior_algorithm import BehaviorAlgorithm, BehaviorLimits
+from ..behavior_algorithm import BehaviorAlgorithm
 from ..behavior_event_kind import BehaviorEventKind
+from ..pellet_device_protocol import PelletDeviceProtocol
+from ..system_machine_state import SystemState
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +48,17 @@ class PelletMachine:
          "conditions": "can_move_home"}
     ]
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None, msg_handler: MessageHandler = None, pellet_command=None):
+    def __init__(self, algorithm: BehaviorAlgorithm = None, msg_handler: MessageHandler = None,
+                 pellet_device: PelletDeviceProtocol = None):
         self.state = PelletState.covering
 
         self.machine = Machine(model=self, states=PelletMachine.states,
                                transitions=PelletMachine.transitions, auto_transitions=False,
                                initial=PelletState.monitoring, model_override=True)
 
-        self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm(BehaviorLimits())
+        # This is primarily for unit testing.  In general, algorithm should always be passed in from the parent
+        # SystemMachine.
+        self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
 
         self._algorithm.session_starting += self._session_starting
         self._algorithm.session_ending += self._session_ending
@@ -64,11 +68,9 @@ class PelletMachine:
         if self._message_handler is not None:
             self._message_handler.ack_received += self._pellet_device_ack_received
 
-        self.pellet_command = pellet_command
+        self._pellet_device = pellet_device
 
         self._api_status_token = None
-
-        self._pellet_command_trace = None
 
         self._events = Events(("pellet_loading", "pellet_sending"))
 
@@ -84,31 +86,31 @@ class PelletMachine:
         self._try_next_state()
 
     def before_move_home(self):
-        if self.pellet_command is not None:
-            self._api_status_token = self.pellet_command.send_home()
+        if self._pellet_device is not None:
+            self._api_status_token = self._pellet_device.send_home()
             EventManager.post_event(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
     def before_load_pellet(self):
-        if self.pellet_command is not None:
+        if self._pellet_device is not None:
             self.events.pellet_loading()
-            self._api_status_token = self.pellet_command.load_pellet()
+            self._api_status_token = self._pellet_device.load_pellet()
             EventManager.post_event(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
     def before_send_pellet(self):
-        if self.pellet_command is not None:
+        if self._pellet_device is not None:
             self.events.pellet_sending()
-            self._api_status_token = self.pellet_command.send_pellet()
+            self._api_status_token = self._pellet_device.send_pellet()
             EventManager.post_event(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
     def before_prerelease_pellet(self):
-        if self.pellet_command is not None:
-            self._api_status_token = self.pellet_command.release_pellet()
+        if self._pellet_device is not None:
+            self._api_status_token = self._pellet_device.release_pellet()
             EventManager.post_event(BehaviorEventKind.pelletPrereleaseBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -117,15 +119,15 @@ class PelletMachine:
         self._algorithm.pellet_loaded()
 
     def before_cover_pellet(self):
-        if self.pellet_command is not None:
-            self._api_status_token = self.pellet_command.cover_pellet()
+        if self._pellet_device is not None:
+            self._api_status_token = self._pellet_device.cover_pellet()
             EventManager.post_event(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
     def before_release_pellet(self):
-        if self.pellet_command is not None:
-            self._api_status_token = self.pellet_command.release_pellet()
+        if self._pellet_device is not None:
+            self._api_status_token = self._pellet_device.release_pellet()
             EventManager.post_event(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -187,9 +189,6 @@ class PelletMachine:
             EventManager.post_event(BehaviorEventKind.pelletExternalToken, context=token)
             logger.warning("ignoring pellet delivery token from external command")
             return
-
-        if self._pellet_command_trace is not None:
-            self._pellet_command_trace.end()
 
         EventManager.post_event(BehaviorEventKind.pelletAcknowledgeToken, context=token)
 

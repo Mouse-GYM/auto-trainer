@@ -13,7 +13,7 @@ import cv2
 import numpy
 
 from autotrainer.core import trim_queue
-from autotrainer.core.project import ProjectInfo, ProjectInterval
+from autotrainer.core import ProjectInfo, ProjectInterval
 
 logger = logging.getLogger(__name__)
 

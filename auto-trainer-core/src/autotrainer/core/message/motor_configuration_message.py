@@ -13,7 +13,8 @@ class Motor(IntEnum):
     PELLET_Y_MOTOR = 3
     PELLET_Z_MOTOR = 4
     PELLET_COVER_SERVO = 5
-    PELLET_LOAD_SERVO = 6
+    PELLET_LOAD_SERVO = 6,
+    TUNNEL_GATE_SERVO = 7
 
 
 """
@@ -108,14 +109,14 @@ class ServoConfigMessage(Protocol):
     def maximum_position(self) -> float: ...
 
     """
-    Units: usec
+    Units: µs
     """
 
     @property
     def min_pwm_duration(self) -> float: ...
 
     """
-    Units: usec
+    Units: µs
     """
 
     @property
@@ -130,6 +131,9 @@ Protocol for access to a full set of motor configurations
 class MotorConfigurations(Protocol):
     @property
     def magnet_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
+
+    @property
+    def tunnel_gate_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
 
     @property
     def load_config(self) -> Tuple[Motor, ServoConfigMessage]: ...

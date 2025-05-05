@@ -2,19 +2,19 @@ import typing
 
 from PySide6 import QtCore
 from PySide6.QtCore import QTimer, Slot
-from PySide6.QtWidgets import QGridLayout, QVBoxLayout
+from PySide6.QtWidgets import QGridLayout
 
 from autotrainer.inference import PoseResponse
 from autotrainer.pyside import ATSeparator
 
 from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.view.analysis_content import AnalysisContent
 from tools.acquisition.view.content_widget import ContentWidget
 from tools.acquisition.view.behavior_content import BehaviorContent
 from tools.acquisition.view.camera_content import CameraContent
 from tools.acquisition.view.diagnostics_content import DiagnosticsContent
-from tools.acquisition.view.pellet_delivery_content import PelletDeliveryContent
-from tools.acquisition.view.head_fix_content import HeadFixContent
-from tools.acquisition.view.output_content import OutputContent
+from tools.acquisition.view.hardware_control_content import HardwareControlContent
+from tools.acquisition.view.hardware_status_content import HardwareStatusContent
 
 
 class MainContent(ContentWidget):
@@ -39,6 +39,8 @@ class MainContent(ContentWidget):
 
         # self._layout.setColumnStretch(7, 1)
 
+        # First rows - cameras
+
         self._left_camera_content = CameraContent(self._model.left_camera)
         self._left_camera_content.camera_view.setTitle("Left Camera")
         # self._left_camera_content.camera_view.setSize(450, 300)
@@ -60,26 +62,33 @@ class MainContent(ContentWidget):
         self._layout.addWidget(self._top_camera_content, 0, 4, 1, 2)
         self._content_widgets.append(self._top_camera_content)
 
-        self._pellet_delivery_content = PelletDeliveryContent(self._model.pellet_delivery)
-        self._layout.addWidget(self._pellet_delivery_content, 3, 0, 1, 3)
-        self._content_widgets.append(self._pellet_delivery_content)
+        # Second row - behavior and analysis
 
-        analysis_content = BehaviorContent(self._model.behavior, self._model.inference)
-        self._layout.addWidget(analysis_content, 1, 0, 2, 3)
-        self._content_widgets.append(analysis_content)
+        behavior_content = BehaviorContent(self._model.behavior, self._model.inference)
+        self._layout.addWidget(behavior_content, 1, 0, 1, 3)
+        self._content_widgets.append(behavior_content)
 
-        self._head_fix_content = HeadFixContent(self._model.head_fix, self._model.message_handler)
-        self._layout.addWidget(self._head_fix_content, 1, 3, 2, 3)
-        self._content_widgets.append(self._head_fix_content)
+        self._analysis_content = AnalysisContent(self._model.hardware, self._model.analysis,
+                                                 self._model.message_handler)
+        self._layout.addWidget(self._analysis_content, 1, 3, 1, 3)
+        self._content_widgets.append(self._analysis_content)
 
-        output_content = OutputContent(self._model)
-        self._layout.addWidget(output_content, 3, 3, 1, 3)
-        self._content_widgets.append(output_content)
+        # Third row - hardware
+
+        hardware_control_content = HardwareControlContent(self._model.hardware)
+        self._layout.addWidget(hardware_control_content, 2, 0, 1, 3)
+        self._content_widgets.append(hardware_control_content)
+
+        hardware_status_content = HardwareStatusContent(self._model.message_handler)
+        self._layout.addWidget(hardware_status_content, 2, 3, 1, 3)
+        self._content_widgets.append(hardware_status_content)
+
+        # Optional fourth row - diagnostics
 
         self._diagnostics = DiagnosticsContent(self._model)
         self._layout.addWidget(self._diagnostics, 4, 0, 1, 6)
 
-        self._layout.setRowStretch(4, 1)
+        self._layout.setRowStretch(1, 1)
 
         self._layout.addWidget(ATSeparator("#b9b9b9"), 5, 0, 1, 8)
 
@@ -107,7 +116,7 @@ class MainContent(ContentWidget):
             self._right_camera_content.update_image()
         if self._model.top_camera.is_enabled:
             self._top_camera_content.update_image()
-        self._head_fix_content.use_cache()
+        self._analysis_content.use_cache()
 
     def refresh_pose(self, response: PoseResponse):
         if self._model.left_camera.is_enabled:

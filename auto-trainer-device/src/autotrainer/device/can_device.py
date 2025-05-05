@@ -69,6 +69,8 @@ class CanDevice(Device):
         self._send_pellet = default_send_pellet()
         self._cover_pellet = default_cover_pellet()
         self._release_pellet = default_release_pellet()
+        self._open_tunnel_gate = None
+        self._close_tunnel_gate = None
         self._compound_movement = None  # Current compound movement
 
         # Initialize command handlers lookup table
@@ -128,11 +130,17 @@ class CanDevice(Device):
             SystemCommandKind.COVER_PELLET:
                 lambda data: self._start_sequence(self._cover_pellet),
 
+            SystemCommandKind.OPEN_TUNNEL_GATE:
+                lambda data: self._start_sequence(self._open_tunnel_gate),
+
+            SystemCommandKind.CLOSE_TUNNEL_GATE:
+                lambda data: self._start_sequence(self._close_tunnel_gate),
+
             SystemCommandKind.DELAY:
                 lambda data: self._interface.delay(data),
 
             SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
-                self._handle_write_motor_configuration,
+                lambda data: self._handle_write_motor_configuration(data),
 
             SystemCommandKind.SET_LOAD_PELLET_PROCEDURE:
                 lambda data: (
@@ -431,7 +439,7 @@ class CanDevice(Device):
             self._homing_motors.pop(0)
             self._home(self._homing_motors)
         elif self._compound_movement is not None and \
-            len(self._compound_movement) > 0:
+                len(self._compound_movement) > 0:
             step = self._compound_movement.pop(0)
 
             if "x" in step:
