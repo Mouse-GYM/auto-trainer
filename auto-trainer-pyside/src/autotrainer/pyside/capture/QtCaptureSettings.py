@@ -2,7 +2,12 @@ from PySide6 import QtCore
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QComboBox, QHBoxLayout, QLineEdit
 
+
+from autotrainer.core.logging import getVerboseLogger
 from autotrainer.pyside.QtLabeledSwitch import QLabeledSwitch
+
+
+logger = getVerboseLogger(__name__)
 
 
 class QCaptureSettings(QWidget):
@@ -84,7 +89,7 @@ class QCaptureSettings(QWidget):
     def imageCaptureInterval(self) -> float:
         try:
             return float(self._stillImageCaptureInterval.text())
-        except:
+        except (ValueError, TypeError):
             pass
 
         return 0.0
@@ -130,5 +135,5 @@ class QCaptureSettings(QWidget):
         try:
             interval = float(value)
             self.image_capture_interval_changed.emit(interval)
-        except:
-            pass
+        except Exception as err:
+            logger.warning("Cannot process image capture interval for %r: %s", value, err)

@@ -33,8 +33,8 @@ class AnimalSubject:
                     animal.pellet_x = data["pellet_x"]
                     animal.pellet_y = data["pellet_y"]
                     animal.pellet_z = data["pellet_z"]
-            except:
-                logger.error(f"Error loading animal subject from {file_path}")
+            except Exception as err:
+                logger.error("Error loading animal subject from %s: %s", file_path, err)
                 return None
 
         return animal

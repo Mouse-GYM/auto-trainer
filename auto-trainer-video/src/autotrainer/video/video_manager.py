@@ -4,9 +4,13 @@ from urllib.parse import urlparse
 
 import cv2
 
+from autotrainer.core.logging import getVerboseLogger
+
 from .camera.random_cam import RandomCam
 from .camera.playback_cam import PlaybackCam
 from .camera.opencv_cam import OpenCVCam
+
+logger = getVerboseLogger(__name__)
 
 _have_spin_cam = False
 
@@ -15,8 +19,8 @@ if sys.version_info.major == 3 and sys.version_info.minor == 8 and not sys.platf
         from .camera.spinnaker_cam import SpinCam
 
         _have_spin_cam = True
-    except:
-        pass
+    except Exception as err:
+        logger.warning("Cannot import SpinCam: %s", err)
 
 
 class CameraKind(str, Enum):

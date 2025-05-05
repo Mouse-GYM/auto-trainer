@@ -6,6 +6,7 @@ Created on Mon Sep 16 17:29:00 2024
 @author: agx001
 """
 
+import logging
 import os
 import pickle
 from pathlib import Path
@@ -15,6 +16,13 @@ from sklearn.decomposition import PCA
 import shutil
 import yaml
 import math
+
+
+from autotrainer.core.logging import getVerboseLogger
+
+
+logger = getVerboseLogger(__name__)
+
 
 def make_new_calibration(square_size, row_ct, col_ct, parent_dir):
     """
@@ -500,8 +508,8 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
                     try:
                         corrected_c = refine_corners(gray, corners[c,0,:], window_size)
                         corrected_points.append([corrected_c])  # Maintain (1, 2) shape for each point
-                    except:
-                        print(f"Index {index} - c {c}")
+                    except Exception as err:
+                        logger.warning(f"Index {index} - c {c} err=%s", err)
                         keep_test = False
                 if keep_test:
                     # Convert corrected_points to a numpy array with shape (30, 1, 2)
