@@ -4,7 +4,7 @@ from datetime import datetime
 
 from typing_extensions import Self
 
-from autotrainer.core import ObservableObject, EventManager, TriggerManager, CAPTURE_TRIGGER_ID, BehaviorConfiguration
+from autotrainer.core import ObservableObject, EventManager, BehaviorConfiguration, post_trigger_enable
 
 from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
@@ -188,7 +188,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._session_mouse_seen = False
         self._pellet_seen = False
 
-        TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, True)
+        post_trigger_enable(self, True)
 
         self.session_starting()
 
@@ -197,7 +197,7 @@ class BehaviorAlgorithm(ObservableObject):
     def end_session(self):
         if self._is_in_session:
             EventManager.post_event(BehaviorEventKind.sessionEnding)
-            TriggerManager.instance().trigger(self, CAPTURE_TRIGGER_ID, False)
+            post_trigger_enable(self, False)
             self._is_in_session = False
             self.session_ending()
             EventManager.post_event(BehaviorEventKind.sessionEnded)
