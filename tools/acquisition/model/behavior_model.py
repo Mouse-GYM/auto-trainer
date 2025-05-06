@@ -19,6 +19,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         self._project: Optional[ProjectInfo] = None
 
         self._machine.algorithm.property_changed += self._on_algorithm_property_changed
+        self._machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
+            "pellet.state", new_val, old_val)
 
         self._is_intersession_enabled = self._machine.algorithm.intersession_enabled
 

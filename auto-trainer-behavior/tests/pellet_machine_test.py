@@ -4,7 +4,7 @@ from datetime import datetime
 
 from autotrainer.behavior import PelletState
 
-from mocks import BehaviorMachineWithMocks
+from .mocks import BehaviorMachineWithMocks
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('transitions').setLevel(logging.INFO)

@@ -4,8 +4,11 @@ would/should happen due to external input (devices, pose information) are tested
 mocks or real interfaces.
 """
 import logging
+from functools import partial
 
 from autotrainer.behavior import PelletMachine, PelletState
+from .conftest import on_state_changed
+
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('transitions').setLevel(logging.INFO)
@@ -88,13 +91,23 @@ def test_covered_load_cycle():
 def test_covered_disabled_load_cycle():
     machine = PelletMachine()
 
+    state_transitions = []
+
+    machine.events.state_changed += partial(on_state_changed, state_transitions=state_transitions)
+
     machine.algorithm.pellet_cover_enabled = False
 
     # With covering disabled, should go directly to release whether in session or not (i.e., in tunnel or not)
     assert_load_cycle(machine, should_release=True)
+    assert state_transitions == [
+        PelletState.loading,
+        PelletState.sending,
+        PelletState.covering,
+        PelletState.releasing,
+        PelletState.monitoring,
+    ]
 
 
 if __name__ == '__main__':
     test_covered_load_cycle()
-
     test_covered_disabled_load_cycle()

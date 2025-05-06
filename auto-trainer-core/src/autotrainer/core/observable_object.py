@@ -19,6 +19,10 @@ class ObservableObject(Events):
     def __init__(self, event_names=()):
         super().__init__(event_names + ("property_changed",))
 
+    # def __bool__(self):
+    #     # NB: used to bypass if model: in Machine.__init__
+    #     return True
+
     def _on_property_changed(self, property_name: str, new_value, old_value):
         """Will only generate an event if the new value does not pass the == test with the old value."""
         if old_value == new_value:
