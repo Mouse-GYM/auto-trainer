@@ -43,7 +43,7 @@ class AppModel(ObservableObject):
         self._right_camera = VideoCaptureModel("right", self._preferences, 1)
         self._top_camera = VideoCaptureModel("web", self._preferences, -1)
 
-        self._cameras = list([self._left_camera, self._right_camera, self._top_camera])
+        self._cameras = [self._left_camera, self._right_camera, self._top_camera]
 
         self._message_queue = queue.Queue()
         self._message_handler = SystemMessageHandler(self._message_queue)
