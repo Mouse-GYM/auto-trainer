@@ -100,7 +100,7 @@ class MainWindow(QMainWindow):
             self.run_action.setEnabled(True)
 
     def on_activated(self):
-        EventManager.create()
+        EventManager.default()
         self.main_content.on_activated()
 
     def closeEvent(self, event):

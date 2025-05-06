@@ -345,7 +345,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 if capture_2 is None:
                     capture_2 = check_frame_count(path_2)
                 if time.time() > timeout:
-                    EventManager.post_event(BehaviorEventKind.intersessionSegmentationInputError)
+                    EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationInputError)
                     logger.error("timeout waiting for intersession video files")
                     break
 
@@ -365,7 +365,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
         except Exception as ex:
             logger.error(ex)
-            EventManager.post_event(BehaviorEventKind.intersessionSegmentationError, context=str(ex))
+            EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError, context=str(ex))
             self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
             self._intersession_block.configuration.complete(self._intersession_block.configuration.nonce, False)
             self._intersession_block = None
