@@ -344,10 +344,10 @@ def run_monitor():
 
                 elif cmd == 'f' or cmd == 'file':
                     if params[0] == 'motor':
-                        file = MotorConfigurationFile(params[1])
+                        file = MotorConfigurationFile.from_file(params[1])
                         device_thread.use_motor_configurations(file)
                     elif params[0] == 'move':
-                        file = CompoundMovementFile(params[1])
+                        file = CompoundMovementFile.from_file(params[1])
                         device_thread.use_compound_movements(file)
                     else:
                         print(f"Unknown file request: {params[0]}")
