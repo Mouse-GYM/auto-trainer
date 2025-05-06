@@ -52,6 +52,9 @@ class BehaviorAlgorithm(ObservableObject):
         self.max_pellets_per_day: int = 50
         self.pellet_missing_time: float = 1.0
 
+        self._pellets_presented: int = 0
+        self._successful_reaches: int = 0
+
     @property
     def limits(self) -> Self:
         return self
@@ -166,17 +169,43 @@ class BehaviorAlgorithm(ObservableObject):
     def day_pellet_count(self):
         return self._day_pellet_count
 
+    @day_pellet_count.setter
+    def day_pellet_count(self, value):
+        self._day_pellet_count = value
+
     @property
     def session_pellet_count(self):
         return self._session_pellet_count
+
+    @session_pellet_count.setter
+    def session_pellet_count(self, value):
+        self._session_pellet_count = value
 
     @property
     def session_mouse_seen(self):
         return self._session_mouse_seen
 
+    @property
+    def pellets_presented(self):
+        return self._pellets_presented
+
+    @pellets_presented.setter
+    def pellets_presented(self, value):
+        self._pellets_presented = value
+
+    @property
+    def successful_reaches(self):
+        return self._successful_reaches
+
+    @successful_reaches.setter
+    def successful_reaches(self, value):
+        self._successful_reaches = value
+
     def start_session(self):
         if self._is_in_session:
             return
+
+        self._session_pellet_count = 0
 
         EventManager.post_event(BehaviorEventKind.sessionStarting)
 

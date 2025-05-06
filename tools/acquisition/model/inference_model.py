@@ -51,7 +51,10 @@ class IntersessionDetection:
 
 class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol):
     def __init__(self, pose_algorithm: PoseAlgorithm):
-        super().__init__(event_names=("pose_response_ready",))
+        super().__init__(event_names=(
+            'pose_response_ready',
+            'detection_result_ready',
+        ))
 
         self._data_queue = Queue()
         self._cmd_queue = Queue()
@@ -59,7 +62,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
         self._offline_queue: Optional[FixedArrayMultiQueue] = None
 
-        self._offline_thread = None
+        self._offline_thread: Optional[Thread] = None
 
         self._is_enabled = False
         self._model_location = ""
@@ -147,6 +150,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
     def perform_detection(self, configuration: DetectionConfiguration):
         logger.info("performing detection analysis")
+        cur_off = self._offline_thread
+        if cur_off is not None and cur_off.is_alive():
+            # protection, if we need more than 1 executing thread at the same time then we need a list to retain the
+            # threads instead of only one of them.
+            cur_off.join()
         self._intersession_detection = IntersessionDetection(configuration)
         self._offline_thread = Thread(target=self._intersession_process)
         self._offline_thread.start()
@@ -377,10 +385,14 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
     def _intersession_process(self):
         try:
-            intersession_process(self._project)
-            self._intersession_detection.configuration.complete(self._intersession_detection.configuration.nonce, True)
-        except Exception as ex:
-            logger.error(ex)
-            self._intersession_detection.configuration.complete(self._intersession_detection.configuration.nonce, False)
+            result = intersession_process(self._project)
+        except Exception as err:
+            logger.error("Error processing intersession: %s", err)
+            processed_ok = False
+        else:
+            processed_ok = True
+            self.detection_result_ready(result)
 
+        self._intersession_detection.configuration.complete(self._intersession_detection.configuration.nonce,
+                                                            processed_ok)
         self._intersession_block = None

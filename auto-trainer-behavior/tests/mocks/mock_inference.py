@@ -10,7 +10,7 @@ class MockInference(ObservableObject):
     Provides pose algorithm events for testing.
     """
     def __init__(self):
-        super().__init__(event_names=("pose_changed",))
+        super().__init__(event_names=('pose_changed', 'detection_result_ready'))
 
         self.segmentation_configuration : Optional[SegmentationConfiguration] = None
         self.detection_configuration: Optional[DetectionConfiguration] = None

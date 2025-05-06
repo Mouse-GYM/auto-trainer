@@ -1,11 +1,15 @@
+import logging
 from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional
 
-from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject
+from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.device import DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice, \
     HeadFix, PelletDelivery
+
+
+logger = logging.getLogger(__name__)
 
 
 class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol):
@@ -70,13 +74,22 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def tare_load_cell(self) -> Optional[UUID]:
         return self._send_with_token(self._tunnel_device, SystemCommandKind.UPDATE_SCALE_TARE)
 
-    def set_x(self, value: int) -> Optional[UUID]:
+    def set_x(self, value: int, *, absolute: bool=True) -> Optional[UUID]:
+        if not absolute:
+            logger.warning("relative set_x|y|z not yet supported, operation skipped")
+            return None
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_X, value)
 
-    def set_y(self, value: int) -> Optional[UUID]:
+    def set_y(self, value: int, *, absolute: bool=True) -> Optional[UUID]:
+        if not absolute:
+            logger.warning("relative set_x|y|z not yet supported, operation skipped")
+            return None
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Y, value)
 
-    def set_z(self, value: int) -> Optional[UUID]:
+    def set_z(self, value: int, *, absolute: bool=True) -> Optional[UUID]:
+        if not absolute:
+            logger.warning("relative set_x|y|z not yet supported, operation skipped")
+            return None
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Z, value)
 
     def send_home(self) -> Optional[UUID]:
@@ -169,7 +182,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def _send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         token = uuid4()
-
         if self._send_command(device, cmd, data, token):
             return token
         else:
