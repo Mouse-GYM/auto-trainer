@@ -104,19 +104,19 @@ class PelletControl(QWidget):
         s_layout = QHBoxLayout()
         s_layout.setContentsMargins(2, 2, 2, 2)
 
-        p_layout, self._x_pos = add_position("X (mm):", -10, 10)
+        p_layout, self._x_pos = add_position("X (mm):", 0, 35)
         self._x_pos.valueChanged.connect(self._update_x)
         s_layout.addLayout(p_layout)
 
         s_layout.addStretch(1)
 
-        p_layout, self._y_pos = add_position("Y (mm):", -10, 10)
+        p_layout, self._y_pos = add_position("Y (mm):", 0, 35)
         self._y_pos.valueChanged.connect(self._update_y)
         s_layout.addLayout(p_layout)
 
         s_layout.addStretch(1)
 
-        p_layout, self._z_pos = add_position("Z (mm):", -10, 10)
+        p_layout, self._z_pos = add_position("Z (mm):", 0, 35)
         self._z_pos.valueChanged.connect(self._update_z)
         s_layout.addLayout(p_layout)
 
