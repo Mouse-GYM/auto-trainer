@@ -2,7 +2,7 @@ import logging
 from functools import partial
 
 from autotrainer.behavior import SystemState, PelletState
-from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID
+from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
 from .mocks import BehaviorMachineWithMocks
 from .conftest import on_state_changed
@@ -16,11 +16,11 @@ def test_enter_exit_tunnel():
     # Observe for video capture being triggered.
     is_capture_triggered = False
 
-    def set_capture_triggered(_sender, _id, b: bool):
+    def set_capture_triggered(notification: Notification):
         nonlocal is_capture_triggered
-        is_capture_triggered = b
+        is_capture_triggered = notification.context
 
-    TriggerManager.instance().register(set_capture_triggered, CAPTURE_TRIGGER_ID)
+    NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, set_capture_triggered)
 
     machine = BehaviorMachineWithMocks()
 

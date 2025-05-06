@@ -5,7 +5,7 @@ from numpy import ndarray
 from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QGridLayout
 
-from autotrainer.core import TriggerManager, CAPTURE_TRIGGER_ID
+from autotrainer.core import NotificationCenter, TriggerNotification, Notification
 from autotrainer.inference import PoseTuple
 from autotrainer.pyside.capture.QtCaptureView import image_data
 from autotrainer.video import VideoRecordMode
@@ -47,7 +47,7 @@ class CameraContent(ContentWidget):
 
         self.setLayout(layout)
 
-        TriggerManager.instance().register(self._trigger_received, CAPTURE_TRIGGER_ID)
+        NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
         self._model.property_changed += self._model_property_changed
 
@@ -94,9 +94,9 @@ class CameraContent(ContentWidget):
     def _still_image_capture_interval_changed(self, interval: float):
         self._model.still_image_capture_interval = interval
 
-    def _trigger_received(self, _, __, context):
+    def _trigger_received(self, notification: Notification):
         if self._model.is_enabled and self._model.record_mode == VideoRecordMode.TRIGGER:
-            self._capture_view.recording_indicator_changed.emit(context)
+            self._capture_view.recording_indicator_changed.emit(notification.context)
 
     def _model_property_changed(self, name, value, _):
         if name == "camera":

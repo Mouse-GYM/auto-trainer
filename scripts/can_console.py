@@ -344,10 +344,10 @@ def run_monitor():
 
                 elif cmd == 'f' or cmd == 'file':
                     if params[0] == 'motor':
-                        file = MotorConfigurationFile(params[1])
+                        file = MotorConfigurationFile.from_file(params[1])
                         device_thread.use_motor_configurations(file)
                     elif params[0] == 'move':
-                        file = CompoundMovementFile(params[1])
+                        file = CompoundMovementFile.from_file(params[1])
                         device_thread.use_compound_movements(file)
                     else:
                         print(f"Unknown file request: {params[0]}")
@@ -524,7 +524,7 @@ def print_help():
     print("<motor> [set] <pos> [<rate>]       "
           " ::Move servo pos [0:120] (deg) rate [0:100] (%)\n"
           "                                   "
-          " ::Move stepper pos [0:27] (mm) rate [0:100] (%)")
+          " ::Move stepper pos [0:35] (mm) rate [0:100] (%)")
     print("<motor> step <start> <end> <step>"
           " ::Step degrees or mms at a time")
     print("<motor> config read                "
