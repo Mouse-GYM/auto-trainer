@@ -778,8 +778,8 @@ class CanInterface(DeviceInterface):
 
         if position < 0:
             position = 0
-        elif position > 12:
-            position = 12
+        elif position > 15:
+            position = 15
 
         addr = self._tgt2addr(target_of_motor(motor))
         return addr is not None and self._jc.StepperMove(addr, _motor_to_id(motor),
@@ -1100,7 +1100,7 @@ class CanInterface(DeviceInterface):
                                                             CanInterface.next_uuid()) == 0
 
     def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> (
-        bool):
+            bool):
         """
         Set the colors of a 3-color LED.
 
@@ -1218,7 +1218,7 @@ class CanInterface(DeviceInterface):
         return None
 
     def _translate_config(self, message) -> \
-        typing.Optional[typing.Union[ServoConfig, StepperConfig]]:
+            typing.Optional[typing.Union[ServoConfig, StepperConfig]]:
         """
         Translate configuration response messages for servo or stepper motors.
 
@@ -1367,7 +1367,7 @@ class CanInterface(DeviceInterface):
         """
         a = None
         if (len(self._audio.magnitudes) == 32 and
-            message.audio_data_cmd.stream_id == self._audio.packet_id):
+                message.audio_data_cmd.stream_id == self._audio.packet_id):
             a = AudioData()
             a.magnitudes = self._audio.magnitudes.copy()
             a.packet_id = self._audio.packet_id
