@@ -140,7 +140,9 @@ class BehaviorAlgorithm(ObservableObject):
     def baseline_intensity(self, value):
         self._baseline_intensity = self._on_property_changed(BehaviorProps.BASELINE_INTENSITY,
                                                              value, self._baseline_intensity)
-        EventManager.post_event(BehaviorEventKind.headfixBaselineChanged, context=value)
+        self._baseline_intensity = self._on_property_changed(BehaviorProps.BASELINE_INTENSITY, value,
+                                                             self._baseline_intensity)
+        EventManager.default().post_event_content(BehaviorEventKind.headfixBaselineChanged, context=value)
 
     @property
     def auto_clamp_intensity(self):
@@ -150,7 +152,7 @@ class BehaviorAlgorithm(ObservableObject):
     def auto_clamp_intensity(self, value):
         self._auto_clamp_intensity = self._on_property_changed(BehaviorProps.AUTO_CLAMP_INTENSITY,
                                                                value, self._auto_clamp_intensity)
-        EventManager.post_event(BehaviorEventKind.autoClampIntensityChanged, context=value)
+        EventManager.default().post_event_content(BehaviorEventKind.autoClampIntensityChanged, context=value)
 
     @property
     def auto_clamp_release_tone_freq(self):
@@ -161,7 +163,7 @@ class BehaviorAlgorithm(ObservableObject):
     def auto_clamp_release_tone_freq(self, value):
         self._auto_clamp_release_tone_freq = self._on_property_changed("auto_clamp_release_tone_freq", value,
                                                                        self._auto_clamp_release_tone_freq)
-        EventManager.post_event(BehaviorEventKind.autoClampReleaseToneFreqChanged, context=value)
+        EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseToneFreqChanged, context=value)
 
     @property
     def auto_clamp_release_delay(self):
@@ -171,7 +173,7 @@ class BehaviorAlgorithm(ObservableObject):
     def auto_clamp_release_delay(self, value):
         self._auto_clamp_release_delay = self._on_property_changed("auto_clamp_release_delay", value,
                                                                    self._auto_clamp_release_delay)
-        EventManager.post_event(BehaviorEventKind.autoClampReleaseDelayChanged, context=value)
+        EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseDelayChanged, context=value)
 
     @property
     def pellet_last_seen(self) -> float:
@@ -244,7 +246,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._session_pellet_count = 0
 
-        EventManager.post_event(BehaviorEventKind.sessionStarting)
+        EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
 
         if self._project_info is not None:
             self._project_info.calculate_next_session_index()
@@ -258,16 +260,16 @@ class BehaviorAlgorithm(ObservableObject):
 
         self.session_starting()
 
-        EventManager.post_event(BehaviorEventKind.sessionStarted)
+        EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
 
     def end_session(self):
         if self._is_in_session:
-            EventManager.post_event(BehaviorEventKind.sessionEnding)
+            EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
             post_trigger_enable(self, False)
             self._is_in_session = False
             self.session_ending()
-            EventManager.post_event(BehaviorEventKind.sessionEnded)
-            EventManager.flush()
+            EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
+            EventManager.default().flush()
 
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0
@@ -295,7 +297,7 @@ class BehaviorAlgorithm(ObservableObject):
     def pellet_seen(self, seen: bool = True):
         if self._pellet_seen != seen:
             self._pellet_seen = seen
-            EventManager.post_event(BehaviorEventKind.pelletSeen, context=seen)
+            EventManager.default().post_event_content(BehaviorEventKind.pelletSeen, context=seen)
 
         if seen:
             self._set_pellet_last_seen(time.time())
@@ -308,7 +310,7 @@ class BehaviorAlgorithm(ObservableObject):
             was_seen = self._session_mouse_seen
             self._session_mouse_seen = self._on_property_changed("session_mouse_seen", seen, self._session_mouse_seen)
             if not was_seen:
-                EventManager.post_event(BehaviorEventKind.sessionMouseSeen)
+                EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
 
     def load_configuration(self, configuration: BehaviorConfiguration):
         self.pellet_delivery_enabled = configuration.pellet_delivery.is_enabled
@@ -346,6 +348,6 @@ class BehaviorAlgorithm(ObservableObject):
     def _check_date(self):
         today = datetime.now().date()
         if today != self._today:
-            EventManager.post_event(BehaviorEventKind.dayStarted)
+            EventManager.default().post_event_content(BehaviorEventKind.dayStarted)
             self._today = today
             self._start_day()

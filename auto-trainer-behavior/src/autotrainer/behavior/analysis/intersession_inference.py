@@ -22,7 +22,7 @@ def intersession_inference(pose_data: ndarray, part_names: typing.List[str], pro
     """
     try:
         shape = pose_data.shape
-        EventManager.post_event(BehaviorEventKind.intersessionSegmentationSave, context=f"{shape}")
+        EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationSave, context=f"{shape}")
         axis_labels = ("x", "y", "p")
         columns = pandas.MultiIndex.from_product([part_names, axis_labels], names=["bodyparts", "coords"])
 
@@ -39,4 +39,4 @@ def intersession_inference(pose_data: ndarray, part_names: typing.List[str], pro
                       mode="w")
     except Exception as e:
         logger.error(f"intersession pellet failed: {e}")
-        EventManager.post_event(BehaviorEventKind.intersessionSegmentationSaveError)
+        EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationSaveError)
