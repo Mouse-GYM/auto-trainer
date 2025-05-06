@@ -9,9 +9,9 @@ from pathlib import Path
 
 import yaml
 
-from autotrainer.core import (ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID, EventManager, SystemMessageHandler,
-                              MessageHandler, SystemConfiguration, CameraId, PersistenceConfiguration,
-                              HardwareConfiguration, get_system_configuration_dumper)
+from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, MessageHandler, SystemConfiguration,
+                              CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
+                              get_system_configuration_dumper, NotificationCenter, TriggerNotification)
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
@@ -79,7 +79,7 @@ class AppModel(ObservableObject):
 
         self._selected_animal: typing.Optional[AnimalSubject] = None
 
-        TriggerManager.instance().register(self._trigger_received, CAPTURE_TRIGGER_ID)
+        NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
         self._message_handler.property_changed += self._on_message_handler_property_changed
 
@@ -394,10 +394,10 @@ class AppModel(ObservableObject):
 
         self.animals = animals
 
-    def _trigger_received(self, _sender, _trigger_id, value):
-        self._is_recording_trigger = value
+    def _trigger_received(self, notification: Notification):
+        self._is_recording_trigger = notification.context
 
-        if value and self._project_info is not None:
+        if notification.context and self._project_info is not None:
             self._save_metadata(self._project_info.get_metadata_file(-1), self._project_info.session.value)
 
     def _on_behavior_property_changed(self, name: str, value, _):
