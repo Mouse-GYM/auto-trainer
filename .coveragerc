@@ -1,0 +1,15 @@
+[run]
+omit =
+    # not yet sure where these are coming, but coverage get a ref. to these, which are non-existent here:
+	config-3.py
+	config.py
+	shibokensupport/*
+	signature_bootstrap.py
+
+[report]
+show_missing = True
+omit =
+    config-3.py
+    config.py
+    shibokensupport/*
+    signature_bootstrap.py
