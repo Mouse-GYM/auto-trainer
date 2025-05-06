@@ -1,4 +1,4 @@
-"""
+    """
 Interface to the CANbus protocol to the device.
 
 The interface to the CANbus is via a C++ library which provides high-level
@@ -778,8 +778,8 @@ class CanInterface(DeviceInterface):
 
         if position < 0:
             position = 0
-        elif position > 12:
-            position = 12
+        elif position > 15:
+            position = 15
 
         addr = self._tgt2addr(target_of_motor(motor))
         return addr is not None and self._jc.StepperMove(addr, _motor_to_id(motor),
