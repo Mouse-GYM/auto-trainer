@@ -439,53 +439,66 @@ class CanDevice(Device):
             self._homing_motors.pop(0)
             self._home(self._homing_motors)
         elif self._compound_movement is not None and \
-                len(self._compound_movement) > 0:
+            len(self._compound_movement) > 0:
             step = self._compound_movement.pop(0)
 
             if "x" in step:
                 location = step["x"]
                 self._interface.set_x(location)
+                logger.debug(f"X to {location}")
 
             elif "y" in step:
                 location = step["y"]
                 self._interface.set_y(location)
+                logger.debug(f"Y to {location}")
 
             elif "z" in step:
                 location = step["z"]
                 self._interface.set_z(location)
+                logger.debug(f"Z to {location}")
 
             elif "load_arm" in step:
                 location = step["load_arm"]
                 self._interface.set_load_servo(location)
+                logger.debug(f"Load Arm to {location}")
 
             elif "barrier_arm" in step:
                 location = step["barrier_arm"]
                 self._interface.set_cover_servo(location)
+                logger.debug(f"Barrier Arm to {location}")
 
             elif "magnet" in step:
                 location = step["magnet"]
                 self._interface.set_magnet(location)
+                logger.debug(f"Magnet to {location}")
 
             elif "delay" in step:
-                logger.debug("delay start")
-                self._interface.delay(step["delay"])
+                duration = step["delay"]
+                self._interface.delay(duration)
+                logger.debug(f"delay for {duration}")
 
             elif "tone" in step:
                 freq, duration = step["tone"].split(',')  # (hz), (sec)
                 self._interface.emit_tone(int(freq), int(float(duration) * 1000))
+                logger.debug(f"Emit Tone at {freq} for {duration}")
 
             elif "predefined" in step:
                 predefined = step["predefined"]
                 if predefined == "send":
                     self._interface.fixed_position()
+                    logger.debug("Predefined Send")
                 elif predefined == "cover":
                     self._interface.cover_pellet()
+                    logger.debug("Predefined Cover (maximum)")
                 elif predefined == "release":
                     self._interface.release_pellet()
+                    logger.debug("Predefined Release (minimum)")
                 elif predefined == "retrieve":
                     self._interface.retrieve_pellet()
+                    logger.debug("Predefined Retrieve (maximum)")
                 elif predefined == "scoop":
                     self._interface.scoop_pellet()
+                    logger.debug("Predefined Scoop (minimum)")
                 elif predefined == "home":
                     self._home([Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR])
         else:
