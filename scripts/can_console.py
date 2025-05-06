@@ -524,7 +524,7 @@ def print_help():
     print("<motor> [set] <pos> [<rate>]       "
           " ::Move servo pos [0:120] (deg) rate [0:100] (%)\n"
           "                                   "
-          " ::Move stepper pos [0:27] (mm) rate [0:100] (%)")
+          " ::Move stepper pos [0:35] (mm) rate [0:100] (%)")
     print("<motor> step <start> <end> <step>"
           " ::Step degrees or mms at a time")
     print("<motor> config read                "
