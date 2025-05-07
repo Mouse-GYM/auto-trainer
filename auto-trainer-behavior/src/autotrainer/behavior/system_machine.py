@@ -1,4 +1,5 @@
 import logging
+from enum import Enum
 from threading import Timer
 
 from transitions import Machine
@@ -22,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 class SystemMachine(StateMachine):
     states = [e for e in SystemState]
+
+    class Properties(str, Enum):
+        pass
 
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,

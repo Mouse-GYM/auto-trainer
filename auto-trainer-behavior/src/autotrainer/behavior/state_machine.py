@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Tuple
 
 from events import Events
@@ -7,6 +8,9 @@ from autotrainer.core import MessageHandler
 
 class StateMachine:
     """Generic state machine/object mixin, with events handling"""
+
+    class Properties(str, Enum):
+        STATE_PROPERTY = "state"
 
     def __init__(self, *, initial_state, event_names: Tuple[str, ...] = ()):
         super().__init__()
@@ -27,4 +31,4 @@ class StateMachine:
             return
         old_value, self._state = self._state, new_value
         self._events.state_changed(old_value, new_value)
-        self._events.property_changed(MessageHandler.STATE_PROPERTY, new_value, old_value)
+        self._events.property_changed(StateMachine.Properties.STATE_PROPERTY, new_value, old_value)
