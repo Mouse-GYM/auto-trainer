@@ -256,6 +256,14 @@ class MainContent(QWidget):
         self._audio_spectrum_plot, widget = self._create_plot_widget("Audio Spectrum (dB)")
         assert isinstance(self._audio_spectrum_plot, PGWidget)
         self._audio_spectrum_plot.setXRange(min=0, max=64)
+        step = 15000
+        ticks = []
+        for i in range(0, 64, 8):  # Step through indices
+            ticks.append((i, str(i * 1500)))  # Map index to actual x value
+
+        # Set the custom ticks
+        ax = self._audio_spectrum_plot.getAxis('bottom')
+        ax.setTicks([ticks])
 
         plot_layout.addWidget(widget, 2, 1)
 
