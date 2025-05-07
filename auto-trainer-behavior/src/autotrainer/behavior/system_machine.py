@@ -262,7 +262,7 @@ class SystemMachine:
         if dev is not None:
             for val, meth in ((res.pellet_x, dev.set_x), (res.pellet_y, dev.set_y), (res.pellet_z, dev.set_z)):
                 if val != 0:
-                    meth(val)
+                    meth(val, absolute=False)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

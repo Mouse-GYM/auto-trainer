@@ -15,6 +15,7 @@ available_XYZ = numpy.array([[-5, 5], [-5, 5], [-5, 5]])
 
 @dataclass
 class IntersessionResponse:
+    # NB: all 3 x/y/z are relative values here:
     pellet_x: int = 0
     pellet_y: int = 0
     pellet_z: int = 0
