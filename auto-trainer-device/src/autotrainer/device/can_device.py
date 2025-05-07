@@ -85,35 +85,35 @@ class CanDevice(Device):
                 lambda data: self._interface.set_magnet(int(data)),
 
             SystemCommandKind.SET_LOAD_SERVO:
-                lambda data: self._interface.set_load_servo(int(data)),
+                lambda data: self._interface.set_load_servo(data),
 
             SystemCommandKind.SET_COVER_SERVO:
-                lambda data: self._interface.set_cover_servo(int(data)),
+                lambda data: self._interface.set_cover_servo(data),
 
             SystemCommandKind.SET_X:
-                lambda data: self._interface.set_x(float(data), True),
+                lambda data: self._interface.set_x(data, True),
 
             SystemCommandKind.SET_Y:
-                lambda data: self._interface.set_y(float(data), True),
+                lambda data: self._interface.set_y(data, True),
 
             SystemCommandKind.SET_Z:
-                lambda data: self._interface.set_z(float(data), True),
+                lambda data: self._interface.set_z(data, True),
 
             SystemCommandKind.MOVE_X:
-                lambda data: self._interface.set_x(float(data), False),
+                lambda data: self._interface.set_x(data, False),
 
             SystemCommandKind.MOVE_Y:
-                lambda data: self._interface.set_y(float(data), False),
+                lambda data: self._interface.set_y(data, False),
 
             SystemCommandKind.MOVE_Z:
-                lambda data: self._interface.set_z(float(data), False),
+                lambda data: self._interface.set_z(data, False),
 
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._home([cast(Motor, data)]),
 
             SystemCommandKind.SEND_HOME:
                 lambda data: self._home(
-                    [Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR]),
+                    [Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]),
 
             SystemCommandKind.SEND_FIXED_XYZ:
                 lambda data: self._interface.fixed_position(),
@@ -500,7 +500,7 @@ class CanDevice(Device):
                     self._interface.scoop_pellet()
                     logger.debug("Predefined Scoop (minimum)")
                 elif predefined == "home":
-                    self._home([Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR])
+                    self._home([Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
         else:
             self._command_complete()
             self._compound_movement = None

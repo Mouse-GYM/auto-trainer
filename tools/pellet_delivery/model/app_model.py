@@ -219,6 +219,11 @@ class AppModel(ObservableObject):
     def get_config(self, motor: Motor):
         self._send_command(SystemCommandKind.READ_MOTOR_CONFIGURATION, motor)
 
+    def load_move_file(self, filename: str):
+        if self._device_connection is not None:
+            movements = CompoundMovementFile.from_file(filename)
+            self._device_connection.use_compound_movements(movements)
+
     def connect_to_device(self):
         if len(self._user_settings.port) == 0:
             return
