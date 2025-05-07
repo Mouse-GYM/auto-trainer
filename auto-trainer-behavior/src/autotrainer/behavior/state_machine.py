@@ -2,6 +2,8 @@ from typing import Tuple
 
 from events import Events
 
+from autotrainer.core import MessageHandler
+
 
 class StateMachine:
     """Generic state machine/object mixin, with events handling"""
@@ -25,4 +27,4 @@ class StateMachine:
             return
         old_value, self._state = self._state, new_value
         self._events.state_changed(old_value, new_value)
-        self._events.property_changed("state", new_value, old_value)
+        self._events.property_changed(MessageHandler.STATE_PROPERTY, new_value, old_value)

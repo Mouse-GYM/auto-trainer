@@ -41,6 +41,8 @@ class MessageHandler(ObservableObject):
     DRAWER_DOOR_PROPERTY = "drawer_door"
     STIMULI_PROPERTY = "stimuli"
 
+    STATE_PROPERTY = "state"
+
     def __init__(self, input_queue: Queue, name: str = "message-handler", event_names=()):
         super().__init__(event_names=event_names + ("ack_received",))
 
