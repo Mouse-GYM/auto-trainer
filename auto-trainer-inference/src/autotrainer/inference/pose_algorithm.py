@@ -29,9 +29,11 @@ class PoseResponse:
     """Normalized X, Y locations for each part for each camera, if above threshold, otherwise -1, -1"""
 
     def x_y_1(self) -> typing.List[PoseTuple]:
+        """Ugly name for the x, y coordinates of the first camera"""
         return list(map(lambda p: (p.x, p.y), self.locations[0]))
 
     def x_y_2(self) -> typing.List[PoseTuple]:
+        """Ugly name for the x, y coordinates of the second camera"""
         return list(map(lambda p: (p.x, p.y), self.locations[1]))
 
     @property
@@ -51,6 +53,19 @@ class PoseResponse:
 
 
 class PoseAlgorithm(ObservableObject):
+    """
+    The PoseAlgorithm is the autotrainer-specific interpretation of the output from a pose model.
+
+    A pose model implementation will return frames of data containing parts with their locations and confidence values.
+    The PoseAlgorithm determines interpreted values such as whether a part has been "seen" (e.g., above some confidence
+    threshold), or may map locations to a normalized coordinate system.
+
+    The objective is for applications and scripts to not have to know low-level part names as used by the model, how
+    thresholds are applied and similar (though they may want to be able to set or modify those thresholds).
+
+    The PoseResponse returned by the PoseAlgorithm captures the interpreted values (e.g., "mouse seen" which may be
+    some function of multiple parts being present and/or at different confidence levels).
+    """
     # TODO Configurable properties
     MIN_CONFIDENCE_PLOT_THRESHOLD = 0.9
     MIN_CONFIDENCE_PRESENT_THRESHOLD = 0.9
@@ -79,12 +94,11 @@ class PoseAlgorithm(ObservableObject):
             return self._parts[part]
         return -1
 
-    '''
-    Will be called once after the model initialized and body parts properties have been set.
-    See part_names() and get_part_index(name)
-    '''
-
     def initialize(self, parts: list):
+        """
+        Will be called once after the model initialized and body parts properties have been set.
+        See part_names() and get_part_index(name).
+        """
         self._parts_list = list(parts)
         self._parts = dict()
         self._default_parts_flag = dict()
@@ -98,6 +112,13 @@ class PoseAlgorithm(ObservableObject):
         self._expected_num_parts = len(self._parts_list)
 
     def process(self, all_frames: typing.List[numpy.ndarray]) -> PoseResponse:
+        """
+        Process the frames from the pose model and return a PoseResponse.
+        Args:
+            all_frames: and interleaved list of pose frame data from the left and right cameras.
+        Returns:
+            PoseResponse: a PoseResponse object with the processed data
+        """
         left_frames = list()
         right_frames = list()
 
@@ -109,14 +130,19 @@ class PoseAlgorithm(ObservableObject):
 
         return self.process_frames(all_frames, left_frames, right_frames)
 
-    '''
-    all_frames - frames in order as output from DLC
-    left_frames - sorted for just the left
-    right_frames - sorted for just the right
-    Each frame is already reshaped to (num_body_parts, 3)
-    '''
-
     def process_frames(self, all_frames: list, left_frames: list, right_frames: list) -> PoseResponse:
+        """
+        Optional function to process frames with the left and right camera frame results separated.  Each frame is
+        already reshaped to (num_body_parts, 3).
+
+        Args:
+            all_frames - frames in order as output from DLC
+            left_frames - sorted for just the left
+            right_frames - sorted for just the right
+
+        Returns:
+            PoseResponse: a PoseResponse object with the processed data
+        """
         self._sequence += 1
 
         locations_1 = self._find_parts(left_frames)
