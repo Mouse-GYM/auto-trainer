@@ -431,6 +431,14 @@ class CanDevice(Device):
         if self._api is not None and kind is not None:
             self.api.send_message(kind, position)
 
+    @staticmethod
+    def _to_tuple(value: str):
+        if "," in str(value):
+            parts = value.split(",")
+            return (float(parts[0].strip()), float(parts[1].strip()))
+        else:
+            return float(value)
+
     def _perform_next_compound_step(self):
         """
         Issue the next step in a multi-step motor sequence.
@@ -443,32 +451,32 @@ class CanDevice(Device):
             step = self._compound_movement.pop(0)
 
             if "x" in step:
-                location = step["x"]
+                location = CanDevice._to_tuple(step["x"])
                 self._interface.set_x(location)
                 logger.debug(f"X to {location}")
 
             elif "y" in step:
-                location = step["y"]
+                location = CanDevice._to_tuple(step["y"])
                 self._interface.set_y(location)
                 logger.debug(f"Y to {location}")
 
             elif "z" in step:
-                location = step["z"]
+                location = CanDevice._to_tuple(step["z"])
                 self._interface.set_z(location)
                 logger.debug(f"Z to {location}")
 
             elif "load_arm" in step:
-                location = step["load_arm"]
+                location = CanDevice._to_tuple(step["load_arm"])
                 self._interface.set_load_servo(location)
                 logger.debug(f"Load Arm to {location}")
 
             elif "barrier_arm" in step:
-                location = step["barrier_arm"]
+                location = CanDevice._to_tuple(step["barrier_arm"])
                 self._interface.set_cover_servo(location)
                 logger.debug(f"Barrier Arm to {location}")
 
             elif "magnet" in step:
-                location = step["magnet"]
+                location = CanDevice._to_tuple(step["magnet"])
                 self._interface.set_magnet(location)
                 logger.debug(f"Magnet to {location}")
 
