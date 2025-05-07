@@ -1,10 +1,13 @@
+
 import logging
+from unittest import mock
 
 import pytest
 
-from autotrainer.behavior import SystemState, PelletState, SystemMachine
+from autotrainer.behavior import SystemState, PelletState, SystemMachine, TunnelDeviceProtocol
 from autotrainer.behavior.analysis.intersession_process import IntersessionResponse
-from autotrainer.core import Notification, TriggerNotification, NotificationCenter
+from autotrainer.core import Notification, TriggerNotification, NotificationCenter, SensorAnalysis, \
+    HeadbarPressureMonitor
 
 from mocks import BehaviorMachineWithMocks
 
@@ -142,9 +145,39 @@ def test_inference_detection_ready(machine):
     assert algo.successful_reaches == 2
 
 
+class TestAutoClamp:
+
+    @pytest.fixture
+    def machine(self):
+        self._tunnel_dev = mock.create_autospec(TunnelDeviceProtocol)
+        machine = SystemMachine(
+            tunnel_device=self._tunnel_dev,
+            analysis=SensorAnalysis(),
+        )
+        return machine
+
+    @pytest.mark.parametrize("state", list(SystemState))
+    @pytest.mark.parametrize("intensities", [[15, 20, 60], [100]])
+    @pytest.mark.parametrize("hbp_engaged", [False, True])
+    @pytest.mark.parametrize("head_fixation_enabled", [False, True])
+    def test_with_analysis_pressure_prop_changed(self, machine, state, intensities, hbp_engaged, head_fixation_enabled):
+        machine.state = state
+        machine.algorithm.head_fixation_enabled = head_fixation_enabled
+        analysis = machine._analysis
+        for intensity in intensities:
+            machine.algorithm.auto_clamp_intensity = intensity
+            analysis.headbar_pressure_monitor.property_changed(
+                HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, hbp_engaged, None,
+            )
+        if state == SystemState.tunnel and hbp_engaged and head_fixation_enabled:
+            assert self._tunnel_dev.update_head_magnet_intensity.call_args_list == [
+                mock.call(i) for i in intensities
+            ]
+        else:
+            assert self._tunnel_dev.update_head_magnet_intensity.call_args_list == []
+
+
 if __name__ == '__main__':
     test_enter_exit_tunnel()
-
     test_intersession_enabled()
-
     test_no_session_without_pellet()
