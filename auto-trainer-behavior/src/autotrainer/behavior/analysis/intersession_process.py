@@ -43,9 +43,9 @@ def intersession_process(project: ProjectInfo) -> IntersessionResponse:
     results_dict = segment_reaches(location, center_method, available_XYZ)
     logger.info(f"process intersession pose data complete {results_dict}")
     return IntersessionResponse(
-        pellet_x=results_dict['pellet_x'],
-        pellet_y=results_dict['pellet_y'],
-        pellet_z=results_dict['pellet_z'],
+        pellet_x=results_dict['shift_x'],
+        pellet_y=results_dict['shift_y'],
+        pellet_z=results_dict['shift_z'],
         food_consumed=results_dict['pellet_consumed'],
         successful_reaches=results_dict['successful_reaches'],
         pellets_presented=results_dict['pellets_presented'],
