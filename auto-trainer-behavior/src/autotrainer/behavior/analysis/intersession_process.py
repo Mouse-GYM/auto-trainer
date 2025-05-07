@@ -21,7 +21,6 @@ class IntersessionResponse:
     food_consumed: int = 0
     successful_reaches: int = 0
     pellets_presented: int = 0
-    baseline_intensity_adjust: int = 0  # unused
 
 
 def intersession_process(project: ProjectInfo) -> IntersessionResponse:
