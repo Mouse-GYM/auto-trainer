@@ -3,8 +3,10 @@ import queue
 import uuid
 from pathlib import Path
 
-from autotrainer.core import ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor
-from autotrainer.device import CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery, DeviceConnection
+from autotrainer.core import ObservableObject, SystemMessageHandler, SystemCommandKind, \
+    MessageHandler, Motor
+from autotrainer.device import (CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery,
+                                DeviceConnection, CompoundMovementFile)
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
@@ -163,7 +165,8 @@ class AppModel(ObservableObject):
 
     @front_door.setter
     def front_door(self, value):
-        self._front_door = self._on_property_changed(MessageHandler.FRONT_DOOR_PROPERTY, value, self._front_door)
+        self._front_door = self._on_property_changed(MessageHandler.FRONT_DOOR_PROPERTY, value,
+                                                     self._front_door)
 
     @property
     def panel_door(self):
@@ -171,7 +174,8 @@ class AppModel(ObservableObject):
 
     @panel_door.setter
     def panel_door(self, value):
-        self._panel_door = self._on_property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, value, self._panel_door)
+        self._panel_door = self._on_property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, value,
+                                                     self._panel_door)
 
     @property
     def stimuli(self):
@@ -179,7 +183,8 @@ class AppModel(ObservableObject):
 
     @stimuli.setter
     def stimuli(self, value):
-        self._stimuli = self._on_property_changed(MessageHandler.STIMULI_PROPERTY, value, self._stimuli)
+        self._stimuli = self._on_property_changed(MessageHandler.STIMULI_PROPERTY, value,
+                                                  self._stimuli)
 
     @property
     def config(self):
@@ -243,7 +248,8 @@ class AppModel(ObservableObject):
 
         self._send_command(SystemCommandKind.REQUEST_VERSION)
 
-        if self._hardware_configuration is None or not Path.exists(Path(self._hardware_configuration)):
+        if self._hardware_configuration is None or not Path.exists(
+            Path(self._hardware_configuration)):
             if Path.home().joinpath(".alogus_config.yaml").exists():
                 self.hardware_configuration = str(Path.home().joinpath(".alogus_config.yaml"))
             elif Path.home().joinpath("alogus_config.yaml").exists():
