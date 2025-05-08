@@ -4,13 +4,13 @@ from urllib.parse import urlparse
 
 import cv2
 
-from autotrainer.core.logging import getVerboseLogger
+from autotrainer.core.logging import get_verbose_logger
 
 from .camera.random_cam import RandomCam
 from .camera.playback_cam import PlaybackCam
 from .camera.opencv_cam import OpenCVCam
 
-logger = getVerboseLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 _have_spin_cam = False
 

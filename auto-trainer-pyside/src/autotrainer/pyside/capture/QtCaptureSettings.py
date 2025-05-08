@@ -3,11 +3,11 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QComboBox, QHBoxLayout, QLineEdit
 
 
-from autotrainer.core.logging import getVerboseLogger
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.pyside.QtLabeledSwitch import QLabeledSwitch
 
 
-logger = getVerboseLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class QCaptureSettings(QWidget):

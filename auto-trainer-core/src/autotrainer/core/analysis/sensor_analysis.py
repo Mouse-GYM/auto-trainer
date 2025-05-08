@@ -7,7 +7,7 @@ from typing import Callable, Optional
 
 import numpy
 
-from ..logging import getVerboseLogger
+from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
 from ..perf_monitor import PerfMonitor
 from ..observable_object import ObservableObject
@@ -18,7 +18,7 @@ from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
 
 
-logger = getVerboseLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 # TODO: Separate true analysis from data recording to file(s) for post-analysis.

@@ -18,10 +18,10 @@ import yaml
 import math
 
 
-from autotrainer.core.logging import getVerboseLogger
+from autotrainer.core.logging import get_verbose_logger
 
 
-logger = getVerboseLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 def make_new_calibration(square_size, row_ct, col_ct, parent_dir):
