@@ -1,10 +1,14 @@
 import logging
 
-logging.basicConfig(level=logging.WARNING, format="%(asctime)s: %(levelname)s: %(name)s: %(message)s")
-logging.getLogger("transitions").setLevel(logging.WARNING)
-logging.getLogger("tools").setLevel(logging.WARNING)
-logging.getLogger("autotrainer").setLevel(logging.WARNING)
-logging.getLogger("inference_algorithms").setLevel(logging.WARNING)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s: %(levelname)s: %(name)s: %(message)s")
+
+cur_desired_lvl = logging.WARNING
+
+logging.getLogger("transitions").setLevel(cur_desired_lvl)
+logging.getLogger("tools").setLevel(cur_desired_lvl)
+logging.getLogger("autotrainer").setLevel(cur_desired_lvl)
+logging.getLogger("inference_algorithms").setLevel(cur_desired_lvl)
+
 
 if __name__ == '__main__':
     import sys

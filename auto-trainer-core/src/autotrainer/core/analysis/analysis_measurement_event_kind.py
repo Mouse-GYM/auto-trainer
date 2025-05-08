@@ -5,5 +5,5 @@ from enum import Enum, IntEnum
 # event logs and other output in the desired format without needing to custom format everywhere.
 
 class AnalysisMeasurementEventKind(IntEnum, Enum):
-    loadCellEngagedChanged = 2001,
+    loadCellEngagedChanged = 2001
     headbarPressureEngagedChanged = 2002

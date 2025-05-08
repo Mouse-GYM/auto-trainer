@@ -9,8 +9,8 @@ import yaml
 
 
 class CameraId(IntEnum, Enum):
-    Left = 0,
-    Right = 1,
+    Left = 0
+    Right = 1
     Web = 2
 
 

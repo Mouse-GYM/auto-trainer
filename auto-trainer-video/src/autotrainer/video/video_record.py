@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 class VideoRecordMode(IntEnum):
-    NONE = -1,
-    CONTINUOUS = 0,
+    NONE = -1
+    CONTINUOUS = 0
     TRIGGER = 1
 
 

@@ -15,23 +15,23 @@ logger = logging.getLogger(__name__)
 
 class InferenceCommandMessageKind(IntEnum):
     Start = 0,
-    Terminate = 1,
-    ProcessLive = 2,
-    ProcessOffline = 3,
+    Terminate = 1
+    ProcessLive = 2
+    ProcessOffline = 3
     ProcessLiveWhenReady = 4
 
 
 class InferenceStatusMessageKind(IntEnum):
-    Created = 0,
-    Loading = 1,
-    Initialized = 2,
-    Running = 3,
-    Terminated = 4,
+    Created = 0
+    Loading = 1
+    Initialized = 2
+    Running = 3
+    Terminated = 4
     Performance = 5
 
 
 class InferenceMode(IntEnum):
-    Live = 0,
+    Live = 0
     Offline = 1
 
 

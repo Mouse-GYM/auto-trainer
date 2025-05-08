@@ -4,6 +4,16 @@ import numpy
 
 
 class PoseModel:
+    """
+    An implementation-independent interface for the pose inference "model" definition.
+
+    These properties and methods represent the API needed by applications to and this module to perform pose inference
+    processing.
+
+    All current implementations are structured in a way that can use this as a base class.  If that changes, this
+    interface may be better suited as a Protocol.
+    """
+
     def __init__(self):
         self._body_parts = list()
         self._body_part_categories = list()
@@ -18,10 +28,33 @@ class PoseModel:
         return self._body_part_categories
 
     def is_valid(self) -> bool:
-        pass
+        """
+        Check if the model is valid.  This is called before loading the model.
+        Returns:
+              True if the model is valid.
+        """
+        return True
 
-    def load(self):
+    def load(self) -> None:
+        """
+        Load the model and perform any required initialization.  It is assumed that when this method returns, it is
+        safe to call `predict()`.  Callers should also consider that this method may take a "long" time to complete
+        by user-interface/interaction standards.
+        """
         pass
 
     def predict(self, frames: numpy.ndarray) -> typing.List[numpy.ndarray]:
-        return numpy.empty((0, 3), dtype="float")
+        """
+        Return pose data for the given video frames.  Although there are no restrictions imposed here, the data is
+        generally assumed to be interleaved left and right camera frames of "batch_size" (which is 2 times the number
+        of frames per camera for two cameras) where the batch size is generally something that has been configured for
+        or determined by the pose model implementation.
+
+        Args:
+            frames: a numpy array of video frame data with shape (frame_count, height, width, 3)
+
+        Returns:
+            a list of numpy arrays with shape (num_body_parts, 3) for each frame in the input frames.  The 3 values
+            are x, y, and confidence.
+        """
+        return list(numpy.empty((0, 3), dtype="float"))

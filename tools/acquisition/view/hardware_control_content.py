@@ -4,13 +4,27 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import QLabel, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout
 
 from autotrainer.core import MessageHandler
-from autotrainer.model import EnvironmentProvider
+from autotrainer.model import EnvironmentProvider, HardwareVersion
 from autotrainer.pyside import CardWidget
 from tools.acquisition.model.hardware_model import HardwareModel
 
 from tools.acquisition.view.content_widget import ContentWidget
 
 logger = logging.getLogger(__name__)
+
+# TODO: This is just to see if the behavior is correct.  They should end up somewhere that any application or script can
+#  access.
+_anshutz_travel_limits = {
+    "x": (-10, 10),
+    "y": (-10, 10),
+    "z": (-10, 10),
+}
+
+_alogus_travel_limits = {
+    "x": (0, 35),
+    "y": (0, 35),
+    "z": (0, 35),
+}
 
 
 class HardwareControlContent(ContentWidget):
@@ -22,6 +36,11 @@ class HardwareControlContent(ContentWidget):
         self._model = model
 
         self._card_widget = CardWidget()
+
+        if EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ:
+            self._travel_limits = _anshutz_travel_limits
+        else:
+            self._travel_limits = _alogus_travel_limits
 
         layout = QGridLayout(None)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -72,8 +91,8 @@ class HardwareControlContent(ContentWidget):
 
         self._x_pos = QSpinBox(None)
         self._x_pos.setValue(0)
-        self._x_pos.setMinimum(-10)
-        self._x_pos.setMaximum(10)
+        self._x_pos.setMinimum(self._travel_limits["x"][0])
+        self._x_pos.setMaximum(self._travel_limits["x"][1])
         self._x_pos.setWrapping(False)
         self._x_pos.setMinimumWidth(50)
         self._x_pos.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -87,8 +106,8 @@ class HardwareControlContent(ContentWidget):
 
         self._y_pos = QSpinBox(None)
         self._y_pos.setValue(0)
-        self._y_pos.setMinimum(-10)
-        self._y_pos.setMaximum(10)
+        self._y_pos.setMinimum(self._travel_limits["y"][0])
+        self._y_pos.setMaximum(self._travel_limits["y"][1])
         self._y_pos.setWrapping(False)
         self._y_pos.setMinimumWidth(50)
         self._y_pos.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -102,8 +121,8 @@ class HardwareControlContent(ContentWidget):
 
         self._z_pos = QSpinBox(None)
         self._z_pos.setValue(0)
-        self._z_pos.setMinimum(-10)
-        self._z_pos.setMaximum(10)
+        self._z_pos.setMinimum(self._travel_limits["z"][0])
+        self._z_pos.setMaximum(self._travel_limits["z"][1])
         self._z_pos.setWrapping(False)
         self._z_pos.setMinimumWidth(50)
         self._z_pos.setAlignment(Qt.AlignmentFlag.AlignRight)
