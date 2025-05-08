@@ -17,10 +17,9 @@ _have_spin_cam = False
 if sys.version_info.major == 3 and sys.version_info.minor == 8 and not sys.platform.startswith("darwin"):
     try:
         from .camera.spinnaker_cam import SpinCam
-
         _have_spin_cam = True
     except Exception as err:
-        logger.warning("Cannot import SpinCam: %s", err)
+        logger.debug("Cannot import SpinCam: %s, but continuing", err)
 
 
 class CameraKind(str, Enum):
