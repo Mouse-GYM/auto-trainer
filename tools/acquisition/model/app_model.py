@@ -9,9 +9,9 @@ from pathlib import Path
 
 import yaml
 
-from autotrainer.core import (ObservableObject, TriggerManager, CAPTURE_TRIGGER_ID, EventManager, SystemMessageHandler,
-                              MessageHandler, SystemConfiguration, CameraId, PersistenceConfiguration,
-                              HardwareConfiguration, get_system_configuration_dumper)
+from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, MessageHandler, SystemConfiguration,
+                              CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
+                              get_system_configuration_dumper, NotificationCenter, TriggerNotification)
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
@@ -79,11 +79,11 @@ class AppModel(ObservableObject):
 
         self._selected_animal: typing.Optional[AnimalSubject] = None
 
-        TriggerManager.instance().register(self._trigger_received, CAPTURE_TRIGGER_ID)
+        NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
         self._message_handler.property_changed += self._on_message_handler_property_changed
-
-        self._behavior.algorithm.property_changed += self._on_behavior_property_changed
+        self._behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
+        self._behavior.property_changed += self._on_behavior_property_changed
 
         self._load_animals()
 
@@ -339,7 +339,6 @@ class AppModel(ObservableObject):
         self._hardware.pellet_identifier = configuration.hardware.pellet_identifier
 
         self.inference.load_configuration(configuration.inference)
-
         self.behavior.load_configuration(configuration.behavior)
 
         self._analysis.headbar_pressure_monitor.load_configuration(configuration.behavior.headbar_pressure)
@@ -394,13 +393,16 @@ class AppModel(ObservableObject):
 
         self.animals = animals
 
-    def _trigger_received(self, _sender, _trigger_id, value):
-        self._is_recording_trigger = value
+    def _trigger_received(self, notification: Notification):
+        self._is_recording_trigger = notification.context
 
-        if value and self._project_info is not None:
+        if notification.context and self._project_info is not None:
             self._save_metadata(self._project_info.get_metadata_file(-1), self._project_info.session.value)
 
-    def _on_behavior_property_changed(self, name: str, value, _):
+    def _on_behavior_property_changed(self, name: str, new_value, old_value):
+        logger.debug("behavior property changed: %s: %s -> %s", name, old_value, new_value)
+
+    def _on_behavior_algo_property_changed(self, name: str, value, _):
         if name == "baseline_intensity" and self._selected_animal is not None:
             self._selected_animal.baseline_magnet_intensity = value
             self._save_animal_metadata()

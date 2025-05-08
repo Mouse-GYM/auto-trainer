@@ -19,9 +19,9 @@ _anshutz_travel_limits = {
 }
 
 _alogus_travel_limits = {
-    "x": (0, 27),
-    "y": (0, 27),
-    "z": (0, 27),
+    "x": (0, 35),
+    "y": (0, 35),
+    "z": (0, 35),
 }
 
 

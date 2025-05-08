@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 
 class CaptureCommandKind(Enum):
     """Commands accepted by VideoCaptureProcess through the command Queue"""
-    TERMINATE = 1,
+    TERMINATE = 1
     """Fully terminate the Process"""
-    ENABLE_CAPTURE = 2,
+    ENABLE_CAPTURE = 2
     """Enable image capture"""
-    DISABLE_CAPTURE = 3,
+    DISABLE_CAPTURE = 3
     """Disable image capture"""
     ENABLE_RECORDING = 4
     """Enable image recording (requires capture enabled)"""
@@ -35,13 +35,13 @@ class CaptureCommandKind(Enum):
 
 class CaptureProcessStatus(IntEnum):
     """ Valid VideoCaptureProcess states available through the status Value"""
-    FAILED = -1,
+    FAILED = -1
     """Failed to configure or run process"""
     UNKNOWN = 0,
     """Uninitialized value not yet set by capture process"""
-    INITIALIZED = 1,
+    INITIALIZED = 1
     """The process is created, but not started"""
-    RUNNING = 2,
+    RUNNING = 2
     """The process is running the capture loop"""
     TERMINATED = 3
     """The capture loop is terminated"""

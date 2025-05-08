@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 class ProjectInterval(IntEnum):
-    NONE = -1,
-    MINUTE = 0,
+    NONE = -1
+    MINUTE = 0
     HOUR = 1
 
 

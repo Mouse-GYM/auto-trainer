@@ -1,6 +1,7 @@
 from typing import Optional
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol
+from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import ObservableObject, ProjectInfo, MessageHandler, SensorAnalysis, BehaviorConfiguration
 from tools.acquisition.model.hardware_model import HardwareModel
 
@@ -19,6 +20,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         self._project: Optional[ProjectInfo] = None
 
         self._machine.algorithm.property_changed += self._on_algorithm_property_changed
+        self._machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
+            f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
 
         self._is_intersession_enabled = self._machine.algorithm.intersession_enabled
 

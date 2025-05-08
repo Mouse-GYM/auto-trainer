@@ -5,22 +5,23 @@ from enum import Enum
 from events import Events
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager
+from autotrainer.core import ProjectInfo, EventManager, ObservableObject
 from ..behavior_event_kind import BehaviorEventKind
 
 from ..inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
 from ..behavior_algorithm import BehaviorAlgorithm
+from ..state_machine import StateMachine
 
 logger = logging.getLogger(__name__)
 
 
 class IntersessionState(str, Enum):
-    idle = "idle",
-    segmentation = "segmentation",
+    idle = "idle"
+    segmentation = "segmentation"
     detection = "detection"
 
 
-class IntersessionMachine:
+class IntersessionMachine(StateMachine):
     states = [e for e in IntersessionState]
 
     transitions = [
@@ -34,11 +35,14 @@ class IntersessionMachine:
 
     def __init__(self, algorithm: BehaviorAlgorithm, project_info: ProjectInfo = None,
                  inference: InferenceProtocol = None):
-        self.state = IntersessionState.idle
 
-        self._machine = Machine(model=self, states=IntersessionMachine.states,
+        initial_state = IntersessionState.idle
+
+        super().__init__(initial_state=initial_state, event_names=("on_analysis_started", "on_analysis_ended"))
+
+        self._machine = Machine(model=[self], states=IntersessionMachine.states,
                                 transitions=IntersessionMachine.transitions, auto_transitions=False,
-                                initial=IntersessionState.idle, model_override=True)
+                                initial=initial_state, model_override=True)
 
         self._project_info = project_info
 
@@ -49,8 +53,6 @@ class IntersessionMachine:
         self._segmentation_configuration = None
 
         self._detection_configuration = None
-
-        self.events = Events(events=("on_analysis_started", "on_analysis_ended",))
 
     @property
     def project(self):

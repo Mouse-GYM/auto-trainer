@@ -11,8 +11,8 @@ from urllib.parse import urlparse
 import numpy
 from numpy import ndarray
 
-from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, TriggerManager, ObservableObject, \
-    CAPTURE_TRIGGER_ID, CameraConfiguration, CameraId
+from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, ObservableObject, \
+    CameraConfiguration, CameraId, NotificationCenter, TriggerNotification, Notification
 from autotrainer.core.project import ProjectInfo
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
@@ -90,7 +90,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
         self._project: Optional[ProjectInfo] = None
 
-        TriggerManager.instance().register(self._on_trigger, CAPTURE_TRIGGER_ID)
+        NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._on_trigger)
 
         self._update_camera_source(self._camera_list[0])
 
@@ -401,9 +401,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
         return elapsed <= timeout
 
-    def _on_trigger(self, _sink, _trigger_id, context):
+    def _on_trigger(self, notification: Notification):
         if self._video_capture is not None:
-            if context:
+            if notification.context:
                 self._send_command(CaptureCommandKind.ENABLE_RECORDING)
             else:
                 self._send_command(CaptureCommandKind.DISABLE_RECORDING)

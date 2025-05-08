@@ -6,6 +6,9 @@ from ..pose_model import PoseModel
 
 
 class MemoryPoseModel(PoseModel):
+    """
+    A "dumb" implementation of a pose model that returns random data.  This is used for testing purposes only.
+    """
     def __init__(self, batchsize: int = 2):
         super().__init__()
 
@@ -17,6 +20,7 @@ class MemoryPoseModel(PoseModel):
         return True
 
     def load(self):
+        # Note - this must be kept in sync w/real models.
         self.body_parts.append("Pellet")
         self.body_parts.append("RH_flat")
         self.body_parts.append("RH_spread")

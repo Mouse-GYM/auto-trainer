@@ -4,28 +4,28 @@ from enum import Enum
 from events import Events
 from transitions import Machine
 
-from autotrainer.core import EventManager, MessageHandler
+from autotrainer.core import EventManager, MessageHandler, ObservableObject
 
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..behavior_event_kind import BehaviorEventKind
 from ..pellet_device_protocol import PelletDeviceProtocol
+from ..state_machine import StateMachine
 from ..system_machine_state import SystemState
 
 logger = logging.getLogger(__name__)
 
 
 class PelletState(str, Enum):
-    monitoring = "monitoring",
-    loading = "loading",
-    prerelease = "prerelease",
-    sending = "sending",
+    monitoring = "monitoring"
+    loading = "loading"
+    prerelease = "prerelease"
+    sending = "sending"
     releasing = "releasing"
-    covering = "covering",
+    covering = "covering"
     home = "home"
 
 
-class PelletMachine:
-    states = [e for e in PelletState]
+class PelletMachine(StateMachine):
 
     # Note that transitions have conditions, where applicable.  What may appear to be unconditional calls to cover,
     # release, or otherwise perform pellet transitions will not succeed and perform those actions if these conditions
@@ -50,11 +50,13 @@ class PelletMachine:
 
     def __init__(self, algorithm: BehaviorAlgorithm = None, msg_handler: MessageHandler = None,
                  pellet_device: PelletDeviceProtocol = None):
-        self.state = PelletState.covering
 
-        self.machine = Machine(model=self, states=PelletMachine.states,
-                               transitions=PelletMachine.transitions, auto_transitions=False,
-                               initial=PelletState.monitoring, model_override=True)
+        initial_state = PelletState.monitoring
+
+        super().__init__(
+            initial_state=initial_state,
+            event_names=("pellet_loading", "pellet_sending"),
+        )
 
         # This is primarily for unit testing.  In general, algorithm should always be passed in from the parent
         # SystemMachine.
@@ -64,15 +66,18 @@ class PelletMachine:
         self._algorithm.session_ending += self._session_ending
 
         self._message_handler = msg_handler
-
-        if self._message_handler is not None:
-            self._message_handler.ack_received += self._pellet_device_ack_received
+        if msg_handler is not None:
+            msg_handler.ack_received += self._pellet_device_ack_received
 
         self._pellet_device = pellet_device
 
         self._api_status_token = None
 
-        self._events = Events(("pellet_loading", "pellet_sending"))
+        self.machine = Machine(model=[self], states=list(PelletState),
+                               transitions=PelletMachine.transitions, auto_transitions=False,
+                               initial=initial_state, model_override=True,
+                       )
+
 
     @property
     def algorithm(self):
