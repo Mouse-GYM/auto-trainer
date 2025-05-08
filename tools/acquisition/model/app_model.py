@@ -82,8 +82,8 @@ class AppModel(ObservableObject):
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
         self._message_handler.property_changed += self._on_message_handler_property_changed
-
-        self._behavior.algorithm.property_changed += self._on_behavior_property_changed
+        self._behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
+        self._behavior.property_changed += self._on_behavior_property_changed
 
         self._load_animals()
 
@@ -339,7 +339,6 @@ class AppModel(ObservableObject):
         self._hardware.pellet_identifier = configuration.hardware.pellet_identifier
 
         self.inference.load_configuration(configuration.inference)
-
         self.behavior.load_configuration(configuration.behavior)
 
         self._analysis.headbar_pressure_monitor.load_configuration(configuration.behavior.headbar_pressure)
@@ -400,7 +399,10 @@ class AppModel(ObservableObject):
         if notification.context and self._project_info is not None:
             self._save_metadata(self._project_info.get_metadata_file(-1), self._project_info.session.value)
 
-    def _on_behavior_property_changed(self, name: str, value, _):
+    def _on_behavior_property_changed(self, name: str, new_value, old_value):
+        logger.debug("behavior property changed: %s: %s -> %s", name, old_value, new_value)
+
+    def _on_behavior_algo_property_changed(self, name: str, value, _):
         if name == "baseline_intensity" and self._selected_animal is not None:
             self._selected_animal.baseline_magnet_intensity = value
             self._save_animal_metadata()

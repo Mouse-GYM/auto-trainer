@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 
 import pytest
 
@@ -6,7 +7,9 @@ from autotrainer.behavior import SystemState, PelletState, SystemMachine
 from autotrainer.behavior.analysis.intersession_process import IntersessionResponse
 from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
-from mocks import BehaviorMachineWithMocks
+from .mocks import BehaviorMachineWithMocks
+from .conftest import on_state_changed
+
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('transitions').setLevel(logging.INFO)
@@ -28,6 +31,9 @@ def test_enter_exit_tunnel():
     NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, set_capture_triggered)
 
     machine = BehaviorMachineWithMocks()
+
+    state_transitions = []
+    machine.events.state_changed += partial(on_state_changed, state_transitions=state_transitions)
 
     # Current code assumes intersession analysis is off by default.
     assert machine.algorithm.intersession_enabled is False
@@ -51,10 +57,18 @@ def test_enter_exit_tunnel():
     assert machine.state == SystemState.cage
     assert machine.algorithm._is_in_session is False
     assert is_capture_triggered is False
+    assert state_transitions == [
+        SystemState.tunnel,
+        SystemState.cage,
+    ]
+
 
 
 def test_no_session_without_pellet():
     machine = BehaviorMachineWithMocks()
+
+    state_transitions = []
+    machine.events.state_changed += partial(on_state_changed, state_transitions=state_transitions)
 
     assert machine.algorithm.is_in_session is False
 
@@ -97,6 +111,10 @@ def test_no_session_without_pellet():
     assert machine.algorithm.is_in_session is True
 
     machine.mock_analysis.mock_load_cell_engaged(False)
+    assert state_transitions == 4 * [
+        SystemState.tunnel,
+        SystemState.cage,
+    ]
 
 
 def test_intersession_enabled():
@@ -107,6 +125,9 @@ def test_intersession_enabled():
     """
     machine = BehaviorMachineWithMocks()
 
+    state_transitions = []
+    machine.events.state_changed += partial(on_state_changed, state_transitions=state_transitions)
+
     machine.algorithm.intersession_enabled = True
 
     machine.mock_analysis.mock_load_cell_engaged(True)
@@ -116,6 +137,11 @@ def test_intersession_enabled():
     machine.mock_analysis.mock_load_cell_engaged(False)
 
     assert machine.state == SystemState.intersession
+    assert state_transitions == [
+        SystemState.tunnel,
+        SystemState.cage,
+        SystemState.intersession,
+    ]
 
 
 def test_inference_detection_ready(machine):

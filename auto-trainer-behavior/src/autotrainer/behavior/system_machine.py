@@ -1,4 +1,5 @@
 import logging
+from enum import Enum
 from threading import Timer
 
 from transitions import Machine
@@ -13,14 +14,18 @@ from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine
 from .pellet import PelletMachine, PelletState
 from .pellet_device_protocol import PelletDeviceProtocol
+from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class SystemMachine:
+class SystemMachine(StateMachine):
     states = [e for e in SystemState]
+
+    class Properties(str, Enum):
+        pass
 
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
@@ -38,10 +43,8 @@ class SystemMachine:
                  tunnel_device: TunnelDeviceProtocol = None, pellet_device: PelletDeviceProtocol = None,
                  inference: InferenceProtocol = None):
 
-        self.state = SystemState.cage
-
-        self.machine = Machine(model=self, states=SystemMachine.states, transitions=SystemMachine.transitions,
-                               auto_transitions=False, initial=SystemState.cage, model_override=True)
+        initial_state = SystemState.cage
+        super().__init__(initial_state=initial_state)
 
         self._project_info = project_info
 
@@ -68,12 +71,18 @@ class SystemMachine:
         self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
         self._pellet_machine.events.pellet_loading += self._pellet_loading
         self._pellet_machine.events.pellet_sending += self._pellet_sending
+        self._pellet_machine.events.state_changed += self._pellet_state_changed
 
         self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
         self._intersession.events.on_analysis_ended += self._intersession_ended
 
         self._algorithm.session_ending += self._session_ended
         self._algorithm.property_changed += self._algorithm_property_changed
+
+        self.machine = Machine(
+            model=[self], states=SystemMachine.states, transitions=SystemMachine.transitions,
+            auto_transitions=False, initial=initial_state, model_override=True,
+        )
 
     @property
     def algorithm(self):
@@ -239,13 +248,16 @@ class SystemMachine:
         if self.state == SystemState.tunnel:
             self.algorithm.start_session()
 
+    def _pellet_state_changed(self, old_value, new_value):
+        logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
+
     def _consider_end_session(self):
         # Do not end if the mouse is still in the tunnel and (a pellet is seen or the pellet deliver is in the sending
         # or releasing states).  Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
-        if (self.state == SystemState.tunnel and
-                (
-                        self._pellet_machine.state == PelletState.sending or self._pellet_machine.state == PelletState.releasing or self._pellet_machine.state == PelletState.monitoring)):
+        if (self.state == SystemState.tunnel
+            and self._pellet_machine.state in {PelletState.sending, PelletState.releasing, PelletState.monitoring}
+        ):
             return
 
         self.algorithm.end_session()
