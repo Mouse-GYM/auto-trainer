@@ -134,6 +134,7 @@ class QCaptureSettings(QWidget):
     def _still_image_capture_interval_changed(self, value: str) -> None:
         try:
             interval = float(value)
+        except (ValueError, TypeError):
+            pass
+        else:
             self.image_capture_interval_changed.emit(interval)
-        except Exception as err:
-            logger.warning("Cannot process image capture interval for %r: %s", value, err)

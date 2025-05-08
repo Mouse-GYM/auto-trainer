@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from queue import Queue
 from enum import Enum, IntEnum
 from multiprocessing import Process, Value, Array
-from typing import Callable, Dict
+from typing import Callable, Dict, Union, Optional
 
 import numpy
 
@@ -75,7 +75,7 @@ class CaptureInferenceAttrs:
     index: int
         The index of this camera in the queue
     """
-    queue: Queue | FixedArrayMultiQueue
+    queue: Union[Queue, FixedArrayMultiQueue]
     index: int
 
 
@@ -88,7 +88,7 @@ class CaptureAttrs:
     """Input queue for submitting commands to the capture process"""
     status: Value
     """Flag for status of the capture process - value is read-only to callers"""
-    image_queue: Queue | FixedArrayQueue | None
+    image_queue: Optional[Union[Queue, FixedArrayQueue]]
     """Queue for camera frame output"""
     frame: Value
     """Current frame index - value is read-only to callers"""
