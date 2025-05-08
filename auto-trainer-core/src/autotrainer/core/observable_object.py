@@ -19,6 +19,14 @@ class ObservableObject(Events):
     def __init__(self, event_names=()):
         super().__init__(event_names + ("property_changed",))
 
+    # def __bool__(self):
+    #     # NB: was used to make the `if model:` in Machine.__init__ method works,
+    #     # when tried mixing an ObservableObject with transitions.Machine
+    #     # but there were other issues too, so keeping commented, as ref. at worst.
+    #     # NB2: this is because the __bool__ method is otherwise overridden by the Events.__len__ method
+    #     #  which returns the nbr of events handled by the given instance.
+    #     return True
+
     def _on_property_changed(self, property_name: str, new_value, old_value):
         """Will only generate an event if the new value does not pass the == test with the old value."""
         if old_value == new_value:
