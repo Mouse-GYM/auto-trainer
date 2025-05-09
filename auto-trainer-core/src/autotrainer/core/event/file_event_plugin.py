@@ -1,14 +1,14 @@
-import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
 from .event_info import EventInfo
 
 from .event_manager_plugin import EventManagerPlugin
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class FileEventPlugin(EventManagerPlugin):

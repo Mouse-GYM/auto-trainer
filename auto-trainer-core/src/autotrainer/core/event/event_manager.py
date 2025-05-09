@@ -1,4 +1,3 @@
-import logging
 import time
 from threading import Thread
 from datetime import datetime
@@ -6,6 +5,7 @@ from queue import Queue, Empty
 from typing import Optional, List
 from typing_extensions import Self
 
+from ..logging import get_verbose_logger
 from ..project import ProjectInfo
 
 from .event_info import EventInfo
@@ -13,7 +13,7 @@ from .event_manager_plugin import EventManagerPlugin
 from .file_event_plugin import FileEventPlugin
 from .logger_event_plugin import LoggerEventPlugin
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class EventManager:
