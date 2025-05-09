@@ -13,6 +13,17 @@ class CameraId(IntEnum, Enum):
     Right = 1
     Web = 2
 
+    def __str__(self) -> str:
+        # Used as part of video file and related naming conventions.
+        if self == CameraId.Left:
+            return "left"
+        elif self == CameraId.Right:
+            return "right"
+        elif self == CameraId.Web:
+            return "web"
+        else:
+            raise ValueError(f"Invalid camera id: {self}")
+
 
 @dataclass
 class CameraConfiguration:
