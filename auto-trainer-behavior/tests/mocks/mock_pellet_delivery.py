@@ -43,3 +43,12 @@ class MockPelletDelivery(ObservableObject):
 
     def send_ack(self):
         self.ack_received(self._last_token)
+
+    def set_x(self, value, *, absolute=True):
+        pass
+
+    def set_y(self, value, *, absolute=True):
+        pass
+
+    def set_z(self, value, *, absolute=True):
+        pass

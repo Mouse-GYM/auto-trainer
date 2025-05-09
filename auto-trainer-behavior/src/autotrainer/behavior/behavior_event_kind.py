@@ -6,6 +6,7 @@ from enum import Enum, IntEnum
 class BehaviorEventKind(IntEnum, Enum):
     tunnelEnter = 1001
     tunnelExit = 1002
+
     pelletLoadCan = 1201
     pelletLoadBegin = 1202
     pelletLoadEnd = 1203
@@ -26,6 +27,14 @@ class BehaviorEventKind(IntEnum, Enum):
     pelletPrereleaseEnd = 1218
     pelletAcknowledgeToken = 1298
     pelletExternalToken = 1299
+
+    # small diff: was on 15XX block (so below/after sessionXX),
+    # keeping the 15xxx block but moved after the above other pelletXXX = ...
+    # to keep logically grouped.
+    pelletSeen = 1501
+    pelletPresented = 1502
+    pelletSuccessfulReach = 1503
+
     sessionStarting = 1301
     sessionStarted = 1302
     sessionEnding = 1303
@@ -33,18 +42,21 @@ class BehaviorEventKind(IntEnum, Enum):
     sessionPelletIncrease = 1311
     sessionPelletDecrease = 1312
     sessionMouseSeen = 1321
+
     dayStarted = 1401
     dayIncreasePellet = 1411
     dayDecreasePellet = 1412
-    pelletSeen = 1501
+
     headfixBaselineChanged = 1601
     headfixLoadCellChanged = 1602
     headfixLoadCellChangedInIntersession = 1603
     headfixLoadCellChangedWrongState = 1604
     headfixAutoTare = 1611
+
     autoClampIntensityChanged = 1621
     autoClampReleaseToneFreqChanged = 1622
     autoClampReleaseDelayChanged = 1623
+
     intersessionSegmentationCan = 1701
     intersessionSegmentationBegin = 1702
     intersessionSegmentationEnd = 1703
@@ -60,5 +72,6 @@ class BehaviorEventKind(IntEnum, Enum):
     intersessionDetectionError = 1715
     intersessionDetectionSave = 1716
     intersessionDetectionSaveError = 1717
+
     headFixationForceDetectorChanged = 1801
     headFixationEnabled = 1802

@@ -7,7 +7,7 @@ from transitions import Machine
 from autotrainer.core import ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor, \
     HeadbarPressureMonitor
 from autotrainer.inference import PoseResponse
-
+from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm
 from .behavior_event_kind import BehaviorEventKind
 from .inference_protocol import InferenceProtocol
@@ -60,8 +60,11 @@ class SystemMachine(StateMachine):
             self._analysis.headbar_pressure_monitor.property_changed += self._headbar_pressure_monitor_property_changed
             self._analysis.load_cell_tare_monitor.tare_callback = self._load_cell_tare_requested
 
-        if inference is not None and inference.pose_algorithm is not None:
-            inference.pose_algorithm.pose_changed += self._pose_changed
+        self._inference = inference
+        if inference is not None:
+            if inference.pose_algorithm is not None:
+                inference.pose_algorithm.pose_changed += self._pose_changed
+            inference.detection_result_ready += self._handle_detection_result
 
         self._pellet_device = pellet_device
 
@@ -258,6 +261,20 @@ class SystemMachine(StateMachine):
             return
 
         self.algorithm.end_session()
+
+    def _handle_detection_result(self, res: IntersessionResponse):
+        if res.food_consumed > 0:
+            self._algorithm.day_pellet_count += res.food_consumed
+            self._algorithm.session_pellet_count += res.food_consumed
+        if res.successful_reaches > 0:
+            self._algorithm.successful_reaches = res.successful_reaches
+        if res.pellets_presented > 0:
+            self._algorithm.pellets_presented = res.pellets_presented
+        dev = self._pellet_device
+        if dev is not None:
+            for val, meth in ((res.pellet_x, dev.set_x), (res.pellet_y, dev.set_y), (res.pellet_z, dev.set_z)):
+                if val != 0:
+                    meth(val, absolute=False)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
