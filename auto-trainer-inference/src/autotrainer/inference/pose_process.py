@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class InferenceCommandMessageKind(IntEnum):
-    Start = 0,
+    Start = 0
     Terminate = 1
     ProcessLive = 2
     ProcessOffline = 3
