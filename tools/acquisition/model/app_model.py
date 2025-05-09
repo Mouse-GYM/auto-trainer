@@ -364,7 +364,7 @@ class AppModel(ObservableObject):
         for camera in self._cameras:
             camera.on_close()
 
-        EventManager.close()
+        EventManager.default().close()
 
         self.hardware.disconnect()
         self._message_handler.request_terminate()

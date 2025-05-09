@@ -4,7 +4,7 @@ from .animal import AnimalSubject
 from .configuration import SystemConfiguration, BehaviorConfiguration, CameraConfiguration, CameraId
 from .configuration import HardwareConfiguration, InferenceConfiguration, PersistenceConfiguration
 from .configuration import get_system_configuration_dumper
-from .event_manager import EventManager, EventInfo
+from .event import EventManager, EventInfo, EventManagerPlugin
 from .fixed_array_multiqueue import FixedArrayMultiQueue
 from .fixed_array_queue import FixedArrayQueue
 from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessage, AudioSpectrumMessage
