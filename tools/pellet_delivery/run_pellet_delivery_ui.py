@@ -34,7 +34,7 @@ def verify_log_location(log_location: str = "", device_name: str = ""):
     def int_map_fcn(value: str):
         try:
             return int(value)
-        except:
+        except (ValueError, TypeError):
             return None
 
     log_vals = [int(x) for x in log_files if int_map_fcn(x) is not None]

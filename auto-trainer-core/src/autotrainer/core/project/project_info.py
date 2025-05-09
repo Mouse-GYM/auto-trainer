@@ -58,7 +58,8 @@ def _safe_ensure_location(location: str) -> bool:
     try:
         path = Path(location)
         path.mkdir(parents=True, exist_ok=True)
-    except:
+    except Exception as err:
+        logger.warning("Could not create dir %r: %s", location, err)
         return False
     return True
 
@@ -252,7 +253,7 @@ class ProjectInfo:
         def int_map_fcn(value: str):
             try:
                 return int(value)
-            except:
+            except (ValueError, TypeError):
                 return None
 
         session_vals = [int(x) for x in session_dirs if int_map_fcn(x) is not None]

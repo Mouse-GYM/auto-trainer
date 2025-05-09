@@ -108,7 +108,10 @@ class EventManager:
         while self._write_active:
             try:
                 info = self._write_queue.get_nowait()
-
+            except Empty:
+                time.sleep(0.05)
+                continue
+            try:
                 if not isinstance(info, EventInfo):
                     logger.debug(f"unexpected event type")
                     continue
@@ -123,10 +126,8 @@ class EventManager:
 
                 self._last_event_info = info
                 self._write_event(info)
-            except Empty:
-                time.sleep(0.05)
-            except Exception as e:
-                pass
+            except Exception as err:
+                logger.warning("Error during write loop: %s", err)
 
         if self._event_file is not None:
             self._event_file.flush()

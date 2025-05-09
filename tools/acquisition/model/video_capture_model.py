@@ -377,7 +377,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 if abs(int(val) - val) < 2.0 * float(numpy.finfo(float).eps):
                     val = int(val)
                 params[key] = val
-            except:
+            except (ValueError, TypeError):
                 if str(params[key]).lower() == "true":
                     params[key] = True
                 elif str(params[key]).lower() == "false":
