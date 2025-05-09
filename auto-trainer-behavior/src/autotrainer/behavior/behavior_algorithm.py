@@ -191,9 +191,9 @@ class BehaviorAlgorithm(ObservableObject):
                                                            value, self._day_pellet_count)
         incr = value - prev_value
         if incr > 0:
-            EventManager.post_event(BehaviorEventKind.dayIncreasePellet, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.dayIncreasePellet, context=value)
         elif incr < 0:
-            EventManager.post_event(BehaviorEventKind.dayDecreasePellet, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.dayDecreasePellet, context=value)
 
     @property
     def session_pellet_count(self):
@@ -206,9 +206,9 @@ class BehaviorAlgorithm(ObservableObject):
                                                                value, self._session_pellet_count)
         incr = value - prev
         if incr > 0:
-            EventManager.post_event(BehaviorEventKind.sessionPelletIncrease, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.sessionPelletIncrease, context=value)
         elif incr < 0:
-            EventManager.post_event(BehaviorEventKind.sessionPelletDecrease, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.sessionPelletDecrease, context=value)
         # if self._session_pellet_count > self.limits.max_pellets_per_session:
         #    self.end_session()
 
@@ -225,7 +225,7 @@ class BehaviorAlgorithm(ObservableObject):
         prev = self._pellets_presented
         self._pellets_presented = self._on_property_changed("pellets_presented", value, prev)
         if prev != value:
-            EventManager.post_event(BehaviorEventKind.pelletPresented, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.pelletPresented, context=value)
 
     @property
     def successful_reaches(self):
@@ -236,7 +236,7 @@ class BehaviorAlgorithm(ObservableObject):
         prev = self._successful_reaches
         self._successful_reaches = self._on_property_changed("successful_reaches", value, prev)
         if prev != value:
-            EventManager.post_event(BehaviorEventKind.pelletSuccessfulReach, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.pelletSuccessfulReach, context=value)
 
     def start_session(self):
         if self._is_in_session:
