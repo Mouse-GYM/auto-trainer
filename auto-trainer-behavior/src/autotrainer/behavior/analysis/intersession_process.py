@@ -15,13 +15,13 @@ available_XYZ = numpy.array([[-5, 5], [-5, 5], [-5, 5]])
 
 @dataclass
 class IntersessionResponse:
+    # NB: all 3 x/y/z are relative values here:
     pellet_x: int = 0
     pellet_y: int = 0
     pellet_z: int = 0
     food_consumed: int = 0
     successful_reaches: int = 0
     pellets_presented: int = 0
-    baseline_intensity_adjust: int = 0  # unused
 
 
 def intersession_process(project: ProjectInfo) -> IntersessionResponse:
@@ -43,9 +43,9 @@ def intersession_process(project: ProjectInfo) -> IntersessionResponse:
     results_dict = segment_reaches(location, center_method, available_XYZ)
     logger.info(f"process intersession pose data complete {results_dict}")
     return IntersessionResponse(
-        pellet_x=results_dict['pellet_x'],
-        pellet_y=results_dict['pellet_y'],
-        pellet_z=results_dict['pellet_z'],
+        pellet_x=results_dict['shift_x'],
+        pellet_y=results_dict['shift_y'],
+        pellet_z=results_dict['shift_z'],
         food_consumed=results_dict['pellet_consumed'],
         successful_reaches=results_dict['successful_reaches'],
         pellets_presented=results_dict['pellets_presented'],

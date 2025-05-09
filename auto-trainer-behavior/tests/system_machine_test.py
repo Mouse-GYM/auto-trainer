@@ -1,14 +1,16 @@
-from functools import partial
 
 import logging
+from functools import partial
 from unittest import mock
 
 import pytest
 
-from autotrainer.behavior import SystemState, PelletState, SystemMachine, TunnelDeviceProtocol
+from autotrainer.behavior import TunnelDeviceProtocol
+from autotrainer.core import SensorAnalysis, HeadbarPressureMonitor
+
+from autotrainer.behavior import SystemState, PelletState, SystemMachine
 from autotrainer.behavior.analysis.intersession_process import IntersessionResponse
-from autotrainer.core import Notification, TriggerNotification, NotificationCenter, SensorAnalysis, \
-    HeadbarPressureMonitor
+from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
 from .mocks import BehaviorMachineWithMocks
 from .conftest import on_state_changed

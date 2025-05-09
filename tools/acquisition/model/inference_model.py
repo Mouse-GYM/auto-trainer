@@ -140,8 +140,19 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
     def pose_algorithm(self) -> PoseAlgorithm:
         return self._algorithm
 
+    def _check_previous_offline_thread(self):
+        cur_off = self._offline_thread
+        if cur_off is not None:
+            # protection, if we need more than 1 executing thread at the same time then we need a list to retain the
+            # threads instead of only one of them.
+            if cur_off.is_alive():
+                logger.warning("Previous offline thread still alive: %s, join might block ~long", cur_off)
+            cur_off.join()
+            self._offline_thread = None
+
     def perform_segmentation(self, configuration: SegmentationConfiguration):
         logger.info("performing segmentation")
+        self._check_previous_offline_thread()
         self._intersession_block = IntersessionBlock(configuration=configuration,
                                                      parts_count=self._algorithm.part_count)
         self._send_message(InferenceCommandMessageKind.ProcessOffline)
@@ -150,11 +161,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
     def perform_detection(self, configuration: DetectionConfiguration):
         logger.info("performing detection analysis")
-        cur_off = self._offline_thread
-        if cur_off is not None and cur_off.is_alive():
-            # protection, if we need more than 1 executing thread at the same time then we need a list to retain the
-            # threads instead of only one of them.
-            cur_off.join()
+        self._check_previous_offline_thread()
         self._intersession_detection = IntersessionDetection(configuration)
         self._offline_thread = Thread(target=self._intersession_process)
         self._offline_thread.start()

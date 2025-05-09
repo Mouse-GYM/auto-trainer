@@ -1,3 +1,4 @@
+import functools
 import logging
 from queue import Queue
 from uuid import UUID, uuid4
@@ -10,6 +11,16 @@ from autotrainer.device import DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CA
 
 
 logger = logging.getLogger(__name__)
+
+
+def _skip_relative(func):
+    @functools.wraps(func)
+    def wrapper(self, value, *, absolute: bool=True):
+        if not absolute:
+            logger.warning("relative value for %s not supported yet. SKIPPING command", func)
+            return None
+        return func(self, value, absolute=absolute)
+    return wrapper
 
 
 class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol):
@@ -74,22 +85,16 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def tare_load_cell(self) -> Optional[UUID]:
         return self._send_with_token(self._tunnel_device, SystemCommandKind.UPDATE_SCALE_TARE)
 
+    @_skip_relative
     def set_x(self, value: int, *, absolute: bool=True) -> Optional[UUID]:
-        if not absolute:
-            logger.warning("relative set_x|y|z not yet supported, operation skipped")
-            return None
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_X, value)
 
+    @_skip_relative
     def set_y(self, value: int, *, absolute: bool=True) -> Optional[UUID]:
-        if not absolute:
-            logger.warning("relative set_x|y|z not yet supported, operation skipped")
-            return None
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Y, value)
 
+    @_skip_relative
     def set_z(self, value: int, *, absolute: bool=True) -> Optional[UUID]:
-        if not absolute:
-            logger.warning("relative set_x|y|z not yet supported, operation skipped")
-            return None
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Z, value)
 
     def send_home(self) -> Optional[UUID]:
