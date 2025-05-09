@@ -10,6 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 class DlcPoseModel(PoseModel):
+    """
+    A wrapper for using DeepLabCut pose inference.
+    """
+
     BODY_PARTS_KEY = 'bodyparts'
     PROJECT_PATH_KEY = 'project_path'
     TRAINING_FRACTION_KEY = 'TrainingFraction'

@@ -249,10 +249,11 @@ class AppModel(ObservableObject):
         if self._hardware_configuration is not None:
             try:
                 self._device_connection.use_motor_configurations(
+                    # MotorConfigurationFile does not take/accept argument(s) atm ?
                     MotorConfigurationFile(self._hardware_configuration))
-            except:
+            except Exception as err:
                 logger.error(
-                    f"failed to read motor configuration file: {self._hardware_configuration}")
+                    "failed to read motor configuration file %s: %s", self._hardware_configuration, err)
                 self.hardware_configuration = None
 
         self.is_connected = True

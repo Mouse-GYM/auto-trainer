@@ -2,7 +2,12 @@ from PySide6 import QtCore
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QGridLayout, QLabel, QComboBox, QHBoxLayout, QLineEdit
 
+
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.pyside.QtLabeledSwitch import QLabeledSwitch
+
+
+logger = get_verbose_logger(__name__)
 
 
 class QCaptureSettings(QWidget):
@@ -84,7 +89,7 @@ class QCaptureSettings(QWidget):
     def imageCaptureInterval(self) -> float:
         try:
             return float(self._stillImageCaptureInterval.text())
-        except:
+        except (ValueError, TypeError):
             pass
 
         return 0.0
@@ -129,6 +134,7 @@ class QCaptureSettings(QWidget):
     def _still_image_capture_interval_changed(self, value: str) -> None:
         try:
             interval = float(value)
-            self.image_capture_interval_changed.emit(interval)
-        except:
+        except (ValueError, TypeError):
             pass
+        else:
+            self.image_capture_interval_changed.emit(interval)

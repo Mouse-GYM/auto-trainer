@@ -154,17 +154,20 @@ class PoseProcess(Process):
         while True:
             try:
                 cmd, context = self._cmd_queue.get_nowait()
-
-                if cmd == InferenceCommandMessageKind.Terminate:
-                    break
-                elif cmd == InferenceCommandMessageKind.ProcessLive:
-                    self._set_process_live()
-                elif cmd == InferenceCommandMessageKind.ProcessOffline:
-                    self._set_process_offline()
-                elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
-                    self._process_live_when_ready = True
-            except:
+            except Empty:
                 pass
+            else:
+                try:
+                    if cmd == InferenceCommandMessageKind.Terminate:
+                        break
+                    elif cmd == InferenceCommandMessageKind.ProcessLive:
+                        self._set_process_live()
+                    elif cmd == InferenceCommandMessageKind.ProcessOffline:
+                        self._set_process_offline()
+                    elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
+                        self._process_live_when_ready = True
+                except Exception as err:
+                    logger.warning("Error processing %s: %s", cmd, err)
 
             if self._input_queue is not None:
                 if self._input_queue.get_output(self._frame_buffer):

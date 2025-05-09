@@ -29,7 +29,7 @@ def get_value(input_val: str):
 
     try:
         return int(input_val[1:])
-    except:
+    except (ValueError, TypeError):
         return None
 
 
