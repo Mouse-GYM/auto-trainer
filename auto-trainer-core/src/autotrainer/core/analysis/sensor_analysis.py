@@ -7,6 +7,7 @@ from typing import Callable, Optional
 
 import numpy
 
+from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
 from ..perf_monitor import PerfMonitor
 from ..observable_object import ObservableObject
@@ -16,7 +17,8 @@ from .headbar_pressure_monitor import HeadbarPressureMonitor
 from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
 
-logger = logging.getLogger(__name__)
+
+logger = get_verbose_logger(__name__)
 
 
 # TODO: Separate true analysis from data recording to file(s) for post-analysis.
@@ -181,8 +183,8 @@ class SensorAnalysis(ObservableObject):
         if self._record_file is not None:
             try:
                 self._record_file.close()
-            except:
-                pass
+            except Exception as err:
+                logger.warning("Failure closing record file: %s", err)
 
             self._record_file = None
 
@@ -205,8 +207,8 @@ class SensorAnalysis(ObservableObject):
                 self._record_file = location
                 logger.info(f"<sensor-analysis>: saving to {interval_file_info.file}")
                 self._had_write_error = False
-            except:
-                logger.error(f"<sensor-analysis>: unable to write to {interval_file_info.file}")
+            except Exception as err:
+                logger.error("<sensor-analysis>: unable to write to %s: %s",interval_file_info.file, err)
 
         return None
 
@@ -214,8 +216,8 @@ class SensorAnalysis(ObservableObject):
         if self._audio_record_file is not None:
             try:
                 self._audio_record_file.close()
-            except:
-                pass
+            except Exception as err:
+                logger.warning("audio record file close failed: %s", err)
 
             self._audio_record_file = None
 
@@ -238,7 +240,7 @@ class SensorAnalysis(ObservableObject):
                 self._audio_record_file = location
                 logger.info(f"<sensor-analysis>: saving audio spectrum to {interval_file_info.file}")
                 self._audio_had_write_error = False
-            except:
-                logger.error(f"<sensor-analysis>: unable to write to {interval_file_info.file}")
+            except Exception as err:
+                logger.error("<sensor-analysis>: unable to write to %r: %s", interval_file_info.file, err)
 
         return None
