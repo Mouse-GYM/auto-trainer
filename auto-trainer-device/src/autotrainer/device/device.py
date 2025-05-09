@@ -42,7 +42,7 @@ class Device:
         pass
 
     def _acknowledge_command(self, token: object):
-        EventManager.post_event(GymDeviceEventKind.deviceCommandAcknowledge, context=token)
+        EventManager.default().post_event_content(GymDeviceEventKind.deviceCommandAcknowledge, context=token)
 
         if self._api is not None:
             self._api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, token)

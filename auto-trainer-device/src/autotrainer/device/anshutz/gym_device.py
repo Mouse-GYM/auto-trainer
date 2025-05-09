@@ -77,8 +77,8 @@ class GymDevice(Device):
             self._last_command = data[0:-1]
             self._last_command_token = token
             self._interface.write_str(data)
-            EventManager.post_event(GymDeviceEventKind.deviceCommandSend,
-                                    context=f"{data}({self._last_command_token})")
+            EventManager.default().post_event_content(GymDeviceEventKind.deviceCommandSend,
+                                                      context=f"{data}({self._last_command_token})")
         else:
             logger.debug("storing in command buffer")
             self._command_buffer.put((data, token))

@@ -93,7 +93,7 @@ class PelletMachine(StateMachine):
     def before_move_home(self):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.send_home()
-            EventManager.post_event(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
+            EventManager.default().post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
@@ -101,7 +101,7 @@ class PelletMachine(StateMachine):
         if self._pellet_device is not None:
             self.events.pellet_loading()
             self._api_status_token = self._pellet_device.load_pellet()
-            EventManager.post_event(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
+            EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
@@ -109,14 +109,14 @@ class PelletMachine(StateMachine):
         if self._pellet_device is not None:
             self.events.pellet_sending()
             self._api_status_token = self._pellet_device.send_pellet()
-            EventManager.post_event(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
+            EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
     def before_prerelease_pellet(self):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.release_pellet()
-            EventManager.post_event(BehaviorEventKind.pelletPrereleaseBegin, context=self._api_status_token)
+            EventManager.default().post_event_content(BehaviorEventKind.pelletPrereleaseBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
@@ -127,45 +127,45 @@ class PelletMachine(StateMachine):
     def before_cover_pellet(self):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.cover_pellet()
-            EventManager.post_event(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
+            EventManager.default().post_event_content(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
     def before_release_pellet(self):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.release_pellet()
-            EventManager.post_event(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
+            EventManager.default().post_event_content(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
     def can_move_home(self):
         can = self.can_use_pellet_command()
-        EventManager.post_event(BehaviorEventKind.pelletHomeCan, context=can)
+        EventManager.default().post_event_content(BehaviorEventKind.pelletHomeCan, context=can)
         return can
 
     def can_load_pellet(self):
         can = self.can_use_pellet_command() and self._algorithm.can_load_pellet()
-        EventManager.post_event(BehaviorEventKind.pelletLoadCan, context=can)
+        EventManager.default().post_event_content(BehaviorEventKind.pelletLoadCan, context=can)
         return can
 
     def can_send_pellet(self):
         can = self.can_use_pellet_command()
-        EventManager.post_event(BehaviorEventKind.pelletSendCan, context=can)
+        EventManager.default().post_event_content(BehaviorEventKind.pelletSendCan, context=can)
         return can
 
     def can_cover_pellet(self):
         can = self.can_use_pellet_command() and self._algorithm.can_cover_pellet()
-        EventManager.post_event(BehaviorEventKind.pelletCoverCan, context=can)
+        EventManager.default().post_event_content(BehaviorEventKind.pelletCoverCan, context=can)
         return can
 
     def can_prerelease_pellet(self):
         can = self.can_use_pellet_command() and self._algorithm.can_release_pellet()
-        EventManager.post_event(BehaviorEventKind.pelletPrereleaseCan, context=can)
+        EventManager.default().post_event_content(BehaviorEventKind.pelletPrereleaseCan, context=can)
         return can
 
     def can_release_pellet(self):
         can = self.can_use_pellet_command() and self._algorithm.can_release_pellet()
-        EventManager.post_event(BehaviorEventKind.pelletReleaseCan, context=can)
+        EventManager.default().post_event_content(BehaviorEventKind.pelletReleaseCan, context=can)
         return can
 
     def can_use_pellet_command(self):
@@ -192,11 +192,11 @@ class PelletMachine(StateMachine):
 
         if token != self._api_status_token:
             # External command while we are waiting for our own.  Track in case it is causing conflicts.
-            EventManager.post_event(BehaviorEventKind.pelletExternalToken, context=token)
+            EventManager.default().post_event_content(BehaviorEventKind.pelletExternalToken, context=token)
             logger.warning("ignoring pellet delivery token from external command")
             return
 
-        EventManager.post_event(BehaviorEventKind.pelletAcknowledgeToken, context=token)
+        EventManager.default().post_event_content(BehaviorEventKind.pelletAcknowledgeToken, context=token)
 
         self._api_status_token = None
 
