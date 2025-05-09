@@ -170,28 +170,48 @@ class EventManager:
         return not self._write_queue.empty()
 
     def _process_queue(self):
+        # Because we a) use plugins and b) allow for EventInfo->is_same to be overridden, we may be given a plugin that
+        # errors on every process_event, or an EventInfo that errors on every is_same.  This would bury the log if we
+        # reported it every time.  It may also be a one time error for the plugin, so we don't want to just skip/remove
+        # if there is an error.
+        # This will log the first occurrence of each of the above, but not spam the log if it is a recurring issue.
+
+        is_same_error_reported = False
+        process_event_error_reported = False
+
         while self._write_active:
             try:
+                # Workaround or current Jetson behavior w/ queue.get(timeout=).
                 info = self._write_queue.get_nowait()
+            except Empty:
+                time.sleep(0.05)
+                continue
 
-                if not isinstance(info, EventInfo):
-                    logger.debug("unexpected event info instance")
-                    continue
+            if not isinstance(info, EventInfo):
+                logger.debug("unexpected event info instance")
+                continue
 
+            try:
                 if info.is_same(self._last_event_info):
                     self._repeat_event_count += 1
                     continue
+            except Exception as ex:  # Possibly coming from EventInfo subclass - cannot predict type of error.
+                if not is_same_error_reported:
+                    logger.error(ex)
+                    is_same_error_reported = True
 
+            try:
                 if self._repeat_event_count > 0:
                     self._process_event(self._last_event_info, self._repeat_event_count)
                     self._repeat_event_count = 0
 
                 self._last_event_info = info
                 self._process_event(info)
-            except Empty:
-                time.sleep(0.05)
-            except Exception:
-                pass
+            except Exception as ex:  # Coming from an arbitrary plugin process_event() - cannot predict type of error.
+                # TODO (maybe): track exceptions per plugin.  After some number N exceptions, disable the plugin.
+                if not process_event_error_reported:
+                    logger.error(ex)
+                    process_event_error_reported = True
 
         for plugin in self._plugins:
             plugin.close()
