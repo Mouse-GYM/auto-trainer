@@ -118,7 +118,8 @@ class EmulationInterface(DeviceInterface):
             messages.append(ServoStatus(Target.MAGNET_DEVICE, Motor.MAGNET_SERVO,
                                         self._positions[Motor.MAGNET_SERVO]))
 
-            messages.append(MagnetDigitalInputs(continuity_0=random() < 0.1, continuity_1=False))
+            messages.append(
+                MagnetDigitalInputs(continuity_0=random() < 0.1, continuity_1=random() < 0.1))
             messages.append(PelletDigitalInputs(Target.PELLET_DEVICE, True, False, True, False))
             messages.append(DoorData())
             messages.append(SensorStatus(temperature_c=28.0 + uniform(-2, 2),

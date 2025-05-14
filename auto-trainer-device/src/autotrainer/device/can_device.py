@@ -219,7 +219,7 @@ class CanDevice(Device):
             )[-1],
 
             MagnetDigitalInputs: lambda message: setattr(self, '_current_digital',
-                                                         message.continuity_0),
+                                                         message.continuity_1),
 
             PelletDigitalInputs: lambda message: (
                 self.api.send_message(SystemStatusMessageKind.STIMULUS_INPUTS,

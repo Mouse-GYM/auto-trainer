@@ -183,7 +183,7 @@ class AppModel(ObservableObject):
     def message_handler_property_changed(self, name: str, value, _old_value):
         if name == SystemMessageHandler.FIRMWARE_VERSION_PROPERTY:
             self.firmware_version = value
-        elif name == "head_magnet_intensity":
+        elif name == SystemMessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
             self.magnet_intensity = value
         elif name == "config":
             self.config = value
