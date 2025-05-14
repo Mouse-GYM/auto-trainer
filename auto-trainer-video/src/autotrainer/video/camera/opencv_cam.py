@@ -17,7 +17,6 @@ class OpenCVCam(CameraBase):
 
     def init(self):
         self._video_capture = cv2.VideoCapture(self._device_idx)
-
         self._width = int(self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         self._height = int(self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self._fps = self._video_capture.get(cv2.CAP_PROP_FPS)

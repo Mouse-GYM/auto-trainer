@@ -63,7 +63,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._video_command_queue = Queue()
         self._video_status = Value("i", CaptureProcessStatus.UNKNOWN)
         self._video_frame_index = Value("i", 0)
-        self._video_image_queue = None
+        self._video_image_queue: Optional[FixedArrayQueue] = None
         self._errors = Array("c", bytes(512))
         self._shape = None
 
@@ -217,14 +217,12 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         if self._display_update_fcn is not None and self._video_capture is not None:
             self._display_update_fcn(data, self._fps)
 
-    def on_prepare_capture(self, network_queue: FixedArrayMultiQueue = None) -> bool:
+    def on_prepare_capture(self, network_queue: Optional[FixedArrayMultiQueue] = None) -> bool:
         self._last_error = None
-
         if not self._is_enabled:
             return True
 
         self._frame_count = 0
-
         self._video_reader_initialize()
 
         if self._camera_source is not None:
@@ -261,7 +259,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 return False
 
             properties = VideoManager.parse_params(url)
-
             if "primary" in properties and bool(properties["primary"]) is True:
                 self._is_primary = True
             else:
@@ -285,6 +282,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     def on_capture_start(self):
         if not self._is_enabled:
+            logger.warning("%s: on_capture_start called but disabled", self)
             return
 
         self._send_command(CaptureCommandKind.ENABLE_CAPTURE)
@@ -435,7 +433,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         else:
             self.shape = (300, 200)
 
-        self._video_image_queue = None if self._shape is None else FixedArrayQueue(3, self._shape)
+        self._video_image_queue = None if self._shape is None else FixedArrayQueue(3, self._shape,
+                                                                                   name="video_q")
 
         self._camera_source = cam
 
@@ -460,6 +459,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
     def _send_command(self, cmd: CaptureCommandKind, context: object = None):
         if self._video_command_queue is not None:
             self._video_command_queue.put((cmd, context))
+        else:
+            logger.warning("%s: _send_command: %s but video command queue is None", self, cmd)
 
     def _trace(self, message: str):
         if self._is_trace_enabled:

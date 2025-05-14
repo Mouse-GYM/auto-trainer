@@ -224,7 +224,13 @@ class AppModel(ObservableObject):
             shape_1 = self.left_camera.shape
             shape_2 = self.right_camera.shape
             if shape_1 == shape_2:
-                self._inference_queue = FixedArrayMultiQueue(3, 2, 3, shape_1)
+                self._inference_queue = FixedArrayMultiQueue(
+                    16,
+                    2,
+                    3,
+                    shape_1,
+                    name="inference_q",
+                )
             else:
                 logger.warning("pellet disabled: left and right camera frame sizes do not match")
 
@@ -259,8 +265,6 @@ class AppModel(ObservableObject):
         if self._analysis is not None:
             self._analysis.project_info = self._project_info
 
-        self.hardware.connect(self._message_handler.input_queue, self._selected_animal)
-
         for camera in self._cameras:
             if camera.is_primary:
                 camera.on_capture_start()
@@ -268,6 +272,10 @@ class AppModel(ObservableObject):
         for camera in self._cameras:
             if not camera.is_primary:
                 camera.on_capture_start()
+
+        logger.debug("connecting hardware ...")
+        self.hardware.connect(self._message_handler.input_queue, self._selected_animal)
+        logger.info("finished connecting hardware")
 
         return True
 

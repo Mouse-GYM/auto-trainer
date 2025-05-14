@@ -3,14 +3,15 @@ import time
 from enum import IntEnum
 from multiprocessing import Process, Queue
 from queue import Empty
-from typing import Optional
+from typing import Optional, Callable, List
 
 import numpy
 
 from autotrainer.core import FixedArrayMultiQueue, PerfMonitor
+from autotrainer.core.logging import get_verbose_logger
 from .pose_model import PoseModel
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class InferenceCommandMessageKind(IntEnum):
@@ -53,8 +54,14 @@ class PoseProcess(Process):
     and messages queues are expected to keep up with or drain the queues as needed.
     """
 
-    def __init__(self, model: PoseModel, live_queue: FixedArrayMultiQueue,
-                 offline_queue: Optional[FixedArrayMultiQueue], data_queue: Queue, cmd_queue: Queue, msg_queue: Queue):
+    def __init__(self,
+                 model: PoseModel,
+                 live_queue: FixedArrayMultiQueue,
+                 offline_queue: Optional[FixedArrayMultiQueue],
+                 data_queue: Queue,
+                 cmd_queue: Queue,
+                 msg_queue: Queue,
+    ):
         """
         :param model: the PoseModel instance
         :param live_queue: a FixedArrayMultiQueue as the default source of input frames
@@ -76,37 +83,31 @@ class PoseProcess(Process):
         self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_count=120,
                                          enable_log=False)
 
-        self._frame_buffer = None
-
         self._mode = InferenceMode.Live
         self._input_queue = self._live_input_queue
 
         self._process_live_when_ready = False
 
     def run(self):
-        logger.info("entering pose_predict")
+        from autotrainer.core.logging import setup_logging
+        setup_logging()
 
+        logger.info("entering pose_predict")
         self._send_message(InferenceStatusMessageKind.Created)
 
-        self._frame_buffer = numpy.ndarray((self._input_queue.batch_size, *self._input_queue.shape, 3))
-
         self._send_message(InferenceStatusMessageKind.Loading)
-
         self._model.load()
 
         try:
             self._send_message(InferenceStatusMessageKind.Initialized, self._model.body_parts)
-
             should_process = self._wait_for_start()
-
             if should_process:
                 self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
                 self._process()
-        except Exception as ex:
-            logger.error(ex)
+        except Exception as err:
+            logger.exception("Error during processing: %s", err)
         finally:
             self._send_message(InferenceStatusMessageKind.Terminated)
-
         logger.info("exiting pose_predict")
 
     def _send_message(self, kind: InferenceStatusMessageKind, context=None):
@@ -120,7 +121,7 @@ class PoseProcess(Process):
         self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
 
     def _set_process_offline(self):
-        logger.debug("processing offline")
+        logger.info("processing offline")
         self._input_queue = self._offline_input_queue
         self._mode = InferenceMode.Offline
         self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
@@ -132,7 +133,6 @@ class PoseProcess(Process):
         while True:
             try:
                 cmd, context = self._cmd_queue.get_nowait()
-
                 if cmd == InferenceCommandMessageKind.Terminate:
                     return False
                 elif cmd == InferenceCommandMessageKind.Start:
@@ -146,43 +146,104 @@ class PoseProcess(Process):
                 # massively slow down the system without explicitly yielding, despite being in its own thread.  This not
                 # the case for other platforms/combinations of the above so may not be apparent when not on the current
                 # deployment platform.
-                time.sleep(0.0001)
+                time.sleep(0.01)
 
         return True
 
     def _process(self):
+        frame_buffer = numpy.ndarray(
+            (self._input_queue.batch_size,  # nbr cams * frames per cam (3 atm)
+             *self._input_queue.shape,  # W, H
+             3,  # current model takes RGB
+             ))
+        frames_indices = numpy.ndarray(
+            (self._input_queue.camera_count, self._input_queue.frames_per_camera), dtype="int64")
+        recording_in_progress = False
+        logger.info("%s: starting processing ..", self)
+        d_q_put = self._data_queue.put
+        get_command = self._cmd_queue.get_nowait
+        predict = self._model.predict
+        perf_add_c = self._perf_monitor.add_cycle
+
+        i_q_get_output: Optional[Callable] = None
+        i_q: Optional[FixedArrayMultiQueue] = None
+
+        def reset_locals():
+            nonlocal i_q, i_q_get_output
+            i_q = self._input_queue
+            i_q_get_output = None if i_q is None else i_q.get_output
+
+        reset_locals()
+
+        t_next_cmd = time.time()
         while True:
-            try:
-                cmd, context = self._cmd_queue.get_nowait()
-            except Empty:
-                pass
-            else:
-                try:
-                    if cmd == InferenceCommandMessageKind.Terminate:
+            cur_t = time.time()
+            if cur_t > t_next_cmd:
+                # do not check command queue on each loop turn, mostly useless
+                # and overhead is not that small
+                t_next_cmd += 1
+                cmd = True
+                while cmd:
+                    try:
+                        cmd, context = get_command()
+                    except Empty:
                         break
-                    elif cmd == InferenceCommandMessageKind.ProcessLive:
-                        self._set_process_live()
-                    elif cmd == InferenceCommandMessageKind.ProcessOffline:
-                        self._set_process_offline()
-                    elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
-                        self._process_live_when_ready = True
-                except Exception as err:
-                    logger.warning("Error processing %s: %s", cmd, err)
+                    else:
+                        logger.info("Handling command %s ...", cmd)
+                        try:
+                            if cmd == InferenceCommandMessageKind.Terminate:
+                                return
+                            elif cmd == InferenceCommandMessageKind.ProcessLive:
+                                self._set_process_live()
+                            elif cmd == InferenceCommandMessageKind.ProcessOffline:
+                                self._set_process_offline()
+                            elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
+                                self._process_live_when_ready = True
+                        except Exception as err:
+                            logger.warning("Error processing %s: %s", cmd, err)
+                # always get new ref:
+                prev_iq = i_q
+                reset_locals()
+                if prev_iq is not i_q:
+                    logger.info("new input_queue: %s / %s", i_q, i_q_get_output)
 
-            if self._input_queue is not None:
-                if self._input_queue.get_output(self._frame_buffer):
-                    pose = self._model.predict(self._frame_buffer)
-
-                    if self._data_queue is not None:
-                        self._data_queue.put((pose, self._mode))
-
-                    if self._perf_monitor.add_cycle():
+            if i_q_get_output is not None:
+                cnt = 0
+                # using while to process all available batch:
+                while i_q_get_output(frame_buffer, frames_indices):
+                    cnt += 1
+                    # done in _feed_intersession_analysis itself
+                    # if self._mode == InferenceMode.Offline:
+                    #     # check frames indices files to see if some of the frames
+                    #     # have been already processed during Live mode
+                    #     pass
+                    # if recording_in_progress:
+                    #     if self._mode == InferenceMode.Offline or any(idx < 0 for indices in frames_indices for idx in indices):
+                    #         recording_in_progress = False
+                    #         logger.info("Detected end of record in progress ; mode=%s ; %s", self._mode, frames_indices)
+                    # else:
+                    #     if self._mode == InferenceMode.Live and all(idx >= 0 for indices in frames_indices for idx in indices):
+                    #         recording_in_progress = True
+                    #         logger.info("Detected start of record in progress ; mode=%s ; %s", self._mode, frames_indices)
+                    pose = predict(frame_buffer)
+                    d_q_put((pose,
+                             self._mode,
+                             # InferenceMode.Live if recording_in_progress else InferenceMode.Offline,
+                             # frames_indices)
+                             frames_indices)  # if recording_in_progress else None)
+                    )
+                    if perf_add_c():
                         self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
+
+                if self._mode == InferenceMode.Offline and self._process_live_when_ready:
+                    self._data_queue.put((None, self._mode, None))
+                    self._set_process_live()
+                    self._process_live_when_ready = False
+                    # always get new ref:
+                    reset_locals()
                 else:
-                    if self._mode == InferenceMode.Offline and self._process_live_when_ready:
-                        self._data_queue.put((None, self._mode))
-                        self._set_process_live()
-                        self._process_live_when_ready = False
+                    if cnt == 0:
+                        time.sleep(0.001)
             else:
                 # See sleep comment above.
                 time.sleep(0.001)

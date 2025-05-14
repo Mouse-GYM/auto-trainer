@@ -1,11 +1,13 @@
 import sys
 from enum import Enum
+from typing import Optional
 from urllib.parse import urlparse
 
 import cv2
 
 from autotrainer.core.logging import get_verbose_logger
 
+from .camera.camera_base import CameraBase
 from .camera.random_cam import RandomCam
 from .camera.playback_cam import PlaybackCam
 from .camera.opencv_cam import OpenCVCam
@@ -83,7 +85,7 @@ class VideoManager:
         return parameters
 
     @classmethod
-    def create_camera(cls, camera_url: str, name: str = ""):
+    def create_camera(cls, camera_url: str, name: str = "") -> Optional[CameraBase]:
         parsed = urlparse(camera_url)
 
         if parsed.scheme == CameraKind.Random:
@@ -95,6 +97,7 @@ class VideoManager:
         elif parsed.scheme == CameraKind.OpenCV:
             camera = OpenCVCam(int(parsed.hostname), name)
         else:
+            logger.warning("No such cam scheme: %s", parsed.scheme)
             return None
 
         camera.init()

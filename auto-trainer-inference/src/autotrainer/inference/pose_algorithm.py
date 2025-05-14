@@ -1,4 +1,4 @@
-import typing
+from typing import List, Dict, Union, Optional, Tuple
 from collections import namedtuple
 from dataclasses import dataclass
 
@@ -22,19 +22,22 @@ class PoseResponse:
     sequence: int
     """Simple index to track responses"""
 
-    parts_flags: (typing.Dict[str, bool], typing.Dict[str, bool], typing.Dict[str, bool])
+    parts_flags: Tuple[Dict[str, bool], Dict[str, bool], Dict[str, bool]]
     """Tuple indicating part seen for left, right, and both (same frame)"""
 
-    locations: typing.List[typing.List[PoseLocation]]
+    locations: List[List[PoseLocation]]
     """Normalized X, Y locations for each part for each camera, if above threshold, otherwise -1, -1"""
 
-    def x_y_1(self) -> typing.List[PoseTuple]:
+    def x_y_1(self) -> List[PoseTuple]:
         """Ugly name for the x, y coordinates of the first camera"""
         return list(map(lambda p: (p.x, p.y), self.locations[0]))
 
-    def x_y_2(self) -> typing.List[PoseTuple]:
+    def x_y_2(self) -> List[PoseTuple]:
         """Ugly name for the x, y coordinates of the second camera"""
         return list(map(lambda p: (p.x, p.y), self.locations[1]))
+
+    def x_y_by_idx(self, cam_idx: int) -> List[PoseTuple]:
+        return list(map(lambda p: (p.x, p.y), self.locations[cam_idx]))
 
     @property
     def pellet_seen(self) -> bool:
@@ -111,7 +114,7 @@ class PoseAlgorithm(ObservableObject):
 
         self._expected_num_parts = len(self._parts_list)
 
-    def process(self, all_frames: typing.List[numpy.ndarray]) -> PoseResponse:
+    def process(self, all_frames: List[numpy.ndarray]) -> PoseResponse:
         """
         Process the frames from the pose model and return a PoseResponse.
         Args:
@@ -154,10 +157,11 @@ class PoseAlgorithm(ObservableObject):
 
         for pose_l, pose_r in zip(left_frames, right_frames):
             for idx, part in enumerate(self._parts_list):
-                maybe_dual = False
                 if pose_l[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     parts_flag_1[part] = True
                     maybe_dual = True
+                else:
+                    maybe_dual = False
                 if pose_r[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     parts_flag_2[part] = True
                     if maybe_dual:
@@ -170,14 +174,14 @@ class PoseAlgorithm(ObservableObject):
 
         return response
 
-    def _find_parts(self, frames: list) -> typing.List[PoseLocation]:
-        locations: typing.List[PoseLocation] = list(self._default_locations)
+    def _find_parts(self, frames: list) -> List[PoseLocation]:
+        locations: List[PoseLocation] = list(self._default_locations)
 
         for pose in frames:
             for idx, part in enumerate(self._parts_list):
                 if pose[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PLOT_THRESHOLD:
-                    locations[idx] = (PoseLocation(part, idx, pose[idx, 0], pose[idx, 1]))
+                    locations[idx] = PoseLocation(part, idx, pose[idx, 0], pose[idx, 1])
                 elif locations[idx] is None:
-                    locations[idx] = (PoseLocation(part, idx, -1, -1))
+                    locations[idx] = PoseLocation(part, idx, -1, -1)
 
         return locations

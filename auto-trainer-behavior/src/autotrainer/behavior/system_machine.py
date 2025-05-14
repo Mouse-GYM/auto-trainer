@@ -213,12 +213,9 @@ class SystemMachine(StateMachine):
 
     def _pose_changed(self, response: PoseResponse):
         self._algorithm.pellet_seen(response.pellet_seen)
-
         self._algorithm.mouse_seen(response.mouse_seen)
-
         if not self._algorithm.pellet_delivery_enabled:
             return
-
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     def _algorithm_property_changed(self, name: str, value, _):

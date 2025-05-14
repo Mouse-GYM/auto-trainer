@@ -1,0 +1,7 @@
+-e auto-trainer-behavior/
+-e auto-trainer-core/
+-e auto-trainer-device/
+-e auto-trainer-model/
+-e auto-trainer-video/
+-e auto-trainer-pyside/
+-e auto-trainer-inference/

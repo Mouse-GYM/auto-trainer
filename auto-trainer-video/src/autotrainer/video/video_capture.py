@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from queue import Queue
 from enum import Enum, IntEnum
 from multiprocessing import Process, Value, Array
-from typing import Callable, Dict, Union, Optional
+from typing import Callable, Dict, Union, Optional, List
 
 import numpy
 
@@ -15,8 +15,10 @@ from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue
 
 from .video_manager import VideoManager
 from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
+from autotrainer.core.logging import get_verbose_logger
+from ..core.fixed_array_queue import BufferResult
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class CaptureCommandKind(Enum):
@@ -75,7 +77,7 @@ class CaptureInferenceAttrs:
     index: int
         The index of this camera in the queue
     """
-    queue: Union[Queue, FixedArrayMultiQueue]
+    queue: Optional[FixedArrayMultiQueue]  # Union[Queue, FixedArrayMultiQueue]
     index: int
 
 
@@ -94,10 +96,10 @@ class CaptureAttrs:
     """Current frame index - value is read-only to callers"""
     camera: CaptureCameraAttrs
     """Camera attributes for the capture process"""
-    inference: CaptureInferenceAttrs = None
-    """Inference attributes for the capture process (optional)"""
-    errors: Array = None
+    errors: Array
     """Multiprocessing Array for communicating errors - value is read-only to callers"""
+    inference: Optional[CaptureInferenceAttrs] = None
+    """Inference attributes for the capture process (optional)"""
 
 
 class VideoCapture(Process):
@@ -117,7 +119,8 @@ class VideoCapture(Process):
 
         self._command_queue = attrs.command_queue
         self._status = attrs.status
-        self._image_queue = attrs.image_queue
+        self._image_queue: Optional[Union[Queue, FixedArrayQueue]] = attrs.image_queue
+        self._network_queue: Optional[FixedArrayMultiQueue]
 
         if attrs.inference is not None:
             self._network_queue = attrs.inference.queue
@@ -142,11 +145,11 @@ class VideoCapture(Process):
         self._is_capturing = False
         self._camera = None
         self._record = None
-        self._record_queue = None
+        self._record_queue: Optional[Queue] = None
+        self._record_queue_list: List = []
 
-        # Buffered send to record queue
-        self._queue_list = list()
-        self._queue_list_count = 0
+        gui_video_player_fps = 15 if record_properties is None else record_properties.fps
+        self._gui_video_frame_delay = 1 / gui_video_player_fps
 
         self.command_handler: Dict[CaptureCommandKind, Callable[[object], None]] = {
             CaptureCommandKind.TERMINATE: self._user_terminate,
@@ -159,6 +162,12 @@ class VideoCapture(Process):
         self._set_status(CaptureProcessStatus.INITIALIZED)
 
     def run(self):
+
+        from autotrainer.core.logging import setup_logging
+        setup_logging()
+
+        logger.info("%s: started running", self)
+
         if not self._prepare_to_run():
             return
 
@@ -170,17 +179,13 @@ class VideoCapture(Process):
         self._status.value = status
 
     def _set_error(self, error: Exception):
-        logger.error(f"<{self._name}> {error}")
-
         self._set_status(CaptureProcessStatus.FAILED)
-
         if self._errors:
             self._errors.value = f"{error}"[:len(self._errors)].encode()
 
     def _prepare_to_run(self) -> bool:
+        logger.info(f"<{self._name}> process started: %s", self._network_queue)
         try:
-            logger.debug(f"<{self._name}> process started")
-
             if self._camera_url is None:
                 logger.error(f"<{self._name}> camera url not specified")
                 return False
@@ -196,27 +201,45 @@ class VideoCapture(Process):
             self._record_properties.fps = self._camera.fps
 
             self._record = VideoRecord(self._record_properties, self._record_queue)
-
             self._record.start()
 
             self._set_status(CaptureProcessStatus.RUNNING)
 
             return True
-        except Exception as ex:
-            self._set_error(ex)
+        except Exception as err:
+            logger.exception("%s: Error during prepare to run: %s", self, err)
+            self._set_error(err)
             return False
 
     def _run_capture_loop(self) -> None:
         fault_count = 0
-
+        cnt_net_q_put = 0
+        cur_frame_idx = -1
+        record_start_frame_idx = None
+        next_t_image_q = time.time()
+        next_t_cmd_q = next_t_image_q
+        q_list = self._record_queue_list
+        rec_q = self._record_queue
+        capture = self._camera.capture
+        net_q_put = None if self._network_queue is None else self._network_queue.put
+        vid_frame_delay = self._gui_video_frame_delay
+        get_command = None if self._command_queue is None else self._command_queue.get_nowait
+        logger.notice("%s: starting capture loop ..", self)
         while self._is_running:
+            t_now = time.time()
             try:
-                if self._command_queue is not None:
-                    try:
-                        cmd, context = self._command_queue.get_nowait()
-                        self._handle_command(cmd, context)
-                    except queue.Empty:
-                        pass
+                if get_command is not None and t_now > next_t_cmd_q:
+                    next_t_cmd_q += 1
+                    cmd = None
+                    while True:
+                        try:
+                            cmd, context = get_command()
+                            self._handle_command(cmd, context)
+                        except queue.Empty:
+                            break
+                        except Exception as err:
+                            logger.exception("Failure executing cmd %s: %s", cmd, err)
+                    q_list = self._record_queue_list
 
                 if not self._is_capturing:
                     # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
@@ -224,28 +247,54 @@ class VideoCapture(Process):
                     # not the case for other platforms/combinations of the above so may not be apparent when not on the
                     # current deployment platform.
                     time.sleep(0.001)
+                    record_start_frame_idx = None
+                    q_list.clear()
                     continue
 
-                frame, when = self._camera.capture()
+                frame, when = capture()
+                cur_frame_idx += 1
 
-                if self._image_queue is not None:
-                    if len(numpy.shape(frame)) < 3:
-                        self._image_queue.put(frame)
-                    else:
-                        self._image_queue.put(frame[:, :, 0])
+                i_q = self._image_queue
+                if i_q is not None:
+                    # image queue goes to GUI video reader frame
+                    if t_now > next_t_image_q:
+                        next_t_image_q = t_now + vid_frame_delay
+                        if len(numpy.shape(frame)) < 3:
+                            i_q.put(frame)
+                        else:
+                            i_q.put(frame[:, :, 0])
 
                 if self._is_record_active:
-                    self._queue_list.append((frame, when))
-                    self._queue_list_count += 1
-                    if self._queue_list_count >= self._record_batch_size:
-                        self._record_queue.put(self._queue_list)
-                        self._queue_list = list()
-                        self._queue_list_count = 0
+                    # record queue goes to video save to disk/file
+                    if record_start_frame_idx is None:
+                        logger.info("Starting record with frame %s", cur_frame_idx)
+                        record_start_frame_idx = cur_frame_idx
+                    q_list.append((frame, when))
+                    if len(q_list) >= self._record_batch_size:
+                        rec_q.put(q_list)  # thread queue
+                        q_list = self._record_queue_list = []
+                else:
+                    if record_start_frame_idx is not None:
+                        # r = cnt_net_q_put % 3  # TODO
+                        record_start_frame_idx = None
+                        # empty = numpy.empty_like(frame)
+                        # if r > 0:
+                        #     for _ in range(3 - r):
+                        #         while net_q_put(empty, self._camera_idx, -1, allow_overflow=False) != BufferResult.Ok:
+                        #             time.sleep(0.001)
+                        # cnt_net_q_put = 0
 
-                if self._network_queue is not None:
-                    self._network_queue.put(frame, self._camera_idx)
-            except Exception as ex:
-                self._set_error(ex)
+                if net_q_put is not None:
+                    # network queue goes to processing/inference
+                    did_put = net_q_put(frame, self._camera_idx,
+                        -1 if record_start_frame_idx is None else cur_frame_idx - record_start_frame_idx,
+                        allow_overflow=False) == BufferResult.Ok
+                    if did_put:
+                        cnt_net_q_put += 1
+
+            except Exception as err:
+                logger.exception("Error during capture loop: %s", err)
+                self._set_error(err)
                 fault_count += 1
                 if fault_count > 5:
                     self._end_capture(None)
@@ -253,10 +302,9 @@ class VideoCapture(Process):
 
     def _terminate_capture_loop(self):
         try:
-            logger.debug(f"<{self._name}> capture loop ended")
+            logger.info(f"<{self._name}> capture loop ended")
 
             self._camera.end_capture()
-
             VideoManager.close()
 
             if self._record is not None:
@@ -266,16 +314,17 @@ class VideoCapture(Process):
             self._set_status(CaptureProcessStatus.TERMINATED)
 
             logger.debug(f"<{self._name}> terminated")
-        except Exception as ex:
-            self._set_error(ex)
+        except Exception as err:
+            logger.exception("%s: terminate capture loop error: %s", self, err)
+            self._set_error(err)
 
     def _create_camera(self):
         self._camera = VideoManager.create_camera(self._camera_url, self._name)
 
     def _handle_command(self, cmd: CaptureCommandKind, context: object):
-        logger.debug(f"<{self._name}> received {cmd}")
-
+        logger.info(f"<{self._name}> executing {cmd}")
         self.command_handler.get(cmd)(context)
+        logger.info("status: capturing=%s recording=%s", self._is_capturing, self._is_record_active)
 
     def _user_terminate(self, _: object):
         self._is_running = False
@@ -287,13 +336,13 @@ class VideoCapture(Process):
         self._is_capturing = False
 
     def _enable_trigger(self, _: object):
-        self._queue_list = list()
-        self._queue_list_count = 0
         self._is_record_active = self._record_properties.should_record(True)
+        logger.info("%s: is_record_active=%s", self, self._is_record_active)
 
     def _disable_trigger(self, _: object):
+        logger.info("%s: trigger disabled", self)
         self._is_record_active = self._record_properties.should_record(False)
-        # self._record_queue.put((None, None))
-        self._queue_list = list()
-        self._queue_list_count = 0
-        self._record_queue.put(list())
+        if len(self._record_queue_list) > 0:
+            self._record_queue.put(self._record_queue_list)
+            self._record_queue_list = []
+        self._record_queue.put([])

@@ -14,8 +14,9 @@ import numpy
 
 from autotrainer.core import trim_queue
 from autotrainer.core import ProjectInfo, ProjectInterval
+from autotrainer.core.logging import get_verbose_logger
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class VideoRecordMode(IntEnum):
@@ -56,8 +57,7 @@ class VideoRecordProperties:
 
 class VideoRecord(Thread):
     def __init__(self, properties: VideoRecordProperties, input_queue: Queue):
-        Thread.__init__(self)
-
+        Thread.__init__(self, name=properties.name)
         self._project_info = properties.project_info
         self._name = properties.name
         self._width = properties.frame_size[0]
@@ -75,13 +75,20 @@ class VideoRecord(Thread):
         self._video_writer = None
         self._video_timestamp_file = None
 
-        self._image_location = None
+        self._image_location: str
         self._last_image_timestamp = time.perf_counter()
 
         self._interval_mode = ProjectInterval.NONE
         self._interval_reference = -1
 
-    def run(self) -> None:
+    def run(self):
+        logger.notice("%s: running", self)
+        try:
+            self._run()
+        except Exception as err:
+            logger.exception("%s: Error during run: %s", err)
+
+    def _run(self) -> None:
         if self._project_info is None or not self._project_info.is_valid():
             logger.error("video recording and image capture can not proceed without value project information")
             return
@@ -91,15 +98,15 @@ class VideoRecord(Thread):
             self._prepare_writers()
 
         last_when = 0
-
         check_count = 0
-
-        frame_skip = 1.0 / self._fps
 
         while self._is_running:
             try:
-                queue_list = self._input_queue.get_nowait()
+                queue_list = self._input_queue.get(timeout=1)
+            except Empty:
+                continue
 
+            try:
                 # if frame is None or when is None:
                 if len(queue_list) == 0:
                     # Indicator for trigger disabled
@@ -126,6 +133,7 @@ class VideoRecord(Thread):
                             self._prepare_writers()
                         self._last_image_timestamp = when
                         when_str = datetime.fromtimestamp(when / 1e9).strftime("%Y%m%d_%H%M%S_%f")[:-3]
+                        assert isinstance(self._image_location, str)
                         cv2.imwrite(os.path.join(self._image_location, self._image_name.format(when=when_str)), frame)
 
                     check_count += 1
@@ -136,16 +144,15 @@ class VideoRecord(Thread):
                         check_count = 0
                         self._check_writers()
 
-            except Empty:
-                time.sleep(frame_skip)
-            except Exception as ex:
-                logger.error(f"loop {ex}", exc_info=True, stack_info=True)
+            except Exception as err:
+                logger.exception("%s: loop error: %s", self, err)
 
             try:
                 self._check_writers()
-            except Exception as ex:
-                logger.error(f"check{ex}", exc_info=True, stack_info=True)
+            except Exception as err:
+                logger.exception("%s: check writers error: %s", self, err)
 
+        logger.notice("%s: main loop exited", self)
         self._close_writers()
 
     def cancel(self):
@@ -163,22 +170,21 @@ class VideoRecord(Thread):
                 self._prepare_writers()
 
     def _prepare_writers(self):
+        logger.info("%s: preparing writers...", self)
         self._interval_reference = self._project_info.get_interval(self._interval_mode)
-
         self._prepare_video_writer()
         self._prepare_image_capture()
 
     def _close_writers(self):
+        logger.info("%s: closing writers...", self)
         self._close_image_writer()
         self._close_video_writer()
 
     def _prepare_image_capture(self):
         self._close_image_writer()
-
         if self._image_interval > 0:
             self._image_location, self._image_name = (
                 self._project_info.get_image_capture_path(self._name, interval=self._interval_mode))
-
             logger.debug(f"<{self.name}>: image capture to {self._image_location}")
 
     def _close_image_writer(self):
@@ -188,17 +194,18 @@ class VideoRecord(Thread):
         self._close_video_writer()
 
         if not self._is_video_enabled:
+            logger.warning("_prepare_video_writer but _is_video_enabled False")
             return
 
         self._record_start = time.time()
 
-        video_file, timestamp_file = self._project_info.get_video_path(self._name, interval=self._interval_mode)
+        video_file, timestamp_file, _ = self._project_info.get_video_path(
+            self._name, interval=self._interval_mode, allow_overwrite=True)
 
-        logger.debug(f"<{self.name}>: video record to {video_file}")
+        logger.notice(f"<{self.name}>: video record to {video_file}")
 
         self._video_writer = cv2.VideoWriter(video_file, cv2.VideoWriter_fourcc(*'mp4v'), self._fps,
                                              (self._width, self._height))
-
         self._video_timestamp_file = open(timestamp_file, "a")
 
     def _close_video_writer(self):

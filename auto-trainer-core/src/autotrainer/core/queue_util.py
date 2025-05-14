@@ -8,11 +8,11 @@ def clear_queue(queue: Queue):
     if queue is None or sys.platform == "darwin":
         return
 
-    while queue.empty() is False or queue.qsize() > 0:
+    while not queue.empty() or queue.qsize() > 0:
         try:
             queue.get_nowait()
         except Empty:
-            pass
+            break
 
 
 def trim_queue(queue: Queue, limit: int) -> bool:
