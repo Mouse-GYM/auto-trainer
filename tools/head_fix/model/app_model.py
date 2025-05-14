@@ -1,8 +1,7 @@
 import logging
 import queue
 
-from autotrainer.core import (ObservableObject, ProjectInterval, SystemMessageHandler,
-                              SystemCommandKind,
+from autotrainer.core import (ObservableObject, ProjectInterval, SystemMessageHandler, SystemCommandKind,
                               SensorAnalysis, Motor)
 from autotrainer.device import DeviceConnection, CanDevice, HeadFix, CAN_IDENTIFIER, HAVE_CAN_DEVICE
 
