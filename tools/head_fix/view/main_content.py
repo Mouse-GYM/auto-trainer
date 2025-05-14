@@ -258,8 +258,8 @@ class MainContent(QWidget):
         self._audio_spectrum_plot.setXRange(min=0, max=64)
         self._audio_spectrum_plot.setYRange(min=0, max=200)
         ticks = []
-        for i in range(0, 64, 8):  # Step through indices
-            ticks.append((i, str(i * 1500)))  # Map index to actual x value
+        for i in range(0, 64, 10):  # Step through indices
+            ticks.append((i, str(i * 1000)))  # Map index to actual x value
 
         # Set the custom ticks
         ax = self._audio_spectrum_plot.getAxis('bottom')
