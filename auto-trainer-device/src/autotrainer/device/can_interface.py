@@ -1366,8 +1366,8 @@ class CanInterface(DeviceInterface):
             AudioData object if a complete packet was received, None otherwise
         """
         a = None
-        if (len(self._audio.magnitudes) == 32 and
-                message.audio_data_cmd.stream_id == self._audio.packet_id):
+        if (len(self._audio.magnitudes) == 64 and
+            message.audio_data_cmd.stream_id == self._audio.packet_id):
             a = AudioData()
             a.magnitudes = self._audio.magnitudes.copy()
             a.packet_id = self._audio.packet_id

@@ -3,7 +3,7 @@ import qtawesome as qta
 
 from PySide6.QtCore import Qt, Signal, QTimer, Slot
 from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
-    QCheckBox, QLineEdit, QFileDialog, QPlainTextEdit, QVBoxLayout
+    QCheckBox, QLineEdit, QFileDialog, QPlainTextEdit, QVBoxLayout, QDoubleSpinBox
 
 from autotrainer.core import PerfMonitor, LoadCellMonitor, ProjectInfo
 from autotrainer.core.message import Motor
@@ -39,6 +39,9 @@ class MainContent(QWidget):
 
         self._head_control = self._create_control_panel()
         layout.addWidget(self._head_control)
+
+        self._tone_control = self._create_tone_panel()
+        layout.addWidget(self._tone_control)
 
         layout.addWidget(self._create_sensor_panel())
 
@@ -169,6 +172,44 @@ class MainContent(QWidget):
 
         return panel
 
+    def _create_tone_panel(self):
+        row_layout = QHBoxLayout()
+        row_layout.setContentsMargins(8, 8, 8, 8)
+        row_layout.setSpacing(16)
+
+        self._set_tone_button = QPushButton("Tone")
+        self._set_tone_button.clicked.connect(self._set_tone)
+        row_layout.addWidget(self._set_tone_button, 0)
+
+        self._frequency = QDoubleSpinBox()
+        self._frequency.setDecimals(0)
+        self._frequency.setMaximum(20000)
+        self._frequency.setMinimum(1000)
+        self._frequency.setValue(5000)
+        self._frequency.setSuffix(" Hz")
+        row_layout.addWidget(self._frequency, 0)
+
+        self._duration = QDoubleSpinBox()
+        self._duration.setMaximum(60)
+        self._duration.setMinimum(1)
+        self._duration.setValue(2)
+        self._duration.setSuffix(" sec")
+        row_layout.addWidget(self._duration, 0)
+
+        row_layout.addStretch(1)
+
+        panel = CardWidget(background_color=None, header_background_color="#00b6de")
+        panel.setContentLayout(row_layout)
+
+        title = QLabel("Tone Generator")
+        title.setStyleSheet("font-weight: bold; color: white")
+
+        panel.header.setContent(title)
+
+        panel.setEnabled(False)
+
+        return panel
+
     def _create_sensor_panel(self):
         row_layout = QVBoxLayout()
 
@@ -213,6 +254,17 @@ class MainContent(QWidget):
         plot_layout.addWidget(widget, 2, 0)
 
         self._audio_spectrum_plot, widget = self._create_plot_widget("Audio Spectrum (dB)")
+        assert isinstance(self._audio_spectrum_plot, PGWidget)
+        self._audio_spectrum_plot.setXRange(min=0, max=64)
+        self._audio_spectrum_plot.setYRange(min=0, max=200)
+        ticks = []
+        for i in range(0, 64, 10):  # Step through indices
+            ticks.append((i, str(i * 1000)))  # Map index to actual x value
+
+        # Set the custom ticks
+        ax = self._audio_spectrum_plot.getAxis('bottom')
+        ax.setTicks([ticks])
+
         plot_layout.addWidget(widget, 2, 1)
 
         self._temperature_plot, widget = self._create_plot_widget("Temperature (\u00b0C)")
@@ -232,7 +284,7 @@ class MainContent(QWidget):
         return panel
 
     # noinspection PyMethodMayBeStatic
-    def _create_plot_widget(self, title: str):
+    def _create_plot_widget(self, title: str) -> (PGWidget, QWidget):
         plot = PGWidget()
         plot.setBackground(None)
         plot.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))
@@ -322,7 +374,7 @@ class MainContent(QWidget):
         self._perf_monitor.add_cycles(len(measurements[0]))
 
     def _audio_spectrum_received(self, spectrum):
-        self._audio_spectrum_plot.replace(spectrum)
+        self._audio_spectrum_plot.replace_cache(spectrum)
 
     def _set_position(self):
         self._model.set_position(self._position.value())
@@ -332,6 +384,9 @@ class MainContent(QWidget):
 
     def _enable_data_stream(self, b: bool):
         self._model.set_stream_enabled(b)
+
+    def _set_tone(self):
+        self._model.set_tone(self._frequency.value(), self._duration.value())
 
     def _connected(self):
         if self._record.isChecked():
@@ -371,6 +426,7 @@ class MainContent(QWidget):
         self._record_location.setEnabled(not enable)
         self._browse_button.setEnabled(not enable)
         self._head_control.setEnabled(enable)
+        self._tone_control.setEnabled(enable)
 
     def _browse_for_location(self):
         dirname = QFileDialog.getExistingDirectory(self, "Select Directory",

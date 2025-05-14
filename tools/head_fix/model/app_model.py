@@ -88,6 +88,17 @@ class AppModel(ObservableObject):
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.SET_MAGNET_INTENSITY, value)
 
+    def set_tone(self, freq: float, duration: float):
+        """
+        Args:
+            freq: Hz
+            duration: sec
+        """
+
+        if self._device_connection is not None:
+            self._device_connection.send_message(SystemCommandKind.PLAY_TONE, (int(freq),
+                                                                               int(duration) * 1000))
+
     def open_tunnel_gate(self):
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.OPEN_TUNNEL_GATE)
