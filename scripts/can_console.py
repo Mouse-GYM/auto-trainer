@@ -117,6 +117,7 @@ def monitor_message_queue():
                       f"- motor={motor_to_str(data.motor)}\n"
                       f"- max vel (mm/sec)={data.maximum_velocity:.2f}\n"
                       f"- max accel (mm/sec^2)={data.maximum_acceleration:.2f}\n"
+                      f"- home vel (mm/sec)={data.homing_velocity:.2f}\n"
                       f"- flip limit orientation={data.flip_limit_orientation}\n"
                       f"- microsteps={data.microsteps}\n"
                       f"- step/rev={data.steps_per_revolution:.0f}\n"
@@ -216,6 +217,10 @@ def write_config(motor: Motor, device_thread):
         resp = input(f"Max Acceleration (mm/sec^2) [{orig_config.maximum_acceleration:.2f}]= ")
         if resp != '':
             config.maximum_acceleration = float(resp)
+
+        resp = input(f"Homing Velocity (mm/sec) [{orig_config.homing_velocity:.2f}] = ")
+        if resp != '':
+            config.homing_velocity = float(resp)
 
         resp = input(f"Flip Limit Location [0, 1] [{orig_config.flip_limit_orientation}]= ")
         if resp != '':

@@ -178,6 +178,7 @@ class StepperConfig(Source):
     _maximum_velocity: float = 61  # mm/sec
     _maximum_acceleration: float = 244  # mm/sec^2
     _flip_limit_orientation: bool = False
+    _homing_velocity: float = 60  # mm/sec
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -191,6 +192,8 @@ class StepperConfig(Source):
             config.maximum_velocity = data["max_vel"]
         if "max_acc" in data:
             config.maximum_acceleration = data["max_acc"]
+        if "home_vel" in data:
+            config.homing_velocity = data["home_vel"]
         if "flip_limit_orientation" in data:
             config.flip_limit_orientation = data["flip_limit_orientation"] == 1
 
@@ -219,6 +222,14 @@ class StepperConfig(Source):
     @maximum_acceleration.setter
     def maximum_acceleration(self, value: float):
         self._maximum_acceleration = value
+
+    @property
+    def homing_velocity(self) -> float:
+        return self._homing_velocity
+
+    @homing_velocity.setter
+    def homing_velocity(self, value: float):
+        self._homing_velocity = value
 
     @property
     def microsteps(self) -> int:

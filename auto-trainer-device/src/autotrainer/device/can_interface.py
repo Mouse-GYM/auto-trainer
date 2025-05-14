@@ -955,12 +955,14 @@ class CanInterface(DeviceInterface):
 
         max_vel = mm_to_turns(config.maximum_velocity)
         max_acc = mm_to_turns(config.maximum_acceleration)
+        home_vel = mm_to_turns(config.homing_velocity)
 
         if self._jc.StepperCfgWrite(addr, motor_id,
                                     config.microsteps,
                                     config.steps_per_revolution,
                                     max_vel,
                                     max_acc,
+                                    home_vel,
                                     config.flip_limit_orientation,
                                     CanInterface.next_uuid()) == 0:
             return True
@@ -1100,7 +1102,7 @@ class CanInterface(DeviceInterface):
                                                             CanInterface.next_uuid()) == 0
 
     def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> (
-            bool):
+        bool):
         """
         Set the colors of a 3-color LED.
 
@@ -1218,7 +1220,7 @@ class CanInterface(DeviceInterface):
         return None
 
     def _translate_config(self, message) -> \
-            typing.Optional[typing.Union[ServoConfig, StepperConfig]]:
+        typing.Optional[typing.Union[ServoConfig, StepperConfig]]:
         """
         Translate configuration response messages for servo or stepper motors.
 
@@ -1281,6 +1283,7 @@ class CanInterface(DeviceInterface):
         config.maximum_velocity = turns_to_mm(message.cfg_response.stepper.motor_max_velocity)
         config.maximum_acceleration = turns_to_mm(
             message.cfg_response.stepper.motor_max_acceleration)
+        config.homing_velocity = turns_to_mm(message.cfg_response.stepper.homing_velocity)
 
         return config
 
