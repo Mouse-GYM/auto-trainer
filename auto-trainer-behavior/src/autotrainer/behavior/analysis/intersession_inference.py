@@ -23,7 +23,7 @@ def intersession_inference(pose_data: ndarray, part_names: typing.List[str], pro
     try:
         shape = pose_data.shape
         EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationSave, context=f"{shape}")
-        axis_labels = ("x", "y", "p")
+        axis_labels = ("x", "y", "likelihood")
         columns = pandas.MultiIndex.from_product([part_names, axis_labels], names=["bodyparts", "coords"])
 
         left = pose_data[::2, :]
