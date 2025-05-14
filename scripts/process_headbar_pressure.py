@@ -52,6 +52,6 @@ if __name__ == '__main__':
     if not os.path.exists(args.file):
         logger.error("The data file does not exist")
 
-    EventManager.create()
+    EventManager.default()
 
     process_data(args.file)

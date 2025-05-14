@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
-    QLayout, QVBoxLayout
+    QLayout, QVBoxLayout, QFileDialog
 
 import qtawesome as qta
 
@@ -91,6 +91,13 @@ class PelletControl(QWidget):
 
         b_layout.addStretch(1)
 
+        self._move_file_button = QPushButton("")
+        folder_icon = qta.icon('fa5s.folder-open')
+        self._move_file_button.setIcon(folder_icon)
+        self._move_file_button.clicked.connect(lambda: self._load_move_file())
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            b_layout.addWidget(self._move_file_button)
+
         self._config_button = QPushButton("")
         gear_icon = qta.icon('fa5s.cog')  # Font Awesome 5 Solid cog icon
         self._config_button.setIcon(gear_icon)
@@ -164,3 +171,19 @@ class PelletControl(QWidget):
 
     def _on_motor_selected(self, motor: Motor):
         self._app_model.get_config(motor)
+
+    def _load_move_file(self):
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle("Open File")
+        dialog.setFileMode(QFileDialog.ExistingFile)  # Allow only one file to be selected
+
+        # Optionally set filters for file types
+        dialog.setNameFilter("All Files (*)")
+
+        # Show the dialog and wait for user's response
+        if dialog.exec_():
+            # Get the selected file path(s) - will be a list
+            selected_files = dialog.selectedFiles()
+            # Return the first (and likely only) file
+
+            self._app_model.load_move_file(selected_files[0])

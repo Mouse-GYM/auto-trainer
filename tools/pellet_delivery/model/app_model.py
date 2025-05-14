@@ -3,8 +3,10 @@ import queue
 import uuid
 from pathlib import Path
 
-from autotrainer.core import ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor
-from autotrainer.device import CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery, DeviceConnection
+from autotrainer.core import ObservableObject, SystemMessageHandler, SystemCommandKind, \
+    MessageHandler, Motor
+from autotrainer.device import (CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery,
+                                DeviceConnection, CompoundMovementFile)
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
@@ -163,7 +165,8 @@ class AppModel(ObservableObject):
 
     @front_door.setter
     def front_door(self, value):
-        self._front_door = self._on_property_changed(MessageHandler.FRONT_DOOR_PROPERTY, value, self._front_door)
+        self._front_door = self._on_property_changed(MessageHandler.FRONT_DOOR_PROPERTY, value,
+                                                     self._front_door)
 
     @property
     def panel_door(self):
@@ -171,7 +174,8 @@ class AppModel(ObservableObject):
 
     @panel_door.setter
     def panel_door(self, value):
-        self._panel_door = self._on_property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, value, self._panel_door)
+        self._panel_door = self._on_property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, value,
+                                                     self._panel_door)
 
     @property
     def stimuli(self):
@@ -179,7 +183,8 @@ class AppModel(ObservableObject):
 
     @stimuli.setter
     def stimuli(self, value):
-        self._stimuli = self._on_property_changed(MessageHandler.STIMULI_PROPERTY, value, self._stimuli)
+        self._stimuli = self._on_property_changed(MessageHandler.STIMULI_PROPERTY, value,
+                                                  self._stimuli)
 
     @property
     def config(self):
@@ -219,6 +224,11 @@ class AppModel(ObservableObject):
     def get_config(self, motor: Motor):
         self._send_command(SystemCommandKind.READ_MOTOR_CONFIGURATION, motor)
 
+    def load_move_file(self, filename: str):
+        if self._device_connection is not None:
+            movements = CompoundMovementFile.from_file(filename)
+            self._device_connection.use_compound_movements(movements)
+
     def connect_to_device(self):
         if len(self._user_settings.port) == 0:
             return
@@ -238,7 +248,8 @@ class AppModel(ObservableObject):
 
         self._send_command(SystemCommandKind.REQUEST_VERSION)
 
-        if self._hardware_configuration is None or not Path.exists(Path(self._hardware_configuration)):
+        if self._hardware_configuration is None or not Path.exists(
+            Path(self._hardware_configuration)):
             if Path.home().joinpath(".alogus_config.yaml").exists():
                 self.hardware_configuration = str(Path.home().joinpath(".alogus_config.yaml"))
             elif Path.home().joinpath("alogus_config.yaml").exists():
@@ -249,10 +260,11 @@ class AppModel(ObservableObject):
         if self._hardware_configuration is not None:
             try:
                 self._device_connection.use_motor_configurations(
+                    # MotorConfigurationFile does not take/accept argument(s) atm ?
                     MotorConfigurationFile(self._hardware_configuration))
-            except:
+            except Exception as err:
                 logger.error(
-                    f"failed to read motor configuration file: {self._hardware_configuration}")
+                    "failed to read motor configuration file %s: %s", self._hardware_configuration, err)
                 self.hardware_configuration = None
 
         self.is_connected = True

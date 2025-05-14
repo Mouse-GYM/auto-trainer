@@ -8,7 +8,7 @@ import yaml
 import numpy
 
 from ..observable_object import ObservableObject
-from ..event_manager import EventManager
+from ..event import EventManager
 
 from .analysis_measurement_event_kind import AnalysisMeasurementEventKind
 
@@ -120,8 +120,8 @@ class LoadCellMonitor(ObservableObject):
     def _ensure_active(self):
         if not self._is_engaged:
             self._is_engaged = True
-            EventManager.post_event(AnalysisMeasurementEventKind.loadCellEngagedChanged, context=True,
-                                    when=datetime.fromtimestamp(self._when), index=self._index)
+            EventManager.default().post_event_content(AnalysisMeasurementEventKind.loadCellEngagedChanged, context=True,
+                                                      when=datetime.fromtimestamp(self._when), index=self._index)
             self.property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, True, False)
 
             self._last_active_start = time.perf_counter()
@@ -129,8 +129,8 @@ class LoadCellMonitor(ObservableObject):
     def _ensure_inactive(self):
         if self._is_engaged:
             self._is_engaged = False
-            EventManager.post_event(AnalysisMeasurementEventKind.loadCellEngagedChanged, context=False,
-                                    when=datetime.fromtimestamp(self._when), index=self._index)
+            EventManager.default().post_event_content(AnalysisMeasurementEventKind.loadCellEngagedChanged, context=False,
+                                                      when=datetime.fromtimestamp(self._when), index=self._index)
             self.property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, False, True)
 
     def force_engaged(self, engaged: bool) -> None:
@@ -140,6 +140,6 @@ class LoadCellMonitor(ObservableObject):
         if engaged != self._is_engaged:
             self._is_engaged = engaged
             self.property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, self._is_engaged, not self._is_engaged)
-            EventManager.post_event(AnalysisMeasurementEventKind.loadCellEngagedChanged,
-                                    context=self._is_engaged, when=datetime.fromtimestamp(time.time()),
-                                    index=time.perf_counter_ns())
+            EventManager.default().post_event_content(AnalysisMeasurementEventKind.loadCellEngagedChanged,
+                                                      context=self._is_engaged, when=datetime.fromtimestamp(time.time()),
+                                                      index=time.perf_counter_ns())

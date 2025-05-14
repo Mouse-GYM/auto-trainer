@@ -67,29 +67,28 @@ class PelletDigitalInputs(Source):
 @dataclass
 class ServoConfig(Source):
     _motor: Motor = Motor.NONE
-    _min_position: float = 0  # (deg)
-    _max_position: float = 120  # (deg)
-    _min_pwm_duration: float = 1000  # (us)
-    _max_pwm_duration: float = 2000  # (us)
-    _max_velocity: float = 200  # (deg/sec)
-    _max_acceleration: float = 100.0  # (deg/sec^2)
+    _minimum_position: float = 0  # (deg)
+    _maximum_position: float = 120  # (deg)
+    _minimum_pwm_duration: float = 1000  # (us)
+    _maximum_pwm_duration: float = 2000  # (us)
+    _maximum_velocity: float = 200  # (deg/sec)
+    _maximum_acceleration: float = 100.0  # (deg/sec^2)
 
     @classmethod
     def from_dict(cls, data: dict):
         config = ServoConfig()
-
         if "min_pos" in data:
-            config.min_position = data["min_pos"]
+            config.minimum_position = data["min_pos"]
         if "max_pos" in data:
-            config.max_position = data["max_pos"]
+            config.maximum_position = data["max_pos"]
         if "min_pwm" in data:
-            config.min_pwm_duration_us = data["min_pwm"]
+            config.minimum_pwm_duration = data["min_pwm"]
         if "max_pwm" in data:
-            config.max_pwm_duration_us = data["max_pwm"]
+            config.maximum_pwm_duration = data["max_pwm"]
         if "max_vel" in data:
-            config.max_velocity = data["max_vel"]
+            config.maximum_velocity = data["max_vel"]
         if "max_acc" in data:
-            config.max_acceleration = data["max_acc"]
+            config.maximum_acceleration = data["max_acc"]
 
         return config
 
@@ -103,51 +102,51 @@ class ServoConfig(Source):
 
     @property
     def maximum_velocity(self) -> float:
-        return self._max_velocity
+        return self._maximum_velocity
 
     @maximum_velocity.setter
     def maximum_velocity(self, value: float):
-        self._max_velocity = value
+        self._maximum_velocity = value
 
     @property
     def maximum_acceleration(self) -> float:
-        return self._max_acceleration
+        return self._maximum_acceleration
 
     @maximum_acceleration.setter
     def maximum_acceleration(self, value: float):
-        self._max_acceleration = value
+        self._maximum_acceleration = value
 
     @property
     def minimum_position(self) -> float:
-        return self._min_position
+        return self._minimum_position
 
     @minimum_position.setter
     def minimum_position(self, value: float):
-        self._min_position = value
+        self._minimum_position = value
 
     @property
     def maximum_position(self) -> float:
-        return self._max_position
+        return self._maximum_position
 
     @maximum_position.setter
     def maximum_position(self, value: float):
-        self._max_position = value
+        self._maximum_position = value
 
     @property
     def minimum_pwm_duration(self) -> float:
-        return self._min_pwm_duration
+        return self._minimum_pwm_duration
 
     @minimum_pwm_duration.setter
     def minimum_pwm_duration(self, value: float):
-        self._min_pwm_duration = value
+        self._minimum_pwm_duration = value
 
     @property
     def maximum_pwm_duration(self) -> float:
-        return self._max_pwm_duration
+        return self._maximum_pwm_duration
 
     @maximum_pwm_duration.setter
     def maximum_pwm_duration(self, value: float):
-        self._max_pwm_duration = value
+        self._maximum_pwm_duration = value
 
 
 @dataclass
@@ -174,10 +173,10 @@ class ServoStatus(Source):
 @dataclass
 class StepperConfig(Source):
     _motor: Motor = Motor.NONE
-    _micro_steps: int = 64
+    _microsteps: int = 64
     _steps_per_revolution: float = 48.0
-    _max_velocity: float = 61  # mm/sec
-    _max_acceleration: float = 244  # mm/sec^2
+    _maximum_velocity: float = 61  # mm/sec
+    _maximum_acceleration: float = 244  # mm/sec^2
     _flip_limit_orientation: bool = False
 
     @classmethod
@@ -185,13 +184,13 @@ class StepperConfig(Source):
         config = StepperConfig()
 
         if "microsteps" in data:
-            config.min_step_inverted = data["microsteps"]
+            config.microsteps = data["microsteps"]
         if "steps_per_revolution" in data:
             config.steps_per_revolution = data["steps_per_revolution"]
         if "max_vel" in data:
-            config.max_velocity = data["max_vel"]
+            config.maximum_velocity = data["max_vel"]
         if "max_acc" in data:
-            config.max_acceleration = data["max_acc"]
+            config.maximum_acceleration = data["max_acc"]
         if "flip_limit_orientation" in data:
             config.flip_limit_orientation = data["flip_limit_orientation"] == 1
 
@@ -207,27 +206,27 @@ class StepperConfig(Source):
 
     @property
     def maximum_velocity(self) -> float:
-        return self._max_velocity
+        return self._maximum_velocity
 
     @maximum_velocity.setter
     def maximum_velocity(self, value: float):
-        self._max_velocity = value
+        self._maximum_velocity = value
 
     @property
     def maximum_acceleration(self) -> float:
-        return self._max_acceleration
+        return self._maximum_acceleration
 
     @maximum_acceleration.setter
     def maximum_acceleration(self, value: float):
-        self._max_acceleration = value
+        self._maximum_acceleration = value
 
     @property
     def microsteps(self) -> int:
-        return self._micro_steps
+        return self._microsteps
 
     @microsteps.setter
     def microsteps(self, value: int):
-        self._micro_steps = value
+        self._microsteps = value
 
     @property
     def steps_per_revolution(self) -> float:
@@ -238,7 +237,7 @@ class StepperConfig(Source):
         self._steps_per_revolution = value
 
     @property
-    def flip_limit_orientation(self) -> int:
+    def flip_limit_orientation(self) -> bool:
         return self._flip_limit_orientation
 
     @flip_limit_orientation.setter

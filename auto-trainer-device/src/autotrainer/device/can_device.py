@@ -85,35 +85,35 @@ class CanDevice(Device):
                 lambda data: self._interface.set_magnet(int(data)),
 
             SystemCommandKind.SET_LOAD_SERVO:
-                lambda data: self._interface.set_load_servo(int(data)),
+                lambda data: self._interface.set_load_servo(data),
 
             SystemCommandKind.SET_COVER_SERVO:
-                lambda data: self._interface.set_cover_servo(int(data)),
+                lambda data: self._interface.set_cover_servo(data),
 
             SystemCommandKind.SET_X:
-                lambda data: self._interface.set_x(float(data), True),
+                lambda data: self._interface.set_x(data, True),
 
             SystemCommandKind.SET_Y:
-                lambda data: self._interface.set_y(float(data), True),
+                lambda data: self._interface.set_y(data, True),
 
             SystemCommandKind.SET_Z:
-                lambda data: self._interface.set_z(float(data), True),
+                lambda data: self._interface.set_z(data, True),
 
             SystemCommandKind.MOVE_X:
-                lambda data: self._interface.set_x(float(data), False),
+                lambda data: self._interface.set_x(data, False),
 
             SystemCommandKind.MOVE_Y:
-                lambda data: self._interface.set_y(float(data), False),
+                lambda data: self._interface.set_y(data, False),
 
             SystemCommandKind.MOVE_Z:
-                lambda data: self._interface.set_z(float(data), False),
+                lambda data: self._interface.set_z(data, False),
 
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._home([cast(Motor, data)]),
 
             SystemCommandKind.SEND_HOME:
                 lambda data: self._home(
-                    [Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR]),
+                    [Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]),
 
             SystemCommandKind.SEND_FIXED_XYZ:
                 lambda data: self._interface.fixed_position(),
@@ -431,6 +431,14 @@ class CanDevice(Device):
         if self._api is not None and kind is not None:
             self.api.send_message(kind, position)
 
+    @staticmethod
+    def _to_tuple(value: str):
+        if "," in str(value):
+            parts = value.split(",")
+            return (float(parts[0].strip()), float(parts[1].strip()))
+        else:
+            return float(value)
+
     def _perform_next_compound_step(self):
         """
         Issue the next step in a multi-step motor sequence.
@@ -439,55 +447,68 @@ class CanDevice(Device):
             self._homing_motors.pop(0)
             self._home(self._homing_motors)
         elif self._compound_movement is not None and \
-                len(self._compound_movement) > 0:
+            len(self._compound_movement) > 0:
             step = self._compound_movement.pop(0)
 
             if "x" in step:
-                location = step["x"]
+                location = CanDevice._to_tuple(step["x"])
                 self._interface.set_x(location)
+                logger.debug(f"X to {location}")
 
             elif "y" in step:
-                location = step["y"]
+                location = CanDevice._to_tuple(step["y"])
                 self._interface.set_y(location)
+                logger.debug(f"Y to {location}")
 
             elif "z" in step:
-                location = step["z"]
+                location = CanDevice._to_tuple(step["z"])
                 self._interface.set_z(location)
+                logger.debug(f"Z to {location}")
 
             elif "load_arm" in step:
-                location = step["load_arm"]
+                location = CanDevice._to_tuple(step["load_arm"])
                 self._interface.set_load_servo(location)
+                logger.debug(f"Load Arm to {location}")
 
             elif "barrier_arm" in step:
-                location = step["barrier_arm"]
+                location = CanDevice._to_tuple(step["barrier_arm"])
                 self._interface.set_cover_servo(location)
+                logger.debug(f"Barrier Arm to {location}")
 
             elif "magnet" in step:
-                location = step["magnet"]
+                location = CanDevice._to_tuple(step["magnet"])
                 self._interface.set_magnet(location)
+                logger.debug(f"Magnet to {location}")
 
             elif "delay" in step:
-                logger.debug("delay start")
-                self._interface.delay(step["delay"])
+                duration = step["delay"]
+                self._interface.delay(duration)
+                logger.debug(f"delay for {duration}")
 
             elif "tone" in step:
                 freq, duration = step["tone"].split(',')  # (hz), (sec)
                 self._interface.emit_tone(int(freq), int(float(duration) * 1000))
+                logger.debug(f"Emit Tone at {freq} for {duration}")
 
             elif "predefined" in step:
                 predefined = step["predefined"]
                 if predefined == "send":
                     self._interface.fixed_position()
+                    logger.debug("Predefined Send")
                 elif predefined == "cover":
                     self._interface.cover_pellet()
+                    logger.debug("Predefined Cover (maximum)")
                 elif predefined == "release":
                     self._interface.release_pellet()
+                    logger.debug("Predefined Release (minimum)")
                 elif predefined == "retrieve":
                     self._interface.retrieve_pellet()
+                    logger.debug("Predefined Retrieve (maximum)")
                 elif predefined == "scoop":
                     self._interface.scoop_pellet()
+                    logger.debug("Predefined Scoop (minimum)")
                 elif predefined == "home":
-                    self._home([Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR])
+                    self._home([Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
         else:
             self._command_complete()
             self._compound_movement = None

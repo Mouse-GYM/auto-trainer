@@ -34,6 +34,7 @@ class MemoryPoseModel(PoseModel):
         self.body_parts.append("Nose")
         self.body_parts.append("Triangle")
         self.body_parts.append("Mouth")
+        self.body_parts.append("Diamond")
 
     def predict(self, frames: numpy.ndarray) -> typing.List[numpy.ndarray]:
         all_frames = list()

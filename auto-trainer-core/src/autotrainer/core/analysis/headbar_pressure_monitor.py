@@ -8,7 +8,7 @@ import yaml
 import numpy
 
 from ..observable_object import ObservableObject
-from ..event_manager import EventManager
+from ..event import EventManager
 
 from .analysis_measurement_event_kind import AnalysisMeasurementEventKind
 
@@ -131,9 +131,9 @@ class HeadbarPressureMonitor(ObservableObject):
         if is_engaged != self._is_engaged:
             self._is_engaged = is_engaged
             self.property_changed(HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, self._is_engaged, not self._is_engaged)
-            EventManager.post_event(AnalysisMeasurementEventKind.headbarPressureEngagedChanged,
-                                    context=self._is_engaged,
-                                    when=datetime.fromtimestamp(when), index=index)
+            EventManager.default().post_event_content(AnalysisMeasurementEventKind.headbarPressureEngagedChanged,
+                                                      context=self._is_engaged,
+                                                      when=datetime.fromtimestamp(when), index=index)
         self._is_engaged = is_engaged
 
         return is_engaged
@@ -157,6 +157,6 @@ class HeadbarPressureMonitor(ObservableObject):
         if engaged != self._is_engaged:
             self._is_engaged = engaged
             self.property_changed(HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, self._is_engaged, not self._is_engaged)
-            EventManager.post_event(AnalysisMeasurementEventKind.headbarPressureEngagedChanged,
-                                    context=self._is_engaged, when=datetime.fromtimestamp(time.time()),
-                                    index=time.perf_counter_ns())
+            EventManager.default().post_event_content(AnalysisMeasurementEventKind.headbarPressureEngagedChanged,
+                                                      context=self._is_engaged, when=datetime.fromtimestamp(time.time()),
+                                                      index=time.perf_counter_ns())
