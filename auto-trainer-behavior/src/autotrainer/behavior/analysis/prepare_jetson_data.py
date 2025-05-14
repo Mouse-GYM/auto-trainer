@@ -4,6 +4,8 @@ Created on Tue Jan 16 16:15:29 2024
 
 @author: reynoben
 """
+import sys
+
 import numpy as np
 import pandas as pd
 import os
@@ -14,6 +16,9 @@ import pickle
 from . import calibration_FLIR as cal_flir
 import yaml
 from pathlib import Path
+
+video_write_ext = ".mp4" if sys.platform.startswith("linux") else ".mkv"
+
 
 def identify_dropped_frames(timestamp_file, frame_rate):
     """
@@ -58,13 +63,15 @@ def identify_dropped_frames(timestamp_file, frame_rate):
 
     return dropped_frame_vector
 
+
 def extend_and_interpolate_tracking_data(tracking_data, dropped_frame_vector):
     """
     Extends and interpolates x/y tracking data for each bodypart to handle dropped frames.
 
     Parameters:
         tracking_data (pd.DataFrame): MultiIndex DataFrame with bodyparts and 'x'/'y' values.
-        dropped_frame_vector (np.ndarray): Binary vector where 0 represents valid frames and 1 represents dropped frames.
+        dropped_frame_vector (np.ndarray): Binary vector where 0 represents valid frames and 1 represents dropped
+        frames.
 
     Returns:
         pd.DataFrame: Extended and interpolated tracking data with corrected lengths.
@@ -91,7 +98,7 @@ def extend_and_interpolate_tracking_data(tracking_data, dropped_frame_vector):
                 valid_frames,  # Frames with valid data
                 original_data  # Original data corresponding to valid frames
             )
-            
+
         # Handle 'p' (confidence) separately
         original_confidence = tracking_data[(bodypart, 'likelihood')].values
 
@@ -107,11 +114,12 @@ def extend_and_interpolate_tracking_data(tracking_data, dropped_frame_vector):
     # Return the extended and interpolated DataFrame
     return extended_data
 
+
 # Helper function to process hand data
 def process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf):
     for h in hand_options:
         hand_categories = [h + item for item in hand_base_names]
-        
+
         likelihood_array = np.empty((len(df), len(hand_categories)), dtype=np.float64)
         y_array = np.empty((len(df), len(hand_categories)), dtype=np.float64)
         x_array = np.empty((len(df), len(hand_categories)), dtype=np.float64)
@@ -126,7 +134,7 @@ def process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf):
                 likelihood_array[:, cndx] = df.loc[:, (dlc_seg, cat, 'likelihood')].values
                 x_array[:, cndx] = df.loc[:, (dlc_seg, cat, 'x')].values
                 y_array[:, cndx] = df.loc[:, (dlc_seg, cat, 'y')].values
-            
+
         col_index = np.argmax(likelihood_array, axis=1)
         row_index = np.arange(len(df))
 
@@ -139,21 +147,22 @@ def process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf):
         newdf.loc[np.arange(len(df)), (h + '_Hand', 'x')] = x2keep
         newdf.loc[np.arange(len(df)), (h + '_Hand', 'y')] = y2keep
         newdf.loc[np.arange(len(df)), (h + '_Hand', 'likelihood')] = p2keep
-    
+
     return newdf
 
-#extract tracking data from H5 file 
+
+# extract tracking data from H5 file
 def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
     dataframe_RL = []
-    bodyparts = ['R_Hand','L_Hand','Pellet','Nose','Mouth','Tongue_mid','Tongue_tip','Star','Triangle']
+    bodyparts = ['R_Hand', 'L_Hand', 'Pellet', 'Nose', 'Mouth', 'Tongue_mid', 'Tongue_tip', 'Star', 'Triangle',
+                 'Diamond']
     coordinates = ['x', 'y', 'likelihood']
     columns = pd.MultiIndex.from_product([bodyparts, coordinates], names=['bodyparts', 'coordinates'])
-
 
     # Process each video
     hand_base_names = ['H_flat', 'H_spread', 'H_grab']
     hand_options = ['R', 'L']
-    additional_names = ['Pellet','Nose','Mouth','Tongue_mid','Tongue_tip','Star','Triangle']
+    additional_names = ['Pellet', 'Nose', 'Mouth', 'Tongue_mid', 'Tongue_tip', 'Star', 'Triangle', 'Diamond']
     for v_path in video_paths:
         vid_dir, vid_name_raw = os.path.split(v_path)
         vid_name_raw = os.path.splitext(vid_name_raw)[0]
@@ -161,14 +170,14 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
         if not os.path.isfile(h5_file_path):
             print('h5 path does not exist')
             return dataframe_RL, bodyparts
-        
+
         df = pd.read_hdf(h5_file_path)
 
         newdf = pd.DataFrame(columns=columns, index=range(len(df)))
-        
+
         # Process hand data
         newdf = process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf)
-        
+
         # Process additional bodyparts
         for an in additional_names:
             if dlc_seg == '_raw2D':
@@ -179,27 +188,26 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
                 newdf.loc[np.arange(len(df)), (an, 'x')] = df[(dlc_seg, an, 'x')].values
                 newdf.loc[np.arange(len(df)), (an, 'y')] = df[(dlc_seg, an, 'y')].values
                 newdf.loc[np.arange(len(df)), (an, 'likelihood')] = df[(dlc_seg, an, 'likelihood')].values
-            
+
         newdf_interpolated = interpolate_coordinates(newdf.copy(), p_thresh)
-        
+
         # Generate the dropped frame vector
-        timestamp_file = v_path.replace('.mp4','_timestamps.txt')
+        timestamp_file = v_path.replace(video_write_ext, '_timestamps.txt')
         dropped_frame_vector = identify_dropped_frames(timestamp_file, frame_rate)
-        
-        # In cases where there are more timestamps than frames
-        dropped_frame_vector = dropped_frame_vector[:len(df)]
-        
+
+        # # In cases where there are more timestamps than frames
+        # dropped_frame_vector = dropped_frame_vector[:len(df)]
+
         # Extend and interpolate the tracking data
         newdf_filled = extend_and_interpolate_tracking_data(
             newdf_interpolated.copy().astype(float),
             dropped_frame_vector)
-        
+
         # Apply Butterworth filter to r_cam_df and l_cam_df with a cutoff frequency of 0.1 (adjust as needed)
         newdf_filtered = apply_butterworth_filter(newdf_filled.copy(), frame_rate=frame_rate)
 
         dataframe_RL.append(newdf_filtered.astype(float))
-        
-    
+
     # Determine the maximum length
     max_len = max(len(dataframe_RL[0]), len(dataframe_RL[1]))
     padded_df_LR = []
@@ -211,8 +219,9 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
         )
         df = pd.concat([df, pad_df], ignore_index=True)
         padded_df_LR.append(df)
-        
+
     return padded_df_LR, bodyparts
+
 
 def get_frame_rate(video_path):
     # TODO: Not yet updated for use with Jetson
@@ -220,7 +229,7 @@ def get_frame_rate(video_path):
     # Extract relevant information from video_path
     vid_name_base, vid_dir = get_vid_name_base(video_path)
     frame_rate_file = os.path.join(vid_dir, vid_name_base + '_userdata_copy.yaml')
-    
+
     if os.path.isfile(frame_rate_file):
         # Read frame rate from userdata_copy.yaml
         with open(frame_rate_file, 'r') as file:
@@ -228,9 +237,10 @@ def get_frame_rate(video_path):
         if 'framerate' in yaml_content:
             frame_rate_string = yaml_content.split('framerate:')[1].split()[0]
             frame_rate = int(''.join(filter(str.isdigit, frame_rate_string)))
-    else: 
+    else:
         print('change to systemdatya_copy for frame rate')
     return frame_rate
+
 
 def get_vid_name_base(video_path):
     vid_dir, vid_name = os.path.split(video_path)
@@ -238,7 +248,6 @@ def get_vid_name_base(video_path):
     txtparts = vid_name.split('_')
     vid_name_base = txtparts[0] + '_' + txtparts[1] + '_' + txtparts[2]
     return vid_name_base, vid_dir
-
 
 
 # Function to interpolate x and y where likelihood < p_thresh
@@ -254,17 +263,16 @@ def interpolate_coordinates(df, p_thresh):
         # Set x and y to NaN where likelihood < p_thresh
         df.loc[below_threshold, x_col] = np.nan
         df.loc[below_threshold, y_col] = np.nan
-        
-        
+
         if df[x_col].notna().sum() > 1:
             # Convert x and y columns to numeric to ensure interpolation works
             df[x_col] = pd.to_numeric(df[x_col], errors='coerce')
             df[y_col] = pd.to_numeric(df[y_col], errors='coerce')
-            
+
             # Interpolate NaN values for x and y
-            df[x_col].interpolate(method='linear',inplace=True)
-            df[y_col].interpolate(method='linear',inplace=True)
-        
+            df[x_col].interpolate(method='linear', inplace=True)
+            df[y_col].interpolate(method='linear', inplace=True)
+
         # Forward-fill and backward-fill any remaining NaN values at the edges
         df[x_col].fillna(method='ffill', inplace=True)
         df[x_col].fillna(method='bfill', inplace=True)
@@ -272,6 +280,7 @@ def interpolate_coordinates(df, p_thresh):
         df[y_col].fillna(method='bfill', inplace=True)
 
     return df
+
 
 # Function to apply a Butterworth filter
 def butterworth_filter(data, frame_rate):
@@ -284,6 +293,7 @@ def butterworth_filter(data, frame_rate):
     y = filtfilt(b, a, data)
     return y
 
+
 # Function to apply Butterworth filter to x and y coordinates
 def apply_butterworth_filter(df, frame_rate):
     for part in df.columns.get_level_values('bodyparts').unique():
@@ -293,16 +303,16 @@ def apply_butterworth_filter(df, frame_rate):
         # Apply the Butterworth filter to the x and y columns
         df[x_col] = butterworth_filter(df[x_col].values, frame_rate)
         df[y_col] = butterworth_filter(df[y_col].values, frame_rate)
-        
+
         df[x_col] = pd.to_numeric(df[x_col], errors='coerce')
         df[y_col] = pd.to_numeric(df[y_col], errors='coerce')
-        
-    
+
     return df
+
 
 def _undistort_points(points, mat, coeffs, r, p, rot_cor):
     pts = points.reshape((-1, 3))
-    src=pts[:, :2].astype(np.float32)
+    src = pts[:, :2].astype(np.float32)
     src = cal_flir.rotate_2D_points(src, rot_cor)
     pts_undist = cv2.undistortPoints(
         src=src,
@@ -313,7 +323,7 @@ def _undistort_points(points, mat, coeffs, r, p, rot_cor):
     )
     pts[:, :2] = pts_undist.squeeze()
     pts_out = pts.reshape((points.shape[0], -1))
-        
+
     return pts_out
 
 
@@ -346,7 +356,8 @@ def undistort_points(dataframe, path_cam_mat):
     #currently no intermediate saving of this due to high speed.
     # check if the undi#%%
 storted files are already present
-    if os.path.exists(os.path.join(path_undistort,filename_cam1 + '_undistort.h5')) and os.path.exists(os.path.join(path_undistort,filename_cam2 + '_undistort.h5')):
+    if os.path.exists(os.path.join(path_undistort,filename_cam1 + '_undistort.h5')) and os.path.exists(os.path.join(
+    path_undistort,filename_cam2 + '_undistort.h5')):
         print("The undistorted files are already present at %s" % os.path.join(path_undistort,filename_cam1))
         dataFrame_cam1_undistort = pd.read_hdf(os.path.join(path_undistort,filename_cam1 + '_undistort.h5'))
         dataFrame_cam2_undistort = pd.read_hdf(os.path.join(path_undistort,filename_cam2 + '_undistort.h5'))
@@ -354,12 +365,12 @@ storted files are already present
     """
     dataframe_cam1 = dataframe[0]
     dataframe_cam2 = dataframe[1]
-    
+
     # Gather calib variables
     path_stereo_file = os.path.join(path_cam_mat, "stereo_params.pickle")
     with open(path_stereo_file, "rb") as handle:
         stereo_file = pickle.load(handle)
-    
+
     stereo_params = stereo_file[list(stereo_file.keys())[0]]
     dataFrame_cam1_undistort, dataFrame_cam2_undistort = _undistort_views(
         [(dataframe_cam1, dataframe_cam2)],
@@ -373,6 +384,7 @@ storted files are already present
         path_stereo_file,
     )
 
+
 def rotate_3d_points(points, x_degrees=0, y_degrees=0, z_degrees=0):
     # Convert degrees to radians
     x_rad = np.radians(x_degrees)
@@ -385,26 +397,26 @@ def rotate_3d_points(points, x_degrees=0, y_degrees=0, z_degrees=0):
         [0, np.cos(x_rad), -np.sin(x_rad)],
         [0, np.sin(x_rad), np.cos(x_rad)]
     ])
-    
+
     R_y = np.array([
         [np.cos(y_rad), 0, np.sin(y_rad)],
         [0, 1, 0],
         [-np.sin(y_rad), 0, np.cos(y_rad)]
     ])
-    
+
     R_z = np.array([
         [np.cos(z_rad), -np.sin(z_rad), 0],
         [np.sin(z_rad), np.cos(z_rad), 0],
         [0, 0, 1]
     ])
-    
+
     # Apply rotations sequentially: X, then Y, then Z
     rotated_points = points @ R_x.T @ R_y.T @ R_z.T
 
     return rotated_points
 
+
 def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
-    
     df_3d = pd.read_hdf(path_3D)
     num_frames = np.shape(df_3d)[0]
     mask = df_3d.columns.get_level_values("bodyparts").isin(bpts)
@@ -414,7 +426,7 @@ def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
 
     square_size, cbrow, cbcol = cal_flir.get_calibration_info(src_dir)
     cam_names = cal_flir.get_video_list(src_dir)
-    path_cam_mat = os.path.join(src_dir,'camera_matrix')
+    path_cam_mat = os.path.join(src_dir, 'camera_matrix')
     path_stereo_file = os.path.join(path_cam_mat, "stereo_params.pickle")
     with open(path_stereo_file, "rb") as handle:
         stereo_file = pickle.load(handle)
@@ -422,21 +434,21 @@ def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
     camera_pair = cam_names[0] + "-" + cam_names[1]
     # Undistort points
     rot_cor = stereo_file[camera_pair]['rot_cor']
-    
+
     # Read frame rate from userdata_copy.yaml
     metadata_path = os.path.join(src_dir, 'calibration_userset.yaml')
     with open(metadata_path, 'r') as file:
         metadata = yaml.safe_load(file)
-    
+
     camera_pos = metadata['camera_pos']
     if not camera_pos == None:
         camLele = camera_pos['camLele']
         camRele = camera_pos['camRele']
         camLazi = camera_pos['camLazi']
         camRazi = camera_pos['camRazi']
-    
-    path_offsets = os.path.join(src_dir,'camera_offsets.pkl')
-    
+
+    path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')
+
     if os.path.isfile(path_offsets):
         with open(path_offsets, "rb") as handle:
             offsets = pickle.load(handle)
@@ -444,48 +456,48 @@ def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
         if center_method[0] == 0:
             print('Warning: No offset file found. Offset will be zero.')
         offsets = {
-        'x_off': 0,
-        'y_off': 0,
-        'z_off': 0,
-        'camLele': camLele,
-        'camRele': camRele,
-        'camLazi': camLazi,
-        'camRazi': camRazi
+            'x_off': 0,
+            'y_off': 0,
+            'z_off': 0,
+            'camLele': camLele,
+            'camRele': camRele,
+            'camLazi': camLazi,
+            'camRazi': camRazi
         }
-    
+
     if center_method[0] > 0:
         bp2use = center_method[1]
-        if center_method[0] == 1: # Use current data
+        if center_method[0] == 1:  # Use current data
             center_3d = df_3d
             center_len = 10
             if np.shape(center_3d)[0] < center_len:
                 center_len = 0
-            
+
         elif center_method[0] == 2:
-            
+
             # Path to the directory containing centering data
             path_centering = os.path.join(src_dir, 'centering')
-            
+
             # Find all 3D .h5 files in the centering directory
             files_3D = glob.glob(os.path.join(path_centering, '*_filtered3D.h5'))
-            
+
             if not files_3D:
                 print('No centering file found. Reverting to default center.')
                 center_len = 0
             else:
                 center_3d = pd.read_hdf(os.path.join(path_centering, files_3D[0]))
                 center_len = num_frames
-        
+
         if center_len > 0:
             if not bp2use in center_3d.columns.get_level_values('bodyparts').unique():
                 print('Bodypart not found')
             else:
-                center_xyz = [0,0,0]
+                center_xyz = [0, 0, 0]
                 speed_ax = []
-                for pos in ['x','y','z']:
+                for pos in ['x', 'y', 'z']:
                     values = center_3d[bp2use].loc[center_3d[bp2use]['p'] == 1, pos]
-                    speed_ax.append(np.diff(values)**2)
-                dist_vec = np.sqrt(speed_ax[0]+speed_ax[1]+speed_ax[2])  # calculate distance
+                    speed_ax.append(np.diff(values) ** 2)
+                dist_vec = np.sqrt(speed_ax[0] + speed_ax[1] + speed_ax[2])  # calculate distance
                 if np.size(dist_vec) > 0:
                     dist_vec = np.concatenate(([dist_vec[0]], dist_vec))  # adjust size
                     speed_vec = dist_vec * (frame_rate / 1000)  # convert to speed in mm/ms
@@ -493,95 +505,91 @@ def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
                     #     pickle.dump(speed_vec, f)
                     # print(np.shape(np.where(np.abs(speed_vec) < 0.004)))
                     center_xyz = []
-                    for pos in ['x','y','z']:
+                    for pos in ['x', 'y', 'z']:
                         values = center_3d[bp2use].loc[center_3d[bp2use]['p'] == 1, pos]
                         # If the centering part is the 'Pellet', ignore frames
                         # in which the pellet is in motion
                         if bp2use == 'Pellet':
                             values = values[np.abs(speed_vec) < 0.004]
                         center_xyz.append(values.median())
-                    
+
                 # Store the calculated offsets in the provided dictionary
                 offsets['x_off'] = center_xyz[0]
                 offsets['y_off'] = center_xyz[1]
                 offsets['z_off'] = center_xyz[2]
-        
+
         # Save the offsets to a pickle file
         with open(path_offsets, 'wb') as f:
             pickle.dump(offsets, f)
-        
-    
-        
-    
+
     # Reorient based on camera angles
     for bp in range(len(bpts)):
-        
-        data = triangulate[:,bp,:]
-        
+        data = triangulate[:, bp, :]
+
         x, y, z = data[:, 0], data[:, 1], data[:, 2]
         x -= offsets['x_off']
         y -= offsets['y_off']
         z -= offsets['z_off']
-        
+
         data = np.vstack((x, y, z)).T
-        
+
         # Elevation of cameras, taken from CAD model
-        avgCamEle = np.mean((camLele,camRele))
-        
+        avgCamEle = np.mean((camLele, camRele))
+
         # Azimuth of cameras, taken from CAD model
-        avgCamAzi = np.mean((camLazi,camRazi))
+        avgCamAzi = np.mean((camLazi, camRazi))
         rotated_data = rotate_3d_points(data, x_degrees=avgCamAzi, y_degrees=avgCamEle, z_degrees=-rot_cor)
-        
+
         # Extract the rotated x, y, z coordinates
         x, y, z = rotated_data[:, 0], rotated_data[:, 1], rotated_data[:, 2]
-        
+
         # data = np.vstack((x, y, z)).T
         data = np.vstack((-x, -z, y)).T
-        
-        triangulate[:,bp,:] = data
-    
-    
+
+        triangulate[:, bp, :] = data
+
     # Rescale the data
-    triangulate = triangulate*square_size
-    
+    triangulate = triangulate * square_size
+
     high_conf_exp = np.expand_dims(high_conf, axis=-1)
     data_4d = np.concatenate([triangulate, high_conf_exp], axis=-1)
     data_4d = data_4d.reshape((num_frames, -1))
-    
+
     # Create 3D DataFrame column and row indices
     axis_labels = ("x", "y", "z", "p")
     columns = pd.MultiIndex.from_product(
         [bpts, axis_labels],
         names=["bodyparts", "coords"],
     )
-    
+
     real_path_3D = path_3D.replace('_filtered3D.h5', '_centered3D.h5')
     inds = range(num_frames)
     df_3d = pd.DataFrame(data_4d, columns=columns, index=inds)
     df_3d.to_hdf(str(real_path_3D), "df_with_missing", format="table", mode="w")
 
-    
+
 def triangulatePoints(P1, P2, x1, x2):
     X = cv2.triangulatePoints(P1[:3], P2[:3], x1, x2)
     return X / X[3]
 
+
 def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
-    path_cam_mat = os.path.join(calib_src_dir,'camera_matrix')
-    
+    path_cam_mat = os.path.join(calib_src_dir, 'camera_matrix')
+
     # Read the calibration variables
     square_size, cbrow, cbcol = cal_flir.get_calibration_info(calib_src_dir)
-    
+
     # Undistort dataframes
     (
-    dataFrame_camera1_undistort,
-    dataFrame_camera2_undistort,
-    stereomatrix,
-    path_stereo_file,
+        dataFrame_camera1_undistort,
+        dataFrame_camera2_undistort,
+        stereomatrix,
+        path_stereo_file,
     ) = undistort_points(df_LR, path_cam_mat)
 
     P1 = stereomatrix["P1"]
     P2 = stereomatrix["P2"]
-    
+
     num_frames = dataFrame_camera1_undistort.shape[0]
     all_points_cam1 = dataFrame_camera1_undistort.to_numpy().reshape(
         (num_frames, 1, -1, 3)
@@ -589,22 +597,22 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
     all_points_cam2 = dataFrame_camera2_undistort.to_numpy().reshape(
         (num_frames, 1, -1, 3)
     )[..., :2]
-    
+
     # Triangulate data
     pts_indv_cam1 = all_points_cam1[:, 0].reshape((-1, 2)).T
     pts_indv_cam2 = all_points_cam2[:, 0].reshape((-1, 2)).T
-    
+
     indv_points_3d = triangulatePoints(
         P1, P2,
         pts_indv_cam1.astype(np.float64),
         pts_indv_cam2.astype(np.float64)
     )
-    
+
     indv_points_3d = indv_points_3d[:3].T.reshape((num_frames, -1, 3))
-    
+
     # Resize based on calibration pattern
     triangulate = np.asanyarray(indv_points_3d)
-    
+
     # Determine regions of low confidence or dropped frames
     mask2d = df_LR[0].columns.get_level_values("bodyparts").isin(bpts)
     xy1 = (df_LR[0].iloc[: num_frames].loc[:, mask2d].to_numpy().reshape((num_frames, -1, 3)))
@@ -615,16 +623,15 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
     hasdrops2 = xy2[..., 2] == -1
     low_conf = ~(visible1 & visible2)
     has_drops = hasdrops1 | hasdrops2
-    
-    
+
     for bp in range(len(bpts)):
         # Step 1: Create a boolean mask where confidence values are below 0.9
-        low_confidence_mask = low_conf[:,bp]
-    
+        low_confidence_mask = low_conf[:, bp]
+
         # Step 2: Identify clusters of consecutive True values
         cluster_mask = np.zeros_like(low_confidence_mask, dtype=bool)
         start = None
-        
+
         # Iterate through the low confidence mask
         for i, value in enumerate(low_confidence_mask):
             if value:  # Found a low-confidence value
@@ -636,14 +643,13 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
                     if i - start >= min_cluster:
                         cluster_mask[start:i] = True  # Mark the entire cluster as True
                     start = None
-        
+
         # Handle the case where the cluster goes until the last element
         if start is not None and len(low_confidence_mask) - start >= min_cluster:
             cluster_mask[start:] = True
-        
-        
-        low_conf[:,bp] = cluster_mask
-    
+
+        low_conf[:, bp] = cluster_mask
+
     low_conf[has_drops] = -1
     high_conf_exp = np.expand_dims(~low_conf, axis=-1)
     triangulate = np.concatenate([triangulate, high_conf_exp], axis=-1)
@@ -655,50 +661,49 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
         [bpts, axis_labels],
         names=["bodyparts", "coords"],
     )
-    
+
     inds = range(num_frames)
     df_3d = pd.DataFrame(triangulate, columns=columns, index=inds)
     df_3d.to_hdf(str(path_3D), "df_with_missing", format="table", mode="w")
 
+
 def process_raw_data(session, vid_tag, dlc_seg, calib_src_dir, center_method):
-    
     frame_rate = 150
-    p_thresh = 0.9 # confidence threshold for DLC raw output
-    min_cluster = 10 # maximum allowed interpolation
+    p_thresh = 0.9  # confidence threshold for DLC raw output
+    min_cluster = 10  # maximum allowed interpolation
     df_3d = []
-    
+
     # Find video files
     mp4_list = os.path.join(session, '*' + vid_tag)
     videoList = glob.glob(mp4_list)
-    
+
     # Extract relevant video paths in order
     videoOrder = ['left', 'right']
     video_paths = [video for key in videoOrder for video in videoList if key in video]
-    
+
     if not video_paths:
         print('No Videos found!\n')
         return
-    
+
     # Extract reach data, filter, prep for undistortion and triangulation
     df_LR, bodyparts = extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate)
     vid_name_base, vid_dir = get_vid_name_base(video_paths[0])
     # Extract reach data, filter, prep for undistortion and triangulation
     for ndx, df in enumerate(df_LR):
         filt_name = Path(video_paths[ndx]).stem + '_filtered2D.h5'
-        filt_path = os.path.join(vid_dir,filt_name)
+        filt_path = os.path.join(vid_dir, filt_name)
         df.to_hdf(str(filt_path), "df_with_missing", format="table", mode="w")
         # print(f"Saved dataframe to {filt_path}")
-
 
     if not len(df_LR):
         print('No tracking obtained for %s' % session)
     else:
-        
+
         raw_path_3D = os.path.join(vid_dir, vid_name_base + '_filtered3D.h5')
         triangulate_3D(df_LR, raw_path_3D, calib_src_dir, bodyparts, min_cluster, p_thresh)
         reorient_and_center(raw_path_3D, calib_src_dir, bodyparts, center_method, frame_rate)
     path_3D = os.path.join(vid_dir, vid_name_base + '_centered3D.h5')
-    
+
     if os.path.isfile(path_3D):
         df_3d = pd.read_hdf(path_3D)
     return df_3d

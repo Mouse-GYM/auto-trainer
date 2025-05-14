@@ -7,7 +7,7 @@ from transitions import Machine
 from autotrainer.core import ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor, \
     HeadbarPressureMonitor
 from autotrainer.inference import PoseResponse
-
+from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm
 from .behavior_event_kind import BehaviorEventKind
 from .inference_protocol import InferenceProtocol
@@ -60,8 +60,11 @@ class SystemMachine(StateMachine):
             self._analysis.headbar_pressure_monitor.property_changed += self._headbar_pressure_monitor_property_changed
             self._analysis.load_cell_tare_monitor.tare_callback = self._load_cell_tare_requested
 
-        if inference is not None and inference.pose_algorithm is not None:
-            inference.pose_algorithm.pose_changed += self._pose_changed
+        self._inference = inference
+        if inference is not None:
+            if inference.pose_algorithm is not None:
+                inference.pose_algorithm.pose_changed += self._pose_changed
+            inference.detection_result_ready += self._handle_detection_result
 
         self._pellet_device = pellet_device
 
@@ -100,12 +103,12 @@ class SystemMachine(StateMachine):
     @project.setter
     def project(self, value: ProjectInfo):
         self._project_info = value
-        EventManager.set_project(self._project_info)
+        EventManager.default().project = self._project_info
         self._algorithm.project = self._project_info
         self._intersession.project = self._project_info
 
     def before_enter_tunnel(self):
-        EventManager.post_event(BehaviorEventKind.tunnelEnter)
+        EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
 
         self.algorithm.reset_session_pellet_count()
 
@@ -126,7 +129,7 @@ class SystemMachine(StateMachine):
     def after_exit_tunnel(self):
         self._update_magnet_position(self.algorithm.baseline_intensity)
 
-        EventManager.post_event(BehaviorEventKind.tunnelExit)
+        EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
         self.algorithm.end_session()
 
     def before_enter_intersession(self):
@@ -153,32 +156,32 @@ class SystemMachine(StateMachine):
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
             # TODO new need event kind
-            # EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
+            # EventManager.default().post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
             return
 
         if name == HeadbarPressureMonitor.IS_ENGAGED_PROPERTY:
-            EventManager.post_event(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
             self._evaluate_auto_clamp(value)
 
     def _load_cell_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
-            EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
             return
 
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
-            EventManager.post_event(BehaviorEventKind.headfixLoadCellChanged, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
             if value:
                 if self.state == SystemState.cage:
                     self.enter_tunnel()
                 else:
-                    EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedWrongState,
-                                            context=self.state)
+                    EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
+                                                              context=self.state)
             else:
                 if self.state == SystemState.tunnel:
                     self.exit_tunnel()
                 else:
-                    EventManager.post_event(BehaviorEventKind.headfixLoadCellChangedWrongState,
-                                            context=self.state)
+                    EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
+                                                              context=self.state)
 
     def _evaluate_auto_clamp(self, is_headbar_pressure_engaged: bool):
         if not self.algorithm.head_fixation_enabled:
@@ -197,7 +200,7 @@ class SystemMachine(StateMachine):
             if self._tunnel_device is not None:
                 logger.info(f"\tauto-clamp setting position to {self.algorithm.auto_clamp_intensity}")
                 self._update_magnet_position(self.algorithm.auto_clamp_intensity)
-                EventManager.post_event(BehaviorEventKind.headFixationEnabled)
+                EventManager.default().post_event_content(BehaviorEventKind.headFixationEnabled)
             else:
                 logger.warning("\tauto-clamp position not sent (head fix command is none)")
         else:
@@ -206,7 +209,7 @@ class SystemMachine(StateMachine):
     def _load_cell_tare_requested(self):
         if self.state != SystemState.tunnel:
             self._tunnel_device.tare_load_cell()
-            EventManager.post_event(BehaviorEventKind.headfixAutoTare)
+            EventManager.default().post_event_content(BehaviorEventKind.headfixAutoTare)
 
     def _pose_changed(self, response: PoseResponse):
         self._algorithm.pellet_seen(response.pellet_seen)
@@ -258,6 +261,20 @@ class SystemMachine(StateMachine):
             return
 
         self.algorithm.end_session()
+
+    def _handle_detection_result(self, res: IntersessionResponse):
+        if res.food_consumed > 0:
+            self._algorithm.day_pellet_count += res.food_consumed
+            self._algorithm.session_pellet_count += res.food_consumed
+        if res.successful_reaches > 0:
+            self._algorithm.successful_reaches = res.successful_reaches
+        if res.pellets_presented > 0:
+            self._algorithm.pellets_presented = res.pellets_presented
+        dev = self._pellet_device
+        if dev is not None:
+            for val, meth in ((res.pellet_x, dev.set_x), (res.pellet_y, dev.set_y), (res.pellet_z, dev.set_z)):
+                if val != 0:
+                    meth(val, absolute=False)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

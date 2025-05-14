@@ -1,7 +1,10 @@
 import logging
 from functools import partial
 
-from autotrainer.behavior import SystemState, PelletState
+import pytest
+
+from autotrainer.behavior import SystemState, PelletState, SystemMachine
+from autotrainer.behavior.analysis.intersession_process import IntersessionResponse
 from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
 from .mocks import BehaviorMachineWithMocks
@@ -10,6 +13,11 @@ from .conftest import on_state_changed
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('transitions').setLevel(logging.INFO)
+
+
+@pytest.fixture
+def machine():
+    return BehaviorMachineWithMocks()
 
 
 def test_enter_exit_tunnel():
@@ -134,6 +142,30 @@ def test_intersession_enabled():
         SystemState.cage,
         SystemState.intersession,
     ]
+
+
+def test_inference_detection_ready(machine):
+    result = IntersessionResponse(
+        food_consumed=20,
+        pellet_x=50,
+        pellets_presented=40,
+        successful_reaches=4,
+    )
+    machine._inference.detection_result_ready(result)
+    algo = machine.algorithm
+    assert algo.session_pellet_count == 20
+    assert algo.day_pellet_count == 20
+    assert algo.successful_reaches == 4
+    assert algo.pellets_presented == 40
+    #
+    result.food_consumed = 15
+    result.successful_reaches = 2
+    result.pellets_presented = 30
+    machine._inference.detection_result_ready(result)
+    assert algo.session_pellet_count == 35
+    assert algo.day_pellet_count == 35
+    assert algo.pellets_presented == 30
+    assert algo.successful_reaches == 2
 
 
 if __name__ == '__main__':

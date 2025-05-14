@@ -40,7 +40,11 @@ def monitor_message_queue():
     while monitor_active:
         try:
             msg = msg_queue.get_nowait()
+        except queue.Empty:
+            time.sleep(0.001)
+            continue
 
+        try:
             if msg[0] == SystemStatusMessageKind.MEASUREMENT and output_fd is not None:
                 if perf_start is None:
                     perf_start = time.perf_counter_ns()
@@ -53,8 +57,8 @@ def monitor_message_queue():
                 if 0 < perf_count <= measurement_count:
                     perf_end = time.perf_counter_ns()
                     break
-        except:
-            time.sleep(0.001)
+        except Exception as err:
+            logger.warning("Error executing msg %r: %s", msg, err)
 
     if output_fd is not None:
         output_fd.close()

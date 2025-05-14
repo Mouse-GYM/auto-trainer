@@ -1,0 +1,223 @@
+import time
+from threading import Thread
+from datetime import datetime
+from queue import Queue, Empty
+from typing import Optional, List
+from typing_extensions import Self
+
+from ..logging import get_verbose_logger
+from ..project import ProjectInfo
+
+from .event_info import EventInfo
+from .event_manager_plugin import EventManagerPlugin
+from .file_event_plugin import FileEventPlugin
+from .logger_event_plugin import LoggerEventPlugin
+
+logger = get_verbose_logger(__name__)
+
+
+class EventManager:
+    """
+    Events, in the context of the autotrainer local application, are a set of messages that track specific changes and
+    actions of interest.  They are a subset of information that is likely to be logged overall, and are made to conform
+    to a specific structure for reading in conjunction with data files during analysis.
+
+    By default, events are also sent to the default logger.  It is generally not necessary to post an event _and_ send
+    the same information explicitly to the logger.
+
+    Repeat behavior:  The objective with repeat events (same event without interruption of another event type) is to
+    * Immediately output the first instance of the event (as would normally happen)
+    * When a new event type is received, output the number of repeats (not counting that first instance already output)
+      * Per the first bullet, this new event type will also be immediately output
+    """
+
+    @classmethod
+    def default(cls) -> Self:
+        """
+        Creates (if needed) and returns the default instance.
+        """
+        if not hasattr(cls, "_instance"):
+            cls._instance = cls("EventManagerInstance")
+            cls._instance.register_plugin(LoggerEventPlugin())
+            cls._instance.register_plugin(FileEventPlugin())
+        return cls._instance
+
+    def __init__(self, key=""):
+        if key != "EventManagerInstance":
+            raise Exception("Use EventManager.default() to access and instance.")
+
+        self._plugins: List[EventManagerPlugin] = list()
+
+        self._project_info = None
+
+        self._last_event_info: Optional[EventInfo] = None
+        self._repeat_event_count = 0
+
+        # Callers should expect requests to post an event return as quickly as possible.  Events are pushed to a queue
+        # so that processing can be done in a separate thread as resources allow.
+        self._write_active = True
+        self._write_queue = Queue()
+        self._write_thread = Thread(target=self._process_queue)
+        self._write_thread.start()
+
+    @property
+    def is_valid(self):
+        return self._write_active is True or self._write_thread is not None
+
+    @property
+    def project(self) -> ProjectInfo:
+        return self._project_info
+
+    @project.setter
+    def project(self, value: ProjectInfo) -> None:
+        """
+        ProjectInfo is an optional property.  If set, it is used to generate the location and name of the event file in
+        the expected format.
+
+        Args
+            value: ProjectInfo object.  This is used to determine the location of the event file.
+        """
+        self._project_info = value
+
+        for plugin in self._plugins:
+            plugin.set_project(value)
+
+    @property
+    def plugins(self) -> List[EventManagerPlugin]:
+        # Do not let callers modify ths list. register/unregister are available for this.  This is already dangerous
+        # enough - giving them access to the plugins themselves.
+        return self._plugins.copy()
+
+    def register_plugin(self, plugin: EventManagerPlugin) -> None:
+        """
+        Registers a plugin with the event manager.
+
+        Args:
+            plugin: The plugin to register.
+        """
+        if plugin not in self._plugins:
+            self._plugins.append(plugin)
+            plugin.set_project(self.project)
+
+    def unregister_plugin(self, plugin: EventManagerPlugin) -> None:
+        """
+        Unregisters a plugin with the event manager.
+
+        Args:
+            plugin: The plugin to unregister.
+        """
+        if plugin in self._plugins:
+            self._plugins.remove(plugin)
+            # Even though the caller must have a reference to the plugin, take responsibility to close, if needed.
+            # In the future, there may be a way to unregister by some kind of key/type/identifier that doesn't require
+            # explicit access to the plugin instance by the caller.
+            plugin.close()
+
+    def flush(self):
+        for plugin in self._plugins:
+            plugin.flush()
+
+    def close(self):
+        """
+        Closes the event manager.  This is required to stop any internal threads and allow a clean exit.  This should
+        only be called when the application or script is closing or otherwise finished with the event manager as an
+        instance, including the `default` cannot be restarted.
+        """
+        self._write_active = False
+
+        for plugin in self._plugins:
+            plugin.set_enable(False)
+
+    def post_event_content(self, kind: int, context: Optional[object] = None, when: Optional[datetime] = None,
+                           index: int = None):
+        """
+        Add an event info instance to the event manager output queue.  This is a convenience method that creates an
+        EventInfo object and optionally populates timestamp related fields as the time this method is called.  If timing
+        information is critical, those arguments should be explicitly set, or `post_event()` should be used with a
+        preconstructed `EventInfo` instance with the desired timestamp fields.
+
+        Args:
+            kind: See EventInfo.kind for a detailed description.
+            context: See EventInfo.kind for a detailed description.
+            when: See EventInfo.kind for a detailed description.
+            index: See EventInfo.kind for a detailed description.
+
+        """
+        info = EventInfo(kind, when=when or datetime.now(), index=index or time.perf_counter_ns(), context=context)
+
+        self.post_event(info)
+
+    def post_event(self, info: EventInfo):
+        """
+        Posts an event info instance to the event manager.
+
+        Args:
+            info:
+
+        Returns:
+
+        """
+        self._write_queue.put(info)
+
+    def has_pending(self) -> bool:
+        """
+        This is primarily for testing and diagnostics.  It should not be relied upon absolutely as this class will not
+        guarantee that whatever implementation is used to queue events for processing will accurately report the state
+        of empty at all times.
+
+        Returns: True if there are pending events to process by the handlers.  Might be accurate, might not.
+        """
+        return not self._write_queue.empty()
+
+    def _process_queue(self):
+        # Because we a) use plugins and b) allow for EventInfo->is_same to be overridden, we may be given a plugin that
+        # errors on every process_event, or an EventInfo that errors on every is_same.  This would bury the log if we
+        # reported it every time.  It may also be a one time error for the plugin, so we don't want to just skip/remove
+        # if there is an error.
+        # This will log the first occurrence of each of the above, but not spam the log if it is a recurring issue.
+
+        is_same_error_reported = False
+        process_event_error_reported = False
+
+        while self._write_active:
+            try:
+                # Workaround or current Jetson behavior w/ queue.get(timeout=).
+                info = self._write_queue.get_nowait()
+            except Empty:
+                time.sleep(0.05)
+                continue
+
+            if not isinstance(info, EventInfo):
+                logger.debug("unexpected event info instance")
+                continue
+
+            try:
+                if info.is_same(self._last_event_info):
+                    self._repeat_event_count += 1
+                    continue
+            except Exception as ex:  # Possibly coming from EventInfo subclass - cannot predict type of error.
+                if not is_same_error_reported:
+                    logger.error(ex)
+                    is_same_error_reported = True
+
+            try:
+                if self._repeat_event_count > 0:
+                    self._process_event(self._last_event_info, self._repeat_event_count)
+                    self._repeat_event_count = 0
+
+                self._last_event_info = info
+                self._process_event(info)
+            except Exception as ex:  # Coming from an arbitrary plugin process_event() - cannot predict type of error.
+                # TODO (maybe): track exceptions per plugin.  After some number N exceptions, disable the plugin.
+                if not process_event_error_reported:
+                    logger.error(ex)
+                    process_event_error_reported = True
+
+        for plugin in self._plugins:
+            plugin.close()
+
+        self._write_thread = None
+
+    def _process_event(self, info: EventInfo, repeat_count: int = 0):
+        for plugin in self._plugins:
+            plugin.process_event(info, repeat_count)

@@ -328,7 +328,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     def load_configuration(self, conf: CameraConfiguration):
         self._id = conf.id
-        self._name = conf.name
+        self._name = str(conf.id)
         self.is_enabled = conf.is_enabled
         self.is_recording_enabled = conf.is_record_enabled
         self.record_mode = VideoRecordMode(conf.record_mode)
@@ -377,7 +377,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 if abs(int(val) - val) < 2.0 * float(numpy.finfo(float).eps):
                     val = int(val)
                 params[key] = val
-            except:
+            except (ValueError, TypeError):
                 if str(params[key]).lower() == "true":
                     params[key] = True
                 elif str(params[key]).lower() == "false":
