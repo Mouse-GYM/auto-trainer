@@ -1168,12 +1168,12 @@ class CanInterface(DeviceInterface):
             JerryCANCmdType.ANALOG_OUT: self._translate_analog_out,
             JerryCANCmdType.LOAD_CELL_READ: lambda msg: LoadCellReading(
                 target=_addr2tgt(msg.dst_id),
-                load=float(msg.load_cell_read.load_mv) / 100.0
+                load=float(msg.load_cell_read.load_mv) / 1000.0
             ),
             JerryCANCmdType.PRESSURE_READ: lambda msg: PressureReading(
                 target=_addr2tgt(msg.dst_id),
                 pressure=float(
-                    msg.pressure_read.pressure_mv) / 100.0 if msg.pressure_read.error != 0 else 0
+                    msg.pressure_read.pressure_mv) / 1000.0 if msg.pressure_read.error == 0 else 0
             ),
             JerryCANCmdType.RGB_LED: lambda msg: ColorLed(
                 target=_addr2tgt(msg.dst_id),
