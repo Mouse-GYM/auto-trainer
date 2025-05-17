@@ -55,7 +55,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._camera_source: Optional[CaptureCameraAttrs] = None
         self._camera_properties = dict()
 
-        self._video_capture = None
+        self._video_capture: VideoCapture = None
         self._video_reader = None
         self._video_reader_reset_event = None
         self._video_reader_stop_event = None
@@ -284,7 +284,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         if not self._is_enabled:
             logger.warning("%s: on_capture_start called but disabled", self)
             return
-
         self._send_command(CaptureCommandKind.ENABLE_CAPTURE)
 
     def on_capture_notify_end(self):
@@ -298,30 +297,30 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
         if self._video_capture is not None:
             self._send_command(CaptureCommandKind.TERMINATE)
-
             if self._wait_for_capture_status(CaptureProcessStatus.TERMINATED, 5):
                 logger.debug(f"<{self._name}> video capture terminate acknowledged")
             else:
                 logger.error(f"<{self._name}> did not receive process terminates status")
 
-        clear_queue(self._video_command_queue)
-
         if self._video_capture is not None:
             self._trace("waiting for process termination")
-
             while self._video_capture.is_alive():
                 time.sleep(0.1)
-
             self._trace("process terminated")
-
+            self._video_capture.join()
             self._video_capture = None
 
-        clear_queue(self._video_image_queue)
+        # NB: clearing video cmd queue having waited & joined the capture process is best.
+        clear_queue(self._video_command_queue)
+        # clear_queue(self._video_image_queue)
+        # video_image_queue is our FixedArrayQueue which cannot be "cleared" by another thread than the
+        # one consuming it. We anyway recreate a new one for each new capture.
+
 
     def on_close(self):
         if self._video_capture is not None:
             self._video_capture.terminate()
-
+            self._video_capture.join()
         self._video_reader_teardown()
 
     def load_configuration(self, conf: CameraConfiguration):

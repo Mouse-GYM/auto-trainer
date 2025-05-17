@@ -1,9 +1,15 @@
 import sys
 from queue import Empty
 from multiprocessing import Queue
+from typing import Union
+
+from autotrainer.core import FixedArrayQueue
+from autotrainer.core.logging import get_verbose_logger
+
+logger = get_verbose_logger(__name__)
 
 
-def clear_queue(queue: Queue):
+def clear_queue(queue: Union[Queue, FixedArrayQueue]):
     """Empty a queue."""
     if queue is None or sys.platform == "darwin":
         return
@@ -12,6 +18,12 @@ def clear_queue(queue: Queue):
         try:
             queue.get_nowait()
         except Empty:
+            empty = queue.empty()
+            qsize = queue.qsize()
+            if not empty or qsize > 0:
+                logger.warning("queue %s: raised Empty but empty()=%s and qsize()=%s",
+                               queue, empty, qsize)
+                continue
             break
 
 

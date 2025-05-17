@@ -1,17 +1,16 @@
 import logging
+import sys
+import argparse
+import faulthandler
+from multiprocessing import set_start_method
 
 
 if __name__ == '__main__':
-    import sys
-    import argparse
-    import faulthandler
-    from multiprocessing import set_start_method
 
-    set_start_method("spawn")
+    set_start_method("spawn")  # MUST BE SET VERY EARLY BEFORE MOST IMPORTS
 
     from autotrainer.core.logging import setup_logging
 
-    # logging.basicConfig(level=logging.INFO, format="%(asctime)s: %(levelname)s: %(name)s: %(message)s")
     setup_logging()
 
     cur_desired_lvl = logging.WARNING
@@ -35,6 +34,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # strtobool compatibility is all over the place.
-    allow_emulation = args.allow_can_emulation.lower() in ["true", "yes", "1"]
+    allow_emulation = args.allow_can_emulation.lower() in {"true", "yes", "1"}
 
     sys.exit(run_acquisition(args.configuration, args.dev, allow_emulation))

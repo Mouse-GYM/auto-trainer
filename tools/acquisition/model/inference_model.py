@@ -1,6 +1,9 @@
+import os
 import queue
+import signal
 import time
 import typing
+from itertools import chain
 from pathlib import Path
 from typing import Optional, Union, List
 from dataclasses import dataclass
@@ -247,12 +250,21 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
             logger.debug(f"<pellet> waiting for process termination")
 
-            t_timeout = time.time() + 3
-            while self._process.is_alive():
-                time.sleep(0.1)
-                if time.time() > t_timeout:
+            t_timeout1 = time.time() + 3
+            t_timeout2 = time.time() + 6
+            while True:
+                t = time.time()
+                if t > t_timeout2:
                     logger.warning("sending SIGTERM to %s", self._process)
                     self._process.terminate()
+                    break
+                if t > t_timeout1:
+                    t_timeout1 += 2
+                    logger.warning("sending SIGINT to %s", self._process)
+                    os.kill(self._process.pid, signal.SIGINT)
+                if not self._process.is_alive():
+                    break
+                time.sleep(0.1)
             self._process.join()
             logger.debug(f"<pellet> process terminated")
             self._process = None
@@ -311,11 +323,15 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         self._set_status(InferenceStatus.live)
                     else:
                         self._set_status(InferenceStatus.intersession)
+                else:
+                    logger.warning("Unhandled msg: %s", msg)
             except Exception as err:
                 logger.exception("Error processing msg %s: %s", msg, err)
 
     def _monitor_data_queue(self):
         cams = [self.project.camera_1, self.project.camera_2]
+        n_cams = len(cams)
+        range_cams = range(n_cams)
         cams_frame_idx_fhs = None
         pose_paths: List[Path] = []
         axis_labels = ("x", "y", "likelihood")
@@ -326,6 +342,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         prev_mode = InferenceMode.Offline
         prev_session = None
         tot_written_to_live = None
+
         while self._is_running:
 
             try:
@@ -352,6 +369,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             self._set_status(InferenceStatus.live)
                         else:
                             self._set_status(InferenceStatus.intersession)
+                    else:
+                        logger.warning("Unhandled msg: %s", msg)
                 except Exception as err:
                     logger.exception("Error processing msg %s: %s", msg, err)
 
@@ -385,7 +404,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         and mode == InferenceMode.Live
                         and frames_indices is not None
                         and all(fr_i >= 0 for frs in frames_indices for fr_i in frs)
-                        and prev_session != prj.session.value  # REQUIRED
+                        and prj.session.value != prev_session  # REQUIRED
                     ):
                         tot_written_to_live = 0
                         prev_session = prj.session.value
@@ -406,24 +425,20 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 if mode == InferenceMode.Live:
                     if cams_frame_idx_fhs is not None and frames_indices is not None:
                         tot_written_to_live += 1
-                        for cdx in range(len(cams)):
-                            fh = cams_frame_idx_fhs[cdx]
+                        for fh, cam_fr_indices in zip(cams_frame_idx_fhs, frames_indices):
                             if fh is not None:
-                                for frame_idx in frames_indices[cdx]:
-                                    if frame_idx >= 0:
-                                        fh.write(f"{frame_idx}\n")
+                                fh.write("\n".join(chain(map(str, cam_fr_indices), [""])))
                                 fh.flush()
-                        e = numpy.empty((0, self._algorithm.part_count * 3), dtype=numpy.float32)
                         columns = pandas.MultiIndex.from_product([self._algorithm.part_names, axis_labels],
                                                                  names=["bodyparts", "coords"])
-                        for cdx in range(len(cams)):
+                        for cdx, (cam_fr_indices, cam_pose_path) in enumerate(zip(frames_indices, pose_paths)):
                             # reminder: pose_data has 1 frame cam1, 1 frame cam2, 1 frame cam1, etc..
-                            cur = pose_data[cdx::len(cams)]
-                            cur = numpy.vstack([e] + [f.flatten() for f in cur])
+                            cur = pose_data[cdx::n_cams]
+                            cur = numpy.vstack([f.flatten() for f in cur])
                             indices = range(cur.shape[0])
                             df_xyp = pandas.DataFrame(cur, columns=columns, index=indices)
-                            df_xyp["frame_idx"] = frames_indices[cdx]  # also store the frame idx with the results
-                            df_xyp.to_hdf(pose_paths[cdx],
+                            df_xyp["frame_idx"] = cam_fr_indices  # also store the frame idx with the results
+                            df_xyp.to_hdf(cam_pose_path,
                                           "df_with_missing",
                                           format="table",
                                           mode="a",
@@ -438,29 +453,32 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 else:
                     if prev_mode == InferenceMode.Live and mode == InferenceMode.Offline:
                         read_h5_dss = [
-                            h5py.File(pose_paths[cdx])["df_with_missing"]["table"]
-                            for cdx in range(len(cams))
+                            h5py.File(cam_pose_path)["df_with_missing"]["table"]
+                            for cam_pose_path in pose_paths
                         ]
-                        read_h5_idx = [0] * len(cams)
+                        read_h5_idx = [0] * n_cams
 
                     if pose_data is None:
                         # end of intersession replay
                         if ib is not None:
                             try:
-                                # logger.info(f"processed {ib.pose_data.shape[0]} pose responses")
-                                m = min(len(l) for l in ib.pose_data_list)
-                                logger.success("processed %s pose responses", m)
+                                m = min(map(len, ib.pose_data_list))
+                                logger.notice("assembled %s pose responses,"
+                                              " now calling intersession_inference()", m)
                                 ib.pose_data = numpy.vstack(
-                                    [ib.pose_data]  # supposed the empty init array
-                                    + [
-                                        ib.pose_data_list[cdx][ix].flatten()
-                                        for ix in range(m)
-                                        for cdx in range(len(cams))
-                                    ]
+                                    list(chain(
+                                        [ib.pose_data],  # supposed the empty init array
+                                        (
+                                            ib.pose_data_list[cdx][ix].flatten()
+                                            for ix in range(m)
+                                            for cdx in range_cams
+                                        )
+                                    ))
                                 )
                                 intersession_inference(ib.pose_data, self._algorithm.part_names,
                                                        self._project)
                                 success = True
+                                logger.success("fully processed session-%s inference", prev_session)
                             except Exception as err:
                                 logger.exception("Error during intersession_inference: %s", err)
                                 success = False
@@ -473,10 +491,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         while True:
                             skipped = 0
                             for fx in range(self._frames_per_camera):
-                                for cdx in range(len(cams)):
-                                    h5i = read_h5_idx[cdx]
-                                    if h5i < len(read_h5_dss[cdx]) - 1 and read_h5_dss[cdx][h5i][2][0] < frames_indices[cdx][fx]:
-                                        ib.pose_data_list[cdx].append(read_h5_dss[cdx][h5i][1])
+                                for cdx, pdl, h5i, cam_h5_dss, cam_fr_indices in zip(
+                                    range_cams, ib.pose_data_list, read_h5_idx, read_h5_dss, frames_indices,
+                                ):
+                                    if h5i < len(cam_h5_dss) - 1 and cam_h5_dss[h5i][2] < cam_fr_indices[fx]:
+                                        pdl.append(cam_h5_dss[h5i][1])
                                         read_h5_idx[cdx] += 1
                                         skipped += 1
                             if skipped > 0:
@@ -484,11 +503,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             else:
                                 break
                         if tot_skipped > 0:
-                            logger.info("read %s entries from h5 live file", tot_skipped)
+                            logger.debug("read %s entries from h5 live file", tot_skipped)
                         # for frame in pose_data:
                         #     self._intersession_block.pose_data = numpy.vstack(
                         #         [self._intersession_block.pose_data, frame.flatten()])
 
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception as err:
                 logger.exception("_monitor_data_queue: loop error processing mode=%s %s: %s",
                                  mode, type(pose_data), err)
@@ -496,99 +517,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # end while is_running.
 
     def _feed_intersession_analysis(self):
-        cams = (self._project.camera_1, self._project.camera_2)
-        cams_paths = []
-        for cam in cams:
-            paths = self._project.get_video_path(name=cam, allow_overwrite=True)
-            logger.info("cam %s: %s", cam, paths)
-            if paths[0] is not None:
-                paths = tuple(Path(p) for p in paths)
-            cams_paths.append(paths)
-        tot_skipped_frames = 0
-
         try:
-            for video_path, _, _ in cams_paths:
-                logger.info("%s: size: %s",
-                            video_path, video_path.stat().st_size if video_path.exists() else "N/A")
-            timeout = time.time() + self._intersession_wait_time
-            captures_d = {}
-            while len(captures_d) < len(cams):
-                for cdx, cam in enumerate(cams):
-                    if cdx not in captures_d:
-                        capture = check_frame_count(cams_paths[cdx][0])
-                        if capture is not None:
-                            captures_d[cdx] = capture
-                if time.time() > timeout:
-                    EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationInputError)
-                    raise RuntimeError("timeout waiting for intersession video files")
-
-            captures: List[cv2.VideoCapture] = [captures_d[cdx] for cdx in range(len(cams))]
-
-            cams_processed_fhs = [
-                (None if not p.exists() or p.stat().st_size == 0 else p.open())
-                for _, _, p in cams_paths
-            ]
-
-            frame_idx = 0
-            cams_frame_count = [0] * len(cams)
-            cams_frame_idx = [0] * len(cams)
-            cams_already_processed_idx = [
-                -1 if fh is None else int(fh.readline().strip())
-                for fh in cams_processed_fhs
-            ]
-            logger.info("cams_already_processed_idx=%s", cams_already_processed_idx)
-            running = True
-            all_read = [False] * len(cams)
-            while running:
-                # skip frames already processed during live:
-                for cdx, fh in enumerate(cams_processed_fhs):
-                    if fh is not None:
-                        skipped = 0
-                        while cams_frame_idx[cdx] == cams_already_processed_idx[cdx]:
-                            skipped += 1
-                            tot_skipped_frames += 1
-                            ret, _ = captures[cdx].read()
-                            if not ret:
-                                all_read[cdx] = True
-                                break
-                            cams_frame_idx[cdx] += 1
-                            val = fh.readline().strip()
-                            if val == "":
-                                fh.close()
-                                cams_processed_fhs[cdx] = None
-                                break
-                            else:
-                                cams_already_processed_idx[cdx] = int(val)
-                        if skipped > 0:
-                            logger.verbose("%s: skipped=%s", cdx, skipped)
-
-                # cams can be "unsynchronized" when being recorded to disk...
-                for cdx, (cap, fr_idx) in enumerate(zip(captures, cams_frame_idx)):
-                    if not all_read[cdx]:
-                        if not self._put_intersession_frame(cap, cdx, fr_idx):
-                            all_read[cdx] = True
-                            break
-                    cams_frame_idx[cdx] += 1
-                frame_idx += 1
-
-                if any(all_read):
-                    # stop on first cam record entirely read/consumed.
-                    break
-
-            empty_frame = numpy.empty((self._frame_width, self._frame_height))
-            for cdx, cnt in enumerate(cams_frame_count):
-                r = cnt % self._frames_per_camera
-                if r > 0:
-                    logger.info("cam-%s: padding %s empty frames to cam", cdx, r)
-                    for _ in range(self._frames_per_camera - r):
-                        while self._offline_queue.put(empty_frame, cdx, -1, allow_overflow=False) != BufferResult.Ok:
-                            time.sleep(0.001)
-
-            logger.info("passed %s frames per camera ; tot_skipped_frames=%s ; per cam last frame idx: %s",
-                        frame_idx, tot_skipped_frames, cams_frame_idx)
-            self._intersession_block.frame_count = frame_idx
-
-            self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
+            self.__feed_intersession_analysis()
         except Exception as err:
             logger.exception("_feed_intersession_analysis: error: %s", err)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError, context=str(err))
@@ -596,10 +526,105 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             self._intersession_block.configuration.complete(self._intersession_block.configuration.nonce, False)
             self._intersession_block = None
 
+    def __feed_intersession_analysis(self):
+        cams = (self._project.camera_1, self._project.camera_2)
+        n_cams = len(cams)
+        cams_paths = [
+            tuple(map(Path, self._project.get_video_path(name=cam, allow_overwrite=True)))
+            for cam in cams
+        ]
+        tot_skipped_frames = 0
+        empty_frame = numpy.empty((self._frame_width, self._frame_height))
+        # NB: we are not waiting for the capture threads to close their writing side to the video file(s)
+        # so this small sleep, for them to get more chance to do it:
+        time.sleep(0.5)
+        # This is to not get "moov-atom-not-found" in stderr output from opencv library.
+        for video_path, _, _ in cams_paths:
+            logger.info("%s: size: %s",
+                        video_path, video_path.stat().st_size if video_path.exists() else "N/A")
+        timeout = time.time() + self._intersession_wait_time
+        captures_d = {}
+        while len(captures_d) < n_cams:
+            for cdx, cam in enumerate(cams):
+                if cdx not in captures_d:
+                    capture = check_frame_count(cams_paths[cdx][0])
+                    if capture is not None:
+                        captures_d[cdx] = capture
+            if time.time() > timeout:
+                EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationInputError)
+                raise RuntimeError("timeout waiting for intersession video files")
+
+        captures: List[cv2.VideoCapture] = [captures_d[cdx] for cdx in range(len(cams))]
+        cams_processed_fhs = [
+            (None if not p.exists() or p.stat().st_size == 0 else p.open())
+            for _, _, p in cams_paths
+        ]
+
+        frame_idx = 0
+        cams_sent_frame_count = [0] * n_cams
+        cams_frame_idx = [0] * n_cams
+        cams_already_processed_idx = [
+            -1 if fh is None else int(fh.readline().strip())
+            for fh in cams_processed_fhs
+        ]
+        logger.debug("first cams_already_processed_idx=%s", cams_already_processed_idx)
+        all_read = [False] * n_cams
+        while True:
+            # skip frames already processed during live:
+            for cdx, fh in enumerate(cams_processed_fhs):
+                if fh is not None:
+                    skipped = 0
+                    while cams_frame_idx[cdx] == cams_already_processed_idx[cdx]:
+                        skipped += 1
+                        tot_skipped_frames += 1
+                        ret, _ = captures[cdx].read()
+                        if not ret:
+                            all_read[cdx] = True
+                            break
+                        cams_frame_idx[cdx] += 1
+                        val = fh.readline().strip()
+                        if val == "":
+                            fh.close()
+                            cams_processed_fhs[cdx] = None
+                            break
+                        else:
+                            cams_already_processed_idx[cdx] = int(val)
+                    if skipped > 0:
+                        logger.spam("cam-%s: skipped=%s", cdx, skipped)
+
+            # cams can be "desynchronized" when being recorded to disk...
+            for cdx, (cap, fr_idx) in enumerate(zip(captures, cams_frame_idx)):
+                if not all_read[cdx]:
+                    if not self._put_intersession_frame(cap, cdx, fr_idx):
+                        all_read[cdx] = True
+                        break
+                    cams_sent_frame_count[cdx] += 1
+                cams_frame_idx[cdx] += 1
+            frame_idx += 1
+
+            if any(all_read):
+                # stop on first cam record entirely read/consumed.
+                break
+        # end while True
+
+        # fill current batch of each cam:
+        for cdx, cnt in enumerate(cams_sent_frame_count):
+            r = self._frames_per_camera - cnt % self._frames_per_camera
+            if r != self._frames_per_camera:
+                logger.info("cam-%s: padding %s empty frames to cam", cdx, r)
+                for _ in range(r):
+                    while self._offline_queue.put(empty_frame, cdx, -1, allow_overflow=False) != BufferResult.Ok:
+                        time.sleep(0.001)
+
+        logger.notice("passed %s frames per camera ; tot_skipped_frames=%s ; per cam last frame idx: %s",
+                    frame_idx, tot_skipped_frames, cams_frame_idx)
+        self._intersession_block.frame_count = frame_idx
+        self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
+
     def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int) -> bool:
         ret, frame = capture.read()
         if not ret:
-            logger.info(f"end of video at index {cam_index}")
+            logger.debug(f"end of video at index {cam_index}")
             return False
         timeout = time.time() + 600   # to be decided if keep or not
         if len(numpy.shape(frame)) >= 3:

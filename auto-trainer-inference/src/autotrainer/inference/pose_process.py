@@ -20,6 +20,7 @@ class InferenceCommandMessageKind(IntEnum):
     ProcessLive = 2
     ProcessOffline = 3
     ProcessLiveWhenReady = 4
+    SetLoggerLevel = 5
 
 
 class InferenceStatusMessageKind(IntEnum):
@@ -141,6 +142,8 @@ class PoseProcess(Process):
                     self._set_process_live()
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:
                     self._set_process_offline()
+                else:
+                    logger.warning("Unhandled command: %s", cmd)
             except Empty:
                 # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
                 # massively slow down the system without explicitly yielding, despite being in its own thread.  This not
@@ -151,6 +154,10 @@ class PoseProcess(Process):
         return True
 
     def _process(self):
+        import tensorflow as tf
+        gpus = tf.config.experimental.list_physical_devices('GPU')
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
         frame_buffer = numpy.ndarray(
             (self._input_queue.batch_size,  # nbr cams * frames per cam (3 atm)
              *self._input_queue.shape,  # W, H
@@ -181,9 +188,8 @@ class PoseProcess(Process):
             if cur_t > t_next_cmd:
                 # do not check command queue on each loop turn, mostly useless
                 # and overhead is not that small
-                t_next_cmd += 1
-                cmd = True
-                while cmd:
+                t_next_cmd += 0.1
+                while True:
                     try:
                         cmd, context = get_command()
                     except Empty:
@@ -199,6 +205,8 @@ class PoseProcess(Process):
                                 self._set_process_offline()
                             elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
                                 self._process_live_when_ready = True
+                            else:
+                                logger.warning("Unhandled command: %s", cmd)
                         except Exception as err:
                             logger.warning("Error processing %s: %s", cmd, err)
                 # always get new ref:
@@ -217,14 +225,14 @@ class PoseProcess(Process):
                     #     # check frames indices files to see if some of the frames
                     #     # have been already processed during Live mode
                     #     pass
-                    # if recording_in_progress:
-                    #     if self._mode == InferenceMode.Offline or any(idx < 0 for indices in frames_indices for idx in indices):
-                    #         recording_in_progress = False
-                    #         logger.info("Detected end of record in progress ; mode=%s ; %s", self._mode, frames_indices)
-                    # else:
-                    #     if self._mode == InferenceMode.Live and all(idx >= 0 for indices in frames_indices for idx in indices):
-                    #         recording_in_progress = True
-                    #         logger.info("Detected start of record in progress ; mode=%s ; %s", self._mode, frames_indices)
+                    if recording_in_progress:
+                        if self._mode == InferenceMode.Offline or any(idx < 0 for indices in frames_indices for idx in indices):
+                            recording_in_progress = False
+                            logger.info("Detected end of record in progress ; mode=%s ; %s", self._mode, frames_indices)
+                    else:
+                        if self._mode == InferenceMode.Live and all(idx >= 0 for indices in frames_indices for idx in indices):
+                            recording_in_progress = True
+                            logger.info("Detected start of record in progress ; mode=%s ; %s", self._mode, frames_indices)
                     pose = predict(frame_buffer)
                     d_q_put((pose,
                              self._mode,

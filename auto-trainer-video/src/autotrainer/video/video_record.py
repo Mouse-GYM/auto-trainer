@@ -67,7 +67,7 @@ class VideoRecord(Thread):
         self._video_rotate_interval = properties.video_rotate_interval
         self._image_interval = properties.image_interval * 1e9
 
-        self._input_queue = input_queue
+        self._input_queue: Queue = input_queue
 
         self._is_running = True
 
@@ -211,6 +211,7 @@ class VideoRecord(Thread):
     def _close_video_writer(self):
         if self._video_writer is not None:
             self._video_writer.release()
+            logger.debug("Released %s", self._video_writer)
             self._video_writer = None
 
         if self._video_timestamp_file is not None:

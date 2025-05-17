@@ -15,7 +15,7 @@ from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue
 
 from .video_manager import VideoManager
 from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
-from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.logging import get_verbose_logger, set_logger_level
 from ..core.fixed_array_queue import BufferResult
 
 logger = get_verbose_logger(__name__)
@@ -25,14 +25,21 @@ class CaptureCommandKind(Enum):
     """Commands accepted by VideoCaptureProcess through the command Queue"""
     TERMINATE = 1
     """Fully terminate the Process"""
+
     ENABLE_CAPTURE = 2
     """Enable image capture"""
+
     DISABLE_CAPTURE = 3
     """Disable image capture"""
+
     ENABLE_RECORDING = 4
     """Enable image recording (requires capture enabled)"""
+
     DISABLE_RECORDING = 5
     """Disable image recording"""
+
+    SET_LOGGER_LEVEL = 6
+    """Set a logger log level"""
 
 
 class CaptureProcessStatus(IntEnum):
@@ -156,7 +163,8 @@ class VideoCapture(Process):
             CaptureCommandKind.ENABLE_CAPTURE: self._begin_capture,
             CaptureCommandKind.DISABLE_CAPTURE: self._end_capture,
             CaptureCommandKind.ENABLE_RECORDING: self._enable_trigger,
-            CaptureCommandKind.DISABLE_RECORDING: self._disable_trigger
+            CaptureCommandKind.DISABLE_RECORDING: self._disable_trigger,
+            CaptureCommandKind.SET_LOGGER_LEVEL: set_logger_level,
         }
 
         self._set_status(CaptureProcessStatus.INITIALIZED)
@@ -218,7 +226,8 @@ class VideoCapture(Process):
         record_start_frame_idx = None
         next_t_image_q = time.time()
         next_t_cmd_q = next_t_image_q
-        q_list = self._record_queue_list
+        img_q = self._image_queue
+        rec_q_list = self._record_queue_list
         rec_q = self._record_queue
         capture = self._camera.capture
         net_q_put = None if self._network_queue is None else self._network_queue.put
@@ -229,9 +238,8 @@ class VideoCapture(Process):
             t_now = time.time()
             try:
                 if get_command is not None and t_now > next_t_cmd_q:
-                    next_t_cmd_q += 1
-                    cmd = None
                     while True:
+                        cmd = None
                         try:
                             cmd, context = get_command()
                             self._handle_command(cmd, context)
@@ -239,7 +247,8 @@ class VideoCapture(Process):
                             break
                         except Exception as err:
                             logger.exception("Failure executing cmd %s: %s", cmd, err)
-                    q_list = self._record_queue_list
+                    next_t_cmd_q += 0.1
+                    rec_q_list = self._record_queue_list
 
                 if not self._is_capturing:
                     # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
@@ -248,31 +257,30 @@ class VideoCapture(Process):
                     # current deployment platform.
                     time.sleep(0.001)
                     record_start_frame_idx = None
-                    q_list.clear()
+                    rec_q_list.clear()
                     continue
 
                 frame, when = capture()
                 cur_frame_idx += 1
 
-                i_q = self._image_queue
-                if i_q is not None:
+                if img_q is not None:
                     # image queue goes to GUI video reader frame
                     if t_now > next_t_image_q:
                         next_t_image_q = t_now + vid_frame_delay
                         if len(numpy.shape(frame)) < 3:
-                            i_q.put(frame)
+                            img_q.put(frame)
                         else:
-                            i_q.put(frame[:, :, 0])
+                            img_q.put(frame[:, :, 0])
 
                 if self._is_record_active:
                     # record queue goes to video save to disk/file
                     if record_start_frame_idx is None:
                         logger.info("Starting record with frame %s", cur_frame_idx)
                         record_start_frame_idx = cur_frame_idx
-                    q_list.append((frame, when))
-                    if len(q_list) >= self._record_batch_size:
-                        rec_q.put(q_list)  # thread queue
-                        q_list = self._record_queue_list = []
+                    rec_q_list.append((frame, when))
+                    if len(rec_q_list) >= self._record_batch_size:
+                        rec_q.put(rec_q_list)  # thread queue
+                        rec_q_list = self._record_queue_list = []
                 else:
                     if record_start_frame_idx is not None:
                         # r = cnt_net_q_put % 3  # TODO
@@ -299,6 +307,7 @@ class VideoCapture(Process):
                 if fault_count > 5:
                     self._end_capture(None)
                     self._user_terminate(None)
+        # end while self._is_running
 
     def _terminate_capture_loop(self):
         try:

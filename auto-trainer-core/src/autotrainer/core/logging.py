@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Dict
+from typing import Optional, Dict, Union
 
 import sys
 import verboselogs
@@ -93,3 +93,11 @@ def setup_logging(
     _already_setup = True
 
     return logger
+
+
+def set_logger_level(context: Union[Dict[str, Union[str, int]]]):
+    if isinstance(context, dict):
+        for name, value in context.items():
+            logging.getLogger(name).setLevel(value)
+    else:
+        logging.warning("unhandled context: %s", context)
