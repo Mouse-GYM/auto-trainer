@@ -143,8 +143,10 @@ class SystemMachine(StateMachine):
         self._pellet_machine.environment_changed()
 
     def _session_ended(self):
-        if self._tunnel_device is not None:
-            self._update_magnet_position(self.algorithm.baseline_intensity)
+        # 5/16/25 should not remove auto-clamp at session end for current testing.
+        # TODO: make this configurable.
+        # if self._tunnel_device is not None:
+        #    self._update_magnet_position(self.algorithm.baseline_intensity)
 
         if self.algorithm.can_perform_intersession_analysis() and self.state == SystemState.cage:
             self.enter_intersession()
