@@ -239,8 +239,10 @@ class TestAutoClamp:
         assert tun_dev.update_head_magnet_intensity.call_args_list == exp_update_head_magnet
         assert machine._pellet_device.play_tone.call_args_list == exp_play_tone
 
+    # 2025-05-18 Turning auto-clamp off at session end has been removed for the time being.  This may change once
+    # auto-clamp is fully evaluated w/animals.
     @pytest.mark.parametrize("start_session", [False, True])
-    def test_auto_clamp_session_off_reset_to_baseline(self, machine, start_session):
+    def auto_clamp_session_off_reset_to_baseline(self, machine, start_session):
         machine.state = SystemState.tunnel
         if start_session:
             machine.algorithm.start_session()
