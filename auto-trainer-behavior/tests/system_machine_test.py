@@ -1,7 +1,14 @@
+
 import logging
 from functools import partial
+from threading import Timer
+from unittest import mock
 
 import pytest
+import time
+
+from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
+from autotrainer.core import SensorAnalysis, HeadbarPressureMonitor
 
 from autotrainer.behavior import SystemState, PelletState, SystemMachine
 from autotrainer.behavior.analysis.intersession_process import IntersessionResponse
@@ -168,9 +175,94 @@ def test_inference_detection_ready(machine):
     assert algo.successful_reaches == 2
 
 
+class TestAutoClamp:
+
+    @pytest.fixture
+    def machine(self):
+        self._tunnel_dev = mock.create_autospec(TunnelDeviceProtocol)
+        machine = SystemMachine(
+            tunnel_device=self._tunnel_dev,
+            pellet_device=mock.create_autospec(PelletDeviceProtocol),
+            analysis=SensorAnalysis(),
+        )
+        return machine
+
+    @pytest.mark.parametrize("state", list(SystemState))
+    @pytest.mark.parametrize("intensities", [[15, 20, 60], [100], ["base"]])
+    @pytest.mark.parametrize("hbp_engaged", [True, False])
+    @pytest.mark.parametrize("head_fixation_enabled", [True, False])
+    def test_with_analysis_pressure_prop_changed(self, machine, state, intensities, hbp_engaged, head_fixation_enabled):
+        machine.state = state
+        machine.algorithm.start_session()
+        machine.algorithm.head_fixation_enabled = head_fixation_enabled
+        analysis = machine._analysis
+        tun_dev = self._tunnel_dev
+        for idx, intensity in enumerate(intensities):
+            if intensity == "base":
+                intensity = machine.algorithm.baseline_intensity
+                intensities[idx] = intensity
+            machine.algorithm.auto_clamp_intensity = intensity
+            analysis.headbar_pressure_monitor.property_changed(
+                HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, hbp_engaged, None,
+            )
+        if state == SystemState.tunnel and hbp_engaged and head_fixation_enabled:
+            assert tun_dev.update_head_magnet_intensity.call_args_list == [
+                mock.call(i) for i in intensities
+            ]
+        else:
+            assert tun_dev.update_head_magnet_intensity.call_args_list == []
+        #
+        tun_dev.reset_mock()
+        def patch_timer(delay, func):
+            m = mock.create_autospec(Timer)
+            m.start.side_effect = func
+            return m
+        with mock.patch("autotrainer.behavior.system_machine.Timer", autospec=True) as m_timer:
+            m_timer.side_effect = patch_timer
+            machine.algorithm.head_fixation_enabled = False  # Disable auto-clamp
+        # This above mock patch allow to not have to :
+        #   time.sleep(machine.algorithm.auto_clamp_release_delay + 0.0005)
+        # and/but not be always sure that the timer has completed...
+        # NB:
+        # This is eventually fragile if other Timer (than the exact one desired (in the same module that is)) were
+        #  created during the same code execution.
+
+        # Now ensure update_head_magnet_intensity has been called as desired (or not):
+        if head_fixation_enabled:  # if auto-clamp was engaged
+            exp_update_head_magnet = [mock.call(machine.algorithm.baseline_intensity)]
+            exp_play_tone = [
+                mock.call(machine.algorithm.auto_clamp_release_tone_freq, 0.5)
+            ]
+        else:
+            exp_update_head_magnet = exp_play_tone = []
+        #
+        assert tun_dev.update_head_magnet_intensity.call_args_list == exp_update_head_magnet
+        assert machine._pellet_device.play_tone.call_args_list == exp_play_tone
+
+    @pytest.mark.parametrize("start_session", [False, True])
+    def test_auto_clamp_session_off_reset_to_baseline(self, machine, start_session):
+        machine.state = SystemState.tunnel
+        if start_session:
+            machine.algorithm.start_session()
+        tun_dev = self._tunnel_dev
+        assert tun_dev.update_head_magnet_intensity.call_args_list == []
+        #
+        # used with debugger:
+        # def catch(*args, **kwargs):
+        #     pass
+        # tun_dev.update_head_magnet_intensity.side_effect = catch
+        machine.after_exit_tunnel()
+
+        nb = 2 if start_session else 1
+        assert tun_dev.update_head_magnet_intensity.call_args_list == nb * [
+            mock.call(machine.algorithm.baseline_intensity)
+        ]  # it's called twice when in session:
+        # once in after_exit_tunnel directly,
+        # and once in _session_ended, as event handler from end_session -> session_ending
+        assert machine._pellet_device.play_tone.call_args_list == []
+
+
 if __name__ == '__main__':
     test_enter_exit_tunnel()
-
     test_intersession_enabled()
-
     test_no_session_without_pellet()
