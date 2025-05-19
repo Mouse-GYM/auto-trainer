@@ -534,7 +534,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             for cam in cams
         ]
         tot_skipped_frames = 0
-        empty_frame = numpy.zeros((self._frame_width, self._frame_height))
+        empty_frame = numpy.zeros((self._frame_height, self._frame_width))
         # NB: we are not waiting for the capture threads to close their writing side to the video file(s)
         # so this small sleep, for them to get more chance to do it:
         time.sleep(0.5)
