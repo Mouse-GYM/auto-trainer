@@ -250,16 +250,16 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
             logger.debug(f"<pellet> waiting for process termination")
 
-            t_timeout1 = time.time() + 3
-            t_timeout2 = time.time() + 6
+            t_timeout_sigint = time.time() + 10
+            t_timeout_sigterm = time.time() + 20
             while True:
                 t = time.time()
-                if t > t_timeout2:
+                if t > t_timeout_sigterm:
                     logger.warning("sending SIGTERM to %s", self._process)
                     self._process.terminate()
                     break
-                if t > t_timeout1:
-                    t_timeout1 += 2
+                if t > t_timeout_sigint:
+                    t_timeout_sigint += 4
                     logger.warning("sending SIGINT to %s", self._process)
                     os.kill(self._process.pid, signal.SIGINT)
                 if not self._process.is_alive():
