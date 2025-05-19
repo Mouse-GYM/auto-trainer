@@ -241,12 +241,12 @@ class MainContent(QWidget):
         plot_layout = QGridLayout()
         plot_layout.setContentsMargins(8, 0, 8, 0)
 
-        self._load_cell_plot, widget = self._create_plot_widget("Load Cell (V)")
-        self._load_cell_plot.setYRange(-1.0, 3.3)
+        self._load_cell_plot, widget = self._create_plot_widget("Load Cell (g)")
+        self._load_cell_plot.setYRange(-1.0, 70)
         plot_layout.addWidget(widget, 0, 0)
 
-        self._headbar_pressure_plot, widget = self._create_plot_widget("Head Bar Pressure (V)")
-        self._headbar_pressure_plot.setYRange(-1.0, 3.3)
+        self._headbar_pressure_plot, widget = self._create_plot_widget("Head Bar Pressure ()")
+        self._headbar_pressure_plot.setYRange(-1.0, 1024)
         plot_layout.addWidget(widget, 0, 1)
 
         self._head_contact_plot, widget = self._create_plot_widget("Head Contact (On/Off)")
