@@ -90,7 +90,10 @@ class IntersessionMachine(StateMachine):
     def can_perform_detection(self):
         EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionCan,
                                                   context=f"{self._project_info is not None}:{self._inference is not None}:{self._detection_configuration is None}")
-        return self._project_info is not None and self._inference is not None and self._detection_configuration is None
+        can_do_detection = self._project_info is not None and self._inference is not None and self._detection_configuration is None
+        logger.info("can_perform_detection() == %s ; prj=%s inference=%s detection_config=%s",
+                    can_do_detection, self._project_info is not None, self._inference is not None, self._detection_configuration is None)
+        return can_do_detection
 
     def _segmentation_complete(self, nonce: str, success: bool):
         if self._segmentation_configuration.nonce != nonce:
