@@ -14,6 +14,7 @@ def clear_queue(queue: Union[Queue, FixedArrayQueue]):
     if queue is None or sys.platform == "darwin":
         return
 
+    warned = False
     while not queue.empty() or queue.qsize() > 0:
         try:
             queue.get_nowait()
@@ -21,8 +22,10 @@ def clear_queue(queue: Union[Queue, FixedArrayQueue]):
             empty = queue.empty()
             qsize = queue.qsize()
             if not empty or qsize > 0:
-                logger.warning("queue %s: raised Empty but empty()=%s and qsize()=%s",
-                               queue, empty, qsize)
+                if not warned:
+                    warned = True
+                    logger.warning("queue %s: raised Empty but empty()=%s and qsize()=%s",
+                                   queue, empty, qsize)
                 continue
             break
 

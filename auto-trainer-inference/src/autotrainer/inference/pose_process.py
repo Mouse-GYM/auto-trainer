@@ -220,11 +220,6 @@ class PoseProcess(Process):
                 # using while to process all available batch:
                 while i_q_get_output(frame_buffer, frames_indices):
                     cnt += 1
-                    # done in _feed_intersession_analysis itself
-                    # if self._mode == InferenceMode.Offline:
-                    #     # check frames indices files to see if some of the frames
-                    #     # have been already processed during Live mode
-                    #     pass
                     if recording_in_progress:
                         if self._mode == InferenceMode.Offline or any(idx < 0 for indices in frames_indices for idx in indices):
                             recording_in_progress = False
@@ -234,12 +229,12 @@ class PoseProcess(Process):
                             recording_in_progress = True
                             logger.info("Detected start of record in progress ; mode=%s ; %s", self._mode, frames_indices)
                     pose = predict(frame_buffer)
+                    # NB:
+                    # the data queue reader/consumer takes care of deciding what to do with the result data:
                     d_q_put((pose,
                              self._mode,
-                             # InferenceMode.Live if recording_in_progress else InferenceMode.Offline,
-                             # frames_indices)
-                             frames_indices)  # if recording_in_progress else None)
-                    )
+                             frames_indices,
+                             ))
                     if perf_add_c():
                         self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
 

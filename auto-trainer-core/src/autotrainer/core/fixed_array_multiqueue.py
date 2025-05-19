@@ -52,7 +52,7 @@ class FixedArrayMultiQueue:
         self._read_index = 0
 
         self._shape = shape
-        self._byte_count = shape[0] * shape[1] #  * self._depth
+        self._byte_count = shape[0] * shape[1]  # 1 frame byte count, no RGB, only 8-bit gray.
 
         self._buff_views = []
         for idx in range(self._depth):
@@ -82,8 +82,6 @@ class FixedArrayMultiQueue:
 
         self._frame_indexing: List[int] = list(numpy.repeat(range(self._frames_per_camera), self._cam_count))
         self._camera_indexing: List[int] = list(numpy.tile(range(self._cam_count), self._frames_per_camera))
-
-        # self._frame_dest = numpy.zeros(self._shape, dtype='uint8')
 
         self._next_counts_log_time = time.time()
         self._overflow_count = 0
@@ -156,7 +154,6 @@ class FixedArrayMultiQueue:
             # the caller of this function has to check its return code/value to decide to retry or not.
             return BufferResult.Overflow
             #
-        # logger.info("buff_idx=%s batch_idx=%s", buffer_index, batch_index)
         cur_view = memoryview(self._buffers[buffer_index][camera][batch_index]).cast("B")
         # reshape does not copy if not necessary
         cur_view[:] = content.reshape(-1)

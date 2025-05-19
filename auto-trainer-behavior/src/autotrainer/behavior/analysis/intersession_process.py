@@ -36,7 +36,7 @@ def intersession_process(project: ProjectInfo) -> IntersessionResponse:
     location, _, _ = project.get_session_path()
     logger.info(f"process intersession pose data using {location}")
     calib_src_dir = "/home/agx001/3d-calibration/4mm_6r_8c_4x"
-    calib_src_dir = "/home/gregory.starck/projects/toptal/4mm_6r_8c_4x"
+    # calib_src_dir = "/home/gregory.starck/projects/toptal/4mm_6r_8c_4x"
     vid_tag = "." + video_write_ext
     dlc_seg = "_raw2D"
     center_method = (1, "Pellet")
