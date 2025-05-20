@@ -356,7 +356,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         prev_session = None
         tot_written_to_live = None
         t_log_counters = time.time()
-        cnt_data_received = 0
+        tot_skipped = cnt_data_received = 0
 
         while self._is_running:
 
