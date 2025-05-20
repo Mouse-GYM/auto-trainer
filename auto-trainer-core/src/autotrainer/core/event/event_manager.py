@@ -126,11 +126,14 @@ class EventManager:
         self._write_active = False
         for plugin in self._plugins:
             plugin.set_enable(False)
-        if self._write_thread is not None:
-            self._write_thread.join()
+        wt = self._write_thread
+        wq = self._write_queue
+        if wt is not None:
+            if wq is not None:
+                wq.put(None)
+            wt.join()
             self._write_thread = None
         # queue needs be flushed so that we can join it:
-        wq = self._write_queue
         if wq is not None:
             while True:
                 try:
@@ -172,7 +175,9 @@ class EventManager:
 
         """
         wq = self._write_queue
-        if wq is not None:
+        if wq is None:
+            logger.debug("post_event(%s) but write queue already removed", info.kind)
+        else:
             wq.put(info)
 
     def has_pending(self) -> bool:
@@ -198,9 +203,12 @@ class EventManager:
         while self._write_active:
             try:
                 # Workaround or current Jetson behavior w/ queue.get(timeout=).
-                info = self._write_queue.get_nowait()
+                # info = self._write_queue.get_nowait()
+                info = self._write_queue.get(timeout=0.05)
+                if info is None:
+                    self._write_queue.task_done()
+                    break
             except Empty:
-                time.sleep(0.05)
                 continue
 
             if not isinstance(info, EventInfo):
