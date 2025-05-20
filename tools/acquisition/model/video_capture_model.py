@@ -64,7 +64,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._camera_source: Optional[CaptureCameraAttrs] = None
         self._camera_properties = {}
 
-        self._video_capture: VideoCapture  # = None
+        self._video_capture: Optional[VideoCapture] = None
         self._video_reader = None
         self._video_reader_reset_event = None
         self._video_reader_stop_event = None
