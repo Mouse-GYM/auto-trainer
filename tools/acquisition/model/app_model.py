@@ -1,5 +1,6 @@
 import json
 import logging
+import multiprocessing
 import queue
 import time
 import typing
@@ -15,6 +16,7 @@ from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandl
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
+from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseAlgorithm
 from tools.acquisition.model.hardware_model import HardwareModel
 
@@ -230,6 +232,7 @@ class AppModel(ObservableObject):
                     3,
                     shape_1,
                     name="inference_q",
+                    mp_ctx=get_mp_ctx(),
                 )
             else:
                 logger.warning("pellet disabled: left and right camera frame sizes do not match")

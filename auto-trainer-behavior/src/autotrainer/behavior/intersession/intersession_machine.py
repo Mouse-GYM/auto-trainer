@@ -2,7 +2,6 @@ import logging
 import secrets
 from enum import Enum
 
-from events import Events
 from transitions import Machine
 
 from autotrainer.core import ProjectInfo, EventManager, ObservableObject
@@ -11,8 +10,9 @@ from ..behavior_event_kind import BehaviorEventKind
 from ..inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..state_machine import StateMachine
+from autotrainer.core.logging import get_verbose_logger
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class IntersessionState(str, Enum):
@@ -45,13 +45,9 @@ class IntersessionMachine(StateMachine):
                                 initial=initial_state, model_override=True)
 
         self._project_info = project_info
-
         self._algorithm = algorithm
-
         self._inference = inference
-
         self._segmentation_configuration = None
-
         self._detection_configuration = None
 
     @property
@@ -64,7 +60,6 @@ class IntersessionMachine(StateMachine):
 
     def after_enter_segmentation(self):
         self.events.on_analysis_started()
-
         self._segmentation_configuration = SegmentationConfiguration(nonce=secrets.token_hex(),
                                                                      session_index=self._project_info.session,
                                                                      complete=self._segmentation_complete)
@@ -83,16 +78,24 @@ class IntersessionMachine(StateMachine):
         self.events.on_analysis_ended()
 
     def can_perform_segmentation(self):
-        EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationCan,
-                                                  context=f"{self._project_info is not None}:{self._inference is not None}:{self._segmentation_configuration is None}")
-        return self._project_info is not None and self._inference is not None and self._segmentation_configuration is None
+        p = self._project_info is not None
+        i = self._inference is not None
+        s = self._segmentation_configuration is not None
+        EventManager.default().post_event_content(
+            BehaviorEventKind.intersessionSegmentationCan, context=f"{p}:{i}:{not s}")
+        res = p and i and not s
+        logger.debug("can_perform_segmentation=%s: prj=%s inference=%s segment=%s", res, p, i, s)
+        return res
 
     def can_perform_detection(self):
+        p = self._project_info is not None
+        i = self._inference is not None
+        d = self._detection_configuration is None
         EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionCan,
-                                                  context=f"{self._project_info is not None}:{self._inference is not None}:{self._detection_configuration is None}")
-        can_do_detection = self._project_info is not None and self._inference is not None and self._detection_configuration is None
-        logger.info("can_perform_detection() == %s ; prj=%s inference=%s detection_config=%s",
-                    can_do_detection, self._project_info is not None, self._inference is not None, self._detection_configuration is None)
+                                                  context=f"{p}:{i}:{d}")
+        can_do_detection = p and i and d
+        logger.debug("can_perform_detection=%s ; prj=%s inference=%s detection_config=%s",
+                    can_do_detection, p, i, d)
         return can_do_detection
 
     def _segmentation_complete(self, nonce: str, success: bool):

@@ -1,10 +1,12 @@
 import ctypes
 import logging
+import multiprocessing
 import queue
 import time
 from enum import IntEnum
 from multiprocessing import RawArray, Value
-from typing import List
+from multiprocessing.context import BaseContext
+from typing import List, Optional
 
 import numpy
 
@@ -17,7 +19,12 @@ class BufferResult(IntEnum):
 
 
 class FixedArrayQueue:
-    def __init__(self, depth: int, shape: (int, int), name: str="noname"):
+    def __init__(self, depth: int, shape: (int, int), name: str="noname", *,
+                 mp_ctx: Optional[BaseContext] = None,
+    ):
+        if mp_ctx is None:
+            mp_ctx = multiprocessing.get_context("spawn")
+
         self._name = name
         # indexing: [buffer]
         self._buffers: List[RawArray] = []
@@ -32,8 +39,8 @@ class FixedArrayQueue:
 
         self._buff_views = []
         for idx in range(self._depth):
-            self._buffers.append(RawArray(ctypes.c_ubyte, self._byte_count))
-            self._is_dirty.append(Value(ctypes.c_bool, False))
+            self._buffers.append(mp_ctx.RawArray(ctypes.c_ubyte, self._byte_count))
+            self._is_dirty.append(mp_ctx.Value(ctypes.c_bool, False))
 
         self._next_counts_log_time = time.time()
         self._overflow_count = 0

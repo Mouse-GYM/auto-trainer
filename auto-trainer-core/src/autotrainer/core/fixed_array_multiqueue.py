@@ -1,8 +1,10 @@
 import ctypes
 import logging
+import multiprocessing
 import time
 
 from multiprocessing import RawArray, Value
+from multiprocessing.context import BaseContext
 from typing import Tuple, List, Optional
 
 import numpy
@@ -30,7 +32,9 @@ class FixedArrayMultiQueue:
                  shape: Tuple[int, int],
                  *,
                  primary: int = 0,
-                 name: str="noname"):
+                 name: str="noname",
+                 mp_ctx: Optional[BaseContext] = None,
+                 ):
         """
         :param depth: queue length before discarding old data if consumers can not keep up
         :param cam_count: number of sources (e.g., cameras) providing 2D data (frames)
@@ -38,6 +42,9 @@ class FixedArrayMultiQueue:
         :param shape: size of each frame
         :param primary: indicates which source (index) defines when frames_per_camera is met and a buffer rotates
         """
+        if mp_ctx is None:
+            mp_ctx = multiprocessing.get_context("spawn")
+
         self._name = name
         # indexing: [buffer][camera][batch_frame]
         self._buffers: List[List[List[RawArray]]] = []
@@ -63,7 +70,7 @@ class FixedArrayMultiQueue:
                 cam_view = []
                 for bdx in range(self._frames_per_camera):
                     # TODO: could use a single rawarray per camera
-                    cam_buffer.append(RawArray(ctypes.c_ubyte, self._byte_count))
+                    cam_buffer.append(mp_ctx.RawArray(ctypes.c_ubyte, self._byte_count))
                 buffer.append(cam_buffer)
                 view.append(cam_view)
 
@@ -73,12 +80,12 @@ class FixedArrayMultiQueue:
         self._is_dirty = [
             # 1 shared array to mark frames in shared mem as ready or not.
             # if value true: means "dirty" means has valid frame in it.
-            RawArray(ctypes.c_bool, self._depth * self._frames_per_camera)
+            mp_ctx.RawArray(ctypes.c_bool, self._depth * self._frames_per_camera)
             for _ in range(self._cam_count)
         ]
 
         # a single shared array for all frames indices of all cameras:
-        self._frame_indices = RawArray(ctypes.c_int64, self._depth * self._frames_per_camera * self._cam_count)
+        self._frame_indices = mp_ctx.RawArray(ctypes.c_int64, self._depth * self._frames_per_camera * self._cam_count)
 
         self._frame_indexing: List[int] = list(numpy.repeat(range(self._frames_per_camera), self._cam_count))
         self._camera_indexing: List[int] = list(numpy.tile(range(self._cam_count), self._frames_per_camera))
@@ -135,11 +142,11 @@ class FixedArrayMultiQueue:
         batch_index = self._batch_index[camera]  # 0 ... up to frames per camera - 1
         dirty_idx = buffer_index * self._frames_per_camera + batch_index
         is_overflow = self._is_dirty[camera][dirty_idx]
-        # t = time.time()
-        # if t > self._next_counts_log_time:
-        #     self._next_counts_log_time += 10
-        #     logger.info("%s[%s]: put=%s overflow=%s", self, camera, self._put_count, self._overflow_count)
-        #     self._put_count = self._overflow_count = 0
+        t = time.time()
+        if t > self._next_counts_log_time:
+            self._next_counts_log_time += 10
+            logger.debug("%s[%s]: put=%s overflow=%s", self, camera, self._put_count, self._overflow_count)
+            self._put_count = self._overflow_count = 0
         if is_overflow:
             self._overflow_count += 1
             if not allow_overflow:

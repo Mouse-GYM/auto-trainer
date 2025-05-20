@@ -1,13 +1,15 @@
 import logging
+import multiprocessing
 import sys
 import argparse
 import faulthandler
-from multiprocessing import set_start_method
 
 
 if __name__ == '__main__':
 
-    set_start_method("spawn")  # MUST BE SET VERY EARLY BEFORE MOST IMPORTS
+    faulthandler.enable()
+
+    multiprocessing.set_start_method("spawn")  # MUST BE SET VERY EARLY BEFORE MOST IMPORTS
 
     from autotrainer.core.logging import setup_logging
 
@@ -21,8 +23,6 @@ if __name__ == '__main__':
     logging.getLogger("inference_algorithms").setLevel(cur_desired_lvl)
 
     from tools.acquisition.run_acquisition import run_acquisition
-
-    faulthandler.enable()
 
     parser = argparse.ArgumentParser()
 

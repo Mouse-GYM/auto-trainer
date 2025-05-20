@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 import queue
 import signal
@@ -23,6 +24,7 @@ from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
     intersession_process, BehaviorEventKind, InferenceProtocol
+from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     DlcPoseModel, MemoryPoseModel, InferenceMode
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
@@ -90,9 +92,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             'detection_result_ready',
         ))
 
-        self._data_queue = Queue()
-        self._cmd_queue = Queue()
-        self._msg_queue = Queue()
+        mp_ctx = get_mp_ctx()
+        self._data_queue = mp_ctx.Queue(maxsize=1024)
+        self._cmd_queue = mp_ctx.Queue(maxsize=64)
+        self._msg_queue = mp_ctx.Queue(maxsize=64)
 
         self._offline_queue: Optional[FixedArrayMultiQueue] = None
         self._offline_thread: Optional[Thread] = None
@@ -186,6 +189,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         for _ in range(self._offline_queue.camera_count):
             self._intersession_block.pose_data_list.append([])
         self._send_message(InferenceCommandMessageKind.ProcessOffline)
+        time.sleep(0.05)
         self._offline_thread = Thread(target=self._feed_intersession_analysis)
         self._offline_thread.start()
 
@@ -215,7 +219,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             return False
 
         self._frame_height, self._frame_width = network_queue.shape
-
         self._frames_per_camera = network_queue.frames_per_camera
 
         self._offline_queue = FixedArrayMultiQueue(
@@ -224,6 +227,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             network_queue.frames_per_camera,
             network_queue.shape,
             name="offline_q",
+            mp_ctx=get_mp_ctx(),
         )
 
         if self._model_location is None or len(self._model_location) == 0:
@@ -236,8 +240,14 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             logger.warning("pellet not started because the model does not exist at the specified location")
             return False
 
-        self._process = PoseProcess(model, network_queue, self._offline_queue, self._data_queue, self._cmd_queue,
-                                    self._msg_queue)
+        self._process = PoseProcess(
+            model,
+            network_queue,
+            self._offline_queue,
+            data_queue=self._data_queue,
+            cmd_queue=self._cmd_queue,
+            msg_queue=self._msg_queue,
+        )
 
         self._process.start()
 
@@ -295,7 +305,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._status = self._on_property_changed("status", status, self._status)
 
     def _send_message(self, kind: InferenceCommandMessageKind, context: typing.Any = None):
-        self._cmd_queue.put((kind, context))
+        q = self._cmd_queue
+        logger.debug("sending command msg %s qsize=%s", kind, q.qsize())
+        q.put((kind, context))
+        logger.debug("sent command msg %s qsize=%s", kind, q.qsize())
 
     def _monitor_msg_queue(self):
         while self._is_running:
@@ -339,18 +352,26 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         read_h5_dss: List[h5py.Dataset] = []
         read_h5_idx: List[int] = []
         recording_in_progress = False
-        prev_mode = InferenceMode.Offline
+        prev_mode = None
         prev_session = None
         tot_written_to_live = None
+        t_log_counters = time.time()
+        cnt_data_received = 0
 
         while self._is_running:
+
+            # t_now = time.time()
+            # if t_now > t_log_counters:
+            #     t_log_counters = t_now + 5
+            #     logger.info("data=%s", cnt_data_received)
+            #     cnt_data_received = 0
 
             try:
                 msg, context = self._msg_queue.get_nowait()
             except queue.Empty:
                 pass
             else:
-                logger.info("Processing msg %s ...", msg)
+                logger.debug("Processing msg %s ...", msg)
                 try:
                     if msg == InferenceStatusMessageKind.Initialized:
                         self._set_status(InferenceStatus.waiting)
@@ -375,9 +396,12 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     logger.exception("Error processing msg %s: %s", msg, err)
 
             try:
-                (pose_data, mode, frames_indices) = self._data_queue.get(timeout=0.1)
+                (pose_data, mode, frames_indices) = self._data_queue.get_nowait()   # (timeout=0.1)
             except queue.Empty:
+                time.sleep(0.005)
                 continue
+
+            cnt_data_received += 1
 
             prj = self.project
             ib: Optional[IntersessionBlock] = self._intersession_block
@@ -389,8 +413,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         mode == InferenceMode.Offline
                         # or self._status != InferenceStatus.live  # not sure needed
                         or pose_data is None
-                        or frames_indices is None
-                        or any(fr_i < 0 for frs in frames_indices for fr_i in frs)
+                        # or frames_indices is None
+                        # or any(fr_i < 0 for frs in frames_indices for fr_i in frs)
                     ):
                         logger.verbose("Detected stop of recording in progress ; status=%s mode=%s frames indices: %s tot_written=%s",
                                        self._status, mode, frames_indices, tot_written_to_live)
@@ -451,7 +475,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     response = self._algorithm.process(pose_data)
                     self.pose_response_ready(response)
                 else:
-                    if prev_mode == InferenceMode.Live and mode == InferenceMode.Offline:
+                    assert mode == InferenceMode.Offline
+                    if prev_mode == InferenceMode.Live:  # and mode == InferenceMode.Offline:
                         read_h5_dss = [
                             h5py.File(cam_pose_path)["df_with_missing"]["table"]
                             for cam_pose_path in pose_paths

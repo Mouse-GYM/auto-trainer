@@ -1,6 +1,7 @@
 import logging
 from enum import Enum
 from threading import Timer
+from typing import Optional
 
 from transitions import Machine
 
@@ -38,9 +39,13 @@ class SystemMachine(StateMachine):
          "before": "before_exit_intersession"}
     ]
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None, project_info: ProjectInfo = None,
-                 msg_handler: MessageHandler = None, analysis: SensorAnalysis = None,
-                 tunnel_device: TunnelDeviceProtocol = None, pellet_device: PelletDeviceProtocol = None,
+    def __init__(self,
+                 algorithm: Optional[BehaviorAlgorithm] = None,
+                 project_info: Optional[ProjectInfo] = None,
+                 msg_handler: MessageHandler = None,
+                 analysis: SensorAnalysis = None,
+                 tunnel_device: TunnelDeviceProtocol = None,
+                 pellet_device: PelletDeviceProtocol = None,
                  inference: InferenceProtocol = None):
 
         initial_state = SystemState.cage

@@ -1,7 +1,9 @@
+import multiprocessing
 import os
 import pathlib
 import time
 import logging
+from multiprocessing.context import BaseContext
 from typing import Optional, List
 from multiprocessing import Queue, Value, Array
 from threading import Event
@@ -13,6 +15,7 @@ from numpy import ndarray
 
 from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, ObservableObject, \
     CameraConfiguration, CameraId, NotificationCenter, TriggerNotification, Notification
+from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.project import ProjectInfo
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
@@ -43,8 +46,14 @@ def create_camera_list():
 
 
 class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
-    def __init__(self, name, preferences: UserPreferences = None, inference_index: int = -1):
+    def __init__(self, name, preferences: UserPreferences = None, inference_index: int = -1,
+                 *,
+                 mp_ctx: Optional[BaseContext] = None,
+    ):
         super().__init__()
+
+        if mp_ctx is None:
+            mp_ctx = get_mp_ctx()
 
         self._id = CameraId.Left
 
@@ -53,16 +62,16 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._inference_index = inference_index
 
         self._camera_source: Optional[CaptureCameraAttrs] = None
-        self._camera_properties = dict()
+        self._camera_properties = {}
 
-        self._video_capture: VideoCapture = None
+        self._video_capture: VideoCapture  # = None
         self._video_reader = None
         self._video_reader_reset_event = None
         self._video_reader_stop_event = None
 
-        self._video_command_queue = Queue()
-        self._video_status = Value("i", CaptureProcessStatus.UNKNOWN)
-        self._video_frame_index = Value("i", 0)
+        self._video_command_queue = mp_ctx.Queue(maxsize=64)
+        self._video_status = mp_ctx.Value("i", CaptureProcessStatus.UNKNOWN)
+        self._video_frame_index = mp_ctx.Value("i", 0)
         self._video_image_queue: Optional[FixedArrayQueue] = None
         self._errors = Array("c", bytes(512))
         self._shape = None
@@ -432,8 +441,12 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         else:
             self.shape = (300, 200)
 
-        self._video_image_queue = None if self._shape is None else FixedArrayQueue(3, self._shape,
-                                                                                   name="video_q")
+        self._video_image_queue = None if self._shape is None else FixedArrayQueue(
+            3,
+            self._shape,
+            name="video_q",
+            mp_ctx=get_mp_ctx(),
+        )
 
         self._camera_source = cam
 

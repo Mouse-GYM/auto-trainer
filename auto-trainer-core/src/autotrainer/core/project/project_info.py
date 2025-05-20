@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import multiprocessing
 import os
 import sys
 from dataclasses import dataclass
@@ -70,18 +71,23 @@ video_write_ext = "mp4" if sys.platform.startswith("linux") else "mkv"
 
 @dataclass
 class ProjectInfo:
+    session: Value = None  # = Value(ctypes.c_uint32, 1)
     root: str = ""
     device_id: str = ""
     when: datetime = None
     ensure_exists: bool = False
-    session: Value = Value(ctypes.c_uint32, 1)
     camera_1: str = ""
     camera_2: str = ""
+
+    def __post_init__(self):
+        if self.session is None:
+            ctx = multiprocessing.get_context("spawn")
+            self.session = ctx.Value(ctypes.c_uint32, 1)
 
     def is_valid(self):
         return self.root is not None and len(self.root) > 0
 
-    def get_day_path(self, skip_ensure: bool = False) -> Tuple[str | None, str | None]:
+    def get_day_path(self, skip_ensure: bool = False) -> Union[Tuple[str, str], Tuple[None, None]]:
         today = (self.when if self.when is not None else datetime.now()).strftime(DATE_FORMAT)
 
         location = os.path.join(self.root, today)
