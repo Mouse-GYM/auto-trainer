@@ -124,9 +124,23 @@ class EventManager:
         instance, including the `default` cannot be restarted.
         """
         self._write_active = False
-
         for plugin in self._plugins:
             plugin.set_enable(False)
+        if self._write_thread is not None:
+            self._write_thread.join()
+            self._write_thread = None
+        # queue needs be flushed so that we can join it:
+        wq = self._write_queue
+        if wq is not None:
+            while True:
+                try:
+                    wq.get_nowait()
+                    wq.task_done()
+                except Empty:
+                    break
+            wq.join()
+            self._write_queue = None
+
 
     def post_event_content(self, kind: int, context: Optional[object] = None, when: Optional[datetime] = None,
                            index: int = None):
@@ -157,7 +171,9 @@ class EventManager:
         Returns:
 
         """
-        self._write_queue.put(info)
+        wq = self._write_queue
+        if wq is not None:
+            wq.put(info)
 
     def has_pending(self) -> bool:
         """
@@ -189,11 +205,13 @@ class EventManager:
 
             if not isinstance(info, EventInfo):
                 logger.debug("unexpected event info instance")
+                self._write_queue.task_done()
                 continue
 
             try:
                 if info.is_same(self._last_event_info):
                     self._repeat_event_count += 1
+                    self._write_queue.task_done()
                     continue
             except Exception as ex:  # Possibly coming from EventInfo subclass - cannot predict type of error.
                 if not is_same_error_reported:
@@ -213,10 +231,11 @@ class EventManager:
                     logger.error(ex)
                     process_event_error_reported = True
 
+            self._write_queue.task_done()
+
         for plugin in self._plugins:
             plugin.close()
 
-        self._write_thread = None
 
     def _process_event(self, info: EventInfo, repeat_count: int = 0):
         for plugin in self._plugins:
