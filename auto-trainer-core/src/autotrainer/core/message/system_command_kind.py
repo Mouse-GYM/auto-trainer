@@ -32,7 +32,7 @@ class SystemCommandKind(IntEnum):
     SET_Y = 206  # moves and sets a Y position for use by SEND_FIXED_XYZ
     SET_Z = 207  # moves and sets a Z position for use by SEND_FIXED_XYZ
     SET_LOAD_SERVO = 208
-    SET_COVER_SERVO = 20
+    SET_COVER_SERVO = 209
     SEND_HOME = 210
     LOAD_PELLET = 211
     SEND_PELLET = 212
@@ -46,6 +46,7 @@ class SystemCommandKind(IntEnum):
     MOVE_X = 220  # moves X, only
     MOVE_Y = 221  # moves Y, only
     MOVE_Z = 222  # moves Z, only
+    SET_GATE_SERVO = 223
 
     # General actions.
     PLAY_TONE = 301

@@ -90,9 +90,10 @@ _MOTOR_TO_STR_MAP = {
     Motor.PELLET_X_MOTOR: "X",
     Motor.PELLET_Y_MOTOR: "Y",
     Motor.PELLET_Z_MOTOR: "Z",
-    Motor.MAGNET_SERVO: "Magnet",
+    Motor.TUNNEL_MAGNET_SERVO: "Magnet",
     Motor.PELLET_LOAD_SERVO: "Load",
-    Motor.PELLET_COVER_SERVO: "Cover"
+    Motor.PELLET_COVER_SERVO: "Cover",
+    Motor.TUNNEL_GATE_SERVO: "Gate"
 }
 
 
@@ -108,7 +109,8 @@ def motor_to_str(motor: Motor) -> str:
 
 
 class MotorInstance(Enum):
-    MAGNET_SERVO_ID = 0
+    TUNNEL_MAGNET_SERVO_ID = 0
+    TUNNEL_GATE_SERVO_ID = 1
     PELLET_X_MOTOR_ID = 0
     PELLET_Y_MOTOR_ID = 1
     PELLET_Z_MOTOR_ID = 2
@@ -120,7 +122,8 @@ _MOTOR_TO_ID_MAP = {
     Motor.PELLET_X_MOTOR: MotorInstance.PELLET_X_MOTOR_ID,
     Motor.PELLET_Y_MOTOR: MotorInstance.PELLET_Y_MOTOR_ID,
     Motor.PELLET_Z_MOTOR: MotorInstance.PELLET_Z_MOTOR_ID,
-    Motor.MAGNET_SERVO: MotorInstance.MAGNET_SERVO_ID,
+    Motor.TUNNEL_MAGNET_SERVO: MotorInstance.TUNNEL_MAGNET_SERVO_ID,
+    Motor.TUNNEL_GATE_SERVO: MotorInstance.TUNNEL_GATE_SERVO_ID,
     Motor.PELLET_LOAD_SERVO: MotorInstance.PELLET_LOAD_SERVO_ID,
     Motor.PELLET_COVER_SERVO: MotorInstance.PELLET_COVER_SERVO_ID
 }
@@ -147,7 +150,8 @@ def is_servo(motor: Motor) -> bool:
     Returns:
         bool: True if the motor is a servo motor, False otherwise
     """
-    return motor is Motor.MAGNET_SERVO or \
+    return motor is Motor.TUNNEL_MAGNET_SERVO or \
+        motor is Motor.TUNNEL_GATE_SERVO or \
         motor is Motor.PELLET_LOAD_SERVO or \
         motor is Motor.PELLET_COVER_SERVO
 
@@ -171,7 +175,9 @@ def target_of_motor(motor: Motor) -> Target:
     Returns:
         Target: the hardware target that the motor resides on
     """
-    return Target.MAGNET_DEVICE if motor is Motor.MAGNET_SERVO else Target.PELLET_DEVICE
+    return Target.MAGNET_DEVICE \
+        if (motor is Motor.TUNNEL_MAGNET_SERVO or motor is Motor.TUNNEL_GATE_SERVO) \
+        else Target.PELLET_DEVICE
 
 
 def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
@@ -188,8 +194,10 @@ def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
     """
     if target is Target.MAGNET_DEVICE:
         if isa_servo:
-            if motor_id is MotorInstance.MAGNET_SERVO_ID.value:
-                return Motor.MAGNET_SERVO
+            if motor_id is MotorInstance.TUNNEL_MAGNET_SERVO_ID.value:
+                return Motor.TUNNEL_MAGNET_SERVO
+            elif motor_id is MotorInstance.TUNNEL_GATE_SERVO_ID.value:
+                return Motor.TUNNEL_GATE_SERVO
     else:
         if isa_servo:
             if motor_id is MotorInstance.PELLET_COVER_SERVO_ID.value:
@@ -263,6 +271,7 @@ class CanInterface(DeviceInterface):
         self._magnet_addr: typing.Optional[int] = None
 
         self.magnet_config = ServoConfig()
+        self.gate_config = ServoConfig()
         self.load_config = ServoConfig()
         self.cover_config = ServoConfig()
         self.x_config = StepperConfig()
@@ -291,8 +300,28 @@ class CanInterface(DeviceInterface):
             config: new configuration
         """
         self._magnet_config = config if config is not None else ServoConfig()
-        self._magnet_config.motor = Motor.MAGNET_SERVO
+        self._magnet_config.motor = Motor.TUNNEL_MAGNET_SERVO
         self._magnet_config.target = target_of_motor(self._magnet_config.motor)
+
+    @property
+    def gate_config(self):
+        """
+        Returns:
+            Handle to the gate servo configuration
+        """
+        return self._gate_config
+
+    @gate_config.setter
+    def gate_config(self, config: ServoConfig):
+        """
+        Updates the gate servo configuration (local copy)
+
+        Args:
+            config: new configuration
+        """
+        self._gate_config = config if config is not None else ServoConfig()
+        self._gate_config.motor = Motor.TUNNEL_GATE_SERVO
+        self._gate_config.target = target_of_motor(self._gate_config.motor)
 
     @property
     def load_config(self):
@@ -601,8 +630,10 @@ class CanInterface(DeviceInterface):
                 config = self.cover_config
             elif motor is Motor.PELLET_LOAD_SERVO:
                 config = self.load_config
-            elif motor is Motor.MAGNET_SERVO:
+            elif motor is Motor.TUNNEL_MAGNET_SERVO:
                 config = self.magnet_config
+            elif motor is Motor.TUNNEL_GATE_SERVO:
+                config = self.gate_config
             else:
                 config = ServoConfig()
         else:
@@ -636,10 +667,15 @@ class CanInterface(DeviceInterface):
 
         config.motor = motor
 
-        if motor is Motor.MAGNET_SERVO:
+        if motor is Motor.TUNNEL_MAGNET_SERVO:
             self.magnet_config = config
             if write_to_remote:
                 rc = self._write_servo_config(self.magnet_config)
+
+        elif motor is Motor.TUNNEL_GATE_SERVO:
+            self.gate_config = config
+            if write_to_remote:
+                rc = self._write_servo_config(self.gate_config)
 
         elif motor is Motor.PELLET_X_MOTOR:
             self.x_config = config
@@ -696,7 +732,8 @@ class CanInterface(DeviceInterface):
         self._query_motor_configuration(Motor.PELLET_Z_MOTOR, StepperConfig)
         self._query_motor_configuration(Motor.PELLET_LOAD_SERVO, ServoConfig)
         self._query_motor_configuration(Motor.PELLET_COVER_SERVO, ServoConfig)
-        self._query_motor_configuration(Motor.MAGNET_SERVO, ServoConfig)
+        self._query_motor_configuration(Motor.TUNNEL_MAGNET_SERVO, ServoConfig)
+        self._query_motor_configuration(Motor.TUNNEL_GATE_SERVO, ServoConfig)
 
     def delay(self, delay_sec) -> bool:
         """
@@ -720,7 +757,8 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
-        return addr is not None and self._jc.LoadCellTare(addr, 0, CanInterface.next_uuid()) == 0
+        return (addr is not None and
+                self._jc.LoadCellTare(addr, 0, CanInterface.next_uuid()) == 0)
 
     def tare_pressure_sensor(self) -> bool:
         """
@@ -730,8 +768,8 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
-        return addr is not None and self._jc.PressureSensorTare(addr, 0, CanInterface.next_uuid()) \
-            == 0
+        return (addr is not None and
+                self._jc.PressureSensorTare(addr, 0, CanInterface.next_uuid()) == 0)
 
     def _set_servo_position(self, motor: Motor, position, config: ServoConfig):
         """
@@ -809,7 +847,7 @@ class CanInterface(DeviceInterface):
                                                          save_as_fixed,
                                                          CanInterface.next_uuid()) == 0
 
-    def set_magnet(self, position: int, _unused: bool = False) -> bool:
+    def set_magnet_servo(self, position, _unused: bool = False) -> bool:
         """
         Set the position of the magnet motor
 
@@ -820,9 +858,22 @@ class CanInterface(DeviceInterface):
         Returns:
             bool: True if successful else False
         """
-        return self._set_servo_position(Motor.MAGNET_SERVO, position, self.magnet_config)
+        return self._set_servo_position(Motor.TUNNEL_MAGNET_SERVO, position, self.magnet_config)
 
-    def set_x(self, position: float, save_as_fixed: bool = False) -> bool:
+    def set_gate_servo(self, position, _unused: bool = False) -> bool:
+        """
+        Set the position of the gate motor
+
+        Args:
+            position: Either a position (float) or a (position, rate (%)) pair
+            _unused
+
+        Returns:
+            bool: True if successful else False
+        """
+        return self._set_servo_position(Motor.TUNNEL_GATE_SERVO, position, self.gate_config)
+
+    def set_x(self, position, save_as_fixed: bool = False) -> bool:
         """
          Set the position of the X-direction motor
 
@@ -836,7 +887,7 @@ class CanInterface(DeviceInterface):
         return self._set_stepper_position(Motor.PELLET_X_MOTOR, position, self.x_config,
                                           save_as_fixed)
 
-    def set_y(self, position: float, save_as_fixed: bool = False) -> bool:
+    def set_y(self, position, save_as_fixed: bool = False) -> bool:
         """
          Set the position of the Y-direction motor
 
@@ -850,7 +901,7 @@ class CanInterface(DeviceInterface):
         return self._set_stepper_position(Motor.PELLET_Y_MOTOR, position, self.y_config,
                                           save_as_fixed)
 
-    def set_z(self, position: float, save_as_fixed: bool = False) -> bool:
+    def set_z(self, position, save_as_fixed: bool = False) -> bool:
         """
          Set the position of the Z-direction motor
 
@@ -875,7 +926,7 @@ class CanInterface(DeviceInterface):
         return addr is not None and \
             self._jc.SendToFixedXYZ(addr, CanInterface.next_uuid()) == 0
 
-    def set_load_servo(self, position: float, _unused: bool = False):
+    def set_load_servo(self, position, _unused: bool = False):
         """
         Set the position of the load arm
 

@@ -58,7 +58,7 @@ def _read_config(interface: CanInterface, motor: Motor):
 
 
 @pytest.mark.canbus
-def test_read_config(interface: CanInterface, motor: Motor = Motor.MAGNET_SERVO):
+def test_read_config(interface: CanInterface, motor: Motor = Motor.TUNNEL_MAGNET_SERVO):
     config = _read_config(interface, motor)
 
     assert config is not None
@@ -66,7 +66,7 @@ def test_read_config(interface: CanInterface, motor: Motor = Motor.MAGNET_SERVO)
 
 
 @pytest.mark.canbus
-def test_write_servo_config(interface: CanInterface, motor: Motor = Motor.MAGNET_SERVO):
+def test_write_servo_config(interface: CanInterface, motor: Motor = Motor.TUNNEL_MAGNET_SERVO):
     config = _read_config(interface, motor)
 
     orig_min = config.minimum_position
@@ -256,8 +256,8 @@ if __name__ == '__main__':
     test_heartbeat(iface, Target.PELLET_DEVICE)
     test_heartbeat(iface, Target.MAGNET_DEVICE)
 
-    test_read_config(iface, Motor.MAGNET_SERVO)
-    test_write_servo_config(iface, Motor.MAGNET_SERVO)
+    test_read_config(iface, Motor.TUNNEL_MAGNET_SERVO)
+    test_write_servo_config(iface, Motor.TUNNEL_MAGNET_SERVO)
     test_read_config(iface, Motor.PELLET_X_MOTOR)
     test_write_stepper_config(iface, Motor.PELLET_X_MOTOR)
     test_write_gpio(iface)

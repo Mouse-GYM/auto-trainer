@@ -70,11 +70,11 @@ def monitor_message_queue():
         elif kind == SystemStatusMessageKind.MEASUREMENTS:
             if print_status is StatusType.SENSORS:
                 d = data[0]
-                print(f"- Head Detect:     {d.switch}")
-                print(f"- Load Weight (v): {d.weight:.3f}")
-                print(f"- Pressure (v):    {d.pressure:.3f}")
-                print(f"- Temperature (F): {d.temperature:.1f}")
-                print(f"- Humidity (%):    {d.humidity:.1f}")
+                print(f"- Head Detect:        {d.switch}")
+                print(f"- Load Weight (g):    {d.weight:.3f}")
+                print(f"- Pressure (0..1024): {d.pressure:.3f}")
+                print(f"- Temperature (F):    {d.temperature:.1f}")
+                print(f"- Humidity (%):       {d.humidity:.1f}")
                 print_status = StatusType.DRAWER_DOOR
 
             if perf_start is None:
@@ -131,7 +131,10 @@ def monitor_message_queue():
               (kind == SystemStatusMessageKind.PELLET_LOAD and
                print_motor_status is Motor.PELLET_LOAD_SERVO) or
               (kind == SystemStatusMessageKind.HEAD_MAGNET and
-               print_motor_status is Motor.MAGNET_SERVO)):
+               print_motor_status is Motor.TUNNEL_MAGNET_SERVO) or
+              (kind == SystemStatusMessageKind.TUNNEL_GATE_SERVO and
+               print_motor_status is Motor.TUNNEL_GATE_SERVO)
+        ):
 
             # TODO deliver full packet. See can_device at or around line 328
             # assert isinstance(data, ServoStatus)
@@ -207,7 +210,9 @@ def str_to_motor(motor_name: str):
     elif motor_name == 'cover' or motor_name == 'c':
         return Motor.PELLET_COVER_SERVO
     elif motor_name == 'magnet' or motor_name == 'm':
-        return Motor.MAGNET_SERVO
+        return Motor.TUNNEL_MAGNET_SERVO
+    elif motor_name == 'gate' or motor_name == 'g':
+        return Motor.TUNNEL_GATE_SERVO
     else:
         return None
 
@@ -328,10 +333,14 @@ def run_monitor():
 
             motor = str_to_motor(cmd)
 
+            # '?' - help
             # 'a' - audio
             # 'c' - cover servo
+            # 'd' - delay (sec)
             # 'f' - load-from-files
-            # 'h' - help
+            # 'g' - gate servo
+            # 'h' - home stepper
+            # 'k' - stepper known position
             # 'l' - load servo
             # 'm' - magnet servo
             # 'o' - set output
@@ -370,11 +379,11 @@ def run_monitor():
                         print(f"Unknown file request: {params[0]}")
                     get_input = True
 
-                elif cmd == 'g' or cmd == 'go':
-                    device_thread.send_message(SystemCommandKind.SEND_FIXED_XYZ)
-
                 elif cmd == 'h' or cmd == 'home':
                     device_thread.send_message(SystemCommandKind.SEND_HOME)
+
+                elif cmd == 'k' or cmd == 'known':
+                    device_thread.send_message(SystemCommandKind.SEND_FIXED_XYZ)
 
                 elif cmd == 'o' or cmd == 'output':
                     handle_output_command(params, device_thread)
@@ -427,7 +436,8 @@ motor_to_set_command = {
     Motor.PELLET_X_MOTOR: SystemCommandKind.SET_X,
     Motor.PELLET_Y_MOTOR: SystemCommandKind.SET_Y,
     Motor.PELLET_Z_MOTOR: SystemCommandKind.SET_Z,
-    Motor.MAGNET_SERVO: SystemCommandKind.SET_MAGNET_INTENSITY,
+    Motor.TUNNEL_MAGNET_SERVO: SystemCommandKind.SET_MAGNET_INTENSITY,
+    Motor.TUNNEL_GATE_SERVO: SystemCommandKind.SET_GATE_SERVO,
     Motor.PELLET_COVER_SERVO: SystemCommandKind.SET_COVER_SERVO,
     Motor.PELLET_LOAD_SERVO: SystemCommandKind.SET_LOAD_SERVO
 }
@@ -436,7 +446,8 @@ motor_to_move_command = {
     Motor.PELLET_X_MOTOR: SystemCommandKind.MOVE_X,
     Motor.PELLET_Y_MOTOR: SystemCommandKind.MOVE_Y,
     Motor.PELLET_Z_MOTOR: SystemCommandKind.MOVE_Z,
-    Motor.MAGNET_SERVO: SystemCommandKind.SET_MAGNET_INTENSITY,
+    Motor.TUNNEL_MAGNET_SERVO: SystemCommandKind.SET_MAGNET_INTENSITY,
+    Motor.TUNNEL_GATE_SERVO: SystemCommandKind.SET_GATE_SERVO,
     Motor.PELLET_COVER_SERVO: SystemCommandKind.SET_COVER_SERVO,
     Motor.PELLET_LOAD_SERVO: SystemCommandKind.SET_LOAD_SERVO
 }
@@ -550,7 +561,7 @@ def print_help():
           " ::Write Configuration")
     print("<motor> trip <cnt>                 "
           " ::<cnt> Round trips")
-    print("<motor> is one of: x, y, z, l[oad], c[over], m[agnet]")
+    print("<motor> is one of: x, y, z, l[oad], c[over], m[agnet], g[ate]")
     print()
 
     print("p[ellet] c[over]                   "
@@ -567,10 +578,10 @@ def print_help():
           " ::Audio sound (hz) (sec)")
     print("d[elay] <sec>                      "
           " ::Delay")
-    print("g[o]                               "
-          " ::Go to Send Position (X, Y, Z)")
     print("h[ome]                             "
           " ::Go to Home Position (0, 0, 0)")
+    print("k[nown]                            "
+          " ::Go to Known/Send Position (X, Y, Z)")
     print("f[ile] motor <file>                "
           " ::Load Motor Configuration")
     print("f[ile] move <file>                 "

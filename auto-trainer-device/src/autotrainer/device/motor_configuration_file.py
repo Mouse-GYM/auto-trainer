@@ -118,8 +118,12 @@ class MotorConfigurationFile:
         if "tunnel" in yaml_dict:
             if "magnet" in yaml_dict["tunnel"]:
                 self._magnet_config = ServoConfig.from_dict(yaml_dict["tunnel"]["magnet"])
-                self._magnet_config.motor = Motor.MAGNET_SERVO
+                self._magnet_config.motor = Motor.TUNNEL_MAGNET_SERVO
                 logger.info(f"Magnet stepper configuration: {self._magnet_config}")
+            if "gate" in yaml_dict["tunnel"]:
+                self._gate_config = ServoConfig.from_dict(yaml_dict["tunnel"]["gate"])
+                self._gate_config.motor = Motor.TUNNEL_GATE_SERVO
+                logger.info(f"Gate stepper configuration: {self._gate_config}")
 
     '''
     Implement MotorConfigurations Protocol
@@ -127,7 +131,11 @@ class MotorConfigurationFile:
 
     @property
     def magnet_config(self) -> Tuple[Motor, ServoConfig]:
-        return Motor.MAGNET_SERVO, self._magnet_config
+        return Motor.TUNNEL_MAGNET_SERVO, self._magnet_config
+
+    @property
+    def gate_config(self) -> Tuple[Motor, ServoConfig]:
+        return Motor.TUNNEL_GATE_SERVO, self._gate_config
 
     @property
     def load_config(self) -> Tuple[Motor, ServoConfig]:

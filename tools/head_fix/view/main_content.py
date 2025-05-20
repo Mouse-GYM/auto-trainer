@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, Signal, QTimer, Slot
 from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
     QCheckBox, QLineEdit, QFileDialog, QPlainTextEdit, QVBoxLayout, QDoubleSpinBox
 
-from autotrainer.core import PerfMonitor, LoadCellMonitor, ProjectInfo
+from autotrainer.core import PerfMonitor, LoadCellMonitor, ProjectInfo, MessageHandler
 from autotrainer.core.message import Motor
 from autotrainer.device import is_servo
 from autotrainer.model import EnvironmentProvider, HardwareVersion
@@ -103,19 +103,51 @@ class MainContent(QWidget):
         position_layout.setContentsMargins(8, 8, 8, 8)
         position_layout.setSpacing(12)
 
-        position_layout.addWidget(QLabel("Intensity:"))
+        position_layout.addWidget(QLabel("Magnet"))
 
-        self._position = QSpinBox()
-        self._position.setMaximum(100)
-        self._position.setValue(0)
-        self._position.setWrapping(False)
-        self._position.setEnabled(False)
-        position_layout.addWidget(self._position, 0, Qt.AlignLeft)
+        self._curr_magnet_position = QLabel("(-)")
+        position_layout.addWidget(self._curr_magnet_position)
 
-        self._update_position_button = QPushButton("Update")
-        self._update_position_button.setEnabled(False)
-        self._update_position_button.clicked.connect(self._set_position)
-        position_layout.addWidget(self._update_position_button, 0)
+        self._magnet_position = QSpinBox()
+        self._magnet_position.setMaximum(120)
+        self._magnet_position.setValue(0)
+        self._magnet_position.setWrapping(False)
+        self._magnet_position.setEnabled(False)
+        position_layout.addWidget(self._magnet_position, 0, Qt.AlignLeft)
+
+        self._update_magnet_button = QPushButton("Update")
+        self._update_magnet_button.setEnabled(False)
+        self._update_magnet_button.clicked.connect(self._set_magnet_position)
+        position_layout.addWidget(self._update_magnet_button, 0)
+
+        position_layout.addStretch(1)
+
+        position_layout.addWidget(QLabel("Gate"))
+
+        self._curr_gate_position = QLabel("(-)")
+        position_layout.addWidget(self._curr_gate_position)
+
+        self._gate_position = QSpinBox()
+        self._gate_position.setMaximum(120)
+        self._gate_position.setValue(0)
+        self._gate_position.setWrapping(False)
+        self._gate_position.setEnabled(False)
+        position_layout.addWidget(self._gate_position, 0, Qt.AlignLeft)
+
+        self._update_gate_button = QPushButton("Update")
+        self._update_gate_button.setEnabled(False)
+        self._update_gate_button.clicked.connect(self._set_gate_position)
+        position_layout.addWidget(self._update_gate_button, 0)
+
+        self._open_gate = QPushButton("Open Gate")
+        self._open_gate.setEnabled(False)
+        self._open_gate.clicked.connect(self._model.open_tunnel_gate)
+        position_layout.addWidget(self._open_gate, 0)
+
+        self._close_gate = QPushButton("Close Gate")
+        self._close_gate.setEnabled(False)
+        self._close_gate.clicked.connect(self._model.close_tunnel_gate)
+        position_layout.addWidget(self._close_gate, 0)
 
         position_layout.addStretch(1)
 
@@ -124,24 +156,11 @@ class MainContent(QWidget):
         self._tare_button.clicked.connect(self._model.tare)
         position_layout.addWidget(self._tare_button, 0)
 
-        self._open_gate = QPushButton("Open Gate")
-        self._open_gate.setEnabled(False)
-        self._open_gate.clicked.connect(self._model.open_tunnel_gate)
-        if EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(self._open_gate, 0)
-
-        self._close_gate = QPushButton("Close Gate")
-        self._close_gate.setEnabled(False)
-        self._close_gate.clicked.connect(self._model.close_tunnel_gate)
-        if EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(self._close_gate, 0)
-
         self._config_button = QPushButton("")
         gear_icon = qta.icon('fa5s.cog')  # Font Awesome 5 Solid cog icon
         self._config_button.setIcon(gear_icon)
         self._config_button.clicked.connect(lambda: self._update_config())
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(self._config_button)
+        position_layout.addWidget(self._config_button)
 
         row_layout.addLayout(position_layout)
 
@@ -157,14 +176,6 @@ class MainContent(QWidget):
         layout.addWidget(title)
 
         layout.addStretch(1)
-
-        label = QLabel("Current Intensity:")
-        label.setStyleSheet("color: white")
-        layout.addWidget(label)
-        self._current_intensity = QLabel("(no updates)")
-        self._current_intensity.setStyleSheet("color: white")
-        self._current_intensity.setContentsMargins(0, 0, 4, 0)
-        layout.addWidget(self._current_intensity)
 
         header.setLayout(layout)
 
@@ -314,9 +325,11 @@ class MainContent(QWidget):
         return panel
 
     def _model_property_changed(self, name, value, _):
-        if name == "magnet_intensity":
-            self._current_intensity.setText(f"{round(value, 1)}")
-        elif name == "config":
+        if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
+            self._curr_magnet_position.setText(f"({round(value, 1)})")
+        elif name == MessageHandler.HEAD_GATE_PROPERTY:
+            self._curr_gate_position.setText(f"({round(value, 1)})")
+        elif name == MessageHandler.CONFIG_PROPERTY:
             if self._config_dialog is not None:
                 if is_servo(value.motor):
                     self._config_dialog.update_servo_config(value)
@@ -376,8 +389,11 @@ class MainContent(QWidget):
     def _audio_spectrum_received(self, spectrum):
         self._audio_spectrum_plot.replace_cache(spectrum)
 
-    def _set_position(self):
-        self._model.set_position(self._position.value())
+    def _set_magnet_position(self):
+        self._model.set_magnet_position(self._magnet_position.value())
+
+    def _set_gate_position(self):
+        self._model.set_gate_position(self._gate_position.value())
 
     def _update_record_enabled(self, b: bool):
         self._model.user_settings.record_enabled = b
@@ -409,14 +425,16 @@ class MainContent(QWidget):
         self._model.analysis.project_info = None
 
         self._perf_monitor.reset()
-        self._current_intensity.setText("(no updates)")
-
+        self._curr_magnet_position.setText("(-)")
+        self._curr_gate_position.setText("(-)")
     def enable_widgets(self, enable: bool):
-        self._position.setEnabled(enable)
+        self._magnet_position.setEnabled(enable)
+        self._gate_position.setEnabled(enable)
         self._tare_button.setEnabled(enable)
         self._open_gate.setEnabled(enable)
         self._close_gate.setEnabled(enable)
-        self._update_position_button.setEnabled(enable)
+        self._update_magnet_button.setEnabled(enable)
+        self._update_gate_button.setEnabled(enable)
         self._load_cell_plot.setEnabled(enable)
         self._head_contact_plot.setEnabled(enable)
         self._headbar_pressure_plot.setEnabled(enable)

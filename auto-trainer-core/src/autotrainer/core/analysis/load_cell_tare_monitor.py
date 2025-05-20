@@ -120,7 +120,8 @@ class LoadCellTareMonitor:
         if self._index >= self._buffer_len:
             self._index = 0
 
-        if numpy.all(numpy.abs(self._values) > self._threshold) and numpy.ptp(self._values) <= self._range_threshold:
+        if numpy.all(numpy.abs(self._values) > self._threshold) and numpy.ptp(
+            self._values) <= self._range_threshold:
             self._tare_callback()
             return True
 

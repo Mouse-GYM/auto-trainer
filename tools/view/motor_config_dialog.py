@@ -23,7 +23,8 @@ class MotorConfigDialog(QDialog):
             "X": Motor.PELLET_X_MOTOR,
             "Y": Motor.PELLET_Y_MOTOR,
             "Z": Motor.PELLET_Z_MOTOR,
-            "Magnet": Motor.MAGNET_SERVO,
+            "Magnet": Motor.TUNNEL_MAGNET_SERVO,
+						"Gate": Motor.TUNNEL_GATE_SERVO,
             "Load Arm": Motor.PELLET_LOAD_SERVO,
             "Barrier": Motor.PELLET_COVER_SERVO
         }
@@ -34,7 +35,9 @@ class MotorConfigDialog(QDialog):
                                    Motor.PELLET_Z_MOTOR)]
         self.servo_motors = [name for name, motor_id in self.motor_mapping.items()
                              if motor_id in (
-                                 Motor.MAGNET_SERVO, Motor.PELLET_LOAD_SERVO,
+                                 Motor.TUNNEL_MAGNET_SERVO,
+																 Motor.TUNNEL_GATE_SERVO, 
+																 Motor.PELLET_LOAD_SERVO,
                                  Motor.PELLET_COVER_SERVO)]
 
         self.all_motors = self.stepper_motors + self.servo_motors

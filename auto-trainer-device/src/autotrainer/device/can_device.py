@@ -69,8 +69,8 @@ class CanDevice(Device):
         self._send_pellet = default_send_pellet()
         self._cover_pellet = default_cover_pellet()
         self._release_pellet = default_release_pellet()
-        self._open_tunnel_gate = None
-        self._close_tunnel_gate = None
+        self._open_tunnel_gate = default_open_gate()
+        self._close_tunnel_gate = default_close_gate()
         self._compound_movement = None  # Current compound movement
 
         # Initialize command handlers lookup table
@@ -82,13 +82,16 @@ class CanDevice(Device):
                 lambda data: self._interface.request_motor_config(data),
 
             SystemCommandKind.SET_MAGNET_INTENSITY:
-                lambda data: self._interface.set_magnet(int(data)),
+                lambda data: self._interface.set_magnet_servo(data),
 
             SystemCommandKind.SET_LOAD_SERVO:
                 lambda data: self._interface.set_load_servo(data),
 
             SystemCommandKind.SET_COVER_SERVO:
                 lambda data: self._interface.set_cover_servo(data),
+
+            SystemCommandKind.SET_GATE_SERVO:
+                lambda data: self._interface.set_gate_servo(data),
 
             SystemCommandKind.SET_X:
                 lambda data: self._interface.set_x(data, True),
@@ -245,17 +248,14 @@ class CanDevice(Device):
 
             StepperConfig: lambda message: (
                 self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
-                self._perform_next_compound_step()
             )[-1],
 
             ServoConfig: lambda message: (
                 self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
-                self._perform_next_compound_step()
             )[-1],
 
             Version: lambda message: (
                 self.api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version),
-                self._perform_next_compound_step()
             )[-1],
 
             DoorData: lambda message: (
@@ -416,7 +416,8 @@ class CanDevice(Device):
         Motor.PELLET_Z_MOTOR: SystemStatusMessageKind.PELLET_Z,
         Motor.PELLET_LOAD_SERVO: SystemStatusMessageKind.PELLET_LOAD,
         Motor.PELLET_COVER_SERVO: SystemStatusMessageKind.PELLET_COVER,
-        Motor.MAGNET_SERVO: SystemStatusMessageKind.HEAD_MAGNET,
+        Motor.TUNNEL_MAGNET_SERVO: SystemStatusMessageKind.HEAD_MAGNET,
+        Motor.TUNNEL_GATE_SERVO: SystemStatusMessageKind.TUNNEL_GATE_SERVO,
     }
 
     def _report_motor_status(self, motor, position, _at_limit: bool = False):
@@ -437,7 +438,7 @@ class CanDevice(Device):
     def _to_tuple(value: str):
         if "," in str(value):
             parts = value.split(",")
-            return (float(parts[0].strip()), float(parts[1].strip()))
+            return float(parts[0].strip()), float(parts[1].strip())
         else:
             return float(value)
 
@@ -479,8 +480,13 @@ class CanDevice(Device):
 
             elif "magnet" in step:
                 location = CanDevice._to_tuple(step["magnet"])
-                self._interface.set_magnet(location)
+                self._interface.set_magnet_servo(location)
                 logger.debug(f"Magnet to {location}")
+
+            elif "gate" in step:
+                location = CanDevice._to_tuple(step["gate"])
+                self._interface.set_gate_servo(location)
+                logger.debug(f"Gate to {location}")
 
             elif "delay" in step:
                 duration = step["delay"]
@@ -576,5 +582,33 @@ def default_release_pellet() -> MotorSteps:
     return MotorSteps("release_pellet",
                       [
                           {'predefined': 'release'},
+                      ]
+                      )
+
+
+def default_open_gate() -> MotorSteps:
+    """
+    Create the default motor step sequence for releasing a pellet.
+
+    Returns:
+        A MotorSteps object containing the release pellet sequence
+    """
+    return MotorSteps("open_gate",
+                      [
+                          {'gate': '120'},
+                      ]
+                      )
+
+
+def default_close_gate() -> MotorSteps:
+    """
+    Create the default motor step sequence for releasing a pellet.
+
+    Returns:
+        A MotorSteps object containing the release pellet sequence
+    """
+    return MotorSteps("close_gate",
+                      [
+                          {'gate': '0'},
                       ]
                       )

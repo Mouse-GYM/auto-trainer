@@ -56,6 +56,8 @@ class SystemMessageHandler(MessageHandler):
             self.property_changed(MessageHandler.COVER_ARM_ANGLE_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.HEAD_MAGNET:
             self.property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.TUNNEL_GATE_SERVO:
+            self.property_changed(MessageHandler.HEAD_GATE_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.FRONT_DOOR:
             self.property_changed(MessageHandler.FRONT_DOOR_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.DRAWER_DOOR:

@@ -29,6 +29,7 @@ class MessageHandler(ObservableObject):
     FIRMWARE_VERSION_PROPERTY = "firmware_version"
 
     HEAD_MAGNET_INTENSITY_PROPERTY = "head_magnet_intensity"
+    HEAD_GATE_PROPERTY = "gate_angle"
 
     DEVICE_X_PROPERTY = "device_x"
     DEVICE_Y_PROPERTY = "device_y"
@@ -41,8 +42,9 @@ class MessageHandler(ObservableObject):
     DRAWER_DOOR_PROPERTY = "drawer_door"
     SPARE_DOOR_PROPERTY = "spare_door"
     EXT_BUTTON_PROPERTY = "ext_button"
-    
+
     STIMULI_PROPERTY = "stimuli"
+    CONFIG_PROPERTY = "config"
 
     def __init__(self, input_queue: Queue, name: str = "message-handler", event_names=()):
         super().__init__(event_names=event_names + ("ack_received",))

@@ -8,7 +8,7 @@ Identifiers for the different motor types
 
 class Motor(IntEnum):
     NONE = 0
-    MAGNET_SERVO = 1
+    TUNNEL_MAGNET_SERVO = 1
     PELLET_X_MOTOR = 2
     PELLET_Y_MOTOR = 3
     PELLET_Z_MOTOR = 4
