@@ -203,7 +203,7 @@ class PoseProcess(Process):
                 while True:
                     # logger.debug("now: qsize=%s empty=%s", q.qsize(), q.empty())
                     try:
-                        cmd, context = self._cmd_queue.get(timeout=0.001)
+                        cmd, context = get_command()
                     except Empty:
                         break
                     logger.info("Handling command %s ...", cmd)
