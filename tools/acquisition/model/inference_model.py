@@ -514,6 +514,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             read_h5_dss = []
                     elif ib is not None:
 
+                        # append any of the live processed frame data that are before current received/processed frames:
                         while True:
                             skipped = 0
                             for fx in range(self._frames_per_camera):
@@ -533,9 +534,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             t_log_counters = t_now + 1
                             logger.debug("read %s entries from h5 live file", tot_skipped)
                             tot_skipped = 0
-                        # for frame in pose_data:
-                        #     self._intersession_block.pose_data = numpy.vstack(
-                        #         [self._intersession_block.pose_data, frame.flatten()])
+
+                        # we can now append the received/processed frame data:
+                        for cdx in range_cams:
+                            for frame in pose_data[cdx::len(cams)]:
+                                ib.pose_data_list[cdx].append(frame)
 
             except (KeyboardInterrupt, SystemExit):
                 raise
