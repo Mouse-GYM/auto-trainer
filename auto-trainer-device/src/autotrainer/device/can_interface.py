@@ -1417,11 +1417,10 @@ class CanInterface(DeviceInterface):
         door.target = _addr2tgt(message.dst_id)
 
         # Reported state is inverse of requested state
-        door.open_state = [
-            not bool(message.doors.opened & 0x1),
-            not bool(message.doors.opened & 0x2),
-            not bool(message.doors.opened & 0x4),
-        ]
+        door.door1 = message.doors.door1
+        door.door2 = message.doors.door2
+        door.door3 = message.doors.door3
+        door.ext_button = message.doors.ext_button
 
         return door
 

@@ -39,6 +39,9 @@ class MessageHandler(ObservableObject):
 
     FRONT_DOOR_PROPERTY = "front_door"
     DRAWER_DOOR_PROPERTY = "drawer_door"
+    SPARE_DOOR_PROPERTY = "spare_door"
+    EXT_BUTTON_PROPERTY = "ext_button"
+    
     STIMULI_PROPERTY = "stimuli"
 
     def __init__(self, input_queue: Queue, name: str = "message-handler", event_names=()):

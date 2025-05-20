@@ -29,8 +29,10 @@ get_input = True
 class StatusType(IntEnum):
     FRONT_DOOR = 1
     DRAWER_DOOR = 2
-    SENSORS = 3
-    STIMULUS = 4
+    SPARE_DOOR = 3
+    EXT_BUTTON = 4
+    SENSORS = 5
+    STIMULUS = 6
 
 
 def monitor_message_queue():
@@ -166,6 +168,16 @@ def monitor_message_queue():
         elif kind == SystemStatusMessageKind.FRONT_DOOR:
             if print_status is StatusType.FRONT_DOOR:
                 print(f"- Front Door:      {'Open' if data else 'Closed'}")
+                print_status = StatusType.SPARE_DOOR
+
+        elif kind == SystemStatusMessageKind.SPARE_DOOR:
+            if print_status is StatusType.SPARE_DOOR:
+                print(f"- Spare Door:      {'Open' if data else 'Closed'}")
+                print_status = StatusType.EXT_BUTTON
+
+        elif kind == SystemStatusMessageKind.EXT_BUTTON:
+            if print_status is StatusType.EXT_BUTTON:
+                print(f"- Ext Button:      {'Pressed' if data else 'Released'}")
                 print_status = StatusType.STIMULUS
 
         elif kind == SystemStatusMessageKind.STIMULUS_INPUTS:

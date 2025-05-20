@@ -60,6 +60,10 @@ class SystemMessageHandler(MessageHandler):
             self.property_changed(MessageHandler.FRONT_DOOR_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.DRAWER_DOOR:
             self.property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.SPARE_DOOR:
+            self.property_changed(MessageHandler.SPARE_DOOR_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.EXT_BUTTON:
+            self.property_changed(MessageHandler.EXT_BUTTON_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.STIMULUS_INPUTS:
             self.property_changed(MessageHandler.STIMULI_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.MOTOR_CONFIGURATION:

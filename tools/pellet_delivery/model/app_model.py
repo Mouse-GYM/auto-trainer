@@ -56,6 +56,8 @@ class AppModel(ObservableObject):
 
         self._front_door = None
         self._panel_door = None
+        self._spare_door = None
+        self._ext_button = None
 
         self._stimuli = None
         self._config = None
@@ -176,6 +178,24 @@ class AppModel(ObservableObject):
     def panel_door(self, value):
         self._panel_door = self._on_property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, value,
                                                      self._panel_door)
+
+    @property
+    def spare_door(self):
+        return self._spare_door
+
+    @spare_door.setter
+    def spare_door(self, value):
+        self._spare_door = self._on_property_changed(MessageHandler.SPARE_DOOR_PROPERTY, value,
+                                                     self._spare_door)
+
+    @property
+    def ext_button(self):
+        return self._ext_button
+
+    @ext_button.setter
+    def ext_button(self, value):
+        self._ext_button = self._on_property_changed(MessageHandler.EXT_BUTTON_PROPERTY, value,
+                                                     self._ext_button)
 
     @property
     def stimuli(self):
@@ -309,6 +329,10 @@ class AppModel(ObservableObject):
             self.front_door = value
         elif name == MessageHandler.DRAWER_DOOR_PROPERTY:
             self.panel_door = value
+        elif name == MessageHandler.SPARE_DOOR_PROPERTY:
+            self.spare_door = value
+        elif name == MessageHandler.EXT_BUTTON_PROPERTY:
+            self.ext_button = value
         elif name == MessageHandler.STIMULI_PROPERTY:
             self.stimuli = value
         elif name == "config":

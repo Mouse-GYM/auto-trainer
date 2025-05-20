@@ -40,7 +40,10 @@ def _create_door_panel():
     drawer_door = Led()
     layout.addRow("Drawer Door:", drawer_door)
 
-    return front_door, drawer_door, create_panel("Doors", layout)
+    ext_button = Led()
+    layout.addRow("Ext Button:", ext_button)
+
+    return front_door, drawer_door, ext_button, create_panel("Doors", layout)
 
 
 def _create_stimulus_panel():
@@ -65,7 +68,7 @@ class PelletState(QWidget):
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._front_door, self._drawer_door, panel = _create_door_panel()
+        self._front_door, self._drawer_door, self._ext_button, panel = _create_door_panel()
         layout.addWidget(panel)
 
         self._stimulus, panel = _create_stimulus_panel()
@@ -78,10 +81,13 @@ class PelletState(QWidget):
             if not value:
                 self._front_door.set_light(False)
                 self._drawer_door.set_light(False)
+                self._ext_button.set_light(False)
         elif name == MessageHandler.FRONT_DOOR_PROPERTY:
             self._front_door.set_light(bool(value))
         elif name == MessageHandler.DRAWER_DOOR_PROPERTY:
             self._drawer_door.set_light(bool(value))
+        elif name == MessageHandler.EXT_BUTTON_PROPERTY:
+            self._ext_button.set_light(bool(value))
         elif name == MessageHandler.STIMULI_PROPERTY:
             for v, box in zip(value, self._stimulus):
                 box.set_light(bool(v))

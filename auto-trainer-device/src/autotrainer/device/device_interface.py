@@ -325,7 +325,10 @@ class AudioData(Source):
 
 @dataclass
 class DoorData(Source):
-    open_state = [False, False, False]
+    door1: bool = False
+    door2: bool = False
+    door3: bool = False
+    ext_button: bool = False
 
 
 @dataclass
