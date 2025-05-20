@@ -91,22 +91,16 @@ class PoseProcess(Process):
 
     def run(self):
         from autotrainer.core.logging import setup_logging
-        self._logger = setup_logging(__name__, logger_level=logging.DEBUG)
-        self._logger.setLevel(logging.DEBUG)
-
-        self._logger.info("On start: qsize=%s empty=%s", self._cmd_queue.qsize(), self._cmd_queue.empty())
-        try:
-            cmd, _ = self._cmd_queue.get_nowait()
-        except Empty:
-            pass
-        else:
-            self._logger.info("Got %s", cmd)
+        setup_logging()
 
         logger.info("entering pose_predict")
         self._send_message(InferenceStatusMessageKind.Created)
 
         self._send_message(InferenceStatusMessageKind.Loading)
+
+        logging.root.setLevel(logging.WARN)
         self._model.load()
+        logging.root.setLevel(logging.INFO)
 
         try:
             self._send_message(InferenceStatusMessageKind.Initialized, self._model.body_parts)
@@ -199,7 +193,7 @@ class PoseProcess(Process):
             if t_now > t_next_cmd:
                 # do not check command queue on each loop turn, mostly useless
                 # and overhead is not that small
-                t_next_cmd += 0.5
+                t_next_cmd += 1
                 while True:
                     # logger.debug("now: qsize=%s empty=%s", q.qsize(), q.empty())
                     try:
@@ -229,17 +223,17 @@ class PoseProcess(Process):
             if i_q_get_output is not None:
                 cnt = 0
                 t_break = time.time() + 1
-                # using while to process all available batch:
+                # using while to process all available batches, up to "t_break"
                 while time.time() < t_break and i_q_get_output(frame_buffer, frames_indices):
                     cnt += 1
                     if recording_in_progress:
                         if self._mode == InferenceMode.Offline or any(idx < 0 for indices in frames_indices for idx in indices):
                             recording_in_progress = False
-                            logger.info("Detected end of record in progress ; mode=%s ; %s", self._mode, frames_indices)
+                            logger.debug("Detected end of record in progress ; mode=%s ; %s", self._mode, frames_indices)
                     else:
                         if self._mode == InferenceMode.Live and all(idx >= 0 for indices in frames_indices for idx in indices):
                             recording_in_progress = True
-                            logger.info("Detected start of record in progress ; mode=%s ; %s", self._mode, frames_indices)
+                            logger.debug("Detected start of record in progress ; mode=%s ; %s", self._mode, frames_indices)
                     pose = predict(frame_buffer)
                     # NB:
                     # the data queue reader/consumer takes care of deciding what to do with the result data:
@@ -249,9 +243,6 @@ class PoseProcess(Process):
                              ))
                     if perf_add_c():
                         self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
-
-                    if time.time() > t_now + 1:
-                        break
 
                 if self._mode == InferenceMode.Offline and self._process_live_when_ready:
                     self._data_queue.put((None, self._mode, None))

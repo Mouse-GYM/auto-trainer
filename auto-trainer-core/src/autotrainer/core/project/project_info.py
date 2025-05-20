@@ -12,6 +12,8 @@ from multiprocessing import Value
 from pathlib import Path
 from typing import Tuple, NamedTuple, Union, Optional
 
+from autotrainer.core.multiproc import get_mp_ctx
+
 DATE_FORMAT = "%Y%m%d"
 
 TIME_FORMAT = "%H%M%S"
@@ -71,7 +73,7 @@ video_write_ext = "mp4" if sys.platform.startswith("linux") else "mkv"
 
 @dataclass
 class ProjectInfo:
-    session: Value = None  # = Value(ctypes.c_uint32, 1)
+    session: Value = None
     root: str = ""
     device_id: str = ""
     when: datetime = None
@@ -81,7 +83,7 @@ class ProjectInfo:
 
     def __post_init__(self):
         if self.session is None:
-            ctx = multiprocessing.get_context("spawn")
+            ctx = get_mp_ctx()
             self.session = ctx.Value(ctypes.c_uint32, 1)
 
     def is_valid(self):

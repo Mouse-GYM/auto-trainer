@@ -333,7 +333,7 @@ class VideoCapture(Process):
     def _handle_command(self, cmd: CaptureCommandKind, context: object):
         logger.info(f"<{self._name}> executing {cmd}")
         self.command_handler.get(cmd)(context)
-        logger.info("status: capturing=%s recording=%s", self._is_capturing, self._is_record_active)
+        logger.debug("status: capturing=%s recording=%s", self._is_capturing, self._is_record_active)
 
     def _user_terminate(self, _: object):
         self._is_running = False

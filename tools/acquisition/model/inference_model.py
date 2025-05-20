@@ -33,19 +33,21 @@ logger = get_verbose_logger(__name__)
 
 
 def _close_fhs(cams_frame_idx_fhs):
-    for fh in cams_frame_idx_fhs or []:
+    for idx, fh in enumerate(cams_frame_idx_fhs or []):
         if fh is not None:
-            logger.info("closing %s", fh.name)
+            logger.debug("closing %s", fh.name)
             fh.flush()
             fh.close()
+            cams_frame_idx_fhs[idx] = None
 
 
 def _close_h5(fhs: List[h5py.File]):
-    for fh in fhs or []:
+    for idx, fh in enumerate(fhs or []):
         logger.info("exiting %s", fh.name)
         # fh.flush()
         fh.__exit__(None, None, None)
         fh.close()
+        fhs[idx] = None
 
 
 class InferenceStatus(str, Enum):
@@ -75,13 +77,13 @@ class IntersessionDetection:
     configuration: DetectionConfiguration
 
 
-def check_frame_count(file_path: Union[str, Path]) -> Optional[cv2.VideoCapture]:
-    capture = cv2.VideoCapture(file_path)
+def check_frame_count(file_path: Path) -> Optional[cv2.VideoCapture]:
+    capture = cv2.VideoCapture(file_path.as_posix())
     count = capture.get(cv2.CAP_PROP_FRAME_COUNT)
     if count < 1:
         capture.release()
         return None
-    logger.info("Opened %s: tot_frames=%s", file_path, count)
+    logger.verbose("Opened %s: tot_frames=%s size=%s", file_path, count, file_path.stat().st_size)
     return capture
 
 
@@ -93,7 +95,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         ))
 
         mp_ctx = get_mp_ctx()
-        self._data_queue = mp_ctx.Queue(maxsize=1024)
+        self._data_queue = mp_ctx.Queue(maxsize=4096)
         self._cmd_queue = mp_ctx.Queue(maxsize=64)
         self._msg_queue = mp_ctx.Queue(maxsize=64)
 
@@ -348,7 +350,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         cams_frame_idx_fhs = None
         pose_paths: List[Path] = []
         axis_labels = ("x", "y", "likelihood")
-        pose_fhs: Optional[List[h5py.File]] = None
+        # pose_fhs: Optional[List[h5py.File]] = None
         read_h5_dss: List[h5py.Dataset] = []
         read_h5_idx: List[int] = []
         recording_in_progress = False
@@ -420,8 +422,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                        self._status, mode, frames_indices, tot_written_to_live)
                         recording_in_progress = False
                         _close_fhs(cams_frame_idx_fhs)
-                        _close_h5(pose_fhs)
-                        cams_frame_idx_fhs = pose_fhs = None
+                        # _close_h5(pose_fhs)
+                        cams_frame_idx_fhs = None
                 else:
                     if (pose_data is not None
                         # and self._status == InferenceStatus.live
@@ -438,7 +440,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         pose_data: List[numpy.ndarray]
                         cams_frame_idx_fhs = []
                         recording_in_progress = True
-                        pose_fhs = []
+                        # pose_fhs = []
                         pose_paths = []
                         for cam in cams:
                             _, _, p_indices = prj.get_video_path(cam, allow_overwrite=True)
@@ -476,7 +478,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     self.pose_response_ready(response)
                 else:
                     assert mode == InferenceMode.Offline
-                    if prev_mode == InferenceMode.Live:  # and mode == InferenceMode.Offline:
+                    if prev_mode == InferenceMode.Live:
                         read_h5_dss = [
                             h5py.File(cam_pose_path)["df_with_missing"]["table"]
                             for cam_pose_path in pose_paths
@@ -571,9 +573,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # so this small sleep, for them to get more chance to do it:
         time.sleep(0.5)
         # This is to not get "moov-atom-not-found" in stderr output from opencv library.
-        for video_path, _, _ in cams_paths:
-            logger.info("%s: size: %s",
-                        video_path, video_path.stat().st_size if video_path.exists() else "N/A")
         timeout = time.time() + self._intersession_wait_time
         captures_d = {}
         while len(captures_d) < n_cams:
@@ -629,7 +628,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 if not all_read[cdx]:
                     if not self._put_intersession_frame(cap, cdx, fr_idx):
                         all_read[cdx] = True
-                        break
                     cams_sent_frame_count[cdx] += 1
                 cams_frame_idx[cdx] += 1
             frame_idx += 1
@@ -643,13 +641,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         for cdx, cnt in enumerate(cams_sent_frame_count):
             r = self._frames_per_camera - cnt % self._frames_per_camera
             if r != self._frames_per_camera:
-                logger.info("cam-%s: padding %s empty frames to cam", cdx, r)
+                logger.debug("cam-%s: padding %s empty frames to cam", cdx, r)
                 for _ in range(r):
                     while self._offline_queue.put(empty_frame, cdx, -1, allow_overflow=False) != BufferResult.Ok:
                         time.sleep(0.001)
 
-        logger.notice("passed %s frames per camera ; tot_skipped_frames=%s ; per cam last frame idx: %s",
-                    frame_idx, tot_skipped_frames, cams_frame_idx)
+        logger.notice("passed %s frames per camera ; tot_skipped_frames=%s ; per cam last frame idx: %s ; cams frame sent count: %s",
+                    frame_idx, tot_skipped_frames, cams_frame_idx, cams_sent_frame_count)
         self._intersession_block.frame_count = frame_idx
         self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
 

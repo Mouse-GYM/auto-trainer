@@ -114,7 +114,7 @@ class DlcPoseModel(PoseModel):
         snapshot_index = self._sys_configuration[self.SNAPSHOT_INDEX_KEY]
         increasing_indices = numpy.argsort([int(m.split('-')[1]) for m in self._snapshots])
         self._snapshots = self._snapshots[increasing_indices]
-        logger.info(f"using {self._snapshots[snapshot_index]} for {self._model_folder}")
+        logger.debug(f"using {self._snapshots[snapshot_index]} for {self._model_folder}")
 
         self._model_configuration[self.INIT_WEIGHTS_KEY] = os.path.join(self._model_folder, 'train',
                                                                         self._snapshots[snapshot_index])
