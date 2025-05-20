@@ -482,6 +482,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             for cam_pose_path in pose_paths
                         ]
                         read_h5_idx = [0] * n_cams
+                        tot_skipped = 0
 
                     if pose_data is None:
                         # end of intersession replay
@@ -512,7 +513,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             self._intersession_block = None
                             read_h5_dss = []
                     else:
-                        tot_skipped = 0
+
                         while True:
                             skipped = 0
                             for fx in range(self._frames_per_camera):
@@ -527,8 +528,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 tot_skipped += skipped
                             else:
                                 break
-                        if tot_skipped > 0:
+                        t_now = time.time()
+                        if tot_skipped > 0 and t_now > t_log_counters:
+                            t_log_counters = t_now + 1
                             logger.debug("read %s entries from h5 live file", tot_skipped)
+                            tot_skipped = 0
                         # for frame in pose_data:
                         #     self._intersession_block.pose_data = numpy.vstack(
                         #         [self._intersession_block.pose_data, frame.flatten()])
