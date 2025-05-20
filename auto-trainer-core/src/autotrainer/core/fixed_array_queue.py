@@ -10,6 +10,8 @@ from typing import List, Optional
 
 import numpy
 
+from autotrainer.core.multiproc import get_mp_ctx
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +25,7 @@ class FixedArrayQueue:
                  mp_ctx: Optional[BaseContext] = None,
     ):
         if mp_ctx is None:
-            mp_ctx = multiprocessing.get_context("spawn")
+            mp_ctx = get_mp_ctx()
 
         self._name = name
         # indexing: [buffer]

@@ -10,6 +10,7 @@ from typing import Tuple, List, Optional
 import numpy
 
 from autotrainer.core.fixed_array_queue import BufferResult
+from autotrainer.core.multiproc import get_mp_ctx
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ class FixedArrayMultiQueue:
         :param primary: indicates which source (index) defines when frames_per_camera is met and a buffer rotates
         """
         if mp_ctx is None:
-            mp_ctx = multiprocessing.get_context("spawn")
+            mp_ctx = get_mp_ctx()
 
         self._name = name
         # indexing: [buffer][camera][batch_frame]
