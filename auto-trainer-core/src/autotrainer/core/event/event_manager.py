@@ -135,14 +135,15 @@ class EventManager:
             self._write_thread = None
         # queue needs be flushed so that we can join it:
         if wq is not None:
+            self._write_queue = None  # set it directly, so that no other thread can now put through this instance
             while True:
                 try:
-                    wq.get_nowait()
+                    item = wq.get_nowait()
+                    logger.spam("dropped unhandled %s", type(item))
                     wq.task_done()
                 except Empty:
                     break
             wq.join()
-            self._write_queue = None
 
 
     def post_event_content(self, kind: int, context: Optional[object] = None, when: Optional[datetime] = None,
@@ -188,7 +189,10 @@ class EventManager:
 
         Returns: True if there are pending events to process by the handlers.  Might be accurate, might not.
         """
-        return not self._write_queue.empty()
+        wq = self._write_queue
+        if wq is None:
+            return False
+        return not wq.empty()
 
     def _process_queue(self):
         # Because we a) use plugins and b) allow for EventInfo->is_same to be overridden, we may be given a plugin that
@@ -203,7 +207,6 @@ class EventManager:
         while self._write_active:
             try:
                 # Workaround or current Jetson behavior w/ queue.get(timeout=).
-                # info = self._write_queue.get_nowait()
                 info = self._write_queue.get(timeout=0.05)
                 if info is None:
                     self._write_queue.task_done()
