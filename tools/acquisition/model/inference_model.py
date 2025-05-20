@@ -512,7 +512,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             ib.configuration.complete(ib.configuration.nonce, success)
                             self._intersession_block = None
                             read_h5_dss = []
-                    else:
+                    elif ib is not None:
 
                         while True:
                             skipped = 0
@@ -563,7 +563,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             for cam in cams
         ]
         tot_skipped_frames = 0
-        empty_frame = numpy.zeros((self._frame_height, self._frame_width))
+        empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
         # NB: we are not waiting for the capture threads to close their writing side to the video file(s)
         # so this small sleep, for them to get more chance to do it:
         time.sleep(0.5)
