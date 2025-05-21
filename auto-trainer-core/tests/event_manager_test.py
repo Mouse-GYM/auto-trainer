@@ -1,4 +1,5 @@
 import time
+import datetime as dt
 
 import pytest
 
@@ -62,7 +63,7 @@ def test_plugin_interface(event_manager, mock_plugin):
 
     assert mock_plugin.project == event_manager.project
 
-    next_event = EventInfo(kind=1)
+    next_event = EventInfo(kind=1, when=dt.datetime.now(), index=0)
     event_manager.post_event(next_event)
 
     # So long as this method provides an accurate response (see docstring for this method), use it instead of some

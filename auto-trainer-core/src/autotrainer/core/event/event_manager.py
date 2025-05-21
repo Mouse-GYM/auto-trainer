@@ -140,7 +140,7 @@ class EventManager:
             while True:
                 try:
                     item = wq.get_nowait()
-                    logger.warning("dropped unhandled %s", type(item))
+                    logger.warning("dropped unhandled %s: %s", type(item), item)
                     wq.task_done()
                 except Empty:
                     break
