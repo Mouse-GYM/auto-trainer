@@ -178,8 +178,7 @@ class EventManager:
         """
         if info is None:
             # "~paranoid" check but that will prevent the non-desired stop of the work thread.
-            logger.warning("post_event(None) refused")
-            return
+            raise RuntimeError("post_event(None) refused")
         wq = self._write_queue
         if wq is None:
             logger.debug("post_event(%s) but write queue already removed", info.kind)

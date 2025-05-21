@@ -75,17 +75,18 @@ def test_plugin_interface(event_manager, mock_plugin):
     assert mock_plugin.event_count == 1
 
     event_manager.flush()
+
+    assert event_manager.is_valid is True
+    assert mock_plugin.enabled is True
     assert mock_plugin.flushed is True
-
+    #
     event_manager.close()
-
+    #
+    assert event_manager.is_valid is False
     assert mock_plugin.enabled is False
-
-    now = time.time()
-
-    while event_manager.is_valid:
-        time.sleep(0.001)
-        if time.time() - now > 2:
-            assert False, "Event manager did not close in a timely manner"
-
     assert mock_plugin.closed is True
+
+
+def test_post_none_event_refused(event_manager):
+    with pytest.raises(RuntimeError, match="post_event\(None\) refused"):
+        event_manager.post_event(None)  # noqa
