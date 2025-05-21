@@ -1,5 +1,6 @@
 import logging
 from enum import Enum
+from pathlib import Path
 from threading import Timer
 from typing import Optional
 
@@ -158,8 +159,15 @@ class SystemMachine(StateMachine):
         # if self._tunnel_device is not None:
         #    self._update_magnet_position(self.algorithm.baseline_intensity)
 
-        if self.algorithm.can_perform_intersession_analysis() and self.state == SystemState.cage:
+        prj = self.project
+        can_perform_analysis = self.algorithm.can_perform_intersession_analysis()
+        if can_perform_analysis and self.state == SystemState.cage:
             self.enter_intersession()
+        if not can_perform_analysis and prj is not None:
+            for cam_name in (prj.camera_1, prj.camera_2):
+                for path in map(Path, prj.get_video_path(cam_name, session=prj.session.value, allow_overwrite=True)):
+                    logger.debug("removing %s", path)
+                    path.unlink(missing_ok=True)
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:

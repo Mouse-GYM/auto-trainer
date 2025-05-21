@@ -1,6 +1,7 @@
 
 import logging
 from functools import partial
+from pathlib import Path
 from threading import Timer
 from unittest import mock
 
@@ -8,7 +9,7 @@ import pytest
 import time
 
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
-from autotrainer.core import SensorAnalysis, HeadbarPressureMonitor
+from autotrainer.core import SensorAnalysis, HeadbarPressureMonitor, ProjectInfo
 
 from autotrainer.behavior import SystemState, PelletState, SystemMachine
 from autotrainer.behavior.analysis.intersession_process import IntersessionResponse
@@ -262,6 +263,19 @@ class TestAutoClamp:
         # once in after_exit_tunnel directly,
         # and once in _session_ended, as event handler from end_session -> session_ending
         assert machine._pellet_device.play_tone.call_args_list == []
+
+    def test_on_session_end_saved_files_deleted_if_mouse_not_seen(self, machine, caplog, project_info):
+        machine.project = project_info
+        machine.algorithm.start_session()
+        # check with cam1 file paths:
+        file_paths = list(map(Path, machine.project.get_video_path(machine.project.camera_1)))
+        assert len(file_paths) > 0
+        for p in file_paths:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.touch()
+        machine.algorithm.end_session()
+        for p in file_paths:
+            assert not p.exists()
 
 
 if __name__ == '__main__':
