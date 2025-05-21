@@ -3,10 +3,10 @@ import queue
 import uuid
 from pathlib import Path
 
-from autotrainer.core import ObservableObject, SystemMessageHandler, SystemCommandKind, \
-    MessageHandler, Motor
-from autotrainer.device import (CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery,
-                                DeviceConnection, CompoundMovementFile)
+from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
+                              EventManager)
+from autotrainer.device import (CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery, 
+                                DeviceConnectionm , CompoundMovementFile)
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
@@ -311,6 +311,8 @@ class AppModel(ObservableObject):
             self._device_connection.request_disconnect()
         if self._message_handler is not None:
             self._message_handler.request_terminate()
+
+        EventManager.try_close_default()
 
     def _message_handler_property_changed(self, name: str, value, _old_value):
         if name == SystemMessageHandler.FIRMWARE_VERSION_PROPERTY:
