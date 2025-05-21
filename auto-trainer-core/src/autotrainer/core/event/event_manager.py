@@ -31,6 +31,9 @@ class EventManager:
       * Per the first bullet, this new event type will also be immediately output
     """
 
+    _instance: "EventManager"
+
+
     @classmethod
     def default(cls) -> Self:
         """
@@ -55,14 +58,13 @@ class EventManager:
 
         # Callers should expect requests to post an event return as quickly as possible.  Events are pushed to a queue
         # so that processing can be done in a separate thread as resources allow.
-        self._write_active = True
         self._write_queue = Queue()
         self._write_thread = Thread(target=self._process_queue)
         self._write_thread.start()
 
     @property
     def is_valid(self):
-        return self._write_active is True or self._write_thread is not None
+        return self._write_thread is not None and self._write_queue is not None
 
     @property
     def project(self) -> ProjectInfo:
@@ -123,7 +125,6 @@ class EventManager:
         only be called when the application or script is closing or otherwise finished with the event manager as an
         instance, including the `default` cannot be restarted.
         """
-        self._write_active = False
         for plugin in self._plugins:
             plugin.set_enable(False)
         wt = self._write_thread
@@ -139,7 +140,7 @@ class EventManager:
             while True:
                 try:
                     item = wq.get_nowait()
-                    logger.spam("dropped unhandled %s", type(item))
+                    logger.warning("dropped unhandled %s", type(item))
                     wq.task_done()
                 except Empty:
                     break
@@ -175,6 +176,10 @@ class EventManager:
         Returns:
 
         """
+        if info is None:
+            # "~paranoid" check but that will prevent the non-desired stop of the work thread.
+            logger.warning("post_event(None) refused")
+            return
         wq = self._write_queue
         if wq is None:
             logger.debug("post_event(%s) but write queue already removed", info.kind)
@@ -204,10 +209,10 @@ class EventManager:
         is_same_error_reported = False
         process_event_error_reported = False
 
-        while self._write_active:
+        while True:
             try:
                 # Workaround or current Jetson behavior w/ queue.get(timeout=).
-                info = self._write_queue.get(timeout=0.05)
+                info = self._write_queue.get(timeout=0.5)
                 if info is None:
                     self._write_queue.task_done()
                     break
