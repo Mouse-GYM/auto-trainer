@@ -265,11 +265,12 @@ class TestAutoClamp:
     def test_on_session_end_saved_files_deleted_if_mouse_not_seen(self, machine, project_info):
         machine.project = project_info
         machine.algorithm.start_session()
+        machine.algorithm.intersession_enabled = True
         # check with cam1 file paths:
         cam = project_info.camera_1
         file_paths = list(
             map(Path, chain(project_info.get_video_path(cam), [
-                project_info.get_intersession_pose_path(cam)]))
+                project_info.get_intersession_pose_path(cam, suffix="_live")]))
         )
         assert len(file_paths) > 0
         for p in file_paths:
