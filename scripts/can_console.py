@@ -6,7 +6,7 @@ from threading import Thread
 from copy import copy
 from enum import IntEnum
 
-from autotrainer.core import SystemStatusMessageKind, SystemCommandKind
+from autotrainer.core import SystemStatusMessageKind, SystemCommandKind, EventManager
 from autotrainer.device import CanDevice, DeviceConnection, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
     CompoundMovementFile, MotorConfigurationFile
@@ -402,6 +402,8 @@ def run_monitor():
     logger.info("waiting for device connection to terminate")
 
     device_thread.join()
+
+    EventManager.try_close_default()
 
     logger.info("done")
 
