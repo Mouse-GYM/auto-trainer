@@ -1,6 +1,7 @@
 
 import logging
 from functools import partial
+from itertools import chain
 from pathlib import Path
 from threading import Timer
 from unittest import mock
@@ -261,11 +262,15 @@ class TestAutoClamp:
         ]
         assert machine._pellet_device.play_tone.call_args_list == []
 
-    def test_on_session_end_saved_files_deleted_if_mouse_not_seen(self, machine, caplog, project_info):
+    def test_on_session_end_saved_files_deleted_if_mouse_not_seen(self, machine, project_info):
         machine.project = project_info
         machine.algorithm.start_session()
         # check with cam1 file paths:
-        file_paths = list(map(Path, machine.project.get_video_path(machine.project.camera_1)))
+        cam = project_info.camera_1
+        file_paths = list(
+            map(Path, chain(project_info.get_video_path(cam), [
+                project_info.get_intersession_pose_path(cam)]))
+        )
         assert len(file_paths) > 0
         for p in file_paths:
             p.parent.mkdir(parents=True, exist_ok=True)

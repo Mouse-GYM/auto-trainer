@@ -1,5 +1,6 @@
 import logging
 from enum import Enum
+from itertools import chain
 from pathlib import Path
 from threading import Timer
 from typing import Optional
@@ -165,7 +166,11 @@ class SystemMachine(StateMachine):
             self.enter_intersession()
         if not can_perform_analysis and prj is not None:
             for cam_name in (prj.camera_1, prj.camera_2):
-                for path in map(Path, prj.get_video_path(cam_name, session=prj.session.value, allow_overwrite=True)):
+                for path in map(Path, chain(
+                        prj.get_video_path(cam_name, session=prj.session.value, allow_overwrite=True),
+                        [prj.get_intersession_pose_path(cam_name, session=prj.session.value, allow_overwrite=True,
+                                                        suffix="_live")],
+                )):
                     logger.debug("removing %s", path)
                     path.unlink(missing_ok=True)
 
