@@ -243,7 +243,7 @@ class TestAutoClamp:
     # 2025-05-18 Turning auto-clamp off at session end has been removed for the time being.  This may change once
     # auto-clamp is fully evaluated w/animals.
     @pytest.mark.parametrize("start_session", [False, True])
-    def auto_clamp_session_off_reset_to_baseline(self, machine, start_session):
+    def test_auto_clamp_session_off_reset_to_baseline(self, machine, start_session):
         machine.state = SystemState.tunnel
         if start_session:
             machine.algorithm.start_session()
@@ -256,12 +256,9 @@ class TestAutoClamp:
         # tun_dev.update_head_magnet_intensity.side_effect = catch
         machine.after_exit_tunnel()
 
-        nb = 2 if start_session else 1
-        assert tun_dev.update_head_magnet_intensity.call_args_list == nb * [
+        assert tun_dev.update_head_magnet_intensity.call_args_list == [
             mock.call(machine.algorithm.baseline_intensity)
-        ]  # it's called twice when in session:
-        # once in after_exit_tunnel directly,
-        # and once in _session_ended, as event handler from end_session -> session_ending
+        ]
         assert machine._pellet_device.play_tone.call_args_list == []
 
     def test_on_session_end_saved_files_deleted_if_mouse_not_seen(self, machine, caplog, project_info):
