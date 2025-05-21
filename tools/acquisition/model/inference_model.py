@@ -351,8 +351,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         pose_paths: List[Path] = []
         axis_labels = ("x", "y", "likelihood")
         # pose_fhs: Optional[List[h5py.File]] = None
-        read_h5_dss: List[h5py.Dataset] = []
-        read_h5_idx: List[int] = []
+        cams_read_h5_dss: List[h5py.Dataset] = []
+        cams_read_h5_idx: List[int] = []
         recording_in_progress = False
         prev_mode = None
         prev_session = None
@@ -479,16 +479,29 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 else:
                     assert mode == InferenceMode.Offline
                     if prev_mode == InferenceMode.Live:
-                        read_h5_dss = [
+                        cams_read_h5_dss = [
                             h5py.File(cam_pose_path)["df_with_missing"]["table"]
                             for cam_pose_path in pose_paths
                         ]
-                        read_h5_idx = [0] * n_cams
+                        cams_read_h5_idx = [0] * n_cams
                         tot_skipped = 0
 
                     if pose_data is None:
                         # end of intersession replay
                         if ib is not None:
+                            for cdx, pdl, cur_h5_idx, cur_h5_dss in zip(
+                                    range_cams, ib.pose_data_list, cams_read_h5_idx, cams_read_h5_dss
+                            ):
+                                while True:
+                                    skipped = 0
+                                    if cur_h5_idx < len(cur_h5_dss) - 1:
+                                        pdl.append(cur_h5_dss[cur_h5_idx][1])
+                                        cur_h5_idx += 1
+                                        skipped += 1
+                                    if skipped == 0:
+                                        break
+                                logger.debug("cam-%s: read %s final entries from h5 live file",
+                                             cdx, skipped)
                             try:
                                 m = min(map(len, ib.pose_data_list))
                                 logger.notice("assembled %s pose responses,"
@@ -506,41 +519,37 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 intersession_inference(ib.pose_data, self._algorithm.part_names,
                                                        self._project)
                                 success = True
-                                logger.success("fully processed session-%s inference", prev_session)
+                                logger.success("fully processed session-%s inference with %s total pose responses",
+                                               prev_session, ib.pose_data.shape[0])
                             except Exception as err:
                                 logger.exception("Error during intersession_inference: %s", err)
                                 success = False
 
                             ib.configuration.complete(ib.configuration.nonce, success)
                             self._intersession_block = None
-                            read_h5_dss = []
+                            cams_read_h5_dss = []
                     elif ib is not None:
+                        # we can now append the received/processed frame data:
+                        skipped = 0
+                        for cdx, pdl, cur_h5_dss in zip(range_cams, ib.pose_data_list, cams_read_h5_dss):
+                            cur_h5_ix = cams_read_h5_idx[cdx]
+                            for fx, frame in enumerate(pose_data[cdx::len(cams)]):
+                                frame_idx = frames_indices[cdx][fx]
+                                # append any of the live processed frame data that are before current received/processed frames:
+                                while cur_h5_ix < len(cur_h5_dss) - 1 and cur_h5_dss[cur_h5_ix][2] < frame_idx:
+                                    pdl.append(cur_h5_dss[cur_h5_ix][1])
+                                    cur_h5_ix += 1
+                                    skipped += 1
+                                cams_read_h5_idx[cdx] = cur_h5_ix
+                                ib.pose_data_list[cdx].append(frame)
 
-                        # append any of the live processed frame data that are before current received/processed frames:
-                        while True:
-                            skipped = 0
-                            for fx in range(self._frames_per_camera):
-                                for cdx, pdl, h5i, cam_h5_dss, cam_fr_indices in zip(
-                                    range_cams, ib.pose_data_list, read_h5_idx, read_h5_dss, frames_indices,
-                                ):
-                                    if h5i < len(cam_h5_dss) - 1 and cam_h5_dss[h5i][2] < cam_fr_indices[fx]:
-                                        pdl.append(cam_h5_dss[h5i][1])
-                                        read_h5_idx[cdx] += 1
-                                        skipped += 1
-                            if skipped > 0:
-                                tot_skipped += skipped
-                            else:
-                                break
+                        tot_skipped += skipped
                         t_now = time.time()
                         if tot_skipped > 0 and t_now > t_log_counters:
                             t_log_counters = t_now + 1
                             logger.debug("read %s entries from h5 live file", tot_skipped)
                             tot_skipped = 0
 
-                        # we can now append the received/processed frame data:
-                        for cdx in range_cams:
-                            for frame in pose_data[cdx::len(cams)]:
-                                ib.pose_data_list[cdx].append(frame)
 
             except (KeyboardInterrupt, SystemExit):
                 raise
