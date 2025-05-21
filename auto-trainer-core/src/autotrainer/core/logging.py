@@ -95,9 +95,6 @@ def setup_logging(
     return logger
 
 
-def set_logger_level(context: Union[Dict[str, Union[str, int]]]):
-    if isinstance(context, dict):
-        for name, value in context.items():
-            logging.getLogger(name).setLevel(value)
-    else:
-        logging.warning("unhandled context: %s", context)
+def set_logger_level(context: Dict[str, Union[str, int]]):
+    for name, value in context.items():
+        logging.getLogger(name).setLevel(value)

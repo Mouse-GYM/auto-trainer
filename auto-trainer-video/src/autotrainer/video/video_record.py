@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import os
 import time
 from dataclasses import dataclass
@@ -8,6 +7,7 @@ from datetime import datetime
 from enum import IntEnum
 from queue import Queue, Empty
 from threading import Thread
+from typing import Optional
 
 import cv2
 import numpy
@@ -27,7 +27,7 @@ class VideoRecordMode(IntEnum):
 
 @dataclass
 class VideoRecordProperties:
-    project_info: ProjectInfo | None = None
+    project_info: Optional[ProjectInfo] = None
     """Information to determine file names and directories."""
     name: str = "camera"
     """Name used as part of video file names and image capture directory."""
@@ -86,7 +86,7 @@ class VideoRecord(Thread):
         try:
             self._run()
         except Exception as err:
-            logger.exception("%s: Error during run: %s", err)
+            logger.exception("%s: Error during run: %s", self, err)
 
     def _run(self) -> None:
         if self._project_info is None or not self._project_info.is_valid():

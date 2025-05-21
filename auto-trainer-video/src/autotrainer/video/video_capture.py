@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import queue
 import time
 from dataclasses import dataclass
@@ -12,11 +11,11 @@ from typing import Callable, Dict, Union, Optional, List
 import numpy
 
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue
+from autotrainer.core.logging import get_verbose_logger, set_logger_level
+from autotrainer.core.fixed_array_queue import BufferResult
 
 from .video_manager import VideoManager
 from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
-from autotrainer.core.logging import get_verbose_logger, set_logger_level
-from ..core.fixed_array_queue import BufferResult
 
 logger = get_verbose_logger(__name__)
 
@@ -95,18 +94,27 @@ class CaptureAttrs:
     """
     command_queue: Queue
     """Input queue for submitting commands to the capture process"""
+
     status: Value
     """Flag for status of the capture process - value is read-only to callers"""
+
     image_queue: Optional[Union[Queue, FixedArrayQueue]]
     """Queue for camera frame output"""
+
     frame: Value
     """Current frame index - value is read-only to callers"""
+
     camera: CaptureCameraAttrs
     """Camera attributes for the capture process"""
+
     errors: Array
     """Multiprocessing Array for communicating errors - value is read-only to callers"""
+
     inference: Optional[CaptureInferenceAttrs] = None
     """Inference attributes for the capture process (optional)"""
+
+    fps_image_queue: Optional[float] = 15
+    """Desired write FPS for the image_queue, if None then default to capture FPS"""
 
 
 class VideoCapture(Process):
@@ -127,6 +135,7 @@ class VideoCapture(Process):
         self._command_queue = attrs.command_queue
         self._status = attrs.status
         self._image_queue: Optional[Union[Queue, FixedArrayQueue]] = attrs.image_queue
+        self._image_queue_frame_delay = None if attrs.fps_image_queue is None else 1 / attrs.fps_image_queue
         self._network_queue: Optional[FixedArrayMultiQueue]
 
         if attrs.inference is not None:
@@ -154,9 +163,6 @@ class VideoCapture(Process):
         self._record = None
         self._record_queue: Optional[Queue] = None
         self._record_queue_list: List = []
-
-        gui_video_player_fps = 15 if record_properties is None else record_properties.fps
-        self._gui_video_frame_delay = 1 / gui_video_player_fps
 
         self.command_handler: Dict[CaptureCommandKind, Callable[[object], None]] = {
             CaptureCommandKind.TERMINATE: self._user_terminate,
@@ -231,7 +237,7 @@ class VideoCapture(Process):
         rec_q = self._record_queue
         capture = self._camera.capture
         net_q_put = None if self._network_queue is None else self._network_queue.put
-        vid_frame_delay = self._gui_video_frame_delay
+        image_queue_delay = self._image_queue_frame_delay
         get_command = None if self._command_queue is None else self._command_queue.get_nowait
         logger.notice("%s: starting capture loop ..", self)
         while self._is_running:
@@ -264,9 +270,10 @@ class VideoCapture(Process):
                 cur_frame_idx += 1
 
                 if img_q is not None:
-                    # image queue goes to GUI video reader frame
-                    if t_now > next_t_image_q:
-                        next_t_image_q = t_now + vid_frame_delay
+                    # image queue goes to GUI video reader frame, currently FixedArrayQueue
+                    if t_now >= next_t_image_q:
+                        if image_queue_delay is not None:
+                            next_t_image_q = t_now + image_queue_delay
                         if len(numpy.shape(frame)) < 3:
                             img_q.put(frame)
                         else:
@@ -283,14 +290,8 @@ class VideoCapture(Process):
                         rec_q_list = self._record_queue_list = []
                 else:
                     if record_start_frame_idx is not None:
-                        # r = cnt_net_q_put % 3  # TODO
+                        # end of record/save-to-disk session/mode
                         record_start_frame_idx = None
-                        # empty = numpy.empty_like(frame)
-                        # if r > 0:
-                        #     for _ in range(3 - r):
-                        #         while net_q_put(empty, self._camera_idx, -1, allow_overflow=False) != BufferResult.Ok:
-                        #             time.sleep(0.001)
-                        # cnt_net_q_put = 0
 
                 if net_q_put is not None:
                     # network queue goes to processing/inference
@@ -299,6 +300,10 @@ class VideoCapture(Process):
                         allow_overflow=False) == BufferResult.Ok
                     if did_put:
                         cnt_net_q_put += 1
+                    # TODO: we should probably pad the network(online) queue on inference mode changes:
+                    # effectively that queue is read by batch of frames.. so we should pad the missing frames in
+                    # currently started batch so that the reader won't get that/theses frame(s) some when later...
+                    # mixed with newest frames
 
             except Exception as err:
                 logger.exception("Error during capture loop: %s", err)

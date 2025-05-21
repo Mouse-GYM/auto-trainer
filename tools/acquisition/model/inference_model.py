@@ -307,10 +307,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._status = self._on_property_changed("status", status, self._status)
 
     def _send_message(self, kind: InferenceCommandMessageKind, context: typing.Any = None):
-        q = self._cmd_queue
-        logger.debug("sending command msg %s qsize=%s", kind, q.qsize())
-        q.put((kind, context))
-        logger.debug("sent command msg %s qsize=%s", kind, q.qsize())
+        cmd_queue = self._cmd_queue
+        # logger.debug("sending command msg %s qsize=%s", kind, cmd_queue.qsize())
+        cmd_queue.put((kind, context))
+        logger.debug("sent command msg %s qsize=%s", kind, cmd_queue.qsize())
 
     def _monitor_msg_queue(self):
         while self._is_running:

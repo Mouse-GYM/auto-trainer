@@ -244,9 +244,16 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
             inference = CaptureInferenceAttrs(queue=network_queue, index=self._inference_index)
 
-            capture_attrs = CaptureAttrs(command_queue=self._video_command_queue, status=self._video_status,
-                                         image_queue=self._video_image_queue, frame=self._video_frame_index,
-                                         camera=camera, inference=inference, errors=self._errors)
+            capture_attrs = CaptureAttrs(
+                command_queue=self._video_command_queue,
+                status=self._video_status,
+                image_queue=self._video_image_queue,
+                fps_image_queue=15 if self._preferences is None else self._preferences.live_feed_refresh_rate,
+                frame=self._video_frame_index,
+                camera=camera,
+                inference=inference,
+                errors=self._errors,
+            )
 
             rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
             image_interval = self._still_image_capture_interval if self._is_still_capture_enabled else 0
@@ -273,17 +280,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             else:
                 self._is_primary = False
 
-            decimation = 1 if self._preferences is None else self._preferences.live_feed_refresh_rate
-
-            if self._video_reader is not None:
-                if self._inference_index == -1:
-                    if "fps" in properties:
-                        self._video_reader.decimation = max(int(int(properties["fps"]) / decimation), 1)
-                    else:
-                        # Assume 30fps
-                        self._video_reader.decimation = max(int(30 / decimation), 1)
-                else:
-                    self._video_reader.decimation = 1
         else:
             self._is_primary = False
 
