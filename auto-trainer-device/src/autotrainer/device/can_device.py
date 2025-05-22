@@ -375,7 +375,14 @@ class CanDevice(Device):
         Args:
             message: The LoadCellReading message
         """
-        print(f"raw={message.raw} avdd={message.avdd} gain={message.gain} load={message.load}")
+        print(
+            f"adc_reg={(message.gain & 0xFF):#02X} "
+            f"i2c_reg={(message.gain >> 8 & 0xFF):#02X} "
+            f"pu_reg={(message.raw & 0xFF):#02X} "
+            f"ct1_reg={(message.raw >> 8 & 0xFF):#02X} "
+            f"ct2_reg={(message.raw >> 16 & 0xFF):#02X} "
+            f"pga_reg={(message.raw >> 24 & 0xFF):#02X} "
+        )
         measurement = HeadFixMeasurement(time.time(),
                                          time.perf_counter_ns(),
                                          message.load,
