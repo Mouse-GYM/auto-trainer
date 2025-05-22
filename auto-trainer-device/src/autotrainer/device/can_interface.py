@@ -280,7 +280,7 @@ class CanInterface(DeviceInterface):
 
         self._audio = AudioData()
 
-        self.load_cell_factor = 47631.0
+        self.load_cell_factor = 1.0
         self.pressure_cell_factor = 1024 / 3.3
 
     @property
