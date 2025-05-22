@@ -239,6 +239,7 @@ class VideoCapture(Process):
         net_q_put = None if self._network_queue is None else self._network_queue.put
         image_queue_delay = self._image_queue_frame_delay
         get_command = None if self._command_queue is None else self._command_queue.get_nowait
+        empty_frame = numpy.zeros(self._record_properties.frame_size, dtype=numpy.uint8)
         logger.notice("%s: starting capture loop ..", self)
         while self._is_running:
             t_now = time.time()
@@ -253,7 +254,7 @@ class VideoCapture(Process):
                             break
                         except Exception as err:
                             logger.exception("Failure executing cmd %s: %s", cmd, err)
-                    next_t_cmd_q += 0.1
+                    next_t_cmd_q += 0.01
                     rec_q_list = self._record_queue_list
 
                 if not self._is_capturing:
@@ -282,7 +283,7 @@ class VideoCapture(Process):
                 if self._is_record_active:
                     # record queue goes to video save to disk/file
                     if record_start_frame_idx is None:
-                        logger.info("Starting record with frame %s", cur_frame_idx)
+                        logger.notice("Starting record with frame %s", cur_frame_idx)
                         record_start_frame_idx = cur_frame_idx
                     rec_q_list.append((frame, when))
                     if len(rec_q_list) >= self._record_batch_size:
@@ -351,7 +352,7 @@ class VideoCapture(Process):
 
     def _enable_trigger(self, _: object):
         self._is_record_active = self._record_properties.should_record(True)
-        logger.info("%s: is_record_active=%s", self, self._is_record_active)
+        logger.debug("%s: is_record_active=%s", self, self._is_record_active)
 
     def _disable_trigger(self, _: object):
         logger.info("%s: trigger disabled", self)

@@ -227,10 +227,12 @@ class AppModel(ObservableObject):
             shape_2 = self.right_camera.shape
             if shape_1 == shape_2:
                 self._inference_queue = FixedArrayMultiQueue(
-                    16,
+                    # live queue does not need/require a lot of "depth" == total nbr of batches that can sit
+                    # in the ring-buffer-queue at the same time.
+                    8,
                     2,
                     3,
-                    shape_1,
+                    shape=shape_1,
                     name="inference_q",
                     mp_ctx=get_mp_ctx(),
                 )

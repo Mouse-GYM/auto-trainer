@@ -169,6 +169,7 @@ class PoseProcess(Process):
         frames_indices = numpy.ndarray(
             (self._input_queue.camera_count, self._input_queue.frames_per_camera), dtype="int64")
         recording_in_progress = False
+        prev_mode = None
         logger.info("%s: starting processing ..", self)
         d_q_put = self._data_queue.put
         get_command = self._cmd_queue.get_nowait
@@ -193,7 +194,7 @@ class PoseProcess(Process):
             if t_now > t_next_cmd:
                 # do not check command queue on each loop turn, mostly useless
                 # and overhead is not that small
-                t_next_cmd += 1
+                t_next_cmd += 0.01
                 while True:
                     # logger.debug("now: qsize=%s empty=%s", q.qsize(), q.empty())
                     try:
@@ -218,13 +219,17 @@ class PoseProcess(Process):
                 prev_iq = i_q
                 reset_locals()
                 if prev_iq is not i_q:
-                    logger.info("new input_queue: %s / %s", i_q, i_q_get_output)
+                    logger.debug("new input_queue: %s / %s", i_q, i_q_get_output)
+
+            if prev_mode != self._mode:
+                logger.notice("Detected change of mode: %s", self._mode)
+                if self._mode == InferenceMode.Live and prev_mode == InferenceMode.Offline:
+                    self._offline_input_queue.reset_reader()
+                prev_mode = self._mode
 
             if i_q_get_output is not None:
                 cnt = 0
-                t_break = time.time() + 1
-                # using while to process all available batches, up to "t_break"
-                while time.time() < t_break and i_q_get_output(frame_buffer, frames_indices):
+                if i_q_get_output(frame_buffer, frames_indices):
                     cnt += 1
                     if recording_in_progress:
                         if self._mode == InferenceMode.Offline or any(idx < 0 for indices in frames_indices for idx in indices):
@@ -239,10 +244,12 @@ class PoseProcess(Process):
                     # the data queue reader/consumer takes care of deciding what to do with the result data:
                     d_q_put((pose,
                              self._mode,
-                             frames_indices,
+                             frames_indices,  # frames_indices.copy(),
                              ))
                     if perf_add_c():
                         self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
+                else:
+                    time.sleep(0.001)
 
                 if self._mode == InferenceMode.Offline and self._process_live_when_ready:
                     self._data_queue.put((None, self._mode, None))
@@ -250,9 +257,6 @@ class PoseProcess(Process):
                     self._process_live_when_ready = False
                     # always get new ref:
                     reset_locals()
-                else:
-                    if cnt == 0:
-                        time.sleep(0.001)
             else:
                 # See sleep comment above.
                 time.sleep(0.001)

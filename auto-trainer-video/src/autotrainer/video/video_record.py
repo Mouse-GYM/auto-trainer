@@ -102,7 +102,7 @@ class VideoRecord(Thread):
 
         while self._is_running:
             try:
-                queue_list = self._input_queue.get(timeout=1)
+                queue_list = self._input_queue.get(timeout=0.01)
             except Empty:
                 continue
 
@@ -170,13 +170,13 @@ class VideoRecord(Thread):
                 self._prepare_writers()
 
     def _prepare_writers(self):
-        logger.info("%s: preparing writers...", self)
+        logger.verbose("%s: preparing writers...", self)
         self._interval_reference = self._project_info.get_interval(self._interval_mode)
         self._prepare_video_writer()
         self._prepare_image_capture()
 
     def _close_writers(self):
-        logger.info("%s: closing writers...", self)
+        logger.verbose("%s: closing writers...", self)
         self._close_image_writer()
         self._close_video_writer()
 

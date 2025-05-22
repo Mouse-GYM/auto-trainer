@@ -220,5 +220,5 @@ class EventManager:
 
     def _process_event(self, info: EventInfo, repeat_count: int = 0):
         for plugin in self._plugins:
-            logger.debug("plugin %s: processing event %s", plugin, info)
+            logger.spam("plugin %s: processing event %s", plugin, info)
             plugin.process_event(info, repeat_count)

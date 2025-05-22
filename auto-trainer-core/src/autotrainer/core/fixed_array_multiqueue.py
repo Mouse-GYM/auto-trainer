@@ -122,14 +122,18 @@ class FixedArrayMultiQueue:
     def buffer_index(self) -> int:
         return self._buffer_index[0]
 
-    # actually unused:
-    def _reset(self):
-        self._buffer_index = 0
+    def reset_writer(self, cam_idx: int):
+        self._buffer_index[cam_idx] = 0
+        self._batch_index[cam_idx] = 0
         zero = memoryview(bytes([0] * self._depth * self._frames_per_camera)).cast("B")
-        for cdx in range(self._cam_count):
-            memoryview(self._is_dirty[cdx]).cast("B")[:] = zero
-        self._read_index = 0
+        memoryview(self._is_dirty[cam_idx]).cast("B")[:] = zero
         self._overflow_count = 0
+        self._put_count = 0
+        logger.debug("%s: cam-%s reset to 0", self, cam_idx)
+
+    def reset_reader(self):
+        self._read_index = 0
+        logger.debug("%s: read_index reset to 0", self)
 
     def is_frame_ready(self, frame_idx):
         frame_idx = frame_idx % (self._depth * self._frames_per_camera)
