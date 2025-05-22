@@ -375,6 +375,7 @@ class CanDevice(Device):
         Args:
             message: The LoadCellReading message
         """
+        print(f"raw={message.raw} avdd={message.avdd} gain={message.gain} load={message.load}")
         measurement = HeadFixMeasurement(time.time(),
                                          time.perf_counter_ns(),
                                          message.load,

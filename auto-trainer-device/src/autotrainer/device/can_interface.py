@@ -1238,7 +1238,10 @@ class CanInterface(DeviceInterface):
             JerryCANCmdType.ANALOG_OUT: self._translate_analog_out,
             JerryCANCmdType.LOAD_CELL_READ: lambda msg: LoadCellReading(
                 target=_addr2tgt(msg.dst_id),
-                load=float(msg.load_cell_read.load_mv) / 1000.0 * self.load_cell_factor
+                load=float(msg.load_cell_read.load_mv) / 1000.0 * self.load_cell_factor,
+                avdd=float(msg.load_cell_read.avdd) / 1000.0,
+                gain=msg.load_cell_read.gain,
+                raw=msg.load_cell_read.raw,
             ),
             JerryCANCmdType.PRESSURE_READ: lambda msg: PressureReading(
                 target=_addr2tgt(msg.dst_id),
