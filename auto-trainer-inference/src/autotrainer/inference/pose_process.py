@@ -244,7 +244,10 @@ class PoseProcess(Process):
                     # the data queue reader/consumer takes care of deciding what to do with the result data:
                     d_q_put((pose,
                              self._mode,
-                             frames_indices,  # frames_indices.copy(),
+                             frames_indices.copy(),  # getting frame indices corruption in reader side without this.
+                             #  frames_indices,  # it could be eventually explained if the serialisation
+                             # of the frames_indices numpy array happens after the return of the queue put()..
+                             # which is not totally impossible.
                              ))
                     if perf_add_c():
                         self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
