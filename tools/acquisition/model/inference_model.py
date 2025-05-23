@@ -518,7 +518,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             ):
                                 while True:
                                     skipped = 0
-                                    if cur_h5_idx < len(cur_h5_dss) - 1:
+                                    if cur_h5_idx < len(cur_h5_dss):
                                         ds_row = cur_h5_dss[cur_h5_idx]
                                         pdl.append(ds_row[1])
                                         if __debug__:
@@ -583,8 +583,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 frame_idx = cam_fr_indices[fx]
                                 if frame_idx == -1:
                                     logger.warning("cam-%s : got negative frame idx: %s", cdx, frames_indices)
-                                    break
-                                while cur_h5_ix < len(cur_h5_dss) - 1 and frame_idx > cur_h5_dss[cur_h5_ix][2]:
+                                    continue
+                                while cur_h5_ix < len(cur_h5_dss) and frame_idx > cur_h5_dss[cur_h5_ix][2]:
                                     ix = cur_h5_dss[cur_h5_ix][2][0]
                                     if ix != len(pdl) or ix in pdd:
                                         logger.warning("cam-%s: detected invalid live frame ix: %s vs %s - double=%s",
@@ -685,10 +685,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             raise RuntimeError("Unexpected difference in processed cams frames index vs processed h5")
 
         frames_per_cam = self._offline_queue.frames_per_camera
-        tot_frames_to_process = int(frames_per_cam * (
-            min(videos_frame_count[cdx] - len(cams_already_processed_idx[cdx])
-                for cdx in range(n_cams)) // frames_per_cam)
-        )
+
+        # tot_frames_to_process = int(frames_per_cam * (
+        #         min(videos_frame_count[cdx] - len(cams_already_processed_idx[cdx])
+        #             for cdx in range(n_cams)) // frames_per_cam)
+        # )
+        tot_frames_to_process = min(videos_frame_count.values()) - min(map(len, cams_already_processed_idx))
+        # above must be done before following one:
         cams_already_processed_idx = numpy.asarray(cams_already_processed_idx)
 
         logger.debug("tot_frames_to_process=%s first cams_already_processed_idx=%s",
@@ -698,6 +701,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             [] for _ in range(n_cams)
         ]
         while frame_idx < tot_frames_to_process:
+
+            if all(all_read):
+                # stop on first cam record entirely read/consumed.
+                logger.warning("unexpected end of video cams: %s", all_read)
+                break
 
             # skip frames already processed during live:
             for cdx, (fh, cam_capture, cur_ix, cur_cam_indices) in enumerate(zip(
@@ -730,10 +738,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             # end for cdx ...
 
             frame_idx += 1
-            if any(all_read):
-                # stop on first cam record entirely read/consumed.
-                logger.warning("unexpected end of video cam on %s", all_read)
-                break
         # end while frame_idx < tot_frames_to_process
 
         # fill current batch of each cam:
