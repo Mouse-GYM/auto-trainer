@@ -186,8 +186,6 @@ class PoseProcess(Process):
 
         reset_locals()
 
-        q = self._cmd_queue
-
         t_next_cmd = time.time()
         while True:
             t_now = time.time()
@@ -227,16 +225,19 @@ class PoseProcess(Process):
                     self._offline_input_queue.reset_reader()
                 prev_mode = self._mode
 
+            all_negative_frame_index = False
             if i_q_get_output is not None:
                 cnt = 0
                 if i_q_get_output(frame_buffer, frames_indices):
                     cnt += 1
+                    any_negative_frame_index = any(idx < 0 for indices in frames_indices for idx in indices)
+                    all_negative_frame_index = all(idx < 0 for indices in frames_indices for idx in indices)
                     if recording_in_progress:
-                        if self._mode == InferenceMode.Offline or any(idx < 0 for indices in frames_indices for idx in indices):
+                        if self._mode == InferenceMode.Offline or any_negative_frame_index:
                             recording_in_progress = False
                             logger.debug("Detected end of record in progress ; mode=%s ; %s", self._mode, frames_indices)
                     else:
-                        if self._mode == InferenceMode.Live and all(idx >= 0 for indices in frames_indices for idx in indices):
+                        if self._mode == InferenceMode.Live and all_negative_frame_index:
                             recording_in_progress = True
                             logger.debug("Detected start of record in progress ; mode=%s ; %s", self._mode, frames_indices)
                     pose = predict(frame_buffer)
@@ -254,7 +255,7 @@ class PoseProcess(Process):
                 else:
                     time.sleep(0.001)
 
-                if self._mode == InferenceMode.Offline and self._process_live_when_ready:
+                if self._mode == InferenceMode.Offline and self._process_live_when_ready and all_negative_frame_index:
                     self._data_queue.put((None, self._mode, None))
                     self._set_process_live()
                     self._process_live_when_ready = False

@@ -450,7 +450,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 if (
                     not recording_in_progress
                     and pose_data is not None
-                    and self._status == InferenceStatus.live
+                    # and self._status == InferenceStatus.live
                     and mode == InferenceMode.Live
                     and frames_indices is not None
                     and all(fr_i >= 0 for frs in frames_indices for fr_i in frs)
@@ -519,9 +519,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 while True:
                                     skipped = 0
                                     if cur_h5_idx < len(cur_h5_dss) - 1:
-                                        pdl.append(cur_h5_dss[cur_h5_idx][1])
+                                        ds_row = cur_h5_dss[cur_h5_idx]
+                                        pdl.append(ds_row[1])
                                         if __debug__:
-                                            pdd[cur_h5_dss[cur_h5_idx][2][0]] = cur_h5_dss[cur_h5_idx][1]
+                                            pdd[ds_row[2][0]] = ds_row[1]
                                         cur_h5_idx += 1
                                         skipped += 1
                                     if skipped == 0:
@@ -569,6 +570,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
                     elif ib is not None:
                         assert pose_data is not None
+                        if all(idx == -1 for cam_fr_indices in frames_indices for idx in cam_fr_indices):
+                            # next pose_data we get/read should be None, ending the current offline session
+                            continue
                         # we can now append the received/processed frame data:
                         skipped = 0
                         # append any of the live processed frame data that are before current
@@ -670,7 +674,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         ]
         cams_already_processed_idx2 = [
             [
-                l[-1][0]
+                l[2][0]  # the third row contains the associated frame index in h5 file ([0] to extract it from array)
                 for l in h5py.File(
                     self.project.get_intersession_pose_path(cam, session=cur_session_nbr, allow_overwrite=True,
                                                             suffix="_live"))["df_with_missing"]["table"]
@@ -678,7 +682,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             for cdx, cam in enumerate(cams)
         ]
         if cams_already_processed_idx != cams_already_processed_idx2:
-            raise RuntimeError("different in processed cams frames index")
+            raise RuntimeError("Unexpected difference in processed cams frames index vs processed h5")
 
         frames_per_cam = self._offline_queue.frames_per_camera
         tot_frames_to_process = int(frames_per_cam * (
@@ -694,12 +698,15 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             [] for _ in range(n_cams)
         ]
         while frame_idx < tot_frames_to_process:
+
             # skip frames already processed during live:
-            for cdx, (fh, cam_capture, cur_ix) in enumerate(zip(cams_processed_fhs, captures, cams_already_processed_cur_ix)):
+            for cdx, (fh, cam_capture, cur_ix, cur_cam_indices) in enumerate(zip(
+                cams_processed_fhs, captures, cams_already_processed_cur_ix, cams_already_processed_idx,
+            )):
                 if fh is None:
                     continue
                 skipped = 0
-                while cur_ix < len(cams_already_processed_idx[cdx]) and cams_frame_idx[cdx] == cams_already_processed_idx[cdx][cur_ix]:
+                while cur_ix < len(cur_cam_indices) and cams_frame_idx[cdx] == cur_cam_indices[cur_ix]:
                     skipped += 1
                     cur_ix += 1
                     cams_frame_idx[cdx] += 1
@@ -709,19 +716,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         break
 
                 cams_already_processed_cur_ix[cdx] = cur_ix
-                    # val = fh.readline().strip()
-                    # if val == "":
-                    #     fh.close()
-                    #     cams_processed_fhs[cdx] = None
-                    #     break
-                    # else:
-                    #     cams_already_processed_idx[cdx] = int(val)
                 if skipped > 0:
                     logger.spam("cam-%s: skipped=%s", cdx, skipped)
                     tot_skipped_frames += skipped
 
-            # cams can be "desynchronized" when being recorded to disk...
-#            for cdx, (cap, fr_idx) in enumerate(zip(captures, cams_frame_idx)):
                 if not all_read[cdx]:
                     if not self._put_intersession_frame(cam_capture, cdx, cams_frame_idx[cdx]):
                         all_read[cdx] = True
@@ -751,6 +749,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             for cdx in range(n_cams):
                 with open(str(cams_paths[cdx][-1]) + "_sent_to_processing.txt", "w") as fh:
                     fh.write("\n".join(map(str, chain(frames_idx_sent[cdx], [""]))))
+
+        # also post a negative index to notify pose process when it has reached end of offline processing
+        for cdx in range(n_cams):
+            # we have to push the required nbr of frames_per_cam to fill entirely a batch
+            for _ in range(frames_per_cam):
+                while self._offline_queue.put(empty_frame, cdx, -1, allow_overflow=False) != BufferResult.Ok:
+                    time.sleep(0.005)
 
         logger.notice("passed %s frames per camera ; tot_skipped_frames=%s ; "
                       "per cam last frame idx: %s ; cams frame sent count: %s",

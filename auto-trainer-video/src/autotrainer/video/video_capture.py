@@ -254,7 +254,7 @@ class VideoCapture(Process):
                             break
                         except Exception as err:
                             logger.exception("Failure executing cmd %s: %s", cmd, err)
-                    next_t_cmd_q += 0.01
+                    next_t_cmd_q += 0.005
                     rec_q_list = self._record_queue_list
 
                 if not self._is_capturing:
