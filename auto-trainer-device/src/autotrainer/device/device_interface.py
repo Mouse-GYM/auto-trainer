@@ -301,9 +301,6 @@ class AnalogOutput(Source):
 @dataclass
 class LoadCellReading(Source):
     load: float = 0
-    avdd: float = 0
-    gain: int = 0
-    raw: int = 0
 
 
 @dataclass
