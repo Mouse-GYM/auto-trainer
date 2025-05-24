@@ -6,8 +6,8 @@ import verboselogs
 import coloredlogs
 
 
-DEFAULT_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s | %(message)s"
-MULTIPROC_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s[%(processName)s.%(process)d-%(threadName)s] | %(message)s"
+DEFAULT_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
+MULTIPROC_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s[%(processName)s.%(process)d-%(threadName)s] %(message)s"
 
 DEFAULT_FIELD_STYLES = dict(
     asctime=dict(color='white', bold=False),

@@ -52,11 +52,11 @@ def _close_h5(fhs: List[Optional[h5py.File]]):
 
 def check_frame_count(file_path: Path):
     capture = cv2.VideoCapture(file_path.as_posix())
-    count = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+    count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
     if count < 1:
         capture.release()
         return None, None
-    logger.verbose("Opened %s: tot_frames=%s size=%s", file_path, int(count), file_path.stat().st_size)
+    logger.verbose("Opened %s: tot_frames=%s size=%s", file_path.name, count, file_path.stat().st_size)
     return capture, count
 
 
@@ -513,20 +513,18 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     if pose_data is None:
                         # end of intersession replay
                         if ib is not None:
+                            fill_live_end = True
                             for cdx, pdl, pdd, cur_h5_idx, cur_h5_dss in zip(
                                 range_cams, ib.pose_data_list, ib.pose_data_dict, cams_read_h5_idx, cams_read_h5_dss
                             ):
-                                while True:
-                                    skipped = 0
-                                    if cur_h5_idx < len(cur_h5_dss):
-                                        ds_row = cur_h5_dss[cur_h5_idx]
-                                        pdl.append(ds_row[1])
-                                        if __debug__:
-                                            pdd[ds_row[2][0]] = ds_row[1]
-                                        cur_h5_idx += 1
-                                        skipped += 1
-                                    if skipped == 0:
-                                        break
+                                skipped = 0
+                                while fill_live_end and cur_h5_idx < len(cur_h5_dss):
+                                    ds_row = cur_h5_dss[cur_h5_idx]
+                                    pdl.append(ds_row[1])
+                                    if __debug__:
+                                        pdd[ds_row[2][0]] = ds_row[1]
+                                    cur_h5_idx += 1
+                                    skipped += 1
                                 logger.debug("cam-%s: read %s final entries from h5 live file",
                                              cdx, skipped)
                             try:
@@ -546,9 +544,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                     list(chain(
                                         [ib.pose_data],  # supposed the empty init array
                                         (
-                                            ib.pose_data_list[cdx][ix]  # .flatten()
-                                            for ix in range(m)
-                                            for cdx in range_cams
+                                             pdl[ix]
+                                             for ix in range(m)
+                                             for pdl in ib.pose_data_list
                                         )
                                     ))
                                 )
@@ -572,6 +570,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         assert pose_data is not None
                         if all(idx == -1 for cam_fr_indices in frames_indices for idx in cam_fr_indices):
                             # next pose_data we get/read should be None, ending the current offline session
+                            logger.debug("got all negative frame indices batch")
                             continue
                         # we can now append the received/processed frame data:
                         skipped = 0
@@ -582,8 +581,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             for fx, frame in enumerate(pose_data[cdx::len(cams)]):
                                 frame_idx = cam_fr_indices[fx]
                                 if frame_idx == -1:
-                                    logger.warning("cam-%s : got negative frame idx: %s", cdx, frames_indices)
-                                    continue
+                                    logger.debug("cam-%s : fx=%s got negative frame idx: %s", cdx, fx, frames_indices)
+                                    break
                                 while cur_h5_ix < len(cur_h5_dss) and frame_idx > cur_h5_dss[cur_h5_ix][2]:
                                     ix = cur_h5_dss[cur_h5_ix][2][0]
                                     if ix != len(pdl) or ix in pdd:
@@ -646,7 +645,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # This is to not get "moov-atom-not-found" in stderr output from opencv library.
         timeout = time.time() + self._intersession_wait_time
         captures_d = {}
-        videos_frame_count = {}
+        videos_frame_count: Dict[int, int] = {}
         while len(captures_d) < n_cams:
             for cdx, cam in enumerate(cams):
                 if cdx not in captures_d:
@@ -690,22 +689,23 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         #         min(videos_frame_count[cdx] - len(cams_already_processed_idx[cdx])
         #             for cdx in range(n_cams)) // frames_per_cam)
         # )
+        tot_frames_to_process = int(((
+            int(frames_per_cam * (min(videos_frame_count.values()) // frames_per_cam))
+            - len(cams_already_processed_idx[0])  # should be same for both cams
+        ) // frames_per_cam) * frames_per_cam)
+        #
         tot_frames_to_process = min(videos_frame_count.values()) - min(map(len, cams_already_processed_idx))
         # above must be done before following one:
         cams_already_processed_idx = numpy.asarray(cams_already_processed_idx)
 
         logger.debug("tot_frames_to_process=%s first cams_already_processed_idx=%s",
                      tot_frames_to_process, cams_already_processed_idx[:, 0])
+
         all_read = [False] * n_cams
         frames_idx_sent = [
             [] for _ in range(n_cams)
         ]
         while frame_idx < tot_frames_to_process:
-
-            if all(all_read):
-                # stop on first cam record entirely read/consumed.
-                logger.warning("unexpected end of video cams: %s", all_read)
-                break
 
             # skip frames already processed during live:
             for cdx, (fh, cam_capture, cur_ix, cur_cam_indices) in enumerate(zip(
@@ -728,14 +728,21 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     logger.spam("cam-%s: skipped=%s", cdx, skipped)
                     tot_skipped_frames += skipped
 
-                if not all_read[cdx]:
+                if all_read[cdx]:
+                    cams_sent_frame_count[cdx] += 1
+                    while self._offline_queue.put(empty_frame, cdx, -1, allow_overflow=False) != BufferResult.Ok:
+                        time.sleep(0.005)
+                else:
                     if not self._put_intersession_frame(cam_capture, cdx, cams_frame_idx[cdx]):
                         all_read[cdx] = True
-                        # break
-                    cams_sent_frame_count[cdx] += 1
-                    frames_idx_sent[cdx].append(cams_frame_idx[cdx])
-                    cams_frame_idx[cdx] += 1
+                    else:
+                        cams_sent_frame_count[cdx] += 1
+                        frames_idx_sent[cdx].append(cams_frame_idx[cdx])
+                        cams_frame_idx[cdx] += 1
             # end for cdx ...
+            if all(all_read):
+                logger.info("reached end of all video cams: %s ; frame_idx=%s", all_read, frame_idx)
+                break
 
             frame_idx += 1
         # end while frame_idx < tot_frames_to_process
@@ -754,17 +761,21 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 with open(str(cams_paths[cdx][-1]) + "_sent_to_processing.txt", "w") as fh:
                     fh.write("\n".join(map(str, chain(frames_idx_sent[cdx], [""]))))
 
-        # also post a negative index to notify pose process when it has reached end of offline processing
+        # total frame count: taking the min of all saved videos frame count:
+        self._intersession_block.frame_count = min(videos_frame_count.values())
+
+        # also post a **full negative indices batch** to notify pose process
+        # when it has reached end of offline processing:
         for cdx in range(n_cams):
-            # we have to push the required nbr of frames_per_cam to fill entirely a batch
             for _ in range(frames_per_cam):
                 while self._offline_queue.put(empty_frame, cdx, -1, allow_overflow=False) != BufferResult.Ok:
                     time.sleep(0.005)
 
-        logger.notice("passed %s frames per camera ; tot_skipped_frames=%s ; "
-                      "per cam last frame idx: %s ; cams frame sent count: %s",
-                    frame_idx, tot_skipped_frames, cams_frame_idx, cams_sent_frame_count)
-        self._intersession_block.frame_count = frame_idx
+        logger.success("passed %s frames per camera frame_count=%s ; "
+                       "tot_skipped_frames=%s cams_frame_idx=%s cams_sent_frame_count=%s",
+                       frame_idx, self._intersession_block.frame_count,
+                       tot_skipped_frames, cams_frame_idx, cams_sent_frame_count)
+
         self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
 
     def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int) -> bool:
@@ -777,8 +788,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             frame = frame[:, :, 0]
         put = self._offline_queue.put
         while time.time() < timeout:
-            res = put(frame, cam_index, frame_idx, allow_overflow=False)
-            if res == BufferResult.Ok:
+            if put(frame, cam_index, frame_idx, allow_overflow=False) == BufferResult.Ok:
                 return True
             # given the current array-multi-queue has no "event" handling we have to retry, at some later point,
             # a good value would be half the duration of the previous, or a recent, inference batch duration,
