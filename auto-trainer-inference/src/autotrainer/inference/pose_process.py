@@ -211,44 +211,40 @@ class PoseProcess(Process):
                             logger.warning("Unhandled command: %s", cmd)
                     except Exception as err:
                         logger.warning("Error processing %s: %s", cmd, err)
-                # always get new ref:
-                prev_iq = i_q
-                reset_locals()
-                if prev_iq is not i_q:
-                    logger.debug("new input_queue: %s / %s", i_q, i_q_get_output)
+                    # always get new ref:
+                    prev_iq = i_q
+                    reset_locals()
+                    if prev_iq is not i_q:
+                        logger.debug("new input_queue: %s / %s", i_q, i_q_get_output)
 
             if prev_mode != self._mode:
                 logger.notice("Detected change of mode: %s", self._mode)
                 prev_mode = self._mode
 
-            if i_q_get_output is not None:
-                if i_q_get_output(frame_buffer, frames_indices):
-                    pose = predict(frame_buffer)
-                    # NB:
-                    # the data queue reader/consumer takes care of deciding what to do with the result data:
-                    d_q_put((pose,
-                             self._mode,
-                             frames_indices.copy(),  # getting frame indices corruption in reader side without this.
-                             #  frames_indices,  # it could be eventually explained if the serialisation
-                             # of the frames_indices numpy array happens after the return of the queue put()..
-                             # which is not totally impossible.
-                             ))
-                    if perf_add_c():
-                        self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
+            if i_q_get_output is not None and i_q_get_output(frame_buffer, frames_indices):
+                pose = predict(frame_buffer)
+                # NB:
+                # the data queue reader/consumer takes care of deciding what to do with the result data:
+                d_q_put((pose,
+                         self._mode,
+                         frames_indices.copy(),  # getting frame indices corruption in reader side without this.
+                         #  frames_indices,  # it could be eventually explained if the serialisation
+                         # of the frames_indices numpy array happens after the return of the queue put()..
+                         # which is not totally impossible.
+                         ))
+                if perf_add_c():
+                    self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
 
-                    if self._mode == InferenceMode.Offline and self._process_live_when_ready and (
-                        all(idx < 0 for indices in frames_indices for idx in indices)
-                    ):
-                        logger.notice("Detected end of offline queue processing")
-                        self._offline_input_queue.reset_reader()  # reset our reader index for next offline
-                        d_q_put((None, self._mode, None))  # tells data monitor this is EOF current offline data
-                        self._set_process_live()  # set us to live processing
-                        self._process_live_when_ready = False
-                        # always get new ref:
-                        reset_locals()
-
-                else:
-                    time.sleep(0.001)
+                if self._mode == InferenceMode.Offline and self._process_live_when_ready and (
+                    all(idx < 0 for indices in frames_indices for idx in indices)
+                ):
+                    logger.notice("Detected end of offline queue processing")
+                    self._offline_input_queue.reset_reader()  # reset our reader index for next offline
+                    d_q_put((None, self._mode, None))  # tells data monitor this is EOF current offline data
+                    self._set_process_live()  # set us to live processing
+                    self._process_live_when_ready = False
+                    # always get new ref:
+                    reset_locals()
             else:
                 # See sleep comment above.
                 time.sleep(0.001)
