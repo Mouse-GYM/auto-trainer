@@ -168,7 +168,6 @@ class PoseProcess(Process):
              ))
         frames_indices = numpy.ndarray(
             (self._input_queue.camera_count, self._input_queue.frames_per_camera), dtype="int64")
-        recording_in_progress = False
         prev_mode = None
         logger.info("%s: starting processing ..", self)
         d_q_put = self._data_queue.put
@@ -193,8 +192,7 @@ class PoseProcess(Process):
                 # do not check command queue on each loop turn, mostly useless
                 # and overhead is not that small
                 t_next_cmd += 0.01
-                while True:
-                    # logger.debug("now: qsize=%s empty=%s", q.qsize(), q.empty())
+                for _ in range(4):  # assuming we don't get "burst" of commands
                     try:
                         cmd, context = get_command()
                     except Empty:
@@ -221,25 +219,10 @@ class PoseProcess(Process):
 
             if prev_mode != self._mode:
                 logger.notice("Detected change of mode: %s", self._mode)
-                if self._mode == InferenceMode.Live and prev_mode == InferenceMode.Offline:
-                    self._offline_input_queue.reset_reader()
                 prev_mode = self._mode
 
-            all_negative_frame_index = False
             if i_q_get_output is not None:
-                cnt = 0
                 if i_q_get_output(frame_buffer, frames_indices):
-                    cnt += 1
-                    any_negative_frame_index = any(idx < 0 for indices in frames_indices for idx in indices)
-                    all_negative_frame_index = all(idx < 0 for indices in frames_indices for idx in indices)
-                    if recording_in_progress:
-                        if self._mode == InferenceMode.Offline or any_negative_frame_index:
-                            recording_in_progress = False
-                            logger.debug("Detected end of record in progress ; mode=%s ; %s", self._mode, frames_indices)
-                    else:
-                        if self._mode == InferenceMode.Live and all_negative_frame_index:
-                            recording_in_progress = True
-                            logger.debug("Detected start of record in progress ; mode=%s ; %s", self._mode, frames_indices)
                     pose = predict(frame_buffer)
                     # NB:
                     # the data queue reader/consumer takes care of deciding what to do with the result data:
@@ -252,15 +235,21 @@ class PoseProcess(Process):
                              ))
                     if perf_add_c():
                         self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
+
+                    if self._mode == InferenceMode.Offline and self._process_live_when_ready and (
+                        all(idx < 0 for indices in frames_indices for idx in indices)
+                    ):
+                        logger.notice("Detected end of offline queue processing")
+                        self._offline_input_queue.reset_reader()  # reset our reader index for next offline
+                        d_q_put((None, self._mode, None))  # tells data monitor this is EOF current offline data
+                        self._set_process_live()  # set us to live processing
+                        self._process_live_when_ready = False
+                        # always get new ref:
+                        reset_locals()
+
                 else:
                     time.sleep(0.001)
-
-                if self._mode == InferenceMode.Offline and self._process_live_when_ready and all_negative_frame_index:
-                    self._data_queue.put((None, self._mode, None))
-                    self._set_process_live()
-                    self._process_live_when_ready = False
-                    # always get new ref:
-                    reset_locals()
             else:
                 # See sleep comment above.
                 time.sleep(0.001)
+        # end while True
