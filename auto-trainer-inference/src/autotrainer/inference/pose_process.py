@@ -241,7 +241,7 @@ class PoseProcess(Process):
                 if perf_add_c():
                     self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
 
-                if self._mode == InferenceMode.Offline and self._process_live_when_ready and (
+                if self._input_queue == self._offline_input_queue and self._process_live_when_ready and (
                     all(idx < 0 for indices in frames_indices for idx in indices)
                 ):
                     logger.notice("Detected end of offline queue processing")

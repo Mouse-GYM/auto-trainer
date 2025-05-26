@@ -7,6 +7,7 @@ import time
 import typing
 from itertools import chain
 from pathlib import Path
+from statistics import mean
 from typing import Optional, Union, List, Dict, TextIO
 from dataclasses import dataclass
 from enum import Enum
@@ -388,13 +389,23 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         tot_skipped = cnt_data_received = 0
         prev_frames_indices = [-1] * n_cams
 
+        writes_h5_live_durations = []
+        cur_h5_live_batch = [[] for _ in range_cams]
+        cur_cams_indices = [[] for _ in range_cams]
+        tot_skipped = 0
+
         while self._is_running:
 
-            # t_now = time.time()
-            # if t_now > t_log_counters:
-            #     t_log_counters = t_now + 5
-            #     logger.info("data=%s", cnt_data_received)
-            #     cnt_data_received = 0
+            t_now = time.time()
+            if t_now > t_log_counters:
+                t_log_counters = t_now + 5
+                logger.debug("data=%s avg_writes_h5_live=%.6f skipped_h5_live=%s",
+                            cnt_data_received,
+                            0 if len(writes_h5_live_durations) == 0 else mean(writes_h5_live_durations),
+                             tot_skipped)
+                cnt_data_received = 0
+                tot_skipped = 0
+                writes_h5_live_durations.clear()
 
             try:
                 msg, context = self._msg_queue.get_nowait()
@@ -450,6 +461,23 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     if frames_indices is None or any(
                         cam_fr_indices[-1] < prev_i for cam_fr_indices, prev_i in zip(frames_indices, prev_frames_indices)
                     ):
+                        for cdx, cam_pose_path in zip(range_cams, pose_paths):
+                            if len(cur_h5_live_batch[cdx]) == 0:
+                                continue
+                            columns = pandas.MultiIndex.from_product([self._algorithm.part_names, axis_labels],
+                                                                     names=["bodyparts", "coords"])
+                            cur = numpy.vstack(cur_h5_live_batch[cdx])
+                            indices = range(cur.shape[0])
+                            df_xyp = pandas.DataFrame(cur, columns=columns, index=indices)
+                            df_xyp["frame_idx"] = list(cur_cams_indices[cdx])  # also store the frame idx with the results
+                            df_xyp.to_hdf(cam_pose_path,
+                                          "df_with_missing",
+                                          format="table",
+                                          mode="a",
+                                          append=True,  # required as well for really concat
+                                          )
+                            cur_h5_live_batch[cdx].clear()
+                            cur_cams_indices[cdx].clear()
                         logger.notice("Detected stop of recording in progress ; status=%s ; mode=%s prev=%s frames_indices=%s",
                                       self._status, mode, prev_mode, frames_indices)
                         recording_in_progress = False
@@ -491,13 +519,16 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                    self._status, mode, frames_indices)
                     pose_data: List[numpy.ndarray]
                     cams_frame_idx_fhs = []
-                    # pose_fhs = []
+                    pose_fhs: List[h5py.File] = []
                     pose_paths = []
                     for cam in cams:
                         _, _, p_indices = prj.get_video_path(cam, allow_overwrite=True)
                         cams_frame_idx_fhs.append(Path(p_indices).open("w"))
                         pose_path = Path(prj.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live"))
                         pose_paths.append(pose_path)
+                        # h5_fh = h5py.File(pose_path, "w")
+                        # pose_fhs.append(h5_fh)
+                        # h5_fh.create_dataset("df_with_missing")
 
                 if mode == InferenceMode.Live:
                     if recording_in_progress and cams_frame_idx_fhs is not None and frames_indices is not None:
@@ -511,16 +542,31 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         for cdx, (cam_fr_indices, cam_pose_path) in enumerate(zip(frames_indices, pose_paths)):
                             # reminder: pose_data has 1 frame cam1, 1 frame cam2, 1 frame cam1, etc..
                             cur = pose_data[cdx::n_cams]
-                            cur = numpy.vstack([f.flatten() for f in cur])
-                            indices = range(cur.shape[0])
-                            df_xyp = pandas.DataFrame(cur, columns=columns, index=indices)
-                            df_xyp["frame_idx"] = list(cam_fr_indices)  # also store the frame idx with the results
-                            df_xyp.to_hdf(cam_pose_path,
-                                          "df_with_missing",
-                                          format="table",
-                                          mode="a",
-                                          append=True,  # required as well for really concat
-                            )
+                            t0 = time.time()
+                            cur = [f.flatten() for f in cur]
+                            t1 = time.time()
+                            writes_h5_live_durations.append(t1 - t0)
+                            # cur = numpy.vstack(cur)
+                            cur_h5_live_batch[cdx].append(cur)
+                            cur_cams_indices[cdx].extend(list(cam_fr_indices))
+                            if len(cur_h5_live_batch[cdx]) > 256:
+                                cur = numpy.vstack(cur_h5_live_batch[cdx])
+                                indices = range(cur.shape[0])
+                                t0 = time.time()
+                                df_xyp = pandas.DataFrame(cur, columns=columns, index=indices)
+                                df_xyp["frame_idx"] = cur_cams_indices[cdx]  # list(cam_fr_indices)  # also store the frame idx with the results
+                                df_xyp.to_hdf(cam_pose_path,
+                                              "df_with_missing",
+                                              format="table",
+                                              mode="a",
+                                              append=True,  # required as well for really concat
+                                )
+                                t1 = time.time()
+                                writes_h5_live_durations.append((t1 - t0) / 256)
+                                cur_h5_live_batch[cdx].clear()
+                                cur_cams_indices[cdx].clear()
+
+                            # pose_fhs[cdx]...
                     # Normalize locations.  Not all consumers will be scaling the location by the original frame size.
                     for frame in pose_data:
                         frame[:, 0] /= self._frame_width
@@ -610,7 +656,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             for fx, frame in enumerate(pose_data[cdx::len(cams)]):
                                 frame_idx = cam_fr_indices[fx]
                                 if frame_idx == -1:
-                                    logger.debug("cam-%s : fx=%s got negative frame idx: %s", cdx, fx, frames_indices)
+                                    logger.debug("cam-%s : fx=%s got negative frame idx: %s", cdx, fx, cam_fr_indices)
                                     break
                                 while cur_h5_ix < len(cur_h5_dss) and frame_idx > cur_h5_dss[cur_h5_ix][2]:
                                     ix = cur_h5_dss[cur_h5_ix][2][0]
@@ -633,11 +679,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 pdl.append(f)
 
                         tot_skipped += skipped
-                        t_now = time.time()
-                        if tot_skipped > 0 and t_now > t_log_counters:
-                            t_log_counters = t_now + 1
-                            logger.debug("read %s entries from h5 live files", tot_skipped)
-                            tot_skipped = 0
 
             except (KeyboardInterrupt, SystemExit):
                 raise
