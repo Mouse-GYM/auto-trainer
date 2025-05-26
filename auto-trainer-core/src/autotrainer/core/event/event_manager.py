@@ -42,6 +42,15 @@ class EventManager:
             cls._instance.register_plugin(FileEventPlugin())
         return cls._instance
 
+    @classmethod
+    def try_close_default(cls):
+        """
+        Close the default instance if it exists.  Do not spin one up just to check (e.g.,
+        EventManager.default().close() if one was never created).
+        """
+        if hasattr(cls, "_instance"):
+            cls._instance.close()
+
     def __init__(self, key=""):
         if key != "EventManagerInstance":
             raise Exception("Use EventManager.default() to access and instance.")

@@ -2,7 +2,7 @@ import logging
 import queue
 
 from autotrainer.core import (ObservableObject, ProjectInterval, SystemMessageHandler, SystemCommandKind,
-                              SensorAnalysis, Motor)
+                              SensorAnalysis, Motor, EventManager)
 from autotrainer.device import DeviceConnection, CanDevice, HeadFix, CAN_IDENTIFIER, HAVE_CAN_DEVICE
 
 from tools.head_fix.model.user_settings import UserSettings
@@ -168,6 +168,8 @@ class AppModel(ObservableObject):
             self._device_connection.request_disconnect()
         if self._message_handler is not None:
             self._message_handler.request_terminate()
+
+        EventManager.try_close_default()
 
     def message_handler_property_changed(self, name: str, value, _old_value):
         if name == SystemMessageHandler.FIRMWARE_VERSION_PROPERTY:
