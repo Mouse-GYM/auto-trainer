@@ -73,7 +73,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._video_status = mp_ctx.Value("i", CaptureProcessStatus.UNKNOWN)
         self._video_frame_index = mp_ctx.Value("i", 0)
         self._video_image_queue: Optional[FixedArrayQueue] = None
-        self._errors = Array("c", bytes(512))
+        self._errors = mp_ctx.Array("c", bytes(512))
         self._shape = None
 
         self._is_enabled = True
