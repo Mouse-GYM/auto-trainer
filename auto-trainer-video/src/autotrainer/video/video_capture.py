@@ -293,6 +293,14 @@ class VideoCapture(Process):
                     if record_start_frame_idx is not None:
                         # end of record/save-to-disk session/mode
                         record_start_frame_idx = None
+                        assert isinstance(self._network_queue, FixedArrayMultiQueue)
+                        for _ in range(self._network_queue.frames_per_camera - cnt_net_q_put % self._network_queue.frames_per_camera):
+                            while net_q_put(empty_frame, self._camera_idx, -1) != BufferResult.Ok:
+                                time.sleep(0.001)
+                        logger.info("sending negative frame indices to signify eof recording")
+                        for _ in range(self._network_queue.frames_per_camera):
+                            while net_q_put(empty_frame, self._camera_idx, -1) != BufferResult.Ok:
+                                time.sleep(0.001)
 
                 if net_q_put is not None:
                     # network queue goes to processing/inference

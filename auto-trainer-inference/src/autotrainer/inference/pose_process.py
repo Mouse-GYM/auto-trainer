@@ -126,7 +126,7 @@ class PoseProcess(Process):
 
     def _set_process_offline(self):
         logger.notice("processing offline")
-        self._input_queue = self._offline_input_queue
+        # self._input_queue = self._offline_input_queue
         self._mode = InferenceMode.Offline
         self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
 
@@ -217,16 +217,22 @@ class PoseProcess(Process):
                     if prev_iq is not i_q:
                         logger.debug("new input_queue: %s / %s", i_q, i_q_get_output)
 
-            if prev_mode != self._mode:
-                logger.notice("Detected change of mode: %s", self._mode)
-                prev_mode = self._mode
+            # if prev_mode != self._mode:
+            #     logger.notice("Detected change of mode: %s", self._mode)
+            #     prev_mode = self._mode
 
             if i_q_get_output is not None and i_q_get_output(frame_buffer, frames_indices):
+                if self._mode == InferenceMode.Offline and self._input_queue == self._live_input_queue and all(i < 0 for cam_fr_indices in frames_indices for i in cam_fr_indices):
+                    self._input_queue = self._offline_input_queue
+                    logger.notice("Switched to offline queue: %s", frames_indices)
+                    # always get new ref:
+                    reset_locals()
+                    continue
                 pose = predict(frame_buffer)
                 # NB:
                 # the data queue reader/consumer takes care of deciding what to do with the result data:
                 d_q_put((pose,
-                         self._mode,
+                         InferenceMode.Live if self._input_queue == self._live_input_queue else InferenceMode.Offline,
                          frames_indices.copy(),  # getting frame indices corruption in reader side without this.
                          #  frames_indices,  # it could be eventually explained if the serialisation
                          # of the frames_indices numpy array happens after the return of the queue put()..
