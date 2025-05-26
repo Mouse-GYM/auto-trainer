@@ -87,6 +87,7 @@ class VideoRecord(Thread):
             self._run()
         except Exception as err:
             logger.exception("%s: Error during run: %s", self, err)
+        self._close_writers()
 
     def _run(self) -> None:
         if self._project_info is None or not self._project_info.is_valid():
@@ -101,6 +102,9 @@ class VideoRecord(Thread):
         check_count = 0
 
         while self._is_running:
+            # if self._video_writer is not None and not self._is_video_enabled:
+            #     self._close_writers()
+
             try:
                 queue_list = self._input_queue.get(timeout=0.01)
             except Empty:
@@ -153,7 +157,6 @@ class VideoRecord(Thread):
                 logger.exception("%s: check writers error: %s", self, err)
 
         logger.notice("%s: main loop exited", self)
-        self._close_writers()
 
     def cancel(self):
         self._is_running = False
@@ -176,7 +179,7 @@ class VideoRecord(Thread):
         self._prepare_image_capture()
 
     def _close_writers(self):
-        logger.verbose("%s: closing writers...", self)
+        logger.info("%s: closing writers...", self)
         self._close_image_writer()
         self._close_video_writer()
 
