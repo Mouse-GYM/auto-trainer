@@ -9,7 +9,9 @@ import numpy
 
 from autotrainer.core import FixedArrayMultiQueue, PerfMonitor
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.message import FrameIndexCategory
 from .pose_model import PoseModel
+
 
 logger = get_verbose_logger(__name__)
 
@@ -222,7 +224,9 @@ class PoseProcess(Process):
             #     prev_mode = self._mode
 
             if i_q_get_output is not None and i_q_get_output(frame_buffer, frames_indices):
-                if self._mode == InferenceMode.Offline and self._input_queue == self._live_input_queue and all(i < 0 for cam_fr_indices in frames_indices for i in cam_fr_indices):
+                if self._mode == InferenceMode.Offline and self._input_queue == self._live_input_queue and (
+                    frames_indices == FrameIndexCategory.EOF_RECORDING
+                ).all():
                     self._input_queue = self._offline_input_queue
                     logger.notice("Switched to offline queue: %s", frames_indices)
                     # always get new ref:
@@ -241,14 +245,14 @@ class PoseProcess(Process):
                 if perf_add_c():
                     self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
 
-                if self._input_queue == self._offline_input_queue and self._process_live_when_ready and (
-                    all(idx < 0 for indices in frames_indices for idx in indices)
-                ):
+                if self._input_queue == self._offline_input_queue and (
+                    frames_indices == FrameIndexCategory.EOF_OFFLINE_PROCESSING
+                ).all():
                     logger.notice("Detected end of offline queue processing")
                     self._offline_input_queue.reset_reader()  # reset our reader index for next offline
                     d_q_put((None, self._mode, None))  # tells data monitor this is EOF current offline data
                     self._set_process_live()  # set us to live processing
-                    self._process_live_when_ready = False
+                    # self._process_live_when_ready = False
                     # always get new ref:
                     reset_locals()
             else:

@@ -13,6 +13,7 @@ import numpy
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue
 from autotrainer.core.logging import get_verbose_logger, set_logger_level
 from autotrainer.core.fixed_array_queue import BufferResult
+from autotrainer.core.message import FrameIndexCategory
 
 from .video_manager import VideoManager
 from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
@@ -294,18 +295,19 @@ class VideoCapture(Process):
                         # end of record/save-to-disk session/mode
                         record_start_frame_idx = None
                         assert isinstance(self._network_queue, FixedArrayMultiQueue)
+                        # pad:
                         for _ in range(self._network_queue.frames_per_camera - cnt_net_q_put % self._network_queue.frames_per_camera):
-                            while net_q_put(empty_frame, self._camera_idx, -1) != BufferResult.Ok:
+                            while net_q_put(empty_frame, self._camera_idx, FrameIndexCategory.PADDING) != BufferResult.Ok:
                                 time.sleep(0.001)
                         logger.info("sending negative frame indices to signify eof recording")
                         for _ in range(self._network_queue.frames_per_camera):
-                            while net_q_put(empty_frame, self._camera_idx, -1) != BufferResult.Ok:
+                            while net_q_put(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING) != BufferResult.Ok:
                                 time.sleep(0.001)
 
                 if net_q_put is not None:
                     # network queue goes to processing/inference
                     did_put = net_q_put(frame, self._camera_idx,
-                        -1 if record_start_frame_idx is None else cur_frame_idx - record_start_frame_idx,
+                        FrameIndexCategory.ONLINE_NO_RECORDING if record_start_frame_idx is None else cur_frame_idx - record_start_frame_idx,
                         allow_overflow=False) == BufferResult.Ok
                     if did_put:
                         cnt_net_q_put += 1

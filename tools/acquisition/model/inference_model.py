@@ -25,6 +25,7 @@ from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
     intersession_process, BehaviorEventKind, InferenceProtocol
+from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     DlcPoseModel, MemoryPoseModel, InferenceMode
@@ -33,6 +34,8 @@ from tools.acquisition.model.project_dependent_protocol import ProjectDependentP
 logger = get_verbose_logger(__name__)
 
 
+# even better is to use __debug__ and use "python -O ..."
+# see https://docs.python.org/3/using/cmdline.html#cmdoption-O
 _local_do_debug = False
 
 
@@ -138,6 +141,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._intersession_block: Optional[IntersessionBlock] = None
         self._intersession_detection: Optional[IntersessionDetection] = None
         self._stop_recorded = threading.Event()
+        self._recording_live_batch = 256
 
     @property
     def project(self) -> ProjectInfo:
@@ -255,7 +259,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
         self._offline_queue = FixedArrayMultiQueue(
             # offline queue can have a bigger depth than the one of the network/live queue.
-            depth=network_queue.depth * 4,
+            depth=network_queue.depth * 8,
             cam_count=network_queue.camera_count,
             frames_per_camera=network_queue.frames_per_camera,
             shape=network_queue.shape,
@@ -454,12 +458,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             frames_indices: Optional[numpy.ndarray]
 
             if recording_in_progress:  # and cams_frame_idx_fhs is not None:
-                # thx to feed analysis which send a full -2 batch frames indices,
+                # thx to feed analysis which send a full SWITCH_TO_OFFLINE_MODE batch frames indices,
                 # this condition allows to know when to close/stopping writing to live files,
                 # and reopen for offline mode
-                if frames_indices is None or all(
-                    cam_fr_indices[-1] < prev_i for cam_fr_indices, prev_i in zip(frames_indices, prev_frames_indices)
-                ):
+                if frames_indices is None or (frames_indices == FrameIndexCategory.SWITCH_TO_OFFLINE_MODE).all():
                     recording_in_progress = False
                     # t_start_offline = time.time()
                     logger.notice("Detected stop of recording in progress ; status=%s ; mode=%s prev=%s frames_indices=%s",
@@ -548,7 +550,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             cam_indices.extend(list(cam_fr_indices))
                             t1 = time.time()
                             writes_h5_live_durations.append(t1 - t0)
-                            if len(cam_h5_live) > 128:
+                            if len(cam_h5_live) >= self._recording_live_batch:
                                 t0 = time.time()
                                 cur = numpy.vstack(cam_h5_live)
                                 indices = range(cur.shape[0])
@@ -561,7 +563,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                               append=True,  # required as well for really concat
                                 )
                                 t1 = time.time()
-                                writes_h5_live_durations.append((t1 - t0) / 256)
+                                writes_h5_live_durations.append((t1 - t0) / self._recording_live_batch)
                                 cam_h5_live.clear()
                                 cam_indices.clear()
 
@@ -643,7 +645,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
                     elif ib is not None:
                         assert pose_data is not None
-                        if all(idx < 0 for cam_fr_indices in frames_indices for idx in cam_fr_indices):
+                        if (frames_indices < 0).all():
                             # next pose_data we get/read should be None, ending the current offline session
                             logger.debug("got all negative frame indices batch: %s", frames_indices)
                             # this also happens when start of offline data
@@ -658,7 +660,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             cur_h5_ix = cams_read_h5_idx[cdx]
                             for fx, frame in enumerate(pose_data[cdx::len(cams)]):
                                 frame_idx = cam_fr_indices[fx]
-                                if frame_idx == -1:
+                                if frame_idx == FrameIndexCategory.PADDING:
                                     logger.debug("cam-%s : fx=%s got negative frame idx: %s", cdx, fx, cam_fr_indices)
                                     break
                                 while cur_h5_ix < len(cur_h5_dss) and frame_idx > cur_h5_dss[cur_h5_ix][2]:
@@ -699,7 +701,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         except Exception as err:
             logger.exception("_feed_intersession_analysis: error: %s", err)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError, context=str(err))
-            self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
+            self._send_message(InferenceCommandMessageKind.ProcessLive)
             self._intersession_block.configuration.complete(self._intersession_block.configuration.nonce, False)
             self._intersession_block = None
 
@@ -716,10 +718,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
         #
         # this allows data_monitor to see/know when to switch to offline mode:
-        # NB: the value -2 is necessary/required (which is smaller than -1)
         for cdx in range(n_cams):
             for _ in range(frames_per_cam):
-                while self._offline_queue.put(empty_frame, cdx, -2, allow_overflow=False) != BufferResult.Ok:
+                while self._offline_queue.put(
+                        empty_frame, cdx, FrameIndexCategory.SWITCH_TO_OFFLINE_MODE,
+                        allow_overflow=False) != BufferResult.Ok:
                     time.sleep(0.005)
 
         timeout = time.time() + self._intersession_wait_time
@@ -736,6 +739,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # so this small sleep, for them to get more chance to do it:
         # time.sleep(0.5)
         # This is to not get "moov-atom-not-found" in stderr output from opencv library.
+        # NB: not anymore necessary since also controlling pose process + data_monitor with frames indices commands.
 
         captures_d = {}
         videos_frame_count: Dict[int, int] = {}
@@ -822,7 +826,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
                 if all_read[cdx]:
                     cams_sent_frame_count[cdx] += 1
-                    while self._offline_queue.put(empty_frame, cdx, -1, allow_overflow=False) != BufferResult.Ok:
+                    while self._offline_queue.put(empty_frame, cdx, FrameIndexCategory.PADDING,
+                                                  allow_overflow=False) != BufferResult.Ok:
                         time.sleep(0.005)
                 else:
                     if not self._put_intersession_frame(cam_capture, cdx, cams_frame_idx[cdx]):
@@ -845,7 +850,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             if r != self._frames_per_camera:
                 logger.notice("cam-%s: padding %s empty frames to cam", cdx, r)
                 for _ in range(r):
-                    while self._offline_queue.put(empty_frame, cdx, -1, allow_overflow=False) != BufferResult.Ok:
+                    while self._offline_queue.put(empty_frame, cdx, FrameIndexCategory.PADDING,
+                                                  allow_overflow=False) != BufferResult.Ok:
                         time.sleep(0.005)
 
         if _local_do_debug:
@@ -856,11 +862,16 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # total frame count: taking the min of all saved videos frame count:
         self._intersession_block.frame_count = min(videos_frame_count.values())
 
+        # not anymore necessary:
+        # self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
+        # thx to:
+
         # also post a **full negative indices batch** to notify pose process
         # when it has reached end of offline processing:
         for cdx in range(n_cams):
             for _ in range(frames_per_cam):
-                while self._offline_queue.put(empty_frame, cdx, -1, allow_overflow=False) != BufferResult.Ok:
+                while self._offline_queue.put(empty_frame, cdx, FrameIndexCategory.EOF_OFFLINE_PROCESSING,
+                                              allow_overflow=False) != BufferResult.Ok:
                     time.sleep(0.005)
 
         logger.success("passed %s frames per camera frame_count=%s ; "
@@ -868,7 +879,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                        frame_idx, self._intersession_block.frame_count,
                        tot_skipped_frames, cams_frame_idx, cams_sent_frame_count)
 
-        self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
 
     def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int) -> bool:
         ret, frame = capture.read()
@@ -885,7 +895,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             # given the current array-multi-queue has no "event" handling we have to retry, at some later point,
             # a good value would be half the duration of the previous, or a recent, inference batch duration,
             # divided by the nbr of frame(s) it contained/had processed.
-            time.sleep(0.005)
+            time.sleep(0.01)
         logger.error("cam %s: timeout waiting offline_queue has space", cam_index)
         return False
 

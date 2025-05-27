@@ -4,3 +4,4 @@ from .motor_configuration_message import MotorConfigurations, ServoConfigMessage
     StepperConfigMessage, Motor
 from .system_command_kind import SystemCommandKind
 from .system_status_message import SystemStatusMessageKind
+from .frame_index import FrameIndexCategory

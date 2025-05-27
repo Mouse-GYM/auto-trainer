@@ -229,7 +229,7 @@ class AppModel(ObservableObject):
                 self._inference_queue = FixedArrayMultiQueue(
                     # live queue does not need/require a lot of "depth" == total nbr of batches that can sit
                     # in the ring-buffer-queue at the same time.
-                    8,
+                    3,
                     2,
                     3,
                     shape=shape_1,
