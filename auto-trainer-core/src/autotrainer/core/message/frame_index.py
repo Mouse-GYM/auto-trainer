@@ -3,13 +3,16 @@ import enum
 
 class FrameIndexCategory(enum.IntEnum):
 
+    SWITCH_TO_ONLINE = -6
     SWITCH_TO_OFFLINE_MODE = -5
     PADDING = -4
     EOF_OFFLINE_PROCESSING = -3
     EOF_RECORDING = -2
-    ONLINE_NO_RECORDING = -1
+
+    ONLINE_NO_RECORDING = -1  # NB: DO NOT CHANGE VALUE OF THIS ONE
 
     RECORDING_OR_OFFLINE_PROCESSING = 1
+    # NB: positive or zero frane index means recording online or offline reprocessing.
 
     @classmethod
     def _missing_(cls, value: int):
