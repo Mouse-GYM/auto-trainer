@@ -280,9 +280,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 print(ex)
 
     def _monitor_data_queue(self):
+        prev_mode = None
+        t_start_offline = 0
         while self._is_running:
             try:
                 (pose_data, mode) = self._data_queue.get(block=False, timeout=0.5)
+                if prev_mode == InferenceMode.Live and mode == InferenceMode.Offline:
+                    t_start_offline = time.time()
                 if mode == InferenceMode.Live:
                     # Normalize locations.  Not all consumers will be scaling the location by the original frame size.
                     for frame in pose_data:
@@ -296,7 +300,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             success = True
 
                             try:
-                                logger.info(f"processed {self._intersession_block.pose_data.shape[0]} pose responses")
+                                m = self._intersession_block.pose_data.shape[0]
+                                logger.info(f"processed {m} pose responses, speed=%.3f/s",
+                                            m / (time.time() - t_start_offline))
 
                                 intersession_inference(self._intersession_block.pose_data, self._algorithm.part_names,
                                                        self._project)
@@ -311,6 +317,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         for frame in pose_data:
                             self._intersession_block.pose_data = numpy.vstack(
                                 [self._intersession_block.pose_data, frame.flatten()])
+
+                prev_mode = mode
             except queue.Empty:
                 time.sleep(0.001)
             except Exception as ex:
