@@ -193,7 +193,7 @@ class EventManager:
                 # Workaround or current Jetson behavior w/ queue.get(timeout=).
                 info = self._write_queue.get_nowait()
             except Empty:
-                time.sleep(0.05)
+                time.sleep(0.01)
                 continue
 
             if not isinstance(info, EventInfo):
