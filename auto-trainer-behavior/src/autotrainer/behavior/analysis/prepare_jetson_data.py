@@ -17,6 +17,10 @@ from . import calibration_FLIR as cal_flir
 import yaml
 from pathlib import Path
 
+from autotrainer.core.logging import get_verbose_logger
+
+logger = get_verbose_logger(__name__)
+
 video_write_ext = ".mp4" if sys.platform.startswith("linux") else ".mkv"
 
 
@@ -49,6 +53,9 @@ def identify_dropped_frames(timestamp_file, frame_rate):
     # Mark dropped frames
     current_frame = 0
     for i, interval in enumerate(intervals):
+        # not sure:
+        # if current_frame >= len(dropped_frame_vector) - 1:
+        #     break
         dropped_frame_vector[current_frame] = 0  # Mark current frame as successful
         current_frame += 1
         if interval > 1.5 * expected_interval:  # Dropped frame threshold
@@ -83,6 +90,8 @@ def extend_and_interpolate_tracking_data(tracking_data, dropped_frame_vector):
     # Initialize the result DataFrame
     extended_data = pd.DataFrame(index=full_index, columns=tracking_data.columns)
 
+    logger.verbose("Doing bodypart loop: total_frames=%s full_index=%s extended_data=%s dropped=%s",
+                   total_frames, len(full_index), len(extended_data), len(dropped_frame_vector))
     # Iterate over each bodypart and interpolate
     for bodypart in tracking_data.columns.levels[0]:  # Iterate through the top-level (bodyparts)
         for coord in ['x', 'y']:  # Iterate through subcategories 'x' and 'y'
@@ -91,13 +100,21 @@ def extend_and_interpolate_tracking_data(tracking_data, dropped_frame_vector):
 
             # Identify valid frames in the dropped_frame_vector
             valid_frames = np.where(dropped_frame_vector == 0)[0]
+            if len(valid_frames) != total_frames:
+                logger.warning("valid_frames=%s vs total_frames=%s", len(valid_frames), total_frames)
 
             # Fill the extended DataFrame with interpolated values
-            extended_data[(bodypart, coord)] = np.interp(
+            try:
+                extended_data[(bodypart, coord)] = np.interp(
                 full_index,  # Full range of frames
                 valid_frames,  # Frames with valid data
                 original_data  # Original data corresponding to valid frames
             )
+            except Exception as err:
+                logger.exception("failed np.interp: %s", err)
+                logger.notice("extended_data=%s full_index=%s valid_frames=%s original_data=%s",
+                             len(extended_data), len(full_index), len(valid_frames), len(original_data))
+                raise
 
         # Handle 'p' (confidence) separately
         original_confidence = tracking_data[(bodypart, 'likelihood')].values
@@ -164,6 +181,7 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
     hand_options = ['R', 'L']
     additional_names = ['Pellet', 'Nose', 'Mouth', 'Tongue_mid', 'Tongue_tip', 'Star', 'Triangle', 'Diamond']
     for v_path in video_paths:
+        logger.info("extract_tracking_data: %s", v_path)
         vid_dir, vid_name_raw = os.path.split(v_path)
         vid_name_raw = os.path.splitext(vid_name_raw)[0]
         h5_file_path = os.path.join(vid_dir, vid_name_raw + dlc_seg + '.h5')
