@@ -17,6 +17,7 @@ from threading import Thread
 import cv2
 import h5py
 import numpy
+import numpy as np
 import pandas
 
 from autotrainer.core import FixedArrayMultiQueue, ObservableObject, ProjectInfo, EventManager, clear_queue, \
@@ -37,6 +38,34 @@ logger = get_verbose_logger(__name__)
 # even better is to use __debug__ and use "python -O ..."
 # see https://docs.python.org/3/using/cmdline.html#cmdoption-O
 _local_do_debug = True
+
+
+def _shorten_text_file(path: Path, limit: int):
+    vals = [v for v in path.open().readlines() if v.strip()]
+    with path.open("w") as fh:
+        fh.write("\n".join(chain(vals[:limit], [''])))
+
+def _short_vid_file(path: Path, limit: int):
+    "ffmpeg -sseof -2 -i input.mp4 output.mp4"
+    cap = cv2.VideoCapture(path.as_posix())
+    idx = 0
+    ret, frame = cap.read()
+    if not ret:
+        return
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        writer.write(frame)
+        idx += 1
+        if idx >= limit:
+            break
+    writer.release()
+    cap.release()
 
 
 def _close_fhs(cams_frame_idx_fhs: Optional[List[Optional[TextIO]]]):
@@ -640,9 +669,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
                     if ( # prev_mode == InferenceMode.Live and
                         len(cams_read_h5_dss) == 0
+                        # and frames_indices is not None and (frames_indices >= 0).any()
                     ):
                         t_start_offline = time.time()
-                        logger.notice("Opening live files for offline processing")
+                        logger.notice("Opening live files for offline processing ; frames=%s", frames_indices)
                         cams_read_h5_dss = [
                             open_h5_file(cam_pose_path)
                             for cam_pose_path in pose_paths
@@ -679,20 +709,29 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                         with open(str(p) + ".idx_monitor_data_q.txt", "w") as fh:
                                             fh.write("\n".join(chain(map(str, sorted(ib.pose_data_dict[cdx])), [''])))
 
-                                m = min(map(len, ib.pose_data_list))
+                                min_nbr_pd = min(map(len, ib.pose_data_list))
+                                for cam in cams:
+                                    paths = list(map(Path, prj.get_video_path(cam, allow_overwrite=True)))
+                                    ts_file = paths[1]
+                                    vals = [v for v in ts_file.read_text().split('\n') if v.strip()]
+                                    if len(vals) > min_nbr_pd:
+                                        _short_vid_file(paths[0], min_nbr_pd)
+                                        _shorten_text_file(ts_file, min_nbr_pd)
+                                        _shorten_text_file(paths[2], min_nbr_pd)
+
                                 ib.pose_data = numpy.vstack(
                                     list(chain(
                                         [ib.pose_data],  # supposed the empty init array
                                         (
                                              pdl[ix]
-                                             for ix in range(m)
+                                             for ix in range(min_nbr_pd)
                                              for pdl in ib.pose_data_list
                                         )
                                     ))
                                 )
                                 logger.notice("assembled %s pose responses, speed=%.3f/s (vstack=%s)"
                                               " now calling intersession_inference()",
-                                              m, 2 * m / (time.time() - t_start_offline), ib.pose_data.shape[0])
+                                              min_nbr_pd, 2 * min_nbr_pd / (time.time() - t_start_offline), ib.pose_data.shape[0])
                                 intersession_inference(ib.pose_data, self._algorithm.part_names,
                                                        self._project)
                                 success = True
@@ -830,7 +869,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         cams_sent_frame_count = [0] * n_cams
         cams_frame_idx = [0] * n_cams
         cams_already_processed_cur_ix = [0] * n_cams
-        cams_already_processed_idx = [
+        cams_already_processed_idx: List[List[int]] = [
             [] if fh is None else [ int(val.strip()) for val in fh.readlines()]
             for fh in cams_processed_fhs
         ]
@@ -860,7 +899,15 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         if tot_frames_to_process < 0:
             logger.warning("detected more in live data than in video files: diff=%s", tot_frames_to_process)
             tot_frames_to_process = 0
+
         # above must be done before following one:
+        # pad the smaller one(s) with negative frame idx
+        m = max(map(len, cams_already_processed_idx))
+        for cdx, cam_indices in enumerate(cams_already_processed_idx):
+            cams_already_processed_idx[cdx] = np.concatenate([
+                np.asarray(cam_indices),
+                np.asarray([-1] * (m - len(cam_indices)))
+            ])
         try:
             cams_already_processed_idx = numpy.asarray(cams_already_processed_idx)
         except Exception as err:
