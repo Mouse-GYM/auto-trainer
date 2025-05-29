@@ -10,6 +10,7 @@ from typing import Tuple, List, Optional
 import numpy
 
 from autotrainer.core.fixed_array_queue import BufferResult
+from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 
 logger = logging.getLogger(__name__)
@@ -222,3 +223,12 @@ class FixedArrayMultiQueue:
         # don't forget to:
         self._read_index = (read_idx_value + 1) % self._depth
         return True
+
+    def put_frame_index_category(self, frame, frame_idx: FrameIndexCategory, timeout: float = 5):
+        t_end = time.time() + timeout
+        for cdx in range(self._cam_count):
+            for _ in range(self._frames_per_camera):
+                while self.put(frame, cdx, frame_idx, allow_overflow=False) != BufferResult.Ok:
+                    if time.time() > t_end:
+                        raise RuntimeError("cam-%s: timeout waiting space in array multiqueue", cdx)
+                    time.sleep(0.005)

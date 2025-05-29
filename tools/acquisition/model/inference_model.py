@@ -817,16 +817,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             for cam in cams
         ]
         tot_skipped_frames = 0
-        frames_per_cam = self._offline_queue.frames_per_camera
         empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
         #
         # this allows data_monitor to see/know when to switch to offline mode:
-        for cdx in range(n_cams):
-            for _ in range(frames_per_cam):
-                while self._offline_queue.put(
-                        empty_frame, cdx, FrameIndexCategory.SWITCH_TO_OFFLINE_MODE,
-                        allow_overflow=False) != BufferResult.Ok:
-                    time.sleep(0.005)
+        self._offline_queue.put_frame_index_category(empty_frame, FrameIndexCategory.SWITCH_TO_OFFLINE_MODE)
 
         timeout = time.time() + 15  # self._intersession_wait_time
 
@@ -987,11 +981,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
         # also post a **full negative indices batch** to notify pose process
         # when it has reached end of offline processing:
-        for cdx in range(n_cams):
-            for _ in range(frames_per_cam):
-                while self._offline_queue.put(empty_frame, cdx, FrameIndexCategory.EOF_OFFLINE_PROCESSING,
-                                              allow_overflow=False) != BufferResult.Ok:
-                    time.sleep(0.005)
+        self._offline_queue.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_OFFLINE_PROCESSING)
 
         self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
 
