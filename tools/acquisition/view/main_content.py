@@ -75,9 +75,9 @@ class MainContent(ContentWidget):
 
         # Third row - hardware
 
-        hardware_control_content = HardwareControlContent(self._model.hardware)
-        self._layout.addWidget(hardware_control_content, 2, 0, 1, 3)
-        self._content_widgets.append(hardware_control_content)
+        self._hardware_control_content = HardwareControlContent(self._model.hardware)
+        self._layout.addWidget(self._hardware_control_content, 2, 0, 1, 3)
+        self._content_widgets.append(self._hardware_control_content)
 
         hardware_status_content = HardwareStatusContent(self._model.message_handler)
         self._layout.addWidget(hardware_status_content, 2, 3, 1, 3)
@@ -105,6 +105,8 @@ class MainContent(ContentWidget):
         self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
 
         self._model.inference.pose_response_ready += self.refresh_pose
+
+        self._model.property_changed += self._model_property_changed
 
         self.set_diagnostics_visible(False)
 
@@ -155,3 +157,7 @@ class MainContent(ContentWidget):
         else:
             self._layout.setRowStretch(1, 1)
             self._layout.setRowStretch(4, 0)
+
+    def _model_property_changed(self, name: str, value, old_value):
+        if name == "selected_animal" and value is not None:
+            self._hardware_control_content.set_selected_animal(value)
