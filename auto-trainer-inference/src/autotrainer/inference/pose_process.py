@@ -277,7 +277,7 @@ class PoseProcess(Process):
                     frames_indices[:, -1] == FrameIndexCategory.EOF_OFFLINE_PROCESSING
                 ).any():
                     logger.notice("Detected end of offline queue processing: %s", frames_indices)
-                    # self._offline_input_queue.reset_reader()  # reset our reader index for next offline
+                    self._offline_input_queue.reset_reader()  # reset our reader index for next offline
                     d_q_put((None, InferenceMode.Offline, None))  # tells data monitor this is EOF current offline data
                     self._set_process_live()  # set us to live processing
                     # self._process_live_when_ready = False
