@@ -37,7 +37,7 @@ logger = get_verbose_logger(__name__)
 
 # even better is to use __debug__ and use "python -O ..."
 # see https://docs.python.org/3/using/cmdline.html#cmdoption-O
-_local_do_debug = True
+_local_do_debug = False
 
 
 def _shorten_text_file(path: Path, limit: int):
@@ -710,10 +710,16 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                             fh.write("\n".join(chain(map(str, sorted(ib.pose_data_dict[cdx])), [''])))
 
                                 min_nbr_pd = min(map(len, ib.pose_data_list))
+
+                                # current analyse code also require exact same frame number in all cameras,
+                                # let's trim what's necessary:
                                 for cam in cams:
                                     paths = list(map(Path, prj.get_video_path(cam, allow_overwrite=True)))
                                     ts_file = paths[1]
                                     vals = [v for v in ts_file.read_text().split('\n') if v.strip()]
+                                    # not ~best way to do this,
+                                    # maybe inspecting the video file for total frames is faster.
+                                    # we must also have the info somewhere in active memory during this run/session
                                     if len(vals) > min_nbr_pd:
                                         _short_vid_file(paths[0], min_nbr_pd)
                                         _shorten_text_file(ts_file, min_nbr_pd)
