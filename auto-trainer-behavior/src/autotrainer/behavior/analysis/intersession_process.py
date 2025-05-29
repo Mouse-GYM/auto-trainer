@@ -6,6 +6,7 @@ from typing import Optional
 import numpy
 
 from autotrainer.core import ProjectInfo, video_write_ext
+from autotrainer.core.logging import get_verbose_logger
 
 from .prepare_jetson_data import process_raw_data
 from .parse_pellet_presentations_jetson import segment_reaches
