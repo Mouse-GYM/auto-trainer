@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import queue
 import time
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ import numpy
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue
 from autotrainer.core.logging import get_verbose_logger, set_logger_level
 from autotrainer.core.fixed_array_queue import BufferResult
+from autotrainer.core.message import FrameIndexCategory
 
 from .video_manager import VideoManager
 from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
@@ -178,7 +180,7 @@ class VideoCapture(Process):
     def run(self):
 
         from autotrainer.core.logging import setup_logging
-        setup_logging()
+        setup_logging(root_level=logging.DEBUG)
 
         logger.info("%s: started running", self)
 
@@ -264,7 +266,7 @@ class VideoCapture(Process):
                     # current deployment platform.
                     time.sleep(0.001)
                     record_start_frame_idx = None
-                    rec_q_list.clear()
+                    rec_q_list = self._record_queue_list = []
                     continue
 
                 frame, when = capture()
@@ -285,19 +287,32 @@ class VideoCapture(Process):
                     if record_start_frame_idx is None:
                         logger.notice("Starting record with frame %s", cur_frame_idx)
                         record_start_frame_idx = cur_frame_idx
-                    rec_q_list.append((frame, when))
-                    if len(rec_q_list) >= self._record_batch_size:
-                        rec_q.put(rec_q_list)  # thread queue
+                        rec_q.put([(frame, when)])  # thread queue
                         rec_q_list = self._record_queue_list = []
+                    else:
+                        rec_q_list.append((frame, when))
+                        if len(rec_q_list) >= self._record_batch_size:
+                            rec_q.put(rec_q_list)  # thread queue
+                            rec_q_list = self._record_queue_list = []
                 else:
                     if record_start_frame_idx is not None:
                         # end of record/save-to-disk session/mode
+                        rec_q_list = self._record_queue_list
                         record_start_frame_idx = None
+                        assert isinstance(self._network_queue, FixedArrayMultiQueue)
+                        # pad:
+                        for _ in range(self._network_queue.frames_per_camera - cnt_net_q_put % self._network_queue.frames_per_camera):
+                            while net_q_put(empty_frame, self._camera_idx, FrameIndexCategory.PADDING) != BufferResult.Ok:
+                                time.sleep(0.001)
+                        logger.info("sending EOF_RECORDING frame indices to signify eof recording")
+                        for _ in range(self._network_queue.frames_per_camera):
+                            while net_q_put(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING) != BufferResult.Ok:
+                                time.sleep(0.001)
 
                 if net_q_put is not None:
                     # network queue goes to processing/inference
                     did_put = net_q_put(frame, self._camera_idx,
-                        -1 if record_start_frame_idx is None else cur_frame_idx - record_start_frame_idx,
+                        FrameIndexCategory.ONLINE_NO_RECORDING if record_start_frame_idx is None else cur_frame_idx - record_start_frame_idx,
                         allow_overflow=False) == BufferResult.Ok
                     if did_put:
                         cnt_net_q_put += 1
@@ -357,6 +372,10 @@ class VideoCapture(Process):
     def _disable_trigger(self, _: object):
         logger.info("%s: trigger disabled", self)
         self._is_record_active = self._record_properties.should_record(False)
+        # if len(rec_q_list) > 0:
+        #     rec_q.put(rec_q_list)  # thread queue
+        #     rec_q.put([])
+        #     rec_q_list = self._record_queue_list = []
         if len(self._record_queue_list) > 0:
             self._record_queue.put(self._record_queue_list)
             self._record_queue_list = []

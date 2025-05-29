@@ -137,6 +137,9 @@ class SystemMachine(StateMachine):
 
     def before_exit_tunnel(self):
         self._algorithm.system_state = SystemState.cage
+        # inference = self._inference
+        # assert isinstance(inference, InferenceModel)
+        # inference.set_inference_to_online()
 
     def after_exit_tunnel(self):
         self._update_magnet_position(self.algorithm.baseline_intensity)
@@ -177,6 +180,11 @@ class SystemMachine(StateMachine):
         can_perform_analysis = self.algorithm.can_perform_intersession_analysis()
         if can_perform_analysis and self.state == SystemState.cage:
             self.enter_intersession()
+        else:
+            inference = self._inference
+            if inference is not None:
+                inference.set_inference_to_online()
+            # self.exit_intersession()
         if not can_perform_analysis and project is not None:
             if self._algorithm.clean_raw_data_on_inactive_session:
                 self._clean_raw_data(project)
@@ -184,6 +192,8 @@ class SystemMachine(StateMachine):
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
             self.exit_intersession()
+        else:
+            self._inference.set_inference_to_online()
 
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:

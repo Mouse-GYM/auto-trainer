@@ -87,6 +87,7 @@ class VideoRecord(Thread):
             self._run()
         except Exception as err:
             logger.exception("%s: Error during run: %s", self, err)
+        self._close_writers()
 
     def _run(self) -> None:
         if self._project_info is None or not self._project_info.is_valid():
@@ -99,8 +100,12 @@ class VideoRecord(Thread):
 
         last_when = 0
         check_count = 0
+        tot_written = 0
 
         while self._is_running:
+            # if self._video_writer is not None and not self._is_video_enabled:
+            #     self._close_writers()
+
             try:
                 queue_list = self._input_queue.get(timeout=0.01)
             except Empty:
@@ -110,7 +115,9 @@ class VideoRecord(Thread):
                 # if frame is None or when is None:
                 if len(queue_list) == 0:
                     # Indicator for trigger disabled
+                    logger.info("Closing video file: tot frames=%s", tot_written)
                     self._close_writers()
+                    tot_written = 0
                     continue
 
                 for frame, when in queue_list:
@@ -118,11 +125,13 @@ class VideoRecord(Thread):
                         if self._video_writer is None:
                             # If triggered, may not be configured yet for this batch
                             self._prepare_writers()
+                            # tot_written = 0
 
                         if len(numpy.shape(frame)) < 3 or numpy.shape(frame)[2] == 1:
                             self._video_writer.write(numpy.tile(frame[:, :, numpy.newaxis], (1, 1, 3)))
                         else:
                             self._video_writer.write(frame)
+                        tot_written += 1
 
                         if self._video_timestamp_file is not None:
                             self._video_timestamp_file.write(f"{when}, {1e9 / (when - last_when)}\n")
@@ -138,11 +147,11 @@ class VideoRecord(Thread):
 
                     check_count += 1
 
-                    if check_count > self._fps:
-                        if trim_queue(self._input_queue, 5):
-                            logger.debug(f"<{self.name}>: queue trimmed")
-                        check_count = 0
-                        self._check_writers()
+                    # if check_count > self._fps:
+                    #     if trim_queue(self._input_queue, 5):
+                    #         logger.debug(f"<{self.name}>: queue trimmed")
+                    #     check_count = 0
+                    #     self._check_writers()
 
             except Exception as err:
                 logger.exception("%s: loop error: %s", self, err)
@@ -153,7 +162,6 @@ class VideoRecord(Thread):
                 logger.exception("%s: check writers error: %s", self, err)
 
         logger.notice("%s: main loop exited", self)
-        self._close_writers()
 
     def cancel(self):
         self._is_running = False
@@ -176,7 +184,7 @@ class VideoRecord(Thread):
         self._prepare_image_capture()
 
     def _close_writers(self):
-        logger.verbose("%s: closing writers...", self)
+        logger.info("%s: closing writers...", self)
         self._close_image_writer()
         self._close_video_writer()
 

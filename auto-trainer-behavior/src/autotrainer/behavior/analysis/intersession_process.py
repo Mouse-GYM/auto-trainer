@@ -1,5 +1,7 @@
 import logging
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
 
 import numpy
 
@@ -24,19 +26,25 @@ class IntersessionResponse:
     pellets_presented: int = 0
 
 
-def intersession_process(project: ProjectInfo) -> IntersessionResponse:
+def intersession_process(
+    project: ProjectInfo, *,
+    calib_dir: Optional[Path] = None,
+) -> IntersessionResponse:
     """
     Called after pose processing for intersession analysis.
 
     :param project: current project info for finding/defining file names
+    :param calib_dir: calibration directory if not default.
     :return: information required to update behavior for future sessions
     """
     # left_input = project.get_intersession_pose_path(name=project.camera_1, allow_overwrite=True)
     # right_input = project.get_intersession_pose_path(name=project.camera_2, allow_overwrite=True)
     location, _, _ = project.get_session_path()
     logger.info(f"process intersession pose data using {location}")
-    calib_src_dir = "/home/agx001/3d-calibration/4mm_6r_8c_4x"
-    # calib_src_dir = "/home/gregory.starck/projects/toptal/4mm_6r_8c_4x"
+    calib_src_dir = Path("~/Autotrainer/4mm_6r_8c_4x").expanduser() if calib_dir is None else calib_dir
+    if not calib_src_dir.is_dir():
+        logger.warning("calib_src_dir %s is not a directory",  calib_src_dir)
+    calib_src_dir = calib_src_dir.as_posix()
     vid_tag = "." + video_write_ext
     dlc_seg = "_raw2D"
     center_method = (1, "Pellet")
@@ -47,7 +55,7 @@ def intersession_process(project: ProjectInfo) -> IntersessionResponse:
         pellet_x=results_dict['shift_x'],
         pellet_y=results_dict['shift_y'],
         pellet_z=results_dict['shift_z'],
-        food_consumed=results_dict['pellet_consumed'],
+        food_consumed=results_dict.get('pellet_consumed', 0),
         successful_reaches=results_dict['successful_reaches'],
         pellets_presented=results_dict['pellets_presented'],
     )

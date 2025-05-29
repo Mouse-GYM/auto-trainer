@@ -9,7 +9,9 @@ import numpy
 
 from autotrainer.core import FixedArrayMultiQueue, PerfMonitor
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.message import FrameIndexCategory
 from .pose_model import PoseModel
+
 
 logger = get_verbose_logger(__name__)
 
@@ -91,16 +93,17 @@ class PoseProcess(Process):
 
     def run(self):
         from autotrainer.core.logging import setup_logging
-        setup_logging()
+        setup_logging(root_level=logging.DEBUG)
 
         logger.info("entering pose_predict")
         self._send_message(InferenceStatusMessageKind.Created)
 
         self._send_message(InferenceStatusMessageKind.Loading)
 
+        prev_lvl = logging.root.level
         logging.root.setLevel(logging.WARN)
         self._model.load()
-        logging.root.setLevel(logging.INFO)
+        logging.root.setLevel(prev_lvl)
 
         try:
             self._send_message(InferenceStatusMessageKind.Initialized, self._model.body_parts)
@@ -125,8 +128,8 @@ class PoseProcess(Process):
         self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
 
     def _set_process_offline(self):
-        logger.notice("processing offline")
-        self._input_queue = self._offline_input_queue
+        logger.notice("got processing offline")
+        # self._input_queue = self._offline_input_queue
         self._mode = InferenceMode.Offline
         self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
 
@@ -145,6 +148,7 @@ class PoseProcess(Process):
                     self._set_process_live()
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:
                     self._set_process_offline()
+                    self._input_queue = self._offline_input_queue
                 else:
                     logger.warning("Unhandled command: %s", cmd)
             except Empty:
@@ -185,13 +189,13 @@ class PoseProcess(Process):
 
         reset_locals()
 
-        t_next_cmd = time.time()
+        t_last_data = t_next_cmd = time.time()
         while True:
             t_now = time.time()
             if t_now > t_next_cmd:
                 # do not check command queue on each loop turn, mostly useless
                 # and overhead is not that small
-                t_next_cmd += 0.01
+                t_next_cmd = t_now + 0.01
                 for _ in range(4):  # assuming we don't get "burst" of commands
                     try:
                         cmd, context = get_command()
@@ -221,12 +225,44 @@ class PoseProcess(Process):
                 logger.notice("Detected change of mode: %s", self._mode)
                 prev_mode = self._mode
 
+            # should be removed once more confident
+            if i_q is self._offline_input_queue and t_now > t_last_data + 10:
+                logger.warning("auto-switching to online")
+                self._set_process_live()
+                reset_locals()
+
             if i_q_get_output is not None and i_q_get_output(frame_buffer, frames_indices):
+                mode_used = InferenceMode.Live if i_q is self._live_input_queue else InferenceMode.Offline
+                t_last_data = t_now
+                if (frames_indices < 0).any() and not (frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all():
+                    logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices)
+
+                if (frames_indices[:, -1] < 0).any():
+                    if i_q is self._offline_input_queue and (
+                        numpy.isin(frames_indices[:, -1], [
+                            FrameIndexCategory.ONLINE_NO_RECORDING, FrameIndexCategory.SWITCH_TO_ONLINE]).any()
+                    ):
+                        self._set_process_live()
+                        reset_locals()
+                        # continue
+
+                    elif (  # self._mode == InferenceMode.Offline and
+                        i_q is self._live_input_queue and (
+                        frames_indices[:, -1] == FrameIndexCategory.EOF_RECORDING
+                    ).any()):
+                        self._input_queue = self._offline_input_queue
+                        self._mode = InferenceMode.Offline
+                        logger.notice("Switched to offline queue: %s", frames_indices)
+                        # self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
+                        # always get new ref:
+                        reset_locals()
+                        # continue
+
                 pose = predict(frame_buffer)
                 # NB:
                 # the data queue reader/consumer takes care of deciding what to do with the result data:
                 d_q_put((pose,
-                         self._mode,
+                         mode_used,  # InferenceMode.Live if self._input_queue == self._live_input_queue else InferenceMode.Offline,
                          frames_indices.copy(),  # getting frame indices corruption in reader side without this.
                          #  frames_indices,  # it could be eventually explained if the serialisation
                          # of the frames_indices numpy array happens after the return of the queue put()..
@@ -235,14 +271,14 @@ class PoseProcess(Process):
                 if perf_add_c():
                     self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
 
-                if self._mode == InferenceMode.Offline and self._process_live_when_ready and (
-                    all(idx < 0 for indices in frames_indices for idx in indices)
-                ):
-                    logger.notice("Detected end of offline queue processing")
-                    self._offline_input_queue.reset_reader()  # reset our reader index for next offline
-                    d_q_put((None, self._mode, None))  # tells data monitor this is EOF current offline data
+                if i_q is self._offline_input_queue and (
+                    frames_indices[:, -1] == FrameIndexCategory.EOF_OFFLINE_PROCESSING
+                ).any():
+                    logger.notice("Detected end of offline queue processing: %s", frames_indices)
+                    # self._offline_input_queue.reset_reader()  # reset our reader index for next offline
+                    d_q_put((None, InferenceMode.Offline, None))  # tells data monitor this is EOF current offline data
                     self._set_process_live()  # set us to live processing
-                    self._process_live_when_ready = False
+                    # self._process_live_when_ready = False
                     # always get new ref:
                     reset_locals()
             else:
