@@ -795,6 +795,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # end while self._is_running
 
     def _feed_intersession_analysis(self):
+        # NB: feed intersession analysis (thread) has currently no way of being "interrupted/stopped",
+        # if pose process goes away (when exit) then this will hang up to timeout: currently 15s,
+        # see _put_intersession_frame().
         try:
             self.__feed_intersession_analysis()
         except Exception as err:
@@ -996,13 +999,12 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                        frame_idx, self._intersession_block.frame_count,
                        tot_skipped_frames, cams_frame_idx, cams_sent_frame_count)
 
-
     def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int) -> bool:
         ret, frame = capture.read()
         if not ret:
             logger.debug(f"end of video at index {cam_index}")
             return False
-        timeout = time.time() + 600   # to be decided if keep or not
+        timeout = time.time() + 15   # to be decided if keep or not
         if len(numpy.shape(frame)) >= 3:
             frame = frame[:, :, 0]
         put = self._offline_queue.put
