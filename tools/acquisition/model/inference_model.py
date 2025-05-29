@@ -174,7 +174,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._intersession_block: Optional[IntersessionBlock] = None
         self._intersession_detection: Optional[IntersessionDetection] = None
         self._stop_recorded = threading.Event()
-        self._recording_live_batch = 256
+        self._recording_live_batch = 64
 
     @property
     def project(self) -> ProjectInfo:
@@ -429,18 +429,17 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         cams_frame_idx_fhs = None
         pose_paths: List[Path] = []
         axis_labels = ("x", "y", "likelihood")
-        columns: pandas.MultiIndex
-        # pose_fhs: Optional[List[h5py.File]] = None
+        columns = pandas.MultiIndex.from_product([self._algorithm.part_names, axis_labels],
+                                                 names=["bodyparts", "coords"])
+        # not the one being used, part_names being empty at this moment, see comment below when re-assigned
         cams_read_h5_dss: List[h5py.Dataset] = []
         cams_read_h5_idx: List[int] = []
         recording_in_progress = False
-        prev_mode = next_prev_mode = None
+        next_prev_mode = None
         prev_session = None
-        prev_status = None
         tot_written_to_live = None
         t_log_counters = time.time()
-        tot_skipped = cnt_data_received = 0
-        prev_frames_indices = [-1] * n_cams
+        cnt_data_received = 0
 
         writes_h5_live_durations = []
         cur_h5_live_batch = [[] for _ in range_cams]
@@ -474,6 +473,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         self._set_status(InferenceStatus.waiting)
                         self._algorithm.initialize(context)
                         self._send_message(InferenceCommandMessageKind.Start)
+                        # NB: having to create columns here:
+                        # part_names is only set when algo is initialized after it's been created:
+                        columns = pandas.MultiIndex.from_product([self._algorithm.part_names, axis_labels],
+                                                                 names=["bodyparts", "coords"])
                     elif msg == InferenceStatusMessageKind.Loading:
                         self._set_status(InferenceStatus.loading)
                     elif msg == InferenceStatusMessageKind.Performance:
@@ -536,19 +539,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         cur_cam_indices.clear()
                     #
                     _close_fhs(cams_frame_idx_fhs)
-                    # _close_h5(pose_fhs)
                     cams_frame_idx_fhs = None
-                    prev_status = self._status
                     self._stop_recorded.set()
-                    # continue
-            else:
-                prev_status = self._status
-
-            if frames_indices is None:
-                prev_frames_indices = [-1] * n_cams
-            else:
-                for cdx, cam_fr_indices in enumerate(frames_indices):
-                    prev_frames_indices[cdx] = cam_fr_indices[-1]
 
             cnt_data_received += 1
 
@@ -564,28 +556,24 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     # and self._status == InferenceStatus.live
                     and mode == InferenceMode.Live
                     and frames_indices is not None
-                    and (frames_indices >= 0).any()   # all(fr_i >= 0 for frs in frames_indices for fr_i in frs)
+                    and (frames_indices >= 0).any()
                     and prj.session.value != prev_session  # REQUIRED
                 ):
-                    self._stop_recorded.clear()
+                    self._stop_recorded.clear()  # reset the flag at start of new record,
+                    # it will be used at end of record, to signal feed analysis thread that we closed the live files.
+
                     tot_written_to_live = 0
                     recording_in_progress = True
                     prev_session = prj.session.value
                     logger.verbose("Detected new record in progress ; status=%s mode=%s frames indices: %s",
                                    self._status, mode, frames_indices)
                     cams_frame_idx_fhs = []
-                    # pose_fhs: List[h5py.File] = []
                     pose_paths = []
-                    columns = pandas.MultiIndex.from_product([self._algorithm.part_names, axis_labels],
-                                                             names=["bodyparts", "coords"])
                     for cam in cams:
                         _, _, p_indices = prj.get_video_path(cam, allow_overwrite=True)
                         cams_frame_idx_fhs.append(Path(p_indices).open("w"))
                         pose_path = Path(prj.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live"))
                         pose_paths.append(pose_path)
-                        # h5_fh = h5py.File(pose_path, "w")
-                        # pose_fhs.append(h5_fh)
-                        # h5_fh.create_dataset("df_with_missing")
 
                 if mode == InferenceMode.Live:
                     if recording_in_progress:  # and cams_frame_idx_fhs is not None and frames_indices is not None:
@@ -610,7 +598,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             if len(cur) == 0:
                                 continue
                             cam_h5_live.append(cur)
-                            cam_indices.extend(list(filter(lambda ix: ix >= 0, cam_fr_indices)))
+                            cam_indices.extend(filter(lambda ix: ix >= 0, cam_fr_indices))
                             t1 = time.time()
                             writes_h5_live_durations.append(t1 - t0)
                             if len(cam_h5_live) >= self._recording_live_batch:
@@ -634,9 +622,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     new_pose_data = []
                     got_done = False
                     for fx in range(self._frames_per_camera):
-                        for cdx in range_cams:
+                        for cdx, cam_fr_indices in zip(range_cams, frames_indices):
                             ix = fx * n_cams + cdx
-                            if frames_indices[cdx][fx] < FrameIndexCategory.ONLINE_NO_RECORDING:
+                            if cam_fr_indices[fx] < FrameIndexCategory.ONLINE_NO_RECORDING:
                                 new_pose_data = new_pose_data[:fx * n_cams]
                                 got_done = True
                                 break
@@ -664,7 +652,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     if frames_indices is not None and numpy.isin(frames_indices[:, -1], [
                         FrameIndexCategory.SWITCH_TO_ONLINE,
                         FrameIndexCategory.ONLINE_NO_RECORDING,
-                    ]).all():
+                    ]).any():   # .all():
                         continue
 
                     if ( # prev_mode == InferenceMode.Live and
@@ -717,13 +705,15 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                     paths = list(map(Path, prj.get_video_path(cam, allow_overwrite=True)))
                                     ts_file = paths[1]
                                     vals = [v for v in ts_file.read_text().split('\n') if v.strip()]
-                                    # not ~best way to do this,
+                                    # not the best way to do this,
                                     # maybe inspecting the video file for total frames is faster.
                                     # we must also have the info somewhere in active memory during this run/session
                                     if len(vals) > min_nbr_pd:
-                                        _short_vid_file(paths[0], min_nbr_pd)
+                                        logger.warning("%s: trimming raw data to %s entries", cam, min_nbr_pd)
                                         _shorten_text_file(ts_file, min_nbr_pd)
-                                        _shorten_text_file(paths[2], min_nbr_pd)
+                                        # normally not necessary:
+                                        # _short_vid_file(paths[0], min_nbr_pd)
+                                        # _shorten_text_file(paths[2], min_nbr_pd)
 
                                 ib.pose_data = numpy.vstack(
                                     list(chain(
@@ -805,6 +795,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # end while self._is_running
 
     def _feed_intersession_analysis(self):
+        # NB: feed intersession analysis (thread) has currently no way of being "interrupted/stopped",
+        # if pose process goes away (when exit) then this will hang up to timeout: currently 15s,
+        # see _put_intersession_frame().
         try:
             self.__feed_intersession_analysis()
         except Exception as err:
@@ -875,7 +868,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         cams_sent_frame_count = [0] * n_cams
         cams_frame_idx = [0] * n_cams
         cams_already_processed_cur_ix = [0] * n_cams
-        cams_already_processed_idx: List[List[int]] = [
+        cams_already_processed_idx_list: List[List[int]] = [
             [] if fh is None else [ int(val.strip()) for val in fh.readlines()]
             for fh in cams_processed_fhs
         ]
@@ -889,42 +882,42 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 ]
                 for cdx, cam in enumerate(cams)
             ]
-            if cams_already_processed_idx != cams_already_processed_idx2:
+            if cams_already_processed_idx_list != cams_already_processed_idx2:
                 raise RuntimeError("Unexpected difference in processed cams frames index vs processed h5")
 
+        # NB: tot_frames_to_process:
+        # not sure which one to use:
+        # 1>
         # tot_frames_to_process = int(frames_per_cam * (
         #         min(videos_frame_count[cdx] - len(cams_already_processed_idx[cdx])
         #             for cdx in range(n_cams)) // frames_per_cam)
         # )
-        tot_frames_to_process = int(((
-            int(frames_per_cam * (min(videos_frame_count.values()) // frames_per_cam))
-            - len(cams_already_processed_idx[0])  # should be same for both cams
-        ) // frames_per_cam) * frames_per_cam)
-        #
-        tot_frames_to_process = max(videos_frame_count.values()) - min(map(len, cams_already_processed_idx))
+        # 2>
+        # tot_frames_to_process = int(((
+        #     int(frames_per_cam * (min(videos_frame_count.values()) // frames_per_cam))
+        #     - len(cams_already_processed_idx[0])  # should be same for both cams
+        # ) // frames_per_cam) * frames_per_cam)
+        # 3>
+        # tot_frames_to_process = min(videos_frame_count.values()) - min(map(len, cams_already_processed_idx_list))
+        # 4>
+        tot_frames_to_process = max(videos_frame_count.values()) - min(map(len, cams_already_processed_idx_list))
         if tot_frames_to_process < 0:
+            # was somehow happening when video record was not properly closing *after* getting all data
             logger.warning("detected more in live data than in video files: diff=%s", tot_frames_to_process)
             tot_frames_to_process = 0
+            # raise or not raise ?
 
         # above must be done before following one:
         # pad the smaller one(s) with negative frame idx
-        m = max(map(len, cams_already_processed_idx))
-        for cdx, cam_indices in enumerate(cams_already_processed_idx):
-            cams_already_processed_idx[cdx] = np.concatenate([
+        m = max(map(len, cams_already_processed_idx_list))
+        for cdx, cam_indices in enumerate(cams_already_processed_idx_list):
+            cams_already_processed_idx_list[cdx] = np.concatenate([
                 np.asarray(cam_indices),
                 np.asarray([-1] * (m - len(cam_indices)))
             ])
-        try:
-            cams_already_processed_idx = numpy.asarray(cams_already_processed_idx)
-        except Exception as err:
-            raise
-
-        try:
-            logger.debug("tot_frames_to_process=%s first cams_already_processed_idx=%s",
-                     tot_frames_to_process, cams_already_processed_idx[:, 0])
-        except Exception as err:
-            logger.error("cams_already_processed_idx=%s", cams_already_processed_idx)
-            raise
+        cams_already_processed_idx = numpy.asarray(cams_already_processed_idx_list)
+        logger.debug("tot_frames_to_process=%s first cams_already_processed_idx=%s",
+                 tot_frames_to_process, cams_already_processed_idx[:, 0])
 
         all_read = [False] * n_cams
         frames_idx_sent = [
@@ -1006,13 +999,12 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                        frame_idx, self._intersession_block.frame_count,
                        tot_skipped_frames, cams_frame_idx, cams_sent_frame_count)
 
-
     def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int) -> bool:
         ret, frame = capture.read()
         if not ret:
             logger.debug(f"end of video at index {cam_index}")
             return False
-        timeout = time.time() + 600   # to be decided if keep or not
+        timeout = time.time() + 15   # to be decided if keep or not
         if len(numpy.shape(frame)) >= 3:
             frame = frame[:, :, 0]
         put = self._offline_queue.put

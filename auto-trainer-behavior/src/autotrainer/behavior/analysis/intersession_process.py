@@ -6,11 +6,12 @@ from typing import Optional
 import numpy
 
 from autotrainer.core import ProjectInfo, video_write_ext
+from autotrainer.core.logging import get_verbose_logger
 
 from .prepare_jetson_data import process_raw_data
 from .parse_pellet_presentations_jetson import segment_reaches
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 available_XYZ = numpy.array([[-5, 5], [-5, 5], [-5, 5]])
 
@@ -50,7 +51,7 @@ def intersession_process(
     center_method = (1, "Pellet")
     process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
     results_dict = segment_reaches(location, center_method, available_XYZ)
-    logger.info(f"process intersession pose data complete {results_dict}")
+    logger.success("process intersession pose data complete %s", results_dict)
     return IntersessionResponse(
         pellet_x=results_dict['shift_x'],
         pellet_y=results_dict['shift_y'],
