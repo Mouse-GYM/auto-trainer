@@ -281,7 +281,6 @@ class CanInterface(DeviceInterface):
         self._audio = AudioData()
 
         self.load_cell_factor = 1.0
-        self.pressure_cell_factor = 1024 / 3.3
 
     @property
     def magnet_config(self):
@@ -462,14 +461,6 @@ class CanInterface(DeviceInterface):
     @load_cell_factor.setter
     def load_cell_factor(self, factor: float):
         self._load_cell_factor = factor
-
-    @property
-    def pressure_cell_factor(self):
-        return self._pressure_cell_factor
-
-    @pressure_cell_factor.setter
-    def pressure_cell_factor(self, factor: float):
-        self._pressure_cell_factor = factor
 
     def are_addresses_valid(self) -> bool:
         """
@@ -1231,9 +1222,7 @@ class CanInterface(DeviceInterface):
             ),
             JerryCANCmdType.PRESSURE_READ: lambda msg: PressureReading(
                 target=_addr2tgt(msg.dst_id),
-                pressure=float(
-                    msg.pressure_read.pressure_mv) / 1000.0 * self.pressure_cell_factor if
-                msg.pressure_read.error == 0 else 0
+                pressure=float(msg.pressure_read.pressure)
             ),
             JerryCANCmdType.RGB_LED: lambda msg: ColorLed(
                 target=_addr2tgt(msg.dst_id),
