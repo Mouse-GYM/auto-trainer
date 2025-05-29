@@ -25,8 +25,7 @@ class FrameIndexCategory(enum.IntEnum):
             value = v
         if value >= 0:
             return FrameIndexCategory.RECORDING_OR_OFFLINE_PROCESSING
-        if value == -1:
-            return FrameIndexCategory.ONLINE_NO_RECORDING
-        if value == -2:
-            return FrameIndexCategory.EOF_RECORDING
+        for k, m in cls._member_map_.items():
+            if m.value == value:
+                return m
         return super()._missing_(value)

@@ -164,7 +164,9 @@ class SystemMachine(StateMachine):
         if self.algorithm.can_perform_intersession_analysis() and self.state == SystemState.cage:
             self.enter_intersession()
         else:
-            self._inference.set_inference_to_online()
+            inference = self._inference
+            if inference is not None:
+                inference.set_inference_to_online()
             # self.exit_intersession()
 
     def _intersession_ended(self):
