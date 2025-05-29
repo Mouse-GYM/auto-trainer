@@ -275,11 +275,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         if offline_queue is not None:
             logger.notice("Setting inference back to online with SWITCH_TO_ONLINE")
             empty = numpy.zeros(offline_queue.shape, dtype=numpy.uint8)
-            for cdx in range(offline_queue.camera_count):
-                for _ in range(offline_queue.frames_per_camera):
-                    while offline_queue.put(empty, cdx, FrameIndexCategory.SWITCH_TO_ONLINE,
-                                            allow_overflow=False) != BufferResult.Ok:
-                        time.sleep(0.005)
+            self._offline_queue.put_frame_index_category(empty, FrameIndexCategory.SWITCH_TO_ONLINE)
 
     def start(self, network_queue: FixedArrayMultiQueue) -> bool:
         # if self._msg_thread is None:
@@ -518,6 +514,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     # t_start_offline = time.time()
                     logger.notice("Detected stop of recording in progress ; status=%s ; mode=%s prev=%s frames_indices=%s",
                                   self._status, mode, prev_mode, frames_indices)
+
                     for cdx, cam_pose_path, cur_cam_indices, cur_h5_live in zip(range_cams, pose_paths, cur_cams_indices, cur_h5_live_batch):
                         if len(cur_h5_live) == 0:
                             continue
