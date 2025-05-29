@@ -210,6 +210,7 @@ class PoseProcess(Process):
                         elif cmd == InferenceCommandMessageKind.ProcessOffline:
                             self._set_process_offline()
                         elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
+                            # NB: not anymore used
                             self._process_live_when_ready = True
                         else:
                             logger.warning("Unhandled command: %s", cmd)
@@ -234,26 +235,27 @@ class PoseProcess(Process):
             if i_q_get_output is not None and i_q_get_output(frame_buffer, frames_indices):
                 mode_used = InferenceMode.Live if i_q is self._live_input_queue else InferenceMode.Offline
                 t_last_data = t_now
-                if (frames_indices < 0).any() and not (frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all():
-                    logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices)
-
                 if (frames_indices[:, -1] < 0).any():
-                    if i_q is self._offline_input_queue and (
+                    if not (frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all():
+                        logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices)
+
+                    if (
                         numpy.isin(frames_indices[:, -1], [
                             FrameIndexCategory.ONLINE_NO_RECORDING, FrameIndexCategory.SWITCH_TO_ONLINE]).any()
                     ):
-                        self._set_process_live()
-                        reset_locals()
-                        # continue
-
-                    elif (  # self._mode == InferenceMode.Offline and
+                        if i_q is not self._live_input_queue:
+                            self._set_process_live()
+                            reset_locals()
+                    # elif required:
+                    elif (
                         i_q is self._live_input_queue and (
                         frames_indices[:, -1] == FrameIndexCategory.EOF_RECORDING
+                        # and certainly not (frames_indices[:, -1] == SWITCH_TO_ONLINE).any() ... or any such
                     ).any()):
                         self._input_queue = self._offline_input_queue
                         self._mode = InferenceMode.Offline
                         logger.notice("Switched to offline queue: %s", frames_indices)
-                        # self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
+                        self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
                         # always get new ref:
                         reset_locals()
                         # continue
