@@ -278,7 +278,13 @@ class TestAutoClamp:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.touch()
         machine.algorithm.clean_raw_data_on_inactive_session = feature_enabled
-        machine.algorithm.end_session()
+        def patch_timer(delay, func):
+            m = mock.create_autospec(Timer)
+            m.start.side_effect = func
+            return m
+        with mock.patch("autotrainer.behavior.system_machine._clean_raw_data_timer", autospec=True) as m_timer:
+            m_timer.side_effect = patch_timer
+            machine.algorithm.end_session()
         for p in file_paths:
             assert not p.exists() if feature_enabled else p.exists()
 

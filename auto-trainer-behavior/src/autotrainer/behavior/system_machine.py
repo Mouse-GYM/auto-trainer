@@ -24,6 +24,13 @@ from .tunnel_device_protocol import TunnelDeviceProtocol
 logger = logging.getLogger(__name__)
 
 
+# NB: this is to ensure we can patch the exact desired one (and only that one) from tests:
+_clean_raw_data_timer = Timer
+_auto_clamp_release_timer = Timer
+_pellet_loading_timer = Timer
+#
+
+
 class SystemMachine(StateMachine):
     states = [e for e in SystemState]
 
@@ -159,16 +166,22 @@ class SystemMachine(StateMachine):
 
     @staticmethod
     def _clean_raw_data(project):
-        for cam_name in (project.camera_1, project.camera_2):
-            paths = map(Path, chain(
-                project.get_video_path(cam_name, session=project.session.value, allow_overwrite=True),
-                [project.get_intersession_pose_path(cam_name, session=project.session.value, allow_overwrite=True,
-                                                    suffix="_live")],
-            ))
-            for path in paths:
-                if path.exists():
-                    logger.debug("removing %s", path)
-                    path.unlink(missing_ok=True)
+        session_value = project.session.value
+        def do_clean():
+            for cam_name in (project.camera_1, project.camera_2):
+                paths = map(Path, chain(
+                    project.get_video_path(cam_name, session=session_value, allow_overwrite=True),
+                    [project.get_intersession_pose_path(cam_name, session=session_value, allow_overwrite=True,
+                                                        suffix="_live")],
+                ))
+                for path in paths:
+                    if path.exists():
+                        logger.debug("removing %s", path)
+                        path.unlink(missing_ok=True)
+        # using timer given when called the monitor data queue might still be writing to disk/still be in live session
+        # making the deletes to not work here
+        t = _clean_raw_data_timer(3, do_clean)
+        t.start()
 
     def _session_ended(self):
         # 5/16/25 should not remove auto-clamp at session end for current testing.
@@ -269,7 +282,7 @@ class SystemMachine(StateMachine):
                 if self._tunnel_device is not None:
                     logger.debug(
                         f"\tchanging magnet intensity to baseline in {self.algorithm.auto_clamp_release_delay} seconds")
-                    timer = Timer(self.algorithm.auto_clamp_release_delay,
+                    timer = _auto_clamp_release_timer(self.algorithm.auto_clamp_release_delay,
                                   lambda: self._update_magnet_position(self.algorithm.baseline_intensity))
                     timer.start()
 
@@ -278,7 +291,7 @@ class SystemMachine(StateMachine):
             self._tunnel_device.update_head_magnet_intensity(position)
 
     def _pellet_loading(self):
-        self._timer1 = Timer(2, self._consider_end_session)
+        self._timer1 = _pellet_loading_timer(2, self._consider_end_session)
         self._timer1.start()
 
     def _pellet_sending(self):
