@@ -243,9 +243,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         for _ in range(self._offline_queue.camera_count):
             self._intersession_block.pose_data_list.append([])
             self._intersession_block.pose_data_dict.append({})
-        # we can reset the offline queue *before* we start feed intersession thread:
-        # for cdx in range(self._offline_queue.camera_count):
-        #     self._offline_queue.reset_writer(cdx)
         self._send_message(InferenceCommandMessageKind.ProcessOffline)
         # once the message is sent, also wait a bit,
         # this is to give some time to inference process to switch to offline queue,
@@ -670,6 +667,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
                     if pose_data is None:
                         # end of intersession replay
+                        # we can reset the offline queue here, it's safe :
+                        # the pose process has switched to its online queue at this point
+                        for cdx in range(self._offline_queue.camera_count):
+                            self._offline_queue.reset_writer(cdx)
                         if ib is not None:
                             fill_live_end = True
                             for cdx, pdl, pdd, cur_h5_idx, cur_h5_dss in zip(

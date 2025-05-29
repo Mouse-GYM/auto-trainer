@@ -192,8 +192,6 @@ class SystemMachine(StateMachine):
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
             self.exit_intersession()
-        else:
-            self._inference.set_inference_to_online()
 
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
