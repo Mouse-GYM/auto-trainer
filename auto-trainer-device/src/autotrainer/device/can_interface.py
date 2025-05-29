@@ -760,17 +760,6 @@ class CanInterface(DeviceInterface):
         return (addr is not None and
                 self._jc.LoadCellTare(addr, 0, CanInterface.next_uuid()) == 0)
 
-    def tare_pressure_sensor(self) -> bool:
-        """
-        Tare the pressure sensor so the current reading is 0.
-
-        Returns:
-            bool: True if successful else False
-        """
-        addr = self._tgt2addr(Target.MAGNET_DEVICE)
-        return (addr is not None and
-                self._jc.PressureSensorTare(addr, 0, CanInterface.next_uuid()) == 0)
-
     def _set_servo_position(self, motor: Motor, position, config: ServoConfig):
         """
         Set the position of a servo motor.

@@ -175,9 +175,8 @@ class CanDevice(Device):
 
             SystemCommandKind.UPDATE_SCALE_TARE:
                 lambda data: (
-                    self._interface.tare_load_cell(),
-                    self._interface.tare_pressure_sensor()
-                )[-1],
+                    self._interface.tare_load_cell()
+                ),
 
             SystemCommandKind.SET_DIGITAL_OUTPUT:
                 lambda data: (
