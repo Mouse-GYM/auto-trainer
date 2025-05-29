@@ -5,7 +5,7 @@ import pytest
 from autotrainer.core.message.frame_index import FrameIndexCategory
 
 
-@pytest.mark.parametrize("idx", [0, 1, 2])
+@pytest.mark.parametrize("idx", [0, 1, 42])
 def test_frame_index_positive_or_null(idx):
     assert FrameIndexCategory(idx) is FrameIndexCategory.RECORDING_OR_OFFLINE_PROCESSING
 
@@ -21,8 +21,23 @@ def test_frame_index_eof_record(idx):
 
 
 @pytest.mark.parametrize("idx", [-3, -3.0, "-3"])
-def test_frame_index_specials(idx):
+def test_frame_index_eof_offline_process(idx):
     assert FrameIndexCategory(idx) is FrameIndexCategory.EOF_OFFLINE_PROCESSING
+
+
+@pytest.mark.parametrize("idx", [-4, -4.0, "-4"])
+def test_frame_index_padding(idx):
+    assert FrameIndexCategory(idx) is FrameIndexCategory.PADDING
+
+
+@pytest.mark.parametrize("idx", [-5, -5.0, "-5"])
+def test_frame_index_switch_to_offline(idx):
+    assert FrameIndexCategory(idx) is FrameIndexCategory.SWITCH_TO_OFFLINE_MODE
+
+
+@pytest.mark.parametrize("idx", [-6, -6.0, "-6"])
+def test_frame_index_switch_to_offline(idx):
+    assert FrameIndexCategory(idx) is FrameIndexCategory.SWITCH_TO_ONLINE
 
 
 @pytest.mark.parametrize("idx,xp_err", [

@@ -15,7 +15,7 @@ class FrameIndexCategory(enum.IntEnum):
     # NB: positive or zero frane index means recording online or offline reprocessing.
 
     @classmethod
-    def _missing_(cls, value: int):
+    def _missing_(cls, value):
         if isinstance(value, str):
             value = int(value)
         if isinstance(value, float):
