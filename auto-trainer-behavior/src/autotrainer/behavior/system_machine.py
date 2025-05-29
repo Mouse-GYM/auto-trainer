@@ -154,25 +154,32 @@ class SystemMachine(StateMachine):
         self._algorithm.system_state = SystemState.cage
         self._pellet_machine.environment_changed()
 
+    @staticmethod
+    def _clean_raw_data(project):
+        for cam_name in (project.camera_1, project.camera_2):
+            paths = map(Path, chain(
+                project.get_video_path(cam_name, session=project.session.value, allow_overwrite=True),
+                [project.get_intersession_pose_path(cam_name, session=project.session.value, allow_overwrite=True,
+                                                    suffix="_live")],
+            ))
+            for path in paths:
+                if path.exists():
+                    logger.debug("removing %s", path)
+                    path.unlink(missing_ok=True)
+
     def _session_ended(self):
         # 5/16/25 should not remove auto-clamp at session end for current testing.
         # TODO: make this configurable.
         # if self._tunnel_device is not None:
         #    self._update_magnet_position(self.algorithm.baseline_intensity)
 
-        prj = self.project
+        project = self.project
         can_perform_analysis = self.algorithm.can_perform_intersession_analysis()
         if can_perform_analysis and self.state == SystemState.cage:
             self.enter_intersession()
-        if not can_perform_analysis and prj is not None:
-            for cam_name in (prj.camera_1, prj.camera_2):
-                for path in map(Path, chain(
-                        prj.get_video_path(cam_name, session=prj.session.value, allow_overwrite=True),
-                        [prj.get_intersession_pose_path(cam_name, session=prj.session.value, allow_overwrite=True,
-                                                        suffix="_live")],
-                )):
-                    logger.debug("removing %s", path)
-                    path.unlink(missing_ok=True)
+        if not can_perform_analysis and project is not None:
+            if self._algorithm.clean_raw_data_on_inactive_session:
+                self._clean_raw_data(project)
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:

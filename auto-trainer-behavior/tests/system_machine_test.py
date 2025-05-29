@@ -262,7 +262,8 @@ class TestAutoClamp:
         ]
         assert machine._pellet_device.play_tone.call_args_list == []
 
-    def test_on_session_end_saved_files_deleted_if_mouse_not_seen(self, machine, project_info):
+    @pytest.mark.parametrize("feature_enabled", [False, True])
+    def test_clean_raw_data_on_session_end(self, machine, project_info, feature_enabled):
         machine.project = project_info
         machine.algorithm.start_session()
         machine.algorithm.intersession_enabled = True
@@ -276,9 +277,10 @@ class TestAutoClamp:
         for p in file_paths:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.touch()
+        machine.algorithm.clean_raw_data_on_inactive_session = feature_enabled
         machine.algorithm.end_session()
         for p in file_paths:
-            assert not p.exists()
+            assert not p.exists() if feature_enabled else p.exists()
 
 
 if __name__ == '__main__':
