@@ -1,9 +1,10 @@
 import logging
+import typing
 
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import QLabel, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout
 
-from autotrainer.core import MessageHandler
+from autotrainer.core import MessageHandler, AnimalSubject
 from autotrainer.model import EnvironmentProvider, HardwareVersion
 from autotrainer.pyside import CardWidget
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -190,10 +191,19 @@ class HardwareControlContent(ContentWidget):
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
 
+        self.setEnabled(False)
+
         self._model.property_changed += self._model_property_changed
 
     def set_is_capture_active(self, is_active: bool):
         self._tare_button.setEnabled(is_active)
+
+    def set_selected_animal(self, animal: typing.Optional[AnimalSubject]):
+        if animal is not None:
+            self._x_pos.setValue(animal.pellet_x)
+            self._y_pos.setValue(animal.pellet_y)
+            self._z_pos.setValue(animal.pellet_z)
+            self._position.setValue(animal.baseline_magnet_intensity)
 
     def _update_position(self):
         self._model.update_head_magnet_intensity(self._position.value())
@@ -218,5 +228,7 @@ class HardwareControlContent(ContentWidget):
             self._update_title(value)
             if value:
                 self._pellet_version.setText(value.replace("emulator", "").strip())
+                self.setEnabled(True)
             else:
                 self._pellet_version.setText("(unknown version)")
+                self.setEnabled(False)
