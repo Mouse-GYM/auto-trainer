@@ -3,10 +3,11 @@ import queue
 import uuid
 from pathlib import Path
 
-from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
+from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind,
+                              MessageHandler, Motor,
                               EventManager)
-from autotrainer.device import (CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery, 
-                                DeviceConnectionm , CompoundMovementFile)
+from autotrainer.device import (CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery,
+                                DeviceConnection, CompoundMovementFile)
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
@@ -284,7 +285,8 @@ class AppModel(ObservableObject):
                     MotorConfigurationFile(self._hardware_configuration))
             except Exception as err:
                 logger.error(
-                    "failed to read motor configuration file %s: %s", self._hardware_configuration, err)
+                    "failed to read motor configuration file %s: %s", self._hardware_configuration,
+                    err)
                 self.hardware_configuration = None
 
         self.is_connected = True
