@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-import typing
+from typing import List, Optional
 from collections import namedtuple
 
 from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QWidget, QLabel, QComboBox, QHBoxLayout, QVBoxLayout, QStackedLayout
 
-from autotrainer.inference import PoseTuple
+from autotrainer.inference import PoseTuple, PoseAlgorithm
 from autotrainer.pyside.CardWidget import CardWidget
 from .QtGLImageView import QGLImageView
 from .QtCaptureSettings import QCaptureSettings
 
-image_data = namedtuple("image_data", ("bytes", "width", "height"))
+
+ImageData = namedtuple("image_data", ("bytes", "width", "height"))
 
 
 class QCaptureView(QWidget):
@@ -27,10 +28,10 @@ class QCaptureView(QWidget):
         self._fps = 0
         self._cameras = list()
 
-        self._next_frame_data: image_data | None = None
+        self._next_frame_data: Optional[ImageData] = None
         self._is_frame_dirty = False
 
-        self._next_frame_points: typing.List[PoseTuple] | None = None
+        self._next_frame_points: List[PoseTuple] = []
         self._are_points_dirty = False
 
         self._card_widget = CardWidget()
@@ -102,6 +103,10 @@ class QCaptureView(QWidget):
 
         self.recording_indicator_changed.connect(lambda b: self._setRecordingEnabledIndicator(b))
 
+    @Slot(PoseAlgorithm)
+    def algo_initialised(self, pose_algo: PoseAlgorithm):
+        self._image.set_pose_algo(pose_algo)
+
     def set_is_capture_active(self, is_active: bool):
         self._camera.setEnabled(not is_active)
 
@@ -159,8 +164,8 @@ class QCaptureView(QWidget):
 
         # self._fps_label.setText(f"{self._fps:.1f}")
 
-    @Slot(image_data, float)
-    def refresh_image(self, data: image_data, fps: float):
+    @Slot(ImageData, float)
+    def refresh_image(self, data: ImageData, fps: float):
         self._next_frame_data = data
 
         self._is_frame_dirty = True
@@ -171,15 +176,12 @@ class QCaptureView(QWidget):
     def update_pose(self):
         if self._next_frame_points is None or not self._are_points_dirty:
             return
-
         self._image.set_points(self._next_frame_points)
-
         self._are_points_dirty = False
 
     @Slot(list)
-    def refresh_pose(self, points: typing.List[PoseTuple]):
+    def refresh_pose(self, points: List[PoseTuple]):
         self._next_frame_points = points
-
         self._are_points_dirty = True
 
     def _source_changed(self, index):

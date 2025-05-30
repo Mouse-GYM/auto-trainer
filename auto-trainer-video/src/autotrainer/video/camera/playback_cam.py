@@ -16,7 +16,7 @@ class PlaybackCam(CameraBase):
         self._file_name = file_name
         self._file_name = urllib.parse.unquote(file_name)
         self._video_capture = None
-        self._make_precise_timestamps = False
+        self._make_precise_timestamps = True
         # make_precise_timestamps:
         # used to bypass/workaround analyse code only being able to handle very precise timestamps
 

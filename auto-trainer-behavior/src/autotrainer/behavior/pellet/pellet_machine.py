@@ -121,7 +121,6 @@ class PelletMachine(StateMachine):
             self._api_status_token = None
 
     def after_load_pellet(self):
-        # unused
         self._algorithm.pellet_loaded()
 
     def before_cover_pellet(self):

@@ -1,5 +1,7 @@
 import logging
+import math
 import multiprocessing
+import operator
 import os
 import queue
 import signal
@@ -9,7 +11,7 @@ import typing
 from itertools import chain
 from pathlib import Path
 from statistics import mean
-from typing import Optional, Union, List, Dict, TextIO
+from typing import Optional, Union, List, Dict, TextIO, Tuple
 from dataclasses import dataclass
 from enum import Enum
 from threading import Thread
@@ -29,7 +31,8 @@ from autotrainer.behavior import SegmentationConfiguration, DetectionConfigurati
 from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
-    DlcPoseModel, MemoryPoseModel, InferenceMode
+    DlcPoseModel, MemoryPoseModel, InferenceMode, PoseResponse
+from autotrainer.inference.pose_elements import SceneElement
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
 logger = get_verbose_logger(__name__)
@@ -137,10 +140,16 @@ class IntersessionDetection:
 
 
 class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol):
-    def __init__(self, pose_algorithm: PoseAlgorithm):
+
+    def __init__(self,
+        pose_algorithm: PoseAlgorithm,
+    ):
         super().__init__(event_names=(
             'pose_response_ready',
             'detection_result_ready',
+            'diamond_triangle_offset_changed',
+            'star_triangle_offset_changed',
+            'algo_initialised',
         ))
 
         mp_ctx = get_mp_ctx()
@@ -154,6 +163,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._is_enabled = False
         self._model_location = ""
         self._algorithm = pose_algorithm
+        # self._algorithm.pose_changed += self._pose_changed
+        # no need, we have the pose response in the monitor data queue function
 
         self._msg_thread = None
         self._data_thread = None
@@ -174,6 +185,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._intersession_detection: Optional[IntersessionDetection] = None
         self._stop_recorded = threading.Event()
         self._recording_live_batch = 64
+        self._monitored_parts_offsets = [
+            (SceneElement.Diamond, SceneElement.Triangle),
+            (SceneElement.Star, SceneElement.Triangle),
+        ]
+        self._parts_offsets: Dict[Tuple[str, str], Tuple[float, float, float]] = {}
 
     @property
     def project(self) -> ProjectInfo:
@@ -223,6 +239,18 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
     @property
     def pose_algorithm(self) -> PoseAlgorithm:
         return self._algorithm
+
+    def get_parts_offsets(self, part1: str, part2: str) -> Optional[Tuple[float, float, float]]:
+        """Return the offsets of part2 relative to part1"""
+        part1 = SceneElement(part1).value
+        part2 = SceneElement(part2).value
+        v_offsets = self._parts_offsets.get((part1, part2), None)
+        if v_offsets is None:
+            v_offsets = self._parts_offsets.get((part2, part1), None)
+            if v_offsets is None:
+                return math.nan, math.nan, math.nan
+            v_offsets = tuple(map(operator.neg, v_offsets))
+        return v_offsets
 
     def _check_previous_offline_thread(self):
         cur_off = self._offline_thread
@@ -470,10 +498,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         self._set_status(InferenceStatus.waiting)
                         self._algorithm.initialize(context)
                         self._send_message(InferenceCommandMessageKind.Start)
-                        # NB: having to create columns here:
-                        # part_names is only set when algo is initialized after it's been created:
-                        columns = pandas.MultiIndex.from_product([self._algorithm.part_names, axis_labels],
-                                                                 names=["bodyparts", "coords"])
+                        self.algo_initialised(self._algorithm)
+                        columns = self._algorithm.pose_result_columns
                     elif msg == InferenceStatusMessageKind.Loading:
                         self._set_status(InferenceStatus.loading)
                     elif msg == InferenceStatusMessageKind.Performance:
@@ -603,7 +629,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 t0 = time.time()
                                 cur = numpy.vstack(cam_h5_live)
                                 indices = range(cur.shape[0])
-                                df_xyp = pandas.DataFrame(cur, columns=columns, index=indices)
+                                df_xyp = pandas.DataFrame(cur,
+                                                          columns=columns, index=indices)
                                 df_xyp["frame_idx"] = list(cam_indices)  # also store the frame idx with the results
                                 df_xyp.to_hdf(cam_pose_path,
                                               "df_with_missing",
@@ -638,11 +665,21 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                            len(pose_data), frames_indices)
                             continue
                         pose_data = new_pose_data
-                    # Normalize locations.  Not all consumers will be scaling the location by the original frame size.
-                    for frame in pose_data:
-                        frame[:, 0] /= self._frame_width
-                        frame[:, 1] /= self._frame_height
-                    response = self._algorithm.process(pose_data)
+                    #
+                    response = self._algorithm.process(pose_data, pairs_3d_offsets=self._monitored_parts_offsets)
+                    #
+                    for part1, part2 in self._monitored_parts_offsets:
+                        pair_key = (part1, part2)
+                        prev = self._parts_offsets.get(pair_key, None)
+                        cur = response.get_parts_3d_offset(part1, part2)
+                        self._parts_offsets[pair_key] = cur
+                        if prev != cur:
+                            # if we wanted as "global" property event handling:
+                            # self._on_property_changed(f"parts_offset_{part1}_{part2}", cur, prev)
+                            if pair_key == (SceneElement.Diamond, SceneElement.Triangle):
+                                self.diamond_triangle_offset_changed(cur)
+                            elif pair_key == (SceneElement.Star, SceneElement.Triangle):
+                                self.star_triangle_offset_changed(cur)
                     self.pose_response_ready(response)
 
                 elif mode == InferenceMode.Offline:

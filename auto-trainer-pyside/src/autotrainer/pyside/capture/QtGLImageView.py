@@ -1,4 +1,4 @@
-import typing
+from typing import List, Optional, Dict
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QSurfaceFormat, QBrush, QPixmap, QPen
@@ -6,11 +6,13 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QHBoxLayout, QGraphicsPixmapItem, \
     QGraphicsEllipseItem
 
-from autotrainer.inference import PoseTuple
+from autotrainer.inference import PoseTuple, PoseAlgorithm
+from autotrainer.inference.pose_elements import SceneElement
 
 
 class QGLImageView(QWidget):
     def __init__(self, width: int = 450, height: int = 300):
+        """Image view for a camera, (width, height) is the dimention of the output model"""
         super().__init__()
 
         self._width = float(width)
@@ -35,27 +37,23 @@ class QGLImageView(QWidget):
         view.setFixedSize(width, height)
         view.setContentsMargins(0, 0, 0, 0)
 
-        pen = QPen(Qt.GlobalColor.red)
-        brush = QBrush(Qt.GlobalColor.red)
-        pen.setWidth(1)
-        self._pellet_point = QGraphicsEllipseItem(0, 0, 5, 5)
-        self._pellet_point.setPen(pen)
-        self._pellet_point.setBrush(brush)
-        self._pellet_point.setZValue(100)
-        self._pellet_point.setPos(-10, -10)
+        self._points: Dict[SceneElement, QGraphicsEllipseItem] = {}
 
-        self._scene.addItem(self._pellet_point)
+        def add_managed_point(color, elem):
+            point = self._points[elem] = QGraphicsEllipseItem(0, 0, 5, 5)
+            pen = QPen(color)
+            pen.setWidth(1)
+            point.setPen(pen)
+            point.setBrush(QBrush(color))
+            point.setZValue(100)
+            point.setPos(-10, -10)
+            self._scene.addItem(point)
 
-        pen = QPen(Qt.GlobalColor.magenta)
-        brush = QBrush(Qt.GlobalColor.magenta)
-        pen.setWidth(1)
-        self._star_point = QGraphicsEllipseItem(0, 0, 5, 5)
-        self._star_point.setPen(pen)
-        self._star_point.setBrush(brush)
-        self._star_point.setZValue(100)
-        self._star_point.setPos(-10, -10)
-
-        self._scene.addItem(self._star_point)
+        add_managed_point(Qt.GlobalColor.red, SceneElement.Pellet)
+        add_managed_point(Qt.GlobalColor.magenta, SceneElement.Star)
+        add_managed_point(Qt.GlobalColor.blue, SceneElement.Diamond)
+        add_managed_point(Qt.GlobalColor.green, SceneElement.Triangle)
+        add_managed_point(Qt.GlobalColor.white, SceneElement.LH_grab)
 
         self._pixmap = None
 
@@ -65,13 +63,15 @@ class QGLImageView(QWidget):
         self.setLayout(layout)
 
         self._count = 0
+        self._pose_algo: Optional[PoseAlgorithm] = None
+
+    def set_pose_algo(self, pose_algo: PoseAlgorithm):
+        self._pose_algo = pose_algo
 
     def set_data_size(self, width, height):
-        scale = self._height / height
-        self._width_factor = width * scale
-        self._height_factor = height * scale
-
         self._pixmap = None
+        self._width_factor = self._width / width
+        self._height_factor = self._height / height
 
     def set_data(self, image: QImage):
         if self._pixmap is None:
@@ -82,9 +82,12 @@ class QGLImageView(QWidget):
         else:
             self._pixmap.setPixmap(QPixmap.fromImage(image))
 
-    def set_points(self, points: typing.List[PoseTuple]):
-        # TODO Massive hack for current model.
-        pellet = points[0]
-        star = points[7]
-        self._pellet_point.setPos(pellet[0] * self._width_factor, pellet[1] * self._height_factor)
-        self._star_point.setPos(star[0] * self._width_factor, star[1] * self._height_factor)
+    def set_points(self, points: List[PoseTuple]):
+        pose_algo = self._pose_algo
+        if pose_algo is None:
+            return
+        width_f = self._width_factor
+        height_f = self._height_factor
+        for elem, point in self._points.items():
+            values = points[pose_algo.get_part_index(elem)]
+            point.setPos(values[0] * width_f, values[1] * height_f)
