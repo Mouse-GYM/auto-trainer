@@ -40,10 +40,9 @@ logger = get_verbose_logger(__name__)
 _local_do_debug = False
 
 
-def _shorten_text_file(path: Path, limit: int):
-    vals = [v for v in path.open().readlines() if v.strip()]
+def _shorten_text_file(lines: List[str], path: Path, limit: int):
     with path.open("w") as fh:
-        fh.write("\n".join(chain(vals[:limit], [''])))
+        fh.write("\n".join(chain(lines[:limit], [''])))
 
 def _short_vid_file(path: Path, limit: int):
     "ffmpeg -sseof -2 -i input.mp4 output.mp4"
@@ -649,12 +648,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     ]).any():   # .all():
                         continue
 
-                    if ( # prev_mode == InferenceMode.Live and
+                    if (  # prev_mode == InferenceMode.Live and
                         len(cams_read_h5_dss) == 0
-                        # and frames_indices is not None and (frames_indices >= 0).any()
+                        and frames_indices is not None and (frames_indices >= 0).any()
                     ):
                         t_start_offline = time.time()
-                        logger.notice("Opening live files for offline processing ; frames=%s", frames_indices)
+                        logger.notice("Opening live files for offline processing ; prev_mode=%s frames=%s",
+                                      prev_mode, frames_indices)
                         cams_read_h5_dss = [
                             open_h5_file(cam_pose_path)
                             for cam_pose_path in pose_paths
@@ -702,13 +702,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 for cam in cams:
                                     paths = list(map(Path, prj.get_video_path(cam, allow_overwrite=True)))
                                     ts_file = paths[1]
-                                    vals = [v for v in ts_file.read_text().split('\n') if v.strip()]
+                                    lines = [v for v in ts_file.read_text().split('\n') if v.strip()]
                                     # not the best way to do this,
                                     # maybe inspecting the video file for total frames is faster.
                                     # we must also have the info somewhere in active memory during this run/session
-                                    if len(vals) > min_nbr_pd:
+                                    if len(lines) > min_nbr_pd:
                                         logger.warning("%s: trimming raw data to %s entries", cam, min_nbr_pd)
-                                        _shorten_text_file(ts_file, min_nbr_pd)
+                                        _shorten_text_file(lines, ts_file, min_nbr_pd)
                                         # normally not necessary:
                                         # _short_vid_file(paths[0], min_nbr_pd)
                                         # _shorten_text_file(paths[2], min_nbr_pd)
@@ -783,6 +783,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 pdl.append(f)
 
                         tot_skipped += skipped
+
+                    else:
+                        assert ib is None and pose_data is not None
+                        if __debug__:
+                            logger.warning("invalid state: ib=None but pose_data%s", pose_data)
 
             except (KeyboardInterrupt, SystemExit):
                 raise
@@ -896,17 +901,17 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         if tot_frames_to_process < 0:
             # was somehow happening when video record was not properly closing *after* getting all data
             logger.warning("detected more in live data than in video files: diff=%s", tot_frames_to_process)
-            tot_frames_to_process = 0
+            tot_frames_to_process = max(videos_frame_count.values())
             # raise or not raise ?
 
         # above must be done before following one:
         # pad the smaller one(s) with negative frame idx
         m = max(map(len, cams_already_processed_idx_list))
         for cdx, cam_indices in enumerate(cams_already_processed_idx_list):
-            cams_already_processed_idx_list[cdx] = np.concatenate([
+            cams_already_processed_idx_list[cdx] = list(np.concatenate([
                 np.asarray(cam_indices),
-                np.asarray([-1] * (m - len(cam_indices)))
-            ])
+                np.asarray([FrameIndexCategory.PADDING] * (m - len(cam_indices)))
+            ]))
         cams_already_processed_idx = numpy.asarray(cams_already_processed_idx_list)
         logger.debug("tot_frames_to_process=%s first cams_already_processed_idx=%s",
                  tot_frames_to_process, cams_already_processed_idx[:, 0])
@@ -959,14 +964,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # end while frame_idx < tot_frames_to_process
 
         # fill current batch of each cam:
-        for cdx, cnt in enumerate(cams_sent_frame_count):
-            r = self._frames_per_camera - cnt % self._frames_per_camera
-            if r != self._frames_per_camera:
-                logger.notice("cam-%s: padding %s empty frames to cam", cdx, r)
-                for _ in range(r):
-                    while self._offline_queue.put(empty_frame, cdx, FrameIndexCategory.PADDING,
-                                                  allow_overflow=False) != BufferResult.Ok:
-                        time.sleep(0.005)
+        for cdx in range(n_cams):
+            self._offline_queue.pad_cur_batch(cdx, empty_frame)
 
         if _local_do_debug:
             for cdx in range(n_cams):
