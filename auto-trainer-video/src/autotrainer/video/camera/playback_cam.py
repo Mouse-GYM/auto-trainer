@@ -16,6 +16,9 @@ class PlaybackCam(CameraBase):
         self._file_name = file_name
         self._file_name = urllib.parse.unquote(file_name)
         self._video_capture = None
+        self._make_precise_timestamps = False
+        # make_precise_timestamps:
+        # used to bypass/workaround analyse code only being able to handle very precise timestamps
 
     def init(self):
         self._video_capture = cv2.VideoCapture(self._file_name)
@@ -38,6 +41,7 @@ class PlaybackCam(CameraBase):
                 break
             time.sleep(0.5 * delta)
         super().capture()
-        new_last_when = self._capture_start + self._frame_count * int(1e9 / self._fps)
-        self._last_when = new_last_when
-        return frame[:, :, 1], self._last_when  # new_last_when
+        if self._make_precise_timestamps:
+            new_last_when = self._capture_start + self._frame_count * int(1e9 / self._fps)
+            self._last_when = new_last_when
+        return frame[:, :, 1], self._last_when

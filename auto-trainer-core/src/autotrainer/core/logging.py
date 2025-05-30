@@ -1,9 +1,12 @@
 import logging
-from typing import Optional, Dict, Union
+from typing import Optional, Dict, Union, TextIO
 
 import sys
 import verboselogs
 import coloredlogs
+
+
+_LogLevelT = Union[str, int]
 
 
 DEFAULT_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -46,13 +49,13 @@ def setup_logging(
     name: str = "main",
     *,
     base_logger_name: Optional[str] = None,  # i.e: "root" logger if None
-    logger_level: str = logging.NOTSET,
-    root_level: str = logging.INFO,
+    logger_level: _LogLevelT = logging.NOTSET,
+    root_level: _LogLevelT = logging.INFO,
     log_format: str = MULTIPROC_LOG_FORMAT,
     date_format: str = "%H:%M:%S.%f",
     level_styles: Optional[Dict[str, Dict[str, str]]] = None,
     field_styles: Optional[Dict[str, Dict[str, str]]] = None,
-    stream = sys.stdout,
+    stream: TextIO = sys.stdout,
 ) -> verboselogs.VerboseLogger:
     global _already_setup
 

@@ -224,11 +224,28 @@ class FixedArrayMultiQueue:
         self._read_index = (read_idx_value + 1) % self._depth
         return True
 
-    def put_frame_index_category(self, frame, frame_idx: FrameIndexCategory, timeout: float = 5):
+    def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 5):
         t_end = time.time() + timeout
         for cdx in range(self._cam_count):
             for _ in range(self._frames_per_camera):
                 while self.put(frame, cdx, frame_idx, allow_overflow=False) != BufferResult.Ok:
                     if time.time() > t_end:
-                        raise RuntimeError("cam-%s: timeout waiting space in array multiqueue", cdx)
+                        raise RuntimeError(f"cam-{cdx}: timeout waiting space in array multiqueue")
+                    time.sleep(0.005)
+
+    def pad_cur_batch(
+        self,
+        cam_idx: int,
+        frame: numpy.ndarray,
+        *,
+        timeout: float = 5,
+        pad_idx: int = FrameIndexCategory.PADDING,
+    ):
+        t_end = time.time() + timeout
+        cur_batch_idx = self._batch_index[cam_idx]
+        if cur_batch_idx != 0:
+            for _ in range(self._frames_per_camera - cur_batch_idx):
+                while self.put(frame, cam_idx, pad_idx, allow_overflow=False) != BufferResult.Ok:
+                    if time.time() > t_end:
+                        raise RuntimeError(f"timeout waiting space for cam-{cam_idx} in {self}")
                     time.sleep(0.005)

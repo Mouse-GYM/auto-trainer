@@ -10,6 +10,7 @@ from multiprocessing import Process, Value, Array
 from typing import Callable, Dict, Union, Optional, List
 
 import numpy
+import verboselogs
 
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue
 from autotrainer.core.logging import get_verbose_logger, set_logger_level
@@ -180,7 +181,7 @@ class VideoCapture(Process):
     def run(self):
 
         from autotrainer.core.logging import setup_logging
-        setup_logging(root_level=logging.DEBUG)
+        setup_logging(root_level=verboselogs.VERBOSE)
 
         logger.info("%s: started running", self)
 
@@ -301,9 +302,7 @@ class VideoCapture(Process):
                         record_start_frame_idx = None
                         assert isinstance(self._network_queue, FixedArrayMultiQueue)
                         # pad:
-                        for _ in range(self._network_queue.frames_per_camera - cnt_net_q_put % self._network_queue.frames_per_camera):
-                            while net_q_put(empty_frame, self._camera_idx, FrameIndexCategory.PADDING) != BufferResult.Ok:
-                                time.sleep(0.001)
+                        self._network_queue.pad_cur_batch(self._camera_idx, empty_frame)
                         logger.info("sending EOF_RECORDING frame indices to signify eof recording")
                         for _ in range(self._network_queue.frames_per_camera):
                             while net_q_put(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING) != BufferResult.Ok:
