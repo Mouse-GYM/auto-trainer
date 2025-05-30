@@ -1,5 +1,6 @@
 import logging
 
+import verboselogs
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton, \
     QFileDialog, QTabWidget, QVBoxLayout
@@ -132,17 +133,27 @@ class PreferencesContent(QWidget):
 
     def _create_advanced_tab(self):
         self._log_level_combobox = QComboBox(None)
-        self._log_level_combobox.addItem("Warning", logging.WARNING)
-        self._log_level_combobox.addItem("Info", logging.INFO)
-        self._log_level_combobox.addItem("Debug", logging.DEBUG)
+        self._log_level_combobox.addItem("Success", verboselogs.SUCCESS)  # 0
+        self._log_level_combobox.addItem("Warning", logging.WARNING)  # 1
+        self._log_level_combobox.addItem("Notice", verboselogs.NOTICE)  # 2
+        self._log_level_combobox.addItem("Info", logging.INFO)  # 3
+        self._log_level_combobox.addItem("Verbose", verboselogs.VERBOSE)  # 4
+        self._log_level_combobox.addItem("Debug", logging.DEBUG)  # 5
+        self._log_level_combobox.addItem("Spam", verboselogs.SPAM)  # 6
         self._log_level_combobox.currentIndexChanged.connect(self._log_level_changed)
 
-        if self._preferences.log_level == logging.INFO:
-            self._log_level_combobox.setCurrentIndex(1)
-        elif self._preferences.log_level == logging.DEBUG:
-            self._log_level_combobox.setCurrentIndex(2)
-        else:
-            self._log_level_combobox.setCurrentIndex(0)
+        levels_to_idx = {
+            verboselogs.SUCCESS: 0,
+            logging.WARNING: 1,
+            verboselogs.NOTICE: 2,
+            logging.INFO: 3,
+            verboselogs.VERBOSE: 4,
+            logging.DEBUG: 5,
+            verboselogs.SPAM: 6,
+        }
+
+        v = levels_to_idx.get(self._preferences.log_level, 3)  # default to info
+        self._log_level_combobox.setCurrentIndex(v)
 
         self._log_location_edit = QLineEdit(None, None)
         self._log_location_edit.setText(self._preferences.log_location)
