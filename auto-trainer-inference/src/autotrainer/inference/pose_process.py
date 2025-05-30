@@ -130,6 +130,10 @@ class PoseProcess(Process):
     def _set_process_offline(self):
         logger.notice("got processing offline")
         # self._input_queue = self._offline_input_queue
+        # do not change immediately the used input queue to offline,
+        # we'll wait the camera capture sends the EOF_RECORDING frame index batch,
+        # so that we process entirely the live queue up to eof_recording,
+        # handling all possible live recorded frames.
         self._mode = InferenceMode.Offline
         self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
 
@@ -210,7 +214,7 @@ class PoseProcess(Process):
                         elif cmd == InferenceCommandMessageKind.ProcessOffline:
                             self._set_process_offline()
                         elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
-                            # NB: not anymore used
+                            # NB: not anymore used actually.
                             self._process_live_when_ready = True
                         else:
                             logger.warning("Unhandled command: %s", cmd)

@@ -242,7 +242,12 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         for _ in range(self._offline_queue.camera_count):
             self._intersession_block.pose_data_list.append([])
             self._intersession_block.pose_data_dict.append({})
+
         self._send_message(InferenceCommandMessageKind.ProcessOffline)
+        # ProcessOffline is not anymore used.
+        # the trigger for pose process to switch to offline queue processing is now delivered by
+        # camera capture itself, which send an EOF_RECORDING when a video/session record finishes.
+
         # once the message is sent, also wait a bit,
         # this is to give some time to inference process to switch to offline queue,
         # and also reset its offline read queue side:
@@ -979,6 +984,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # when it has reached end of offline processing:
         self._offline_queue.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_OFFLINE_PROCESSING)
 
+        # ProcessLiveWhenReady is async vs EOF_OFFLINE_PROCESSING just send before
+        # it's not anymore actually used by pose process, but we still deliver it, for log purpose mainly.
         self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
 
         logger.success("passed %s frames per camera frame_count=%s ; "
