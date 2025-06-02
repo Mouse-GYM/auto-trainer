@@ -219,8 +219,7 @@ class TestAutoClamp:
             m = mock.create_autospec(Timer)
             m.start.side_effect = func
             return m
-        with mock.patch("autotrainer.behavior.system_machine.Timer", autospec=True) as m_timer:
-            m_timer.side_effect = patch_timer
+        with mock.patch("autotrainer.behavior.system_machine._auto_clamp_release_timer", new=patch_timer):
             machine.algorithm.head_fixation_enabled = False  # Disable auto-clamp
         # This above mock patch allow to not have to :
         #   time.sleep(machine.algorithm.auto_clamp_release_delay + 0.0005)
@@ -282,8 +281,7 @@ class TestAutoClamp:
             m = mock.create_autospec(Timer)
             m.start.side_effect = func
             return m
-        with mock.patch("autotrainer.behavior.system_machine._clean_raw_data_timer", autospec=True) as m_timer:
-            m_timer.side_effect = patch_timer
+        with mock.patch("autotrainer.behavior.system_machine._clean_raw_data_timer", new=patch_timer):
             machine.algorithm.end_session()
         for p in file_paths:
             assert not p.exists() if feature_enabled else p.exists()
