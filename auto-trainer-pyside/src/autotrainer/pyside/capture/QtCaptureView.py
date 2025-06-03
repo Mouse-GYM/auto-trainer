@@ -149,14 +149,17 @@ class QCaptureView(QWidget):
         self._image.set_data_size(width, height)
 
     def update_image(self):
-        if self._next_frame_data is None or not self._is_frame_dirty:
+        next_frame = self._next_frame_data
+        if next_frame is None or not self._is_frame_dirty:
             return
 
-        image = QImage(self._next_frame_data.bytes, self._next_frame_data.width, self._next_frame_data.height,
+        image = QImage(next_frame.bytes, next_frame.width, next_frame.height,
                        QImage.Format_Grayscale8)
 
-        if self._next_frame_data.height != self._image_height or self._next_frame_data.width != self._image_width:
-            image = image.scaled(self._image_width, self._image_height, Qt.KeepAspectRatio)
+        if next_frame.height != self._image_height or next_frame.width != self._image_width:
+            image = image.scaled(self._image_width, self._image_height,
+                                 Qt.AspectRatioMode.IgnoreAspectRatio,  # really convert/scale to give image w X h
+                                 )
 
         self._image.set_data(image)
 

@@ -1,3 +1,4 @@
+import warnings
 from typing import List, Optional, Dict
 
 from PySide6.QtCore import Qt
@@ -70,8 +71,12 @@ class QGLImageView(QWidget):
 
     def set_data_size(self, width, height):
         self._pixmap = None
-        self._width_factor = self._width / width
-        self._height_factor = self._height / height
+        self._data_width = width
+        self._data_height = height
+        scale_w = self._width / self._data_width
+        scale_h = self._height / self._data_height
+        self._width_factor = scale_w
+        self._height_factor = scale_h
 
     def set_data(self, image: QImage):
         if self._pixmap is None:
@@ -81,6 +86,18 @@ class QGLImageView(QWidget):
             self._scene.addItem(self._pixmap)
         else:
             self._pixmap.setPixmap(QPixmap.fromImage(image))
+        # display view is (self._width, self._height)
+        # output coordinates are in (self._data_width, self._data_height)
+        # image is supposed to also be in same size than display view
+        img_size = image.width(), image.height()
+        cur_size = self._width, self._height
+        if img_size != cur_size:
+            raise RuntimeError(f"received image not same size than display view: {img_size} vs {cur_size}")
+            # # warnings.warn(f"received image not same size than display view: {img_size} vs {cur_size}", UserWarning)
+            # scale_w = self._width / img_size[0]
+            # scale_h = self._height / img_size[1]
+            # self._width_factor = scale_w
+            # self._height_factor = scale_h
 
     def set_points(self, points: List[PoseTuple]):
         pose_algo = self._pose_algo
