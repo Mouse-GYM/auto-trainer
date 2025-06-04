@@ -28,7 +28,31 @@ class ObservableObject(Events):
     #     return True
 
     def _on_property_changed(self, property_name: str, new_value, old_value):
-        """Will only generate an event if the new value does not pass the == test with the old value."""
+        """
+        Generate a property-changed event if the new value does not pass the == test with the old value.
+
+        This is a convenience method for only generating an event when the value has actually changed (as defined by
+        `==`).  If `==` is not an appropriate test for a given property, a subclass should override this method for
+        handling that property, or the caller should use the property_changed event directly.
+
+        A common pattern for subclasses would be:
+
+        ```
+        def set_age(self, value: int):
+            self._age = self._on_property_changed("age", value, self._age)
+        ```
+
+        This will only generate an event if the new value is different from the old value and update the member variable
+        with the new value if it changed.
+
+        An important note for event handlers is that the property on the object will be the old value at the time the
+        event is handled.  Handlers must use the `new_value` argument to get the new value.
+
+        Args:
+            property_name (str): Name of the property that changed.
+            new_value: New value of the property.
+            old_value: Old/current value of the property.
+        """
         if old_value == new_value:
             return old_value
 
