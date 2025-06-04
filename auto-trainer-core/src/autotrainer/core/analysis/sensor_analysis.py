@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import logging
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Optional
 
 import numpy
 
@@ -11,7 +11,7 @@ from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
 from ..perf_monitor import PerfMonitor
 from ..observable_object import ObservableObject
-from ..message import AudioSpectrumMessage
+from ..message.audio_spectrum_message import AudioSpectrumMessage
 
 from .headbar_pressure_monitor import HeadbarPressureMonitor
 from .load_cell_monitor import LoadCellMonitor
