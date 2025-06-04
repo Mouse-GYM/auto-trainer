@@ -28,13 +28,6 @@ class BehaviorEventKind(IntEnum, Enum):
     pelletAcknowledgeToken = 1298
     pelletExternalToken = 1299
 
-    # small diff: was on 15XX block (so below/after sessionXX),
-    # keeping the 15xxx block but moved after the above other pelletXXX = ...
-    # to keep logically grouped.
-    pelletSeen = 1501
-    pelletPresented = 1502
-    pelletSuccessfulReach = 1503
-
     sessionStarting = 1301
     sessionStarted = 1302
     sessionEnding = 1303
@@ -46,6 +39,10 @@ class BehaviorEventKind(IntEnum, Enum):
     dayStarted = 1401
     dayIncreasePellet = 1411
     dayDecreasePellet = 1412
+
+    pelletSeen = 1501
+    pelletPresented = 1502
+    pelletSuccessfulReach = 1503
 
     headfixBaselineChanged = 1601
     headfixLoadCellChanged = 1602
@@ -72,6 +69,9 @@ class BehaviorEventKind(IntEnum, Enum):
     intersessionDetectionError = 1715
     intersessionDetectionSave = 1716
     intersessionDetectionSaveError = 1717
+    intersessionShiftX = 1731
+    intersessionShiftY = 1732
+    intersessionShiftZ = 1733
 
     headFixationForceDetectorChanged = 1801
     headFixationEnabled = 1802
