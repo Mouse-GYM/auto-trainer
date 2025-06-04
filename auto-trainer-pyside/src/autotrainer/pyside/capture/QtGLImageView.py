@@ -1,6 +1,7 @@
 import warnings
 from typing import List, Optional, Dict
 
+import numpy
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QSurfaceFormat, QBrush, QPixmap, QPen
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
@@ -21,6 +22,9 @@ class QGLImageView(QWidget):
 
         self._width_factor = 1
         self._height_factor = 1
+        self._raw_img_scale_w = self._raw_img_scale_h = 1
+        self._raw_img_w = self._width
+        self._raw_img_h = self._height
 
         self._scene = QGraphicsScene(0, 0, width, height)
 
@@ -73,38 +77,34 @@ class QGLImageView(QWidget):
         self._pixmap = None
         self._data_width = width
         self._data_height = height
-        scale_w = self._width / self._data_width
-        scale_h = self._height / self._data_height
-        self._width_factor = scale_w
-        self._height_factor = scale_h
+        self._width_factor = self._data_width / self._width
+        self._height_factor = self._data_height / self._height
+
+    def set_scale_aspect_ratio(self, scale_w, scale_h):
+        self._raw_img_scale_w = scale_w
+        self._raw_img_scale_h = scale_h
 
     def set_data(self, image: QImage):
-        if self._pixmap is None:
-            self._pixmap = QGraphicsPixmapItem(QPixmap.fromImage(image))
+        pixmap = QPixmap.fromImage(image)
+        if self._pixmap is None:  # or True
+            # if self._pixmap is not None:
+            #     self._scene.removeItem(self._pixmap)
+            self._pixmap = QGraphicsPixmapItem(pixmap)
             self._pixmap.setZValue(0)
             self._pixmap.setPos(0, 0)
             self._scene.addItem(self._pixmap)
         else:
-            self._pixmap.setPixmap(QPixmap.fromImage(image))
-        # display view is (self._width, self._height)
-        # output coordinates are in (self._data_width, self._data_height)
-        # image is supposed to also be in same size than display view
-        img_size = image.width(), image.height()
-        cur_size = self._width, self._height
-        if img_size != cur_size:
-            raise RuntimeError(f"received image not same size than display view: {img_size} vs {cur_size}")
-            # # warnings.warn(f"received image not same size than display view: {img_size} vs {cur_size}", UserWarning)
-            # scale_w = self._width / img_size[0]
-            # scale_h = self._height / img_size[1]
-            # self._width_factor = scale_w
-            # self._height_factor = scale_h
+            self._pixmap.setPixmap(pixmap)
 
     def set_points(self, points: List[PoseTuple]):
         pose_algo = self._pose_algo
         if pose_algo is None:
             return
-        width_f = self._width_factor
-        height_f = self._height_factor
+        width_f = self._raw_img_scale_w / self._width_factor
+        height_f = self._raw_img_scale_h / self._height_factor
+        # values are in coordinates (self._data_width, self._data_height)
         for elem, point in self._points.items():
             values = points[pose_algo.get_part_index(elem)]
-            point.setPos(values[0] * width_f, values[1] * height_f)
+            x = values[0] * width_f
+            y = values[1] * height_f
+            point.setPos(x, y)

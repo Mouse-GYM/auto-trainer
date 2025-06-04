@@ -4,7 +4,7 @@ from typing import List, Optional
 from collections import namedtuple
 
 from PySide6.QtCore import Qt, Signal, Slot, QSize
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QWidget, QLabel, QComboBox, QHBoxLayout, QVBoxLayout, QStackedLayout
 
 from autotrainer.inference import PoseTuple, PoseAlgorithm
@@ -149,20 +149,28 @@ class QCaptureView(QWidget):
         self._image.set_data_size(width, height)
 
     def update_image(self):
-        next_frame = self._next_frame_data
-        if next_frame is None or not self._is_frame_dirty:
+        frame = self._next_frame_data
+        if frame is None or not self._is_frame_dirty:
             return
 
-        image = QImage(next_frame.bytes, next_frame.width, next_frame.height,
-                       QImage.Format_Grayscale8)
+        image = QImage(frame.bytes, frame.width, frame.height, QImage.Format_Grayscale8)
 
-        if next_frame.height != self._image_height or next_frame.width != self._image_width:
-            image = image.scaled(self._image_width, self._image_height,
-                                 Qt.AspectRatioMode.IgnoreAspectRatio,  # really convert/scale to give image w X h
-                                 )
-
+        image = image.scaled(self._image_width, self._image_height,
+                             # NB: this keep the aspect ratio of the image:
+                             Qt.AspectRatioMode.KeepAspectRatio,
+                             # so result image may not be same than requested W x H
+                             )
+        if (image.width(), image.height()) != (self._image_width, self._image_height):
+            scale_w = image.width() / self._image_width
+            scale_h = image.height() / self._image_height
+            self._image.set_scale_aspect_ratio(scale_w, scale_h)
+            # tried to: but makes hard crash/segfault
+            # padded = QImage(self._image_width, self._image_height, image.format())
+            # padded.fill(Qt.GlobalColor.black)
+            # painter = QPainter(padded)
+            # painter.drawImage(0, 0, image)
+            # image = padded
         self._image.set_data(image)
-
         self._is_frame_dirty = False
 
         # self._fps_label.setText(f"{self._fps:.1f}")
@@ -170,9 +178,7 @@ class QCaptureView(QWidget):
     @Slot(ImageData, float)
     def refresh_image(self, data: ImageData, fps: float):
         self._next_frame_data = data
-
         self._is_frame_dirty = True
-
         if fps != self._fps:
             self._fps = fps
 
