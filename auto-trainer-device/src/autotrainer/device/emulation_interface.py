@@ -199,42 +199,51 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_magnet_servo(self, position: float, _save: bool = False) -> bool:
+    def move_magnet_servo(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set magnet position {position}")
             self._positions[Motor.TUNNEL_MAGNET_SERVO] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_gate_servo(self, position: float, _save: bool = False) -> bool:
+    def move_gate_servo(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set gate position {position}")
             self._positions[Motor.TUNNEL_GATE_SERVO] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_x(self, position: float, _save: bool = False) -> bool:
+    def set_motor_x(self, position) -> bool:
+        return self.move_motor_x(position, True)
+
+    def move_motor_x(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute x {position}")
             self._positions[Motor.PELLET_X_MOTOR] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_y(self, position: float, _save: bool = False) -> bool:
+    def set_motor_y(self, position) -> bool:
+        return self.move_motor_y(position, True)
+
+    def move_motor_y(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute y {position}")
             self._positions[Motor.PELLET_Y_MOTOR] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_z(self, position: float, _save: bool = False) -> bool:
+    def set_motor_z(self, position) -> bool:
+        return self.move_motor_z(position, True)
+
+    def move_motor_z(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute z {position}")
             self._positions[Motor.PELLET_Z_MOTOR] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_load(self, position: float, _save: bool = False) -> bool:
+    def move_load_servo(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set load arm {position}")
             self._positions[Motor.PELLET_LOAD_SERVO] = position + 0.00001
@@ -244,14 +253,14 @@ class EmulationInterface(DeviceInterface):
     def retrieve_pellet(self) -> bool:
         if self._is_open:
             logger.info("retreive pellet")
-        return self.set_load(self._configs[Motor.PELLET_LOAD_SERVO].maximum_position)
+        return self.move_load_servo(self._configs[Motor.PELLET_LOAD_SERVO].maximum_position)
 
     def scoop_pellet(self) -> bool:
         if self._is_open:
             logger.info("scoop pellet")
-        return self.set_load(self._configs[Motor.PELLET_LOAD_SERVO].minimum_position)
+        return self.move_load_servo(self._configs[Motor.PELLET_LOAD_SERVO].minimum_position)
 
-    def set_cover(self, position, _save: bool = False) -> bool:
+    def move_cover_servo(self, position, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set barrier arm {position}")
             self._positions[Motor.PELLET_COVER_SERVO] = position + 0.00001
@@ -261,12 +270,12 @@ class EmulationInterface(DeviceInterface):
     def release_pellet(self) -> bool:
         if self._is_open:
             logger.info("release pellet")
-        return self.set_cover(self._configs[Motor.PELLET_COVER_SERVO].minimum_position)
+        return self.move_cover_servo(self._configs[Motor.PELLET_COVER_SERVO].minimum_position)
 
     def cover_pellet(self) -> bool:
         if self._is_open:
             logger.info("cover pellet")
-        return self.set_cover(self._configs[Motor.PELLET_COVER_SERVO].maximum_position)
+        return self.move_cover_servo(self._configs[Motor.PELLET_COVER_SERVO].maximum_position)
 
     def fixed_position(self) -> bool:
         self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))

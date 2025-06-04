@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
-    QLayout, QVBoxLayout, QFileDialog
+    QLayout, QVBoxLayout, QFileDialog, QFrame
 
 import qtawesome as qta
 
@@ -25,13 +25,19 @@ def add_position(label: str, s_min: int, s_max: int) -> (QLayout, QSpinBox):
     position_layout.addWidget(QLabel(label), 0)
 
     pos = QSpinBox()
-    pos.setMinimumWidth(140)
+    pos.setMinimumWidth(40)
     pos.setMinimum(s_min)
     pos.setMaximum(s_max)
     pos.setWrapping(False)
     position_layout.addWidget(pos, 0)
 
-    return position_layout, pos
+    moveButton = QPushButton("Move")
+    position_layout.addWidget(moveButton, 0)
+
+    setButton = QPushButton("Set")
+    position_layout.addWidget(setButton, 0)
+
+    return position_layout, pos, moveButton, setButton
 
 
 class PelletControl(QWidget):
@@ -111,32 +117,58 @@ class PelletControl(QWidget):
         s_layout = QHBoxLayout()
         s_layout.setContentsMargins(2, 2, 2, 2)
 
-        p_layout, self._x_pos = add_position("X (mm):", -10, 10)
-        self._x_pos.valueChanged.connect(self._update_x)
+        p_layout, self._x_pos, moveButton, setButton = add_position("X (mm):", -10, 10)
+        moveButton.clicked.connect(lambda: self._move_x())
+        setButton.clicked.connect(lambda: self._set_x())
         s_layout.addLayout(p_layout)
 
         s_layout.addStretch(1)
 
-        p_layout, self._y_pos = add_position("Y (mm):", -10, 10)
-        self._y_pos.valueChanged.connect(self._update_y)
+        line = QFrame()
+        line.setFrameShape(QFrame.VLine)
+        line.setFrameShadow(QFrame.Sunken)
+        s_layout.addWidget(line)
+
+        s_layout.addStretch(1)
+
+        p_layout, self._y_pos, moveButton, setButton = add_position("Y (mm):", -10, 10)
+        moveButton.clicked.connect(lambda: self._move_y())
+        setButton.clicked.connect(lambda: self._set_y())
         s_layout.addLayout(p_layout)
 
         s_layout.addStretch(1)
 
-        p_layout, self._z_pos = add_position("Z (mm):", -10, 10)
-        self._z_pos.valueChanged.connect(self._update_z)
+        line = QFrame()
+        line.setFrameShape(QFrame.VLine)
+        line.setFrameShadow(QFrame.Sunken)
+        s_layout.addWidget(line)
+
+        s_layout.addStretch(1)
+
+        p_layout, self._z_pos, moveButton, setButton = add_position("Z (mm):", -10, 10)
+        moveButton.clicked.connect(lambda: self._move_z())
+        setButton.clicked.connect(lambda: self._set_z())
         s_layout.addLayout(p_layout)
 
         return s_layout
 
-    def _update_x(self):
+    def _set_x(self):
         self._app_model.set_x(self._x_pos.value())
 
-    def _update_y(self):
+    def _set_y(self):
         self._app_model.set_y(self._y_pos.value())
 
-    def _update_z(self):
+    def _set_z(self):
         self._app_model.set_z(self._z_pos.value())
+
+    def _move_x(self):
+        self._app_model.move_x(self._x_pos.value())
+
+    def _move_y(self):
+        self._app_model.move_y(self._y_pos.value())
+
+    def _move_z(self):
+        self._app_model.move_z(self._z_pos.value())
 
     def _model_property_changed(self, name: str, value, _old_value):
         if name == "travel_limits":

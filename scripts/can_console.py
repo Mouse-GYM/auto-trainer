@@ -453,20 +453,16 @@ motor_to_set_command = {
     Motor.PELLET_X_MOTOR: SystemCommandKind.SET_X,
     Motor.PELLET_Y_MOTOR: SystemCommandKind.SET_Y,
     Motor.PELLET_Z_MOTOR: SystemCommandKind.SET_Z,
-    Motor.TUNNEL_MAGNET_SERVO: SystemCommandKind.SET_MAGNET_INTENSITY,
-    Motor.TUNNEL_GATE_SERVO: SystemCommandKind.SET_GATE_SERVO,
-    Motor.PELLET_COVER_SERVO: SystemCommandKind.SET_COVER_SERVO,
-    Motor.PELLET_LOAD_SERVO: SystemCommandKind.SET_LOAD_SERVO
 }
 
 motor_to_move_command = {
     Motor.PELLET_X_MOTOR: SystemCommandKind.MOVE_X,
     Motor.PELLET_Y_MOTOR: SystemCommandKind.MOVE_Y,
     Motor.PELLET_Z_MOTOR: SystemCommandKind.MOVE_Z,
-    Motor.TUNNEL_MAGNET_SERVO: SystemCommandKind.SET_MAGNET_INTENSITY,
-    Motor.TUNNEL_GATE_SERVO: SystemCommandKind.SET_GATE_SERVO,
-    Motor.PELLET_COVER_SERVO: SystemCommandKind.SET_COVER_SERVO,
-    Motor.PELLET_LOAD_SERVO: SystemCommandKind.SET_LOAD_SERVO
+    Motor.TUNNEL_MAGNET_SERVO: SystemCommandKind.MOVE_MAGNET_SERVO,
+    Motor.TUNNEL_GATE_SERVO: SystemCommandKind.MOVE_GATE_SERVO,
+    Motor.PELLET_COVER_SERVO: SystemCommandKind.MOVE_COVER_SERVO,
+    Motor.PELLET_LOAD_SERVO: SystemCommandKind.MOVE_LOAD_SERVO
 }
 
 
@@ -485,14 +481,18 @@ def handle_motor_command(motor: Motor, params, device_thread):
         print_motor_status = motor
 
     # set position
+    elif params[0] == 'move':
+        device_thread.send_message(motor_to_move_command[motor],
+                                   data=move_parameter(params[1:]), context="motor move")
+
+    # set position (no 'move')
+    elif numeric:
+        device_thread.send_message(motor_to_move_command[motor],
+                                   data=move_parameter(params[0:]), context="motor move")
+
     elif params[0] == 'set':
         device_thread.send_message(motor_to_set_command[motor],
                                    data=move_parameter(params[1:]), context="motor set")
-
-    # set position (no 'set')
-    elif numeric:
-        device_thread.send_message(motor_to_set_command[motor],
-                                   data=move_parameter(params[0:]), context="motor set")
 
     # sent to home position
     elif params[0] == 'home':
@@ -568,10 +568,12 @@ def print_help():
 
     print("<motor>                            "
           " ::Motor status")
-    print("<motor> [set] <pos> [<rate>]       "
+    print("<motor> [move] <pos> [<rate>]      "
           " ::Move servo pos [0:120] (deg) rate [0:100] (%)\n"
           "                                   "
           " ::Move stepper pos [0:35] (mm) rate [0:100] (%)")
+    print("<motor> set <pos>                  "
+          " ::Set stepper send location pos [0:35] (mm)")
     print("<motor> step <start> <end> <step>"
           " ::Step degrees or mms at a time")
     print("<motor> config read                "

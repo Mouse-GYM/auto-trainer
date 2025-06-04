@@ -73,7 +73,7 @@ def test_notify_tare_load_cell():
 
 @pytest.mark.canbus
 def test_notify_set_magnet():
-    notify_command(SystemCommandKind.SET_MAGNET_INTENSITY, 103, data=3.0, expect_ack=False)
+    notify_command(SystemCommandKind.MOVE_MAGNET_SERVO, 103, data=3.0, expect_ack=False)
 
 
 @pytest.mark.canbus
@@ -89,6 +89,21 @@ def test_notify_set_y():
 @pytest.mark.canbus
 def test_notify_set_z():
     notify_command(SystemCommandKind.SET_Z, 10.6, data=6, expect_ack=False)
+
+
+@pytest.mark.canbus
+def test_notify_move_x():
+    notify_command(SystemCommandKind.MOVE_X, 10.4, data=4, expect_ack=False)
+
+
+@pytest.mark.canbus
+def test_notify_move_y():
+    notify_command(SystemCommandKind.MOVE_Y, 10.5, data=5, expect_ack=False)
+
+
+@pytest.mark.canbus
+def test_notify_move_z():
+    notify_command(SystemCommandKind.MOVE_Z, 10.6, data=6, expect_ack=False)
 
 
 @pytest.mark.canbus
@@ -208,6 +223,9 @@ if __name__ == '__main__':
     test_notify_set_x()
     test_notify_set_y()
     test_notify_set_z()
+    test_notify_move_x()
+    test_notify_move_y()
+    test_notify_move_z()
     test_notify_set_home()
     test_notify_load_pellet()
     test_notify_send_pellet()

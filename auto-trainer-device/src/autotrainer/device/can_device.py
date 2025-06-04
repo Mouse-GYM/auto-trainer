@@ -81,35 +81,35 @@ class CanDevice(Device):
             SystemCommandKind.READ_MOTOR_CONFIGURATION:
                 lambda data: self._interface.request_motor_config(data),
 
-            SystemCommandKind.SET_MAGNET_INTENSITY:
-                lambda data: self._interface.set_magnet_servo(data),
+            SystemCommandKind.MOVE_MAGNET_SERVO:
+                lambda data: self._interface.move_magnet_servo(data),
 
-            SystemCommandKind.SET_LOAD_SERVO:
-                lambda data: self._interface.set_load_servo(data),
+            SystemCommandKind.MOVE_LOAD_SERVO:
+                lambda data: self._interface.move_load_servo(data),
 
-            SystemCommandKind.SET_COVER_SERVO:
-                lambda data: self._interface.set_cover_servo(data),
+            SystemCommandKind.MOVE_COVER_SERVO:
+                lambda data: self._interface.move_cover_servo(data),
 
-            SystemCommandKind.SET_GATE_SERVO:
-                lambda data: self._interface.set_gate_servo(data),
+            SystemCommandKind.MOVE_GATE_SERVO:
+                lambda data: self._interface.move_gate_servo(data),
 
             SystemCommandKind.SET_X:
-                lambda data: self._interface.set_x(data, True),
+                lambda data: self._interface.set_motor_x(data),
 
             SystemCommandKind.SET_Y:
-                lambda data: self._interface.set_y(data, True),
+                lambda data: self._interface.set_motor_y(data),
 
             SystemCommandKind.SET_Z:
-                lambda data: self._interface.set_z(data, True),
+                lambda data: self._interface.set_motor_z(data),
 
             SystemCommandKind.MOVE_X:
-                lambda data: self._interface.set_x(data, False),
+                lambda data: self._interface.move_motor_x(data, False),
 
             SystemCommandKind.MOVE_Y:
-                lambda data: self._interface.set_y(data, False),
+                lambda data: self._interface.move_motor_y(data, False),
 
             SystemCommandKind.MOVE_Z:
-                lambda data: self._interface.set_z(data, False),
+                lambda data: self._interface.move_motor_z(data, False),
 
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._home([cast(Motor, data)]),
@@ -454,37 +454,37 @@ class CanDevice(Device):
 
             if "x" in step:
                 location = CanDevice._to_tuple(step["x"])
-                self._interface.set_x(location)
+                self._interface.move_motor_x(location)
                 logger.debug(f"X to {location}")
 
             elif "y" in step:
                 location = CanDevice._to_tuple(step["y"])
-                self._interface.set_y(location)
+                self._interface.move_motor_y(location)
                 logger.debug(f"Y to {location}")
 
             elif "z" in step:
                 location = CanDevice._to_tuple(step["z"])
-                self._interface.set_z(location)
+                self._interface.move_motor_z(location)
                 logger.debug(f"Z to {location}")
 
             elif "load_arm" in step:
                 location = CanDevice._to_tuple(step["load_arm"])
-                self._interface.set_load_servo(location)
+                self._interface.move_load_servo(location)
                 logger.debug(f"Load Arm to {location}")
 
             elif "barrier_arm" in step:
                 location = CanDevice._to_tuple(step["barrier_arm"])
-                self._interface.set_cover_servo(location)
+                self._interface.move_cover_servo(location)
                 logger.debug(f"Barrier Arm to {location}")
 
             elif "magnet" in step:
                 location = CanDevice._to_tuple(step["magnet"])
-                self._interface.set_magnet_servo(location)
+                self._interface.move_magnet_servo(location)
                 logger.debug(f"Magnet to {location}")
 
             elif "gate" in step:
                 location = CanDevice._to_tuple(step["gate"])
-                self._interface.set_gate_servo(location)
+                self._interface.move_gate_servo(location)
                 logger.debug(f"Gate to {location}")
 
             elif "delay" in step:

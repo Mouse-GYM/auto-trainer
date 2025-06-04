@@ -1,8 +1,8 @@
 import logging
 import queue
 
-from autotrainer.core import (ObservableObject, ProjectInterval, SystemMessageHandler, SystemCommandKind,
-                              SensorAnalysis, Motor, EventManager, MessageHandler)
+from autotrainer.core import (ObservableObject, ProjectInterval, SystemMessageHandler,
+                              SystemCommandKind, SensorAnalysis, Motor, EventManager, MessageHandler)
 from autotrainer.device import DeviceConnection, CanDevice, HeadFix, CAN_IDENTIFIER, HAVE_CAN_DEVICE
 
 from tools.head_fix.model.user_settings import UserSettings
@@ -99,12 +99,12 @@ class AppModel(ObservableObject):
 
     def set_magnet_position(self, value: float):
         if self._device_connection is not None:
-            self._device_connection.send_message(SystemCommandKind.SET_MAGNET_INTENSITY, value,
+            self._device_connection.send_message(SystemCommandKind.MOVE_MAGNET_SERVO, value,
                                                  context="set magnet")
 
     def set_gate_position(self, value: float):
         if self._device_connection is not None:
-            self._device_connection.send_message(SystemCommandKind.SET_GATE_SERVO, value,
+            self._device_connection.send_message(SystemCommandKind.MOVE_GATE_SERVO, value,
                                                  context="set gate")
 
     def set_tone(self, freq: float, duration: float):

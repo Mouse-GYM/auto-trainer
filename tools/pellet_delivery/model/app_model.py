@@ -239,6 +239,15 @@ class AppModel(ObservableObject):
     def set_z(self, value: int):
         self._send_command(SystemCommandKind.SET_Z, value, context=uuid.uuid4())
 
+    def move_x(self, value: int):
+        self._send_command(SystemCommandKind.MOVE_X, value, context=uuid.uuid4())
+
+    def move_y(self, value: int):
+        self._send_command(SystemCommandKind.MOVE_Y, value, context=uuid.uuid4())
+
+    def move_z(self, value: int):
+        self._send_command(SystemCommandKind.MOVE_Z, value, context=uuid.uuid4())
+
     def set_config(self, config):
         self._send_command(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
 
