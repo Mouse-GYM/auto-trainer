@@ -155,7 +155,6 @@ class EventManager:
                     break
             wq.join()
 
-
     def post_event_content(self, kind: int, context: Optional[object] = None, when: Optional[datetime] = None,
                            index: int = None):
         """
@@ -228,19 +227,21 @@ class EventManager:
                 continue
 
             if not isinstance(info, EventInfo):
-                logger.debug("unexpected event info instance")
+                logger.warning("unexpected event info instance")
                 self._write_queue.task_done()
                 continue
 
             try:
-                if info.is_same(self._last_event_info):
+                is_same = info.is_same(self._last_event_info)
+            except Exception as err:  # Possibly coming from EventInfo subclass - cannot predict type of error.
+                if not is_same_error_reported:
+                    logger.error("is_same failed: %s", err)
+                    is_same_error_reported = True
+            else:
+                if is_same:
                     self._repeat_event_count += 1
                     self._write_queue.task_done()
                     continue
-            except Exception as ex:  # Possibly coming from EventInfo subclass - cannot predict type of error.
-                if not is_same_error_reported:
-                    logger.error(ex)
-                    is_same_error_reported = True
 
             try:
                 if self._repeat_event_count > 0:
@@ -263,4 +264,5 @@ class EventManager:
 
     def _process_event(self, info: EventInfo, repeat_count: int = 0):
         for plugin in self._plugins:
+            logger.spam("plugin %s: processing event %s", plugin, info)
             plugin.process_event(info, repeat_count)

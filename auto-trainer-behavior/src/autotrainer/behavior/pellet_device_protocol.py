@@ -10,21 +10,24 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     and state machine.
     """
 
-    def set_x(self, value: int, *, absolute: bool=True) -> Optional[UUID]: ...
+    def set_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]: ...
+
     """
     Request a move for the X stepper.
     
     :return: A token to expect from the device message handler when the request is complete.
     """
 
-    def set_y(self, value: int, *, absolute: bool=True) -> Optional[UUID]: ...
+    def set_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]: ...
+
     """
     Request a move for the Y stepper.
     
     :return: A token to expect from the device message handler when the request is complete.
     """
 
-    def set_z(self, value: int, *, absolute: bool=True) -> Optional[UUID]: ...
+    def set_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]: ...
+
     """
     Request a move for the Z stepper.
     

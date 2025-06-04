@@ -1,4 +1,3 @@
-import functools
 import logging
 from queue import Queue
 from uuid import UUID, uuid4
@@ -6,21 +5,10 @@ from typing import Optional
 
 from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
-from autotrainer.device import DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice, \
-    HeadFix, PelletDelivery
-
+from autotrainer.device import (DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
+                                HeadFix, PelletDelivery)
 
 logger = logging.getLogger(__name__)
-
-
-def _skip_relative(func):
-    @functools.wraps(func)
-    def wrapper(self, value, *, absolute: bool=True):
-        if not absolute:
-            logger.warning("relative value for %s not supported yet. SKIPPING command", func)
-            return None
-        return func(self, value, absolute=absolute)
-    return wrapper
 
 
 class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol):
@@ -42,6 +30,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         message_handler.property_changed += self._message_handler_property_changed
 
         self._head_magnet_position: Optional[float] = None
+
+        # Support for relative x, y, z movements and whether they are persistent as the Send position various between
+        # hardware implementations.  One the Alogus hardware is used exclusively, it should be possible to remove these
+        # and rely on SET_X/Y/Z commands with the extra arguments that support relative and/or movements that should
+        # not affect the Send position.
+        self._last_x: Optional[int] = None
+        self._last_y: Optional[int] = None
+        self._last_z: Optional[int] = None
 
     @property
     def tunnel_identifier(self) -> Optional[str]:
@@ -85,16 +81,28 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def tare_load_cell(self) -> Optional[UUID]:
         return self._send_with_token(self._tunnel_device, SystemCommandKind.UPDATE_SCALE_TARE)
 
-    @_skip_relative
-    def set_x(self, value: int, *, absolute: bool=True) -> Optional[UUID]:
+    def set_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+        if not absolute:
+            if self._last_x is None:
+                logger.warning("relative x movement requested, but no last x position is set")
+                return None
+            value += self._last_x
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_X, value)
 
-    @_skip_relative
-    def set_y(self, value: int, *, absolute: bool=True) -> Optional[UUID]:
+    def set_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+        if not absolute:
+            if self._last_y is None:
+                logger.warning("relative y movement requested, but no last y position is set")
+                return None
+            value += self._last_y
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Y, value)
 
-    @_skip_relative
-    def set_z(self, value: int, *, absolute: bool=True) -> Optional[UUID]:
+    def set_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+        if not absolute:
+            if self._last_z is None:
+                logger.warning("relative z movement requested, but no last z position is set")
+                return None
+            value += self._last_z
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Z, value)
 
     def send_home(self) -> Optional[UUID]:
@@ -116,6 +124,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._send_with_token(self._pellet_device, SystemCommandKind.PLAY_TONE, frequency)
 
     def connect(self, cmd_queue: Queue, animal: Optional[AnimalSubject] = None):
+        self._last_x = None
+        self._last_y = None
+        self._last_z = None
+
         if self.tunnel_identifier == CAN_IDENTIFIER:
             # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
             # configured to generate messages as frequently as the real device.
@@ -171,6 +183,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
             self._head_magnet_position = value
             self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value, old_value)
+        elif name == MessageHandler.DEVICE_X_PROPERTY:
+            self._last_x = value
+        elif name == MessageHandler.DEVICE_Y_PROPERTY:
+            self._last_y = value
+        elif name == MessageHandler.DEVICE_Y_PROPERTY:
+            self._last_z = value
         elif name == MessageHandler.FIRMWARE_VERSION_PROPERTY and value is not None:
             version = str(value).lower()
             if version.find("module") != -1:

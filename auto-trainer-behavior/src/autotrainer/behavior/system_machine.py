@@ -1,11 +1,12 @@
 import logging
 from enum import Enum
 from threading import Timer
+from typing import Optional
 
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor, \
-    HeadbarPressureMonitor
+from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor,
+                              HeadbarPressureMonitor)
 from autotrainer.inference import PoseResponse
 from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm
@@ -38,9 +39,13 @@ class SystemMachine(StateMachine):
          "before": "before_exit_intersession"}
     ]
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None, project_info: ProjectInfo = None,
-                 msg_handler: MessageHandler = None, analysis: SensorAnalysis = None,
-                 tunnel_device: TunnelDeviceProtocol = None, pellet_device: PelletDeviceProtocol = None,
+    def __init__(self,
+                 algorithm: Optional[BehaviorAlgorithm] = None,
+                 project_info: Optional[ProjectInfo] = None,
+                 msg_handler: MessageHandler = None,
+                 analysis: SensorAnalysis = None,
+                 tunnel_device: TunnelDeviceProtocol = None,
+                 pellet_device: PelletDeviceProtocol = None,
                  inference: InferenceProtocol = None):
 
         initial_state = SystemState.cage
@@ -130,6 +135,9 @@ class SystemMachine(StateMachine):
 
     def before_exit_tunnel(self):
         self._algorithm.system_state = SystemState.cage
+        # inference = self._inference
+        # assert isinstance(inference, InferenceModel)
+        # inference.set_inference_to_online()
 
     def after_exit_tunnel(self):
         self._update_magnet_position(self.algorithm.baseline_intensity)
@@ -155,6 +163,11 @@ class SystemMachine(StateMachine):
 
         if self.algorithm.can_perform_intersession_analysis() and self.state == SystemState.cage:
             self.enter_intersession()
+        else:
+            inference = self._inference
+            if inference is not None:
+                inference.set_inference_to_online()
+            # self.exit_intersession()
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
@@ -172,7 +185,8 @@ class SystemMachine(StateMachine):
 
     def _load_cell_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
-            EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
+                                                      context=value)
             return
 
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
@@ -220,12 +234,9 @@ class SystemMachine(StateMachine):
 
     def _pose_changed(self, response: PoseResponse):
         self._algorithm.pellet_seen(response.pellet_seen)
-
         self._algorithm.mouse_seen(response.mouse_seen)
-
         if not self._algorithm.pellet_delivery_enabled:
             return
-
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     def _algorithm_property_changed(self, name: str, value, _):
@@ -263,7 +274,7 @@ class SystemMachine(StateMachine):
         # or releasing states).  Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
         if (self.state == SystemState.tunnel
-            and self._pellet_machine.state in {PelletState.sending, PelletState.releasing, PelletState.monitoring}
+                and self._pellet_machine.state in {PelletState.sending, PelletState.releasing, PelletState.monitoring}
         ):
             return
 
@@ -279,9 +290,12 @@ class SystemMachine(StateMachine):
             self._algorithm.pellets_presented = res.pellets_presented
         dev = self._pellet_device
         if dev is not None:
-            for val, meth in ((res.pellet_x, dev.set_x), (res.pellet_y, dev.set_y), (res.pellet_z, dev.set_z)):
+            for val, meth, kind in ((res.pellet_x, dev.set_x, BehaviorEventKind.intersessionShiftX),
+                                    (res.pellet_y, dev.set_y, BehaviorEventKind.intersessionShiftY),
+                                    (res.pellet_z, dev.set_z, BehaviorEventKind.intersessionShiftZ)):
                 if val != 0:
                     meth(val, absolute=False)
+                    EventManager.default().post_event_content(kind, context=val)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

@@ -55,7 +55,7 @@ def test_video_capture_process(camera_url: str, iterations: int, capture_duratio
         camera = CaptureCameraAttrs(name="test", url=camera_url)
 
         attrs = CaptureAttrs(command_queue=cmd_queue, status=status, image_queue=image_queue, camera=camera,
-                             frame=frame)
+                             frame=frame, errors=None)
 
         process = VideoCapture(attrs)
 
