@@ -4,8 +4,8 @@ from threading import Timer
 
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor, \
-    HeadbarPressureMonitor
+from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor,
+                              HeadbarPressureMonitor)
 from autotrainer.inference import PoseResponse
 from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm
@@ -172,7 +172,8 @@ class SystemMachine(StateMachine):
 
     def _load_cell_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
-            EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
+                                                      context=value)
             return
 
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
@@ -263,7 +264,7 @@ class SystemMachine(StateMachine):
         # or releasing states).  Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
         if (self.state == SystemState.tunnel
-            and self._pellet_machine.state in {PelletState.sending, PelletState.releasing, PelletState.monitoring}
+                and self._pellet_machine.state in {PelletState.sending, PelletState.releasing, PelletState.monitoring}
         ):
             return
 
@@ -279,9 +280,12 @@ class SystemMachine(StateMachine):
             self._algorithm.pellets_presented = res.pellets_presented
         dev = self._pellet_device
         if dev is not None:
-            for val, meth in ((res.pellet_x, dev.set_x), (res.pellet_y, dev.set_y), (res.pellet_z, dev.set_z)):
+            for val, meth, kind in ((res.pellet_x, dev.set_x, BehaviorEventKind.intersessionShiftX),
+                                    (res.pellet_y, dev.set_y, BehaviorEventKind.intersessionShiftY),
+                                    (res.pellet_z, dev.set_z, BehaviorEventKind.intersessionShiftZ)):
                 if val != 0:
                     meth(val, absolute=False)
+                    EventManager.default().post_event_content(kind, context=val)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
