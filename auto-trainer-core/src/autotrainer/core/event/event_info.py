@@ -19,11 +19,11 @@ class EventInfo:
     to prevent id duplication, if desired.  For most event sinks, the `str()` value is also used as part of the 
     output.  Using and `IntEnum` or similar that generates a descriptive string by default is encouraged.
     """
-    when: datetime = None
+    when: datetime
     """
     The time the event occurred.  This is typically presented as a date/time string in the output.
     """
-    index: int = None
+    index: int
     """
     An time-based index that may be more precise than standard date-time functions.  Typically set via 
     `time.perf_counter_ns()`.  The same method of indexing must be used across all `EventInfo` providers if indexing 
