@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import dataclasses
 from typing import List, Optional
 from collections import namedtuple
 
+import numpy
 from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QWidget, QLabel, QComboBox, QHBoxLayout, QVBoxLayout, QStackedLayout
@@ -13,7 +15,11 @@ from .QtGLImageView import QGLImageView
 from .QtCaptureSettings import QCaptureSettings
 
 
-ImageData = namedtuple("image_data", ("bytes", "width", "height"))
+@dataclasses.dataclass
+class ImageData:
+    array: numpy.ndarray
+    width: int
+    height: int
 
 
 class QCaptureView(QWidget):
@@ -153,23 +159,29 @@ class QCaptureView(QWidget):
         if frame is None or not self._is_frame_dirty:
             return
 
-        image = QImage(frame.bytes, frame.width, frame.height, QImage.Format_Grayscale8)
+        image = QImage(  # noqa
+            frame.array,  # frame.array.data can also be used
+            frame.width, frame.height,
+            QImage.Format_Grayscale8,
+        )
 
         image = image.scaled(self._image_width, self._image_height,
                              # NB: this keep the aspect ratio of the image:
                              Qt.AspectRatioMode.KeepAspectRatio,
                              # so result image may not be same than requested W x H
                              )
-        if (image.width(), image.height()) != (self._image_width, self._image_height):
+        if (image.width(), image.height()) == (self._image_width, self._image_height):
+            self._image.set_scale_aspect_ratio(1, 1)
+        else:
             scale_w = image.width() / self._image_width
             scale_h = image.height() / self._image_height
             self._image.set_scale_aspect_ratio(scale_w, scale_h)
-            # tried to: but makes hard crash/segfault
-            # padded = QImage(self._image_width, self._image_height, image.format())
-            # padded.fill(Qt.GlobalColor.black)
-            # painter = QPainter(padded)
-            # painter.drawImage(0, 0, image)
-            # image = padded
+            padded = QImage(self._image_width, self._image_height, image.format())
+            padded.fill(Qt.GlobalColor.black)
+            painter = QPainter(padded)
+            painter.drawImage(0, 0, image)
+            image = padded
+
         self._image.set_data(image)
         self._is_frame_dirty = False
 

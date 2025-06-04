@@ -65,7 +65,7 @@ class CameraContent(ContentWidget):
     @Slot(ndarray, float)
     def refresh_image(self, data: ndarray, fps: float):
         row, col = data.shape
-        self._capture_view.refresh_image(ImageData(data.flatten().tobytes(), col, row), fps)
+        self._capture_view.refresh_image(ImageData(data, col, row), fps)
 
     def set_is_editable(self, is_editable: bool):
         self._capture_view.set_is_editable(is_editable)

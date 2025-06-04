@@ -61,6 +61,7 @@ class QGLImageView(QWidget):
         add_managed_point(Qt.GlobalColor.white, SceneElement.LH_grab)
 
         self._pixmap = None
+        self._cur_image = None  # image must remain active to prevent segfault when pixmap continue use it.
 
         layout = QHBoxLayout()
         layout.addWidget(view)
@@ -74,6 +75,7 @@ class QGLImageView(QWidget):
         self._pose_algo = pose_algo
 
     def set_data_size(self, width, height):
+        # data size is the output model resolution
         self._pixmap = None
         self._data_width = width
         self._data_height = height
@@ -81,14 +83,15 @@ class QGLImageView(QWidget):
         self._height_factor = self._data_height / self._height
 
     def set_scale_aspect_ratio(self, scale_w, scale_h):
+        # used when source image is not same aspect ratio than the one used by self
         self._raw_img_scale_w = scale_w
         self._raw_img_scale_h = scale_h
 
     def set_data(self, image: QImage):
+        # retain a ref the used image to keep it alive after calling function also return
+        self._cur_image = image
         pixmap = QPixmap.fromImage(image)
-        if self._pixmap is None:  # or True
-            # if self._pixmap is not None:
-            #     self._scene.removeItem(self._pixmap)
+        if self._pixmap is None:
             self._pixmap = QGraphicsPixmapItem(pixmap)
             self._pixmap.setZValue(0)
             self._pixmap.setPos(0, 0)
@@ -107,4 +110,8 @@ class QGLImageView(QWidget):
             values = points[pose_algo.get_part_index(elem)]
             x = values[0] * width_f
             y = values[1] * height_f
-            point.setPos(x, y)
+            if x < 0 or y < 0 or x > self._width or y > self._height:
+                point.setVisible(False)
+            else:
+                point.setPos(x, y)
+                point.setVisible(True)
