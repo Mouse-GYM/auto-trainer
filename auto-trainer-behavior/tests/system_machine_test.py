@@ -1,6 +1,8 @@
 
 import logging
 from functools import partial
+from itertools import chain
+from pathlib import Path
 from threading import Timer
 from unittest import mock
 
@@ -8,7 +10,7 @@ import pytest
 import time
 
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
-from autotrainer.core import SensorAnalysis, HeadbarPressureMonitor
+from autotrainer.core import SensorAnalysis, HeadbarPressureMonitor, ProjectInfo
 
 from autotrainer.behavior import SystemState, PelletState, SystemMachine
 from autotrainer.behavior.analysis.intersession_process import IntersessionResponse
@@ -217,8 +219,7 @@ class TestAutoClamp:
             m = mock.create_autospec(Timer)
             m.start.side_effect = func
             return m
-        with mock.patch("autotrainer.behavior.system_machine.Timer", autospec=True) as m_timer:
-            m_timer.side_effect = patch_timer
+        with mock.patch("autotrainer.behavior.system_machine._auto_clamp_release_timer", new=patch_timer):
             machine.algorithm.head_fixation_enabled = False  # Disable auto-clamp
         # This above mock patch allow to not have to :
         #   time.sleep(machine.algorithm.auto_clamp_release_delay + 0.0005)
@@ -242,7 +243,7 @@ class TestAutoClamp:
     # 2025-05-18 Turning auto-clamp off at session end has been removed for the time being.  This may change once
     # auto-clamp is fully evaluated w/animals.
     @pytest.mark.parametrize("start_session", [False, True])
-    def auto_clamp_session_off_reset_to_baseline(self, machine, start_session):
+    def test_auto_clamp_session_off_reset_to_baseline(self, machine, start_session):
         machine.state = SystemState.tunnel
         if start_session:
             machine.algorithm.start_session()
@@ -255,13 +256,35 @@ class TestAutoClamp:
         # tun_dev.update_head_magnet_intensity.side_effect = catch
         machine.after_exit_tunnel()
 
-        nb = 2 if start_session else 1
-        assert tun_dev.update_head_magnet_intensity.call_args_list == nb * [
+        assert tun_dev.update_head_magnet_intensity.call_args_list == [
             mock.call(machine.algorithm.baseline_intensity)
-        ]  # it's called twice when in session:
-        # once in after_exit_tunnel directly,
-        # and once in _session_ended, as event handler from end_session -> session_ending
+        ]
         assert machine._pellet_device.play_tone.call_args_list == []
+
+    @pytest.mark.parametrize("feature_enabled", [False, True])
+    def test_clean_raw_data_on_session_end(self, machine, project_info, feature_enabled):
+        machine.project = project_info
+        machine.algorithm.start_session()
+        machine.algorithm.intersession_enabled = True
+        # check with cam1 file paths:
+        cam = project_info.camera_1
+        file_paths = list(
+            map(Path, chain(project_info.get_video_path(cam), [
+                project_info.get_intersession_pose_path(cam, suffix="_live")]))
+        )
+        assert len(file_paths) > 0
+        for p in file_paths:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.touch()
+        machine.algorithm.clean_raw_data_on_inactive_session = feature_enabled
+        def patch_timer(delay, func):
+            m = mock.create_autospec(Timer)
+            m.start.side_effect = func
+            return m
+        with mock.patch("autotrainer.behavior.system_machine._clean_raw_data_timer", new=patch_timer):
+            machine.algorithm.end_session()
+        for p in file_paths:
+            assert not p.exists() if feature_enabled else p.exists()
 
 
 if __name__ == '__main__':
