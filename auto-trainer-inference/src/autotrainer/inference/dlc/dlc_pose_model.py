@@ -114,7 +114,7 @@ class DlcPoseModel(PoseModel):
         snapshot_index = self._sys_configuration[self.SNAPSHOT_INDEX_KEY]
         increasing_indices = numpy.argsort([int(m.split('-')[1]) for m in self._snapshots])
         self._snapshots = self._snapshots[increasing_indices]
-        logger.info(f"using {self._snapshots[snapshot_index]} for {self._model_folder}")
+        logger.debug(f"using {self._snapshots[snapshot_index]} for {self._model_folder}")
 
         self._model_configuration[self.INIT_WEIGHTS_KEY] = os.path.join(self._model_folder, 'train',
                                                                         self._snapshots[snapshot_index])
@@ -127,10 +127,7 @@ class DlcPoseModel(PoseModel):
     def predict(self, frames) -> typing.List[numpy.ndarray]:
         pose_data = self._predict.getposeNP(frames, self._model_configuration, self._model_session, self._model_inputs,
                                             self._model_outputs)
-
-        all_frames = list()
-
-        for frame in range(pose_data.shape[0]):
-            all_frames.append(pose_data[frame, :].reshape(self._body_parts_count, 3))
-
-        return all_frames
+        return [
+            pose_data[frame, :].reshape(self._body_parts_count, 3)
+            for frame in range(pose_data.shape[0])
+        ]

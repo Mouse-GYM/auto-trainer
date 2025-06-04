@@ -1,25 +1,28 @@
 import logging
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s: %(levelname)s: %(name)s: %(message)s")
-
-cur_desired_lvl = logging.WARNING
-
-logging.getLogger("transitions").setLevel(cur_desired_lvl)
-logging.getLogger("tools").setLevel(cur_desired_lvl)
-logging.getLogger("autotrainer").setLevel(cur_desired_lvl)
-logging.getLogger("inference_algorithms").setLevel(cur_desired_lvl)
+import multiprocessing
+import sys
+import argparse
+import faulthandler
 
 
 if __name__ == '__main__':
-    import sys
-    import argparse
-    import faulthandler
-    from multiprocessing import set_start_method
-    from tools.acquisition.run_acquisition import run_acquisition
 
     faulthandler.enable()
 
-    set_start_method("spawn")
+    multiprocessing.set_start_method("spawn")  # MUST BE SET VERY EARLY BEFORE MOST IMPORTS
+
+    from autotrainer.core.logging import setup_logging
+
+    setup_logging()
+
+    cur_desired_lvl = logging.WARNING
+
+    logging.getLogger("transitions").setLevel(cur_desired_lvl)
+    logging.getLogger("tools").setLevel(cur_desired_lvl)
+    logging.getLogger("autotrainer").setLevel(cur_desired_lvl)
+    logging.getLogger("inference_algorithms").setLevel(cur_desired_lvl)
+
+    from tools.acquisition.run_acquisition import run_acquisition
 
     parser = argparse.ArgumentParser()
 
@@ -31,9 +34,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # strtobool compatibility is all over the place.
-    allow_emulation = args.allow_can_emulation.lower() in ["true", "yes", "1"]
+    allow_emulation = args.allow_can_emulation.lower() in {"true", "yes", "1"}
 
-    if run_acquisition(args.configuration, args.dev, allow_emulation):
-        sys.exit(0)
-    else:
-        sys.exit(1)
+    sys.exit(run_acquisition(args.configuration, args.dev, allow_emulation))

@@ -452,7 +452,11 @@ def segment_reaches(session, center_method, available_XYZ):
     
     if debug == 1:
         print(pellet_events)
-    
+
+    shift_x = 0
+    shift_y = 0
+    shift_z = 0
+
     successful_reaches = 0
     pellets_consumed = 0
     if len(pellet_events):
@@ -496,6 +500,7 @@ def segment_reaches(session, center_method, available_XYZ):
             shift_z = -1
         elif z_off > -0.5:
             shift_z = 1
+
     if shift_x < available_XYZ[0,0]: shift_x = 0
     if shift_x > available_XYZ[0,1]: shift_x = 0
     if shift_y < available_XYZ[1,0]: shift_y = 0

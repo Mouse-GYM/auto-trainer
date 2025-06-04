@@ -193,20 +193,20 @@ class EventManager:
                 # Workaround or current Jetson behavior w/ queue.get(timeout=).
                 info = self._write_queue.get_nowait()
             except Empty:
-                time.sleep(0.05)
+                time.sleep(0.01)
                 continue
 
             if not isinstance(info, EventInfo):
-                logger.debug("unexpected event info instance")
+                logger.warning("unexpected event info instance")
                 continue
 
             try:
                 if info.is_same(self._last_event_info):
                     self._repeat_event_count += 1
                     continue
-            except Exception as ex:  # Possibly coming from EventInfo subclass - cannot predict type of error.
+            except Exception as err:  # Possibly coming from EventInfo subclass - cannot predict type of error.
                 if not is_same_error_reported:
-                    logger.error(ex)
+                    logger.error("is_same failed: %s", err)
                     is_same_error_reported = True
 
             try:
@@ -229,4 +229,5 @@ class EventManager:
 
     def _process_event(self, info: EventInfo, repeat_count: int = 0):
         for plugin in self._plugins:
+            logger.spam("plugin %s: processing event %s", plugin, info)
             plugin.process_event(info, repeat_count)

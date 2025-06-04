@@ -1,6 +1,7 @@
 import logging
 from enum import Enum
 from threading import Timer
+from typing import Optional
 
 from transitions import Machine
 
@@ -38,9 +39,13 @@ class SystemMachine(StateMachine):
          "before": "before_exit_intersession"}
     ]
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None, project_info: ProjectInfo = None,
-                 msg_handler: MessageHandler = None, analysis: SensorAnalysis = None,
-                 tunnel_device: TunnelDeviceProtocol = None, pellet_device: PelletDeviceProtocol = None,
+    def __init__(self,
+                 algorithm: Optional[BehaviorAlgorithm] = None,
+                 project_info: Optional[ProjectInfo] = None,
+                 msg_handler: MessageHandler = None,
+                 analysis: SensorAnalysis = None,
+                 tunnel_device: TunnelDeviceProtocol = None,
+                 pellet_device: PelletDeviceProtocol = None,
                  inference: InferenceProtocol = None):
 
         initial_state = SystemState.cage
@@ -130,6 +135,9 @@ class SystemMachine(StateMachine):
 
     def before_exit_tunnel(self):
         self._algorithm.system_state = SystemState.cage
+        # inference = self._inference
+        # assert isinstance(inference, InferenceModel)
+        # inference.set_inference_to_online()
 
     def after_exit_tunnel(self):
         self._update_magnet_position(self.algorithm.baseline_intensity)
@@ -155,6 +163,11 @@ class SystemMachine(StateMachine):
 
         if self.algorithm.can_perform_intersession_analysis() and self.state == SystemState.cage:
             self.enter_intersession()
+        else:
+            inference = self._inference
+            if inference is not None:
+                inference.set_inference_to_online()
+            # self.exit_intersession()
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
@@ -220,12 +233,9 @@ class SystemMachine(StateMachine):
 
     def _pose_changed(self, response: PoseResponse):
         self._algorithm.pellet_seen(response.pellet_seen)
-
         self._algorithm.mouse_seen(response.mouse_seen)
-
         if not self._algorithm.pellet_delivery_enabled:
             return
-
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     def _algorithm_property_changed(self, name: str, value, _):

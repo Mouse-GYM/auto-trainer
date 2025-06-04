@@ -89,7 +89,7 @@ class CameraBase:
         """
 
         if self._frame_count == 0:
-            self._capture_start = time.time_ns()
+            self._last_when = self._capture_start = time.time_ns()
 
         self._last_when = time.time_ns()
 

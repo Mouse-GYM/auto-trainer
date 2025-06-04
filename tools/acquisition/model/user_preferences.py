@@ -1,3 +1,4 @@
+import logging
 import sys
 from pathlib import Path
 
@@ -36,7 +37,7 @@ class UserPreferences(ObservableObject):
         self._animal_location = self._settings.value("system/animal_location", "")
 
         self._log_location: str = self._settings.value("system/log_location", "")
-        self._log_level = self._settings.value("system/log_level", 30, int)
+        self._log_level = self._settings.value("system/log_level", logging.WARNING, int)
 
         self._live_feed_refresh_rate = self._settings.value("display/refresh_rate", 15, int)
 

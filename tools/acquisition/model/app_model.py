@@ -1,5 +1,6 @@
 import json
 import logging
+import multiprocessing
 import queue
 import time
 import typing
@@ -15,6 +16,7 @@ from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandl
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
+from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseAlgorithm
 from tools.acquisition.model.hardware_model import HardwareModel
 
@@ -224,7 +226,16 @@ class AppModel(ObservableObject):
             shape_1 = self.left_camera.shape
             shape_2 = self.right_camera.shape
             if shape_1 == shape_2:
-                self._inference_queue = FixedArrayMultiQueue(3, 2, 3, shape_1)
+                self._inference_queue = FixedArrayMultiQueue(
+                    # live queue does not need/require a lot of "depth" == total nbr of batches that can sit
+                    # in the ring-buffer-queue at the same time.
+                    3,
+                    2,
+                    3,
+                    shape=shape_1,
+                    name="inference_q",
+                    mp_ctx=get_mp_ctx(),
+                )
             else:
                 logger.warning("pellet disabled: left and right camera frame sizes do not match")
 
@@ -259,8 +270,6 @@ class AppModel(ObservableObject):
         if self._analysis is not None:
             self._analysis.project_info = self._project_info
 
-        self.hardware.connect(self._message_handler.input_queue, self._selected_animal)
-
         for camera in self._cameras:
             if camera.is_primary:
                 camera.on_capture_start()
@@ -268,6 +277,10 @@ class AppModel(ObservableObject):
         for camera in self._cameras:
             if not camera.is_primary:
                 camera.on_capture_start()
+
+        logger.debug("connecting hardware ...")
+        self.hardware.connect(self._message_handler.input_queue, self._selected_animal)
+        logger.info("finished connecting hardware")
 
         return True
 

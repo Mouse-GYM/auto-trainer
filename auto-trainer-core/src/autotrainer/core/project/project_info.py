@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import multiprocessing
 import os
 import sys
 from dataclasses import dataclass
@@ -9,7 +10,9 @@ from datetime import datetime
 from enum import IntEnum
 from multiprocessing import Value
 from pathlib import Path
-from typing import Tuple, NamedTuple
+from typing import Tuple, NamedTuple, Union, Optional
+
+from autotrainer.core.multiproc import get_mp_ctx
 
 DATE_FORMAT = "%Y%m%d"
 
@@ -70,18 +73,23 @@ video_write_ext = "mp4" if sys.platform.startswith("linux") else "mkv"
 
 @dataclass
 class ProjectInfo:
+    session: Value = None
     root: str = ""
     device_id: str = ""
     when: datetime = None
     ensure_exists: bool = False
-    session: Value = Value(ctypes.c_uint32, 1)
     camera_1: str = ""
     camera_2: str = ""
+
+    def __post_init__(self):
+        if self.session is None:
+            ctx = get_mp_ctx()
+            self.session = ctx.Value(ctypes.c_uint32, 1)
 
     def is_valid(self):
         return self.root is not None and len(self.root) > 0
 
-    def get_day_path(self, skip_ensure: bool = False) -> Tuple[str | None, str | None]:
+    def get_day_path(self, skip_ensure: bool = False) -> Union[Tuple[str, str], Tuple[None, None]]:
         today = (self.when if self.when is not None else datetime.now()).strftime(DATE_FORMAT)
 
         location = os.path.join(self.root, today)
@@ -147,7 +155,7 @@ class ProjectInfo:
         return SessionSource(location, prefix, s_idx)
 
     def get_source_path(self, name: str = "", interval: ProjectInterval = ProjectInterval.NONE, session: int = -1,
-                        skip_ensure: bool = False) -> ProjectPath | None:
+                        skip_ensure: bool = False) -> Optional[ProjectPath]:
         if interval is None or interval == ProjectInterval.NONE:
             path = self.get_session_path(name, session=session, skip_ensure=skip_ensure)
         else:
@@ -186,16 +194,19 @@ class ProjectInfo:
                                                           os.path.join(path.location, f"{path.prefix}.{ext}"),
                                                           path.interval)
 
-    def get_video_path(self, name: str = "",
-                       interval: ProjectInterval = ProjectInterval.NONE, session: int = -1,
-                       allow_overwrite: bool = False) -> Tuple[str | None, str | None]:
+    def get_video_path(
+        self,
+        name: str = "",
+        interval: ProjectInterval = ProjectInterval.NONE,
+        session: int = -1,
+        allow_overwrite: bool = False,
+    ) -> Union[Tuple[str, str, str], Tuple[None, None, None]]:
+        """Get the 3-tuple of video paths for given arguments"""
         path = self.get_source_path(name, interval=interval, session=session)
-
         if path is None:
-            return None, None
+            return None, None, None
 
         file_name = f"{path.full_path}.{video_write_ext}"
-
         index = 0
 
         if not allow_overwrite:
@@ -206,11 +217,16 @@ class ProjectInfo:
         modifier = "" if index == 0 else "_" + str(index)
 
         ts_file = f"{path.full_path}_timestamps{modifier}.txt"
+        frames_processed_indices_file = f"{path.full_path}_processed_frames.txt"
 
-        return file_name, ts_file
+        return file_name, ts_file, frames_processed_indices_file
 
-    def get_image_capture_path(self, name: str = "", interval: ProjectInterval = ProjectInterval.NONE,
-                               session: int = -1) -> Tuple[str | None, str | None]:
+    def get_image_capture_path(self,
+        name: str = "",
+        interval: ProjectInterval = ProjectInterval.NONE,
+        session: int = -1,
+    ) -> Union[Tuple[str, str], Tuple[None, None]]:
+        """Get the 2-tuple of image paths for given arguments"""
         base = self.get_source_path(name, interval=interval, session=session, skip_ensure=True)
 
         image_location = os.path.join(base.location, f"{base.prefix}{IMAGE_CAPTURE_SUFFIX}")
@@ -223,18 +239,21 @@ class ProjectInfo:
 
         return image_location, image_file_format_str
 
-    def get_intersession_pose_path(self, name: str = "", session: int = -1, allow_overwrite: bool = False):
+    def get_intersession_pose_path(
+        self,
+        name: str = "",
+        session: int = -1,
+        allow_overwrite: bool = False,
+        *,
+        suffix: str = "",
+    ) -> str:
         source = self.get_source_path(name, session=session)
-
-        file_name = os.path.join(source.location, f"{source.prefix}_raw2D.h5")
-
+        file_name = os.path.join(source.location, f"{source.prefix}_raw2D{suffix}.h5")
         index = 0
-
         if not allow_overwrite:
             while os.path.exists(file_name):
                 index += 1
                 file_name = os.path.join(source.location, f"{source.prefix}_{index}.h5")
-
         return file_name
 
     def calculate_next_session_index(self) -> None:

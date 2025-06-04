@@ -15,9 +15,9 @@ class PoseModel:
     """
 
     def __init__(self):
-        self._body_parts = list()
-        self._body_part_categories = list()
-        self._body_parts_by_category = dict()
+        self._body_parts = []
+        self._body_part_categories = []
+        self._body_parts_by_category = {}
 
     @property
     def body_parts(self):
