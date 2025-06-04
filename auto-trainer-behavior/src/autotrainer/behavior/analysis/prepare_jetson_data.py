@@ -399,6 +399,7 @@ storted files are already present
         dataFrame_cam1_undistort,
         dataFrame_cam2_undistort,
         stereo_params,
+        path_stereo_file,
     )
 
 
@@ -601,6 +602,7 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
         dataFrame_camera1_undistort,
         dataFrame_camera2_undistort,
         stereomatrix,
+        path_stereo_file,
     ) = undistort_points(df_LR, path_cam_mat)
 
     df_3d = triangulate_3d_step1(
