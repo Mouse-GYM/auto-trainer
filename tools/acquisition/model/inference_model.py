@@ -527,6 +527,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         indices = range(cur.shape[0])
                         df_xyp = pandas.DataFrame(cur, columns=columns, index=indices)
                         df_xyp["frame_idx"] = list(cur_cam_indices)  # also store the frame idx with the results
+                        logger.debug("flushing remaining h5 batch (%s) to %s",
+                                     len(df_xyp), cam_pose_path)
                         df_xyp.to_hdf(cam_pose_path,
                                       "df_with_missing",
                                       format="table",
@@ -655,7 +657,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
                     if (  # prev_mode == InferenceMode.Live and
                         len(cams_read_h5_dss) == 0
-                        and frames_indices is not None and (frames_indices >= 0).any()
+                        # and frames_indices is not None and (frames_indices >= 0).any()
+                        # with random cam there might be no frame to replay, so we get immediatelly all < 0
                     ):
                         t_start_offline = time.time()
                         logger.notice("Opening live files for offline processing ; prev_mode=%s frames=%s",
