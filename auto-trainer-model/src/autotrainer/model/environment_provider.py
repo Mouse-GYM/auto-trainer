@@ -1,4 +1,8 @@
+import importlib.util
+
 from .hardware_version import HardwareVersion, default_determine_hardware_version
+
+_spec_api = importlib.util.find_spec("autotrainer.api")
 
 
 class EnvironmentProvider:
@@ -14,6 +18,8 @@ class EnvironmentProvider:
 
     _allow_can_emulation = False
 
+    _external_api_available = _spec_api is not None
+
     @staticmethod
     def hardware_version() -> HardwareVersion:
         return EnvironmentProvider._hardware_version
@@ -25,3 +31,7 @@ class EnvironmentProvider:
     @staticmethod
     def enable_can_emulation(enable: bool) -> None:
         EnvironmentProvider._allow_can_emulation = enable
+
+    @staticmethod
+    def is_external_api_available() -> bool:
+        return EnvironmentProvider._external_api_available
