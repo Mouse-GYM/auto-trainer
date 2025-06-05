@@ -298,7 +298,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._offline_thread = Thread(target=self._intersession_process, name="intersession_process")
         self._offline_thread.start()
 
-    # unused
     def perform_live(self):
         self.set_inference_to_online()
 
