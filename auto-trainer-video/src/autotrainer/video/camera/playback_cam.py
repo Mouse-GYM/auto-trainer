@@ -19,20 +19,28 @@ class PlaybackCam(CameraBase):
         self._make_precise_timestamps = True
         # make_precise_timestamps:
         # used to bypass/workaround analyse code only being able to handle very precise timestamps
+        self._video_frame_count = -1
 
     def init(self):
-        self._video_capture = cv2.VideoCapture(self._file_name)
-        self.fps = self._video_capture.get(cv2.CAP_PROP_FPS)
+        vc = self._video_capture = cv2.VideoCapture(self._file_name)
+        self.fps = vc.get(cv2.CAP_PROP_FPS)
         if self.fps == 0:
             self.fps = 30
-        self.width = self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH)
-        self.height = self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        self.width = vc.get(cv2.CAP_PROP_FRAME_WIDTH)
+        self.height = vc.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        self._video_frame_count = vc.get(cv2.CAP_PROP_FRAME_COUNT)
         logger.notice("init with fps=%s W=%s H=%s", self.fps, self.width, self.height)
 
     def capture(self) -> (numpy.ndarray, int):
         ret, frame = self._video_capture.read()
         if not ret:
-            raise RuntimeError(f"capture failed on {self._video_capture}")
+            if self._frame_count == self._video_frame_count:
+                self._video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                logger.notice("%s: loop-back to begin file", self._file_name)
+                self._frame_count = 0
+                ret, frame = self._video_capture.read()
+            if not ret:
+                raise RuntimeError(f"capture failed on {self._video_capture}")
         max_diff = 0.05 / self._fps
         while True:
             now = time.time_ns()
