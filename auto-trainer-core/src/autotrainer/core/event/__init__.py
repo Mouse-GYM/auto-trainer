@@ -26,6 +26,6 @@ def try_register_api_event_plugin() -> bool:
             EventManager.default().register_plugin(plugin)
             return True
         except Exception as ex:
-            logger.error(f"API plugin module available, however registration failed: {ex}")
+            logger.exception(f"API plugin module available, however registration failed.", exc_info=ex)
 
     return False
