@@ -1,4 +1,5 @@
 import logging
+from typing import Tuple
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
@@ -6,6 +7,7 @@ from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton,
 from autotrainer.core import PerfMonitor, MessageHandler, SensorAnalysis, LoadCellMonitor
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget, QtIndicator
 from tools.acquisition.model.hardware_model import HardwareModel
+from tools.acquisition.model.inference_model import InferenceModel
 
 from tools.acquisition.view.content_widget import ContentWidget
 
@@ -17,11 +19,14 @@ _INACTIVE_LOAD_CELL_COLOR = (240, 240, 240)
 
 class AnalysisContent(ContentWidget):
     position_changed = Signal(int, name="position_changed")
+    diamond_triangle_offset_changed = Signal(tuple, name="diamond_triangle_offset_changed")
+    star_triangle_offset_changed = Signal(tuple, name="star_triangle_offset_changed")
 
-    def __init__(self, model: HardwareModel, analysis: SensorAnalysis, msg_handler: MessageHandler):
+    def __init__(self, hardware_model: HardwareModel, inference_model: InferenceModel, analysis: SensorAnalysis,
+                 msg_handler: MessageHandler):
         super().__init__()
 
-        self._model = model
+        self._model = hardware_model
 
         self._analysis = analysis
 
@@ -55,6 +60,18 @@ class AnalysisContent(ContentWidget):
         title = QLabel("Analysis")
         title.setStyleSheet("font-weight: bold")
         layout.addWidget(title)
+
+        layout.addWidget(QLabel("D-T:"))
+        self._triangle_diamond_offset = QLabel("n/a")
+        self.diamond_triangle_offset_changed.connect(
+            lambda x: self._triangle_diamond_offset.setText(f"{x[0]:.2f}, {x[1]:.2f}, {x[2]:.2f}"))
+        layout.addWidget(self._triangle_diamond_offset)
+
+        layout.addWidget(QLabel("S-T:"))
+        self._star_triangle_offset = QLabel("n/a")
+        self.star_triangle_offset_changed.connect(
+            lambda x: self._star_triangle_offset.setText(f"{x[0]:.2f}, {x[1]:.2f}, {x[2]:.2f}"))
+        layout.addWidget(self._star_triangle_offset)
 
         layout.addStretch(1)
 
@@ -101,6 +118,9 @@ class AnalysisContent(ContentWidget):
 
         self._model.property_changed += self._model_property_changed
 
+        inference_model.star_triangle_offset_changed += self._star_triangle_offset_changed
+        inference_model.diamond_triangle_offset_changed += self._diamond_triangle_offset_changed
+
         self._analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
 
         msg_handler.measurement_callback = self._weight_received
@@ -146,3 +166,9 @@ class AnalysisContent(ContentWidget):
             self._load_cell.setText(str(value))
         elif name == "position":
             self.position_changed.emit(value)
+
+    def _diamond_triangle_offset_changed(self, offset: Tuple[float, float, float]):
+        self.diamond_triangle_offset_changed.emit(offset)
+
+    def _star_triangle_offset_changed(self, offset: Tuple[float, float, float]):
+        self.star_triangle_offset_changed.emit(offset)
