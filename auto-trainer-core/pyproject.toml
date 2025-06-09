@@ -19,4 +19,5 @@ dependencies = [
     # "numpy >= 1.24, < 2",
     # "pyhumps >= 3.8, < 4",
     "verboselogs >= 1.7, < 2",
+    "coloredlogs >= 15, < 16",
 ]

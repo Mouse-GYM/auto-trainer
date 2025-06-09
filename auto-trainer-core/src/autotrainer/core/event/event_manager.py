@@ -31,6 +31,9 @@ class EventManager:
       * Per the first bullet, this new event type will also be immediately output
     """
 
+    _instance: "EventManager"
+
+
     @classmethod
     def default(cls) -> Self:
         """
@@ -64,14 +67,13 @@ class EventManager:
 
         # Callers should expect requests to post an event return as quickly as possible.  Events are pushed to a queue
         # so that processing can be done in a separate thread as resources allow.
-        self._write_active = True
         self._write_queue = Queue()
         self._write_thread = Thread(target=self._process_queue)
         self._write_thread.start()
 
     @property
     def is_valid(self):
-        return self._write_active is True or self._write_thread is not None
+        return self._write_thread is not None and self._write_queue is not None
 
     @property
     def project(self) -> ProjectInfo:
@@ -132,10 +134,26 @@ class EventManager:
         only be called when the application or script is closing or otherwise finished with the event manager as an
         instance, including the `default` cannot be restarted.
         """
-        self._write_active = False
-
         for plugin in self._plugins:
             plugin.set_enable(False)
+        wt = self._write_thread
+        wq = self._write_queue
+        if wt is not None:
+            if wq is not None:
+                wq.put(None)
+            wt.join()
+            self._write_thread = None
+        # queue needs be flushed so that we can join it:
+        if wq is not None:
+            self._write_queue = None  # set it directly, so that no other thread can now put through this instance
+            while True:
+                try:
+                    item = wq.get_nowait()
+                    logger.warning("dropped unhandled %s: %s", type(item), item)
+                    wq.task_done()
+                except Empty:
+                    break
+            wq.join()
 
     def post_event_content(self, kind: int, context: Optional[object] = None, when: Optional[datetime] = None,
                            index: int = None):
@@ -166,7 +184,14 @@ class EventManager:
         Returns:
 
         """
-        self._write_queue.put(info)
+        if info is None:
+            # "~paranoid" check but that will prevent the non-desired stop of the work thread.
+            raise RuntimeError("post_event(None) refused")
+        wq = self._write_queue
+        if wq is None:
+            logger.debug("post_event(%s) but write queue already removed", info.kind)
+        else:
+            wq.put(info)
 
     def has_pending(self) -> bool:
         """
@@ -176,7 +201,10 @@ class EventManager:
 
         Returns: True if there are pending events to process by the handlers.  Might be accurate, might not.
         """
-        return not self._write_queue.empty()
+        wq = self._write_queue
+        if wq is None:
+            return False
+        return not wq.empty()
 
     def _process_queue(self):
         # Because we a) use plugins and b) allow for EventInfo->is_same to be overridden, we may be given a plugin that
@@ -188,26 +216,32 @@ class EventManager:
         is_same_error_reported = False
         process_event_error_reported = False
 
-        while self._write_active:
+        while True:
             try:
                 # Workaround or current Jetson behavior w/ queue.get(timeout=).
-                info = self._write_queue.get_nowait()
+                info = self._write_queue.get(timeout=0.5)
+                if info is None:
+                    self._write_queue.task_done()
+                    break
             except Empty:
-                time.sleep(0.05)
                 continue
 
             if not isinstance(info, EventInfo):
-                logger.debug("unexpected event info instance")
+                logger.warning("unexpected event info instance")
+                self._write_queue.task_done()
                 continue
 
             try:
-                if info.is_same(self._last_event_info):
-                    self._repeat_event_count += 1
-                    continue
-            except Exception as ex:  # Possibly coming from EventInfo subclass - cannot predict type of error.
+                is_same = info.is_same(self._last_event_info)
+            except Exception as err:  # Possibly coming from EventInfo subclass - cannot predict type of error.
                 if not is_same_error_reported:
-                    logger.error(ex)
+                    logger.error("is_same failed: %s", err)
                     is_same_error_reported = True
+            else:
+                if is_same:
+                    self._repeat_event_count += 1
+                    self._write_queue.task_done()
+                    continue
 
             try:
                 if self._repeat_event_count > 0:
@@ -222,11 +256,13 @@ class EventManager:
                     logger.error(ex)
                     process_event_error_reported = True
 
+            self._write_queue.task_done()
+
         for plugin in self._plugins:
             plugin.close()
 
-        self._write_thread = None
 
     def _process_event(self, info: EventInfo, repeat_count: int = 0):
         for plugin in self._plugins:
+            logger.spam("plugin %s: processing event %s", plugin, info)
             plugin.process_event(info, repeat_count)

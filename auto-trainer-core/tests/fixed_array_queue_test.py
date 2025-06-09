@@ -7,8 +7,8 @@ def increase_buffer(buffer: FixedArrayMultiQueue, shape: (int, int), frames_per_
     content = numpy.zeros(shape, dtype=numpy.uint8)
 
     for idx in range(frames_per_camera):
-        buffer.put(content + idx + offset, 1)
-        buffer.put(content + idx + offset, 0)
+        buffer.put(content + idx + offset, 1, 0)
+        buffer.put(content + idx + offset, 0, 0)
 
 
 def check_buffer(buffer: FixedArrayMultiQueue, shape: (int, int), frames_per_camera: int, expected_index: int):

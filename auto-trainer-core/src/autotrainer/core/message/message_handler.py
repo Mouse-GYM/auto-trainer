@@ -4,7 +4,8 @@ from queue import Queue
 from threading import Thread
 
 from ..observable_object import ObservableObject
-from ..message import SystemStatusMessageKind
+
+from .system_status_message import SystemStatusMessageKind
 
 logger = logging.getLogger(__name__)
 

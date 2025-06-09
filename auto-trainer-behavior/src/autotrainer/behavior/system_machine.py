@@ -1,11 +1,14 @@
 import logging
 from enum import Enum
+from itertools import chain
+from pathlib import Path
 from threading import Timer
+from typing import Optional
 
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor, \
-    HeadbarPressureMonitor
+from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor,
+                              HeadbarPressureMonitor)
 from autotrainer.inference import PoseResponse
 from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm
@@ -19,6 +22,13 @@ from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
 
 logger = logging.getLogger(__name__)
+
+
+# NB: this is to ensure we can patch the exact desired one (and only that one) from tests:
+_clean_raw_data_timer = Timer
+_auto_clamp_release_timer = Timer
+_pellet_loading_timer = Timer
+#
 
 
 class SystemMachine(StateMachine):
@@ -38,9 +48,13 @@ class SystemMachine(StateMachine):
          "before": "before_exit_intersession"}
     ]
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None, project_info: ProjectInfo = None,
-                 msg_handler: MessageHandler = None, analysis: SensorAnalysis = None,
-                 tunnel_device: TunnelDeviceProtocol = None, pellet_device: PelletDeviceProtocol = None,
+    def __init__(self,
+                 algorithm: Optional[BehaviorAlgorithm] = None,
+                 project_info: Optional[ProjectInfo] = None,
+                 msg_handler: MessageHandler = None,
+                 analysis: SensorAnalysis = None,
+                 tunnel_device: TunnelDeviceProtocol = None,
+                 pellet_device: PelletDeviceProtocol = None,
                  inference: InferenceProtocol = None):
 
         initial_state = SystemState.cage
@@ -130,6 +144,9 @@ class SystemMachine(StateMachine):
 
     def before_exit_tunnel(self):
         self._algorithm.system_state = SystemState.cage
+        # inference = self._inference
+        # assert isinstance(inference, InferenceModel)
+        # inference.set_inference_to_online()
 
     def after_exit_tunnel(self):
         self._update_magnet_position(self.algorithm.baseline_intensity)
@@ -147,14 +164,43 @@ class SystemMachine(StateMachine):
         self._algorithm.system_state = SystemState.cage
         self._pellet_machine.environment_changed()
 
+    @staticmethod
+    def _clean_raw_data(project):
+        session_value = project.session.value
+        def do_clean():
+            for cam_name in (project.camera_1, project.camera_2):
+                paths = map(Path, chain(
+                    project.get_video_path(cam_name, session=session_value, allow_overwrite=True),
+                    [project.get_intersession_pose_path(cam_name, session=session_value, allow_overwrite=True,
+                                                        suffix="_live")],
+                ))
+                for path in paths:
+                    if path.exists():
+                        logger.debug("removing %s", path)
+                        path.unlink(missing_ok=True)
+        # using timer given when called the monitor data queue might still be writing to disk/still be in live session
+        # making the deletes to not work here
+        t = _clean_raw_data_timer(3, do_clean)
+        t.start()
+
     def _session_ended(self):
         # 5/16/25 should not remove auto-clamp at session end for current testing.
         # TODO: make this configurable.
         # if self._tunnel_device is not None:
         #    self._update_magnet_position(self.algorithm.baseline_intensity)
 
-        if self.algorithm.can_perform_intersession_analysis() and self.state == SystemState.cage:
+        project = self.project
+        can_perform_analysis = self.algorithm.can_perform_intersession_analysis()
+        if can_perform_analysis and self.state == SystemState.cage:
             self.enter_intersession()
+        else:
+            inference = self._inference
+            if inference is not None:
+                inference.set_inference_to_online()
+            # self.exit_intersession()
+        if not can_perform_analysis and project is not None:
+            if self._algorithm.clean_raw_data_on_inactive_session:
+                self._clean_raw_data(project)
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
@@ -172,7 +218,8 @@ class SystemMachine(StateMachine):
 
     def _load_cell_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
-            EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
+            EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
+                                                      context=value)
             return
 
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
@@ -220,12 +267,9 @@ class SystemMachine(StateMachine):
 
     def _pose_changed(self, response: PoseResponse):
         self._algorithm.pellet_seen(response.pellet_seen)
-
         self._algorithm.mouse_seen(response.mouse_seen)
-
         if not self._algorithm.pellet_delivery_enabled:
             return
-
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     def _algorithm_property_changed(self, name: str, value, _):
@@ -239,7 +283,7 @@ class SystemMachine(StateMachine):
                 if self._tunnel_device is not None:
                     logger.debug(
                         f"\tchanging magnet intensity to baseline in {self.algorithm.auto_clamp_release_delay} seconds")
-                    timer = Timer(self.algorithm.auto_clamp_release_delay,
+                    timer = _auto_clamp_release_timer(self.algorithm.auto_clamp_release_delay,
                                   lambda: self._update_magnet_position(self.algorithm.baseline_intensity))
                     timer.start()
 
@@ -248,7 +292,7 @@ class SystemMachine(StateMachine):
             self._tunnel_device.update_head_magnet_intensity(position)
 
     def _pellet_loading(self):
-        self._timer1 = Timer(2, self._consider_end_session)
+        self._timer1 = _pellet_loading_timer(2, self._consider_end_session)
         self._timer1.start()
 
     def _pellet_sending(self):
@@ -263,7 +307,7 @@ class SystemMachine(StateMachine):
         # or releasing states).  Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
         if (self.state == SystemState.tunnel
-            and self._pellet_machine.state in {PelletState.sending, PelletState.releasing, PelletState.monitoring}
+                and self._pellet_machine.state in {PelletState.sending, PelletState.releasing, PelletState.monitoring}
         ):
             return
 
@@ -279,9 +323,12 @@ class SystemMachine(StateMachine):
             self._algorithm.pellets_presented = res.pellets_presented
         dev = self._pellet_device
         if dev is not None:
-            for val, meth in ((res.pellet_x, dev.set_x), (res.pellet_y, dev.set_y), (res.pellet_z, dev.set_z)):
+            for val, meth, kind in ((res.pellet_x, dev.set_x, BehaviorEventKind.intersessionShiftX),
+                                    (res.pellet_y, dev.set_y, BehaviorEventKind.intersessionShiftY),
+                                    (res.pellet_z, dev.set_z, BehaviorEventKind.intersessionShiftZ)):
                 if val != 0:
                     meth(val, absolute=False)
+                    EventManager.default().post_event_content(kind, context=val)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

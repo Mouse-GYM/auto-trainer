@@ -1,7 +1,9 @@
+import multiprocessing
 import os
 import pathlib
 import time
 import logging
+from multiprocessing.context import BaseContext
 from typing import Optional, List
 from multiprocessing import Queue, Value, Array
 from threading import Event
@@ -13,6 +15,7 @@ from numpy import ndarray
 
 from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, ObservableObject, \
     CameraConfiguration, CameraId, NotificationCenter, TriggerNotification, Notification
+from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.project import ProjectInfo
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
@@ -43,8 +46,14 @@ def create_camera_list():
 
 
 class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
-    def __init__(self, name, preferences: UserPreferences = None, inference_index: int = -1):
+    def __init__(self, name, preferences: UserPreferences = None, inference_index: int = -1,
+                 *,
+                 mp_ctx: Optional[BaseContext] = None,
+    ):
         super().__init__()
+
+        if mp_ctx is None:
+            mp_ctx = get_mp_ctx()
 
         self._id = CameraId.Left
 
@@ -53,18 +62,18 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._inference_index = inference_index
 
         self._camera_source: Optional[CaptureCameraAttrs] = None
-        self._camera_properties = dict()
+        self._camera_properties = {}
 
-        self._video_capture = None
+        self._video_capture: Optional[VideoCapture] = None
         self._video_reader = None
         self._video_reader_reset_event = None
         self._video_reader_stop_event = None
 
-        self._video_command_queue = Queue()
-        self._video_status = Value("i", CaptureProcessStatus.UNKNOWN)
-        self._video_frame_index = Value("i", 0)
-        self._video_image_queue = None
-        self._errors = Array("c", bytes(512))
+        self._video_command_queue = mp_ctx.Queue(maxsize=64)
+        self._video_status = mp_ctx.Value("i", CaptureProcessStatus.UNKNOWN)
+        self._video_frame_index = mp_ctx.Value("i", 0)
+        self._video_image_queue: Optional[FixedArrayQueue] = None
+        self._errors = mp_ctx.Array("c", bytes(512))
         self._shape = None
 
         self._is_enabled = True
@@ -217,14 +226,12 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         if self._display_update_fcn is not None and self._video_capture is not None:
             self._display_update_fcn(data, self._fps)
 
-    def on_prepare_capture(self, network_queue: FixedArrayMultiQueue = None) -> bool:
+    def on_prepare_capture(self, network_queue: Optional[FixedArrayMultiQueue] = None) -> bool:
         self._last_error = None
-
         if not self._is_enabled:
             return True
 
         self._frame_count = 0
-
         self._video_reader_initialize()
 
         if self._camera_source is not None:
@@ -237,9 +244,16 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
             inference = CaptureInferenceAttrs(queue=network_queue, index=self._inference_index)
 
-            capture_attrs = CaptureAttrs(command_queue=self._video_command_queue, status=self._video_status,
-                                         image_queue=self._video_image_queue, frame=self._video_frame_index,
-                                         camera=camera, inference=inference, errors=self._errors)
+            capture_attrs = CaptureAttrs(
+                command_queue=self._video_command_queue,
+                status=self._video_status,
+                image_queue=self._video_image_queue,
+                fps_image_queue=15 if self._preferences is None else self._preferences.live_feed_refresh_rate,
+                frame=self._video_frame_index,
+                camera=camera,
+                inference=inference,
+                errors=self._errors,
+            )
 
             rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
             image_interval = self._still_image_capture_interval if self._is_still_capture_enabled else 0
@@ -261,23 +275,11 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 return False
 
             properties = VideoManager.parse_params(url)
-
             if "primary" in properties and bool(properties["primary"]) is True:
                 self._is_primary = True
             else:
                 self._is_primary = False
 
-            decimation = 1 if self._preferences is None else self._preferences.live_feed_refresh_rate
-
-            if self._video_reader is not None:
-                if self._inference_index == -1:
-                    if "fps" in properties:
-                        self._video_reader.decimation = max(int(int(properties["fps"]) / decimation), 1)
-                    else:
-                        # Assume 30fps
-                        self._video_reader.decimation = max(int(30 / decimation), 1)
-                else:
-                    self._video_reader.decimation = 1
         else:
             self._is_primary = False
 
@@ -285,8 +287,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     def on_capture_start(self):
         if not self._is_enabled:
+            logger.warning("%s: on_capture_start called but disabled", self)
             return
-
         self._send_command(CaptureCommandKind.ENABLE_CAPTURE)
 
     def on_capture_notify_end(self):
@@ -300,30 +302,30 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
         if self._video_capture is not None:
             self._send_command(CaptureCommandKind.TERMINATE)
-
             if self._wait_for_capture_status(CaptureProcessStatus.TERMINATED, 5):
                 logger.debug(f"<{self._name}> video capture terminate acknowledged")
             else:
                 logger.error(f"<{self._name}> did not receive process terminates status")
 
-        clear_queue(self._video_command_queue)
-
         if self._video_capture is not None:
             self._trace("waiting for process termination")
-
             while self._video_capture.is_alive():
                 time.sleep(0.1)
-
             self._trace("process terminated")
-
+            self._video_capture.join()
             self._video_capture = None
 
-        clear_queue(self._video_image_queue)
+        # NB: clearing video cmd queue having waited & joined the capture process is best.
+        clear_queue(self._video_command_queue)
+        # clear_queue(self._video_image_queue)
+        # video_image_queue is our FixedArrayQueue which cannot be "cleared" by another thread than the
+        # one consuming it. We anyway recreate a new one for each new capture.
+
 
     def on_close(self):
         if self._video_capture is not None:
             self._video_capture.terminate()
-
+            self._video_capture.join()
         self._video_reader_teardown()
 
     def load_configuration(self, conf: CameraConfiguration):
@@ -435,7 +437,12 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         else:
             self.shape = (300, 200)
 
-        self._video_image_queue = None if self._shape is None else FixedArrayQueue(3, self._shape)
+        self._video_image_queue = None if self._shape is None else FixedArrayQueue(
+            3,
+            self._shape,
+            name="video_q",
+            mp_ctx=get_mp_ctx(),
+        )
 
         self._camera_source = cam
 
@@ -460,6 +467,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
     def _send_command(self, cmd: CaptureCommandKind, context: object = None):
         if self._video_command_queue is not None:
             self._video_command_queue.put((cmd, context))
+        else:
+            logger.warning("%s: _send_command: %s but video command queue is None", self, cmd)
 
     def _trace(self, message: str):
         if self._is_trace_enabled:

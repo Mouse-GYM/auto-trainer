@@ -2,10 +2,11 @@ import logging
 from queue import Queue
 from typing import Callable, List
 
-from ..message import SystemStatusMessageKind
+
+from ..analysis.sensor_analysis import SensorAnalysis
 
 from .message_handler import MessageHandler
-from .sensor_analysis import SensorAnalysis
+from .system_status_message import SystemStatusMessageKind
 
 logger = logging.getLogger(__name__)
 

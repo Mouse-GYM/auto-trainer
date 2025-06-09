@@ -35,8 +35,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._pellet_cover_enabled = True
 
         self._intersession_enabled = False
-
         self._head_fixation_enabled = False
+        self._clean_raw_data_on_inactive_session = False
 
         self._auto_clamp_intensity = 100
         self._auto_clamp_release_tone_freq = 7000
@@ -131,6 +131,14 @@ class BehaviorAlgorithm(ObservableObject):
                                                                 value, self._head_fixation_enabled)
         if old_value != self._head_fixation_enabled:
             logger.info(f"auto-clamp enabled changed to: {self._head_fixation_enabled}")
+
+    @property
+    def clean_raw_data_on_inactive_session(self):
+        return self._clean_raw_data_on_inactive_session
+
+    @clean_raw_data_on_inactive_session.setter
+    def clean_raw_data_on_inactive_session(self, value):
+        self._clean_raw_data_on_inactive_session = value
 
     @property
     def baseline_intensity(self):

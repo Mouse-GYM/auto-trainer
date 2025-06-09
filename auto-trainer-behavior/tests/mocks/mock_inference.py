@@ -46,3 +46,5 @@ class MockInference(ObservableObject):
 
     def perform_live(self):
         pass
+
+    def set_inference_to_online(self): ...
