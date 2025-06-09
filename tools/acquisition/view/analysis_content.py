@@ -65,13 +65,13 @@ class AnalysisContent(ContentWidget):
         layout.addWidget(QLabel("D-T:"))
         self._triangle_diamond_offset = QLabel("n/a")
         self.diamond_triangle_offset_changed.connect(
-            lambda x: self._triangle_diamond_offset.setText(f"{x[0]:.2f}, {x[1]:.2f}, {x[2]:.2f}"))
+            lambda x: self._triangle_diamond_offset.setText("n/a" if math.isnan(x[0]) else ", ".join(f"{v:.2f}" for v in x)))
         layout.addWidget(self._triangle_diamond_offset)
 
         layout.addWidget(QLabel("S-T:"))
         self._star_triangle_offset = QLabel("n/a")
         self.star_triangle_offset_changed.connect(
-            lambda x: self._star_triangle_offset.setText(f"{x[0]:.2f}, {x[1]:.2f}, {x[2]:.2f}"))
+            lambda x: self._star_triangle_offset.setText("n/a" if math.isnan(x[0]) else ", ".join(f"{v:.2f}" for v in x)))
         layout.addWidget(self._star_triangle_offset)
 
         layout.addStretch(1)
@@ -169,7 +169,7 @@ class AnalysisContent(ContentWidget):
             self.position_changed.emit(value)
 
     def _diamond_triangle_offset_changed(self, offset: Tuple[float, float, float]):
-        self.diamond_triangle_offset_changed.emit("n/a" if math.isnan(offset[0]) else offset)
+        self.diamond_triangle_offset_changed.emit(offset)
 
     def _star_triangle_offset_changed(self, offset: Tuple[float, float, float]):
-        self.star_triangle_offset_changed.emit("n/a" if math.isnan(offset[0]) else offset)
+        self.star_triangle_offset_changed.emit(offset)
