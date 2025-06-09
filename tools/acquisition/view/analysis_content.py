@@ -1,4 +1,5 @@
 import logging
+import math
 from typing import Tuple
 
 from PySide6.QtCore import Signal
@@ -168,7 +169,7 @@ class AnalysisContent(ContentWidget):
             self.position_changed.emit(value)
 
     def _diamond_triangle_offset_changed(self, offset: Tuple[float, float, float]):
-        self.diamond_triangle_offset_changed.emit(offset)
+        self.diamond_triangle_offset_changed.emit("n/a" if math.isnan(offset[0]) else offset)
 
     def _star_triangle_offset_changed(self, offset: Tuple[float, float, float]):
-        self.star_triangle_offset_changed.emit(offset)
+        self.star_triangle_offset_changed.emit("n/a" if math.isnan(offset[0]) else offset)
