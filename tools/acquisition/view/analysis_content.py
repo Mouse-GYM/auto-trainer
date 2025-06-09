@@ -19,7 +19,6 @@ _INACTIVE_LOAD_CELL_COLOR = (240, 240, 240)
 
 
 class AnalysisContent(ContentWidget):
-    position_changed = Signal(int, name="position_changed")
     diamond_triangle_offset_changed = Signal(tuple, name="diamond_triangle_offset_changed")
     star_triangle_offset_changed = Signal(tuple, name="star_triangle_offset_changed")
 
@@ -115,8 +114,6 @@ class AnalysisContent(ContentWidget):
 
         self.set_is_editable(False)
 
-        self.position_changed.connect(lambda x: self._current_position.setText(str(x)))
-
         self._model.property_changed += self._model_property_changed
 
         inference_model.star_triangle_offset_changed += self._star_triangle_offset_changed
@@ -144,9 +141,6 @@ class AnalysisContent(ContentWidget):
 
         self._plot1.cache_data(values)
 
-    def _update_position(self):
-        self._model.update_head_magnet_intensity(self._position.value())
-
     def _update_trigger(self):
         try:
             self._model.load_trigger = float(self._load_cell.text())
@@ -165,8 +159,6 @@ class AnalysisContent(ContentWidget):
         # rather than direct set/update.
         if name == "load_trigger":
             self._load_cell.setText(str(value))
-        elif name == "position":
-            self.position_changed.emit(value)
 
     def _diamond_triangle_offset_changed(self, offset: Tuple[float, float, float]):
         self.diamond_triangle_offset_changed.emit(offset)
