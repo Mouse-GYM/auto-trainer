@@ -108,6 +108,8 @@ class PoseResponse:
         part1 = SceneElement(part1).value
         part2 = SceneElement(part2).value
         # should use mapping from model configuration for part1/2
+        if not self.is_part_seen(part1) or not self.is_part_seen(part2):
+            return math.nan, math.nan, math.nan
         value = self.parts_3d_offsets.get(part1, {}).get(part2, None)
         if value is None:
             value = self.parts_3d_offsets.get(part2, {}).get(part1, None)
@@ -263,18 +265,6 @@ class PoseAlgorithm(ObservableObject):
             PoseResponse: a PoseResponse object with the processed data
         """
         self._sequence += 1
-        parts_3d_offsets = defaultdict(dict)
-        if len(pairs_3d_offsets) > 0:
-            # NB: only handling last frame of batch:
-            df_3d = self._handle_offsets_pose_data(*(
-                [cam_frames[-1]]
-                for cam_frames in per_cam_frames
-            ))
-            for part1, part2 in pairs_3d_offsets:
-                parts_3d_offsets[part1][part2] = tuple(
-                      df_3d[part1].iloc[-1, 0:3]  # last frame, 3 first columns (x, y, z)
-                    - df_3d[part2].iloc[-1, 0:3]
-                )
 
         left_frames = per_cam_frames[0]
         right_frames = per_cam_frames[1]
@@ -297,6 +287,18 @@ class PoseAlgorithm(ObservableObject):
                     parts_flag_2[part] = True
                     if maybe_dual:
                         parts_flag_3[part] = True
+
+        parts_3d_offsets = defaultdict(dict)
+        if len(pairs_3d_offsets) > 0:
+            # NB: only handling last frame of batch:
+            cams_last_frame = [cam_frames[-1] for cam_frames in per_cam_frames]
+            df_3d = self._handle_offsets_pose_data(*([frame] for frame in cams_last_frame))
+            for part1, part2 in pairs_3d_offsets:
+                parts_3d_offsets[part1][part2] = tuple(
+                      df_3d[part1].iloc[-1, 0:3]  # last frame, 3 first columns (x, y, z)
+                    - df_3d[part2].iloc[-1, 0:3]
+                )
+                # check of parts confidence level is handled in PoseResponse.get_parts_3d_offset()
 
         response = PoseResponse(
             sequence=self._sequence,
