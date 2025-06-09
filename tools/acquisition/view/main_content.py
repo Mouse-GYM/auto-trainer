@@ -9,7 +9,6 @@ from autotrainer.inference import PoseResponse, PoseAlgorithm
 from autotrainer.pyside import ATSeparator
 
 from tools.acquisition.model.app_model import AppModel
-from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.view.analysis_content import AnalysisContent
 from tools.acquisition.view.content_widget import ContentWidget
 from tools.acquisition.view.behavior_content import BehaviorContent
@@ -70,7 +69,7 @@ class MainContent(ContentWidget):
         self._layout.addWidget(behavior_content, 1, 0, 1, 3)
         self._content_widgets.append(behavior_content)
 
-        self._analysis_content = AnalysisContent(self._model.hardware, self._model.analysis,
+        self._analysis_content = AnalysisContent(self._model.hardware, self._model.inference, self._model.analysis,
                                                  self._model.message_handler)
         self._layout.addWidget(self._analysis_content, 1, 3, 1, 3)
         self._content_widgets.append(self._analysis_content)
@@ -111,9 +110,6 @@ class MainContent(ContentWidget):
         inference = self._model.inference
         inference.pose_response_ready += self.refresh_pose
         inference.algo_initialised += self._algo_initialised
-        # can be moved in deeper content/UI element:
-        inference.star_triangle_offset_changed += self._star_triangle_offset_changed
-        inference.diamond_triangle_offset_changed += self._diamond_triangle_offset_changed
 
         self.set_diagnostics_visible(False)
 
@@ -172,9 +168,3 @@ class MainContent(ContentWidget):
     def _algo_initialised(self, algo: PoseAlgorithm):
         for cam_content in (self._left_camera_content, self._right_camera_content):
             cam_content.algo_initialised(algo)
-
-    def _star_triangle_offset_changed(self, offset: Tuple[float, float, float]):
-        pass
-
-    def _diamond_triangle_offset_changed(self, offset: Tuple[float, float, float]):
-        pass
