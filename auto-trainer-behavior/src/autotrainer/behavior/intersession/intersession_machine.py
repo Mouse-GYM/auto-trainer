@@ -61,7 +61,7 @@ class IntersessionMachine(StateMachine):
     def after_enter_segmentation(self):
         self.events.on_analysis_started()
         self._segmentation_configuration = SegmentationConfiguration(nonce=secrets.token_hex(),
-                                                                     session_index=self._project_info.session,
+                                                                     session_index=self._project_info.session.value,
                                                                      complete=self._segmentation_complete)
         EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationBegin,
                                                   context=self._segmentation_configuration.nonce)
