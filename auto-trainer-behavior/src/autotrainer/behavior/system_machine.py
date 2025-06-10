@@ -1,4 +1,5 @@
 import logging
+import math
 from enum import Enum
 from itertools import chain
 from pathlib import Path
@@ -40,8 +41,11 @@ class SystemMachine(StateMachine):
 
     class Properties(str, Enum):
         DIAMOND_TRIANGLE_OFFSET_DRIFT = "diamond_triangle_offset_drift"
-        COVER_PELLET_OFFSET_DRIFT = "cover_pellet_offset_drift"
-        RELEASE_PELLET_OFFSET_DRIFT = "release_pellet_offset_drift"
+        COVER_PELLET_DISTANCE = "cover_pellet_distance"
+        COVER_POSITION_ERROR_DETECTED = "cover_position_error_detected"
+        RELEASE_PELLET_DISTANCE = "release_pellet_distance"
+        RELEASE_POSITION_ERROR_DETECTED = "release_position_error_detected"
+
 
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
@@ -64,8 +68,8 @@ class SystemMachine(StateMachine):
                  inference: InferenceProtocol = None,
                  *,
                  diamond_triangle_known_offset: Optional[Offset3DTuple] = Offset3DTuple(0, 0, 0),  # None,
-                 cover_pellet_star_triangle_known_offset: Optional[Offset3DTuple] = Offset3DTuple(0, 0, 0),  # None,
-                 release_pellet_star_triangle_known_offset: Optional[Offset3DTuple] = Offset3DTuple(0, 0, 0),  # None,
+                 cover_max_distance_threshold: Optional[int] = 1,
+                 release_max_distance_threshold: Optional[int] = 1,
                  ):
 
         initial_state = SystemState.cage
@@ -81,11 +85,15 @@ class SystemMachine(StateMachine):
         self._msg_handler = msg_handler
 
         self._diamond_triangle_known_offset = diamond_triangle_known_offset
-        self._diamond_triangle_prev_drift: Optional[Offset3DTuple] = None
-        self._cover_pellet_star_triangle_known_offset = cover_pellet_star_triangle_known_offset
-        self._cover_pellet_star_triangle_prev_drift: Optional[Offset3DTuple] = None
-        self._release_pellet_star_triangle_known_offset = release_pellet_star_triangle_known_offset
-        self._release_pellet_star_triangle_prev_drift: Optional[Offset3DTuple] = None
+        self._diamond_triangle_prev_drift: Optional[int] = None
+
+        self._cover_max_distance_threshold = cover_max_distance_threshold
+        self._cover_pellet_prev_distance: Optional[int] = None
+        self._cover_pellet_prev_error_detected: Optional[bool] = None
+
+        self._release_max_distance_threshold = release_max_distance_threshold
+        self._release_pellet_prev_distance: Optional[int] = None
+        self._release_pellet_prev_error_detected: Optional[bool] = None
 
         self._analysis = analysis
         if analysis is not None:
@@ -289,6 +297,7 @@ class SystemMachine(StateMachine):
         check_drift = (
             self._state != SystemState.intersession
             and self._pellet_machine.state == PelletState.monitoring
+            and self._pellet_machine.can_use_pellet_command()
             and known_offset is not None
         )
         if not check_drift:
@@ -312,37 +321,53 @@ class SystemMachine(StateMachine):
             self._diamond_triangle_prev_drift = drift
 
     def _handle_star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
-        known_cover = self._cover_pellet_star_triangle_known_offset
-        known_release = self._release_pellet_star_triangle_known_offset
-        if known_cover is not None and self._pellet_machine.is_cover_pellet_completed:
-            prev = self._cover_pellet_star_triangle_prev_drift
-            if offset is None:
-                drift = None
-            else:
-                drift = known_cover - offset
-                d_drift = None if prev is None else prev - drift
-                # not sure which abs_diff to check against:
-                if d_drift is not None and any(v > 1 for v in d_drift):
-                    logger.verbose("cover pellet offset drift: %s d_drift=%s", drift, d_drift)
-            if drift != prev:
+        cover_threshold = self._cover_max_distance_threshold
+        check_cover_distance = (
+            cover_threshold is not None
+            and self._pellet_machine.state == PelletState.covering
+            and self._pellet_machine.can_use_pellet_command()
+            and self._algorithm.pellet_cover_enabled
+            and self._algorithm.is_in_session
+        )
+        if check_cover_distance:
+            cover_distance = math.sqrt(
+                offset.x ** 2 + offset.y ** 2 + offset.y ** 2
+            )
+            prev = self._cover_pellet_prev_distance
+            if cover_distance != prev:
                 self.events.property_changed(
-                    self.Properties.COVER_PELLET_OFFSET_DRIFT, drift, prev)
-                self._cover_pellet_star_triangle_prev_drift = drift
+                    self.Properties.COVER_PELLET_DISTANCE, cover_distance, prev)
+                self._cover_pellet_prev_distance = cover_distance
+            #
+            is_error = cover_distance > cover_threshold
+            prev = self._cover_pellet_prev_error_detected
+            if is_error != prev:
+                self.events.property_changed(
+                    self.Properties.COVER_POSITION_ERROR_DETECTED, is_error, prev)
 
-        elif known_release is not None and self._pellet_machine.is_release_pellet_completed:
-            prev = self._release_pellet_star_triangle_prev_drift
-            if offset is None:
-                drift = None
-            else:
-                drift = known_release - offset
-                d_drift = None if prev is None else prev - drift
-                # not sure which abs_diff to check against:
-                if d_drift is None or any(v > 1 for v in d_drift):
-                    logger.verbose("release pellet offset drift: %s d_drift=%s", drift, d_drift)
-            if drift != prev:
+        release_threshold = self._release_max_distance_threshold
+        check_release_distance = (
+            release_threshold is not None
+            and self._state == SystemState.tunnel
+            and self._pellet_machine.state == PelletState.releasing
+            and self._pellet_machine.can_use_pellet_command()
+            and not self._algorithm.is_in_session
+        )
+        if check_release_distance:
+            release_distance = math.sqrt(
+                offset.x ** 2 + offset.y ** 2 + offset.y ** 2
+            )
+            prev = self._release_pellet_prev_distance
+            if release_distance != prev:
                 self.events.property_changed(
-                    self.Properties.COVER_PELLET_OFFSET_DRIFT, drift, prev)
-                self._release_pellet_star_triangle_prev_drift = drift
+                    self.Properties.RELEASE_PELLET_DISTANCE, release_distance, prev)
+                self._release_pellet_prev_distance = release_distance
+            #
+            is_error = release_distance > release_threshold
+            prev = self._cover_pellet_prev_error_detected
+            if is_error != prev:
+                self.events.property_changed(
+                    self.Properties.RELEASE_POSITION_ERROR_DETECTED, is_error, prev)
 
     def _pose_changed(self, response: PoseResponse):
         if response.pellet_seen:

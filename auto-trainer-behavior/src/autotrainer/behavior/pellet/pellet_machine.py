@@ -74,13 +74,6 @@ class PelletMachine(StateMachine):
 
         self._api_status_token = None
 
-        self._api_status_cover_pellet_token = None
-        self._api_status_release_pellet_token = None
-        self._move_in_progress = False
-        self._is_send_pellet_completed = False
-        self._is_cover_pellet_completed = False
-        self._is_release_pellet_completed = False
-
         self.machine = Machine(model=[self], states=list(PelletState),
                                transitions=PelletMachine.transitions, auto_transitions=False,
                                initial=initial_state, model_override=True,
@@ -93,13 +86,6 @@ class PelletMachine(StateMachine):
     @property
     def events(self):
         return self._events
-
-    @property
-    def is_cover_pellet_completed(self):
-        return (
-            self._is_cover_pellet_completed
-            and not self._move_in_progress
-        )
 
     def environment_changed(self):
         self._try_next_state()
