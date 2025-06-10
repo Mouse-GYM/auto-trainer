@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 from enum import Enum
 
+from typing import Callable
 from typing_extensions import Self
 
 from autotrainer.core import ObservableObject, EventManager, BehaviorConfiguration, post_trigger_enable
@@ -27,8 +28,14 @@ class BehaviorProps(str, Enum):
 
 class BehaviorAlgorithm(ObservableObject):
 
+    # dynamic events type hints,
+    # helps IDE search/completion/type-verification:
+    session_starting: Callable[[], None]
+    session_ending: Callable[[], None]
+    system_state_changed: Callable[[SystemState], None]
+
     def __init__(self):
-        super().__init__(event_names=("session_starting", "session_ending"))
+        super().__init__(event_names=("session_starting", "session_ending", "system_state_changed"))
         self._project_info = None
 
         self._pellet_delivery_enabled = True
@@ -87,7 +94,9 @@ class BehaviorAlgorithm(ObservableObject):
 
     @system_state.setter
     def system_state(self, value: SystemState):
-        self._system_state = value
+        if value != self._system_state:
+            self.system_state_changed(self._system_state, value)
+            self._system_state = value
 
     @property
     def is_in_session(self) -> bool:
