@@ -284,7 +284,7 @@ class SystemMachine(StateMachine):
             self._state != SystemState.intersession
             and self._pellet_machine.state == PelletState.monitoring
             and known_offset is not None
-            and self._pellet_machine.is_send_pellet_completed
+            # and self._pellet_machine.is_send_pellet_completed  # TODO
         )
         if not check_drift:
             return
@@ -295,7 +295,7 @@ class SystemMachine(StateMachine):
             logger.verbose("drift diamond triangle: %s d_drift=%s", drift, d_drift)
         if drift != self._diamond_star_prev_drift:
             self._diamond_star_prev_drift = drift
-            self._pellet_device.set_motor_drift(drift)
+            # self._pellet_device.set_motor_drift(drift)  # TODO
             self.events.property_changed(
                 self.Properties.DIAMOND_STAR_OFFSET_DRIFT, drift, self._diamond_star_prev_drift)
 
