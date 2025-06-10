@@ -1,6 +1,6 @@
 import logging
 import time
-from queue import Queue
+from queue import Queue, Empty
 from threading import Thread
 from typing import Callable
 
@@ -49,12 +49,14 @@ class MessageHandler(ObservableObject):
 
     def __init__(self, input_queue: Queue, name: str = "message-handler", event_names=()):
         super().__init__(event_names=event_names + ("ack_received",))
-
         self._input_queue = input_queue
-
         self._name = name
-
         self._current_thread = None
+
+    def __del__(self):
+        thread = self._current_thread
+        if thread is not None:
+            self.request_terminate()
 
     @property
     def input_queue(self) -> Queue:
@@ -67,10 +69,9 @@ class MessageHandler(ObservableObject):
 
     def run(self):
         logger.debug(f"<{self._name}>: entering message event loop")
-
         while True:
             msg, data = self._input_queue.get()
-
+            self._input_queue.task_done()  # for now we don't care when we do it, so do it first
             if msg == TERMINATE:
                 break
             elif msg == SystemStatusMessageKind.ACKNOWLEDGE:
@@ -79,11 +80,7 @@ class MessageHandler(ObservableObject):
                 self.property_changed(MessageHandler.FIRMWARE_VERSION_PROPERTY, data, None)
             else:
                 self.message_received(msg, data)
-
             time.sleep(0.0001)
-
-        self._current_thread = None
-
         logger.debug(f"<{self._name}>: exiting message event loop")
 
     def request_terminate(self):
@@ -93,6 +90,23 @@ class MessageHandler(ObservableObject):
         """
         if self._input_queue is not None:
             self._input_queue.put((TERMINATE, None))
+
+    def wait_terminated(self):
+        thread = self._current_thread
+        queue = self._input_queue
+        if thread is not None:
+            self._current_thread = None
+            thread.join()
+        if queue is not None:
+            self._input_queue = None
+            while not queue.empty():
+                try:
+                    obj = queue.get_nowait()
+                except Empty:
+                    break
+                logger.warning("drop unhandled %s", type(obj))
+                queue.task_done()
+            queue.join()
 
     def message_received(self, msg, _data):
         pass
