@@ -1,14 +1,14 @@
 import dataclasses
 import math
 import operator
-from typing import List, Dict, Union, Optional, Tuple, Callable
+from typing import List, Dict, Optional, Tuple, Callable
 from collections import namedtuple, defaultdict
 from dataclasses import dataclass
 
 import numpy
 import pandas
 
-from autotrainer.core import ObservableObject
+from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from .config import StereoParams
 from autotrainer.inference.pose_elements import SceneElement
@@ -22,9 +22,6 @@ logger = get_verbose_logger(__name__)
 
 
 PoseTuple = namedtuple("PoseTuple", ["x", "y"])
-
-
-Pairs3dOffsetT = Union[List[Tuple[str, str]], Tuple[Tuple[str, str], ...]]
 
 
 @dataclass(frozen=True)
@@ -46,7 +43,7 @@ class PoseResponse:
     locations: List[List[PoseLocation]]
     """X, Y locations for each part for each camera, if above threshold, otherwise -1, -1"""
 
-    parts_3d_offsets: Dict[str, Dict[str, Tuple[float, float, float]]] = dataclasses.field(default_factory=dict)
+    parts_3d_offsets: Dict[str, Dict[str, Offset3DTuple]] = dataclasses.field(default_factory=dict)
     """3D offsets of the pairs of parts requested during the response creation"""
 
     def x_y_1(self) -> List[PoseTuple]:
@@ -98,8 +95,10 @@ class PoseResponse:
             cams_idx = tuple(range(len(self.parts_flags) - 1))
         part = SceneElement(part).value
         for idx in cams_idx:
-            if self.parts_flags[idx][part]:
-                return True
+            value = self.parts_flags[idx].get(part, None)
+            if value is not None:
+                if value:
+                    return True
         return False
 
     def get_parts_3d_offset(
@@ -108,26 +107,25 @@ class PoseResponse:
         part2: str,
         *,
         require_present_all_cams: bool = True,
-    ) -> Tuple[float, float, float]:
+    ) -> Optional[Offset3DTuple]:
         """Return the 3d offsets between part1 and part2,
-        if none exist/is available return 3 NaN values instead
+        if none exist/is available return None instead
         """
         part1 = SceneElement(part1).value
         part2 = SceneElement(part2).value
-        # -1 means all cams in is_part_seen()
-        # while no idx means any cam:
+        # -1 means all cams in is_part_seen(), while no idx means any cam:
         cams_idx = (-1,) if require_present_all_cams else ()
         part1_seen = self.is_part_seen(part1, cams_idx=cams_idx)
         part2_seen = self.is_part_seen(part2, cams_idx=cams_idx)
         if not part1_seen or not part2_seen:
-            return math.nan, math.nan, math.nan
+            return None
         value = self.parts_3d_offsets.get(part1, {}).get(part2, None)
         if value is None:
             value = self.parts_3d_offsets.get(part2, {}).get(part1, None)
             if value is None:
-                return math.nan, math.nan, math.nan
+                return None
             value = tuple(map(operator.neg, value))
-        return value
+        return Offset3DTuple(value)
 
 
 class PoseAlgorithm(ObservableObject):

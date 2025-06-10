@@ -1,5 +1,8 @@
 from dataclasses import dataclass
-from typing import Protocol, Callable, Tuple
+from typing import Protocol, Callable, Tuple, Optional
+
+from autotrainer.core import Offset3DTuple
+
 
 # NB: not importing autotrainer.inference
 
@@ -41,8 +44,8 @@ class InferenceProtocol(Protocol):
     detection_result_ready: Callable[["autotrainer.behavior.analysis.IntersessionResponse"], None]
     pose_response_ready: Callable[["autotrainer.inference.PoseResponse"], None]
     algo_initialised: Callable[["autotrainer.inference.PoseAlgorithm"], None]
-    diamond_triangle_offset_changed: Callable[[Tuple[float, float, float]], None]
-    star_triangle_offset_changed: Callable[[Tuple[float, float, float]], None]
+    diamond_triangle_offset_changed: Callable[[Optional[Offset3DTuple]], None]
+    star_triangle_offset_changed: Callable[[Optional[Offset3DTuple]], None]
 
 
 if __debug__ and False:

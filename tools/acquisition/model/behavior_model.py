@@ -15,7 +15,15 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
 
         self._analysis = analysis
 
-        self._machine = SystemMachine(None, None, msg_handler, analysis, hardware_model, hardware_model, inference)
+        self._machine = SystemMachine(
+            algorithm=None,
+            project_info=None,
+            msg_handler=msg_handler,
+            analysis=analysis,
+            tunnel_device=hardware_model,
+            pellet_device=hardware_model,
+            inference=inference,
+        )
 
         self._project: Optional[ProjectInfo] = None
 
@@ -24,7 +32,6 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
 
         self._is_intersession_enabled = self._machine.algorithm.intersession_enabled
-
         self._hardware_model = hardware_model
 
     @property

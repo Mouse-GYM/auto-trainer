@@ -23,7 +23,7 @@ import numpy as np
 import pandas
 
 from autotrainer.core import FixedArrayMultiQueue, ObservableObject, ProjectInfo, EventManager, clear_queue, \
-    InferenceConfiguration
+    InferenceConfiguration, Offset3DTuple
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
@@ -189,7 +189,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             (SceneElement.Diamond, SceneElement.Triangle),
             (SceneElement.Star, SceneElement.Triangle),
         ]
-        self._parts_offsets: Dict[Tuple[str, str], Tuple[float, float, float]] = {}
+        self._parts_offsets: Dict[Tuple[str, str], Offset3DTuple] = {}
 
     @property
     def project(self) -> ProjectInfo:
@@ -240,17 +240,17 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
     def pose_algorithm(self) -> PoseAlgorithm:
         return self._algorithm
 
-    def get_parts_offsets(self, part1: str, part2: str) -> Optional[Tuple[float, float, float]]:
-        """Return the offsets of part2 relative to part1"""
+    def get_parts_offsets(self, part1: str, part2: str) -> Optional[Offset3DTuple]:
+        """Return the offsets of part2 relative to part1 as last known"""
         part1 = SceneElement(part1).value
         part2 = SceneElement(part2).value
         v_offsets = self._parts_offsets.get((part1, part2), None)
         if v_offsets is None:
             v_offsets = self._parts_offsets.get((part2, part1), None)
             if v_offsets is None:
-                return math.nan, math.nan, math.nan
+                return None
             v_offsets = tuple(map(operator.neg, v_offsets))
-        return v_offsets
+        return Offset3DTuple(v_offsets)
 
     def _check_previous_offline_thread(self):
         cur_off = self._offline_thread

@@ -1,11 +1,11 @@
 import logging
 import math
-from typing import Tuple
+from typing import Tuple, Optional
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
 
-from autotrainer.core import PerfMonitor, MessageHandler, SensorAnalysis, LoadCellMonitor
+from autotrainer.core import PerfMonitor, MessageHandler, SensorAnalysis, LoadCellMonitor, Offset3DTuple
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget, QtIndicator
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
@@ -18,9 +18,13 @@ _ACTIVE_LOAD_CELL_COLOR = (0, 250, 154)
 _INACTIVE_LOAD_CELL_COLOR = (240, 240, 240)
 
 
+def _render_offset_3d_value(value: Optional[Offset3DTuple]) -> str:
+    return "n/a" if value is None else ", ".join(f"{coord:.2f}" for coord in value)
+
+
 class AnalysisContent(ContentWidget):
-    diamond_triangle_offset_changed = Signal(tuple, name="diamond_triangle_offset_changed")
-    star_triangle_offset_changed = Signal(tuple, name="star_triangle_offset_changed")
+    diamond_triangle_offset_changed = Signal(str, name="diamond_triangle_offset_changed")
+    star_triangle_offset_changed = Signal(str, name="star_triangle_offset_changed")
 
     def __init__(self, hardware_model: HardwareModel, inference_model: InferenceModel, analysis: SensorAnalysis,
                  msg_handler: MessageHandler):
@@ -63,14 +67,12 @@ class AnalysisContent(ContentWidget):
 
         layout.addWidget(QLabel("D-T:"))
         self._triangle_diamond_offset = QLabel("n/a")
-        self.diamond_triangle_offset_changed.connect(
-            lambda x: self._triangle_diamond_offset.setText("n/a" if math.isnan(x[0]) else ", ".join(f"{v:.2f}" for v in x)))
+        self.diamond_triangle_offset_changed.connect(self._triangle_diamond_offset.setText)
         layout.addWidget(self._triangle_diamond_offset)
 
         layout.addWidget(QLabel("S-T:"))
         self._star_triangle_offset = QLabel("n/a")
-        self.star_triangle_offset_changed.connect(
-            lambda x: self._star_triangle_offset.setText("n/a" if math.isnan(x[0]) else ", ".join(f"{v:.2f}" for v in x)))
+        self.star_triangle_offset_changed.connect(self._star_triangle_offset.setText)
         layout.addWidget(self._star_triangle_offset)
 
         layout.addStretch(1)
@@ -160,8 +162,8 @@ class AnalysisContent(ContentWidget):
         if name == "load_trigger":
             self._load_cell.setText(str(value))
 
-    def _diamond_triangle_offset_changed(self, offset: Tuple[float, float, float]):
-        self.diamond_triangle_offset_changed.emit(offset)
+    def _diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
+        self.diamond_triangle_offset_changed.emit(_render_offset_3d_value(offset))
 
-    def _star_triangle_offset_changed(self, offset: Tuple[float, float, float]):
-        self.star_triangle_offset_changed.emit(offset)
+    def _star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
+        self.star_triangle_offset_changed.emit(_render_offset_3d_value(offset))
