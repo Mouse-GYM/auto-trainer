@@ -5,6 +5,7 @@ from PySide6 import QtCore
 from PySide6.QtCore import QTimer, Slot
 from PySide6.QtWidgets import QGridLayout
 
+from autotrainer.core import Offset3DTuple
 from autotrainer.inference import PoseResponse, PoseAlgorithm
 from autotrainer.pyside import ATSeparator
 

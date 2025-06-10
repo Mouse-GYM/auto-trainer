@@ -22,7 +22,7 @@ except (ModuleNotFoundError, TypeError, AttributeError):
     pass
 
 from autotrainer.core import SystemStatusMessageKind, SystemCommandKind, \
-    AudioSpectrumData
+    AudioSpectrumData, Offset3DTuple
 
 from .motor_steps import MotorSteps
 from .device import Device
@@ -72,6 +72,9 @@ class CanDevice(Device):
         self._open_tunnel_gate = None
         self._close_tunnel_gate = None
         self._compound_movement = None  # Current compound movement
+
+        self._motor_drift = Offset3DTuple(0, 0, 0)
+        # TODO: apply drift to the user set x/y/z commands passed values
 
         # Initialize command handlers lookup table
         self._command_handlers = {
@@ -199,6 +202,8 @@ class CanDevice(Device):
                     self._interface.emit_tone(data[0], data[1])
                     if isinstance(data, tuple) else None
                 ),
+
+            SystemCommandKind.SET_MOTOR_DRIFT: (lambda data: setattr(self, "_motor_drift", data)),
 
             # No-op handlers
             SystemCommandKind.STREAM_START: lambda data: None,

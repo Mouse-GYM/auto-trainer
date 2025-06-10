@@ -20,6 +20,7 @@ from autotrainer.core import AnimalSubject
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseAlgorithm
 from autotrainer.inference.config import load_calib_stereo_params
+
 from tools.acquisition.model.hardware_model import HardwareModel
 
 from tools.acquisition.model.inference_model import InferenceModel

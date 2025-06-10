@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from autotrainer.core import MotorConfigurations
+from autotrainer.core import MotorConfigurations, Offset3DTuple
 
 
 class DeviceConnectionProtocol(Protocol):
@@ -19,3 +19,5 @@ class DeviceConnectionProtocol(Protocol):
     def send_message(self, kind: int, data: object = None, context: object = None): ...
 
     def use_motor_configurations(self, data: MotorConfigurations): ...
+
+    def set_motor_drift(self, drift: Offset3DTuple): ...

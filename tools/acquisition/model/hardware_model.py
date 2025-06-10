@@ -3,7 +3,7 @@ from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional
 
-from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject
+from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.device import (DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 HeadFix, PelletDelivery)
@@ -217,3 +217,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             return True
 
         return False
+
+    def set_motor_drift(self, drift: Offset3DTuple):
+        self._pellet_device.set_motor_drift(drift)

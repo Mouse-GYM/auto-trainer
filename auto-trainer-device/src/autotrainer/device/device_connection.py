@@ -3,9 +3,9 @@ import math
 import time
 from queue import Queue, Empty
 from threading import Thread
-from typing import Callable
+from typing import Callable, Union
 
-from autotrainer.core import MotorConfigurations, SystemCommandKind
+from autotrainer.core import MotorConfigurations, SystemCommandKind, Offset3DTuple
 
 from .can_device import HAVE_CAN_DEVICE
 from .device import Device
@@ -136,9 +136,11 @@ class DeviceConnection(DeviceConnectionProtocol):
     def set_release_procedure(self, release_steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, release_steps)
 
-    def set_motor_configuration(self, config):
-        assert isinstance(config, ServoConfig) or isinstance(config, StepperConfig)
+    def set_motor_configuration(self, config: Union[ServoConfig, StepperConfig]):
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
+
+    def set_motor_drift(self, drift: Offset3DTuple):
+        self.send_message(SystemCommandKind.SET_MOTOR_DRIFT, drift)
 
     def _start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
