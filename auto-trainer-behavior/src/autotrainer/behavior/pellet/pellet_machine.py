@@ -73,7 +73,6 @@ class PelletMachine(StateMachine):
         self._pellet_device = pellet_device
 
         self._api_status_token = None
-        self._api_status_send_pellet_token = None
 
         self._api_status_cover_pellet_token = None
         self._api_status_release_pellet_token = None
@@ -96,23 +95,9 @@ class PelletMachine(StateMachine):
         return self._events
 
     @property
-    def is_send_pellet_completed(self):
-        return (
-            self._is_send_pellet_completed
-            and not self._move_in_progress
-        )
-
-    @property
     def is_cover_pellet_completed(self):
         return (
             self._is_cover_pellet_completed
-            and not self._move_in_progress
-        )
-
-    @property
-    def is_release_pellet_completed(self):
-        return (
-            self._is_release_pellet_completed
             and not self._move_in_progress
         )
 
@@ -122,7 +107,6 @@ class PelletMachine(StateMachine):
     def before_move_home(self):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.send_home()
-            self._move_in_progress = True
             EventManager.default().post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -131,7 +115,6 @@ class PelletMachine(StateMachine):
         if self._pellet_device is not None:
             self.events.pellet_loading()
             self._api_status_token = self._pellet_device.load_pellet()
-            self._move_in_progress = True
             EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -139,9 +122,7 @@ class PelletMachine(StateMachine):
     def before_send_pellet(self):
         if self._pellet_device is not None:
             self.events.pellet_sending()
-            self._api_status_send_pellet_token = self._api_status_token = self._pellet_device.send_pellet()
-            self._is_send_pellet_completed = False
-            self._move_in_progress = True
+            self._api_status_token = self._pellet_device.send_pellet()
             EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -149,7 +130,6 @@ class PelletMachine(StateMachine):
     def before_prerelease_pellet(self):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.release_pellet()
-            self._move_in_progress = True
             EventManager.default().post_event_content(BehaviorEventKind.pelletPrereleaseBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -159,18 +139,14 @@ class PelletMachine(StateMachine):
 
     def before_cover_pellet(self):
         if self._pellet_device is not None:
-            self._api_status_cover_pellet_token = self._api_status_token = self._pellet_device.cover_pellet()
-            self._move_in_progress = True
-            self._is_release_pellet_completed = False
+            self._api_status_token = self._pellet_device.cover_pellet()
             EventManager.default().post_event_content(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
     def before_release_pellet(self):
         if self._pellet_device is not None:
-            self._api_status_release_pellet_token = self._api_status_token = self._pellet_device.release_pellet()
-            self._move_in_progress = True
-            self._is_cover_pellet_completed = False
+            self._api_status_token = self._pellet_device.release_pellet()
             EventManager.default().post_event_content(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -234,27 +210,8 @@ class PelletMachine(StateMachine):
                          token, self._api_status_token)
             return
 
-        if token == self._api_status_send_pellet_token and not self._is_send_pellet_completed:
-            self._is_send_pellet_completed = True
-            logger.notice("Detected send_pellet completed")
-            self._is_cover_pellet_completed = False
-            self._is_release_pellet_completed = False
-
-        elif token == self._api_status_cover_pellet_token and not self._is_cover_pellet_completed:
-            self._is_cover_pellet_completed = True
-            logger.notice("Detected cover pellet completed")
-            self._is_send_pellet_completed = False  # not sure for this one
-            self._is_release_pellet_completed = False
-
-        elif token == self._api_status_release_pellet_token and not self._is_release_pellet_completed:
-            self._is_release_pellet_completed = True
-            logger.notice("Detected release pellet completed")
-            self._is_send_pellet_completed = False  # not sure, same
-            self._is_cover_pellet_completed = False
-
         EventManager.default().post_event_content(BehaviorEventKind.pelletAcknowledgeToken, context=token)
 
-        self._move_in_progress = False
         self._api_status_token = None
 
         self._try_next_state()
