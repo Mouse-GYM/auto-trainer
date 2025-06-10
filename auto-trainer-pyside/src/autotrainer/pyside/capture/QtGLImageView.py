@@ -59,6 +59,7 @@ class QGLImageView(QWidget):
         add_managed_point(Qt.GlobalColor.blue, SceneElement.Diamond)
         add_managed_point(Qt.GlobalColor.green, SceneElement.Triangle)
         add_managed_point(Qt.GlobalColor.white, SceneElement.LH_grab)
+        add_managed_point(Qt.GlobalColor.yellow, SceneElement.RH_grab)
 
         self._pixmap = None
         self._cur_image = None  # image must remain active to prevent segfault when pixmap continue use it.
