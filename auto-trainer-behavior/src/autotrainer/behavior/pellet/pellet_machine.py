@@ -73,9 +73,6 @@ class PelletMachine(StateMachine):
         self._pellet_device = pellet_device
 
         self._api_status_token = None
-        self._api_status_send_pellet_token = None
-        self._is_send_pellet_completed = False
-        self._move_in_progress = False
 
         self.machine = Machine(model=[self], states=list(PelletState),
                                transitions=PelletMachine.transitions, auto_transitions=False,
@@ -91,17 +88,12 @@ class PelletMachine(StateMachine):
     def events(self):
         return self._events
 
-    @property
-    def is_send_pellet_completed(self):
-        return self._is_send_pellet_completed and not self._move_in_progress
-
     def environment_changed(self):
         self._try_next_state()
 
     def before_move_home(self):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.send_home()
-            self._move_in_progress = True
             EventManager.default().post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -110,7 +102,6 @@ class PelletMachine(StateMachine):
         if self._pellet_device is not None:
             self.events.pellet_loading()
             self._api_status_token = self._pellet_device.load_pellet()
-            self._move_in_progress = True
             EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -118,9 +109,7 @@ class PelletMachine(StateMachine):
     def before_send_pellet(self):
         if self._pellet_device is not None:
             self.events.pellet_sending()
-            self._api_status_send_pellet_token = self._api_status_token = self._pellet_device.send_pellet()
-            self._is_send_pellet_completed = False
-            self._move_in_progress = True
+            self._api_status_token = self._pellet_device.send_pellet()
             EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -128,7 +117,6 @@ class PelletMachine(StateMachine):
     def before_prerelease_pellet(self):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.release_pellet()
-            self._move_in_progress = True
             EventManager.default().post_event_content(BehaviorEventKind.pelletPrereleaseBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -139,7 +127,6 @@ class PelletMachine(StateMachine):
     def before_cover_pellet(self):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.cover_pellet()
-            self._move_in_progress = True
             EventManager.default().post_event_content(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -147,7 +134,6 @@ class PelletMachine(StateMachine):
     def before_release_pellet(self):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.release_pellet()
-            self._move_in_progress = True
             EventManager.default().post_event_content(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -211,14 +197,8 @@ class PelletMachine(StateMachine):
                          token, self._api_status_token)
             return
 
-        if token == self._api_status_send_pellet_token:
-            self._is_send_pellet_completed = True
-            self._api_status_send_pellet_token = None
-            logger.notice("Detected send_pellet completed")
-
         EventManager.default().post_event_content(BehaviorEventKind.pelletAcknowledgeToken, context=token)
 
-        self._move_in_progress = False
         self._api_status_token = None
 
         self._try_next_state()

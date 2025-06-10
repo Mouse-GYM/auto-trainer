@@ -284,7 +284,6 @@ class SystemMachine(StateMachine):
             self._state != SystemState.intersession
             and self._pellet_machine.state == PelletState.monitoring
             and known_offset is not None
-            and self._pellet_machine.is_send_pellet_completed
         )
         if not check_drift:
             return
