@@ -85,7 +85,7 @@ class SystemMachine(StateMachine):
         self._msg_handler = msg_handler
 
         self._diamond_triangle_known_offset = diamond_triangle_known_offset
-        self._diamond_triangle_prev_drift: Optional[int] = None
+        self._diamond_triangle_prev_drift: Optional[Offset3DTuple] = None
 
         self._cover_max_distance_threshold = cover_max_distance_threshold
         self._cover_pellet_prev_distance: Optional[int] = None
@@ -307,9 +307,9 @@ class SystemMachine(StateMachine):
             drift = None
         else:
             drift = known_offset - offset
-            d_drift = prev - drift
+            d_drift = None if prev is None else prev - drift
             # not sure which abs_diff to check against:
-            if any(abs(d) > 1 for d in d_drift):
+            if d_drift is None or any(abs(d) > 1 for d in d_drift):
                 logger.verbose("diamond triangle offset drift: %s d_drift=%s", drift, d_drift)
         if drift != prev:
             if drift is not None:
