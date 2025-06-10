@@ -5,6 +5,7 @@ Created on Tue Jan 16 16:15:29 2024
 @author: reynoben
 """
 import sys
+from typing import Dict, Any, List
 
 import numpy as np
 import pandas as pd
@@ -341,11 +342,10 @@ def _undistort_points(points, mat, coeffs, r, p, rot_cor):
     )
     pts[:, :2] = pts_undist.squeeze()
     pts_out = pts.reshape((points.shape[0], -1))
-
     return pts_out
 
 
-def _undistort_views(df_view_pairs, stereo_params):
+def undistort_views(df_view_pairs, stereo_params):
     df_views_undist = []
     for df_view_pair, camera_pair in zip(df_view_pairs, stereo_params):
         params = stereo_params[camera_pair]
@@ -365,7 +365,7 @@ def _undistort_views(df_view_pairs, stereo_params):
     return df_views_undist
 
 
-def undistort_points(dataframe, path_cam_mat):
+def undistort_points(dataframe: pd.DataFrame, path_cam_mat: str):
     """
     path_undistort = destfolder
     filename_cam1 = Path(dataframe[0]).stem
@@ -388,9 +388,9 @@ storted files are already present
     path_stereo_file = os.path.join(path_cam_mat, "stereo_params.pickle")
     with open(path_stereo_file, "rb") as handle:
         stereo_file = pickle.load(handle)
-
     stereo_params = stereo_file[list(stereo_file.keys())[0]]
-    dataFrame_cam1_undistort, dataFrame_cam2_undistort = _undistort_views(
+
+    dataFrame_cam1_undistort, dataFrame_cam2_undistort = undistort_views(
         [(dataframe_cam1, dataframe_cam2)],
         stereo_file,
     )[0]
@@ -605,6 +605,24 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
         path_stereo_file,
     ) = undistort_points(df_LR, path_cam_mat)
 
+    df_3d = triangulate_3d_step1(
+        df_LR,
+        dataFrame_camera1_undistort, dataFrame_camera2_undistort,
+        stereomatrix=stereomatrix, bpts=bpts, min_cluster=min_cluster, p_thresh=p_thresh
+    )
+    df_3d.to_hdf(str(path_3D), "df_with_missing", format="table", mode="w")
+
+
+def triangulate_3d_step1(
+    df_LR: List[pd.DataFrame],
+    dataFrame_camera1_undistort: pd.DataFrame,
+    dataFrame_camera2_undistort: pd.DataFrame,
+    *,
+    stereomatrix: Dict[str, Any],
+    bpts: List[str],
+    min_cluster,
+    p_thresh,
+) -> pd.DataFrame:
     P1 = stereomatrix["P1"]
     P2 = stereomatrix["P2"]
 
@@ -679,10 +697,9 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
         [bpts, axis_labels],
         names=["bodyparts", "coords"],
     )
-
     inds = range(num_frames)
     df_3d = pd.DataFrame(triangulate, columns=columns, index=inds)
-    df_3d.to_hdf(str(path_3D), "df_with_missing", format="table", mode="w")
+    return df_3d
 
 
 def process_raw_data(session, vid_tag, dlc_seg, calib_src_dir, center_method):

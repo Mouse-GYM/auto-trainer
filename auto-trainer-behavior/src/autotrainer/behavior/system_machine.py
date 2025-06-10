@@ -3,13 +3,17 @@ from enum import Enum
 from itertools import chain
 from pathlib import Path
 from threading import Timer
-from typing import Optional
+from typing import Optional, Tuple
 
 from transitions import Machine
 
 from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor,
                               HeadbarPressureMonitor)
+from autotrainer.core import Offset3DTuple
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference import PoseResponse
+from autotrainer.inference.pose_elements import SceneElement
+
 from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm
 from .behavior_event_kind import BehaviorEventKind
@@ -21,7 +25,7 @@ from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 # NB: this is to ensure we can patch the exact desired one (and only that one) from tests:
@@ -35,7 +39,7 @@ class SystemMachine(StateMachine):
     states = [e for e in SystemState]
 
     class Properties(str, Enum):
-        pass
+        DIAMOND_STAR_OFFSET_DRIFT = "diamond_star_offset_drift"
 
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
@@ -55,7 +59,10 @@ class SystemMachine(StateMachine):
                  analysis: SensorAnalysis = None,
                  tunnel_device: TunnelDeviceProtocol = None,
                  pellet_device: PelletDeviceProtocol = None,
-                 inference: InferenceProtocol = None):
+                 inference: InferenceProtocol = None,
+                 *,
+                 diamond_star_known_offset: Optional[Offset3DTuple] = (0, 0, 0),  # None,
+                 ):
 
         initial_state = SystemState.cage
         super().__init__(initial_state=initial_state)
@@ -67,12 +74,16 @@ class SystemMachine(StateMachine):
 
         self._tunnel_device = tunnel_device
 
-        self._analysis = analysis
+        self._msg_handler = msg_handler
 
-        if self._analysis is not None:
-            self._analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
-            self._analysis.headbar_pressure_monitor.property_changed += self._headbar_pressure_monitor_property_changed
-            self._analysis.load_cell_tare_monitor.tare_callback = self._load_cell_tare_requested
+        self._diamond_star_known_offset = diamond_star_known_offset
+        self._diamond_star_prev_drift = (0, 0, 0)
+
+        self._analysis = analysis
+        if analysis is not None:
+            analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
+            analysis.headbar_pressure_monitor.property_changed += self._headbar_pressure_monitor_property_changed
+            analysis.load_cell_tare_monitor.tare_callback = self._load_cell_tare_requested
 
         self._inference = inference
         if inference is not None:
@@ -265,7 +276,33 @@ class SystemMachine(StateMachine):
             self._tunnel_device.tare_load_cell()
             EventManager.default().post_event_content(BehaviorEventKind.headfixAutoTare)
 
+    def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
+        if offset is None:
+            return
+        known_offset = self._diamond_star_known_offset
+        check_drift = (
+            self._state != SystemState.intersession
+            and self._pellet_machine.state == PelletState.monitoring
+            and known_offset is not None
+            and self._pellet_machine.is_send_pellet_completed
+        )
+        if not check_drift:
+            return
+        drift = known_offset - offset
+        d_drift = Offset3DTuple(*(v1 - v2 for v1, v2 in zip(self._diamond_star_prev_drift, drift)))
+        # not sure which abs_diff to check against:
+        if any(abs(d) > 1 for d in d_drift):
+            logger.verbose("drift diamond triangle: %s d_drift=%s", drift, d_drift)
+        if drift != self._diamond_star_prev_drift:
+            self._diamond_star_prev_drift = drift
+            self._pellet_device.set_motor_drift(drift)
+            self.events.property_changed(
+                self.Properties.DIAMOND_STAR_OFFSET_DRIFT, drift, self._diamond_star_prev_drift)
+
     def _pose_changed(self, response: PoseResponse):
+        if response.pellet_seen:
+            self._handle_diamond_triangle_offset_changed(
+                response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
         self._algorithm.pellet_seen(response.pellet_seen)
         self._algorithm.mouse_seen(response.mouse_seen)
         if not self._algorithm.pellet_delivery_enabled:

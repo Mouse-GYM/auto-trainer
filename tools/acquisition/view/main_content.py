@@ -1,10 +1,11 @@
 import typing
+from typing import Tuple
 
 from PySide6 import QtCore
 from PySide6.QtCore import QTimer, Slot
 from PySide6.QtWidgets import QGridLayout
 
-from autotrainer.inference import PoseResponse
+from autotrainer.inference import PoseResponse, PoseAlgorithm
 from autotrainer.pyside import ATSeparator
 
 from tools.acquisition.model.app_model import AppModel
@@ -68,7 +69,7 @@ class MainContent(ContentWidget):
         self._layout.addWidget(behavior_content, 1, 0, 1, 3)
         self._content_widgets.append(behavior_content)
 
-        self._analysis_content = AnalysisContent(self._model.hardware, self._model.analysis,
+        self._analysis_content = AnalysisContent(self._model.hardware, self._model.inference, self._model.analysis,
                                                  self._model.message_handler)
         self._layout.addWidget(self._analysis_content, 1, 3, 1, 3)
         self._content_widgets.append(self._analysis_content)
@@ -104,9 +105,11 @@ class MainContent(ContentWidget):
         self._timer.timeout.connect(self.update_image)
         self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
 
-        self._model.inference.pose_response_ready += self.refresh_pose
-
+        # register handlers to events:
         self._model.property_changed += self._model_property_changed
+        inference = self._model.inference
+        inference.pose_response_ready += self.refresh_pose
+        inference.algo_initialised += self._algo_initialised
 
         self.set_diagnostics_visible(False)
 
@@ -161,3 +164,7 @@ class MainContent(ContentWidget):
     def _model_property_changed(self, name: str, value, old_value):
         if name == "selected_animal" and value is not None:
             self._hardware_control_content.set_selected_animal(value)
+
+    def _algo_initialised(self, algo: PoseAlgorithm):
+        for cam_content in (self._left_camera_content, self._right_camera_content):
+            cam_content.algo_initialised(algo)

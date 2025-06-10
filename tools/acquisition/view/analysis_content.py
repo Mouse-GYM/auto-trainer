@@ -1,11 +1,14 @@
 import logging
+import math
+from typing import Tuple, Optional
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
 
-from autotrainer.core import PerfMonitor, MessageHandler, SensorAnalysis, LoadCellMonitor
+from autotrainer.core import PerfMonitor, MessageHandler, SensorAnalysis, LoadCellMonitor, Offset3DTuple
 from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget, QtIndicator
 from tools.acquisition.model.hardware_model import HardwareModel
+from tools.acquisition.model.inference_model import InferenceModel
 
 from tools.acquisition.view.content_widget import ContentWidget
 
@@ -15,13 +18,19 @@ _ACTIVE_LOAD_CELL_COLOR = (0, 250, 154)
 _INACTIVE_LOAD_CELL_COLOR = (240, 240, 240)
 
 
-class AnalysisContent(ContentWidget):
-    position_changed = Signal(int, name="position_changed")
+def _render_offset_3d_value(value: Optional[Offset3DTuple]) -> str:
+    return "n/a" if value is None else ", ".join(f"{coord:.2f}" for coord in value)
 
-    def __init__(self, model: HardwareModel, analysis: SensorAnalysis, msg_handler: MessageHandler):
+
+class AnalysisContent(ContentWidget):
+    diamond_triangle_offset_changed = Signal(str, name="diamond_triangle_offset_changed")
+    star_triangle_offset_changed = Signal(str, name="star_triangle_offset_changed")
+
+    def __init__(self, hardware_model: HardwareModel, inference_model: InferenceModel, analysis: SensorAnalysis,
+                 msg_handler: MessageHandler):
         super().__init__()
 
-        self._model = model
+        self._model = hardware_model
 
         self._analysis = analysis
 
@@ -55,6 +64,16 @@ class AnalysisContent(ContentWidget):
         title = QLabel("Analysis")
         title.setStyleSheet("font-weight: bold")
         layout.addWidget(title)
+
+        layout.addWidget(QLabel("D-T:"))
+        self._triangle_diamond_offset = QLabel("n/a")
+        self.diamond_triangle_offset_changed.connect(self._triangle_diamond_offset.setText)
+        layout.addWidget(self._triangle_diamond_offset)
+
+        layout.addWidget(QLabel("S-T:"))
+        self._star_triangle_offset = QLabel("n/a")
+        self.star_triangle_offset_changed.connect(self._star_triangle_offset.setText)
+        layout.addWidget(self._star_triangle_offset)
 
         layout.addStretch(1)
 
@@ -97,9 +116,10 @@ class AnalysisContent(ContentWidget):
 
         self.set_is_editable(False)
 
-        self.position_changed.connect(lambda x: self._current_position.setText(str(x)))
-
         self._model.property_changed += self._model_property_changed
+
+        inference_model.star_triangle_offset_changed += self._star_triangle_offset_changed
+        inference_model.diamond_triangle_offset_changed += self._diamond_triangle_offset_changed
 
         self._analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
 
@@ -123,9 +143,6 @@ class AnalysisContent(ContentWidget):
 
         self._plot1.cache_data(values)
 
-    def _update_position(self):
-        self._model.update_head_magnet_intensity(self._position.value())
-
     def _update_trigger(self):
         try:
             self._model.load_trigger = float(self._load_cell.text())
@@ -144,5 +161,9 @@ class AnalysisContent(ContentWidget):
         # rather than direct set/update.
         if name == "load_trigger":
             self._load_cell.setText(str(value))
-        elif name == "position":
-            self.position_changed.emit(value)
+
+    def _diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
+        self.diamond_triangle_offset_changed.emit(_render_offset_3d_value(offset))
+
+    def _star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
+        self.star_triangle_offset_changed.emit(_render_offset_3d_value(offset))
