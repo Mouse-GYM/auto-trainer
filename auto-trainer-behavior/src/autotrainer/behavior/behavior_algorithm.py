@@ -2,6 +2,7 @@ import logging
 import time
 from datetime import datetime
 from enum import Enum
+from typing import Callable
 
 from typing_extensions import Self
 
@@ -26,6 +27,11 @@ class BehaviorProps(str, Enum):
 
 
 class BehaviorAlgorithm(ObservableObject):
+
+    # dynamic events type hints,
+    # helps IDE search/completion/type-verification:
+    session_starting: Callable[[], None]
+    session_ending: Callable[[], None]
 
     def __init__(self):
         super().__init__(event_names=("session_starting", "session_ending"))
