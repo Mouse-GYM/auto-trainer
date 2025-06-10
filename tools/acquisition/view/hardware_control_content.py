@@ -2,7 +2,8 @@ import logging
 import typing
 
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtWidgets import QLabel, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout
+from PySide6.QtWidgets import (QLabel, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout,
+                               QFormLayout, QStackedLayout)
 
 from autotrainer.core import MessageHandler, AnimalSubject
 from autotrainer.model import EnvironmentProvider, HardwareVersion
@@ -30,6 +31,7 @@ _alogus_travel_limits = {
 
 class HardwareControlContent(ContentWidget):
     position_changed = Signal(int, name="position_changed")
+    command_changed = Signal(str, name="command_changed")
 
     def __init__(self, model: HardwareModel):
         super().__init__()
@@ -186,12 +188,33 @@ class HardwareControlContent(ContentWidget):
 
         self._card_widget.header.setContent(self._header)
 
+        # Footer
+        self._basic_footer = QWidget(None)
+
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(QLabel("Command in progress:"))
+        self._command_label = QLabel("None")
+        layout.addWidget(self._command_label, stretch=1)
+
+        self._basic_footer.setLayout(layout)
+
+        self._stack_layout = QStackedLayout()
+        self._stack_layout.addWidget(self._basic_footer)
+
+        widget = QWidget(None)
+        widget.setLayout(self._stack_layout)
+
+        self._card_widget.footer.setContent(widget)
+
         # Final layout
         layout = QVBoxLayout()
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
 
         self.setEnabled(False)
+
+        self.command_changed.connect(lambda x: self._command_label.setText(x))
 
         self._model.property_changed += self._model_property_changed
 
@@ -232,3 +255,11 @@ class HardwareControlContent(ContentWidget):
             else:
                 self._pellet_version.setText("(unknown version)")
                 self.setEnabled(False)
+                self._command_label.setText("None")
+        elif property_name == HardwareModel.PENDING_COMMAND_PROPERTY:
+            if value:
+                self.command_changed.emit(value.name)
+                self.setEnabled(False)
+            else:
+                self.command_changed.emit("None")
+                self.setEnabled(True)
