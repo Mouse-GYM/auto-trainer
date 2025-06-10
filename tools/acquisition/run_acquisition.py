@@ -4,7 +4,10 @@ import sys
 
 from PySide6 import QtGui
 
-logger = logging.getLogger(__name__)
+from autotrainer.core.event import try_register_api_event_plugin
+from autotrainer.core.logging import get_verbose_logger
+
+logger = get_verbose_logger(__name__)
 
 missing_file = "The configuration file {0} does not exist.  A default configuration will be loaded."
 
@@ -86,6 +89,8 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
     preferences = UserPreferences()
 
     verify_log_location(preferences.log_location, preferences.serial_number)
+
+    try_register_api_event_plugin()
 
     window = MainWindow(app, preferences, configuration, "1.1.42", is_dev)
 
