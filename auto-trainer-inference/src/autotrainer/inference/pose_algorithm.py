@@ -102,13 +102,24 @@ class PoseResponse:
                 return True
         return False
 
-    def get_parts_3d_offset(self, part1: str, part2: str) -> Tuple[float, float, float]:
+    def get_parts_3d_offset(
+        self,
+        part1: str,
+        part2: str,
+        *,
+        require_present_all_cams: bool = True,
+    ) -> Tuple[float, float, float]:
         """Return the 3d offsets between part1 and part2,
-        if none exist/is available return 3 NaN values instead."""
+        if none exist/is available return 3 NaN values instead
+        """
         part1 = SceneElement(part1).value
         part2 = SceneElement(part2).value
-        # should use mapping from model configuration for part1/2
-        if not self.is_part_seen(part1) or not self.is_part_seen(part2):
+        # -1 means all cams in is_part_seen()
+        # while no idx means any cam:
+        cams_idx = (-1,) if require_present_all_cams else ()
+        part1_seen = self.is_part_seen(part1, cams_idx=cams_idx)
+        part2_seen = self.is_part_seen(part2, cams_idx=cams_idx)
+        if not part1_seen or not part2_seen:
             return math.nan, math.nan, math.nan
         value = self.parts_3d_offsets.get(part1, {}).get(part2, None)
         if value is None:
