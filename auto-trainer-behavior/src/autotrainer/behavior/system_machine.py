@@ -38,12 +38,17 @@ _auto_clamp_release_timer = Timer
 _pellet_loading_timer = Timer
 #
 
+class CheckThresholdWay(str, Enum):
+    TRIGGER_IF_GREATER = "trigger_if_greater"
+    TRIGGER_IF_SMALLER = "trigger_if_smaller"
+
 
 @dataclasses.dataclass
 class CheckElementDistanceContext:
     distance_property_name: str
     error_property_name: str
-    error_distance_threshold: float = math.inf  # unit probably millimeter
+    error_way: CheckThresholdWay
+    error_distance_threshold: float
     error_min_duration_threshold: float = math.inf  # unit is second
     distance: float = 0  # unit probably millimeter
     error_detected: bool = False
@@ -56,9 +61,9 @@ class SystemMachine(StateMachine):
     class Properties(str, Enum):
         DIAMOND_TRIANGLE_OFFSET_DRIFT = "diamond_triangle_offset_drift"
         COVER_PELLET_DISTANCE = "cover_pellet_distance"
-        COVER_POSITION_ERROR_DETECTED = "cover_position_error_detected"
+        COVER_PELLET_POS_ERROR_DETECTED = "cover_pellet_pos_error_detected"
         RELEASE_PELLET_DISTANCE = "release_pellet_distance"
-        RELEASE_POSITION_ERROR_DETECTED = "release_position_error_detected"
+        RELEASE_PELLET_POS_ERROR_DETECTED = "release_pellet_pos_error_detected"
 
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
@@ -103,15 +108,17 @@ class SystemMachine(StateMachine):
 
         self._cover_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=self.Properties.COVER_PELLET_DISTANCE,
-            error_property_name=self.Properties.COVER_POSITION_ERROR_DETECTED,
+            error_property_name=self.Properties.COVER_PELLET_POS_ERROR_DETECTED,
             error_distance_threshold=cover_error_min_distance_threshold,
             error_min_duration_threshold=cover_release_min_duration_threshold,
+            error_way=CheckThresholdWay.TRIGGER_IF_SMALLER,
         )
         self._release_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=self.Properties.RELEASE_PELLET_DISTANCE,
-            error_property_name=self.Properties.RELEASE_POSITION_ERROR_DETECTED,
+            error_property_name=self.Properties.RELEASE_PELLET_POS_ERROR_DETECTED,
             error_distance_threshold=release_error_min_distance_threshold,
             error_min_duration_threshold=cover_release_min_duration_threshold,
+            error_way=CheckThresholdWay.TRIGGER_IF_GREATER,
         )
 
         self._analysis = analysis
@@ -344,10 +351,15 @@ class SystemMachine(StateMachine):
             # for now: we only set once this flag, never clear it.
             return
         distance = math.sqrt(offset.x ** 2 + offset.y ** 2 + offset.y ** 2)
+        prev_distance = ctx.distance
         if distance != ctx.distance:
-            self.events.property_changed(ctx.distance_property_name, distance, ctx.distance)
+            self.events.property_changed(ctx.distance_property_name, distance, prev_distance)
             ctx.distance = distance
-        is_error = distance >= ctx.error_distance_threshold
+        if ctx.error_way is CheckThresholdWay.TRIGGER_IF_GREATER:
+            is_error = distance >= ctx.error_distance_threshold
+        else:
+            assert ctx.error_way is CheckThresholdWay.TRIGGER_IF_SMALLER
+            is_error = distance <= ctx.error_distance_threshold
         if not is_error:
             # we might want to only unset the error_start_timestamp after some minimum duration too
             ctx.error_start_timestamp = None
@@ -357,27 +369,30 @@ class SystemMachine(StateMachine):
             ctx.error_start_timestamp = t_now
         else:
             if t_now - ctx.error_start_timestamp >= ctx.error_min_duration_threshold:
+                logger.critical("Detected %s ; distance=%.3f prev=%s",
+                                ctx.error_property_name, distance, prev_distance)
+                ctx.error_detected = True
                 self.events.property_changed(ctx.error_property_name, True, False)
 
     def _handle_star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if offset is None:
             return
+        pellet_machine = self._pellet_machine
+        if not pellet_machine.can_use_pellet_command():
+            # never consider any release or cover check when pellet cannot be used yet.
+            return
+        algo = self.algorithm
         check_cover_distance = (
-            self._pellet_machine.state == PelletState.covering
-            and self._pellet_machine.can_use_pellet_command()
-            and self._algorithm.pellet_cover_enabled
-            and self._algorithm.is_in_session
+            (pellet_machine.state == PelletState.monitoring and algo.is_in_session and algo.pellet_cover_enabled)
+            or (pellet_machine.state == PelletState.covering and not algo.is_in_session)
         )
         if check_cover_distance:
-            self._handle_check_element_distance(
-                self._cover_pellet_distance_ctx, offset
-            )
-
+            self._handle_check_element_distance(self._cover_pellet_distance_ctx, offset)
+            # never consider the check release position when we checked the cover one
+            return
         check_release_distance = (
-            self._state == SystemState.tunnel
-            and self._pellet_machine.state == PelletState.releasing
-            and self._pellet_machine.can_use_pellet_command()
-            and not self._algorithm.is_in_session
+            pellet_machine.state == PelletState.monitoring
+            and not (algo.is_in_session and algo.pellet_cover_enabled)
         )
         if check_release_distance:
             self._handle_check_element_distance(self._release_pellet_distance_ctx, offset)
