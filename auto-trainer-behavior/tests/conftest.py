@@ -1,8 +1,10 @@
 import contextlib
 import logging
 import queue
+import sys
 import time
 from functools import partial
+from pathlib import Path
 from typing import List, Any
 from unittest import mock
 
@@ -14,24 +16,9 @@ from autotrainer.core import ProjectInfo
 from autotrainer.device import DeviceConnectionProtocol
 from autotrainer.inference import PoseAlgorithm, PoseResponse
 
+
 from tools.acquisition.model.inference_model import InferenceModel
 
-
-@pytest.fixture(autouse=True, scope="session")
-def _auto_set_misc_log_level():
-    # some logger we don't want too verbose in any case
-    logging.getLogger('transitions').setLevel(logging.INFO)
-
-
-@pytest.fixture(autouse=True)
-def _auto_close_event_manager():
-    # allow to close the EventManager and have its worker thread exits gracefully (on each end of test case)
-    yield
-    mgr = getattr(EventManager, "_instance", None)
-    if mgr is not None:
-        assert isinstance(mgr, EventManager)
-        mgr.close()
-        del EventManager._instance  # noqa
 
 
 def property_value_save_transitions(old_value, new_value, *, transitions: List[Any]):
