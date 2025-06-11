@@ -24,7 +24,7 @@ class MotorConfigDialog(QDialog):
             "Y": Motor.PELLET_Y_MOTOR,
             "Z": Motor.PELLET_Z_MOTOR,
             "Magnet": Motor.TUNNEL_MAGNET_SERVO,
-						"Gate": Motor.TUNNEL_GATE_SERVO,
+            "Gate": Motor.TUNNEL_GATE_SERVO,
             "Load Arm": Motor.PELLET_LOAD_SERVO,
             "Barrier": Motor.PELLET_COVER_SERVO
         }
@@ -36,8 +36,8 @@ class MotorConfigDialog(QDialog):
         self.servo_motors = [name for name, motor_id in self.motor_mapping.items()
                              if motor_id in (
                                  Motor.TUNNEL_MAGNET_SERVO,
-																 Motor.TUNNEL_GATE_SERVO, 
-																 Motor.PELLET_LOAD_SERVO,
+                                 Motor.TUNNEL_GATE_SERVO,
+                                 Motor.PELLET_LOAD_SERVO,
                                  Motor.PELLET_COVER_SERVO)]
 
         self.all_motors = self.stepper_motors + self.servo_motors
@@ -159,11 +159,21 @@ class MotorConfigDialog(QDialog):
             self.max_velocity_spin.setSuffix(" mm/s")
             self.max_accel_spin.setSuffix(" mm/s²")
 
+            enable = motor_name == "X"
+            # Common stepper configuration values are set only by the X motor
+            self.max_accel_spin.setEnabled(enable)
+            self.max_velocity_spin.setEnabled(enable)
+            self.homing_velocity_spin.setEnabled(enable)
+            self.micro_steps_combo.setEnabled(enable)
+            self.steps_per_rev_spin.setEnabled(enable)
+
         elif motor_name in self.servo_motors:
             self.stepper_group.setVisible(False)
             self.servo_group.setVisible(True)
             self.max_velocity_spin.setSuffix(" deg/s")
             self.max_accel_spin.setSuffix(" deg/s²")
+            self.max_accel_spin.setEnabled(True)
+            self.max_velocity_spin.setEnabled(True)
 
     def _query_config(self):
         motor_name = self.motor_combo.currentText()

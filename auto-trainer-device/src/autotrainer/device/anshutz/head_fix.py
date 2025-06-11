@@ -54,7 +54,7 @@ class HeadFix(GymDevice):
                 val = int(data)
             else:
                 val = typing.cast(int, data)
-            self._send_data(f"A{typing.cast(int, val)}x", context)
+            self._send_data(f"A{val}x", context)
             if context is not None:
                 self._commands_with_status[context] = (SystemCommandKind.MOVE_MAGNET_SERVO, val)
             self.api.send_message(SystemStatusMessageKind.HEAD_MAGNET, val)
@@ -63,7 +63,7 @@ class HeadFix(GymDevice):
                 val = int(data)
             else:
                 val = typing.cast(int, data)
-            self._send_data(f"A{typing.cast(int, val)}x", context)
+            self._send_data(f"A{val}x", context)
             if context is not None:
                 self._commands_with_status[context] = (SystemCommandKind.MOVE_GATE_SERVO, val)
             self.api.send_message(SystemStatusMessageKind.TUNNEL_GATE_SERVO, val)

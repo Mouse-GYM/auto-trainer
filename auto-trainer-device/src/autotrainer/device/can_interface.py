@@ -78,9 +78,9 @@ def target_to_str(target: Target) -> str:
     Returns:
         str: Human-readable string identifier for the target
     """
-    if target is Target.PELLET_DEVICE:
+    if target == Target.PELLET_DEVICE:
         return "Pellet"
-    elif target is Target.MAGNET_DEVICE:
+    elif target == Target.MAGNET_DEVICE:
         return "Magnet"
     else:
         return "Unknown"
@@ -150,10 +150,10 @@ def is_servo(motor: Motor) -> bool:
     Returns:
         bool: True if the motor is a servo motor, False otherwise
     """
-    return motor is Motor.TUNNEL_MAGNET_SERVO or \
-        motor is Motor.TUNNEL_GATE_SERVO or \
-        motor is Motor.PELLET_LOAD_SERVO or \
-        motor is Motor.PELLET_COVER_SERVO
+    return motor == Motor.TUNNEL_MAGNET_SERVO or \
+        motor == Motor.TUNNEL_GATE_SERVO or \
+        motor == Motor.PELLET_LOAD_SERVO or \
+        motor == Motor.PELLET_COVER_SERVO
 
 
 def is_stepper(motor: Motor) -> bool:
@@ -176,7 +176,7 @@ def target_of_motor(motor: Motor) -> Target:
         Target: the hardware target that the motor resides on
     """
     return Target.MAGNET_DEVICE \
-        if (motor is Motor.TUNNEL_MAGNET_SERVO or motor is Motor.TUNNEL_GATE_SERVO) \
+        if (motor == Motor.TUNNEL_MAGNET_SERVO or motor == Motor.TUNNEL_GATE_SERVO) \
         else Target.PELLET_DEVICE
 
 
@@ -192,24 +192,28 @@ def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
     Returns:
         Motor: associated Motor identifier
     """
-    if target is Target.MAGNET_DEVICE:
+
+    # NOTE: The ENUM.value MUST be used here, as the incoming value is an int,
+    # and we need to compare to the value of the enum, not the enum, itself.
+
+    if target == Target.MAGNET_DEVICE:
         if isa_servo:
-            if motor_id is MotorInstance.TUNNEL_MAGNET_SERVO_ID.value:
+            if motor_id == MotorInstance.TUNNEL_MAGNET_SERVO_ID.value:
                 return Motor.TUNNEL_MAGNET_SERVO
-            elif motor_id is MotorInstance.TUNNEL_GATE_SERVO_ID.value:
+            elif motor_id == MotorInstance.TUNNEL_GATE_SERVO_ID.value:
                 return Motor.TUNNEL_GATE_SERVO
     else:
         if isa_servo:
-            if motor_id is MotorInstance.PELLET_COVER_SERVO_ID.value:
+            if motor_id == MotorInstance.PELLET_COVER_SERVO_ID.value:
                 return Motor.PELLET_COVER_SERVO
-            elif motor_id is MotorInstance.PELLET_LOAD_SERVO_ID.value:
+            elif motor_id == MotorInstance.PELLET_LOAD_SERVO_ID.value:
                 return Motor.PELLET_LOAD_SERVO
         else:
-            if motor_id is MotorInstance.PELLET_X_MOTOR_ID.value:
+            if motor_id == MotorInstance.PELLET_X_MOTOR_ID.value:
                 return Motor.PELLET_X_MOTOR
-            elif motor_id is MotorInstance.PELLET_Y_MOTOR_ID.value:
+            elif motor_id == MotorInstance.PELLET_Y_MOTOR_ID.value:
                 return Motor.PELLET_Y_MOTOR
-            elif motor_id is MotorInstance.PELLET_Z_MOTOR_ID.value:
+            elif motor_id == MotorInstance.PELLET_Z_MOTOR_ID.value:
                 return Motor.PELLET_Z_MOTOR
 
     return Motor.NONE
@@ -477,7 +481,7 @@ class CanInterface(DeviceInterface):
         Returns:
              int: CANbus address of the given target
         """
-        dst = self.pellet_address if target is Target.PELLET_DEVICE else self.magnet_address
+        dst = self.pellet_address if target == Target.PELLET_DEVICE else self.magnet_address
         return dst
 
     def _assign_address(self, message):
@@ -599,7 +603,7 @@ class CanInterface(DeviceInterface):
             messages = self.read(1)
             if len(messages) > 0:
                 for msg in messages:
-                    if isinstance(msg, typeof) and msg.target is target:
+                    if isinstance(msg, typeof) and msg.target == target:
                         return msg
             time.sleep(0.001)
 
@@ -617,22 +621,22 @@ class CanInterface(DeviceInterface):
 
             # Not all configuration items get pushed/pulled to the target
             # Reminder: config points to same object after assignment
-            if motor is Motor.PELLET_COVER_SERVO:
+            if motor == Motor.PELLET_COVER_SERVO:
                 config = self.cover_config
-            elif motor is Motor.PELLET_LOAD_SERVO:
+            elif motor == Motor.PELLET_LOAD_SERVO:
                 config = self.load_config
-            elif motor is Motor.TUNNEL_MAGNET_SERVO:
+            elif motor == Motor.TUNNEL_MAGNET_SERVO:
                 config = self.magnet_config
-            elif motor is Motor.TUNNEL_GATE_SERVO:
+            elif motor == Motor.TUNNEL_GATE_SERVO:
                 config = self.gate_config
             else:
                 config = ServoConfig()
         else:
-            if motor is Motor.PELLET_X_MOTOR:
+            if motor == Motor.PELLET_X_MOTOR:
                 config = self.x_config
-            elif motor is Motor.PELLET_Y_MOTOR:
+            elif motor == Motor.PELLET_Y_MOTOR:
                 config = self.y_config
-            elif motor is Motor.PELLET_Z_MOTOR:
+            elif motor == Motor.PELLET_Z_MOTOR:
                 config = self.z_config
             else:
                 config = StepperConfig()
@@ -658,37 +662,37 @@ class CanInterface(DeviceInterface):
 
         config.motor = motor
 
-        if motor is Motor.TUNNEL_MAGNET_SERVO:
+        if motor == Motor.TUNNEL_MAGNET_SERVO:
             self.magnet_config = config
             if write_to_remote:
                 rc = self._write_servo_config(self.magnet_config)
 
-        elif motor is Motor.TUNNEL_GATE_SERVO:
+        elif motor == Motor.TUNNEL_GATE_SERVO:
             self.gate_config = config
             if write_to_remote:
                 rc = self._write_servo_config(self.gate_config)
 
-        elif motor is Motor.PELLET_X_MOTOR:
+        elif motor == Motor.PELLET_X_MOTOR:
             self.x_config = config
             if write_to_remote:
                 rc = self._write_stepper_config(self.x_config)
 
-        elif motor is Motor.PELLET_Y_MOTOR:
+        elif motor == Motor.PELLET_Y_MOTOR:
             self.y_config = config
             if write_to_remote:
                 rc = self._write_stepper_config(self.y_config)
 
-        elif motor is Motor.PELLET_Z_MOTOR:
+        elif motor == Motor.PELLET_Z_MOTOR:
             self.z_config = config
             if write_to_remote:
                 rc = self._write_stepper_config(self.z_config)
 
-        elif motor is Motor.PELLET_COVER_SERVO:
+        elif motor == Motor.PELLET_COVER_SERVO:
             self.cover_config = config
             if write_to_remote:
                 rc = self._write_servo_config(self.cover_config)
 
-        elif motor is Motor.PELLET_LOAD_SERVO:
+        elif motor == Motor.PELLET_LOAD_SERVO:
             self.load_config = config
             if write_to_remote:
                 rc = self._write_servo_config(self.load_config)
@@ -1106,13 +1110,13 @@ class CanInterface(DeviceInterface):
 
         # These values are based on the order and listing in the DTS files for
         # each board.
-        if gpio is DigitalOutputs.STIMULUS_1:
+        if gpio == DigitalOutputs.STIMULUS_1:
             gpio_id = 4
-        elif gpio is DigitalOutputs.STIMULUS_2:
+        elif gpio == DigitalOutputs.STIMULUS_2:
             gpio_id = 5
-        elif gpio is DigitalOutputs.STIMULUS_3:
+        elif gpio == DigitalOutputs.STIMULUS_3:
             gpio_id = 6
-        elif gpio is DigitalOutputs.STIMULUS_4:
+        elif gpio == DigitalOutputs.STIMULUS_4:
             gpio_id = 7
         else:
             return False
@@ -1149,7 +1153,7 @@ class CanInterface(DeviceInterface):
         Returns:
             bool: True if successful else False
         """
-        if channel is AnalogOutputs.STATUS_OUT:
+        if channel == AnalogOutputs.STATUS_OUT:
             channel = 0
         else:
             return False
@@ -1365,10 +1369,10 @@ class CanInterface(DeviceInterface):
         else:
             gpios = PelletDigitalInputs()
             gpios.target = _addr2tgt(message.dst_id)
-            gpios.stimulus_1 = bool(message.gpio_read.state & 0x010)
-            gpios.stimulus_2 = bool(message.gpio_read.state & 0x020)
-            gpios.stimulus_3 = bool(message.gpio_read.state & 0x040)
-            gpios.stimulus_4 = bool(message.gpio_read.state & 0x080)
+            gpios.stimulus_1 = message.gpio_read.state & 0x010 == 0x010
+            gpios.stimulus_2 = message.gpio_read.state & 0x020 == 0x020
+            gpios.stimulus_3 = message.gpio_read.state & 0x040 == 0x040
+            gpios.stimulus_4 = message.gpio_read.state & 0x080 == 0x080
             return gpios
 
     @staticmethod
@@ -1412,7 +1416,7 @@ class CanInterface(DeviceInterface):
         Args:
             message: JerryCANMsg with continued audio data
         """
-        if self._audio.packet_id != 0 and self._audio.target is _addr2tgt(message.dst_id):
+        if self._audio.packet_id != 0 and self._audio.target == _addr2tgt(message.dst_id):
             self._audio.magnitudes.extend(message.audio_data.magnitudes)
         return None
 
@@ -1476,7 +1480,7 @@ class CanInterface(DeviceInterface):
         target = _addr2tgt(message.dst_id)
         motor = _id_to_motor(target, True, message.servo_status.motor_id)
 
-        if motor is Motor.NONE:
+        if motor == Motor.NONE:
             return None
 
         return ServoStatus(target, motor, message.servo_status.position)
@@ -1495,7 +1499,7 @@ class CanInterface(DeviceInterface):
         target = _addr2tgt(message.dst_id)
         motor = _id_to_motor(target, False, message.stepper_status.motor_id)
 
-        if motor is Motor.NONE:
+        if motor == Motor.NONE:
             return None
 
         return StepperStatus(
