@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 
-from autotrainer.behavior import PelletState, SystemState
+from autotrainer.behavior import PelletState, SystemState, PelletMachine
 
 
 def test_enter_exit_default(mock_system, machine):
@@ -304,6 +304,28 @@ def test_session_limit(mock_system, machine):
 
         PelletState.monitoring,
     ]
+
+
+@pytest.mark.parametrize("pellet_seen", [True, False])
+@pytest.mark.parametrize("must_release", [True, False])
+@pytest.mark.parametrize("pellet_state", sorted(PelletState))
+def test_move_home_when_intersession(pellet_state, pellet_seen, must_release):
+    pellet_machine = PelletMachine()
+    pellet_machine.state = pellet_state
+    pellet_machine.algorithm.system_state = SystemState.intersession
+    pellet_machine._try_next_state(pellet_seen=pellet_seen, must_release=must_release)
+    assert pellet_machine.state is PelletState.home
+
+
+@pytest.mark.parametrize("pellet_seen", [True, False])
+@pytest.mark.parametrize("must_release", [True, False])
+@pytest.mark.parametrize("system_state", sorted(set(SystemState) - {SystemState.intersession}))
+def test_send_pellet_when_home(system_state, pellet_seen, must_release):
+    pellet_machine = PelletMachine()
+    pellet_machine.state = PelletState.home
+    pellet_machine.algorithm.system_state = system_state
+    pellet_machine._try_next_state(pellet_seen=pellet_seen, must_release=must_release)
+    assert pellet_machine.state is PelletState.sending
 
 
 @pytest.mark.xfail(reason="Disabled until day limit is implemented via reach detection.")
