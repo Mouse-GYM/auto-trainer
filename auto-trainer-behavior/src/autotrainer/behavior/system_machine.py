@@ -352,7 +352,7 @@ class SystemMachine(StateMachine):
             return
         distance = math.sqrt(offset.x ** 2 + offset.y ** 2 + offset.y ** 2)
         prev_distance = ctx.distance
-        if distance != ctx.distance:
+        if distance != prev_distance:
             self.events.property_changed(ctx.distance_property_name, distance, prev_distance)
             ctx.distance = distance
         if ctx.error_way is CheckThresholdWay.TRIGGER_IF_GREATER:
