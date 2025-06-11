@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from autotrainer.core import ObservableObject
+from autotrainer.core import ObservableObject, Offset3DTuple
 
 logger = logging.getLogger(__name__)
 
@@ -51,4 +51,7 @@ class MockPelletDelivery(ObservableObject):
         pass
 
     def set_z(self, value, *, absolute=True):
+        pass
+
+    def set_motor_drift(self, drift: Offset3DTuple):
         pass
