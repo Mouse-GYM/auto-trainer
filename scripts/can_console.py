@@ -227,30 +227,29 @@ def write_config(motor: Motor, device_thread):
         assert isinstance(orig_config, StepperConfig)
         config = copy(orig_config)
 
+        resp = input(f"Max Velocity (mm/sec) [{orig_config.maximum_velocity:.2f}] = ")
+        if resp != '':
+            config.maximum_velocity = float(resp)
+
+        resp = input(f"Max Acceleration (mm/sec^2) [{orig_config.maximum_acceleration:.2f}]= ")
+        if resp != '':
+            config.maximum_acceleration = float(resp)
+
+        resp = input(f"Homing Velocity (mm/sec) [{orig_config.homing_velocity:.2f}] = ")
+        if resp != '':
+            config.homing_velocity = float(resp)
+
         resp = input(f"Flip Limit Location [0, 1] [{orig_config.flip_limit_orientation}]= ")
         if resp != '':
             config.flip_limit_orientation = int(resp) == 1
 
-        if motor == Motor.PELLET_X_MOTOR:
-            resp = input(f"Max Velocity (mm/sec) [{orig_config.maximum_velocity:.2f}] = ")
-            if resp != '':
-                config.maximum_velocity = float(resp)
+        resp = input(f"Microsteps [2,4,8,16,32,64] [{orig_config.microsteps}]= ")
+        if resp != '':
+            config.microsteps = int(resp)
 
-            resp = input(f"Max Acceleration (mm/sec^2) [{orig_config.maximum_acceleration:.2f}]= ")
-            if resp != '':
-                config.maximum_acceleration = float(resp)
-
-            resp = input(f"Homing Velocity (mm/sec) [{orig_config.homing_velocity:.2f}] = ")
-            if resp != '':
-                config.homing_velocity = float(resp)
-
-            resp = input(f"Microsteps [2,4,8,16,32,64] [{orig_config.microsteps}]= ")
-            if resp != '':
-                config.microsteps = int(resp)
-
-            resp = input(f"Steps/Revolution [{orig_config.steps_per_revolution:.0f}]= ")
-            if resp != '':
-                config.steps_per_revolution = float(resp)
+        resp = input(f"Steps/Revolution [{orig_config.steps_per_revolution:.0f}]= ")
+        if resp != '':
+            config.steps_per_revolution = float(resp)
 
         device_thread.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, (motor, config),
                                    context="write stepper config")

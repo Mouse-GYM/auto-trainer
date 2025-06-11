@@ -159,21 +159,11 @@ class MotorConfigDialog(QDialog):
             self.max_velocity_spin.setSuffix(" mm/s")
             self.max_accel_spin.setSuffix(" mm/s²")
 
-            enable = motor_name == "X"
-            # Common stepper configuration values are set only by the X motor
-            self.max_accel_spin.setEnabled(enable)
-            self.max_velocity_spin.setEnabled(enable)
-            self.homing_velocity_spin.setEnabled(enable)
-            self.micro_steps_combo.setEnabled(enable)
-            self.steps_per_rev_spin.setEnabled(enable)
-
         elif motor_name in self.servo_motors:
             self.stepper_group.setVisible(False)
             self.servo_group.setVisible(True)
             self.max_velocity_spin.setSuffix(" deg/s")
             self.max_accel_spin.setSuffix(" deg/s²")
-            self.max_accel_spin.setEnabled(True)
-            self.max_velocity_spin.setEnabled(True)
 
     def _query_config(self):
         motor_name = self.motor_combo.currentText()
