@@ -28,7 +28,8 @@ class IntersessionResponse:
 
 
 def intersession_process(
-    project: ProjectInfo, *,
+    project: ProjectInfo,
+    *,
     calib_dir: Optional[Path] = None,
 ) -> IntersessionResponse:
     """

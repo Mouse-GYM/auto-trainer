@@ -7,6 +7,7 @@ import typing
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
@@ -18,8 +19,9 @@ from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseAlgorithm
-from tools.acquisition.model.hardware_model import HardwareModel
+from autotrainer.inference.config import load_calib_stereo_params
 
+from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
@@ -34,7 +36,10 @@ def _failed_camera_template(name: str, error: str):
 
 
 class AppModel(ObservableObject):
-    def __init__(self, preferences: UserPreferences, app_version: str = ""):
+    def __init__(self, preferences: UserPreferences, app_version: str = "",
+                 *,
+                 calib_dir: Optional[Path] = None,
+                 ):
         super().__init__(("on_error",))
 
         self._preferences = preferences
@@ -58,7 +63,16 @@ class AppModel(ObservableObject):
 
         self._inference_queue = None
 
-        self._pose_algorithm = PoseAlgorithm()
+        calib_src_dir = (Path("~/Autotrainer/4mm_6r_8c_4x") if calib_dir is None
+                         else calib_dir).expanduser()
+        if calib_src_dir.exists():
+            self._stereo_params = load_calib_stereo_params(
+                calib_src_dir.joinpath('camera_matrix', 'stereo_params.pickle')
+            )
+        else:
+            self._stereo_params = None
+
+        self._pose_algorithm = PoseAlgorithm(stereo_params=self._stereo_params)
 
         self._inference = InferenceModel(self._pose_algorithm)
 
@@ -118,7 +132,7 @@ class AppModel(ObservableObject):
         return self._analysis
 
     @property
-    def inference(self):
+    def inference(self) -> InferenceModel:
         return self._inference
 
     @property

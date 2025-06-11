@@ -2,6 +2,7 @@ import logging
 import time
 from queue import Queue
 from threading import Thread
+from typing import Callable
 
 from ..observable_object import ObservableObject
 
@@ -46,6 +47,10 @@ class MessageHandler(ObservableObject):
 
     STIMULI_PROPERTY = "stimuli"
     CONFIG_PROPERTY = "config"
+
+    # type hints helper:
+    # dynamic event:
+    ack_received: Callable[[str], None]
 
     def __init__(self, input_queue: Queue, name: str = "message-handler", event_names=()):
         super().__init__(event_names=event_names + ("ack_received",))

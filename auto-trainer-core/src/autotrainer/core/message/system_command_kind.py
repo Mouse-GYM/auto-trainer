@@ -48,6 +48,8 @@ class SystemCommandKind(IntEnum):
     MOVE_Z = 222  # moves Z, only
     MOVE_GATE_SERVO = 223
 
+    SET_MOTOR_DRIFT = 223
+
     # General actions.
     PLAY_TONE = 301
     SET_RGB_LED = 302

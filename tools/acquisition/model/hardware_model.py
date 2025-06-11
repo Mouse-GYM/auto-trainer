@@ -3,7 +3,7 @@ from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional
 
-from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject
+from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.device import (DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 HeadFix, PelletDelivery)
@@ -18,6 +18,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     TUNNEL_IDENTIFIER_PROPERTY = "tunnel_identifier"
     PELLET_IDENTIFIER_PROPERTY = "pellet_identifier"
 
+    PENDING_COMMAND_TOKEN_PROPERTY = "pending_command_token"
+    PENDING_COMMAND_PROPERTY = "pending_command"
+
     def __init__(self, message_handler: MessageHandler):
         super().__init__()
 
@@ -27,7 +30,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._tunnel_device: Optional[DeviceConnectionProtocol] = None
         self._pellet_device: Optional[DeviceConnectionProtocol] = None
 
+        self._pending_command: Optional[SystemCommandKind] = None
+        self._pending_command_token: Optional[UUID] = None
+
         message_handler.property_changed += self._message_handler_property_changed
+        message_handler.ack_received += self._ack_received
 
         self._head_magnet_position: Optional[float] = None
 
@@ -56,6 +63,24 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def pellet_identifier(self, value: str):
         self._pellet_identifier = self._on_property_changed(HardwareModel.PELLET_IDENTIFIER_PROPERTY, value,
             self._pellet_identifier)
+
+    @property
+    def pending_command_token(self) -> Optional[UUID]:
+        return self._pending_command_token
+
+    @pending_command_token.setter
+    def pending_command_token(self, value: Optional[UUID]):
+        self._pending_command_token = self._on_property_changed(HardwareModel.PENDING_COMMAND_TOKEN_PROPERTY, value,
+                                                                self._pending_command_token)
+
+    @property
+    def pending_command(self) -> Optional[SystemCommandKind]:
+        return self._pending_command
+
+    @pending_command.setter
+    def pending_command(self, value: Optional[SystemCommandKind]):
+        self._pending_command = self._on_property_changed(HardwareModel.PENDING_COMMAND_PROPERTY, value,
+                                                          self._pending_command)
 
     @property
     def head_magnet_intensity(self) -> Optional[float]:
@@ -172,10 +197,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._send_command(self._tunnel_device, SystemCommandKind.STREAM_START)
 
         if animal is not None:
-            self.update_head_magnet_intensity(animal.baseline_magnet_intensity)
-            self.set_x(animal.pellet_x)
-            self.set_y(animal.pellet_y)
-            self.set_z(animal.pellet_z)
+            self._send_command(self._tunnel_device, SystemCommandKind.SET_MAGNET_INTENSITY,
+                               animal.baseline_magnet_intensity)
+            self._send_command(self._pellet_device, SystemCommandKind.SET_X, animal.pellet_x)
+            self._send_command(self._pellet_device, SystemCommandKind.SET_Y, animal.pellet_y)
+            self._send_command(self._pellet_device, SystemCommandKind.SET_Z, animal.pellet_z)
 
     def disconnect(self):
         if self._tunnel_device is not None:
@@ -214,8 +240,15 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                                           old_value)
 
     def _send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
+        if self._pending_command_token is not None:
+            logger.info(f"ignoring action due to pending command: {self._pending_command_token}")
+            return None
+
         token = uuid4()
+
         if self._send_command(device, cmd, data, token):
+            self.pending_command_token = token
+            self.pending_command = cmd
             return token
         else:
             return None
@@ -227,3 +260,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             return True
 
         return False
+
+    def set_motor_drift(self, drift: Offset3DTuple):
+        """Apply the pellet motor drift"""
+        # TODO: when changes applied to auto-trainer-device files:
+        # self._pellet_device.set_motor_drift(drift)
+
+    def _ack_received(self, token: UUID):
+        if self._pending_command_token is not None and self._pending_command_token == token:
+            self.pending_command_token = None
+            self.pending_command = None
