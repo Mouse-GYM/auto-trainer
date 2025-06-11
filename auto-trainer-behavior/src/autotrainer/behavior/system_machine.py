@@ -1,5 +1,8 @@
+import dataclasses
 import logging
 import math
+import time
+from datetime import timedelta
 from enum import Enum
 from itertools import chain
 from pathlib import Path
@@ -36,6 +39,17 @@ _pellet_loading_timer = Timer
 #
 
 
+@dataclasses.dataclass
+class CheckElementDistanceContext:
+    distance_property_name: str
+    error_property_name: str
+    error_distance_threshold: float = math.inf  # unit probably millimeter
+    error_min_duration_threshold: float = math.inf  # unit is second
+    distance: float = 0  # unit probably millimeter
+    error_detected: bool = False
+    error_start_timestamp: Optional[float] = None
+
+
 class SystemMachine(StateMachine):
     states = [e for e in SystemState]
 
@@ -68,8 +82,9 @@ class SystemMachine(StateMachine):
                  inference: InferenceProtocol = None,
                  *,
                  diamond_triangle_known_offset: Optional[Offset3DTuple] = Offset3DTuple(0, 0, 0),  # None,
-                 cover_max_distance_threshold: Optional[int] = 1,
-                 release_max_distance_threshold: Optional[int] = 1,
+                 cover_error_min_distance_threshold: float = 2,  # math.inf,   # probably millimeter
+                 release_error_min_distance_threshold: float = 2,  # math.inf,
+                 cover_release_min_duration_threshold: float = 3,  # seconds
                  ):
 
         initial_state = SystemState.cage
@@ -87,13 +102,18 @@ class SystemMachine(StateMachine):
         self._diamond_triangle_known_offset = diamond_triangle_known_offset
         self._diamond_triangle_prev_drift: Optional[Offset3DTuple] = None
 
-        self._cover_max_distance_threshold = cover_max_distance_threshold
-        self._cover_pellet_prev_distance: Optional[int] = None
-        self._cover_pellet_prev_error_detected: Optional[bool] = None
-
-        self._release_max_distance_threshold = release_max_distance_threshold
-        self._release_pellet_prev_distance: Optional[int] = None
-        self._release_pellet_prev_error_detected: Optional[bool] = None
+        self._cover_pellet_distance_ctx = CheckElementDistanceContext(
+            distance_property_name=self.Properties.COVER_PELLET_DISTANCE,
+            error_property_name=self.Properties.COVER_POSITION_ERROR_DETECTED,
+            error_distance_threshold=cover_error_min_distance_threshold,
+            error_min_duration_threshold=cover_release_min_duration_threshold,
+        )
+        self._release_pellet_distance_ctx = CheckElementDistanceContext(
+            distance_property_name=self.Properties.RELEASE_PELLET_DISTANCE,
+            error_property_name=self.Properties.RELEASE_POSITION_ERROR_DETECTED,
+            error_distance_threshold=release_error_min_distance_threshold,
+            error_min_duration_threshold=cover_release_min_duration_threshold,
+        )
 
         self._analysis = analysis
         if analysis is not None:
@@ -171,9 +191,6 @@ class SystemMachine(StateMachine):
 
     def before_exit_tunnel(self):
         self._algorithm.system_state = SystemState.cage
-        # inference = self._inference
-        # assert isinstance(inference, InferenceModel)
-        # inference.set_inference_to_online()
 
     def after_exit_tunnel(self):
         self._update_magnet_position(self.algorithm.baseline_intensity)
@@ -193,7 +210,10 @@ class SystemMachine(StateMachine):
 
     @staticmethod
     def _clean_raw_data(project):
+        # NB: get/read the current session index value immediately,
+        # this ensures that if it's changed by main process/thread then we are cleaning the good/correct one !!
         session_value = project.session.value
+
         def do_clean():
             for cam_name in (project.camera_1, project.camera_2):
                 paths = map(Path, chain(
@@ -205,7 +225,7 @@ class SystemMachine(StateMachine):
                     if path.exists():
                         logger.debug("removing %s", path)
                         path.unlink(missing_ok=True)
-        # using timer given when called the monitor data queue might still be writing to disk/still be in live session
+        # using timer given when called the monitor data queue might still be writing to disk/still be in live session,
         # making the deletes to not work here
         t = _clean_raw_data_timer(3, do_clean)
         t.start()
@@ -320,54 +340,48 @@ class SystemMachine(StateMachine):
                 self.Properties.DIAMOND_TRIANGLE_OFFSET_DRIFT, drift, prev)
             self._diamond_triangle_prev_drift = drift
 
+    def _handle_check_element_distance(self, ctx: CheckElementDistanceContext, offset: Offset3DTuple):
+        if ctx.error_detected:
+            # for now: we only set once this flag, never clear it.
+            return
+        distance = math.sqrt(offset.x ** 2 + offset.y ** 2 + offset.y ** 2)
+        if distance != ctx.distance:
+            self.events.property_changed(ctx.distance_property_name, distance, ctx.distance)
+            ctx.distance = distance
+        is_error = distance >= ctx.error_distance_threshold
+        if not is_error:
+            # we might want to only unset the error_start_timestamp after some minimum duration too
+            ctx.error_start_timestamp = None
+            return
+        t_now = time.time()
+        if ctx.error_start_timestamp is None:
+            ctx.error_start_timestamp = t_now
+        else:
+            if t_now - ctx.error_start_timestamp >= ctx.error_min_duration_threshold:
+                self.events.property_changed(ctx.error_property_name, True, False)
+
     def _handle_star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
-        cover_threshold = self._cover_max_distance_threshold
+        if offset is None:
+            return
         check_cover_distance = (
-            cover_threshold is not None
-            and self._pellet_machine.state == PelletState.covering
+            self._pellet_machine.state == PelletState.covering
             and self._pellet_machine.can_use_pellet_command()
             and self._algorithm.pellet_cover_enabled
             and self._algorithm.is_in_session
         )
         if check_cover_distance:
-            cover_distance = math.sqrt(
-                offset.x ** 2 + offset.y ** 2 + offset.y ** 2
+            self._handle_check_element_distance(
+                self._cover_pellet_distance_ctx, offset
             )
-            prev = self._cover_pellet_prev_distance
-            if cover_distance != prev:
-                self.events.property_changed(
-                    self.Properties.COVER_PELLET_DISTANCE, cover_distance, prev)
-                self._cover_pellet_prev_distance = cover_distance
-            #
-            is_error = cover_distance > cover_threshold
-            prev = self._cover_pellet_prev_error_detected
-            if is_error != prev:
-                self.events.property_changed(
-                    self.Properties.COVER_POSITION_ERROR_DETECTED, is_error, prev)
 
-        release_threshold = self._release_max_distance_threshold
         check_release_distance = (
-            release_threshold is not None
-            and self._state == SystemState.tunnel
+            self._state == SystemState.tunnel
             and self._pellet_machine.state == PelletState.releasing
             and self._pellet_machine.can_use_pellet_command()
             and not self._algorithm.is_in_session
         )
         if check_release_distance:
-            release_distance = math.sqrt(
-                offset.x ** 2 + offset.y ** 2 + offset.y ** 2
-            )
-            prev = self._release_pellet_prev_distance
-            if release_distance != prev:
-                self.events.property_changed(
-                    self.Properties.RELEASE_PELLET_DISTANCE, release_distance, prev)
-                self._release_pellet_prev_distance = release_distance
-            #
-            is_error = release_distance > release_threshold
-            prev = self._cover_pellet_prev_error_detected
-            if is_error != prev:
-                self.events.property_changed(
-                    self.Properties.RELEASE_POSITION_ERROR_DETECTED, is_error, prev)
+            self._handle_check_element_distance(self._release_pellet_distance_ctx, offset)
 
     def _pose_changed(self, response: PoseResponse):
         if response.pellet_seen:
