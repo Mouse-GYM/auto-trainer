@@ -4,6 +4,7 @@ from enum import Enum
 from events import Events
 from transitions import Machine
 
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import EventManager, MessageHandler, ObservableObject
 
 from ..behavior_algorithm import BehaviorAlgorithm
@@ -12,7 +13,7 @@ from ..pellet_device_protocol import PelletDeviceProtocol
 from ..state_machine import StateMachine
 from ..system_machine_state import SystemState
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class PelletState(str, Enum):
@@ -184,7 +185,7 @@ class PelletMachine(StateMachine):
     def _session_ending(self):
         self._try_next_state()
 
-    def _pellet_device_ack_received(self, token):
+    def _pellet_device_ack_received(self, token: str):
         if self._api_status_token is None:
             # External command.  Safe to ignore.
             return
@@ -192,7 +193,8 @@ class PelletMachine(StateMachine):
         if token != self._api_status_token:
             # External command while we are waiting for our own.  Track in case it is causing conflicts.
             EventManager.default().post_event_content(BehaviorEventKind.pelletExternalToken, context=token)
-            logger.warning("ignoring pellet delivery token from external command")
+            logger.debug("ignoring pellet delivery token from external command. token=%r api_status=%r",
+                         token, self._api_status_token)
             return
 
         EventManager.default().post_event_content(BehaviorEventKind.pelletAcknowledgeToken, context=token)

@@ -2,6 +2,7 @@ import logging
 import time
 from datetime import datetime
 from enum import Enum
+from typing import Callable
 
 from typing import Callable
 from typing_extensions import Self

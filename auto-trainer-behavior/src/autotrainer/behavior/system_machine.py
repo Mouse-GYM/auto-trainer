@@ -39,7 +39,7 @@ class SystemMachine(StateMachine):
     states = [e for e in SystemState]
 
     class Properties(str, Enum):
-        DIAMOND_STAR_OFFSET_DRIFT = "diamond_star_offset_drift"
+        DIAMOND_TRIANGLE_OFFSET_DRIFT = "diamond_triangle_offset_drift"
 
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
@@ -76,8 +76,8 @@ class SystemMachine(StateMachine):
 
         self._msg_handler = msg_handler
 
-        self._diamond_star_known_offset = diamond_star_known_offset
-        self._diamond_star_prev_drift = (0, 0, 0)
+        self._diamond_triangle_known_offset = diamond_star_known_offset
+        self._diamond_triangle_prev_drift: Optional[Offset3DTuple] = None
 
         self._analysis = analysis
         if analysis is not None:
@@ -279,25 +279,29 @@ class SystemMachine(StateMachine):
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if offset is None:
             return
-        known_offset = self._diamond_star_known_offset
+        known_offset = self._diamond_triangle_known_offset
         check_drift = (
             self._state != SystemState.intersession
             and self._pellet_machine.state == PelletState.monitoring
             and known_offset is not None
-            and self._pellet_machine.is_send_pellet_completed
         )
         if not check_drift:
             return
         drift = known_offset - offset
-        d_drift = Offset3DTuple(*(v1 - v2 for v1, v2 in zip(self._diamond_star_prev_drift, drift)))
+        prev = self._diamond_triangle_prev_drift
+        if prev is None:
+            d_drift = None
+        else:
+            d_drift = prev - drift
         # not sure which abs_diff to check against:
-        if any(abs(d) > 1 for d in d_drift):
+        if d_drift is None or any(abs(d) > 1 for d in d_drift):
             logger.verbose("drift diamond triangle: %s d_drift=%s", drift, d_drift)
-        if drift != self._diamond_star_prev_drift:
-            self._diamond_star_prev_drift = drift
-            self._pellet_device.set_motor_drift(drift)
+        if drift != prev:
+            self._diamond_triangle_prev_drift = drift
+            if drift is not None:
+                self._pellet_device.set_motor_drift(drift)
             self.events.property_changed(
-                self.Properties.DIAMOND_STAR_OFFSET_DRIFT, drift, self._diamond_star_prev_drift)
+                self.Properties.DIAMOND_TRIANGLE_OFFSET_DRIFT, drift, prev)
 
     def _pose_changed(self, response: PoseResponse):
         if response.pellet_seen:

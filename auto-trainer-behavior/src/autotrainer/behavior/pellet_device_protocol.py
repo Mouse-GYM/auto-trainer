@@ -1,7 +1,7 @@
 from typing import Protocol, Optional
 from uuid import UUID
 
-from autotrainer.core import ObservableObjectProtocol
+from autotrainer.core import ObservableObjectProtocol, Offset3DTuple
 
 
 class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
@@ -11,7 +11,6 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     """
 
     def set_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]: ...
-
     """
     Request a move for the X stepper.
     
@@ -19,7 +18,6 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     """
 
     def set_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]: ...
-
     """
     Request a move for the Y stepper.
     
@@ -27,7 +25,6 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     """
 
     def set_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]: ...
-
     """
     Request a move for the Z stepper.
     
@@ -35,7 +32,6 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     """
 
     def send_home(self) -> Optional[UUID]: ...
-
     """
     Request a move to 0, 0, 0.
     
@@ -43,7 +39,6 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     """
 
     def load_pellet(self) -> Optional[UUID]: ...
-
     """
     Request a full load cycle to scoop the pellet from the bin.
     
@@ -51,7 +46,6 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     """
 
     def send_pellet(self) -> Optional[UUID]: ...
-
     """
     Request a move from the current position to the "send" location stored in the hardware.
     
@@ -59,7 +53,6 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     """
 
     def cover_pellet(self) -> Optional[UUID]: ...
-
     """
     Request the barrier arm close and cover the pellet.
     
@@ -67,7 +60,6 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     """
 
     def release_pellet(self) -> Optional[UUID]: ...
-
     """
     Request the barrier arm open and expose the pellet.
     
@@ -75,9 +67,11 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     """
 
     def play_tone(self, frequency: int, duration: float) -> Optional[UUID]: ...
-
     """
     Request the device play a tone.
     
     :return: A token to expect from the device message handler when the request is complete.
     """
+
+    def set_motor_drift(self, drift: Offset3DTuple): ...
+    """Set the motor drift offset"""
