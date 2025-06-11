@@ -60,7 +60,6 @@ class SystemMachine(StateMachine):
         RELEASE_PELLET_DISTANCE = "release_pellet_distance"
         RELEASE_POSITION_ERROR_DETECTED = "release_position_error_detected"
 
-
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
          "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
