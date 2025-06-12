@@ -19,7 +19,7 @@ from autotrainer.inference import PoseResponse
 from autotrainer.inference.pose_elements import SceneElement
 
 from .analysis.intersession_process import IntersessionResponse
-from .behavior_algorithm import BehaviorAlgorithm
+from .behavior_algorithm import BehaviorAlgorithm, BehaviorProps
 from .behavior_event_kind import BehaviorEventKind
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine
@@ -38,32 +38,9 @@ _auto_clamp_release_timer = Timer
 _pellet_loading_timer = Timer
 #
 
-class CheckThresholdWay(str, Enum):
-    TRIGGER_IF_GREATER = "trigger_if_greater"
-    TRIGGER_IF_SMALLER = "trigger_if_smaller"
-
-
-@dataclasses.dataclass
-class CheckElementDistanceContext:
-    distance_property_name: str
-    error_property_name: str
-    error_way: CheckThresholdWay
-    error_distance_threshold: float
-    error_min_duration_threshold: float = math.inf  # unit is second
-    distance: float = 0  # unit probably millimeter
-    error_detected: bool = False
-    error_start_timestamp: Optional[float] = None
-
 
 class SystemMachine(StateMachine):
     states = [e for e in SystemState]
-
-    class Properties(str, Enum):
-        DIAMOND_TRIANGLE_OFFSET_DRIFT = "diamond_triangle_offset_drift"
-        COVER_PELLET_DISTANCE = "cover_pellet_distance"
-        COVER_PELLET_POS_ERROR_DETECTED = "cover_pellet_pos_error_detected"
-        RELEASE_PELLET_DISTANCE = "release_pellet_distance"
-        RELEASE_PELLET_POS_ERROR_DETECTED = "release_pellet_pos_error_detected"
 
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
@@ -84,11 +61,6 @@ class SystemMachine(StateMachine):
                  tunnel_device: TunnelDeviceProtocol = None,
                  pellet_device: PelletDeviceProtocol = None,
                  inference: InferenceProtocol = None,
-                 *,
-                 diamond_triangle_known_offset: Optional[Offset3DTuple] = Offset3DTuple(0, 0, 0),  # None,
-                 cover_error_min_distance_threshold: float = 2,  # math.inf,   # probably millimeter
-                 release_error_min_distance_threshold: float = 2,  # math.inf,
-                 cover_release_min_duration_threshold: float = 3,  # seconds
                  ):
 
         initial_state = SystemState.cage
@@ -96,30 +68,13 @@ class SystemMachine(StateMachine):
 
         self._project_info = project_info
 
-        self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
-        self._algorithm.project = self._project_info
+        algorithm = self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
+        algorithm.project = project_info
+        algorithm.session_ending += self._session_ended
+        algorithm.property_changed += self._algorithm_property_changed
 
         self._tunnel_device = tunnel_device
-
         self._msg_handler = msg_handler
-
-        self._diamond_triangle_known_offset = diamond_triangle_known_offset
-        self._diamond_triangle_prev_drift: Optional[Offset3DTuple] = None
-
-        self._cover_pellet_distance_ctx = CheckElementDistanceContext(
-            distance_property_name=self.Properties.COVER_PELLET_DISTANCE,
-            error_property_name=self.Properties.COVER_PELLET_POS_ERROR_DETECTED,
-            error_distance_threshold=cover_error_min_distance_threshold,
-            error_min_duration_threshold=cover_release_min_duration_threshold,
-            error_way=CheckThresholdWay.TRIGGER_IF_SMALLER,
-        )
-        self._release_pellet_distance_ctx = CheckElementDistanceContext(
-            distance_property_name=self.Properties.RELEASE_PELLET_DISTANCE,
-            error_property_name=self.Properties.RELEASE_PELLET_POS_ERROR_DETECTED,
-            error_distance_threshold=release_error_min_distance_threshold,
-            error_min_duration_threshold=cover_release_min_duration_threshold,
-            error_way=CheckThresholdWay.TRIGGER_IF_GREATER,
-        )
 
         self._analysis = analysis
         if analysis is not None:
@@ -142,9 +97,6 @@ class SystemMachine(StateMachine):
 
         self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
         self._intersession.events.on_analysis_ended += self._intersession_ended
-
-        self._algorithm.session_ending += self._session_ended
-        self._algorithm.property_changed += self._algorithm_property_changed
 
         self.machine = Machine(
             model=[self], states=SystemMachine.states, transitions=SystemMachine.transitions,
@@ -319,60 +271,14 @@ class SystemMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.headfixAutoTare)
 
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
-        known_offset = self._diamond_triangle_known_offset
-        check_drift = (
-            self._state != SystemState.intersession
+        if not (
+            offset is not None
+            and self._state != SystemState.intersession
             and self._pellet_machine.state == PelletState.monitoring
             and self._pellet_machine.can_use_pellet_command()
-            and known_offset is not None
-        )
-        if not check_drift:
+        ):
             return
-        prev = self._diamond_triangle_prev_drift
-        if offset is None:
-            drift = None
-        else:
-            drift = known_offset - offset
-            d_drift = None if prev is None else prev - drift
-            # not sure which abs_diff to check against:
-            if d_drift is None or any(abs(d) > 1 for d in d_drift):
-                logger.verbose("diamond triangle offset drift: %s d_drift=%s", drift, d_drift)
-        if drift != prev:
-            if drift is not None:
-                # only set motor drift when drift is known (not None)
-                self._pellet_device.set_motor_drift(drift)
-            # publishing event in all cases (None or not):
-            self.events.property_changed(
-                self.Properties.DIAMOND_TRIANGLE_OFFSET_DRIFT, drift, prev)
-            self._diamond_triangle_prev_drift = drift
-
-    def _handle_check_element_distance(self, ctx: CheckElementDistanceContext, offset: Offset3DTuple):
-        if ctx.error_detected:
-            # for now: we only set once this flag, never clear it.
-            return
-        distance = math.sqrt(offset.x ** 2 + offset.y ** 2 + offset.y ** 2)
-        prev_distance = ctx.distance
-        if distance != prev_distance:
-            self.events.property_changed(ctx.distance_property_name, distance, prev_distance)
-            ctx.distance = distance
-        if ctx.error_way is CheckThresholdWay.TRIGGER_IF_GREATER:
-            is_error = distance >= ctx.error_distance_threshold
-        else:
-            assert ctx.error_way is CheckThresholdWay.TRIGGER_IF_SMALLER
-            is_error = distance <= ctx.error_distance_threshold
-        if not is_error:
-            # we might want to only unset the error_start_timestamp after some minimum duration too
-            ctx.error_start_timestamp = None
-            return
-        t_now = time.time()
-        if ctx.error_start_timestamp is None:
-            ctx.error_start_timestamp = t_now
-        else:
-            if t_now - ctx.error_start_timestamp >= ctx.error_min_duration_threshold:
-                logger.critical("Detected %s ; distance=%.3f prev=%s",
-                                ctx.error_property_name, distance, prev_distance)
-                ctx.error_detected = True
-                self.events.property_changed(ctx.error_property_name, True, False)
+        self._algorithm.handle_diamond_triangle_offset(offset)
 
     def _handle_star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if offset is None:
@@ -387,14 +293,14 @@ class SystemMachine(StateMachine):
             or (pellet_machine.state == PelletState.covering)
         )
         if check_cover_distance:
-            self._handle_check_element_distance(self._cover_pellet_distance_ctx, offset)
+            algo.handle_cover_pellet_offset(offset)
             # never consider the check release position when we checked the cover one
             return
         # otherwise, given can_use_pellet_command() is True (check above),
         # we know we have to check release pos distance if state is monitoring:
         check_release_distance = (pellet_machine.state == PelletState.monitoring)
         if check_release_distance:
-            self._handle_check_element_distance(self._release_pellet_distance_ctx, offset)
+            algo.handle_release_pellet_offset(offset)
 
     def _pose_changed(self, response: PoseResponse):
         if response.pellet_seen:
@@ -409,10 +315,10 @@ class SystemMachine(StateMachine):
             return
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
-    def _algorithm_property_changed(self, name: str, value, _):
+    def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.
         if name == "head_fixation_enabled":
-            if not value:
+            if not new_value:
                 logger.debug("auto-clamp disabled (backing off to baseline intensity)")
                 if self.algorithm.is_in_session:
                     logger.debug("\tsending tone to indicate auto-clamp disabled")
@@ -423,6 +329,9 @@ class SystemMachine(StateMachine):
                     timer = _auto_clamp_release_timer(self.algorithm.auto_clamp_release_delay,
                                   lambda: self._update_magnet_position(self.algorithm.baseline_intensity))
                     timer.start()
+        elif name == BehaviorProps.PELLET_MOTOR_DRIFT:
+            if new_value is not None:
+                self._pellet_device.set_motor_drift(new_value)
 
     def _update_magnet_position(self, position: int):
         if self._tunnel_device is not None:
