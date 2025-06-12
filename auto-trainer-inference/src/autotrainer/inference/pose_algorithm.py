@@ -202,10 +202,10 @@ class PoseAlgorithm(ObservableObject):
         columns = pandas.MultiIndex.from_product([self._parts_list, axis_labels],
                                                  names=["bodyparts", "coords"])
         self._pose_result_columns = columns
-        self._has_hands_part_names = all(
-            col in parts
-            for col in ('RH_flat', 'RH_spread', 'RH_grab', 'LH_flat', 'LH_spread', 'LH_grab')
-        )
+        self._has_hands_part_names = all(map(parts.__contains__, (
+            SceneElement.RH_flat, SceneElement.RH_spread, SceneElement.RH_grab,
+            SceneElement.LH_flat, SceneElement.LH_spread, SceneElement.LH_grab,
+        )))
 
     @property
     def pose_result_columns(self) -> pandas.MultiIndex:
