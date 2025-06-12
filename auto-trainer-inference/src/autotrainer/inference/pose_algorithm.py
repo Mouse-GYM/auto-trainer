@@ -11,7 +11,7 @@ import pandas
 from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from .config import StereoParams
-from autotrainer.inference.pose_elements import SceneElement, BaseSceneElement
+from autotrainer.inference.pose_elements import SceneElement
 
 # see inline where imported:
 # from autotrainer.behavior.analysis.calibration import triangulate_3d_with_params

@@ -44,7 +44,7 @@ class QGLImageView(QWidget):
 
         self._points: Dict[SceneElement, QGraphicsEllipseItem] = {}
 
-        def add_managed_point(color, elem):
+        def add_managed_point(color, elem: SceneElement):
             point = self._points[elem] = QGraphicsEllipseItem(0, 0, 5, 5)
             pen = QPen(color)
             pen.setWidth(1)
