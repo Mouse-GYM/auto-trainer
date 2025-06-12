@@ -34,6 +34,8 @@ class PoseLocation:
 
 @dataclass(frozen=True)
 class PoseResponse:
+    """Defines response of various input"""
+
     sequence: int
     """Simple index to track responses"""
 
@@ -50,31 +52,21 @@ class PoseResponse:
     parts_3d_offsets: Dict[str, Dict[str, Offset3DTuple]] = dataclasses.field(default_factory=dict)
     """3D offsets of the pairs of parts requested during the response creation"""
 
-    # def x_y_1(self) -> List[PoseTuple]:
-    #     """Ugly name for the x, y coordinates of the first camera"""
-    #     return list(map(lambda p: (p.x, p.y), self.locations[0]))
-    #
-    # def x_y_2(self) -> List[PoseTuple]:
-    #     """Ugly name for the x, y coordinates of the second camera"""
-    #     return list(map(lambda p: (p.x, p.y), self.locations[1]))
-    #
-    # def x_y_by_idx(self, cam_idx: int) -> List[PoseTuple]:
-    #     return list(map(lambda p: (p.x, p.y), self.locations[cam_idx]))
-
     @property
     def pellet_seen(self) -> bool:
         """Default logic/conditions for pellet seen"""
-        return self.parts_flags[0]["Pellet"] or self.parts_flags[1]["Pellet"]
+        return self.parts_flags[0][SceneElement.Pellet] or self.parts_flags[1][SceneElement.Pellet]
 
     @property
     def star_seen(self):
         """Default logic/conditions for star seen"""
-        return self.parts_flags[0]["Star"] or self.parts_flags[1]["Star"]
+        return self.parts_flags[0][SceneElement.Star] or self.parts_flags[1][SceneElement.Star]
 
     @property
     def mouse_seen(self) -> bool:
-        """Default logic/conditions for mouse seen"""
-        return self.parts_flags[2]["Nose"]
+        """Default logic/conditions for mouse seen: require seen in ALL/both cams"""
+        # return all(flags.get(SceneElement.Nose, False) for flags in self.parts_flags)
+        return self.parts_flags[2][SceneElement.Nose]
 
     @property
     def diamond_seen(self):
@@ -317,32 +309,33 @@ class PoseAlgorithm(ObservableObject):
                 # check of parts confidence level is handled in PoseResponse.get_parts_3d_offset()
 
         # given import loop/cycle issue to be fixed:
-        from autotrainer.behavior.analysis.prepare_jetson_data import process_hand_data
         hand_base_names = ['H_flat', 'H_spread', 'H_grab']
         hand_options = ['R', 'L']
         bodyparts = ['R_Hand', 'L_Hand']
         coordinates = ['x', 'y', 'likelihood']
         columns = pandas.MultiIndex.from_product([bodyparts, coordinates], names=['bodyparts', 'coordinates'])
-        df = pandas.DataFrame(
-            numpy.concatenate(cams_last_frame).reshape(2  # nbr of frames in the dataframe
-                                                       , -1),
-            columns=self._pose_result_columns)
-        process_hands_results = pandas.DataFrame(columns=columns, index=range(2))
-        process_hands_results = process_hand_data(
-            df,
-            hand_base_names=hand_base_names,
-            hand_options=hand_options,
-            dlc_seg="_raw2D",
-            newdf=process_hands_results
-        )
-        for elem in SceneElement.L_Hand, SceneElement.R_Hand:
-            if __debug__ and elem not in process_hands_results:
-                continue
-            v = process_hands_results[elem]
-            if v['likelihood'][0] > self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                locations_1[elem] = PoseLocation(elem, -1, v['x'][0], v['y'][0])
-            if v['likelihood'][1] > self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                locations_2[elem] = PoseLocation(elem, -1, v['x'][1], v['y'][1])
+        if all(col in columns for col in self._pose_result_columns):
+            from autotrainer.behavior.analysis.prepare_jetson_data import process_hand_data
+            df = pandas.DataFrame(
+                numpy.concatenate(cams_last_frame).reshape(2  # nbr of frames in the dataframe
+                                                           , -1),
+                columns=self._pose_result_columns)
+            process_hands_results = pandas.DataFrame(columns=columns, index=range(2))
+            process_hands_results = process_hand_data(
+                df,
+                hand_base_names=hand_base_names,
+                hand_options=hand_options,
+                dlc_seg="_raw2D",
+                newdf=process_hands_results
+            )
+            for elem in SceneElement.L_Hand, SceneElement.R_Hand:
+                if __debug__ and elem not in process_hands_results:
+                    continue
+                v = process_hands_results[elem]
+                if v['likelihood'][0] > self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                    locations_1[elem] = PoseLocation(elem, -1, v['x'][0], v['y'][0])
+                if v['likelihood'][1] > self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                    locations_2[elem] = PoseLocation(elem, -1, v['x'][1], v['y'][1])
 
         response = PoseResponse(
             sequence=self._sequence,

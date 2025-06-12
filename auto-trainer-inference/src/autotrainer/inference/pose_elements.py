@@ -19,8 +19,9 @@ class _BaseSceneElement(str):  # , Enum):
         # set all string values to SceneElement/cls instance,
         # which pre-loads it in _cache_scene_elements:
         for name, value in vars(cls).items():
-            if isinstance(value, str):
-                setattr(cls, name, cls(value))
+            if cls.__annotations__.get(name) != 'SceneElement' or not isinstance(value, str):
+                continue
+            setattr(cls, name, cls(value))
 
     def __new__(cls, value: str):
         cached = _cache_scene_elements.get(value, None)
