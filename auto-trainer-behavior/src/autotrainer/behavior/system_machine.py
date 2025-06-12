@@ -382,18 +382,17 @@ class SystemMachine(StateMachine):
             # never consider any release or cover check when pellet cannot be used yet.
             return
         algo = self.algorithm
-        check_cover_distance = (
-            (pellet_machine.state == PelletState.monitoring and algo.is_in_session and algo.pellet_cover_enabled)
-            or (pellet_machine.state == PelletState.covering and not algo.is_in_session)
+        check_cover_distance = not algo.is_in_session and (
+            (pellet_machine.state == PelletState.monitoring and algo.pellet_cover_enabled)
+            or (pellet_machine.state == PelletState.covering)
         )
         if check_cover_distance:
             self._handle_check_element_distance(self._cover_pellet_distance_ctx, offset)
             # never consider the check release position when we checked the cover one
             return
-        check_release_distance = (
-            pellet_machine.state == PelletState.monitoring
-            and not (algo.is_in_session and algo.pellet_cover_enabled)
-        )
+        # otherwise, given can_use_pellet_command() is True (check above),
+        # we know we have to check release pos distance if state is monitoring:
+        check_release_distance = (pellet_machine.state == PelletState.monitoring)
         if check_release_distance:
             self._handle_check_element_distance(self._release_pellet_distance_ctx, offset)
 
