@@ -334,12 +334,10 @@ class BehaviorAlgorithm(ObservableObject):
 
     @cover_servo_status.setter
     def cover_servo_status(self, status: CoverServoStatus):
-        self._on_property_changed(BehaviorProps.COVER_SERVO_STATUS, status, self._cover_servo_status)
+        self._cover_servo_status = self._on_property_changed(BehaviorProps.COVER_SERVO_STATUS,
+                                                             status, self._cover_servo_status)
         if status is CoverServoStatus.OK:
-            logger.notice("Setting cover servo status to %s", status)
-        else:
-            logger.critical("Detected %s", status)
-        self._cover_servo_status = status
+            logger.notice("Set cover servo status to %s", status)
 
     @property
     def diamond_triangle_known_offset(self):
