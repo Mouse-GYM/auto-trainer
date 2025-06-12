@@ -8,7 +8,7 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QHBoxLayout, QGraphicsPixmapItem, \
     QGraphicsEllipseItem
 
-from autotrainer.inference import PoseTuple, PoseAlgorithm
+from autotrainer.inference import PoseTuple, PoseAlgorithm, PoseLocation
 from autotrainer.inference.pose_elements import SceneElement
 
 
@@ -59,6 +59,8 @@ class QGLImageView(QWidget):
         add_managed_point(Qt.GlobalColor.blue, SceneElement.Diamond)
         add_managed_point(Qt.GlobalColor.green, SceneElement.Triangle)
         add_managed_point(Qt.GlobalColor.white, SceneElement.LH_grab)
+        add_managed_point(Qt.GlobalColor.darkRed, SceneElement.L_Hand)
+        add_managed_point(Qt.GlobalColor.darkCyan, SceneElement.R_Hand)
 
         self._pixmap = None
         self._cur_image = None  # image must remain active to prevent segfault when pixmap continue use it.
@@ -99,19 +101,22 @@ class QGLImageView(QWidget):
         else:
             self._pixmap.setPixmap(pixmap)
 
-    def set_points(self, points: List[PoseTuple]):
+    def set_points(self, points: Dict[SceneElement, PoseLocation]):
         pose_algo = self._pose_algo
         if pose_algo is None:
             return
         width_f = self._raw_img_scale_w / self._width_factor
         height_f = self._raw_img_scale_h / self._height_factor
         # values are in coordinates (self._data_width, self._data_height)
-        for elem, point in self._points.items():
-            values = points[pose_algo.get_part_index(elem)]
-            x = values[0] * width_f
-            y = values[1] * height_f
+        for elem, widget_point in self._points.items():
+            values = points.get(elem, None)
+            if values is None:
+                widget_point.setVisible(False)
+                continue
+            x = values.x * width_f
+            y = values.y * height_f
             if x < 0 or y < 0 or x > self._width or y > self._height:
-                point.setVisible(False)
+                widget_point.setVisible(False)
             else:
-                point.setPos(x, y)
-                point.setVisible(True)
+                widget_point.setPos(x, y)
+                widget_point.setVisible(True)

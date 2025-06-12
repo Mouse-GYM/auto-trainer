@@ -126,9 +126,9 @@ class MainContent(ContentWidget):
 
     def refresh_pose(self, response: PoseResponse):
         if self._model.left_camera.is_enabled:
-            self._left_camera_content.refresh_pose(response.x_y_1())
+            self._left_camera_content.refresh_pose(response.locations[0])
         if self._model.right_camera.is_enabled:
-            self._right_camera_content.refresh_pose(response.x_y_2())
+            self._right_camera_content.refresh_pose(response.locations[1])
 
     @property
     def is_diagnostics_visible(self) -> bool:

@@ -30,19 +30,25 @@ class BaseSceneElement(str):  # , Enum):
 class SceneElement(BaseSceneElement):
 
     Pellet = BaseSceneElement('Pellet')
+
+    R_Hand = BaseSceneElement('R_Hand')
     RH_flat = BaseSceneElement('RH_flat')
     RH_spread = BaseSceneElement('RH_spread')
     RH_grab = BaseSceneElement('RH_grab')
+
+    L_Hand = BaseSceneElement('L_Hand')
     LH_flat = BaseSceneElement('LH_flat')
     LH_spread = BaseSceneElement('LH_spread')
     LH_grab = BaseSceneElement('LH_grab')
-    Star = BaseSceneElement('Star')
+
+    Nose = BaseSceneElement('Nose')
+    Mouth = BaseSceneElement('Mouth')
     Tongue_mid = BaseSceneElement('Tongue_mid')
     Tongue_tip = BaseSceneElement('Tongue_tip')
-    Nose = BaseSceneElement('Nose')
-    Triangle = BaseSceneElement('Triangle')
-    Mouth = BaseSceneElement('Mouth')
+
+    Star = BaseSceneElement('Star')
     Diamond = BaseSceneElement('Diamond')
+    Triangle = BaseSceneElement('Triangle')
 
     def __new__(cls, value):
         return BaseSceneElement(value)

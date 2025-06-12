@@ -11,7 +11,7 @@ import pandas
 from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from .config import StereoParams
-from autotrainer.inference.pose_elements import SceneElement
+from autotrainer.inference.pose_elements import SceneElement, BaseSceneElement
 
 # see inline where imported:
 # from autotrainer.behavior.analysis.calibration import triangulate_3d_with_params
@@ -37,25 +37,29 @@ class PoseResponse:
     sequence: int
     """Simple index to track responses"""
 
-    parts_flags: Tuple[Dict[str, bool], Dict[str, bool], Dict[str, bool]]
+    parts_flags: Tuple[
+        Dict[str, bool],
+        Dict[str, bool],
+        Dict[str, bool],
+    ]
     """Tuple indicating part seen for left, right, and both (same frame)"""
 
-    locations: List[List[PoseLocation]]
-    """X, Y locations for each part for each camera, if above threshold, otherwise -1, -1"""
+    locations: List[Dict[SceneElement, PoseLocation]]
+    """X, Y locations for each part for each camera, if above threshold, otherwise -1, -1 (or not present)"""
 
     parts_3d_offsets: Dict[str, Dict[str, Offset3DTuple]] = dataclasses.field(default_factory=dict)
     """3D offsets of the pairs of parts requested during the response creation"""
 
-    def x_y_1(self) -> List[PoseTuple]:
-        """Ugly name for the x, y coordinates of the first camera"""
-        return list(map(lambda p: (p.x, p.y), self.locations[0]))
-
-    def x_y_2(self) -> List[PoseTuple]:
-        """Ugly name for the x, y coordinates of the second camera"""
-        return list(map(lambda p: (p.x, p.y), self.locations[1]))
-
-    def x_y_by_idx(self, cam_idx: int) -> List[PoseTuple]:
-        return list(map(lambda p: (p.x, p.y), self.locations[cam_idx]))
+    # def x_y_1(self) -> List[PoseTuple]:
+    #     """Ugly name for the x, y coordinates of the first camera"""
+    #     return list(map(lambda p: (p.x, p.y), self.locations[0]))
+    #
+    # def x_y_2(self) -> List[PoseTuple]:
+    #     """Ugly name for the x, y coordinates of the second camera"""
+    #     return list(map(lambda p: (p.x, p.y), self.locations[1]))
+    #
+    # def x_y_by_idx(self, cam_idx: int) -> List[PoseTuple]:
+    #     return list(map(lambda p: (p.x, p.y), self.locations[cam_idx]))
 
     @property
     def pellet_seen(self) -> bool:
@@ -155,8 +159,8 @@ class PoseAlgorithm(ObservableObject):
         stereo_params: Optional[StereoParams] = None,
     ):
         super().__init__(event_names=("pose_changed",))
-        self._parts_list: List[str] = []
-        self._parts: Dict[str, int] = {}  # key is part name, value is part model index
+        self._parts_list: List[SceneElement] = []
+        self._parts: Dict[SceneElement, int] = {}  # key is part name, value is part model index
         self._expected_num_parts = 0
         self._sequence = 0
         self._default_parts_flag: Dict[str, bool] = {}
@@ -188,7 +192,7 @@ class PoseAlgorithm(ObservableObject):
         See part_names() and get_part_index(name).
         """
         parts = self._parts_list[:] = [
-            SceneElement(part).value
+            SceneElement(part)
             for part in parts
         ]
         self._parts.clear()
@@ -278,6 +282,8 @@ class PoseAlgorithm(ObservableObject):
         left_frames = per_cam_frames[0]
         right_frames = per_cam_frames[1]
 
+        frames_per_cam = len(left_frames)
+
         locations_1 = self._find_parts(left_frames)
         locations_2 = self._find_parts(right_frames)
 
@@ -297,10 +303,11 @@ class PoseAlgorithm(ObservableObject):
                     if maybe_dual:
                         parts_flag_3[part] = True
 
+        # NB: only handling/using last frame of batch (for each cam):
+        # we could eventually do all the frames and eventually make an avg ?
+        cams_last_frame = [cam_frames[-1] for cam_frames in per_cam_frames]
         parts_3d_offsets = defaultdict(dict)
         if len(pairs_3d_offsets) > 0:
-            # NB: only handling last frame of batch:
-            cams_last_frame = [cam_frames[-1] for cam_frames in per_cam_frames]
             df_3d = self._handle_offsets_pose_data(*([frame] for frame in cams_last_frame))
             for part1, part2 in pairs_3d_offsets:
                 parts_3d_offsets[part1][part2] = tuple(
@@ -309,25 +316,47 @@ class PoseAlgorithm(ObservableObject):
                 )
                 # check of parts confidence level is handled in PoseResponse.get_parts_3d_offset()
 
+        # given import loop/cycle issue to be fixed:
+        from autotrainer.behavior.analysis.prepare_jetson_data import process_hand_data
+        hand_base_names = ['H_flat', 'H_spread', 'H_grab']
+        hand_options = ['R', 'L']
+        bodyparts = ['R_Hand', 'L_Hand']
+        coordinates = ['x', 'y', 'likelihood']
+        columns = pandas.MultiIndex.from_product([bodyparts, coordinates], names=['bodyparts', 'coordinates'])
+        df = pandas.DataFrame(
+            numpy.concatenate(cams_last_frame).reshape(2  # nbr of frames in the dataframe
+                                                       , -1),
+            columns=self._pose_result_columns)
+        process_hands_results = pandas.DataFrame(columns=columns, index=range(2))
+        process_hands_results = process_hand_data(
+            df,
+            hand_base_names=hand_base_names,
+            hand_options=hand_options,
+            dlc_seg="_raw2D",
+            newdf=process_hands_results
+        )
+        for elem in SceneElement.L_Hand, SceneElement.R_Hand:
+            if __debug__ and elem not in process_hands_results:
+                continue
+            v = process_hands_results[elem]
+            if v['likelihood'][0] > self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                locations_1[elem] = PoseLocation(elem, -1, v['x'][0], v['y'][0])
+            if v['likelihood'][1] > self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                locations_2[elem] = PoseLocation(elem, -1, v['x'][1], v['y'][1])
+
         response = PoseResponse(
             sequence=self._sequence,
             parts_flags=(parts_flag_1, parts_flag_2, parts_flag_3),
             locations=[locations_1, locations_2],
             parts_3d_offsets=dict(parts_3d_offsets),
         )
-
         self.pose_changed(response)
-
         return response
 
-    def _find_parts(self, frames: list) -> List[PoseLocation]:
-        locations: List[PoseLocation] = list(self._default_locations)
-
+    def _find_parts(self, frames: list) -> Dict[SceneElement, PoseLocation]:
+        locations: Dict[SceneElement, PoseLocation] = {}
         for pose in frames:
             for idx, part in enumerate(self._parts_list):
                 if pose[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PLOT_THRESHOLD:
-                    locations[idx] = PoseLocation(part, idx, pose[idx, 0], pose[idx, 1])
-                elif locations[idx] is None:
-                    locations[idx] = PoseLocation(part, idx, -1, -1)
-
+                    locations[part] = PoseLocation(part, idx, pose[idx, 0], pose[idx, 1])
         return locations
