@@ -158,6 +158,7 @@ class PoseAlgorithm(ObservableObject):
         self._default_parts_flag: Dict[str, bool] = {}
         self._default_locations = []
         self._pose_result_columns: Optional[pandas.MultiIndex] = None
+        self._has_hands_part_names: bool = False
         self._stereo_params = stereo_params
 
     @property
@@ -201,6 +202,10 @@ class PoseAlgorithm(ObservableObject):
         columns = pandas.MultiIndex.from_product([self._parts_list, axis_labels],
                                                  names=["bodyparts", "coords"])
         self._pose_result_columns = columns
+        self._has_hands_part_names = all(
+            col in parts
+            for col in ('RH_flat', 'RH_spread', 'RH_grab', 'LH_flat', 'LH_spread', 'LH_grab')
+        )
 
     @property
     def pose_result_columns(self) -> pandas.MultiIndex:
@@ -308,14 +313,16 @@ class PoseAlgorithm(ObservableObject):
                 )
                 # check of parts confidence level is handled in PoseResponse.get_parts_3d_offset()
 
-        # given import loop/cycle issue to be fixed:
-        hand_base_names = ['H_flat', 'H_spread', 'H_grab']
-        hand_options = ['R', 'L']
-        bodyparts = ['R_Hand', 'L_Hand']
-        coordinates = ['x', 'y', 'likelihood']
-        columns = pandas.MultiIndex.from_product([bodyparts, coordinates], names=['bodyparts', 'coordinates'])
-        if all(col in columns for col in self._pose_result_columns):
+        if self._has_hands_part_names:
+            # given import loop/cycle issue to be fixed:
             from autotrainer.behavior.analysis.prepare_jetson_data import process_hand_data
+
+            # todo: should be somehow more global:
+            hand_base_names = ['H_flat', 'H_spread', 'H_grab']
+            hand_options = ['R', 'L']
+            bodyparts = ['R_Hand', 'L_Hand']
+            coordinates = ['x', 'y', 'likelihood']
+            columns = pandas.MultiIndex.from_product([bodyparts, coordinates], names=['bodyparts', 'coordinates'])
             df = pandas.DataFrame(
                 numpy.concatenate(cams_last_frame).reshape(2  # nbr of frames in the dataframe
                                                            , -1),
