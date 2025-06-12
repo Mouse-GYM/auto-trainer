@@ -39,6 +39,9 @@ def main():
     cv2.namedWindow(window_name)
     # cv2.startWindowThread()
 
+    history_list = []
+    history_count = 1  # 30 * 1  # fps * duration
+
     while cap.isOpened():
         if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 0:
             break
@@ -47,12 +50,19 @@ def main():
         ret, frame = cap.read()
         if not ret:
             break
-
         # frame = cv2.resize(frame, (600, 450))
 
-        # Apply background subtraction
-        fg_mask = backSub.apply(frame)
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        history_list.append(gray_frame)
+        if len(history_list) <= history_count:
+            # fg_mask = backSub.apply(frame)
+            continue
+        else:
+            background = history_list.pop(0)
+            fg_mask = cv2.absdiff(background, gray_frame)
+        fg_mask[fg_mask < 0.1] = 0
 
+        # Apply background subtraction
         # apply global threshold to remove shadows
         retval, mask_thresh = cv2.threshold(fg_mask,
                                             180, #180,
@@ -104,7 +114,7 @@ def main():
         large_contours = sorted(large_contours, key=lambda t: t[1], reverse=True)
 
         # frame_out = frame.copy()
-        frame_out = cv2.drawContours(frame, [c[0] for c in large_contours[:4]], -1, (0, 255, 0), 1)
+        frame_out = cv2.drawContours(frame.copy(), [c[0] for c in large_contours[:4]], -1, (0, 255, 0), 1)
         for idx, (cnt, area) in enumerate(large_contours):
             if idx > 0:
                 if area < 0.75 * large_contours[0][1]:
@@ -118,7 +128,7 @@ def main():
                 break
 
         # Display the resulting frame
-        frame_out_display = cv2.cvtColor(frame_out, cv2.COLOR_BGR2RGB)
+        frame_out_display = cv2.cvtColor(fg_mask, cv2.COLOR_BGR2RGB)
         cv2.imshow(window_name, frame_out_display)
         key = cv2.waitKey(1)
         if key == 27:
