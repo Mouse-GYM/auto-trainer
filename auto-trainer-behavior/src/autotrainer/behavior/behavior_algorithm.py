@@ -479,11 +479,16 @@ class BehaviorAlgorithm(ObservableObject):
             is_error = distance <= ctx.error_distance_threshold
         if not is_error:
             # we might want to only unset the error_start_timestamp after some minimum duration too
-            ctx.error_start_timestamp = None
+            if ctx.error_start_timestamp is not None:
+                ctx.error_start_timestamp = None
+                logger.info("End of deviation on %s ; distance=%s",
+                            ctx.distance_property_name, distance)
             return
         t_now = time.time()
         if ctx.error_start_timestamp is None:
             ctx.error_start_timestamp = t_now
+            logger.warning("Detected start of %s deviation ; distance=%s threshold=%s",
+                           ctx.distance_property_name, ctx.error_distance_threshold)
         else:
             if t_now - ctx.error_start_timestamp >= ctx.error_min_duration_threshold:
                 logger.critical("Detected %s ; distance=%.3f prev=%s",
