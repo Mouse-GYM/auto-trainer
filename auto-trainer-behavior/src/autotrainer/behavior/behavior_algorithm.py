@@ -85,6 +85,7 @@ class BehaviorAlgorithm(ObservableObject):
             "session_starting",
             "session_ending",
             "cover_servo_status_changed",
+            "pellet_motor_drift_changed",
         ))
         self._project_info = None
 
