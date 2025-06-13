@@ -48,13 +48,13 @@ class LoadCellMonitor(ObservableObject):
     whether to start and stop "sessions" of an experiment.
     """
 
-    THRESHOLD_PROPERTY = "threshold"
+    LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY = "load_cell_engaged_threshold"
     IS_ENGAGED_PROPERTY = "is_engaged"
 
     def __init__(self):
         super().__init__()
 
-        self._threshold: float = 10.0
+        self._load_cell_engaged_threshold: float = 10.0
         self.threshold_duration: float = 0.25
         self.min_hold_duration: float = 5.0
         self.post_hold_duration: float = 2.0
@@ -69,33 +69,33 @@ class LoadCellMonitor(ObservableObject):
         self._is_engaged: bool = False
 
     @property
-    def threshold(self) -> float:
-        return self._threshold
+    def load_cell_engaged_threshold(self) -> float:
+        return self._load_cell_engaged_threshold
 
-    @threshold.setter
-    def threshold(self, value: float):
-        self._threshold = self._on_property_changed(LoadCellMonitor.THRESHOLD_PROPERTY, value, self._threshold)
+    @load_cell_engaged_threshold.setter
+    def load_cell_engaged_threshold(self, value: float):
+        self._load_cell_engaged_threshold = self._on_property_changed(LoadCellMonitor.LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY, value, self._load_cell_engaged_threshold)
 
     @property
     def is_engaged(self) -> bool:
         return self._is_engaged
 
     def load_configuration(self, configuration: LoadCellConfiguration):
-        self.threshold = configuration.threshold
+        self.load_cell_engaged_threshold = configuration.threshold
         self.threshold_duration = configuration.threshold_duration
         self.min_hold_duration = configuration.min_event_duration
         self.post_hold_duration = configuration.min_post_event_hold_duration
 
     def save_configuration(self) -> LoadCellConfiguration:
         return LoadCellConfiguration(
-            threshold=self.threshold,
+            threshold=self.load_cell_engaged_threshold,
             threshold_duration=self.threshold_duration,
             min_event_duration=self.min_hold_duration,
             min_post_event_hold_duration=self.post_hold_duration
         )
 
     def update(self, value: numpy.floating, when: float, index: int):
-        if value > self.threshold:
+        if value > self.load_cell_engaged_threshold:
             self._inactive_debounce.cancel()
             if not self._was_active:
                 self._was_active = True
