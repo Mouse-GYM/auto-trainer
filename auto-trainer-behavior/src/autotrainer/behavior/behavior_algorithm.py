@@ -37,7 +37,6 @@ class CoverServoStatus(int, Enum):
 @dataclasses.dataclass
 class CheckElementDistanceContext:
     distance_property_name: str
-    error_property_name: str
     cover_servo_status: CoverServoStatus
     error_way: CheckThresholdWay
     error_distance_threshold: float
@@ -61,9 +60,7 @@ class BehaviorProps(str, Enum):
     PELLET_MOTOR_DRIFT = 'pellet_motor_drift'
     COVER_SERVO_STATUS = 'cover_servo_status'
     COVER_PELLET_DISTANCE = "cover_pellet_distance"
-    COVER_PELLET_POS_ERROR_DETECTED = "cover_pellet_pos_error_detected"
     RELEASE_PELLET_DISTANCE = "release_pellet_distance"
-    RELEASE_PELLET_POS_ERROR_DETECTED = "release_pellet_pos_error_detected"
 
 
 class BehaviorAlgorithm(ObservableObject):
@@ -136,7 +133,6 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._cover_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=         BehaviorProps.COVER_PELLET_DISTANCE,
-            error_property_name=            BehaviorProps.COVER_PELLET_POS_ERROR_DETECTED,
             error_distance_threshold=       cover_error_min_distance_threshold,
             error_min_duration_threshold=   cover_release_min_duration_threshold,
             error_way=                      CheckThresholdWay.TRIGGER_IF_SMALLER,
@@ -144,7 +140,6 @@ class BehaviorAlgorithm(ObservableObject):
         )
         self._release_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=         BehaviorProps.RELEASE_PELLET_DISTANCE,
-            error_property_name=            BehaviorProps.RELEASE_PELLET_POS_ERROR_DETECTED,
             error_distance_threshold=       release_error_min_distance_threshold,
             error_min_duration_threshold=   cover_release_min_duration_threshold,
             error_way=                      CheckThresholdWay.TRIGGER_IF_GREATER,
@@ -489,12 +484,13 @@ class BehaviorAlgorithm(ObservableObject):
                            ctx.distance_property_name, ctx.error_distance_threshold)
         else:
             if t_now - ctx.error_start_timestamp >= ctx.error_min_duration_threshold:
-                logger.critical("Detected %s ; distance=%.3f prev=%s",
-                                ctx.error_property_name, distance, prev_distance)
-                ctx.error_detected = self._on_property_changed(
-                    ctx.error_property_name, True, ctx.error_detected)
+                logger.critical("Detected %s over threshold ; distance=%.3f prev=%s threshold=%s",
+                                ctx.distance_property_name, distance, prev_distance,
+                                ctx.error_distance_threshold)
+                ctx.error_detected = True
                 prev_status = self._cover_servo_status
                 new_status = CoverServoStatus(prev_status | ctx.cover_servo_status)
+                self.cover_servo_status_changed(new_status)
                 self._cover_servo_status = self._on_property_changed(
                     BehaviorProps.COVER_SERVO_STATUS, new_status, prev_status)
 
