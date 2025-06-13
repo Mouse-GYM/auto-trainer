@@ -6,6 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Callable, Optional
 
+from typing import Callable
 from typing_extensions import Self
 
 from autotrainer.core.logging import get_verbose_logger

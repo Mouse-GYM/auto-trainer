@@ -3,20 +3,15 @@ Test transition behavior with explicit calls to the transitions and the behavior
 would/should happen due to external input (devices, pose information) are tested elsewhere.  These tests do not require
 mocks or real interfaces.
 """
-import logging
+from unittest import mock
 
 import pytest
 from transitions import MachineError
 
-from autotrainer.behavior import SystemMachine, SystemState
-
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger('transitions').setLevel(logging.INFO)
+from autotrainer.behavior import SystemState
 
 
-def test_enter_exit_transitions():
-    machine = SystemMachine()
-
+def test_enter_exit_transitions(machine, mock_system):
     # Current code assumes intersession analysis is off by default.  Flag if that changes and we forget to update
     # assumptions.
     assert machine.algorithm.intersession_enabled is False
@@ -51,7 +46,10 @@ def test_enter_exit_transitions():
 
     machine.algorithm.mouse_seen(True)
 
-    machine.exit_tunnel()
+    with mock_system.mock_perform_segmentation() as m_perf_segm:
+        machine.exit_tunnel()
+
+    assert m_perf_segm.call_args_list == [mock.call(machine.intersession._segmentation_configuration)]
 
     # Test with intersession enabled.
     assert machine.state == SystemState.intersession
@@ -65,7 +63,3 @@ def test_enter_exit_transitions():
     machine.exit_intersession()
 
     assert machine.state == SystemState.cage
-
-
-if __name__ == '__main__':
-    test_enter_exit_transitions()

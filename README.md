@@ -88,7 +88,7 @@ Most of the content in `scripts` are lightweight utilities to determine if vario
 
 ## Testing
 
-PyTest testing is supported and configured via `conftest.py`.
+PyTest testing is supported and configured via `./conftest.py`.
 
 Individual namespace packages (*e.g,* `auto-trainer-core`) contain a `tests` directory.  There are also unit and functional
 tests for high-level functionality in the applications and that combine elements of multiple packages.
@@ -102,7 +102,7 @@ PyTest is not installed with via the default requirements.txt.  To enable testin
 
 `pip install -r requirements-test.txt`
 
-Run all default tests from the root directory:
+Run *all* default tests from the root directory:
 
 `pytest`
 
@@ -110,7 +110,18 @@ Run all tests, including functional, from the root directory:
 
 `pytest --functional`
 
-To limit testing to an individual namespace package, change your working directory to that package and use the same commands
+To limit testing to an individual namespace package, issue still from the base repo main root directory:
+
+`pytest ./auto-trainer-device/tests ./auto-trainer-video/tests`
+
+for instance. Alternatively you can `cd` into the subdir, and execute `pytest ./tests` too.
+
+To list all test cases, from repo base/root dir:
+
+`pytest --collect-only --quiet`
+
+Then you can use any of the outputted lines (1 per test case) as arg to pytest to execute that specific test case.
+You can also given many at once.
 
 ## Modules
 
