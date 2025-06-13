@@ -102,7 +102,6 @@ def test_cover_pellet_enabled(mock_system, machine):
 
     assert machine.state == SystemState.tunnel
 
-    assert mock_system.system_state_trans == mock_system.machine_state_trans
     assert mock_system.machine_state_trans == [
         SystemState.tunnel,
         SystemState.cage,
@@ -272,7 +271,6 @@ def test_session_limit(mock_system, machine):
     # assert algorithm.day_pellet_count == 3
     assert algorithm.session_pellet_count == 0
 
-    assert mock_system.machine_state_trans == mock_system.system_state_trans
     assert mock_system.machine_state_trans == [
         SystemState.tunnel,
         SystemState.cage,

@@ -33,10 +33,9 @@ class BehaviorAlgorithm(ObservableObject):
     # helps IDE search/completion/type-verification:
     session_starting: Callable[[], None]
     session_ending: Callable[[], None]
-    system_state_changed: Callable[[SystemState], None]
 
     def __init__(self):
-        super().__init__(event_names=("session_starting", "session_ending", "system_state_changed"))
+        super().__init__(event_names=("session_starting", "session_ending"))
         self._project_info = None
 
         self._pellet_delivery_enabled = True
@@ -95,9 +94,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @system_state.setter
     def system_state(self, value: SystemState):
-        if value != self._system_state:
-            self.system_state_changed(self._system_state, value)
-            self._system_state = value
+        self._system_state = value
 
     @property
     def is_in_session(self) -> bool:

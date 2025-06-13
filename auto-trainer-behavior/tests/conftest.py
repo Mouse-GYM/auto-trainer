@@ -105,10 +105,6 @@ class MockSystemMachine:
         self.intersession_state_trans = []
         machine.intersession.events.state_changed += partial(
             property_value_save_transitions, transitions=self.intersession_state_trans)
-        self.system_state_trans = []
-        machine.algorithm.system_state_changed += partial(
-            property_value_save_transitions, transitions=self.system_state_trans
-        )
 
     @pytest.fixture(autouse=True)
     def __machine(self, machine: SystemMachine) -> SystemMachine:  # noqa
