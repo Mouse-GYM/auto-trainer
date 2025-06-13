@@ -28,7 +28,7 @@ from .motor_steps import MotorSteps
 from .device import Device
 from .emulation_interface import EmulationInterface
 from .device_api import DeviceApi
-from .head_fix_measurement import HeadFixMeasurement
+from autotrainer.core.analysis.head_fix_measurement import HeadFixMeasurement
 from .can_interface import CanInterface
 from .device_interface import *
 
