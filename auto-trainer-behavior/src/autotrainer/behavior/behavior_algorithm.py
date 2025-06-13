@@ -450,6 +450,8 @@ class BehaviorAlgorithm(ObservableObject):
         # not sure which abs_diff to check against:
         if d_drift is None or any(abs(d) > 1 for d in d_drift):
             logger.verbose("diamond triangle offset drift: %s d_drift=%s", drift, d_drift)
+        if prev != drift:
+            self.pellet_motor_drift_changed(drift)
         self._diamond_triangle_prev_drift = self._on_property_changed(BehaviorProps.PELLET_MOTOR_DRIFT, drift, prev)
 
     def handle_cover_pellet_offset(self, offset: Offset3DTuple):
