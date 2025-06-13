@@ -104,7 +104,6 @@ class PelletDelivery(GymDevice):
                     val = int(data)
                 else:
                     val = typing.cast(int, data)
-                self._send_z = typing.cast(int, val)
                 self._send_data(f"K{val}x", context)
                 if context is not None:
                     self._commands_with_status[context] = (SystemCommandKind.MOVE_Z, val)

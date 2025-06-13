@@ -34,7 +34,7 @@ from .device_interface import *
 
 
 def _to_tuple(value: str):
-    if "," in str(value):
+    if "," in value:
         parts = value.split(",")
         return float(parts[0].strip()), float(parts[1].strip())
     else:
