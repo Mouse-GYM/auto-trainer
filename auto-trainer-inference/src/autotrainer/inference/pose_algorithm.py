@@ -153,7 +153,6 @@ class PoseAlgorithm(ObservableObject):
         super().__init__(event_names=("pose_changed",))
         self._parts_list: List[SceneElement] = []
         self._parts: Dict[SceneElement, int] = {}  # key is part name, value is part model index
-        self._expected_num_parts = 0
         self._sequence = 0
         self._default_parts_flag: Dict[str, bool] = {}
         self._default_locations = []
@@ -197,7 +196,6 @@ class PoseAlgorithm(ObservableObject):
             self._default_parts_flag[part] = False
             self._default_locations.append(None)
 
-        self._expected_num_parts = len(self._parts_list)
         axis_labels = ("x", "y", "likelihood")
         columns = pandas.MultiIndex.from_product([self._parts_list, axis_labels],
                                                  names=["bodyparts", "coords"])
