@@ -79,7 +79,6 @@ class PelletMachine(StateMachine):
                                initial=initial_state, model_override=True,
                        )
 
-
     @property
     def algorithm(self):
         return self._algorithm
