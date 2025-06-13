@@ -271,14 +271,13 @@ class SystemMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.headfixAutoTare)
 
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
-        if not (
+        if (
             offset is not None
             and self._state != SystemState.intersession
             and self._pellet_machine.state == PelletState.monitoring
             and self._pellet_machine.can_use_pellet_command()
         ):
-            return
-        self._algorithm.handle_diamond_triangle_offset(offset)
+            self._algorithm.handle_diamond_triangle_offset(offset)
 
     def _handle_star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if offset is None:
