@@ -61,8 +61,8 @@ class LoadCellMonitor(ObservableObject):
     def __init__(
         self,
         *,
-        thrashing_variability_g_threshold: float = 25,  # g for grams
-        thrashing_variability_min_delay: float = 1,  # seconds
+        thrashing_var_weight_threshold: float = 25,  # g for grams
+        thrashing_var_minimum_delay: float = 1,  # seconds
         ):
         super().__init__(event_names=('is_thrashing_detected',))
 
@@ -80,13 +80,13 @@ class LoadCellMonitor(ObservableObject):
         self._index = 0
         self._is_engaged: bool = False
 
-        self._thrashing_variability_g_threshold = thrashing_variability_g_threshold
-        self._thrashing_variability_min_delay = thrashing_variability_min_delay
+        self._thrashing_var_weight_threshold = thrashing_var_weight_threshold
+        self._thrashing_var_minimum_delay = thrashing_var_minimum_delay
         self._values_history: Deque[
             Tuple[float, float, int]
             # data, when, index
         ] = deque()
-        self._history_max_age: float = thrashing_variability_min_delay  # seconds
+        self._history_max_age: float = thrashing_var_minimum_delay  # seconds
         self._thrashing_detected: bool = False
 
     @property
@@ -102,20 +102,20 @@ class LoadCellMonitor(ObservableObject):
         return self._is_engaged
 
     @property
-    def thrashing_variability_min_delay(self) -> float:
-        return self._thrashing_variability_min_delay
+    def thrashing_var_minimum_delay(self) -> float:
+        return self._thrashing_var_minimum_delay
 
-    @thrashing_variability_min_delay.setter
-    def thrashing_variability_min_delay(self, value):
-        self._thrashing_variability_min_delay = value
+    @thrashing_var_minimum_delay.setter
+    def thrashing_var_minimum_delay(self, value):
+        self._thrashing_var_minimum_delay = value
 
     @property
-    def thrashing_variability_g_threshold(self) -> float:
-        return self._thrashing_variability_g_threshold
+    def thrashing_var_weight_threshold(self) -> float:
+        return self._thrashing_var_weight_threshold
 
-    @thrashing_variability_g_threshold.setter
-    def thrashing_variability_g_threshold(self, value):
-        self._thrashing_variability_min_delay = value
+    @thrashing_var_weight_threshold.setter
+    def thrashing_var_weight_threshold(self, value):
+        self._thrashing_var_minimum_delay = value
 
     def load_configuration(self, configuration: LoadCellConfiguration):
         self.load_cell_engaged_threshold = configuration.threshold
@@ -146,13 +146,13 @@ class LoadCellMonitor(ObservableObject):
             self._inactive_debounce.cancel()
             t_now = time.time()
             if self._was_active:
-                if t_now - self._t_start_was_active > self._thrashing_variability_min_delay:
+                if t_now - self._t_start_was_active > self._thrashing_var_minimum_delay:
                     ptp_value = numpy.ptp([
                         h_val
                         for h_val, h_when, _ in self._values_history
-                        if when - h_when < self._thrashing_variability_min_delay
+                        if when - h_when < self._thrashing_var_minimum_delay
                     ])
-                    new_detected = ptp_value >= self._thrashing_variability_g_threshold
+                    new_detected = ptp_value >= self._thrashing_var_weight_threshold
                     prev_detected = self._thrashing_detected
                     self._thrashing_detected = self._on_property_changed(
                         self.IS_THRASHING_DETECTED_PROPERTY, new_detected, prev_detected)
