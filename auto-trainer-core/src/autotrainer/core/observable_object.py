@@ -1,6 +1,10 @@
-from typing import Protocol
+from typing import Protocol, Callable, Any
 
 from events import Events
+
+
+NewValueAny = Any
+OldValueAny = Any
 
 
 class ObservableObject(Events):
@@ -15,6 +19,9 @@ class ObservableObject(Events):
     the == test with the old value.  This prevents needless events and more importantly endless recursion when two
     objects are listening to each other to stay in sync (e.g., UI and model where a change may originate in either).
     """
+
+    # type hint for dynamic event function (added by Events):
+    property_changed: Callable[[str, NewValueAny, OldValueAny], None]
 
     def __init__(self, event_names=()):
         super().__init__(event_names + ("property_changed",))
