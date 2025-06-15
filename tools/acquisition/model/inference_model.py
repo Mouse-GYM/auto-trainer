@@ -189,7 +189,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             (SceneElement.Diamond, SceneElement.Triangle),
             (SceneElement.Star, SceneElement.Triangle),
         ]
-        self._parts_offsets: Dict[Tuple[str, str], Offset3DTuple] = {}
+        self._parts_offsets: Dict[Tuple[SceneElement, SceneElement], Offset3DTuple] = {}
 
     @property
     def project(self) -> ProjectInfo:

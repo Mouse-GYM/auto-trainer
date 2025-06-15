@@ -277,8 +277,6 @@ class PoseAlgorithm(ObservableObject):
         left_frames = per_cam_frames[0]
         right_frames = per_cam_frames[1]
 
-        frames_per_cam = len(left_frames)
-
         locations_1 = self._find_parts(left_frames)
         locations_2 = self._find_parts(right_frames)
 
@@ -351,7 +349,7 @@ class PoseAlgorithm(ObservableObject):
         self.pose_changed(response)
         return response
 
-    def _find_parts(self, frames: list) -> Dict[SceneElement, PoseLocation]:
+    def _find_parts(self, frames: List[numpy.ndarray]) -> Dict[SceneElement, PoseLocation]:
         locations: Dict[SceneElement, PoseLocation] = {}
         for pose in frames:
             for idx, part in enumerate(self._parts_list):
