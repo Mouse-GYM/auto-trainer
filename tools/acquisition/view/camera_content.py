@@ -59,10 +59,6 @@ class CameraContent(ContentWidget):
     def camera_view(self) -> QCaptureView:
         return self._capture_view
 
-    @Slot(PoseAlgorithm)
-    def algo_initialised(self, pose_algo: PoseAlgorithm):
-        self._capture_view.algo_initialised(pose_algo)
-
     @Slot(ndarray, float)
     def refresh_image(self, data: ndarray, fps: float):
         row, col = data.shape

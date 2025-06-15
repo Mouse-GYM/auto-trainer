@@ -110,10 +110,6 @@ class QCaptureView(QWidget):
 
         self.recording_indicator_changed.connect(lambda b: self._setRecordingEnabledIndicator(b))
 
-    @Slot(PoseAlgorithm)
-    def algo_initialised(self, pose_algo: PoseAlgorithm):
-        self._image.set_pose_algo(pose_algo)
-
     def set_is_capture_active(self, is_active: bool):
         self._camera.setEnabled(not is_active)
 

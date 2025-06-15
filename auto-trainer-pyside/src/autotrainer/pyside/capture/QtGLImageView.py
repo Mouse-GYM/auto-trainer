@@ -73,10 +73,6 @@ class QGLImageView(QWidget):
         self.setLayout(layout)
 
         self._count = 0
-        self._pose_algo: Optional[PoseAlgorithm] = None
-
-    def set_pose_algo(self, pose_algo: PoseAlgorithm):
-        self._pose_algo = pose_algo
 
     def set_data_size(self, width, height):
         # data size is the output model resolution
@@ -104,9 +100,6 @@ class QGLImageView(QWidget):
             self._pixmap.setPixmap(pixmap)
 
     def set_points(self, points: Dict[SceneElement, PoseLocation]):
-        pose_algo = self._pose_algo
-        if pose_algo is None:
-            return
         width_f = self._raw_img_scale_w / self._width_factor
         height_f = self._raw_img_scale_h / self._height_factor
         # values are in coordinates (self._data_width, self._data_height)
