@@ -337,9 +337,9 @@ class PoseAlgorithm(ObservableObject):
                 if __debug__ and elem not in process_hands_results:
                     continue
                 v = process_hands_results[elem]
-                if v['likelihood'][0] > self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                if v['likelihood'][0] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     locations_1[elem] = PoseLocation(elem, -1, v['x'][0], v['y'][0])
-                if v['likelihood'][1] > self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                if v['likelihood'][1] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     locations_2[elem] = PoseLocation(elem, -1, v['x'][1], v['y'][1])
 
         response = PoseResponse(
