@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import List, Optional
+from typing import List, Optional, Dict
 from collections import namedtuple
 
 import numpy
@@ -9,10 +9,11 @@ from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QWidget, QLabel, QComboBox, QHBoxLayout, QVBoxLayout, QStackedLayout
 
-from autotrainer.inference import PoseTuple, PoseAlgorithm
+from autotrainer.inference import PoseTuple, PoseAlgorithm, PoseLocation
 from autotrainer.pyside.CardWidget import CardWidget
 from .QtGLImageView import QGLImageView
 from .QtCaptureSettings import QCaptureSettings
+from ...inference.pose_elements import SceneElement
 
 
 @dataclasses.dataclass
@@ -37,7 +38,7 @@ class QCaptureView(QWidget):
         self._next_frame_data: Optional[ImageData] = None
         self._is_frame_dirty = False
 
-        self._next_frame_points: List[PoseTuple] = []
+        self._next_frame_points: Dict[SceneElement, PoseLocation] = {}
         self._are_points_dirty = False
 
         self._card_widget = CardWidget()
@@ -108,10 +109,6 @@ class QCaptureView(QWidget):
         self.set_is_editable(False)
 
         self.recording_indicator_changed.connect(lambda b: self._setRecordingEnabledIndicator(b))
-
-    @Slot(PoseAlgorithm)
-    def algo_initialised(self, pose_algo: PoseAlgorithm):
-        self._image.set_pose_algo(pose_algo)
 
     def set_is_capture_active(self, is_active: bool):
         self._camera.setEnabled(not is_active)
@@ -201,7 +198,7 @@ class QCaptureView(QWidget):
         self._are_points_dirty = False
 
     @Slot(list)
-    def refresh_pose(self, points: List[PoseTuple]):
+    def refresh_pose(self, points: Dict[SceneElement, PoseLocation]):
         self._next_frame_points = points
         self._are_points_dirty = True
 

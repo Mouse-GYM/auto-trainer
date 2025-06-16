@@ -110,7 +110,6 @@ class MainContent(ContentWidget):
         self._model.property_changed += self._model_property_changed
         inference = self._model.inference
         inference.pose_response_ready += self.refresh_pose
-        inference.algo_initialised += self._algo_initialised
 
         self.set_diagnostics_visible(False)
 
@@ -126,9 +125,9 @@ class MainContent(ContentWidget):
 
     def refresh_pose(self, response: PoseResponse):
         if self._model.left_camera.is_enabled:
-            self._left_camera_content.refresh_pose(response.x_y_1())
+            self._left_camera_content.refresh_pose(response.locations[0])
         if self._model.right_camera.is_enabled:
-            self._right_camera_content.refresh_pose(response.x_y_2())
+            self._right_camera_content.refresh_pose(response.locations[1])
 
     @property
     def is_diagnostics_visible(self) -> bool:
@@ -165,7 +164,3 @@ class MainContent(ContentWidget):
     def _model_property_changed(self, name: str, value, old_value):
         if name == "selected_animal" and value is not None:
             self._hardware_control_content.set_selected_animal(value)
-
-    def _algo_initialised(self, algo: PoseAlgorithm):
-        for cam_content in (self._left_camera_content, self._right_camera_content):
-            cam_content.algo_initialised(algo)
