@@ -7,6 +7,7 @@ from typing import Optional, List
 import numpy
 
 from .head_fix_measurement import HeadFixMeasurement
+from .audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
 from ..perf_monitor import PerfMonitor
@@ -53,6 +54,8 @@ class SensorAnalysis(ObservableObject):
         self._tare_detector = LoadCellTareMonitor()
         self._tare_callback = None
 
+        self._audio_thrashing_monitor = AudioSpectrumThrashMonitor()
+
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_count=3000)
 
     @property
@@ -89,6 +92,10 @@ class SensorAnalysis(ObservableObject):
     @property
     def load_cell_tare_monitor(self):
         return self._tare_detector
+
+    @property
+    def audio_thrashing_monitor(self):
+        return self._audio_thrashing_monitor
 
     @property
     def is_headbar_switch_engaged(self):
@@ -158,6 +165,8 @@ class SensorAnalysis(ObservableObject):
     def audio_spectrum_received(self, spectrum: AudioSpectrumMessage):
         if spectrum is None or not spectrum.magnitudes:
             return
+
+        self._audio_thrashing_monitor.update(spectrum.magnitudes, spectrum.when, spectrum.index)
 
         if self._audio_record_file is not None:
             file_timestamp = datetime.now()

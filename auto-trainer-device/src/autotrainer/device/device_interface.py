@@ -13,10 +13,12 @@ There is a set of data classes that contain state and status of the gym hardware
 There is a main interface class (DeviceInterface) that defines the API for access to the abstracted
 hardware.
 """
+import dataclasses
 import math
 import typing
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import List
 
 from autotrainer.core.message import Motor
 
@@ -310,7 +312,7 @@ class AudioData(Source):
     packet_id: int = 0
     when: float = 0
     index: int = 0
-    magnitudes = []
+    magnitudes: List[float] = dataclasses.field(default_factory=list)
 
 
 @dataclass

@@ -149,7 +149,7 @@ class LoadCellMonitor(ObservableObject):
             hist.popleft()
         hist.append((value, when, index))
 
-    def update(self, value: float, when: float, index: int):
+    def update(self, value: Union[float, numpy.floating], when: float, index: int):
         self._update_history(value, when, index)
         t_start = self._t_start_was_active
         prev_detected = self._thrashing_detected

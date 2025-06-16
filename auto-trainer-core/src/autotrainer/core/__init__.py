@@ -56,6 +56,9 @@ class Offset3DTuple(_Offset3DTuple):
 
 #
 
+# MUST come first:
+from .observable_object import ObservableObject, ObservableObjectProtocol
+
 from .analysis import SensorAnalysis, MeasurementData, AudioSpectrumData
 from .analysis import LoadCellMonitor, HeadbarPressureMonitor
 from .animal import AnimalSubject
@@ -68,7 +71,6 @@ from .fixed_array_queue import FixedArrayQueue
 from .message import MessageHandler, SystemMessageHandler
 from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessage, AudioSpectrumMessage
 from .message import MotorConfigurations, Motor
-from .observable_object import ObservableObject, ObservableObjectProtocol
 from .perf_monitor import PerfMonitor
 from .project import ProjectInfo, ProjectInterval, video_write_ext
 from .queue_util import clear_queue, trim_queue
