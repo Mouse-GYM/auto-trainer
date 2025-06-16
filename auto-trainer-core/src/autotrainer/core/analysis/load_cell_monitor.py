@@ -18,6 +18,11 @@ from .analysis_measurement_event_kind import AnalysisMeasurementEventKind
 _NO_OP_TIMER = Timer(1.0, lambda: None)
 
 
+# to allow to be patched from tests:
+_timer_load_cell_engaged = Timer
+
+
+
 @dataclass
 class LoadCellConfiguration:
     threshold: float = 15.0
@@ -102,6 +107,10 @@ class LoadCellMonitor(ObservableObject):
         return self._is_engaged
 
     @property
+    def thrashing_detected(self) -> bool:
+        return self._thrashing_detected
+
+    @property
     def thrashing_var_minimum_delay(self) -> float:
         return self._thrashing_var_minimum_delay
 
@@ -140,7 +149,7 @@ class LoadCellMonitor(ObservableObject):
             hist.popleft()
         hist.append((value, when, index))
 
-    def update(self, value: numpy.floating, when: float, index: int):
+    def update(self, value: float, when: float, index: int):
         self._update_history(value, when, index)
         if value > self.load_cell_engaged_threshold:
             self._inactive_debounce.cancel()
@@ -152,7 +161,11 @@ class LoadCellMonitor(ObservableObject):
                         for h_val, h_when, _ in self._values_history
                         if when - h_when < self._thrashing_var_minimum_delay
                     ])
-                    new_detected = ptp_value >= self._thrashing_var_weight_threshold
+                    new_detected = bool(
+                        # NB: using bool() given value is numpy.bool_ otherwise,
+                        # we want to use native python bool instead, so the bool().
+                        ptp_value >= self._thrashing_var_weight_threshold
+                    )
                     prev_detected = self._thrashing_detected
                     self._thrashing_detected = self._on_property_changed(
                         self.IS_THRASHING_DETECTED_PROPERTY, new_detected, prev_detected)
@@ -163,7 +176,7 @@ class LoadCellMonitor(ObservableObject):
                 self._t_start_was_active = t_now
                 self._when = when
                 self._index = index
-                self._active_debounce = Timer(self.threshold_duration, self._ensure_active)
+                self._active_debounce = _timer_load_cell_engaged(self.threshold_duration, self._ensure_active)
                 self._active_debounce.start()
         else:
             self._active_debounce.cancel()
