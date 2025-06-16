@@ -144,7 +144,7 @@ class LoadCellMonitor(ObservableObject):
         hist = self._values_history
         while len(hist) > 0:
             h0_val, h0_when, h0_idx = hist[0]
-            if when - h0_when < self._history_max_age:
+            if when - h0_when <= self._history_max_age:
                 break
             hist.popleft()
         hist.append((value, when, index))
