@@ -3,7 +3,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Timer
-from typing import Callable, List, Tuple, Deque
+from typing import Callable, List, Tuple, Deque, Optional, Union
 
 from typing_extensions import Self
 
@@ -78,7 +78,7 @@ class LoadCellMonitor(ObservableObject):
 
         self._last_active_start: int = 0
         self._was_active: bool = False
-        self._t_start_was_active: float = 0
+        self._t_start_was_active: Optional[float] = None
         self._active_debounce: Timer = _NO_OP_TIMER
         self._inactive_debounce: Timer = _NO_OP_TIMER
         self._when = 0
@@ -151,11 +151,12 @@ class LoadCellMonitor(ObservableObject):
 
     def update(self, value: float, when: float, index: int):
         self._update_history(value, when, index)
+        t_start = self._t_start_was_active
+        prev_detected = self._thrashing_detected
         if value > self.load_cell_engaged_threshold:
             self._inactive_debounce.cancel()
-            t_now = time.time()
-            if self._was_active:
-                if t_now - self._t_start_was_active > self._thrashing_var_minimum_delay:
+            if t_start is not None:
+                if when - self._t_start_was_active > self._thrashing_var_minimum_delay:
                     ptp_value = numpy.ptp([
                         h_val
                         for h_val, h_when, _ in self._values_history
@@ -166,20 +167,24 @@ class LoadCellMonitor(ObservableObject):
                         # we want to use native python bool instead, so the bool().
                         ptp_value >= self._thrashing_var_weight_threshold
                     )
-                    prev_detected = self._thrashing_detected
                     self._thrashing_detected = self._on_property_changed(
                         self.IS_THRASHING_DETECTED_PROPERTY, new_detected, prev_detected)
                     if new_detected != prev_detected:
                         self.is_thrashing_detected(new_detected)
             else:
                 self._was_active = True
-                self._t_start_was_active = t_now
+                self._t_start_was_active = when
                 self._when = when
                 self._index = index
                 self._active_debounce = _timer_load_cell_engaged(self.threshold_duration, self._ensure_active)
                 self._active_debounce.start()
         else:
             self._active_debounce.cancel()
+            # not sure that we want this here:
+            self._thrashing_detected = self._on_property_changed(self.IS_THRASHING_DETECTED_PROPERTY, False, prev_detected)
+            if prev_detected:
+                self.is_thrashing_detected(False)
+            #
             if self._was_active:
                 self._was_active = False
                 self._when = when

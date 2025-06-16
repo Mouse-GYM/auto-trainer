@@ -14,7 +14,7 @@ def load_cell_monitor():
     yield instance
 
 
-def test_detect_thrashing(load_cell_monitor, m_time_time):
+def test_detect_thrashing(load_cell_monitor):
     assert load_cell_monitor.thrashing_detected is False
 
     thrash_detected_list = []
@@ -25,10 +25,6 @@ def test_detect_thrashing(load_cell_monitor, m_time_time):
     load_cell_monitor.is_thrashing_detected += handle_thrashing_detected
 
     t_now = 0
-    def patched_time_time():
-        return t_now  # + 0.0001
-
-    m_time_time.side_effect = patched_time_time
 
     idx = 0
     def update_cell(v, t):
