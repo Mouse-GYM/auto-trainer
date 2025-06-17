@@ -105,11 +105,12 @@ class AppModel(ObservableObject):
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.READ_MOTOR_CONFIGURATION, motor)
 
-    def tare(self):
+    def tare(self) -> bool:
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE)
         else:
             logger.warning("attempt to tare when device thread is not initialized")
+        return True
 
     def set_stream_enabled(self, enable: bool):
         if enable:
