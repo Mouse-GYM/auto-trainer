@@ -485,7 +485,7 @@ class BehaviorAlgorithm(ObservableObject):
         if ctx.error_start_timestamp is None:
             ctx.error_start_timestamp = t_now
             logger.warning("Detected start of %s deviation ; distance=%s threshold=%s",
-                           ctx.distance_property_name, ctx.error_distance_threshold)
+                           ctx.distance_property_name, distance, ctx.error_distance_threshold)
         else:
             if t_now - ctx.error_start_timestamp >= ctx.error_min_duration_threshold:
                 logger.critical("Detected %s over threshold ; distance=%.3f prev=%s threshold=%s",
