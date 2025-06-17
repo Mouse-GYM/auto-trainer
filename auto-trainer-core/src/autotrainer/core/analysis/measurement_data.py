@@ -4,11 +4,11 @@ from typing import List
 
 from typing_extensions import Self
 
-from ..message.measurement_message import MeasurementMessage
+from ..message.measurement_message import MeasurementMessageProtocol
 
 
 @dataclass
-class MeasurementData(MeasurementMessage):
+class MeasurementData(MeasurementMessageProtocol):
     """
     Default class that implements the MeasurementMessage protocol.  Actual hardware devices will likely deliver their
     own object that implements the protocol.  However, this class can be used to read back data from the "monitor" CSV

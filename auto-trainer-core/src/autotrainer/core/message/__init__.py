@@ -1,5 +1,5 @@
 from .audio_spectrum_message import AudioSpectrumMessage
-from .measurement_message import MeasurementMessage
+from .measurement_message import MeasurementMessageProtocol
 from .message_handler import MessageHandler
 from .motor_configuration_message import MotorConfigurations, ServoConfigMessage, \
     StepperConfigMessage, Motor
