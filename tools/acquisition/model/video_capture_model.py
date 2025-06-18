@@ -19,6 +19,7 @@ from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.project import ProjectInfo
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
+from autotrainer.video.detection import PresenceDetectionAttrs
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
 from tools.acquisition.model.user_preferences import UserPreferences
@@ -46,9 +47,13 @@ def create_camera_list():
 
 
 class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
-    def __init__(self, name, preferences: UserPreferences = None, inference_index: int = -1,
-                 *,
-                 mp_ctx: Optional[BaseContext] = None,
+    def __init__(
+        self,
+        name: str,
+        preferences: UserPreferences = None,
+        inference_index: int = -1,
+        *,
+        mp_ctx: Optional[BaseContext] = None,
     ):
         super().__init__()
 
@@ -226,11 +231,15 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         if self._display_update_fcn is not None and self._video_capture is not None:
             self._display_update_fcn(data, self._fps)
 
-    def on_prepare_capture(self, network_queue: Optional[FixedArrayMultiQueue] = None) -> bool:
+    def on_prepare_capture(
+        self,
+        network_queue: Optional[FixedArrayMultiQueue] = None,
+        *,
+        presence_detection_attrs: Optional[PresenceDetectionAttrs] = None,
+    ) -> bool:
         self._last_error = None
         if not self._is_enabled:
             return True
-
         self._frame_count = 0
         self._video_reader_initialize()
 
@@ -242,7 +251,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
             camera = CaptureCameraAttrs(name=self._name, url=url)
 
-            inference = CaptureInferenceAttrs(queue=network_queue, index=self._inference_index)
+            inference = None if network_queue is None else CaptureInferenceAttrs(
+                queue=network_queue, index=self._inference_index)
 
             capture_attrs = CaptureAttrs(
                 command_queue=self._video_command_queue,
@@ -253,6 +263,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 camera=camera,
                 inference=inference,
                 errors=self._errors,
+                presence_detection_attrs=presence_detection_attrs,
             )
 
             rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
@@ -260,8 +271,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             record_properties = VideoRecordProperties(project_info=self._project, record_mode=self.record_mode,
                                                       video_rotate_interval=rotate_interval,
                                                       image_interval=image_interval)
-
-            self._video_capture = VideoCapture(capture_attrs, record_properties)
+            self._video_capture = VideoCapture(capture_attrs, record_properties,
+                                               project_info=self._project)
 
             self._video_capture.start()
 
@@ -275,10 +286,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 return False
 
             properties = VideoManager.parse_params(url)
-            if "primary" in properties and bool(properties["primary"]) is True:
-                self._is_primary = True
-            else:
-                self._is_primary = False
+            self._is_primary = bool(properties.get('primary', False))
 
         else:
             self._is_primary = False

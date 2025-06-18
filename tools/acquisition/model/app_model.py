@@ -8,7 +8,7 @@ import typing
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import yaml
 
@@ -23,6 +23,7 @@ from autotrainer.core import AnimalSubject
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseAlgorithm
 from autotrainer.inference.config import load_calib_stereo_params
+from autotrainer.video.detection import PresenceDetectionAttrs
 
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
@@ -51,7 +52,9 @@ class AppModel(ObservableObject):
 
         self._left_camera = VideoCaptureModel("left", self._preferences, 0)
         self._right_camera = VideoCaptureModel("right", self._preferences, 1)
+
         self._top_camera = VideoCaptureModel("web", self._preferences, -1)
+        self._top_camera_presence_detection = PresenceDetectionAttrs()
 
         self._cameras = [self._left_camera, self._right_camera, self._top_camera]
 
@@ -109,12 +112,12 @@ class AppModel(ObservableObject):
 
         self._notes = ""
 
-        self._models: typing.List[ProjectDependentProtol] = [self._left_camera, self._right_camera, self._top_camera,
+        self._models: List[ProjectDependentProtol] = [self._left_camera, self._right_camera, self._top_camera,
                                                              self._inference, self._behavior]
 
-        self._animals: typing.List[AnimalSubject] = []
+        self._animals: List[AnimalSubject] = []
 
-        self._selected_animal: typing.Optional[AnimalSubject] = None
+        self._selected_animal: Optional[AnimalSubject] = None
 
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
@@ -145,6 +148,10 @@ class AppModel(ObservableObject):
         return self._top_camera
 
     @property
+    def top_camera_presence_detection(self):
+        return self._top_camera_presence_detection
+
+    @property
     def behavior(self):
         return self._behavior
 
@@ -169,19 +176,19 @@ class AppModel(ObservableObject):
         return self._output_location
 
     @property
-    def animals(self) -> typing.List[AnimalSubject]:
+    def animals(self) -> List[AnimalSubject]:
         return self._animals
 
     @animals.setter
-    def animals(self, value: typing.List[AnimalSubject]):
+    def animals(self, value: List[AnimalSubject]):
         self._animals = self._on_property_changed("animals", value, self._animals)
 
     @property
-    def selected_animal(self) -> typing.Optional[AnimalSubject]:
+    def selected_animal(self) -> Optional[AnimalSubject]:
         return self._selected_animal
 
     @selected_animal.setter
-    def selected_animal(self, value: typing.Optional[AnimalSubject]):
+    def selected_animal(self, value: Optional[AnimalSubject]):
         self._selected_animal = self._on_property_changed("selected_animal", value, self._selected_animal)
 
         if self._selected_animal is not None:
@@ -287,7 +294,9 @@ class AppModel(ObservableObject):
                               _failed_camera_template(self.right_camera.name, self.right_camera.last_error))
 
         if did_start:
-            did_start = did_start and self.top_camera.on_prepare_capture()
+            did_start = did_start and self.top_camera.on_prepare_capture(
+                presence_detection_attrs=self._top_camera_presence_detection,
+            )
             if not did_start:
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(self.top_camera.name, self.top_camera.last_error))
