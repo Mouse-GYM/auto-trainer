@@ -68,7 +68,6 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         percent = 100 * sum(map(int, above_threshold)) / len(self._values_history)
         detected = percent >= cfg.threshold_percent
         t_start = self._t_start_detecting
-        prev_detected = self._cur_detected
         if detected:
             if t_start is None:
                 self._t_start_detecting = when
@@ -78,5 +77,4 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         else:
             if t_start is not None:
                 self._t_start_detecting = None
-        self._cur_detected = self._on_property_changed(self.AUDIO_THRASHING_DETECTED_PROPERTY,
-                                                       detected, prev_detected)
+        self.is_thrashing_detected = detected
