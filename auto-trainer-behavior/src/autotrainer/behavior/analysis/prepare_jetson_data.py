@@ -19,6 +19,7 @@ import yaml
 from pathlib import Path
 
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.inference.config import load_calib_stereo_params
 
 logger = get_verbose_logger(__name__)
 
@@ -134,7 +135,8 @@ def extend_and_interpolate_tracking_data(tracking_data, dropped_frame_vector):
 
 
 # Helper function to process hand data
-def process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf):
+def process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf,
+                      additional_names):
     for h in hand_options:
         hand_categories = [h + item for item in hand_base_names]
 
@@ -166,6 +168,17 @@ def process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf):
         newdf.loc[np.arange(len(df)), (h + '_Hand', 'y')] = y2keep
         newdf.loc[np.arange(len(df)), (h + '_Hand', 'likelihood')] = p2keep
 
+    # Process additional bodyparts
+    for an in additional_names:
+        if dlc_seg == '_raw2D':
+            newdf.loc[np.arange(len(df)), (an, 'x')] = df[(an, 'x')].values
+            newdf.loc[np.arange(len(df)), (an, 'y')] = df[(an, 'y')].values
+            newdf.loc[np.arange(len(df)), (an, 'likelihood')] = df[(an, 'likelihood')].values
+        else:
+            newdf.loc[np.arange(len(df)), (an, 'x')] = df[(dlc_seg, an, 'x')].values
+            newdf.loc[np.arange(len(df)), (an, 'y')] = df[(dlc_seg, an, 'y')].values
+            newdf.loc[np.arange(len(df)), (an, 'likelihood')] = df[(dlc_seg, an, 'likelihood')].values
+
     return newdf
 
 
@@ -195,18 +208,8 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
         newdf = pd.DataFrame(columns=columns, index=range(len(df)))
 
         # Process hand data
-        newdf = process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf)
-
-        # Process additional bodyparts
-        for an in additional_names:
-            if dlc_seg == '_raw2D':
-                newdf.loc[np.arange(len(df)), (an, 'x')] = df[(an, 'x')].values
-                newdf.loc[np.arange(len(df)), (an, 'y')] = df[(an, 'y')].values
-                newdf.loc[np.arange(len(df)), (an, 'likelihood')] = df[(an, 'likelihood')].values
-            else:
-                newdf.loc[np.arange(len(df)), (an, 'x')] = df[(dlc_seg, an, 'x')].values
-                newdf.loc[np.arange(len(df)), (an, 'y')] = df[(dlc_seg, an, 'y')].values
-                newdf.loc[np.arange(len(df)), (an, 'likelihood')] = df[(dlc_seg, an, 'likelihood')].values
+        newdf = process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf,
+                                  additional_names=additional_names)
 
         newdf_interpolated = interpolate_coordinates(newdf.copy(), p_thresh)
 
@@ -436,44 +439,76 @@ def rotate_3d_points(points, x_degrees=0, y_degrees=0, z_degrees=0):
 
 def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
     df_3d = pd.read_hdf(path_3D)
+    path_cam_mat = os.path.join(src_dir, 'camera_matrix')
+    path_stereo_file = os.path.join(path_cam_mat, "stereo_params.pickle")
+    calib_params = load_calib_stereo_params(Path(path_stereo_file))
+
+    # Read frame rate from userdata_copy.yaml
+    metadata_path = os.path.join(src_dir, 'calibration_userset.yaml')
+    with open(metadata_path, 'r') as file:
+        calib_metadata = yaml.safe_load(file)
+
+    square_size, _, _ = cal_flir.get_calibration_info(src_dir)
+    cam_names = cal_flir.get_video_list(src_dir)
+
+    path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')
+    if os.path.isfile(path_offsets):
+        logger.info("Reusing offsets file %s", path_offsets)
+        with open(path_offsets, "rb") as handle:
+            cam_offsets = pickle.load(handle)
+
+    res_df_3d = reorient_and_center_step1(
+        df_3d=df_3d,
+        src_dir=src_dir,
+        bpts=bpts,
+        center_method=center_method,
+        frame_rate=frame_rate,
+        calib_metadata=calib_metadata,
+        stereo_file=calib_params.as_pickle_dict(),
+        square_size=square_size,
+        cam_names=cam_names,
+        cam_offsets=cam_offsets,
+        save_offsets=True,
+    )
+    real_path_3D = path_3D.replace('_filtered3D.h5', '_centered3D.h5')
+    res_df_3d.to_hdf(real_path_3D, "df_with_missing", format="table", mode="w")
+
+
+def reorient_and_center_step1(
+    *,
+    df_3d,
+    src_dir,
+    bpts,
+    center_method,
+    frame_rate,
+    stereo_file,
+    calib_metadata,
+    square_size,
+    cam_names,
+    cam_offsets,
+    save_offsets: bool = False,
+):
     num_frames = np.shape(df_3d)[0]
     mask = df_3d.columns.get_level_values("bodyparts").isin(bpts)
     data_4d = df_3d.loc[:, mask].to_numpy().reshape((len(df_3d), -1, 4))
     triangulate, high_conf_exp = np.split(data_4d, [3], axis=-1)
     high_conf = np.squeeze(high_conf_exp, axis=-1)  # Shape will be (484, 8)
 
-    square_size, cbrow, cbcol = cal_flir.get_calibration_info(src_dir)
-    cam_names = cal_flir.get_video_list(src_dir)
-    path_cam_mat = os.path.join(src_dir, 'camera_matrix')
-    path_stereo_file = os.path.join(path_cam_mat, "stereo_params.pickle")
-    with open(path_stereo_file, "rb") as handle:
-        stereo_file = pickle.load(handle)
-
     camera_pair = cam_names[0] + "-" + cam_names[1]
     # Undistort points
     rot_cor = stereo_file[camera_pair]['rot_cor']
 
-    # Read frame rate from userdata_copy.yaml
-    metadata_path = os.path.join(src_dir, 'calibration_userset.yaml')
-    with open(metadata_path, 'r') as file:
-        metadata = yaml.safe_load(file)
-
-    camera_pos = metadata['camera_pos']
-    if not camera_pos == None:
+    camera_pos = calib_metadata['camera_pos']
+    if camera_pos is not None:
         camLele = camera_pos['camLele']
         camRele = camera_pos['camRele']
         camLazi = camera_pos['camLazi']
         camRazi = camera_pos['camRazi']
 
-    path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')
-
-    if os.path.isfile(path_offsets):
-        with open(path_offsets, "rb") as handle:
-            offsets = pickle.load(handle)
-    else:
+    if not cam_offsets:
         if center_method[0] == 0:
             print('Warning: No offset file found. Offset will be zero.')
-        offsets = {
+        cam_offsets = {
             'x_off': 0,
             'y_off': 0,
             'z_off': 0,
@@ -532,22 +567,24 @@ def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
                         center_xyz.append(values.median())
 
                 # Store the calculated offsets in the provided dictionary
-                offsets['x_off'] = center_xyz[0]
-                offsets['y_off'] = center_xyz[1]
-                offsets['z_off'] = center_xyz[2]
+                cam_offsets['x_off'] = center_xyz[0]
+                cam_offsets['y_off'] = center_xyz[1]
+                cam_offsets['z_off'] = center_xyz[2]
 
         # Save the offsets to a pickle file
-        with open(path_offsets, 'wb') as f:
-            pickle.dump(offsets, f)
+        if save_offsets:
+            path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')
+            with open(path_offsets, 'wb') as fh:
+                pickle.dump(cam_offsets, fh)
 
     # Reorient based on camera angles
     for bp in range(len(bpts)):
         data = triangulate[:, bp, :]
 
         x, y, z = data[:, 0], data[:, 1], data[:, 2]
-        x -= offsets['x_off']
-        y -= offsets['y_off']
-        z -= offsets['z_off']
+        x -= cam_offsets['x_off']
+        y -= cam_offsets['y_off']
+        z -= cam_offsets['z_off']
 
         data = np.vstack((x, y, z)).T
 
@@ -580,10 +617,9 @@ def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
         names=["bodyparts", "coords"],
     )
 
-    real_path_3D = path_3D.replace('_filtered3D.h5', '_centered3D.h5')
     inds = range(num_frames)
     df_3d = pd.DataFrame(data_4d, columns=columns, index=inds)
-    df_3d.to_hdf(str(real_path_3D), "df_with_missing", format="table", mode="w")
+    return df_3d
 
 
 def triangulatePoints(P1, P2, x1, x2):

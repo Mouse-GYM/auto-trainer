@@ -149,6 +149,10 @@ class PoseAlgorithm(ObservableObject):
         self,
         *,
         stereo_params: Optional[StereoParams] = None,
+        calib_metadata: Optional[Dict] = None,
+        cam_names: Optional[List[str]] = None,
+        square_size,
+        cam_offsets,
     ):
         super().__init__(event_names=("pose_changed",))
         self._parts_list: List[SceneElement] = []
@@ -159,6 +163,43 @@ class PoseAlgorithm(ObservableObject):
         self._pose_result_columns: Optional[pandas.MultiIndex] = None
         self._has_hands_part_names: bool = False
         self._stereo_params = stereo_params
+        self._calib_metadata = calib_metadata
+        self._cam_names = cam_names
+        self._square_size = square_size
+        self._cam_offsets = cam_offsets
+        #
+        axis_labels = ['x', 'y', 'likelihood']
+        self._hand_base_names = ['H_flat', 'H_spread', 'H_grab']
+        self._hand_options = ['R', 'L']
+        self._hands_columns = pandas.MultiIndex.from_product([
+            [SceneElement.R_Hand, SceneElement.L_Hand], axis_labels],
+            names=['bodyparts', 'coordinates'])
+        self._hands_input_parts = [
+            SceneElement.RH_flat, SceneElement.RH_spread, SceneElement.RH_grab,
+            SceneElement.LH_flat, SceneElement.LH_spread, SceneElement.LH_grab,
+        ]
+        self._hands_input_columns = pandas.MultiIndex.from_product(
+            [self._hands_input_parts, axis_labels], names=['bodyparts', 'coordinates']
+        )
+        # self._all_body_parts = [
+        #     SceneElement.R_Hand,
+        #     SceneElement.L_Hand,
+        #     SceneElement.Pellet,
+        #     SceneElement.Nose,
+        #     'Mouth',
+        #     'Tongue_mid',
+        #     'Tongue_tip',
+        #     'Star',
+        #     'Triangle',
+        #     'Diamond',
+        # ]
+        # self._all_body_parts_columns = pandas.MultiIndex.from_product([self._all_body_parts, axis_labels],
+        #                                                               names=["bodyparts", "coords"])
+        self._star_triangle_diamond_parts = [
+            SceneElement.Star, SceneElement.Triangle, SceneElement.Diamond
+        ]
+        self._star_triangle_diamond_columns = pandas.MultiIndex.from_product([self._star_triangle_diamond_parts, axis_labels],
+                                                                      names=["bodyparts", "coords"])
 
     @property
     def part_names(self) -> list:
@@ -210,32 +251,56 @@ class PoseAlgorithm(ObservableObject):
         return self._pose_result_columns
 
     def _handle_offsets_pose_data(self,
-        *per_cam_pose_data: List[numpy.ndarray]
+        *per_cam_detection: numpy.ndarray
     ):
         """Handle pose data offsets"""
         from autotrainer.behavior.analysis.calibration import triangulate_3d_with_params
+        from autotrainer.behavior.analysis.prepare_jetson_data import interpolate_coordinates
         # import cycle/loop, TODO: "unmix/unknot" it
         stereo_params = self._stereo_params
         if stereo_params is None:
             raise RuntimeError("stereo_params must be set with a valid calib src dir")
         p_thresh = 0.9  # confidence threshold for DLC raw output
         min_cluster = 10  # maximum allowed interpolation
-        frames_per_cam = len(per_cam_pose_data[0])
-        df_2d = [
-            pandas.DataFrame(
-                numpy.asarray(cam_pose_data).reshape(frames_per_cam, -1),
-                columns=self._pose_result_columns,
-            )
-            for cam_pose_data in per_cam_pose_data
-        ]
+        # not sure min_cluster change anything for when nbr frames == 1 (per cam)
+        #
+        df_2d = pandas.DataFrame(
+            numpy.concatenate(per_cam_detection).reshape(len(per_cam_detection), -1),
+            columns=self._star_triangle_diamond_columns,
+        )
+        # df_2d = interpolate_coordinates(df_2d, p_thresh)  # not required probably
         df_3d = triangulate_3d_with_params(
-            df_2d,
-            body_parts=self._parts_list,
+            [df_2d.iloc[0:1], df_2d.iloc[1:2]],
+            body_parts=self._star_triangle_diamond_parts,
             stereo_params=self._stereo_params,
             p_thresh=p_thresh,
             min_cluster=min_cluster,
         )
+        # but reorient and center looks required:
+        from autotrainer.behavior.analysis.prepare_jetson_data import reorient_and_center_step1
+        center_method = (1, SceneElement.Diamond)
+        df_3d = reorient_and_center_step1(
+            df_3d=df_3d,
+            stereo_file=stereo_params.as_pickle_dict(),
+            center_method=center_method,
+            frame_rate=1,
+            bpts=self._star_triangle_diamond_parts,
+            calib_metadata=self._calib_metadata,
+            cam_names=self._cam_names,
+            cam_offsets=self._cam_offsets,
+            square_size=self._square_size,
+            save_offsets=False,
+            src_dir="/dev/null",
+        )
         return df_3d
+
+    def set_3d_offsets_pairs(self, pairs_3d_offsets: Pairs3dOffsetT = ()):
+        unique_parts = set()
+        for p1, p2 in pairs_3d_offsets:
+            unique_parts.add(p1)
+            unique_parts.add(p2)
+        self._pairs_3d_offsets = pairs_3d_offsets
+        # todo continue
 
     def process(self,
         all_frames: List[numpy.ndarray],
@@ -300,36 +365,26 @@ class PoseAlgorithm(ObservableObject):
         # we could eventually do all the frames and eventually make an avg ?
         cams_last_frame = [cam_frames[-1] for cam_frames in per_cam_frames]
         parts_3d_offsets = defaultdict(dict)
-        if len(pairs_3d_offsets) > 0:
-            df_3d = self._handle_offsets_pose_data(*([frame] for frame in cams_last_frame))
-            for part1, part2 in pairs_3d_offsets:
-                parts_3d_offsets[part1][part2] = tuple(
-                      df_3d[part1].iloc[-1, 0:3]  # last frame, 3 first columns (x, y, z)
-                    - df_3d[part2].iloc[-1, 0:3]
-                )
-                # check of parts confidence level is handled in PoseResponse.get_parts_3d_offset()
 
         if self._has_hands_part_names:
             # given import loop/cycle issue to be fixed:
             from autotrainer.behavior.analysis.prepare_jetson_data import process_hand_data
-
-            # todo: should be somehow more global:
-            hand_base_names = ['H_flat', 'H_spread', 'H_grab']
-            hand_options = ['R', 'L']
-            bodyparts = ['R_Hand', 'L_Hand']
-            coordinates = ['x', 'y', 'likelihood']
-            columns = pandas.MultiIndex.from_product([bodyparts, coordinates], names=['bodyparts', 'coordinates'])
+            gpi = self.get_part_index
             df = pandas.DataFrame(
-                numpy.concatenate(cams_last_frame).reshape(2  # nbr of frames in the dataframe
+                numpy.asarray(
+                    [[cam_last_frame[gpi(p)] for p in self._hands_input_parts]
+                     for cam_last_frame in cams_last_frame]
+                ).reshape(2  # nbr of frames in the dataframe
                                                            , -1),
-                columns=self._pose_result_columns)
-            process_hands_results = pandas.DataFrame(columns=columns, index=range(2))
+                columns=self._hands_input_columns)
+            process_hands_results = pandas.DataFrame(columns=self._hands_columns, index=range(2))
             process_hands_results = process_hand_data(
                 df,
-                hand_base_names=hand_base_names,
-                hand_options=hand_options,
+                hand_base_names=self._hand_base_names,
+                hand_options=self._hand_options,
                 dlc_seg="_raw2D",
-                newdf=process_hands_results
+                newdf=process_hands_results,
+                additional_names=[],
             )
             for elem in SceneElement.L_Hand, SceneElement.R_Hand:
                 if __debug__ and elem not in process_hands_results:
@@ -339,6 +394,17 @@ class PoseAlgorithm(ObservableObject):
                     locations_1[elem] = PoseLocation(elem, -1, v['x'][0], v['y'][0])
                 if v['likelihood'][1] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     locations_2[elem] = PoseLocation(elem, -1, v['x'][1], v['y'][1])
+
+            if len(pairs_3d_offsets) > 0:
+                df_3d = self._handle_offsets_pose_data(
+                    *(numpy.asarray([frame[gpi(p)] for p in self._star_triangle_diamond_parts]) for frame in cams_last_frame)
+                )
+                for part1, part2 in pairs_3d_offsets:
+                    parts_3d_offsets[part1][part2] = tuple(
+                        df_3d[part1].iloc[-1, 0:3]  # last frame, 3 first columns (x, y, z)
+                        - df_3d[part2].iloc[-1, 0:3]
+                    )
+                    # check of parts confidence level is handled in PoseResponse.get_parts_3d_offset()
 
         response = PoseResponse(
             sequence=self._sequence,
