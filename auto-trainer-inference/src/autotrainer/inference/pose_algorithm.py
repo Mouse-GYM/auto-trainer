@@ -151,8 +151,8 @@ class PoseAlgorithm(ObservableObject):
         stereo_params: Optional[StereoParams] = None,
         calib_metadata: Optional[Dict] = None,
         cam_names: Optional[List[str]] = None,
-        square_size,
-        cam_offsets,
+        square_size: Optional[int] = None,
+        cam_offsets: Optional[List[float]] = None,
     ):
         super().__init__(event_names=("pose_changed",))
         self._parts_list: List[SceneElement] = []
