@@ -166,4 +166,6 @@ class AnalysisContent(ContentWidget):
         self.diamond_triangle_offset_changed.emit(_render_offset_3d_value(offset))
 
     def _star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
-        self.star_triangle_offset_changed.emit(_render_offset_3d_value(offset))
+        self.star_triangle_offset_changed.emit(
+            "n/a" if offset is None else f"{offset.distance:.2f} mm"
+        )

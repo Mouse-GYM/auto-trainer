@@ -1,6 +1,7 @@
 import json
 import logging
 import multiprocessing
+import pickle
 import queue
 import time
 import typing
@@ -11,6 +12,7 @@ from typing import Optional
 
 import yaml
 
+from autotrainer.behavior.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, MessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
                               get_system_configuration_dumper, NotificationCenter, TriggerNotification)
@@ -69,10 +71,28 @@ class AppModel(ObservableObject):
             self._stereo_params = load_calib_stereo_params(
                 calib_src_dir.joinpath('camera_matrix', 'stereo_params.pickle')
             )
+            metadata_path = calib_src_dir.joinpath('calibration_userset.yaml')
+            with metadata_path.open() as fh:
+                self._calib_metadata = yaml.safe_load(fh)
+
+            square_size, _, _ = calibration_FLIR.get_calibration_info(calib_src_dir.as_posix())
+            cam_names = calibration_FLIR.get_video_list(calib_src_dir.as_posix())
+            path_offsets = calib_src_dir.joinpath('camera_offsets.pkl')
+            # if path_offsets.is_file():
+            with open(path_offsets, "rb") as fh:
+                cam_offsets = pickle.load(fh)
         else:
             self._stereo_params = None
+            self._calib_metadata = None
+            square_size = cam_names = None
 
-        self._pose_algorithm = PoseAlgorithm(stereo_params=self._stereo_params)
+        self._pose_algorithm = PoseAlgorithm(
+            stereo_params=self._stereo_params,
+            calib_metadata=self._calib_metadata,
+            cam_names=cam_names,
+            square_size=square_size,
+            cam_offsets=cam_offsets,
+        )
 
         self._inference = InferenceModel(self._pose_algorithm)
 
