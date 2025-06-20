@@ -71,7 +71,7 @@ from .event import EventManager, EventInfo, EventManagerPlugin
 from .fixed_array_multiqueue import FixedArrayMultiQueue
 from .fixed_array_queue import FixedArrayQueue
 from .message import MessageHandler, SystemMessageHandler
-from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessage, AudioSpectrumMessage
+from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessageProtocol, AudioSpectrumMessage
 from .message import MotorConfigurations, Motor
 from .perf_monitor import PerfMonitor
 from .project import ProjectInfo, ProjectInterval, video_write_ext

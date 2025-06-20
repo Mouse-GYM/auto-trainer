@@ -14,29 +14,39 @@ def load_cell_monitor():
     yield instance
 
 
-def test_detect_thrashing(load_cell_monitor):
+@pytest.mark.parametrize("threshold_duration, load_cell_engaged_threshold", [
+    (0.5, 2),
+    (2, 3),
+])
+@pytest.mark.parametrize("weight_threshold", [5, 15, 45])
+def test_detect_thrashing(load_cell_monitor, threshold_duration, load_cell_engaged_threshold, weight_threshold):
     assert load_cell_monitor.thrashing_detected is False
+
+    load_cell_monitor.thrashing_var_weight_threshold = weight_threshold
+    load_cell_monitor.threshold_duration = threshold_duration
+    load_cell_monitor.load_cell_engaged_threshold = load_cell_engaged_threshold
 
     thrash_detected_list = []
 
-    def handle_thrashing_detected(detected: bool):
-        thrash_detected_list.append(detected)
+    def handle_thrashing_detected(prop_name, new_value, old_value):
+        if prop_name == load_cell_monitor.IS_THRASHING_DETECTED_PROPERTY:
+            thrash_detected_list.append(new_value)
 
-    load_cell_monitor.is_thrashing_detected += handle_thrashing_detected
+    load_cell_monitor.property_changed += handle_thrashing_detected
 
     t_now = 0
 
     idx = 0
-    def update_cell(v, t):
+    def update_monitor(v, t):
         nonlocal idx
         load_cell_monitor.update(v, t, idx)
         idx += 1
 
     value = 0
-    update_cell(value, t_now)
+    update_monitor(value, t_now)
 
     t_now += 1
-    update_cell(value, t_now)
+    update_monitor(value, t_now)
 
     # value is lower than threshold, so not engaged:
     assert not load_cell_monitor.is_engaged
@@ -55,7 +65,7 @@ def test_detect_thrashing(load_cell_monitor):
 
     with mock.patch("autotrainer.core.analysis.load_cell_monitor._timer_load_cell_engaged", new=patched_timer):
         #
-        update_cell(value, t_now)
+        update_monitor(value, t_now)
 
     assert load_cell_monitor._was_active
     assert load_cell_monitor.is_engaged
