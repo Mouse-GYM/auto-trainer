@@ -1,3 +1,4 @@
+import math
 from collections import namedtuple
 from typing import Union, List, Tuple
 
@@ -50,9 +51,10 @@ class Offset3DTuple(_Offset3DTuple):
     def __neg__(self):
         return self.__class__(-self.x, -self.y, -self.z)
 
-#
-#
-# Offset3D = numpy.ndarray
+    @property
+    def distance(self) -> float:
+        return math.sqrt(sum(c**2 for c in self))
+
 
 #
 
