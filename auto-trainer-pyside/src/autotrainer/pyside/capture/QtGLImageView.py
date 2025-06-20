@@ -1,7 +1,5 @@
-import warnings
-from typing import List, Optional, Dict
+from typing import Dict
 
-import numpy
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QSurfaceFormat, QBrush, QPixmap, QPen
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
@@ -9,7 +7,7 @@ from PySide6.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QHBoxLayou
     QGraphicsEllipseItem
 
 from autotrainer.inference import PoseTuple, PoseAlgorithm, PoseLocation
-from autotrainer.inference.pose_elements import SceneElement
+from autotrainer.core.pose_elements import SceneElement
 
 
 class QGLImageView(QWidget):
