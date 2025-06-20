@@ -110,3 +110,15 @@ def test_repr_and_str():
     o = Offset3DTuple((1, 2, 3))
     assert str(o) == "(1, 2, 3)"
     assert repr(o) == "(1, 2, 3)"
+
+
+@pytest.mark.parametrize("offset, exp_distance", [
+    (Offset3DTuple(0, 0, 0), 0),
+    (Offset3DTuple(1, 0, 0), 1),
+    (Offset3DTuple(-1, 0, 0), 1),
+    (Offset3DTuple(0, 1, 0), 1),
+    (Offset3DTuple(0, 0, -1), 1),
+    (Offset3DTuple(1, 1, 1), 1.7320508075688772),
+])
+def test_distance(offset, exp_distance):
+    assert offset.distance == exp_distance
