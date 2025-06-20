@@ -310,7 +310,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
     def start(self, network_queue: FixedArrayMultiQueue) -> bool:
         if self._msg_thread is None:
-            self._msg_thread = Thread(target=self._monitor_msg_queue)
+            self._msg_thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue")
             self._msg_thread.start()
 
         if self._data_thread is None:

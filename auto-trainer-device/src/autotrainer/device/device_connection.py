@@ -142,7 +142,7 @@ class DeviceConnection(DeviceConnectionProtocol):
 
     def _start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
-            self._current_thread = Thread(target=self._run)
+            self._current_thread = Thread(target=self._run, name=self._name)
             self._current_thread.start()
 
     def _run(self) -> None:
