@@ -13,6 +13,7 @@ from typing import Optional
 import yaml
 
 from autotrainer.behavior.analysis import calibration_FLIR
+from autotrainer.behavior.behavior_algorithm import BehaviorProps
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, MessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
                               get_system_configuration_dumper, NotificationCenter, TriggerNotification)
@@ -398,7 +399,6 @@ class AppModel(ObservableObject):
 
     def save_configuration(self):
         conf = self._create_configuration()
-
         return conf.save_default(self._preferences.configuration_location)
 
     def on_activated(self):
@@ -415,6 +415,7 @@ class AppModel(ObservableObject):
 
         self.hardware.disconnect()
         self._message_handler.request_terminate()
+        # should we self._message_handler.wait_terminated() ?
 
         self.save_configuration()
 
@@ -450,7 +451,7 @@ class AppModel(ObservableObject):
         logger.debug("behavior property changed: %s: %s -> %s", name, old_value, new_value)
 
     def _on_behavior_algo_property_changed(self, name: str, value, _):
-        if name == "baseline_intensity" and self._selected_animal is not None:
+        if name == BehaviorProps.BASELINE_INTENSITY and self._selected_animal is not None:
             self._selected_animal.baseline_magnet_intensity = value
             self._save_animal_metadata()
 
