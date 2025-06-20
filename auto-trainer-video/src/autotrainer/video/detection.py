@@ -12,7 +12,11 @@ import cv2
 import numpy
 
 from autotrainer.core import ProjectInfo
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx
+
+
+logger = get_verbose_logger(__name__)
 
 
 @dataclasses.dataclass
@@ -47,6 +51,10 @@ class VideoDetection(threading.Thread):
         self._next_frames: Deque[Tuple[float, numpy.ndarray]] = collections.deque(maxlen=60)
         self._prev_frame = None
         self._prev_when = None
+        self._csv_header = ["Time", "Index", "Presence", "Motion"]
+        self._file_info = None
+        self._csv_writer = None
+        self._csv_writer_fh = None
         super().__init__(name="PresenceDetection")
 
     def cancel(self):
@@ -55,22 +63,30 @@ class VideoDetection(threading.Thread):
     def update_frame(self, when: float, frame: numpy.ndarray):
         self._next_frames.append((when, frame))
 
+    def _check_path(self):
+        csv_file_info = self._project_info.get_webcam_presence_file()
+        if csv_file_info == self._file_info:
+            return
+        if self._csv_writer_fh is not None:
+            self._csv_writer_fh.flush()
+            self._csv_writer_fh.close()
+        if csv_file_info is None:
+            self._csv_writer_fh = self._csv_writer = None
+        else:
+            f_path = Path(csv_file_info.file)
+            logger.verbose("Switching to %s", f_path)
+            prev_exist = f_path.is_file() and f_path.exists() and f_path.stat().st_size > 0
+            self._csv_writer_fh = open(csv_file_info.file, "a")
+            self._csv_writer = csv.DictWriter(self._csv_writer_fh, self._csv_header)
+            if not prev_exist:
+                self._csv_writer.writeheader()
+        self._file_info = csv_file_info
+
     def run(self):
         attrs = self._attrs
         prev_frame = prev_when = None
         prev_detected = attrs.presence_detected.value
-        csv_file_info = self._project_info.get_webcam_presence_file()
-        csv_header = ["Time", "Index", "Presence", "Motion"]
-        row_dict = dict.fromkeys(csv_header)
-        if csv_file_info is None:
-            fh = csv_writer = None
-        else:
-            f_path = Path(csv_file_info.file)
-            prev_exist = f_path.is_file() and f_path.exists() and f_path.stat().st_size > 0
-            fh = open(csv_file_info.file, "a")
-            csv_writer = csv.DictWriter(fh, csv_header)
-            if not prev_exist:
-                csv_writer.writeheader()
+        row_dict = dict.fromkeys(self._csv_header)
 
         while not self._stop_requested:
             try:
@@ -93,6 +109,8 @@ class VideoDetection(threading.Thread):
                 if is_detected != prev_detected:
                     attrs.presence_detected.value = is_detected
                 prev_detected = is_detected
+                self._check_path()
+                csv_writer = self._csv_writer
                 if csv_writer is not None:
                     row_dict.update(
                         Time=when / 1e9,
@@ -104,6 +122,7 @@ class VideoDetection(threading.Thread):
             prev_frame = gray_frame
             prev_when = when
         # end while not self._stop_requested
+        fh = self._csv_writer_fh
         if fh is not None:
             fh.flush()
             fh.close()
