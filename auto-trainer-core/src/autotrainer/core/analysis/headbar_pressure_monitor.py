@@ -48,7 +48,7 @@ class HeadbarPressureMonitor(ObservableObject):
 
         self._sample_rate = 100
 
-        self._threshold: float = 30
+        self._load_cell_engaged_threshold: float = 30
         self._duration: float = 0.25
 
         self._values = numpy.empty((1, 0))
@@ -77,12 +77,12 @@ class HeadbarPressureMonitor(ObservableObject):
         self._rebuild_buffers()
 
     @property
-    def threshold(self) -> float:
-        return self._threshold
+    def load_cell_engaged_threshold(self) -> float:
+        return self._load_cell_engaged_threshold
 
-    @threshold.setter
-    def threshold(self, value: float) -> None:
-        self._threshold = self._on_property_changed("threshold", value, self._threshold)
+    @load_cell_engaged_threshold.setter
+    def load_cell_engaged_threshold(self, value: float) -> None:
+        self._load_cell_engaged_threshold = self._on_property_changed("threshold", value, self._load_cell_engaged_threshold)
 
     @property
     def duration(self) -> float:
@@ -98,11 +98,11 @@ class HeadbarPressureMonitor(ObservableObject):
         return self._is_engaged
 
     def load_configuration(self, configuration: HeadbarPressureConfiguration):
-        self.threshold = configuration.threshold
+        self.load_cell_engaged_threshold = configuration.threshold
         self.duration = configuration.duration
 
     def save_configuration(self) -> HeadbarPressureConfiguration:
-        return HeadbarPressureConfiguration(threshold=self._threshold, duration=self._duration)
+        return HeadbarPressureConfiguration(threshold=self._load_cell_engaged_threshold, duration=self._duration)
 
     def update(self, values: list, when: float = 0.0, index: int = 0) -> bool:
         self._values = numpy.append(self._values, values)
@@ -124,7 +124,7 @@ class HeadbarPressureMonitor(ObservableObject):
             old_start = idx
             old_end = idx + self._first_third
 
-            if numpy.all(self._values[old_start:old_end] <= (self._values[new_start:new_end] - self._threshold)):
+            if numpy.all(self._values[old_start:old_end] <= (self._values[new_start:new_end] - self._load_cell_engaged_threshold)):
                 is_engaged = True
                 break
 
