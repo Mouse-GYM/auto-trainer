@@ -343,7 +343,10 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             url += f":{conf.port}"
 
         if len(conf.path) > 0:
-            url += f"/{conf.path}"
+            # Reminder: we url-decoded, if it was encoded, in CameraConfiguration.__post_init__
+            # so here we have to quote with safe=() :
+            encoded_path = urllib.parse.quote(conf.path, safe=())
+            url += f"/{encoded_path}"
 
         if len(conf.params) > 0:
             url += "?" + urllib.parse.urlencode(conf.params)
