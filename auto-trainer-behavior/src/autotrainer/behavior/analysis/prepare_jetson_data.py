@@ -49,7 +49,12 @@ def identify_dropped_frames(timestamp_file, frame_rate):
     expected_interval = 1.0 / frame_rate
 
     # Create a binary vector for the entire video length
-    expected_frame_count = int(round((timestamps_s[-1] - timestamps_s[0]) / expected_interval)) + 1
+    expected_frame_count = 1 + round((timestamps_ns[-1] - timestamps_ns[0]) * frame_rate / 1e9)
+    if expected_frame_count != len(timestamps_df):
+        logger.verbose(
+            "Correcting expected_frame_count from %s to %s", expected_frame_count, len(timestamps_df))
+        expected_frame_count = len(timestamps_df)
+
     dropped_frame_vector = np.zeros(expected_frame_count, dtype=int)
 
     # Mark dropped frames
