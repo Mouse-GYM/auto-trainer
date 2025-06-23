@@ -15,7 +15,10 @@ def test_fp_and_xp_not_same(project_info, caplog):
     project_info.device_id = "agx001"
     project_info.when = datetime(2025, 6, 23)
     caplog.set_level(verboselogs.VERBOSE)
-    res = intersession_process(project_info)
+    res = intersession_process(
+        project_info,
+        calib_dir=this_dir.joinpath("4mm_6r_8c_4x"),
+    )
     assert "Correcting expected_frame_count from " in caplog.text
     assert isinstance(res, IntersessionResponse)
     assert res.food_consumed == 0
