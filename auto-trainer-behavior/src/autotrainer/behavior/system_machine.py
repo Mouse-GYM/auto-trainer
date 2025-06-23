@@ -269,6 +269,7 @@ class SystemMachine(StateMachine):
         if self.state != SystemState.tunnel:
             self._tunnel_device.tare_load_cell()
             EventManager.default().post_event_content(BehaviorEventKind.headfixAutoTare)
+        return False
 
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if (
