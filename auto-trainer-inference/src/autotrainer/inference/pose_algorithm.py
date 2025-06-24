@@ -1,5 +1,4 @@
 import dataclasses
-import math
 import operator
 from typing import List, Dict, Optional, Tuple, Callable
 from collections import namedtuple, defaultdict
@@ -9,13 +8,11 @@ import numpy
 import pandas
 
 from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple
+from autotrainer.core.analysis.calibration import triangulate_3d_with_params
+from autotrainer.core.analysis.prepare_jetson_data import process_hand_data, reorient_and_center_step1
 from autotrainer.core.logging import get_verbose_logger
-from .config import StereoParams
-from autotrainer.inference.pose_elements import SceneElement
-
-# see inline where imported:
-# from autotrainer.behavior.analysis.calibration import triangulate_3d_with_params
-# import loop/cycle atm
+from autotrainer.core.analysis.config import StereoParams
+from autotrainer.core.pose_elements import SceneElement
 
 
 logger = get_verbose_logger(__name__)
@@ -254,9 +251,6 @@ class PoseAlgorithm(ObservableObject):
         *per_cam_detection: numpy.ndarray
     ):
         """Handle pose data offsets"""
-        from autotrainer.behavior.analysis.calibration import triangulate_3d_with_params
-        from autotrainer.behavior.analysis.prepare_jetson_data import interpolate_coordinates
-        # import cycle/loop, TODO: "unmix/unknot" it
         stereo_params = self._stereo_params
         if stereo_params is None:
             raise RuntimeError("stereo_params must be set with a valid calib src dir")
@@ -277,7 +271,6 @@ class PoseAlgorithm(ObservableObject):
             min_cluster=min_cluster,
         )
         # but reorient and center looks required:
-        from autotrainer.behavior.analysis.prepare_jetson_data import reorient_and_center_step1
         center_method = (1, SceneElement.Diamond)
         df_3d = reorient_and_center_step1(
             df_3d=df_3d,
@@ -367,8 +360,6 @@ class PoseAlgorithm(ObservableObject):
         parts_3d_offsets = defaultdict(dict)
 
         if self._has_hands_part_names:
-            # given import loop/cycle issue to be fixed:
-            from autotrainer.behavior.analysis.prepare_jetson_data import process_hand_data
             gpi = self.get_part_index
             df = pandas.DataFrame(
                 numpy.asarray(

@@ -5,7 +5,7 @@ import numpy
 
 from autotrainer.inference import PoseAlgorithm
 from autotrainer.inference import PoseResponse, PoseLocation
-from autotrainer.inference.pose_elements import SceneElement
+from autotrainer.core.pose_elements import SceneElement
 
 
 def verify_common_output(response: PoseResponse, sequence: int, parts: typing.List[str]):
