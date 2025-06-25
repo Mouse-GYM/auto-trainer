@@ -1,6 +1,4 @@
 import logging
-import math
-import multiprocessing
 import operator
 import os
 import queue
@@ -11,7 +9,7 @@ import typing
 from itertools import chain
 from pathlib import Path
 from statistics import mean
-from typing import Optional, Union, List, Dict, TextIO, Tuple
+from typing import Optional, List, Dict, TextIO, Tuple
 from dataclasses import dataclass
 from enum import Enum
 from threading import Thread
@@ -32,7 +30,7 @@ from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     DlcPoseModel, MemoryPoseModel, InferenceMode, PoseResponse
-from autotrainer.inference.pose_elements import SceneElement
+from autotrainer.core.pose_elements import SceneElement
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
 logger = get_verbose_logger(__name__)

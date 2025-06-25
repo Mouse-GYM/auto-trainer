@@ -1,10 +1,8 @@
 import json
 import logging
-import multiprocessing
 import pickle
 import queue
 import time
-import typing
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,8 +10,7 @@ from typing import Optional, List
 
 import yaml
 
-from autotrainer.behavior.analysis import calibration_FLIR
-from autotrainer.behavior.behavior_algorithm import BehaviorProps
+from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, MessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
                               get_system_configuration_dumper, NotificationCenter, TriggerNotification)
@@ -21,8 +18,9 @@ from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
 from autotrainer.core.multiproc import get_mp_ctx
+from autotrainer.core.analysis.config import load_calib_stereo_params
 from autotrainer.inference import PoseAlgorithm
-from autotrainer.inference.config import load_calib_stereo_params
+from autotrainer.behavior.behavior_algorithm import BehaviorProps
 from autotrainer.video.detection import PresenceDetectionAttrs
 
 from tools.acquisition.model.hardware_model import HardwareModel

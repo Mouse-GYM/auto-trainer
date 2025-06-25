@@ -1,13 +1,7 @@
-import dataclasses
-import logging
-import math
-import time
-from datetime import timedelta
-from enum import Enum
 from itertools import chain
 from pathlib import Path
 from threading import Timer
-from typing import Optional, Tuple
+from typing import Optional
 
 from transitions import Machine
 
@@ -16,7 +10,7 @@ from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorA
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference import PoseResponse
-from autotrainer.inference.pose_elements import SceneElement
+from autotrainer.core.pose_elements import SceneElement
 
 from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorProps
@@ -269,6 +263,7 @@ class SystemMachine(StateMachine):
         if self.state != SystemState.tunnel:
             self._tunnel_device.tare_load_cell()
             EventManager.default().post_event_content(BehaviorEventKind.headfixAutoTare)
+        return False
 
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if (
