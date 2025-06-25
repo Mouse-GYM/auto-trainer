@@ -152,8 +152,8 @@ class PoseAlgorithm(ObservableObject):
         cam_offsets: Optional[List[float]] = None,
     ):
         super().__init__(event_names=("pose_changed",))
-        self._parts_list: List[SceneElement] = []
-        self._parts: Dict[SceneElement, int] = {}  # key is part name, value is part model index
+        self._parts_list: List[str] = []
+        self._parts: Dict[str, int] = {}  # key is part name, value is part model index
         self._sequence = 0
         self._default_parts_flag: Dict[str, bool] = {}
         self._default_locations = []
@@ -208,7 +208,6 @@ class PoseAlgorithm(ObservableObject):
 
     def get_part_index(self, part: str) -> int:
         """Give the model part index, or -1 if unknown"""
-        part = SceneElement(part).value  # sanitize
         return self._parts.get(part, -1)
 
     def initialize(
