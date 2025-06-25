@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Dict
 
 _cache_scene_elements: Dict[str, "_BaseSceneElement"] = {}
-
+_cache_scene_elements_str: Dict[str, str] = {}
 
 class _BaseSceneElement(str):  # , Enum):
     """Dedicated str subclass for scene elements,
@@ -29,12 +29,12 @@ class _BaseSceneElement(str):  # , Enum):
             tentative = super().__new__(cls, value)
             assert isinstance(tentative, _BaseSceneElement)
             cached = _cache_scene_elements.setdefault(value, tentative)  # threads-safe
-        return cached
-
-    @property
-    def value(self):
-        # was using an Enum subclass previously, and code still using this ".value" property.
-        return self
+        # return the raw str value:
+        # otherwise, when used as column(multiindex or not) and in h5 files that will make
+        # the column to be saved with pickle,
+        # which when unpickled fails if the pickled object type has been moved meanwhile.
+        cached_str = _cache_scene_elements_str.setdefault(value, str(cached))
+        return cached_str
 
 
 class SceneElement(_BaseSceneElement):
