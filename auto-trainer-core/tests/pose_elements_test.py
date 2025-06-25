@@ -1,6 +1,6 @@
 import pytest
 
-from autotrainer.inference.pose_elements import SceneElement, _BaseSceneElement
+from autotrainer.core.pose_elements import SceneElement, _BaseSceneElement
 
 
 def test_scene_element_base():
