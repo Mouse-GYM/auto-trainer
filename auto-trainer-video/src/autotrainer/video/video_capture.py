@@ -12,10 +12,11 @@ from typing import Callable, Dict, Union, Optional, List
 import numpy
 import verboselogs
 
-from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue
+from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo
 from autotrainer.core.logging import get_verbose_logger, set_logger_level
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.message import FrameIndexCategory
+from .detection import PresenceDetectionAttrs, VideoDetection
 
 from .video_manager import VideoManager
 from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
@@ -119,6 +120,9 @@ class CaptureAttrs:
     fps_image_queue: Optional[float] = 15
     """Desired write FPS for the image_queue, if None then default to capture FPS"""
 
+    presence_detection_attrs: Optional[PresenceDetectionAttrs] = None
+    """Optional Presence detection"""
+
 
 class VideoCapture(Process):
     """
@@ -129,12 +133,18 @@ class VideoCapture(Process):
     or any other process.
     """
 
-    def __init__(self, attrs: CaptureAttrs, record_properties: VideoRecordProperties = None):
+    def __init__(
+        self,
+        attrs: CaptureAttrs,
+        record_properties: Optional[VideoRecordProperties] = None,
+        project_info: Optional[ProjectInfo] = None,
+    ):
         super().__init__(name=attrs.camera.name)
 
         self._name = attrs.camera.name
         self._camera_url = attrs.camera.url
 
+        self._project_info = project_info
         self._command_queue = attrs.command_queue
         self._status = attrs.status
         self._image_queue: Optional[Union[Queue, FixedArrayQueue]] = attrs.image_queue
@@ -166,6 +176,8 @@ class VideoCapture(Process):
         self._record = None
         self._record_queue: Optional[Queue] = None
         self._record_queue_list: List = []
+
+        self._detection_attrs = attrs.presence_detection_attrs
 
         self.command_handler: Dict[CaptureCommandKind, Callable[[object], None]] = {
             CaptureCommandKind.TERMINATE: self._user_terminate,
@@ -220,6 +232,12 @@ class VideoCapture(Process):
             self._record = VideoRecord(self._record_properties, self._record_queue)
             self._record.start()
 
+            if self._detection_attrs is None or self._project_info is None:
+                self._video_detection = None
+            else:
+                self._video_detection = VideoDetection(self._project_info, self._detection_attrs)
+                self._video_detection.start()
+
             self._set_status(CaptureProcessStatus.RUNNING)
 
             return True
@@ -243,6 +261,7 @@ class VideoCapture(Process):
         image_queue_delay = self._image_queue_frame_delay
         get_command = None if self._command_queue is None else self._command_queue.get_nowait
         empty_frame = numpy.zeros(self._record_properties.frame_size, dtype=numpy.uint8)
+        vid_detection = self._video_detection
         logger.notice("%s: starting capture loop ..", self)
         while self._is_running:
             t_now = time.time()
@@ -282,6 +301,9 @@ class VideoCapture(Process):
                             img_q.put(frame)
                         else:
                             img_q.put(frame[:, :, 0])
+
+                if vid_detection is not None:
+                    vid_detection.update_frame(when, frame)
 
                 if self._is_record_active:
                     # record queue goes to video save to disk/file
@@ -340,6 +362,10 @@ class VideoCapture(Process):
                 self._record.cancel()
                 self._record.join()
 
+            if self._video_detection is not None:
+                self._video_detection.cancel()
+                self._video_detection.join()
+
             self._set_status(CaptureProcessStatus.TERMINATED)
 
             logger.debug(f"<{self._name}> terminated")
@@ -371,10 +397,6 @@ class VideoCapture(Process):
     def _disable_trigger(self, _: object):
         logger.info("%s: trigger disabled", self)
         self._is_record_active = self._record_properties.should_record(False)
-        # if len(rec_q_list) > 0:
-        #     rec_q.put(rec_q_list)  # thread queue
-        #     rec_q.put([])
-        #     rec_q_list = self._record_queue_list = []
         if len(self._record_queue_list) > 0:
             self._record_queue.put(self._record_queue_list)
             self._record_queue_list = []

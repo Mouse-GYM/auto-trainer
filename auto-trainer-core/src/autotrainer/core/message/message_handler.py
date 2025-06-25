@@ -64,7 +64,7 @@ class MessageHandler(ObservableObject):
 
     def start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
-            self._current_thread = Thread(target=self.run)
+            self._current_thread = Thread(target=self.run, name=self.__class__.__name__)
             self._current_thread.start()
 
     def run(self):
