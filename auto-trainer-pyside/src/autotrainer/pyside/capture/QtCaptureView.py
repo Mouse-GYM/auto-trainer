@@ -13,7 +13,7 @@ from autotrainer.inference import PoseTuple, PoseAlgorithm, PoseLocation
 from autotrainer.pyside.CardWidget import CardWidget
 from .QtGLImageView import QGLImageView
 from .QtCaptureSettings import QCaptureSettings
-from ...inference.pose_elements import SceneElement
+from autotrainer.core.pose_elements import SceneElement
 
 
 @dataclasses.dataclass

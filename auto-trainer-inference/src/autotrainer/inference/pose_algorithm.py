@@ -86,7 +86,7 @@ class PoseResponse:
         if len(cams_idx) == 0:
             # - 1 given last part flags is conjunction of all previous cams
             cams_idx = tuple(range(len(self.parts_flags) - 1))
-        part = SceneElement(part).value
+        part = SceneElement(part)
         for idx in cams_idx:
             value = self.parts_flags[idx].get(part, None)
             if value is not None:
@@ -104,8 +104,8 @@ class PoseResponse:
         """Return the 3d offsets between part1 and part2,
         if none exist/is available return None instead
         """
-        part1 = SceneElement(part1).value
-        part2 = SceneElement(part2).value
+        part1 = SceneElement(part1)
+        part2 = SceneElement(part2)
         # -1 means all cams in is_part_seen(), while no idx means any cam:
         cams_idx = (-1,) if require_present_all_cams else ()
         part1_seen = self.is_part_seen(part1, cams_idx=cams_idx)
