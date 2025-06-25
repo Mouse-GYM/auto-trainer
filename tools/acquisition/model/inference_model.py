@@ -240,8 +240,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
     def get_parts_offsets(self, part1: str, part2: str) -> Optional[Offset3DTuple]:
         """Return the offsets of part2 relative to part1 as last known"""
-        part1 = SceneElement(part1).value
-        part2 = SceneElement(part2).value
+        part1 = SceneElement(part1)
+        part2 = SceneElement(part2)
         v_offsets = self._parts_offsets.get((part1, part2), None)
         if v_offsets is None:
             v_offsets = self._parts_offsets.get((part2, part1), None)
