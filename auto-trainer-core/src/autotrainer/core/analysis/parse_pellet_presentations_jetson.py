@@ -18,7 +18,7 @@ import os
 from scipy.signal import savgol_coeffs, filtfilt
 import glob
 import pickle
-from . import prepare_jetson_data as prep_jet
+from autotrainer.core.analysis import prepare_jetson_data as prep_jet
 import inspect
 
 def get_coeffs():

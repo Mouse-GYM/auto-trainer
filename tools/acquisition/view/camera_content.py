@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import Dict
 
 from numpy import ndarray
 
@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QGridLayout
 
 from autotrainer.core import NotificationCenter, TriggerNotification, Notification
 from autotrainer.inference import PoseTuple, PoseAlgorithm, PoseLocation
-from autotrainer.inference.pose_elements import SceneElement
+from autotrainer.core.pose_elements import SceneElement
 from autotrainer.pyside.capture.QtCaptureView import ImageData
 from autotrainer.video import VideoRecordMode
 from autotrainer.pyside import QCaptureView
