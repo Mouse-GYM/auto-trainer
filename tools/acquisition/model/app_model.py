@@ -1,6 +1,5 @@
 import json
 import logging
-import multiprocessing
 import pickle
 import queue
 import time
@@ -12,7 +11,7 @@ from typing import Optional
 
 import yaml
 
-from autotrainer.behavior.analysis import calibration_FLIR
+from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, MessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
                               get_system_configuration_dumper, NotificationCenter, TriggerNotification)
@@ -21,7 +20,7 @@ from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseAlgorithm
-from autotrainer.inference.config import load_calib_stereo_params
+from autotrainer.core.analysis.config import load_calib_stereo_params
 
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
