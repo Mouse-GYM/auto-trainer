@@ -98,7 +98,7 @@ class SystemMachine(StateMachine):
         )
 
     @property
-    def algorithm(self):
+    def algorithm(self) -> BehaviorAlgorithm:
         return self._algorithm
 
     @property

@@ -244,6 +244,8 @@ class MainWindow(QMainWindow):
     def _preferences_property_changed(self, name, value, _):
         if name == "log_level":
             self._update_log_level(value)
+        elif name == "remove_raw_data_when_inactive_session":
+            self._model.behavior.algorithm.clean_raw_data_on_inactive_session = value
 
     def _internal_simulate_trigger(self):
         self._model.behavior.trigger_tunnel(self.capture_trigger_action.isChecked())

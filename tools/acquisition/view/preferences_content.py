@@ -3,7 +3,7 @@ import logging
 import verboselogs
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton, \
-    QFileDialog, QTabWidget, QVBoxLayout
+    QFileDialog, QTabWidget, QVBoxLayout, QCheckBox
 
 from autotrainer.device import get_available_hardware
 from autotrainer.model import EnvironmentProvider, HardwareVersion
@@ -177,6 +177,11 @@ class PreferencesContent(QWidget):
         # form_layout.addRow(ATSeparator())
         # form_layout.addRow(QWidget())
 
+        self._checkbox_remove_raw_data_inactive_session = QCheckBox()
+        self._checkbox_remove_raw_data_inactive_session.setChecked(self._preferences.remove_raw_data_when_inactive_session)
+        self._checkbox_remove_raw_data_inactive_session.stateChanged.connect(self._remove_raw_data_when_inactive_session_changed)
+        form_layout.addRow("Remove saved videos when animal not seen:", self._checkbox_remove_raw_data_inactive_session)
+
         tab = QWidget(None)
         tab.setLayout(form_layout)
 
@@ -212,6 +217,9 @@ class PreferencesContent(QWidget):
 
     def _log_location_changed(self, value: str):
         self._preferences.log_location = value
+
+    def _remove_raw_data_when_inactive_session_changed(self, value: bool):
+        self._preferences.remove_raw_data_when_inactive_session = value
 
     def _browse_for_location(self, which: str):
         if which == "animal":
