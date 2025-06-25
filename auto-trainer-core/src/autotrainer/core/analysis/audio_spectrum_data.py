@@ -12,7 +12,7 @@ class AudioSpectrumData(AudioSpectrumMessage):
     """
     when_val: float
     index_val: int
-    magnitudes_val: float
+    magnitudes_val: List[float]
 
     @property
     def when(self) -> float:
