@@ -752,6 +752,7 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
+        return False
         return (addr is not None and
                 self._jc.LoadCellTare(addr, 0, CanInterface.next_uuid()) == 0)
 
