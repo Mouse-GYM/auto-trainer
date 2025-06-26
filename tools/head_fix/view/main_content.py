@@ -41,7 +41,8 @@ class MainContent(QWidget):
         layout.addWidget(self._head_control)
 
         self._tone_control = self._create_tone_panel()
-        layout.addWidget(self._tone_control)
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            layout.addWidget(self._tone_control)
 
         layout.addWidget(self._create_sensor_panel())
 
@@ -122,32 +123,43 @@ class MainContent(QWidget):
 
         position_layout.addStretch(1)
 
-        position_layout.addWidget(QLabel("Gate"))
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            position_layout.addWidget(QLabel("Gate"))
 
         self._curr_gate_position = QLabel("(-)")
-        position_layout.addWidget(self._curr_gate_position)
+        
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            position_layout.addWidget(self._curr_gate_position)
 
         self._gate_position = QSpinBox()
         self._gate_position.setMaximum(120)
         self._gate_position.setValue(0)
         self._gate_position.setWrapping(False)
         self._gate_position.setEnabled(False)
-        position_layout.addWidget(self._gate_position, 0, Qt.AlignLeft)
+        
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            position_layout.addWidget(self._gate_position, 0, Qt.AlignLeft)
 
         self._update_gate_button = QPushButton("Update")
         self._update_gate_button.setEnabled(False)
         self._update_gate_button.clicked.connect(self._set_gate_position)
-        position_layout.addWidget(self._update_gate_button, 0)
+        
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            position_layout.addWidget(self._update_gate_button, 0)
 
         self._open_gate = QPushButton("Open Gate")
         self._open_gate.setEnabled(False)
         self._open_gate.clicked.connect(self._model.open_tunnel_gate)
-        position_layout.addWidget(self._open_gate, 0)
+        
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            position_layout.addWidget(self._open_gate, 0)
 
         self._close_gate = QPushButton("Close Gate")
         self._close_gate.setEnabled(False)
         self._close_gate.clicked.connect(self._model.close_tunnel_gate)
-        position_layout.addWidget(self._close_gate, 0)
+        
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            position_layout.addWidget(self._close_gate, 0)
 
         position_layout.addStretch(1)
 
@@ -160,7 +172,8 @@ class MainContent(QWidget):
         gear_icon = qta.icon('fa5s.cog')  # Font Awesome 5 Solid cog icon
         self._config_button.setIcon(gear_icon)
         self._config_button.clicked.connect(lambda: self._update_config())
-        position_layout.addWidget(self._config_button)
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            position_layout.addWidget(self._config_button)
 
         row_layout.addLayout(position_layout)
 
@@ -276,7 +289,8 @@ class MainContent(QWidget):
         ax = self._audio_spectrum_plot.getAxis('bottom')
         ax.setTicks([ticks])
 
-        plot_layout.addWidget(widget, 2, 1)
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            plot_layout.addWidget(widget, 2, 1)
 
         self._temperature_plot, widget = self._create_plot_widget("Temperature (\u00b0C)")
         self._temperature_plot.setYRange(0, 50)

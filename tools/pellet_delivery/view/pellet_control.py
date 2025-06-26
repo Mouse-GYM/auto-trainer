@@ -117,10 +117,16 @@ class PelletControl(QWidget):
         s_layout = QHBoxLayout()
         s_layout.setContentsMargins(2, 2, 2, 2)
 
+        is_legacy = EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ
+
         p_layout, self._x_pos, moveButton, setButton = add_position("X (mm):", -10, 10)
         moveButton.clicked.connect(lambda: self._move_x())
         setButton.clicked.connect(lambda: self._set_x())
         s_layout.addLayout(p_layout)
+
+        
+        if is_legacy:
+            moveButton.setVisible(False)
 
         s_layout.addStretch(1)
 
@@ -136,6 +142,10 @@ class PelletControl(QWidget):
         setButton.clicked.connect(lambda: self._set_y())
         s_layout.addLayout(p_layout)
 
+        
+        if is_legacy:
+            moveButton.setVisible(False)
+
         s_layout.addStretch(1)
 
         line = QFrame()
@@ -149,6 +159,10 @@ class PelletControl(QWidget):
         moveButton.clicked.connect(lambda: self._move_z())
         setButton.clicked.connect(lambda: self._set_z())
         s_layout.addLayout(p_layout)
+
+        
+        if is_legacy:
+            moveButton.setVisible(False)
 
         return s_layout
 
