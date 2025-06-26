@@ -30,10 +30,12 @@ if __name__ == '__main__':
     parser.add_argument("-d", "--dev", help="enable development mode and options", action="store_true")
     parser.add_argument("-e", "--allow-can-emulation", help="include CAN emulation as a connection option",
                         default="", type=str)
+    parser.add_argument("--simulate-trigger-load-cell", action="store_true")
 
     args = parser.parse_args()
 
     # strtobool compatibility is all over the place.
     allow_emulation = args.allow_can_emulation.lower() in {"true", "yes", "1"}
 
-    sys.exit(run_acquisition(args.configuration, args.dev, allow_emulation))
+    sys.exit(run_acquisition(args.configuration, args.dev, allow_emulation,
+                             simulate_trigger_load_cell=args.simulate_trigger_load_cell))

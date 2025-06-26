@@ -1,11 +1,16 @@
 import logging
 import os
+import random
 import sys
+import threading
+import time
 
 from PySide6 import QtGui
+from PySide6.QtWidgets import QApplication
 
 from autotrainer.core.event import try_register_api_event_plugin
 from autotrainer.core.logging import get_verbose_logger
+from tools.acquisition.view.main_window import MainWindow
 
 logger = get_verbose_logger(__name__)
 
@@ -69,7 +74,27 @@ def verify_log_location(log_location: str, device_name: str):
     logging.root.addHandler(file_handler)
 
 
-def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_emulation: bool = False) -> int:
+
+def send_commands(mw: MainWindow, exit_event: threading.Event):
+    time.sleep(15)
+    mc = mw.main_content
+    while not exit_event.isSet():
+        tot_dur = random.randint(3, 30)
+        logger.notice("TRIGGER 1 for %s seconds", tot_dur)
+        mw.capture_trigger_action.trigger()
+        time.sleep(tot_dur)
+        logger.notice("TRIGGER 2")
+        mw.capture_trigger_action.trigger()
+        time.sleep(6 * tot_dur)
+
+
+def run_acquisition(
+    configuration: str = None,
+    is_dev: bool = False,
+    allow_can_emulation: bool = False,
+    *,
+    simulate_trigger_load_cell: bool = False,
+) -> int:
     from PySide6.QtWidgets import QApplication
 
     from autotrainer.model import EnvironmentProvider
@@ -100,4 +125,17 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     window.on_activated()
 
-    return app.exec()
+    if simulate_trigger_load_cell:
+        exit_event = threading.Event()
+        thread = threading.Thread(target=send_commands, args=(window, exit_event))
+        thread.start()
+    else:
+        exit_event = thread = None
+
+    res = app.exec()
+
+    if simulate_trigger_load_cell:
+        exit_event.set()
+        thread.join()
+
+    return res
