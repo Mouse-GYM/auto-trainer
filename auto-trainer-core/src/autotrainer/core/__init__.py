@@ -1,3 +1,4 @@
+import math
 from collections import namedtuple
 from typing import Union, List, Tuple
 
@@ -50,11 +51,15 @@ class Offset3DTuple(_Offset3DTuple):
     def __neg__(self):
         return self.__class__(-self.x, -self.y, -self.z)
 
-#
-#
-# Offset3D = numpy.ndarray
+    @property
+    def distance(self) -> float:
+        return math.sqrt(sum(c**2 for c in self))
+
 
 #
+
+# MUST come first:
+from .observable_object import ObservableObject, ObservableObjectProtocol
 
 from .analysis import SensorAnalysis, MeasurementData, AudioSpectrumData
 from .analysis import LoadCellMonitor, HeadbarPressureMonitor
@@ -66,9 +71,8 @@ from .event import EventManager, EventInfo, EventManagerPlugin
 from .fixed_array_multiqueue import FixedArrayMultiQueue
 from .fixed_array_queue import FixedArrayQueue
 from .message import MessageHandler, SystemMessageHandler
-from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessage, AudioSpectrumMessage
+from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessageProtocol, AudioSpectrumMessage
 from .message import MotorConfigurations, Motor
-from .observable_object import ObservableObject, ObservableObjectProtocol
 from .perf_monitor import PerfMonitor
 from .project import ProjectInfo, ProjectInterval, video_write_ext
 from .queue_util import clear_queue, trim_queue

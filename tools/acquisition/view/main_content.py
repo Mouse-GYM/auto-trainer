@@ -6,6 +6,7 @@ from PySide6.QtCore import QTimer, Slot
 from PySide6.QtWidgets import QGridLayout
 
 from autotrainer.core import Offset3DTuple
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference import PoseResponse, PoseAlgorithm
 from autotrainer.pyside import ATSeparator
 
@@ -17,6 +18,9 @@ from tools.acquisition.view.camera_content import CameraContent
 from tools.acquisition.view.diagnostics_content import DiagnosticsContent
 from tools.acquisition.view.hardware_control_content import HardwareControlContent
 from tools.acquisition.view.hardware_status_content import HardwareStatusContent
+
+
+logger = get_verbose_logger(__name__)
 
 
 class MainContent(ContentWidget):
@@ -102,33 +106,42 @@ class MainContent(ContentWidget):
 
         self._start = 0
 
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self.update_image)
-        self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
-
         # register handlers to events:
         self._model.property_changed += self._model_property_changed
         inference = self._model.inference
         inference.pose_response_ready += self.refresh_pose
-        inference.algo_initialised += self._algo_initialised
 
         self.set_diagnostics_visible(False)
 
+        self._prev_top_cam_detect = None
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self.update_image)
+        self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
+
+
     @Slot()
     def update_image(self):
-        if self._model.left_camera.is_enabled:
+        model = self._model
+        top_cam_pres = model.top_camera_presence_detection
+        cur_val = top_cam_pres.presence_detected.value
+        if cur_val != self._prev_top_cam_detect:
+            cur_sum = top_cam_pres.pc_sum.value
+            logger.notice("top_camera presence detected: %s sum=%s", cur_val, cur_sum)
+            self._prev_top_cam_detect = cur_val
+        if model.left_camera.is_enabled:
             self._left_camera_content.update_image()
-        if self._model.right_camera.is_enabled:
+        if model.right_camera.is_enabled:
             self._right_camera_content.update_image()
-        if self._model.top_camera.is_enabled:
+        if model.top_camera.is_enabled:
             self._top_camera_content.update_image()
         self._analysis_content.use_cache()
 
     def refresh_pose(self, response: PoseResponse):
         if self._model.left_camera.is_enabled:
-            self._left_camera_content.refresh_pose(response.x_y_1())
+            self._left_camera_content.refresh_pose(response.locations[0])
         if self._model.right_camera.is_enabled:
-            self._right_camera_content.refresh_pose(response.x_y_2())
+            self._right_camera_content.refresh_pose(response.locations[1])
 
     @property
     def is_diagnostics_visible(self) -> bool:
@@ -165,7 +178,3 @@ class MainContent(ContentWidget):
     def _model_property_changed(self, name: str, value, old_value):
         if name == "selected_animal" and value is not None:
             self._hardware_control_content.set_selected_animal(value)
-
-    def _algo_initialised(self, algo: PoseAlgorithm):
-        for cam_content in (self._left_camera_content, self._right_camera_content):
-            cam_content.algo_initialised(algo)

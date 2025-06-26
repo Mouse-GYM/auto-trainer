@@ -38,7 +38,7 @@ def process_data(file: str):
     measurements = MeasurementData.from_file(file)
 
     monitor = HeadbarPressureMonitor()
-    monitor.threshold = 10
+    monitor.load_cell_engaged_threshold = 10
     _print_detections(monitor, measurements)
 
 

@@ -7,7 +7,7 @@ from threading import Timer
 from autotrainer.core import PerfMonitor, SystemCommandKind, SystemStatusMessageKind
 
 from ..device_api import DeviceApi
-from ..head_fix_measurement import HeadFixMeasurement
+from autotrainer.core.analysis.head_fix_measurement import HeadFixMeasurement
 
 from .serial_interface import SerialInterface
 from .gym_device import GymDevice

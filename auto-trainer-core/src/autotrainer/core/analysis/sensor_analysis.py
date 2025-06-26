@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
-import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 import numpy
 
+from .head_fix_measurement import HeadFixMeasurement
+from .audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
 from ..perf_monitor import PerfMonitor
@@ -16,7 +17,6 @@ from ..message.audio_spectrum_message import AudioSpectrumMessage
 from .headbar_pressure_monitor import HeadbarPressureMonitor
 from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
-
 
 logger = get_verbose_logger(__name__)
 
@@ -53,6 +53,8 @@ class SensorAnalysis(ObservableObject):
 
         self._tare_detector = LoadCellTareMonitor()
         self._tare_callback = None
+
+        self._audio_thrashing_monitor = AudioSpectrumThrashMonitor()
 
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_count=3000)
 
@@ -92,6 +94,10 @@ class SensorAnalysis(ObservableObject):
         return self._tare_detector
 
     @property
+    def audio_thrashing_monitor(self):
+        return self._audio_thrashing_monitor
+
+    @property
     def is_headbar_switch_engaged(self):
         # TODO - this signal is not currently encapsulated in an object for whatever analysis is needed like the others.
         #  If it is used in the future, this should probably be refactored similar to the other sub-components.
@@ -100,12 +106,13 @@ class SensorAnalysis(ObservableObject):
     def stream_start(self):
         self._perf_monitor.reset()
 
-    def measurements_received(self, measurements):
-        weights = list()
-        switch = list()
-        pressure = list()
-        temperature = list()
-        humidity = list()
+    def measurements_received(self, measurements: List[HeadFixMeasurement]):
+        assert len(measurements) > 0
+        weights = []
+        switch = []
+        pressure = []
+        temperature = []
+        humidity = []
 
         if self._record_file is not None:
             file_timestamp = datetime.now()
@@ -127,19 +134,20 @@ class SensorAnalysis(ObservableObject):
             if self._record_file is not None:
                 try:
                     self._record_file.write(
-                        f"{m.when}, {m.timestamp}, {m.weight}, {m.switch}, {m.pressure},"
+                        f"{m.when}, {m.timestamp}, {m.weight}, {m.switch}, {m.pressure}, "
                         f"{m.temperature}, {m.humidity}\n")
-                except Exception as e:
+                except Exception as err:
                     # This could be too much if something major is wrong.  Just output once per file rotation.
                     if not self._had_write_error:
-                        logger.error(f"<sensor-analysis>: unable to write: {e}")
+                        logger.exception("<sensor-analysis>: unable to write: %s", err)
                         self._had_write_error = True
 
+        first_measure = measurements[0]
         # Load cell monitor.
-        self._load_cell_monitor.update(numpy.mean(weights), measurements[0].when, measurements[0].timestamp)
+        self._load_cell_monitor.update(numpy.mean(weights), first_measure.when, first_measure.timestamp)
 
         # Headbar analog pressure monitor.
-        self._headbar_pressure_monitor.update(pressure, measurements[0].when, measurements[0].timestamp)
+        self._headbar_pressure_monitor.update(pressure, first_measure.when, first_measure.timestamp)
 
         # Headbar digital switch - no real implementation at this time.
         self._is_headbar_switch_engaged = self._on_property_changed(SensorAnalysis.IS_HEADBAR_SWITCH_ENGAGED_PROPERTY,
@@ -157,6 +165,8 @@ class SensorAnalysis(ObservableObject):
     def audio_spectrum_received(self, spectrum: AudioSpectrumMessage):
         if spectrum is None or not spectrum.magnitudes:
             return
+
+        self._audio_thrashing_monitor.update(spectrum.magnitudes, spectrum.when, spectrum.index)
 
         if self._audio_record_file is not None:
             file_timestamp = datetime.now()

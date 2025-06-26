@@ -33,12 +33,12 @@ def test_headbar_detection():
     assert detection_count == 19
 
     # Lower threshold
-    detector.threshold = 20
+    detector.load_cell_engaged_threshold = 20
     detection_count = _count_detections(detector, measurements)
     assert detection_count == 39
 
     # Raise threshold
-    detector.threshold = 40
+    detector.load_cell_engaged_threshold = 40
     detection_count = _count_detections(detector, measurements)
     assert detection_count == 12
 

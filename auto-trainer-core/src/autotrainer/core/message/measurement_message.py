@@ -1,7 +1,7 @@
 from typing import Protocol
 
 
-class MeasurementMessage(Protocol):
+class MeasurementMessageProtocol(Protocol):
     """
     MeasurementMessage defines the expected interface for measurement data provided by the hardware.  This is expected
     object passed as part of a SystemStatusMessageKind.MEASUREMENTS message.

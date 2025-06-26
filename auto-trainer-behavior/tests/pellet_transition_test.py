@@ -7,11 +7,7 @@ import logging
 from functools import partial
 
 from autotrainer.behavior import PelletMachine, PelletState
-from .conftest import on_state_changed
-
-
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger('transitions').setLevel(logging.INFO)
+from .conftest import property_value_save_transitions
 
 
 def assert_load_cycle(machine: PelletMachine, should_release: bool = True) -> None:
@@ -92,8 +88,7 @@ def test_covered_disabled_load_cycle():
     machine = PelletMachine()
 
     state_transitions = []
-
-    machine.events.state_changed += partial(on_state_changed, state_transitions=state_transitions)
+    machine.events.state_changed += partial(property_value_save_transitions, transitions=state_transitions)
 
     machine.algorithm.pellet_cover_enabled = False
 
@@ -106,8 +101,3 @@ def test_covered_disabled_load_cycle():
         PelletState.releasing,
         PelletState.monitoring,
     ]
-
-
-if __name__ == '__main__':
-    test_covered_load_cycle()
-    test_covered_disabled_load_cycle()

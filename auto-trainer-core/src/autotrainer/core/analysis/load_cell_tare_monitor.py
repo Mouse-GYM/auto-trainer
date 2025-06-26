@@ -1,10 +1,13 @@
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable, Optional, List
 
 from typing_extensions import Self
 
 import numpy
 import yaml
+
+
+TareCallbackT = Optional[Callable[[], bool]]
 
 
 @dataclass
@@ -43,11 +46,12 @@ class LoadCellTareMonitor:
         self._duration: float = 2.0
         self._sample_rate: int = 100
 
+        self._baseline: float = 0
         self._buffer_len = 0
         self._values = None
         self._index = 0
 
-        self._tare_callback: Optional[Callable[[], None]] = None
+        self._tare_callback: TareCallbackT = None
 
         self._reset()
 
@@ -86,11 +90,15 @@ class LoadCellTareMonitor:
         self._reset()
 
     @property
+    def baseline(self) -> float:
+        return self._baseline
+
+    @property
     def tare_callback(self):
         return self._tare_callback
 
     @tare_callback.setter
-    def tare_callback(self, tare_callback: Callable[[], None]) -> None:
+    def tare_callback(self, tare_callback: TareCallbackT) -> None:
         self._tare_callback = tare_callback
 
     def load_configuration(self, configuration: LoadCellAutoTareConfiguration):
@@ -106,9 +114,9 @@ class LoadCellTareMonitor:
             duration=self._duration
         )
 
-    def update(self, values: list) -> bool:
+    def update(self, values: List[float]) -> bool:
         # Currently there is no state management or other reason to perform the calculation if there is no callback.
-        if not self._tare_callback:
+        if self._tare_callback is None:
             return False
 
         increase = len(values)
@@ -120,12 +128,23 @@ class LoadCellTareMonitor:
         if self._index >= self._buffer_len:
             self._index = 0
 
-        if numpy.all(numpy.abs(self._values) > self._threshold) and numpy.ptp(
-            self._values) <= self._range_threshold:
-            self._tare_callback()
+        if (
+            numpy.all(numpy.abs(self._values - self._baseline) > self._threshold)
+            and numpy.ptp(self._values) <= self._range_threshold
+        ):
+            if self._tare_callback():
+                self.reset_baseline()
+            else:
+                self.update_baseline()
             return True
 
         return False
+
+    def update_baseline(self):
+        self._baseline = numpy.average(self._values)
+
+    def reset_baseline(self):
+        self._baseline = 0
 
     def _reset(self) -> None:
         self._buffer_len = int(self._sample_rate * self._duration)

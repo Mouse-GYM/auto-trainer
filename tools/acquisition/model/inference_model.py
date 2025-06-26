@@ -1,6 +1,4 @@
 import logging
-import math
-import multiprocessing
 import operator
 import os
 import queue
@@ -11,7 +9,7 @@ import typing
 from itertools import chain
 from pathlib import Path
 from statistics import mean
-from typing import Optional, Union, List, Dict, TextIO, Tuple
+from typing import Optional, List, Dict, TextIO, Tuple
 from dataclasses import dataclass
 from enum import Enum
 from threading import Thread
@@ -32,7 +30,7 @@ from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     DlcPoseModel, MemoryPoseModel, InferenceMode, PoseResponse
-from autotrainer.inference.pose_elements import SceneElement
+from autotrainer.core.pose_elements import SceneElement
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
 logger = get_verbose_logger(__name__)
@@ -189,7 +187,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             (SceneElement.Diamond, SceneElement.Triangle),
             (SceneElement.Star, SceneElement.Triangle),
         ]
-        self._parts_offsets: Dict[Tuple[str, str], Offset3DTuple] = {}
+        self._parts_offsets: Dict[Tuple[SceneElement, SceneElement], Offset3DTuple] = {}
 
     @property
     def project(self) -> ProjectInfo:
@@ -242,8 +240,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
     def get_parts_offsets(self, part1: str, part2: str) -> Optional[Offset3DTuple]:
         """Return the offsets of part2 relative to part1 as last known"""
-        part1 = SceneElement(part1).value
-        part2 = SceneElement(part2).value
+        part1 = SceneElement(part1)
+        part2 = SceneElement(part2)
         v_offsets = self._parts_offsets.get((part1, part2), None)
         if v_offsets is None:
             v_offsets = self._parts_offsets.get((part2, part1), None)
@@ -309,9 +307,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             self._offline_queue.put_frame_index_category(empty, FrameIndexCategory.SWITCH_TO_ONLINE)
 
     def start(self, network_queue: FixedArrayMultiQueue) -> bool:
-        # if self._msg_thread is None:
-        #     self._msg_thread = Thread(target=self._monitor_msg_queue)
-        #     self._msg_thread.start()
+        if self._msg_thread is None:
+            self._msg_thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue")
+            self._msg_thread.start()
 
         if self._data_thread is None:
             self._data_thread = Thread(target=self._monitor_data_queue, name="monitor_data_queue")
@@ -359,29 +357,31 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         return True
 
     def stop(self):
-        if self._process is not None:
+        proc = self._process
+        if proc is not None:
             self._set_status(InferenceStatus.stopping)
             self._send_message(InferenceCommandMessageKind.Terminate)
 
             logger.debug(f"<pellet> waiting for process termination")
 
-            t_timeout_sigint = time.time() + 10
-            t_timeout_sigterm = time.time() + 20
+            t_timeout_sigint = time.time() + 30
+            t_timeout_sigterm = time.time() + 60
             while True:
                 t = time.time()
                 if t > t_timeout_sigterm:
-                    logger.warning("sending SIGTERM to %s", self._process)
-                    self._process.terminate()
+                    logger.warning("sending SIGTERM to %s", proc)
+                    # proc.terminate()
+                    os.kill(proc.pid, signal.SIGTERM)
                     break
                 if t > t_timeout_sigint:
-                    t_timeout_sigint += 4
-                    logger.warning("sending SIGINT to %s", self._process)
-                    os.kill(self._process.pid, signal.SIGINT)
-                if not self._process.is_alive():
+                    t_timeout_sigint += 10
+                    logger.warning("sending SIGINT to %s", proc)
+                    os.kill(proc.pid, signal.SIGINT)
+                if not proc.is_alive():
                     break
                 time.sleep(0.1)
-            self._process.join()
-            logger.debug(f"<pellet> process terminated")
+            proc.join()
+            logger.info("<pellet> process exited with %s", proc.exitcode)
             self._process = None
 
             self._set_status(InferenceStatus.stopped)
@@ -393,6 +393,16 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
     def terminate(self):
         self.stop()
         self._is_running = False
+        data_thread = self._data_thread
+        if data_thread is not None:
+            logger.verbose("joining data_thread")
+            data_thread.join()
+            self._data_thread = None
+        msg_thread = self._msg_thread
+        if msg_thread is not None:
+            logger.verbose("joining msg_thread")
+            msg_thread.join()
+            self._msg_thread.join()
 
     def load_configuration(self, configuration: InferenceConfiguration):
         self.model_location = configuration.pose_model_location
@@ -415,36 +425,36 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         cmd_queue.put((kind, context))
         logger.debug("sent command msg %s qsize=%s", kind, cmd_queue.qsize())
 
-    # def _monitor_msg_queue(self):
-    #     while self._is_running:
-    #         try:
-    #             msg, context = self._msg_queue.get(timeout=0.5)
-    #         except queue.Empty:
-    #             continue
-    #
-    #         logger.debug("Processing msg %s ...", msg)
-    #         try:
-    #             if msg == InferenceStatusMessageKind.Initialized:
-    #                 self._set_status(InferenceStatus.waiting)
-    #                 self._algorithm.initialize(context)
-    #                 self._send_message(InferenceCommandMessageKind.Start)
-    #             elif msg == InferenceStatusMessageKind.Loading:
-    #                 self._set_status(InferenceStatus.loading)
-    #             elif msg == InferenceStatusMessageKind.Performance:
-    #                 logger.info(f"{context :.1f} predict calls/s")
-    #                 fps = context * self._frames_per_camera
-    #                 logger.info(f"{fps :.1f} frames/camera/s ({(fps * 2):.1f} total frames/s)")
-    #             elif msg == InferenceStatusMessageKind.Running:
-    #                 mode = InferenceMode(context)
-    #                 logger.info(f"predict running with {mode.name} queue")
-    #                 if mode == InferenceMode.Live:
-    #                     self._set_status(InferenceStatus.live)
-    #                 else:
-    #                     self._set_status(InferenceStatus.intersession)
-    #             else:
-    #                 logger.warning("Unhandled msg: %s", msg)
-    #         except Exception as err:
-    #             logger.exception("Error processing msg %s: %s", msg, err)
+    def _monitor_msg_queue(self):
+        while self._is_running:
+            try:
+                msg, context = self._msg_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            logger.debug("Processing msg %s ...", msg)
+            try:
+                if msg == InferenceStatusMessageKind.Initialized:
+                    self._set_status(InferenceStatus.waiting)
+                    self._algorithm.initialize(context)
+                    self._send_message(InferenceCommandMessageKind.Start)
+                    self.algo_initialised(self._algorithm)
+                elif msg == InferenceStatusMessageKind.Loading:
+                    self._set_status(InferenceStatus.loading)
+                elif msg == InferenceStatusMessageKind.Performance:
+                    logger.info(f"{context :.1f} predict calls/s")
+                    fps = context * self._frames_per_camera
+                    logger.info(f"{fps :.1f} frames/camera/s ({(fps * 2):.1f} total frames/s)")
+                elif msg == InferenceStatusMessageKind.Running:
+                    mode = InferenceMode(context)
+                    logger.info(f"predict running with {mode.name} queue")
+                    if mode == InferenceMode.Live:
+                        self._set_status(InferenceStatus.live)
+                    else:
+                        self._set_status(InferenceStatus.intersession)
+                else:
+                    logger.warning("Unhandled msg: %s", msg)
+            except Exception as err:
+                logger.exception("Error processing msg %s: %s", msg, err)
 
     def _monitor_data_queue(self):
         cams = [self.project.camera_1, self.project.camera_2]
@@ -453,9 +463,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         cams_frame_idx_fhs = None
         pose_paths: List[Path] = []
         axis_labels = ("x", "y", "likelihood")
-        columns = pandas.MultiIndex.from_product([self._algorithm.part_names, axis_labels],
-                                                 names=["bodyparts", "coords"])
-        # not the one being used, part_names being empty at this moment, see comment below when re-assigned
         cams_read_h5_dss: List[h5py.Dataset] = []
         cams_read_h5_idx: List[int] = []
         recording_in_progress = False
@@ -485,37 +492,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 cnt_data_received = 0
                 tot_skipped = 0
                 writes_h5_live_durations.clear()
-
-            try:
-                msg, context = self._msg_queue.get_nowait()
-            except queue.Empty:
-                pass
-            else:
-                logger.debug("Processing msg %s ...", msg)
-                try:
-                    if msg == InferenceStatusMessageKind.Initialized:
-                        self._set_status(InferenceStatus.waiting)
-                        self._algorithm.initialize(context)
-                        self._send_message(InferenceCommandMessageKind.Start)
-                        self.algo_initialised(self._algorithm)
-                        columns = self._algorithm.pose_result_columns
-                    elif msg == InferenceStatusMessageKind.Loading:
-                        self._set_status(InferenceStatus.loading)
-                    elif msg == InferenceStatusMessageKind.Performance:
-                        logger.info(f"{context :.1f} predict calls/s")
-                        fps = context * self._frames_per_camera
-                        logger.info(f"{fps :.1f} frames/camera/s ({(fps * 2):.1f} total frames/s)")
-                    elif msg == InferenceStatusMessageKind.Running:
-                        mode = InferenceMode(context)
-                        logger.info(f"predict running with {mode.name} queue")
-                        if mode == InferenceMode.Live:
-                            self._set_status(InferenceStatus.live)
-                        else:
-                            self._set_status(InferenceStatus.intersession)
-                    else:
-                        logger.warning("Unhandled msg: %s", msg)
-                except Exception as err:
-                    logger.exception("Error processing msg %s: %s", msg, err)
 
             prev_mode = next_prev_mode  # don't forget
             try:
@@ -549,8 +525,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             continue
                         cur = [a for a in cur_h5_live if len(a) > 0]  # if not necessary when correctly filtered ahead
                         cur = numpy.vstack(cur)
-                        indices = range(cur.shape[0])
-                        df_xyp = pandas.DataFrame(cur, columns=columns, index=indices)
+                        indices = list(range(cur.shape[0]))
+                        df_xyp = pandas.DataFrame(cur, columns=self._algorithm.pose_result_columns, index=indices)
                         df_xyp["frame_idx"] = list(cur_cam_indices)  # also store the frame idx with the results
                         logger.debug("flushing remaining h5 batch (%s) to %s",
                                      len(df_xyp), cam_pose_path)
@@ -629,9 +605,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             if len(cam_h5_live) >= self._recording_live_batch:
                                 t0 = time.time()
                                 cur = numpy.vstack(cam_h5_live)
-                                indices = range(cur.shape[0])
+                                indices = list(range(cur.shape[0]))
                                 df_xyp = pandas.DataFrame(cur,
-                                                          columns=columns, index=indices)
+                                                          columns=self._algorithm.pose_result_columns, index=indices)
                                 df_xyp["frame_idx"] = list(cam_indices)  # also store the frame idx with the results
                                 df_xyp.to_hdf(cam_pose_path,
                                               "df_with_missing",

@@ -2,8 +2,8 @@ from typing import List
 
 import pandas as pd
 
-from autotrainer.inference.config import StereoParams
-from .prepare_jetson_data import triangulate_3d_step1, undistort_views
+from autotrainer.core.analysis.config import StereoParams
+from autotrainer.core.analysis.prepare_jetson_data import undistort_views, triangulate_3d_step1
 
 
 def undistort_points(

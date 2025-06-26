@@ -1,17 +1,51 @@
+import dataclasses
 import logging
+import math
 import time
 from datetime import datetime
 from enum import Enum
-from typing import Callable
+from typing import Callable, Optional
 
+from typing import Callable
 from typing_extensions import Self
 
-from autotrainer.core import ObservableObject, EventManager, BehaviorConfiguration, post_trigger_enable
+from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core import ObservableObject, EventManager, BehaviorConfiguration, post_trigger_enable, Offset3DTuple
 
 from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
 
-logger = logging.getLogger(__name__)
+
+logger = get_verbose_logger(__name__)
+
+class CheckThresholdWay(str, Enum):
+    TRIGGER_IF_GREATER = "trigger_if_greater"
+    TRIGGER_IF_SMALLER = "trigger_if_smaller"
+
+
+class CoverServoStatus(int, Enum):
+    OK = 0
+    COVER_POSITION_ERROR = 1
+    RELEASE_POSITION_ERROR = 2
+
+    COVER_AND_RELEASE_POS_ERROR = COVER_POSITION_ERROR | RELEASE_POSITION_ERROR
+
+    @property
+    def is_error(self):
+        return self is not CoverServoStatus.OK
+
+
+@dataclasses.dataclass
+class CheckElementDistanceContext:
+    distance_property_name: str
+    cover_servo_status: CoverServoStatus
+    error_way: CheckThresholdWay
+    error_distance_threshold: float
+    error_min_duration_threshold: float = math.inf  # unit is second
+
+    distance: float = 0  # unit probably millimeter
+    error_detected: bool = False
+    error_start_timestamp: Optional[float] = None
 
 
 class BehaviorProps(str, Enum):
@@ -24,6 +58,10 @@ class BehaviorProps(str, Enum):
     PELLET_COVER_ENABLED = 'pellet_cover_enabled'
     SESSION_PELLET_COUNT = 'session_pellet_count'
 
+    PELLET_MOTOR_DRIFT = 'pellet_motor_drift'
+    COVER_SERVO_STATUS = 'cover_servo_status'
+    COVER_PELLET_DISTANCE = "cover_pellet_distance"
+    RELEASE_PELLET_DISTANCE = "release_pellet_distance"
 
 
 class BehaviorAlgorithm(ObservableObject):
@@ -33,8 +71,23 @@ class BehaviorAlgorithm(ObservableObject):
     session_starting: Callable[[], None]
     session_ending: Callable[[], None]
 
-    def __init__(self):
-        super().__init__(event_names=("session_starting", "session_ending"))
+    pellet_motor_drift_changed: Callable[[Offset3DTuple], None]
+    cover_servo_status_changed: Callable[[CoverServoStatus], None]
+
+    def __init__(
+        self,
+        *,
+        diamond_triangle_known_offset: Optional[Offset3DTuple] = Offset3DTuple(0, 0, 0),  # None,
+        cover_error_min_distance_threshold: float = 2,  # math.inf,   # probably millimeter
+        release_error_min_distance_threshold: float = 2,  # math.inf,
+        cover_release_min_duration_threshold: float = 3,  # seconds
+    ):
+        super().__init__(event_names=(
+            "session_starting",
+            "session_ending",
+            "cover_servo_status_changed",
+            "pellet_motor_drift_changed",
+        ))
         self._project_info = None
 
         self._pellet_delivery_enabled = True
@@ -74,6 +127,26 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._pellets_presented: int = 0
         self._successful_reaches: int = 0
+
+        self._cover_servo_status = CoverServoStatus.OK
+
+        self._diamond_triangle_known_offset = diamond_triangle_known_offset
+        self._diamond_triangle_prev_drift: Optional[Offset3DTuple] = None
+
+        self._cover_pellet_distance_ctx = CheckElementDistanceContext(
+            distance_property_name=         BehaviorProps.COVER_PELLET_DISTANCE,
+            error_distance_threshold=       cover_error_min_distance_threshold,
+            error_min_duration_threshold=   cover_release_min_duration_threshold,
+            error_way=                      CheckThresholdWay.TRIGGER_IF_SMALLER,
+            cover_servo_status=             CoverServoStatus.COVER_POSITION_ERROR,
+        )
+        self._release_pellet_distance_ctx = CheckElementDistanceContext(
+            distance_property_name=         BehaviorProps.RELEASE_PELLET_DISTANCE,
+            error_distance_threshold=       release_error_min_distance_threshold,
+            error_min_duration_threshold=   cover_release_min_duration_threshold,
+            error_way=                      CheckThresholdWay.TRIGGER_IF_GREATER,
+            cover_servo_status=             CoverServoStatus.RELEASE_POSITION_ERROR,
+        )
 
     @property
     def limits(self) -> Self:
@@ -252,6 +325,21 @@ class BehaviorAlgorithm(ObservableObject):
         if prev != value:
             EventManager.default().post_event_content(BehaviorEventKind.pelletSuccessfulReach, context=value)
 
+    @property
+    def cover_servo_status(self) -> CoverServoStatus:
+        return self._cover_servo_status
+
+    @cover_servo_status.setter
+    def cover_servo_status(self, status: CoverServoStatus):
+        self._cover_servo_status = self._on_property_changed(BehaviorProps.COVER_SERVO_STATUS,
+                                                             status, self._cover_servo_status)
+        if status is CoverServoStatus.OK:
+            logger.notice("Set cover servo status to %s", status)
+
+    @property
+    def diamond_triangle_known_offset(self):
+        return self._diamond_triangle_known_offset
+
     def start_session(self):
         if self._is_in_session:
             return
@@ -353,6 +441,62 @@ class BehaviorAlgorithm(ObservableObject):
         configuration.head_clamp.auto_clamp_intensity = self.auto_clamp_intensity
         configuration.head_clamp.auto_clamp_release_tone_freq = self.auto_clamp_release_tone_freq
         configuration.head_clamp.auto_clamp_release_tone_delay = self.auto_clamp_release_delay
+
+    def handle_diamond_triangle_offset(self, offset: Offset3DTuple):
+        known_offset = self._diamond_triangle_known_offset
+        if known_offset is None:
+            return
+        prev = self._diamond_triangle_prev_drift
+        drift = known_offset - offset
+        d_drift = None if prev is None else prev - drift
+        # not sure which abs_diff to check against:
+        if d_drift is None or any(abs(d) > 1 for d in d_drift):
+            logger.verbose("diamond triangle offset drift: %s d_drift=%s", drift, d_drift)
+        if prev != drift:
+            self.pellet_motor_drift_changed(drift)
+        self._diamond_triangle_prev_drift = self._on_property_changed(BehaviorProps.PELLET_MOTOR_DRIFT, drift, prev)
+
+    def handle_cover_pellet_offset(self, offset: Offset3DTuple):
+        self._handle_check_element_distance(self._cover_pellet_distance_ctx, offset)
+
+    def handle_release_pellet_offset(self, offset: Offset3DTuple):
+        self._handle_check_element_distance(self._release_pellet_distance_ctx, offset)
+
+    def _handle_check_element_distance(self, ctx: CheckElementDistanceContext, offset: Offset3DTuple):
+        if ctx.error_detected:
+            # for now: we only set once this flag, never clear it.
+            return
+        distance = math.sqrt(offset.x ** 2 + offset.y ** 2 + offset.y ** 2)
+        prev_distance = ctx.distance
+        ctx.distance = self._on_property_changed(ctx.distance_property_name, distance, prev_distance)
+        if ctx.error_way is CheckThresholdWay.TRIGGER_IF_GREATER:
+            is_error = distance >= ctx.error_distance_threshold
+        else:
+            assert ctx.error_way is CheckThresholdWay.TRIGGER_IF_SMALLER
+            is_error = distance <= ctx.error_distance_threshold
+        if not is_error:
+            # we might want to only unset the error_start_timestamp after some minimum duration too
+            if ctx.error_start_timestamp is not None:
+                ctx.error_start_timestamp = None
+                logger.info("End of deviation on %s ; distance=%s",
+                            ctx.distance_property_name, distance)
+            return
+        t_now = time.time()
+        if ctx.error_start_timestamp is None:
+            ctx.error_start_timestamp = t_now
+            logger.warning("Detected start of %s deviation ; distance=%s threshold=%s",
+                           ctx.distance_property_name, distance, ctx.error_distance_threshold)
+        else:
+            if t_now - ctx.error_start_timestamp >= ctx.error_min_duration_threshold:
+                logger.critical("Detected %s over threshold ; distance=%.3f prev=%s threshold=%s",
+                                ctx.distance_property_name, distance, prev_distance,
+                                ctx.error_distance_threshold)
+                ctx.error_detected = True
+                prev_status = self._cover_servo_status
+                new_status = CoverServoStatus(prev_status | ctx.cover_servo_status)
+                self.cover_servo_status_changed(new_status)
+                self._cover_servo_status = self._on_property_changed(
+                    BehaviorProps.COVER_SERVO_STATUS, new_status, prev_status)
 
     def _start_day(self):
         self._day_pellet_count = 0

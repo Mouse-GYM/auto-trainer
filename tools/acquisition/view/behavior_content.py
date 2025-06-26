@@ -52,7 +52,7 @@ class BehaviorContent(ContentWidget):
 
         content_layout.addWidget(QLabel("Auto-Clamp Threshold:"), 1, 4)
         self._auto_clamp_threshold = QSpinBox(None)
-        self._auto_clamp_threshold.setValue(self._analysis.headbar_pressure_monitor.threshold)
+        self._auto_clamp_threshold.setValue(self._analysis.headbar_pressure_monitor.load_cell_engaged_threshold)
         self._auto_clamp_threshold.setMinimum(0)
         self._auto_clamp_threshold.setMaximum(1023)
         self._auto_clamp_threshold.setWrapping(False)
@@ -161,7 +161,7 @@ class BehaviorContent(ContentWidget):
         self._inference_model.model_location = self._location.text()
 
     def _update_auto_clamp_intensity(self, value):
-        self._analysis.headbar_pressure_monitor.threshold = value
+        self._analysis.headbar_pressure_monitor.load_cell_engaged_threshold = value
 
     def _make_position_baseline(self):
         self._behavior_model.use_current_head_magnet_position_as_baseline()

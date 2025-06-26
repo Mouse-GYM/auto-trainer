@@ -1,7 +1,10 @@
 import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Timer
+from typing import Callable, List, Tuple, Deque, Optional, Union
+
 from typing_extensions import Self
 
 import yaml
@@ -13,6 +16,11 @@ from ..event import EventManager
 from .analysis_measurement_event_kind import AnalysisMeasurementEventKind
 
 _NO_OP_TIMER = Timer(1.0, lambda: None)
+
+
+# to allow to be patched from tests:
+_timer_load_cell_engaged = Timer
+
 
 
 @dataclass
@@ -48,63 +56,128 @@ class LoadCellMonitor(ObservableObject):
     whether to start and stop "sessions" of an experiment.
     """
 
-    THRESHOLD_PROPERTY = "threshold"
+    LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY = "load_cell_engaged_threshold"
     IS_ENGAGED_PROPERTY = "is_engaged"
+    IS_THRASHING_DETECTED_PROPERTY = "is_thrashing_detected"
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        thrashing_var_weight_threshold: float = 25,  # g for grams
+        thrashing_var_minimum_delay: float = 1,  # seconds
+        ):
         super().__init__()
 
-        self._threshold: float = 10.0
+        self._load_cell_engaged_threshold: float = 10.0
         self.threshold_duration: float = 0.25
         self.min_hold_duration: float = 5.0
         self.post_hold_duration: float = 2.0
 
         self._last_active_start: int = 0
         self._was_active: bool = False
+        self._t_start_was_active: Optional[float] = None
         self._active_debounce: Timer = _NO_OP_TIMER
         self._inactive_debounce: Timer = _NO_OP_TIMER
         self._when = 0
         self._index = 0
-
         self._is_engaged: bool = False
 
-    @property
-    def threshold(self) -> float:
-        return self._threshold
+        self._thrashing_var_weight_threshold = thrashing_var_weight_threshold
+        self._thrashing_var_minimum_delay = thrashing_var_minimum_delay
+        self._values_history: Deque[
+            Tuple[float, float, int]
+            # data, when, index
+        ] = deque()
+        self._history_max_age: float = thrashing_var_minimum_delay  # seconds
+        self._thrashing_detected: bool = False
 
-    @threshold.setter
-    def threshold(self, value: float):
-        self._threshold = self._on_property_changed(LoadCellMonitor.THRESHOLD_PROPERTY, value, self._threshold)
+    @property
+    def load_cell_engaged_threshold(self) -> float:
+        return self._load_cell_engaged_threshold
+
+    @load_cell_engaged_threshold.setter
+    def load_cell_engaged_threshold(self, value: float):
+        self._load_cell_engaged_threshold = self._on_property_changed(LoadCellMonitor.LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY, value, self._load_cell_engaged_threshold)
 
     @property
     def is_engaged(self) -> bool:
         return self._is_engaged
 
+    @property
+    def thrashing_detected(self) -> bool:
+        return self._thrashing_detected
+
+    @property
+    def thrashing_var_minimum_delay(self) -> float:
+        return self._thrashing_var_minimum_delay
+
+    @thrashing_var_minimum_delay.setter
+    def thrashing_var_minimum_delay(self, value):
+        self._thrashing_var_minimum_delay = value
+
+    @property
+    def thrashing_var_weight_threshold(self) -> float:
+        return self._thrashing_var_weight_threshold
+
+    @thrashing_var_weight_threshold.setter
+    def thrashing_var_weight_threshold(self, value):
+        self._thrashing_var_minimum_delay = value
+
     def load_configuration(self, configuration: LoadCellConfiguration):
-        self.threshold = configuration.threshold
+        self.load_cell_engaged_threshold = configuration.threshold
         self.threshold_duration = configuration.threshold_duration
         self.min_hold_duration = configuration.min_event_duration
         self.post_hold_duration = configuration.min_post_event_hold_duration
 
     def save_configuration(self) -> LoadCellConfiguration:
         return LoadCellConfiguration(
-            threshold=self.threshold,
+            threshold=self.load_cell_engaged_threshold,
             threshold_duration=self.threshold_duration,
             min_event_duration=self.min_hold_duration,
             min_post_event_hold_duration=self.post_hold_duration
         )
 
-    def update(self, value: numpy.floating, when: float, index: int):
-        if value > self.threshold:
+    def _update_history(self, value, when, index):
+        hist = self._values_history
+        while len(hist) > 0:
+            h0_val, h0_when, h0_idx = hist[0]
+            if when - h0_when <= self._history_max_age:
+                break
+            hist.popleft()
+        hist.append((value, when, index))
+
+    def update(self, value: Union[float, numpy.floating], when: float, index: int):
+        self._update_history(value, when, index)
+        t_start = self._t_start_was_active
+        prev_detected = self._thrashing_detected
+        if value > self.load_cell_engaged_threshold:
             self._inactive_debounce.cancel()
-            if not self._was_active:
+            if t_start is not None:
+                if when - self._t_start_was_active > self._thrashing_var_minimum_delay:
+                    ptp_value = numpy.ptp([
+                        h_val
+                        for h_val, h_when, _ in self._values_history
+                        if when - h_when < self._thrashing_var_minimum_delay
+                    ])
+                    new_detected = bool(
+                        # NB: using bool() given value is numpy.bool_ otherwise,
+                        # we want to use native python bool instead, so the bool().
+                        ptp_value >= self._thrashing_var_weight_threshold
+                    )
+                    self._thrashing_detected = self._on_property_changed(
+                        self.IS_THRASHING_DETECTED_PROPERTY, new_detected, prev_detected)
+            else:
                 self._was_active = True
+                self._t_start_was_active = when
                 self._when = when
                 self._index = index
-                self._active_debounce = Timer(self.threshold_duration, self._ensure_active)
+                self._active_debounce = _timer_load_cell_engaged(self.threshold_duration, self._ensure_active)
                 self._active_debounce.start()
         else:
             self._active_debounce.cancel()
+            # not sure that we want this here:
+            self._thrashing_detected = self._on_property_changed(self.IS_THRASHING_DETECTED_PROPERTY, False, prev_detected)
+            #
             if self._was_active:
                 self._was_active = False
                 self._when = when

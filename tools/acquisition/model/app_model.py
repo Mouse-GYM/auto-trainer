@@ -1,16 +1,16 @@
 import json
 import logging
-import multiprocessing
+import pickle
 import queue
 import time
-import typing
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import yaml
 
+from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, MessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
                               get_system_configuration_dumper, NotificationCenter, TriggerNotification)
@@ -18,8 +18,10 @@ from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
 from autotrainer.core.multiproc import get_mp_ctx
+from autotrainer.core.analysis.config import load_calib_stereo_params
 from autotrainer.inference import PoseAlgorithm
-from autotrainer.inference.config import load_calib_stereo_params
+from autotrainer.behavior.behavior_algorithm import BehaviorProps
+from autotrainer.video.detection import PresenceDetectionAttrs
 
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
@@ -48,7 +50,9 @@ class AppModel(ObservableObject):
 
         self._left_camera = VideoCaptureModel("left", self._preferences, 0)
         self._right_camera = VideoCaptureModel("right", self._preferences, 1)
+
         self._top_camera = VideoCaptureModel("web", self._preferences, -1)
+        self._top_camera_presence_detection = PresenceDetectionAttrs()
 
         self._cameras = [self._left_camera, self._right_camera, self._top_camera]
 
@@ -69,10 +73,28 @@ class AppModel(ObservableObject):
             self._stereo_params = load_calib_stereo_params(
                 calib_src_dir.joinpath('camera_matrix', 'stereo_params.pickle')
             )
+            metadata_path = calib_src_dir.joinpath('calibration_userset.yaml')
+            with metadata_path.open() as fh:
+                self._calib_metadata = yaml.safe_load(fh)
+
+            square_size, _, _ = calibration_FLIR.get_calibration_info(calib_src_dir.as_posix())
+            cam_names = calibration_FLIR.get_video_list(calib_src_dir.as_posix())
+            path_offsets = calib_src_dir.joinpath('camera_offsets.pkl')
+            # if path_offsets.is_file():
+            with open(path_offsets, "rb") as fh:
+                cam_offsets = pickle.load(fh)
         else:
             self._stereo_params = None
+            self._calib_metadata = None
+            square_size = cam_names = None
 
-        self._pose_algorithm = PoseAlgorithm(stereo_params=self._stereo_params)
+        self._pose_algorithm = PoseAlgorithm(
+            stereo_params=self._stereo_params,
+            calib_metadata=self._calib_metadata,
+            cam_names=cam_names,
+            square_size=square_size,
+            cam_offsets=cam_offsets,
+        )
 
         self._inference = InferenceModel(self._pose_algorithm)
 
@@ -88,12 +110,12 @@ class AppModel(ObservableObject):
 
         self._notes = ""
 
-        self._models: typing.List[ProjectDependentProtol] = [self._left_camera, self._right_camera, self._top_camera,
+        self._models: List[ProjectDependentProtol] = [self._left_camera, self._right_camera, self._top_camera,
                                                              self._inference, self._behavior]
 
-        self._animals: typing.List[AnimalSubject] = []
+        self._animals: List[AnimalSubject] = []
 
-        self._selected_animal: typing.Optional[AnimalSubject] = None
+        self._selected_animal: Optional[AnimalSubject] = None
 
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
@@ -124,6 +146,10 @@ class AppModel(ObservableObject):
         return self._top_camera
 
     @property
+    def top_camera_presence_detection(self):
+        return self._top_camera_presence_detection
+
+    @property
     def behavior(self):
         return self._behavior
 
@@ -148,19 +174,19 @@ class AppModel(ObservableObject):
         return self._output_location
 
     @property
-    def animals(self) -> typing.List[AnimalSubject]:
+    def animals(self) -> List[AnimalSubject]:
         return self._animals
 
     @animals.setter
-    def animals(self, value: typing.List[AnimalSubject]):
+    def animals(self, value: List[AnimalSubject]):
         self._animals = self._on_property_changed("animals", value, self._animals)
 
     @property
-    def selected_animal(self) -> typing.Optional[AnimalSubject]:
+    def selected_animal(self) -> Optional[AnimalSubject]:
         return self._selected_animal
 
     @selected_animal.setter
-    def selected_animal(self, value: typing.Optional[AnimalSubject]):
+    def selected_animal(self, value: Optional[AnimalSubject]):
         self._selected_animal = self._on_property_changed("selected_animal", value, self._selected_animal)
 
         if self._selected_animal is not None:
@@ -266,7 +292,9 @@ class AppModel(ObservableObject):
                               _failed_camera_template(self.right_camera.name, self.right_camera.last_error))
 
         if did_start:
-            did_start = did_start and self.top_camera.on_prepare_capture()
+            did_start = did_start and self.top_camera.on_prepare_capture(
+                presence_detection_attrs=self._top_camera_presence_detection,
+            )
             if not did_start:
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(self.top_camera.name, self.top_camera.last_error))
@@ -378,7 +406,6 @@ class AppModel(ObservableObject):
 
     def save_configuration(self):
         conf = self._create_configuration()
-
         return conf.save_default(self._preferences.configuration_location)
 
     def on_activated(self):
@@ -395,6 +422,7 @@ class AppModel(ObservableObject):
 
         self.hardware.disconnect()
         self._message_handler.request_terminate()
+        # should we self._message_handler.wait_terminated() ?
 
         self.save_configuration()
 
@@ -430,7 +458,7 @@ class AppModel(ObservableObject):
         logger.debug("behavior property changed: %s: %s -> %s", name, old_value, new_value)
 
     def _on_behavior_algo_property_changed(self, name: str, value, _):
-        if name == "baseline_intensity" and self._selected_animal is not None:
+        if name == BehaviorProps.BASELINE_INTENSITY and self._selected_animal is not None:
             self._selected_animal.baseline_magnet_intensity = value
             self._save_animal_metadata()
 

@@ -1,0 +1,10 @@
+alpha: 1
+camera_pos:
+  camLazi: -55
+  camLele: 12.5
+  camRazi: -5
+  camRele: 30
+gamma: 1
+num_frames: 100
+oversample: 4
+quality: 0.95

@@ -98,7 +98,7 @@ class AnalysisContent(ContentWidget):
         layout.addWidget(QLabel("Load Cell Threshold (g):"))
         self._load_cell = QLineEdit(None, None)
         self._load_cell.editingFinished.connect(self._update_trigger)
-        self._load_cell.setText(str(self._analysis.load_cell_monitor.threshold))
+        self._load_cell.setText(str(self._analysis.load_cell_monitor.load_cell_engaged_threshold))
         layout.addWidget(self._load_cell)
 
         layout.addStretch(1)
@@ -166,4 +166,6 @@ class AnalysisContent(ContentWidget):
         self.diamond_triangle_offset_changed.emit(_render_offset_3d_value(offset))
 
     def _star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
-        self.star_triangle_offset_changed.emit(_render_offset_3d_value(offset))
+        self.star_triangle_offset_changed.emit(
+            "n/a" if offset is None else f"{offset.distance:.2f} mm"
+        )
