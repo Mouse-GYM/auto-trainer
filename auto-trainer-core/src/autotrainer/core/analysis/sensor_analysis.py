@@ -107,6 +107,7 @@ class SensorAnalysis(ObservableObject):
         self._perf_monitor.reset()
 
     def measurements_received(self, measurements: List[HeadFixMeasurement]):
+        logger.debug("Received %s measures", len(measurements))
         assert len(measurements) > 0
         weights = []
         switch = []
