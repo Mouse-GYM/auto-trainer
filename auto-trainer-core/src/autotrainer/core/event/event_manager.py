@@ -68,7 +68,11 @@ class EventManager:
         # Callers should expect requests to post an event return as quickly as possible.  Events are pushed to a queue
         # so that processing can be done in a separate thread as resources allow.
         self._write_queue = Queue()
-        self._write_thread = Thread(target=self._process_queue, name=f"{self.__class__.__name__}")
+        self._write_thread = Thread(
+            target=self._process_queue,
+            name=f"{self.__class__.__name__}",
+            daemon=True,  # allow the main thread/process to exit even if this thread is still alive
+        )
         self._write_thread.start()
 
     @property
