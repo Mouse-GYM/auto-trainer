@@ -47,7 +47,7 @@ def _confirm_values(configuration: SystemConfiguration, version: int):
     assert configuration.behavior.head_clamp.auto_clamp_release_tone_freq == 6000
     assert configuration.behavior.head_clamp.auto_clamp_release_tone_delay == 0.2
 
-    assert configuration.behavior.load_cell.threshold == 10
+    assert configuration.behavior.load_cell.weight_active_threshold == 10
     assert configuration.behavior.load_cell.threshold_duration == 0.20
     assert configuration.behavior.load_cell.min_event_duration == 4.0
     assert configuration.behavior.load_cell.min_post_event_hold_duration == 3.0

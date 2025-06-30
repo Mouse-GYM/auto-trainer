@@ -27,13 +27,16 @@ def process_path(
     props = {}
     m_timer = mock.patch(f"{LoadCellMonitor.__module__}._timer_load_cell_engaged")
     m_timer.start()  # this disables the "interactive/live" "timeout" timers
+    t0 = None
 
     def handle_prop_changed(name, new_value, prev_value):
         nonlocal prev_ts_changed
         prop_prev = props.get(name, None)
         if prop_prev is None or prop_prev != new_value:
-            prev_changed = prev_ts_changed.get(name, 0)
-            print(f"{ts:.2f} {name}: {prev_value} -> {ts - prev_changed:.2f}s -> {new_value} ; w={weight:.1f}")
+            prev_changed = prev_ts_changed.get(name, None)
+            if prev_changed is None:
+                prev_changed = ts
+            print(f"T={ts - t0:.2f} {name}: {prev_value} -> {ts - prev_changed:.2f}s -> {new_value} ; w={weight:.1f}")
             # print(ts, ts - prev_ts_changed, name, new_value, weight)
             prev_ts_changed[name] = ts
         props[name] = new_value
@@ -54,9 +57,12 @@ def process_path(
                     capturing = False
             continue
         if not capturing:
+            t0 = None
             continue
         parts = [p.strip() for p in line.split(",")]
         ts = float(parts[0])
+        if t0 is None:
+            t0 = ts
         idx = int(parts[1])
         weight = float(parts[2])
         monitor.update(weight, ts, idx)
@@ -79,7 +85,9 @@ def main():
     path: Path = args.input_path
     print(f"Processing {path}")
     with path.open() as fh:
-        process_path(fh, warn_diff_threshold=args.warn_diff_threshold)
+        process_path(fh,
+                     warn_diff_threshold=args.warn_diff_threshold,
+                     only_with_begin_end_marks=args.only_with_begin_end_marks)
 
     print("finished")
 
