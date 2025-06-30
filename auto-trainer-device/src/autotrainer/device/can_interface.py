@@ -1275,9 +1275,9 @@ class CanInterface(DeviceInterface):
         """
         if message.bootloader_response.type == JerryCANBootloaderCmd.SubCommand.VERSION:
             target = _addr2tgt(message.dst_id)
-            version_str = f"{target_to_str(target)}: {message.bootloader_response.version.running_major}." \
-                          f"{message.bootloader_response.version.running_minor}." \
-                          f"{message.bootloader_response.version.running_patch}"
+            version_str = f"{target_to_str(target)}: {message.bootloader_response.version.running_version_major}." \
+                          f"{message.bootloader_response.version.running_version_minor}." \
+                          f"{message.bootloader_response.version.running_version_patch}"
             return Version(target, version_str)
         return None
 
