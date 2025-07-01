@@ -92,6 +92,15 @@ def setup_logging(
     base_logger.addHandler(root_handler)
     base_logger.setLevel(root_level)
 
+    #
+
+    cur_desired_lvl = logging.WARNING
+
+    logging.getLogger("transitions").setLevel(cur_desired_lvl)
+    logging.getLogger("tools").setLevel(cur_desired_lvl)
+    logging.getLogger("autotrainer").setLevel(cur_desired_lvl)
+    logging.getLogger("inference_algorithms").setLevel(cur_desired_lvl)
+
     logger = get_verbose_logger(name)
     _already_setup = True
 

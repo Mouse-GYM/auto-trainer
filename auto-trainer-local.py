@@ -15,13 +15,6 @@ if __name__ == '__main__':
 
     setup_logging()
 
-    cur_desired_lvl = logging.WARNING
-
-    logging.getLogger("transitions").setLevel(cur_desired_lvl)
-    logging.getLogger("tools").setLevel(cur_desired_lvl)
-    logging.getLogger("autotrainer").setLevel(cur_desired_lvl)
-    logging.getLogger("inference_algorithms").setLevel(cur_desired_lvl)
-
     from tools.acquisition.run_acquisition import run_acquisition
 
     parser = argparse.ArgumentParser()
