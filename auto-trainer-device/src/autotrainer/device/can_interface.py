@@ -599,7 +599,7 @@ class CanInterface(DeviceInterface):
         """
         raise NotImplementedError()
 
-    def get_response(self, typeof: Type[Source], target: Target, timeout: float = 2.0):
+    def get_response(self, typeof: Type[MotorSource], target: Target, timeout: float = 2.0):
         """
         Read data until a specific response is detected
 
@@ -609,20 +609,28 @@ class CanInterface(DeviceInterface):
             timeout: Maximum time to wait (sec). Default=2.0
         """
         now = time.time()
-
-        while time.time() - now < timeout:
+        final_res = None
+        dropped = set()
+        tot_dropped = 0
+        while time.time() - now < timeout and final_res is None:
             messages = self.read(1)
             if len(messages) > 0:
                 for idx, msg in enumerate(messages):
                     if isinstance(msg, typeof) and msg.target == target:
                         if idx + 1 < len(messages):
-                            logger.verbose("dropping msgs %s", messages[idx + 1:])
-                        return msg
+                            tot_dropped += len(messages) - idx - 1
+                            dropped |= set(type(v) for v in messages[idx + 1:])
+                        final_res = msg
+                        break
                     else:
-                        logger.verbose("dropping msg %s", msg)
+                        dropped.add(type(msg))
+                        tot_dropped += 1
             time.sleep(0.001)
 
-        return None
+        logger.debug("get_response: res=%s ; dropped %s msgs, types=%s",
+                     final_res, tot_dropped, dropped)
+
+        return final_res
 
     def get_motor_configuration(self, motor: Motor):
         """
@@ -714,7 +722,7 @@ class CanInterface(DeviceInterface):
 
         return rc
 
-    def _query_motor_configuration(self, motor: Motor, config_type: Type[Source]):
+    def _query_motor_configuration(self, motor: Motor, config_type: Type[MotorSource]):
         """
          Read the configurations from the remote device and print it out.
 

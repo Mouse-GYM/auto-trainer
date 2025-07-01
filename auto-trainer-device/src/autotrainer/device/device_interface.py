@@ -48,6 +48,11 @@ class Source:
 
 
 @dataclass
+class MotorSource(Source):
+    _motor: Motor = Motor.NONE
+
+
+@dataclass
 class Heartbeat(Source):
     unused: bool = False
 
@@ -67,8 +72,7 @@ class PelletDigitalInputs(Source):
 
 
 @dataclass
-class ServoConfig(Source):
-    _motor: Motor = Motor.NONE
+class ServoConfig(MotorSource):
     _minimum_position: float = 0  # (deg)
     _maximum_position: float = 120  # (deg)
     _minimum_pwm_duration: float = 1000  # (us)
@@ -173,8 +177,7 @@ class ServoStatus(Source):
 
 
 @dataclass
-class StepperConfig(Source):
-    _motor: Motor = Motor.NONE
+class StepperConfig(MotorSource):
     _microsteps: int = 64
     _steps_per_revolution: float = 48.0
     _maximum_velocity: float = 61  # mm/sec
