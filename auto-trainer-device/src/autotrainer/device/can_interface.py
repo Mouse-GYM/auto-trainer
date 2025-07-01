@@ -17,6 +17,7 @@ import logging
 import time
 import warnings
 from enum import Enum
+from typing import Type
 
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
@@ -33,11 +34,12 @@ else:
 
 
 from autotrainer.core.message import Motor
+from autotrainer.core.logging import get_verbose_logger
 from .device_interface import *
 from .stepper_motor import mm_to_turns, turns_to_mm
 
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 def _is_pellet_by_addr(addr: int) -> bool:
@@ -597,7 +599,7 @@ class CanInterface(DeviceInterface):
         """
         raise NotImplementedError()
 
-    def get_response(self, typeof, target: Target, timeout: float = 2.0):
+    def get_response(self, typeof: Type[Source], target: Target, timeout: float = 2.0):
         """
         Read data until a specific response is detected
 
@@ -611,9 +613,13 @@ class CanInterface(DeviceInterface):
         while time.time() - now < timeout:
             messages = self.read(1)
             if len(messages) > 0:
-                for msg in messages:
+                for idx, msg in enumerate(messages):
                     if isinstance(msg, typeof) and msg.target == target:
+                        if idx + 1 < len(messages):
+                            logger.verbose("dropping msgs %s", messages[idx + 1:])
                         return msg
+                    else:
+                        logger.verbose("dropping msg %s", msg)
             time.sleep(0.001)
 
         return None
@@ -708,7 +714,7 @@ class CanInterface(DeviceInterface):
 
         return rc
 
-    def _query_motor_configuration(self, motor: Motor, config_type):
+    def _query_motor_configuration(self, motor: Motor, config_type: Type[Source]):
         """
          Read the configurations from the remote device and print it out.
 
@@ -719,7 +725,7 @@ class CanInterface(DeviceInterface):
         config = None
         while config is None:
             self.request_motor_config(motor)
-            config = self.get_response(config_type, target_of_motor(motor), 2)
+            config = self.get_response(config_type, target_of_motor(motor), 3)
             if config is not None and config.motor == motor:
                 self.set_motor_configuration(motor, config, False)
                 logger.info(f"Pulled configuration for {motor_to_str(motor)}")
@@ -1094,7 +1100,11 @@ class CanInterface(DeviceInterface):
             msg.stepper.motor_id = _motor_to_id(motor)
 
         addr = self._tgt2addr(target)
-        return addr is not None and self._jc.CfgRead(addr, msg) == 0
+        if addr is None:
+            return False
+        res = self._jc.CfgRead(addr, msg)
+        logger.debug("motor=%s: tentative request addr=%s tgt=%s => res=%s", motor, addr, target, res)
+        return res == 0
 
     def send_heartbeat(self) -> bool:
         """
