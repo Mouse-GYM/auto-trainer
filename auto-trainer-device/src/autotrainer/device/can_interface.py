@@ -15,6 +15,7 @@ a list of data sets that are then propagated to the rest of the application.
 
 import logging
 import time
+import warnings
 from enum import Enum
 
 try:
@@ -27,11 +28,14 @@ else:
     jerry_v = tuple(
         map(lambda s: int(s) if s.isdigit() else s, version("pyjerrycan").split("."))
     )
+    if jerry_v < (1, 2, 0):
+        warnings.warn(f"expected pyjerrycan >= 1.2.0 ; got {jerry_v}", UserWarning)
 
 
+from autotrainer.core.message import Motor
 from .device_interface import *
 from .stepper_motor import mm_to_turns, turns_to_mm
-from autotrainer.core.message import Motor
+
 
 logger = logging.getLogger(__name__)
 
@@ -273,8 +277,6 @@ class CanInterface(DeviceInterface):
             self._jc = None
         else:
             self._jc = JerryCAN()
-            if jerry_v < (1, 2, 0):
-                logger.warning("expected pyjerrycan >= 1.2.0 ; got %s", jerry_v)
 
         self._is_open = False
 
