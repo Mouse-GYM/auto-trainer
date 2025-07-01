@@ -20,9 +20,14 @@ from enum import Enum
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
         JerryCANBootloaderCmd
+except ModuleNotFoundError:
+    JerryCAN = None
+else:
+    from importlib.metadata import version
+    jerry_v = tuple(
+        map(lambda s: int(s) if s.isdigit() else s, version("pyjerrycan").split("."))
+    )
 
-except (ModuleNotFoundError, TypeError, AttributeError):
-    pass
 
 from .device_interface import *
 from .stepper_motor import mm_to_turns, turns_to_mm
@@ -264,10 +269,12 @@ class CanInterface(DeviceInterface):
         """
         super().__init__()
 
-        try:
-            self._jc = JerryCAN()
-        except (ModuleNotFoundError, TypeError, AttributeError):
+        if JerryCAN is None:
             self._jc = None
+        else:
+            self._jc = JerryCAN()
+            if jerry_v < (1, 2, 0):
+                logger.warning("expected pyjerrycan >= 1.2.0 ; got %s", jerry_v)
 
         self._is_open = False
 
