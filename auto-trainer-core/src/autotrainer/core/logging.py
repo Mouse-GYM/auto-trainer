@@ -94,14 +94,9 @@ def setup_logging(
 
     #
 
-    cur_desired_lvl = logging.WARNING
-
-    logging.getLogger("transitions").setLevel(cur_desired_lvl)
-    logging.getLogger("tools").setLevel(cur_desired_lvl)
-    logging.getLogger("autotrainer").setLevel(cur_desired_lvl)
-    logging.getLogger("inference_algorithms").setLevel(cur_desired_lvl)
-
     logger = get_verbose_logger(name)
+    logger.setLevel(logger_level)
+
     _already_setup = True
 
     return logger
