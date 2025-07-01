@@ -27,7 +27,7 @@ def test_detect_thrashing():
         monitor.update(v, t, idx)
         idx += 1
 
-    audio_db_values = [0] * 64
+    audio_db_values = [0.00001 * i for i in range(64)]
 
     update_monitor(audio_db_values, t_now)
 

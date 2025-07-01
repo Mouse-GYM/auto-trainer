@@ -1,9 +1,10 @@
 
 import dataclasses
 import math
+import operator
 import time
 from collections import deque
-from functools import reduce
+from functools import reduce, partial
 from typing import Optional, List
 
 from autotrainer.core import ObservableObject
@@ -57,7 +58,7 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         cfg = self._config
         above_threshold = list(
             map(
-                cfg.threshold_db.__le__,
+                partial(operator.le, cfg.threshold_db),
                 reduce(
                     lambda a, b: a + b,
                     map(lambda bins: [bins[0][idx] for idx in cfg.bins_list], self._values_history),
