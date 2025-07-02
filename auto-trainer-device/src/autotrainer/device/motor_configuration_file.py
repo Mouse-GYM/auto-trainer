@@ -18,12 +18,14 @@ import yaml
 from pathlib import Path
 from typing import Tuple
 
+from autotrainer.core import MotorConfigurations
+
 from .device_interface import ServoConfig, StepperConfig, Motor
 
 logger = logging.getLogger(__name__)
 
 
-class MotorConfigurationFile:
+class MotorConfigurationFile(MotorConfigurations):
 
     def __init__(self):
         """
