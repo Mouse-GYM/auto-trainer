@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSpinBo
 
 import qtawesome as qta
 
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.message import Motor
 from autotrainer.device import is_servo
 from autotrainer.model import HardwareVersion, EnvironmentProvider
@@ -11,6 +12,9 @@ from autotrainer.pyside import ATSeparator
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.view.basic_panel import create_panel
 from tools.view.motor_config_dialog import MotorConfigDialog
+
+
+logger = get_verbose_logger(__name__)
 
 _NO_UPDATES = "(no updates)"
 
@@ -188,6 +192,7 @@ class PelletControl(QWidget):
 
     def _model_property_changed(self, name: str, value, _old_value):
         if name == "travel_limits":
+            logger.debug("got & applying travel_limits: %s", value)
             self._x_pos.setMinimum(value["x"][0])
             self._x_pos.setMaximum(value["x"][1])
             self._y_pos.setMinimum(value["y"][0])

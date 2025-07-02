@@ -23,7 +23,8 @@ def main():
     from tools.acquisition.model.app_model import AppModel
 
     from autotrainer.core.logging import get_verbose_logger
-    logger = get_verbose_logger()
+
+    logger = get_verbose_logger("main")
 
     parser = argparse.ArgumentParser()
 

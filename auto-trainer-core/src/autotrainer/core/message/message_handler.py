@@ -74,10 +74,13 @@ class MessageHandler(ObservableObject):
 
     def run(self):
         logger.debug(f"<{self._name}>: entering message event loop")
+        msg = None
         while True:
+            if msg is not None:
+                self._input_queue.task_done()
             msg, data = self._input_queue.get()
-            self._input_queue.task_done()  # for now we don't care when we do it, so do it first
             if msg == TERMINATE:
+                self._input_queue.task_done()
                 break
             elif msg == SystemStatusMessageKind.ACKNOWLEDGE:
                 self.ack_received(data)

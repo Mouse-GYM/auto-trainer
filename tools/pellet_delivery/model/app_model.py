@@ -2,16 +2,18 @@ import logging
 import queue
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind,
                               MessageHandler, Motor,
                               EventManager)
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.device import (CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery,
                                 DeviceConnection, CompoundMovementFile)
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 # TODO: This is just to see if the behavior is correct.  They should end up somewhere that any application or script can
 #  access.
@@ -38,7 +40,7 @@ class AppModel(ObservableObject):
 
         self._hardware_configuration = None
 
-        self._device_connection = None
+        self._device_connection: Optional[DeviceConnection] = None
 
         self._message_handler = SystemMessageHandler(queue.Queue())
         self._message_handler.property_changed += self._message_handler_property_changed
@@ -352,14 +354,13 @@ class AppModel(ObservableObject):
 
     def reader_ack_received(self, ack):
         logger.info(f"ack context received: {ack}")
-
         if self._last_command is not None and ack == self._last_command:
             self._last_command = None
             self.command_pending = False
 
     def _send_command(self, message, data=None, context=None):
         if self._last_command is not None:
-            logger.debug("ignoring command while existing command is in process")
+            logger.verbose("ignoring command while existing command is in process")
             return
 
         if context is not None:
