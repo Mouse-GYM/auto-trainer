@@ -76,7 +76,6 @@ class SystemMessageHandler(MessageHandler):
             if self._audio_callback is not None:
                 self._audio_callback(data.magnitudes)
         elif msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
-            weights, switch, pressure, temperature, humidity = self._analysis.measurements_received(
-                data)
+            measures = self._analysis.measurements_received(data)
             if self._measurement_callback is not None:
-                self._measurement_callback((weights, switch, pressure, temperature, humidity))
+                self._measurement_callback(measures)
