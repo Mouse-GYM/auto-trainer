@@ -46,6 +46,8 @@ class PelletControl(QWidget):
 
         self._app_model: AppModel = app_model
 
+        self._config_dialog = None
+
         self._app_model.property_changed += self._model_property_changed
 
         layout = QVBoxLayout()

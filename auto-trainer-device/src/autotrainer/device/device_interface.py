@@ -51,6 +51,14 @@ class Source:
 class MotorSource(Source):
     _motor: Motor = Motor.NONE
 
+    @property
+    def motor(self) -> Motor:
+        return self._motor
+
+    @motor.setter
+    def motor(self, value: Motor):
+        self._motor = value
+
 
 @dataclass
 class Heartbeat(Source):
@@ -97,14 +105,6 @@ class ServoConfig(MotorSource):
             config.maximum_acceleration = data["max_acc"]
 
         return config
-
-    @property
-    def motor(self) -> Motor:
-        return self._motor
-
-    @motor.setter
-    def motor(self, value: Motor):
-        self._motor = value
 
     @property
     def maximum_velocity(self) -> float:

@@ -180,7 +180,6 @@ class DeviceConnection(DeviceConnectionProtocol):
         if not self._interface.is_open:
             try:
                 success = self._interface.open()
-
                 if success:
                     logger.debug(f"<{self._name}> interface open")
                     self._device.connect()

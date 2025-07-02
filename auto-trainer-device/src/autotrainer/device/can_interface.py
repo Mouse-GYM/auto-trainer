@@ -528,8 +528,8 @@ class CanInterface(DeviceInterface):
             return False
 
         self._is_open = self._jc.Open() == 0
-
-        self._query_configuration()
+        if self._is_open:
+            self._query_configuration()
 
         return self._is_open
 
@@ -730,16 +730,14 @@ class CanInterface(DeviceInterface):
              motor:
              config_type: Either a ServoConfig or StepperConfig class reference
          """
-        config = None
-        while config is None:
+        while True:
             self.request_motor_config(motor)
             config = self.get_response(config_type, target_of_motor(motor), 3)
             if config is not None and config.motor == motor:
                 self.set_motor_configuration(motor, config, False)
                 logger.info(f"Pulled configuration for {motor_to_str(motor)}")
-            else:
-                logger.info(f"Failed to get configuration for {motor_to_str(motor)}")
-                config = None
+                break
+            logger.info(f"Failed to get configuration for {motor_to_str(motor)}")
 
     def _query_configuration(self):
         """
