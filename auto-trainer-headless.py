@@ -1,15 +1,10 @@
 import logging
 import os
-
 import time
-
-logging.basicConfig(level=logging.WARNING, format="%(asctime)s: %(levelname)s: %(name)s: %(message)s")
-logging.getLogger("transitions").setLevel(logging.WARNING)
-logging.getLogger("autotrainer").setLevel(logging.WARNING)
-logging.getLogger("tools").setLevel(logging.WARNING)
-logging.getLogger("inference_algorithms").setLevel(logging.WARNING)
-
-logger = logging.getLogger(__name__)
+import sys
+import argparse
+import faulthandler
+from multiprocessing import set_start_method
 
 
 def update_log_level(value: int):
@@ -23,9 +18,19 @@ def update_log_level(value: int):
         logging.getLogger("transitions").setLevel(logging.WARNING)
 
 
-def main(configuration: str):
+def main():
     from tools.acquisition.model.user_preferences import UserPreferences
     from tools.acquisition.model.app_model import AppModel
+
+    from autotrainer.core.logging import get_verbose_logger
+    logger = get_verbose_logger()
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-c", "--configuration", help="configuration file", default=None, type=str)
+
+    args = parser.parse_args()
+    configuration = args.configuration
 
     if configuration and not os.path.exists(configuration):
         return -1
@@ -53,22 +58,10 @@ def main(configuration: str):
 
 
 if __name__ == '__main__':
-    import sys
-    import argparse
-    import faulthandler
-    from multiprocessing import set_start_method
-
     faulthandler.enable()
-
     set_start_method("spawn")
 
-    parser = argparse.ArgumentParser()
+    from autotrainer.core.logging import setup_logging
+    setup_logging()
 
-    parser.add_argument("-c", "--configuration", help="configuration file", default=None, type=str)
-
-    args = parser.parse_args()
-
-    if main(args.configuration):
-        sys.exit(0)
-    else:
-        sys.exit(1)
+    sys.exit(main())

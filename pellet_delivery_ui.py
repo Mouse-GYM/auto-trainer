@@ -4,11 +4,6 @@ import sys
 
 from tools.pellet_delivery.run_pellet_delivery_ui import run_pellet_delivery_ui
 
-# logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s\t [%(name)s] %(message)s")
-# logging.getLogger('autotrainer').setLevel(logging.DEBUG)
-# logging.getLogger('tools').setLevel(logging.DEBUG)
-
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -26,5 +21,5 @@ def main():
 
 if __name__ == '__main__':
     from autotrainer.core.logging import setup_logging
-    setup_logging()
+    setup_logging("autotrainer", logger_level=logging.DEBUG)
     sys.exit(main())

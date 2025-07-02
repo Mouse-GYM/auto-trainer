@@ -71,13 +71,7 @@ def setup_logging(
         field_styles = DEFAULT_FIELD_STYLES
     #
     console_handler = logging.StreamHandler(stream=stream)
-    if False:
-        fmt = logging.Formatter(
-        log_format,
-        datefmt=date_format,
-    )
-    else:
-        fmt = coloredlogs.ColoredFormatter(
+    fmt = coloredlogs.ColoredFormatter(
         log_format,
         level_styles=level_styles,
         field_styles=field_styles,
@@ -93,6 +87,11 @@ def setup_logging(
     base_logger.setLevel(root_level)
 
     #
+
+    logging.getLogger("transitions").setLevel(logger_level)
+    logging.getLogger("tools").setLevel(logger_level)
+    logging.getLogger("autotrainer").setLevel(logger_level)
+    logging.getLogger("inference_algorithms").setLevel(logger_level)
 
     logger = get_verbose_logger(name)
     logger.setLevel(logger_level)
