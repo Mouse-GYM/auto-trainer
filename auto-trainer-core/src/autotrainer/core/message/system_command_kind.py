@@ -49,6 +49,8 @@ class SystemCommandKind(IntEnum):
 
     SET_MOTOR_DRIFT = 223
 
+    SEND_HOMING = 224
+
     # General actions.
     PLAY_TONE = 301
     SET_RGB_LED = 302

@@ -933,10 +933,12 @@ class CanInterface(DeviceInterface):
             return False
 
         addr = self._tgt2addr(Target.PELLET_DEVICE)
+        if addr is None:
+            return False
 
         # Third arg - forward/rev. Go in forward direction if the non-zero locations are negative
-        return addr is not None and self._jc.StepperHome(addr, _motor_to_id(motor),
-                                                         CanInterface.next_uuid()) == 0
+        res = self._jc.StepperHome(addr, _motor_to_id(motor), CanInterface.next_uuid())
+        return res == 0
 
     def _write_stepper_config(self, config: StepperConfig) -> bool:
         """

@@ -314,7 +314,8 @@ def run_monitor():
             # 'a' - audio
             # 'c' - cover servo
             # 'f' - load-from-files
-            # 'h' - help
+            # 'h' - send home
+            # 'H' - send homing
             # 'l' - load servo
             # 'm' - magnet servo
             # 'o' - set output
@@ -358,6 +359,9 @@ def run_monitor():
 
                 elif cmd == 'h' or cmd == 'home':
                     device_thread.send_message(SystemCommandKind.SEND_HOME)
+
+                elif cmd == 'H' or cmd == 'homing':
+                    device_thread.send_message(SystemCommandKind.SEND_HOMING)
 
                 elif cmd == 'o' or cmd == 'output':
                     handle_output_command(params, device_thread)

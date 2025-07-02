@@ -65,6 +65,11 @@ class PelletControl(QWidget):
         self._home_button.clicked.connect(lambda: self._app_model.send_home())
         b_layout.addWidget(self._home_button)
 
+        self._homing_button = QPushButton("Homing")
+        self._homing_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
+        self._homing_button.clicked.connect(self._app_model.send_homing)
+        b_layout.addWidget(self._homing_button)
+
         b_layout.addStretch(1)
 
         self._load_button = QPushButton("Load")

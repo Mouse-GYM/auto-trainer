@@ -85,11 +85,15 @@ class PelletDelivery(GymDevice):
                 self._commands_with_status[context] = (SystemCommandKind.SET_Z, val)
         elif kind == SystemCommandKind.PLAY_TONE:
             self._send_data(f"N{typing.cast(int, data)}x", context)
-        elif kind == SystemCommandKind.SET_SEND_PELLET_PROCEDURE or \
-                kind == SystemCommandKind.SET_LOAD_PELLET_PROCEDURE or \
-                kind == SystemCommandKind.SET_COVER_PELLET_PROCEDURE or \
-                kind == SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE or \
-                kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
+        elif kind in {
+            SystemCommandKind.SET_SEND_PELLET_PROCEDURE,
+            SystemCommandKind.SET_LOAD_PELLET_PROCEDURE,
+            SystemCommandKind.SET_COVER_PELLET_PROCEDURE,
+            SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE,
+            SystemCommandKind.WRITE_MOTOR_CONFIGURATION,
+            SystemCommandKind.SEND_HOMING,
+        }:
+            # on purpose unhandled commands
             pass
         else:
             logger.warning(f"unknown message kind: {kind}")

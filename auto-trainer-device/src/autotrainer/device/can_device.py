@@ -111,9 +111,12 @@ class CanDevice(Device):
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._home([cast(Motor, data)]),
 
-            SystemCommandKind.SEND_HOME:
+            SystemCommandKind.SEND_HOMING:
                 lambda data: self._home(
                     [Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR]),
+
+            SystemCommandKind.SEND_HOME:
+                lambda data: self._send_home(),
 
             SystemCommandKind.SEND_FIXED_XYZ:
                 lambda data: self._interface.fixed_position(),
@@ -407,6 +410,11 @@ class CanDevice(Device):
         if len(motors) > 0:
             self._interface.stepper_home(motors[0])
             self._homing_motors = motors
+
+    def _send_home(self):
+        self._interface.set_x(0)
+        self._interface.set_y(0)
+        self._interface.set_z(0)
 
     _motor_to_status_kind = {
         Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_X,

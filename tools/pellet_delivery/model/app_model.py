@@ -193,6 +193,9 @@ class AppModel(ObservableObject):
     def send_home(self):
         self._send_command(SystemCommandKind.SEND_HOME, context=uuid.uuid4())
 
+    def send_homing(self):
+        self._send_command(SystemCommandKind.SEND_HOMING, context=uuid.uuid4())
+
     def load_pellet(self):
         self._send_command(SystemCommandKind.LOAD_PELLET, context=uuid.uuid4())
 
