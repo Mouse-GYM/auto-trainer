@@ -665,7 +665,8 @@ class CanInterface(DeviceInterface):
                     else:
                         dropped.add(type(msg))
                         tot_dropped += 1
-            time.sleep(0.001)
+            else:
+                time.sleep(0.001)
 
         logger.debug("get_response: res=%s ; dropped %s msgs, types=%s",
                      final_res, tot_dropped, dropped)
