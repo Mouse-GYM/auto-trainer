@@ -1,5 +1,6 @@
 
 import dataclasses
+import itertools
 import math
 import operator
 import time
@@ -51,7 +52,7 @@ class AudioSpectrumThrashMonitor(ObservableObject):
             if when - h0_when <= self._config.time_window:
                 break
             hist.popleft()
-        hist.append((values, when, index))
+        hist.append(([values[i] for i in self._config.bins_list], when, index))
 
     def update(self, values: List[float], when: float = 0.0, index: int = 0):
         self._update_history(values, when, index)
@@ -59,11 +60,7 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         above_threshold = list(
             map(
                 partial(operator.le, cfg.threshold_db),
-                reduce(
-                    lambda a, b: a + b,
-                    map(lambda bins: [bins[0][idx] for idx in cfg.bins_list], self._values_history),
-                    [],
-                ),
+                itertools.chain(*(v[0] for v in self._values_history))
             )
         )
         percent = 100 * sum(map(int, above_threshold)) / len(self._values_history)
