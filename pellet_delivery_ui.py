@@ -2,8 +2,6 @@ import argparse
 import logging
 import sys
 
-from tools.pellet_delivery.run_pellet_delivery_ui import run_pellet_delivery_ui
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -15,6 +13,8 @@ def main():
 
     # strtobool compatibility is all over the place.
     allow_emulation = args.allow_can_emulation.lower() in ["true", "yes", "1"]
+
+    from tools.pellet_delivery.run_pellet_delivery_ui import run_pellet_delivery_ui
 
     return run_pellet_delivery_ui(allow_emulation)
 
