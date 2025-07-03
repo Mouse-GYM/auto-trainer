@@ -297,6 +297,46 @@ class CanInterface(DeviceInterface):
 
         self.load_cell_factor = 21053.0
 
+        # Simple handlers implemented as lambdas
+        self._handlers = {
+            JerryCANCmdType.HEARTBEAT: lambda msg: Heartbeat(target=_addr2tgt(msg.dst_id)),
+            JerryCANCmdType.BOOTLOADER_RESPONSE: self._translate_bootloader,
+            JerryCANCmdType.CFG_RESPONSE: self._translate_config,
+            JerryCANCmdType.GPIO_READ: self._translate_gpio,
+            JerryCANCmdType.TONE: lambda msg: Tone(
+                target=_addr2tgt(msg.dst_id),
+                time_remaining_ms=msg.tone.duration_ms,
+                frequency_hz=msg.tone.frequency_hz
+            ),
+            JerryCANCmdType.ANALOG_OUT: self._translate_analog_out,
+            JerryCANCmdType.LOAD_CELL_READ: lambda msg: LoadCellReading(
+                target=_addr2tgt(msg.dst_id),
+                load=float(msg.load_cell_read.load_mv) / 1000.0 * self.load_cell_factor,
+            ),
+            JerryCANCmdType.PRESSURE_READ: lambda msg: PressureReading(
+                target=_addr2tgt(msg.dst_id),
+                pressure=float(msg.pressure_read.pressure)
+            ),
+            JerryCANCmdType.RGB_LED: lambda msg: ColorLed(
+                target=_addr2tgt(msg.dst_id),
+                red=msg.rgb_led.red,
+                green=msg.rgb_led.green,
+                blue=msg.rgb_led.blue
+            ),
+            JerryCANCmdType.AUDIO_MAGNITUDE_DATA_BEGIN: self._handle_audio_begin,
+            JerryCANCmdType.AUDIO_MAGNITUDE_DATA_CONT: self._handle_audio_cont,
+            JerryCANCmdType.AUDIO_MAGNITUDE_DATA_END: self._handle_audio_end,
+            JerryCANCmdType.DOOR_SENSOR: self._translate_door_sensor,
+            JerryCANCmdType.SERVO_STATUS: self._translate_servo_status,
+            JerryCANCmdType.STEPPER_STATUS: self._translate_stepper_status,
+            JerryCANCmdType.TEMP_HUM_READ: lambda msg: SensorStatus(
+                target=_addr2tgt(msg.dst_id),
+                temperature_c=float(msg.temp_hum_read.temperature) / 100.0,
+                humidity_percent=float(msg.temp_hum_read.humidity) / 100.0
+            ),
+            JerryCANCmdType.ACKNOWLEDGE: lambda msg: Acknowledge(uuid=msg.uuid),
+        }
+
     @property
     def magnet_config(self):
         """
@@ -1242,50 +1282,8 @@ class CanInterface(DeviceInterface):
         Returns:
             Populated class type (see device_interface.py) or None
         """
-        # Simple handlers implemented as lambdas
-        handlers = {
-            JerryCANCmdType.HEARTBEAT: lambda msg: Heartbeat(target=_addr2tgt(msg.dst_id)),
-            JerryCANCmdType.BOOTLOADER_RESPONSE: self._translate_bootloader,
-            JerryCANCmdType.CFG_RESPONSE: self._translate_config,
-            JerryCANCmdType.GPIO_READ: self._translate_gpio,
-            JerryCANCmdType.TONE: lambda msg: Tone(
-                target=_addr2tgt(msg.dst_id),
-                time_remaining_ms=msg.tone.duration_ms,
-                frequency_hz=msg.tone.frequency_hz
-            ),
-            JerryCANCmdType.ANALOG_OUT: self._translate_analog_out,
-            JerryCANCmdType.LOAD_CELL_READ: lambda msg: LoadCellReading(
-                target=_addr2tgt(msg.dst_id),
-                load=float(msg.load_cell_read.load_mv) / 1000.0 * self.load_cell_factor,
-            ),
-            JerryCANCmdType.PRESSURE_READ: lambda msg: PressureReading(
-                target=_addr2tgt(msg.dst_id),
-                pressure=float(msg.pressure_read.pressure)
-            ),
-            JerryCANCmdType.RGB_LED: lambda msg: ColorLed(
-                target=_addr2tgt(msg.dst_id),
-                red=msg.rgb_led.red,
-                green=msg.rgb_led.green,
-                blue=msg.rgb_led.blue
-            ),
-            JerryCANCmdType.AUDIO_MAGNITUDE_DATA_BEGIN: self._handle_audio_begin,
-            JerryCANCmdType.AUDIO_MAGNITUDE_DATA_CONT: self._handle_audio_cont,
-            JerryCANCmdType.AUDIO_MAGNITUDE_DATA_END: self._handle_audio_end,
-            JerryCANCmdType.DOOR_SENSOR: self._translate_door_sensor,
-            JerryCANCmdType.SERVO_STATUS: self._translate_servo_status,
-            JerryCANCmdType.STEPPER_STATUS: self._translate_stepper_status,
-            JerryCANCmdType.TEMP_HUM_READ: lambda msg: SensorStatus(
-                target=_addr2tgt(msg.dst_id),
-                temperature_c=float(msg.temp_hum_read.temperature) / 100.0,
-                humidity_percent=float(msg.temp_hum_read.humidity) / 100.0
-            ),
-            JerryCANCmdType.ACKNOWLEDGE: lambda msg: Acknowledge(uuid=msg.uuid),
-        }
-
-        handler = handlers.get(message.type)
-        if handler:
-            return handler(message)
-        return None
+        handler = self._handlers.get(message.type, lambda _: None)
+        return handler(message)
 
     @staticmethod
     def _translate_bootloader(message) -> typing.Optional[Version]:
