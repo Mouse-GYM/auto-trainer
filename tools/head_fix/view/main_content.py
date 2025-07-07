@@ -61,7 +61,7 @@ class MainContent(QWidget):
         self._timer.timeout.connect(self.refresh_data)
         self._timer.start(100)
 
-        self._perf_monitor = PerfMonitor(name="<HeadFixUI>", units="mps", report_count=3000)
+        self._perf_monitor = PerfMonitor(name="<HeadFixUI>", units="mps", report_window=30)
 
         handler = TextBoxHandler(self._diagnostics)
         handler.setFormatter(

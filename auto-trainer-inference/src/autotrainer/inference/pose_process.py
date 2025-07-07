@@ -83,7 +83,7 @@ class PoseProcess(Process):
         self._msg_queue = msg_queue
         self._data_queue = data_queue
 
-        self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_count=120,
+        self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_window=30,
                                          enable_log=False)
 
         self._mode = InferenceMode.Live

@@ -112,7 +112,7 @@ class AnalysisContent(ContentWidget):
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
 
-        self._perf_monitor = PerfMonitor(name="headFixContent", units="mps", report_count=3000)
+        self._perf_monitor = PerfMonitor(name="headFixContent", units="mps", report_window=30)
 
         self.set_is_editable(False)
 

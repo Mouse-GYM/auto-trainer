@@ -30,7 +30,7 @@ class HeadFix(GymDevice):
 
         self._measurements = list()
 
-        self._perf_monitor = PerfMonitor(name="<head-fix>", units="mps", report_count=3000)
+        self._perf_monitor = PerfMonitor(name="<head-fix>", units="mps", report_window=30)
 
     @property
     def measurements(self) -> typing.List[HeadFixMeasurement]:
