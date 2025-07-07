@@ -158,6 +158,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         logger.debug(f"<{self._name}> thread terminated")
 
     def _run_unconnected(self) -> bool:
+        logger.info("running unconnected")
         while True:
             try:
                 cmd, data, context = self._cmd_queue.get_nowait()
@@ -196,6 +197,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         return True
 
     def _run_connected(self) -> bool:
+        logger.info("running connected")
         while True:
             # Data from the device for the device listener to process.
             heartbeat = 0
