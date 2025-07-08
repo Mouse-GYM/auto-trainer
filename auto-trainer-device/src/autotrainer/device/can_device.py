@@ -33,7 +33,9 @@ from .can_interface import CanInterface
 from .device_interface import *
 
 
-def _to_tuple(value: str):
+def _to_tuple(value: Union[str, Any]):
+    if not isinstance(value, str):
+        return value
     if "," in value:
         parts = value.split(",")
         return float(parts[0].strip()), float(parts[1].strip())
