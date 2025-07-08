@@ -44,7 +44,7 @@ class PerfMonitor:
         Add a single cycle to the count.
 
         Returns:
-            bool: True if the cycle count is a multiple of `report_count` and the CPS value was/would be reported.
+            bool: True if the CPS value was reported. False otherwise.
         """
         return self.add_cycles(1)
 
@@ -53,7 +53,7 @@ class PerfMonitor:
         Add a block of cycles to the count.
 
         Returns:
-            bool: True if the cycle count passed a multiple of `report_count` and the CPS value was/would be reported.
+            bool: True if the CPS value was reported. False otherwise.
         """
         if cycles <= 0:
             return False
@@ -65,14 +65,13 @@ class PerfMonitor:
             self._next_refresh = self._start = t_perf_now
             self._next_refresh += self.report_window
 
-        self._cycle_count += cycles
-
         if t_perf_now > self._next_refresh:
             self.cps = self._cycle_count / (t_perf_now - self._next_refresh + self.report_window)
             if self.enable_log:
                 logger.log(self.log_level, f"{self.name}: {self.cps:.1f} {self.units}")
             self._next_refresh += self.report_window
-            self._cycle_count = 0
+            self._cycle_count = cycles
             return True
 
+        self._cycle_count += cycles
         return False
