@@ -280,6 +280,7 @@ class CanInterface(DeviceInterface):
         else:
             self._jc = JerryCAN()
 
+        self._cnt_none = 0
         self._is_open = False
 
         self._pellet_addr: typing.Optional[int] = None
@@ -568,6 +569,7 @@ class CanInterface(DeviceInterface):
             return False
 
         self._is_open = self._jc.Open() == 0
+        self._cnt_none = 0
         if self._is_open:
             self._query_configuration()
 
@@ -652,20 +654,19 @@ class CanInterface(DeviceInterface):
         final_res = None
         dropped = set()
         tot_dropped = 0
-        while time.time() - now < timeout and final_res is None:
+        while time.time() - now < timeout:
             messages = self.read(1)
             if len(messages) > 0:
-                for idx, msg in enumerate(messages):
-                    if isinstance(msg, typeof) and msg.target == target:
-                        if idx + 1 < len(messages):
-                            tot_dropped += len(messages) - idx - 1
-                            dropped |= set(type(v) for v in messages[idx + 1:])
-                        final_res = msg
-                        break
-                    else:
-                        dropped.add(type(msg))
-                        tot_dropped += 1
+                assert len(messages) == 1  # unless we change the read(1) above
+                msg = messages[0]
+                if isinstance(msg, typeof) and msg.target == target:
+                    final_res = msg
+                    break
+                else:
+                    dropped.add(type(msg))
+                    tot_dropped += 1
             else:
+                self._cnt_none += 1
                 time.sleep(0.001)
 
         logger.debug("get_response: res=%s ; dropped %s msgs, types=%s",
