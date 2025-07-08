@@ -202,10 +202,14 @@ class DeviceConnection(DeviceConnectionProtocol):
             # Data from the device for the device listener to process.
             heartbeat = 0
             while self._interface.can_read():
-                self._device.notify_data(self._interface.read(self._read_limit))
+                messages = self._interface.read(self._read_limit)
+                self._device.notify_data(messages)
                 heartbeat += 1
                 if heartbeat > 5:
                     break
+                if len(messages) == 0:
+                    # give a small break
+                    time.sleep(0.0001)
 
             # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
             try:

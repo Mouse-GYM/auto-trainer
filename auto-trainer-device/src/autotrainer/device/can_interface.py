@@ -604,16 +604,22 @@ class CanInterface(DeviceInterface):
             while len(messages) < max_count:
                 message = self._jc.ReceiveMessage()
                 if message is None:
+                    # current jc.ReceiveMessage is non-blocking,
+                    # so if we get None it means there is nothing available atm. should retry later.
+                    self._cnt_none += 1
                     break
-                else:
-                    messages.append(message)
-                    self._assign_address(message)
+
+                messages.append(message)
+                self._assign_address(message)
 
                 # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
                 # significantly slow down the system without explicitly yielding, despite being in its own thread.  This
                 # is not the case for other platforms/combinations of the above so may not be apparent when not on the
                 # deployment current platform.
-                time.sleep(0.0001)
+                # time.sleep(0.0001)
+                # Greg: There is already a sleep in the caller(s), when they have one,
+                # but having it here induces this slow-down for every caller, and for each of their .read() execution,
+                # even when there is data that is read and while there could be more directly already available.
 
         return [x for x in map(self._translate, messages) if x is not None]
 
