@@ -339,6 +339,11 @@ def run_monitor():
 
             argv = line.split()
 
+            if len(argv) == 0:
+                get_input = True
+                print("empty command, please type a command or ?")
+                continue
+
             cmd = argv[0]
             params = argv[1:]
 
@@ -422,11 +427,28 @@ def run_monitor():
                 elif cmd == 'v' or cmd == 'version':
                     device_thread.send_message(SystemCommandKind.REQUEST_VERSION, context="version")
 
-            except ValueError:
-                print("Invalid numeric value in command")
-                get_input = True
-            except IndexError:
-                print(f"Invalid command: {cmd} {params}")
+                elif cmd == "logger":
+                    get_input = True
+                    if len(params) == 0:
+                        logger.info("handlers=%s", logging.root.handlers)
+                        logger.info("level=%s", logging.root.level)
+                    elif len(params) >= 1:
+                        if len(params) >= 2:
+                            name, level = params
+                        else:
+                            name = logging.root.name
+                            level = params[0]
+                        log = logging.getLogger(name)
+                        if level.isdigit():
+                            level = int(level)
+                        logger.info("logger %s: level=%s", log.name, log.level)
+                        log.setLevel(level)
+                else:
+                    get_input = True
+                    logger.warning("Unknown command: %s", cmd)
+
+            except ValueError as err:
+                logger.exception("ValueError: %s", err)
                 get_input = True
         else:
             if not mon_thread.is_alive():
@@ -620,6 +642,9 @@ def print_help():
           " ::Tare Load Cell/Pressure Sensors")
     print("v[ersion]                          "
           " ::Version")
+    print("logger [<name>] <level>"
+          "  ::Set logger [name] level"
+          )
     print()
 
 
@@ -645,4 +670,5 @@ def main():
 
 if __name__ == '__main__':
     logger = setup_logging()
+    logging.getLogger("autotrainer").setLevel("DEBUG")  # can be changed with "logger" cli command
     sys.exit(main())
