@@ -274,13 +274,17 @@ class CanDevice(Device):
                 self.api.send_message(SystemStatusMessageKind.EXT_BUTTON, message.ext_button)
             )[-1] if self._api is not None else None,
 
-            Acknowledge: lambda message: (self._perform_next_compound_step()
-                                          if message.uuid == CanInterface.uuid() else None)
+            Acknowledge: self._handle_ack,
         }
 
         if not HAVE_CAN_DEVICE:
             logger.warning(
                 "Alogus hardware or hardware support not found.  Using emulation interface.")
+
+    def _handle_ack(self, msg: Acknowledge):
+        logger.debug("Received ack: %s - %s", msg.target, msg.uuid)
+        if msg.uuid == CanInterface.uuid():
+            self._perform_next_compound_step()
 
     @property
     def api(self):
@@ -448,7 +452,7 @@ class CanDevice(Device):
         Issue the next step in a multi-step motor sequence.
         """
         if len(self._homing_motors) > 1:
-            self._homing_motors.pop(0)
+            self._homing_motors.pop(0)  # first one is/was executed by _home() function
             self._home(self._homing_motors)
         elif self._compound_movement is not None and \
             len(self._compound_movement) > 0:

@@ -1069,13 +1069,18 @@ class CanInterface(DeviceInterface):
         """
         logger.info(f"Homing Stepper Motor {motor_to_str(motor)}")
         if is_servo(motor):
+            logger.warning("invalid stepper home motor: %s", motor)
             return False
 
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-
+        if addr is None:
+            logger.warning("No pellet device addr found")
+            return False
         # Third arg - forward/rev. Go in forward direction if the non-zero locations are negative
-        return addr is not None and self._jc.StepperHome(addr, _motor_to_id(motor),
-                                                         CanInterface.next_uuid()) == 0
+        res = self._jc.StepperHome(addr, _motor_to_id(motor), CanInterface.next_uuid())
+        logger.debug("addr=%s motor=%s : home request => res=%s", addr, motor, res)
+        return res == 0
+
 
     def _write_stepper_config(self, config: StepperConfig) -> bool:
         """
