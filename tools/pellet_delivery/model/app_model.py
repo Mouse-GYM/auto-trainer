@@ -369,8 +369,7 @@ class AppModel(ObservableObject):
 
         self._last_command = context
 
-        if context is not None:
-            logger.debug(f"sending message with context: {context}")
-
+        # if context is not None:
+        logger.debug("sending message %s with context: %s", message, context)
         if self._device_connection is not None:
             self._device_connection.send_message(message, data, context)
