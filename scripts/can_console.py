@@ -669,6 +669,6 @@ def main():
 
 
 if __name__ == '__main__':
-    logger = setup_logging()
+    logger = setup_logging(time_precision=6)
     logging.getLogger("autotrainer").setLevel("DEBUG")  # can be changed with "logger" cli command
     sys.exit(main())
