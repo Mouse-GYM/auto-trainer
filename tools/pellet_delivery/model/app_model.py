@@ -358,7 +358,7 @@ class AppModel(ObservableObject):
             self._last_command = None
             self.command_pending = False
 
-    def _send_command(self, message, data=None, context=None):
+    def _send_command(self, message, data=None, *, context=None):
         if self._last_command is not None:
             logger.verbose("ignoring command while existing command is in process")
             return
