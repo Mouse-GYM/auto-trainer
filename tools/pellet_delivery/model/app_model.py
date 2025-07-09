@@ -360,14 +360,14 @@ class AppModel(ObservableObject):
 
     def _send_command(self, message, data=None, *, context=None):
         if self._last_command is not None:
-            logger.verbose("ignoring command while existing command is in process")
+            logger.verbose("ignoring command %s while existing command is in process with context=%s",
+                           self._last_command)
             return
 
         if context is not None:
             # If not planning to confirm the response token, don't block the UI.
             self.command_pending = True
-
-        self._last_command = context
+            self._last_command = context
 
         # if context is not None:
         logger.debug("sending message %s with context: %s", message, context)
