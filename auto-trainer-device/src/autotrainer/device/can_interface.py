@@ -703,6 +703,7 @@ class CanInterface(DeviceInterface):
             else:
                 config = ServoConfig()
         else:
+            assert is_stepper(motor)
             if motor == Motor.PELLET_X_MOTOR:
                 config = self.x_config
             elif motor == Motor.PELLET_Y_MOTOR:
@@ -860,8 +861,13 @@ class CanInterface(DeviceInterface):
                                                        AbsOrRel.ABSOLUTE,
                                                        CanInterface.next_uuid()) == 0
 
-    def _move_stepper_motor(self, motor: Motor, position, config: StepperConfig, save_as_fixed:
-    bool):
+    def _move_stepper_motor(
+        self,
+        motor: Motor,
+        position,
+        config: StepperConfig,
+        save_as_fixed: bool,
+    ):
         """
         Move a stepper motor.
         
@@ -880,7 +886,8 @@ class CanInterface(DeviceInterface):
             velocity = float(position[1]) / 100.0 * config.maximum_velocity
             position = float(position[0])
         else:
-            return
+            logger.warning("Unhandled position: %s", position)
+            return False
 
         position = mm_to_turns(position)
         velocity = mm_to_turns(velocity)

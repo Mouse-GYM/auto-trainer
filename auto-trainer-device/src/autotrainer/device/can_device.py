@@ -518,6 +518,8 @@ class CanDevice(Device):
                     logger.debug("Predefined Scoop (minimum)")
                 elif predefined == "home":
                     self._home([Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
+                else:
+                    logger.warning("unhandled predefined: %s", predefined)
         else:
             self._command_complete()
             self._compound_movement = None

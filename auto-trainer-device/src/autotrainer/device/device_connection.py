@@ -123,6 +123,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.load_config)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.magnet_config)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.cover_config)
+        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.gate_config)
 
     def set_load_procedure(self, load_steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, load_steps)

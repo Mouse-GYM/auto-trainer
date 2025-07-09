@@ -35,6 +35,7 @@ class MotorConfigurationFile(MotorConfigurations):
         self._magnet_config = ServoConfig()
         self._load_config = ServoConfig()
         self._cover_config = ServoConfig()
+        self._gate_config = ServoConfig()
         self._x_config = StepperConfig()
         self._y_config = StepperConfig()
         self._z_config = StepperConfig()

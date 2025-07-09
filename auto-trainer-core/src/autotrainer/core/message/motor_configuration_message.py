@@ -129,11 +129,12 @@ Protocol for access to a full set of motor configurations
 
 
 class MotorConfigurations(Protocol):
+
     @property
     def magnet_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
 
     @property
-    def tunnel_gate_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
+    def gate_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
 
     @property
     def load_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
