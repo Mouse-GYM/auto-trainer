@@ -1,19 +1,18 @@
 import argparse
 import logging
 import queue
+import sys
 import time
 from threading import Thread
 from copy import copy
 from enum import IntEnum
 
 from autotrainer.core import SystemStatusMessageKind, SystemCommandKind, EventManager
+from autotrainer.core.logging import setup_logging
 from autotrainer.device import CanDevice, DeviceConnection, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
     CompoundMovementFile, MotorConfigurationFile
 
-logging.basicConfig(level=logging.INFO)
-logging.getLogger("autotrainer").setLevel(logging.DEBUG)
-logger = logging.getLogger(__name__)
 
 msg_queue = queue.Queue()
 msg_queue_active = True
@@ -624,7 +623,9 @@ def print_help():
     print()
 
 
-if __name__ == '__main__':
+def main():
+    global output_file, perf_print
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument("can", help="the can id", type=int, default=1)
@@ -640,3 +641,8 @@ if __name__ == '__main__':
     perf_print = perf_count != -1
 
     run_monitor()
+
+
+if __name__ == '__main__':
+    logger = setup_logging()
+    sys.exit(main())

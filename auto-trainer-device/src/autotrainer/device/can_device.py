@@ -282,8 +282,10 @@ class CanDevice(Device):
                 "Alogus hardware or hardware support not found.  Using emulation interface.")
 
     def _handle_ack(self, msg: Acknowledge):
-        logger.debug("Received ack: %s - %s", msg.target, msg.uuid)
-        if msg.uuid == CanInterface.uuid():
+        cur_can_uuid = CanInterface.uuid()
+        logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s",
+                     msg.target, msg.uuid, cur_can_uuid)
+        if msg.uuid == cur_can_uuid:
             self._perform_next_compound_step()
 
     @property
