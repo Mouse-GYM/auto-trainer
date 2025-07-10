@@ -844,7 +844,8 @@ class CanInterface(DeviceInterface):
             velocity = float(position[1]) / 100.0 * config.maximum_velocity
             position = float(position[0])
         else:
-            return
+            logger.warning("unandled pos: %s", position)
+            return False
 
         if position < 0:
             position = 0
@@ -854,12 +855,16 @@ class CanInterface(DeviceInterface):
         acceleration = config.maximum_acceleration
 
         addr = self._tgt2addr(target_of_motor(motor))
-        return addr is not None and self._jc.ServoMove(addr, _motor_to_id(motor),
+        if addr is None:
+            logger.warning("no addr for motor-servo=%s", motor)
+            return False
+        res = self._jc.ServoMove(addr, _motor_to_id(motor),
                                                        position,
                                                        velocity,
                                                        acceleration,
                                                        AbsOrRel.ABSOLUTE,
-                                                       CanInterface.next_uuid()) == 0
+                                                       CanInterface.next_uuid())
+        return res == 0
 
     def _move_stepper_motor(
         self,
@@ -899,13 +904,17 @@ class CanInterface(DeviceInterface):
             position = 15
 
         addr = self._tgt2addr(target_of_motor(motor))
-        return addr is not None and self._jc.StepperMove(addr, _motor_to_id(motor),
+        if addr is None:
+            logger.warning("addr None for stepper motor=%s", motor)
+            return False
+        res = self._jc.StepperMove(addr, _motor_to_id(motor),
                                                          position,
                                                          velocity,
                                                          acceleration,
                                                          AbsOrRel.ABSOLUTE,
                                                          save_as_fixed,
-                                                         CanInterface.next_uuid()) == 0
+                                                         CanInterface.next_uuid())
+        return res == 0
 
     def move_magnet_servo(self, position, _unused: bool = False) -> bool:
         """
