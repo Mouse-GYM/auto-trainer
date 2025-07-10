@@ -676,7 +676,7 @@ class CanInterface(DeviceInterface):
                 time.sleep(0.001)
 
         logger.debug("get_response(%s): res=%s ; dropped %s msgs, types=%s",
-                     typeof, final_res, tot_dropped, dropped)
+                     typeof.__qualname__, final_res, tot_dropped, dropped)
 
         return final_res
 
@@ -784,9 +784,9 @@ class CanInterface(DeviceInterface):
             config = self.get_response(config_type, target_of_motor(motor), 3)
             if config is not None and config.motor == motor:
                 self.set_motor_configuration(motor, config, False)
-                logger.info(f"Pulled configuration for {motor_to_str(motor)}")
+                logger.info("Pulled configuration for %s", motor)
                 break
-            logger.info(f"Failed to get configuration for {motor_to_str(motor)}")
+            logger.warning("Failed to get configuration for %s", motor)
 
     def _query_configuration(self):
         """

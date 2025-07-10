@@ -642,9 +642,8 @@ def print_help():
           " ::Tare Load Cell/Pressure Sensors")
     print("v[ersion]                          "
           " ::Version")
-    print("logger [<name>] <level>"
-          "  ::Set logger [name] level"
-          )
+    print("logger [<name>] <level>            "
+          " ::Set logger [name] level")
     print()
 
 
