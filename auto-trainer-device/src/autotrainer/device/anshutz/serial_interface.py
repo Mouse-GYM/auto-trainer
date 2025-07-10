@@ -2,6 +2,7 @@ import logging
 import math
 import sys
 import typing
+from typing import Optional
 
 import serial
 import serial.tools.list_ports
@@ -55,7 +56,7 @@ class SerialInterface(DeviceInterface):
     def __init__(self, port: str, baudrate: int = 115200):
         super().__init__()
         self._port = port
-        self._serial = None
+        self._serial: Optional[serial.Serial] = None
         self._baudrate = baudrate
 
     @property
