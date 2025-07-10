@@ -675,8 +675,8 @@ class CanInterface(DeviceInterface):
                 self._cnt_none += 1
                 time.sleep(0.001)
 
-        logger.debug("get_response: res=%s ; dropped %s msgs, types=%s",
-                     final_res, tot_dropped, dropped)
+        logger.debug("get_response(%s): res=%s ; dropped %s msgs, types=%s",
+                     typeof, final_res, tot_dropped, dropped)
 
         return final_res
 

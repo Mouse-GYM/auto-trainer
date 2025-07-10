@@ -455,7 +455,6 @@ class CanDevice(Device):
         """
         if len(self._homing_motors) > 1:
             self._homing_motors.pop(0)  # first one is/was executed by _home() function
-            time.sleep(0.2)
             self._home(self._homing_motors)
         elif self._compound_movement is not None and \
             len(self._compound_movement) > 0:
