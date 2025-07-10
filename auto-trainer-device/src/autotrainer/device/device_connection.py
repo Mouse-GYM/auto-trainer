@@ -163,21 +163,22 @@ class DeviceConnection(DeviceConnectionProtocol):
         while True:
             try:
                 cmd, data, context = self._cmd_queue.get_nowait()
-
-                if cmd == _REQUEST_DISCONNECT:
-                    logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
-                    return False
-                elif cmd == _REQUEST_CONNECT:
-                    logger.debug(f"<{self._name}> message: _REQUEST_CONNECT")
-                    break
-                else:
-                    logger.debug(f"<{self._name}> message: {cmd} ignored")
             except Empty:
                 # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
                 # significantly slow down the system without explicitly yielding, despite being in its own thread.  This
                 # is not the case for other platforms/combinations of the above so may not be apparent when not on the
                 # deployment current platform.
                 time.sleep(0.0001)
+                continue
+
+            if cmd == _REQUEST_DISCONNECT:
+                logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
+                return False
+            elif cmd == _REQUEST_CONNECT:
+                logger.debug(f"<{self._name}> message: _REQUEST_CONNECT")
+                break
+            else:
+                logger.debug(f"<{self._name}> message: {cmd} ignored")
 
         if not self._interface.is_open:
             try:
@@ -202,6 +203,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         while True:
             # Data from the device for the device listener to process.
             heartbeat = 0
+            messages = []  # for end of while True.
             while self._interface.can_read():
                 messages = self._interface.read(self._read_limit)
                 self._device.notify_data(messages)
@@ -223,7 +225,9 @@ class DeviceConnection(DeviceConnectionProtocol):
                     self._device.notify_message(cmd, data, context)
             except Empty:
                 # See sleep comment above.
-                time.sleep(0.0001)
+                if len(messages) == 0:
+                    # only sleep if we've read nothing from bus
+                    time.sleep(0.0001)
 
         if self._interface.is_open:
             self._device.disconnect()

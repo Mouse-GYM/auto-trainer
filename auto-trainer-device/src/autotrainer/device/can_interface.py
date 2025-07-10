@@ -844,7 +844,7 @@ class CanInterface(DeviceInterface):
             velocity = float(position[1]) / 100.0 * config.maximum_velocity
             position = float(position[0])
         else:
-            logger.warning("unandled pos: %s", position)
+            logger.warning("unhandled pos: %s", position)
             return False
 
         if position < 0:

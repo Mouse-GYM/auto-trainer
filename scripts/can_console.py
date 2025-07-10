@@ -14,7 +14,6 @@ from autotrainer.device import CanDevice, DeviceConnection, Motor, \
     CompoundMovementFile, MotorConfigurationFile
 
 
-msg_queue = queue.Queue()
 msg_queue_active = True
 output_file = None
 perf_start = None
@@ -34,7 +33,7 @@ class StatusType(IntEnum):
     STIMULUS = 6
 
 
-def monitor_message_queue():
+def monitor_message_queue(msg_queue):
     global perf_start, perf_count, print_motor_status, print_status
     global get_input
 
@@ -312,8 +311,9 @@ def run_monitor():
     global print_motor_status
     global print_status, msg_queue_active
 
-    mon_thread = Thread(target=monitor_message_queue)
+    msg_queue = queue.Queue()
 
+    mon_thread = Thread(target=monitor_message_queue, args=(msg_queue,))
     mon_thread.start()
 
     device_connection = DeviceConnection(CanDevice(), msg_queue)
