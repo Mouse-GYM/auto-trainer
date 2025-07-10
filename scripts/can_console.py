@@ -316,9 +316,9 @@ def run_monitor():
 
     mon_thread.start()
 
-    device_thread = DeviceConnection(CanDevice(), msg_queue)
+    device_connection = DeviceConnection(CanDevice(), msg_queue)
 
-    device_thread.request_connect()
+    device_connection.request_connect()
     last_command = ""
 
     while True:
@@ -374,47 +374,47 @@ def run_monitor():
                     get_input = True
 
                 elif motor is not None:
-                    handle_motor_command(motor, params, device_thread)
+                    handle_motor_command(motor, params, device_connection)
 
                 elif cmd == 'a' or cmd == 'audio':
-                    device_thread.send_message(SystemCommandKind.PLAY_TONE,
+                    device_connection.send_message(SystemCommandKind.PLAY_TONE,
                                                # period from sec to msec
                                                data=(int(params[0]), int(float(params[1]) * 1000)),
                                                context="tone")
 
                 elif cmd == 'd' or cmd == 'delay':
-                    device_thread.send_message(SystemCommandKind.DELAY, float(params[0]),
+                    device_connection.send_message(SystemCommandKind.DELAY, float(params[0]),
                                                context="delay")
 
                 elif cmd == 'f' or cmd == 'file':
                     if params[0] == 'motor':
                         file = MotorConfigurationFile.from_file(params[1])
-                        device_thread.use_motor_configurations(file)
+                        device_connection.use_motor_configurations(file)
                     elif params[0] == 'move':
                         file = CompoundMovementFile.from_file(params[1])
-                        device_thread.use_compound_movements(file)
+                        device_connection.use_compound_movements(file)
                     else:
                         print(f"Unknown file request: {params[0]}")
                     get_input = True
 
                 elif cmd == 'h' or cmd == 'home':
-                    device_thread.send_message(SystemCommandKind.SEND_HOME, context="home")
+                    device_connection.send_message(SystemCommandKind.SEND_HOME, context="home")
 
                 elif cmd == 'k' or cmd == 'known':
-                    device_thread.send_message(SystemCommandKind.SEND_FIXED_XYZ, context="known")
+                    device_connection.send_message(SystemCommandKind.SEND_FIXED_XYZ, context="known")
 
                 elif cmd == 'o' or cmd == 'output':
-                    handle_output_command(params, device_thread)
+                    handle_output_command(params, device_connection)
 
                 elif cmd == 'p' or cmd == 'pellet':
-                    handle_pellet_command(params, device_thread)
+                    handle_pellet_command(params, device_connection)
 
                 elif cmd == 'q' or cmd == 'quit':
-                    device_thread.request_disconnect()
+                    device_connection.request_disconnect()
                     break
 
                 elif cmd == 'r' or cmd == 'rgb':
-                    device_thread.send_message(SystemCommandKind.SET_RGB_LED,
+                    device_connection.send_message(SystemCommandKind.SET_RGB_LED,
                                                (int(params[0]), int(params[1]), int(params[2])),
                                                context="rgb")
 
@@ -422,10 +422,10 @@ def run_monitor():
                     print_status = StatusType.SENSORS
 
                 elif cmd == 't' or cmd == 'tare':
-                    device_thread.send_message(SystemCommandKind.UPDATE_SCALE_TARE, context="tare")
+                    device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE, context="tare")
 
                 elif cmd == 'v' or cmd == 'version':
-                    device_thread.send_message(SystemCommandKind.REQUEST_VERSION, context="version")
+                    device_connection.send_message(SystemCommandKind.REQUEST_VERSION, context="version")
 
                 elif cmd == "logger":
                     get_input = True
@@ -452,7 +452,7 @@ def run_monitor():
                 get_input = True
         else:
             if not mon_thread.is_alive():
-                device_thread.request_disconnect()
+                device_connection.request_disconnect()
                 break
             else:
                 time.sleep(0.1)
@@ -463,7 +463,7 @@ def run_monitor():
 
     logger.info("waiting for device connection to terminate")
 
-    device_thread.join()
+    device_connection.join()
 
     EventManager.try_close_default()
 
@@ -487,7 +487,7 @@ motor_to_move_command = {
 }
 
 
-def handle_motor_command(motor: Motor, params, device_thread):
+def handle_motor_command(motor: Motor, params, device_connection):
     global print_motor_status, get_input
     try:
         float(params[0])
@@ -503,34 +503,34 @@ def handle_motor_command(motor: Motor, params, device_thread):
 
     # set position
     elif params[0] == 'move':
-        device_thread.send_message(motor_to_move_command[motor],
-                                   data=move_parameter(params[1:]), context="motor move")
+        device_connection.send_message(motor_to_move_command[motor],
+                                       data=move_parameter(params[1:]), context="motor move")
 
     # set position (no 'move')
     elif numeric:
-        device_thread.send_message(motor_to_move_command[motor],
-                                   data=move_parameter(params[0:]), context="motor move")
+        device_connection.send_message(motor_to_move_command[motor],
+                                       data=move_parameter(params[0:]), context="motor move")
 
     elif params[0] == 'set':
-        device_thread.send_message(motor_to_set_command[motor],
-                                   data=move_parameter(params[1:]), context="motor set")
+        device_connection.send_message(motor_to_set_command[motor],
+                                       data=move_parameter(params[1:]), context="motor set")
 
     # sent to home position
     elif params[0] == 'home':
-        device_thread.send_message(SystemCommandKind.SEND_TO_LIMITS, data=motor, context="motor "
+        device_connection.send_message(SystemCommandKind.SEND_TO_LIMITS, data=motor, context="motor "
                                                                                          "home")
 
     elif params[0] == 'trip':
-        round_trip_test(motor, int(params[1]), device_thread)
+        round_trip_test(motor, int(params[1]), device_connection)
         get_input = True
 
     # read or write configuration
     elif params[0] == 'config':
         if params[1] == 'read':
-            device_thread.send_message(SystemCommandKind.READ_MOTOR_CONFIGURATION, data=motor,
-                                       context="motor read")
+            device_connection.send_message(SystemCommandKind.READ_MOTOR_CONFIGURATION, data=motor,
+                                           context="motor read")
         elif params[1] == 'write':
-            write_config(motor, device_thread)
+            write_config(motor, device_connection)
         else:
             print(f"Unrecognized configuration request: {params[1]}")
             get_input = True
@@ -542,8 +542,8 @@ def handle_motor_command(motor: Motor, params, device_thread):
         step = step if start < stop else -step
 
         for position in range(start, stop + step, step):
-            device_thread.send_message(motor_to_move_command[motor],
-                                       data=float(position), context="motor step")
+            device_connection.send_message(motor_to_move_command[motor],
+                                           data=float(position), context="motor step")
             time.sleep(1 + .25 * step)
         get_input = True
     else:
@@ -551,7 +551,7 @@ def handle_motor_command(motor: Motor, params, device_thread):
         get_input = True
 
 
-def handle_pellet_command(params, device_thread):
+def handle_pellet_command(params, device_connection):
     global get_input
     """
     Handle a pellet control sequence
@@ -559,27 +559,27 @@ def handle_pellet_command(params, device_thread):
     cmd = params[0]
 
     if cmd == 'cover' or cmd == 'c':
-        device_thread.send_message(SystemCommandKind.COVER_PELLET, context="pellet cover")
+        device_connection.send_message(SystemCommandKind.COVER_PELLET, context="pellet cover")
     elif cmd == 'load' or cmd == 'l':
-        device_thread.send_message(SystemCommandKind.LOAD_PELLET, context="pellet load")
+        device_connection.send_message(SystemCommandKind.LOAD_PELLET, context="pellet load")
     elif cmd == 'release' or cmd == 'r':
-        device_thread.send_message(SystemCommandKind.RELEASE_PELLET, context="pellet release")
+        device_connection.send_message(SystemCommandKind.RELEASE_PELLET, context="pellet release")
     elif cmd == 'send' or cmd == 's':
-        device_thread.send_message(SystemCommandKind.SEND_PELLET, context="pellet send")
+        device_connection.send_message(SystemCommandKind.SEND_PELLET, context="pellet send")
     else:
         print(f"Unrecognized pellet command: {cmd}")
         get_input = True
 
 
-def handle_output_command(params, device_thread):
+def handle_output_command(params, device_connection):
     cmd = params[0]
 
     if cmd == 'd' or cmd == 'digital':
-        device_thread.send_message(SystemCommandKind.SET_DIGITAL_OUTPUT,
-                                   (int(params[1]), int(params[2])), context="dout")
+        device_connection.send_message(SystemCommandKind.SET_DIGITAL_OUTPUT,
+                                       (int(params[1]), int(params[2])), context="dout")
     elif cmd == 'a' or cmd == 'analog':
-        device_thread.send_message(SystemCommandKind.SET_ANALOG_OUTPUT,
-                                   (int(params[1]), int(params[2])), context="aout")
+        device_connection.send_message(SystemCommandKind.SET_ANALOG_OUTPUT,
+                                       (int(params[1]), int(params[2])), context="aout")
 
 
 def print_help():
