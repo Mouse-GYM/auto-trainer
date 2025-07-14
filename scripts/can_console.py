@@ -321,13 +321,8 @@ def run_monitor():
     device_connection.request_connect()
     last_command = ""
 
-    default_motors_cfg_file = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()
-    if default_motors_cfg_file.exists():
-        motors_cfg = MotorConfigurationFile.from_file(default_motors_cfg_file)
-        device_connection.use_motor_configurations(motors_cfg)
-    else:
-        logger.warning("Default motor config file %s not present, no motor config auto-applied, this might be critical",
-                       default_motors_cfg_file)
+    device_connection.load_default_motor_config()
+    device_connection.load_default_move_config()
 
     while True:
         if perf_count <= 0:

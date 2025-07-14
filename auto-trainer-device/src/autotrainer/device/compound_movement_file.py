@@ -27,6 +27,8 @@ class CompoundMovementFile(CompoundMovementDataSet):
     Presents the data in the form of a CompoundMovementDataSet Protocol
     """
 
+    DEFAULT_LOCATION = Path("~/Autotrainer/move_config.yaml")  # you shall use .expanduser() when you use it
+
     class _Movement(IntEnum):
         LOAD_PELLET = 0
         SEND_PELLET = 1
