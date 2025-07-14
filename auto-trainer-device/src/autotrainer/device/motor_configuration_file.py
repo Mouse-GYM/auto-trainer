@@ -92,7 +92,7 @@ class MotorConfigurationFile(MotorConfigurations):
                 logger.error(f"Alogus motor configuration file {filename}: {e}")
                 raise
             else:
-                logger.notice("Config %s, loaded: %s", file, loaded)
+                logger.notice("Config %s, loaded: %s", filename, loaded)
                 if len(loaded) != 7:
                     # x + y + z + pellet load + pellet cover + tunnel-gate + tunnel-magnet
                     raise RuntimeError(f"Expected 7 sections loaded from motor config file {filename}")
