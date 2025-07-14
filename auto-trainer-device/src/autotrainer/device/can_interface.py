@@ -140,7 +140,7 @@ _MOTOR_TO_ID_MAP = {
 }
 
 
-def _motor_to_id(motor: Motor):
+def _motor_to_id(motor: Motor) -> int:
     """
     Args:
         motor: Motor identifier
@@ -149,7 +149,7 @@ def _motor_to_id(motor: Motor):
         int: Physical identifier for the motor
     """
 
-    motor_id = _MOTOR_TO_ID_MAP.get(motor)
+    motor_id = _MOTOR_TO_ID_MAP[motor]
     return motor_id.value
 
 
@@ -893,6 +893,8 @@ class CanInterface(DeviceInterface):
         else:
             logger.warning("Unhandled position: %s", position)
             return False
+
+        logger.debug("move %.3f mm with v=%.3f mm/s**2", position, velocity)
 
         position = mm_to_turns(position)
         velocity = mm_to_turns(velocity)
