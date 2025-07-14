@@ -1,5 +1,10 @@
 import typing
 
+# must be firsts to prevent partial import name error because of import loop cycle(s):
+from .motor_steps import MotorSteps
+from .compound_movement_file import CompoundMovementFile
+from .motor_configuration_file import MotorConfigurationFile
+
 from .device import Device
 from .device_api import DeviceApi
 from .can_interface import CanInterface, motor_to_str, target_to_str, is_stepper, is_servo, \
@@ -13,9 +18,6 @@ from .device_interface import (DeviceInterface, Target, Motor, ServoConfig, Step
                                SensorStatus, Status)
 from .emulation_interface import EmulationInterface
 from .can_device import CanDevice, HAVE_CAN_DEVICE
-from .motor_steps import MotorSteps
-from .compound_movement_file import CompoundMovementFile
-from .motor_configuration_file import MotorConfigurationFile
 from .anshutz import HeadFix, PelletDelivery, parse_measurement, parse_measurements
 
 CAN_IDENTIFIER = "CAN"
