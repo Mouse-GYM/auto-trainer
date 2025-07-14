@@ -16,10 +16,5 @@ requires-python = ">=3.8"
 dependencies = [
     "pyserial",
     "auto-trainer-core",
-    "auto-trainer-core",
-]
-
-[project.optional-dependencies]
-can = [
-    "pyjerrycan",
+    # "pyjerrycan >= 1.2.0",  optional atm
 ]

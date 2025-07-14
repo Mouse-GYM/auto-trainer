@@ -29,8 +29,8 @@ else:
     jerry_v = tuple(
         map(lambda s: int(s) if s.isdigit() else s, version("pyjerrycan").split("."))
     )
-    if jerry_v >= (1, 2, 0):
-        warnings.warn(f"expected pyjerrycan < 1.2.0 ; got {jerry_v}", UserWarning)
+    if jerry_v < (1, 2, 0):
+        warnings.warn(f"expected pyjerrycan >= 1.2.0 ; got {jerry_v}", UserWarning)
 
 
 from autotrainer.core.message import Motor
@@ -1329,9 +1329,9 @@ class CanInterface(DeviceInterface):
         """
         if message.bootloader_response.type == JerryCANBootloaderCmd.SubCommand.VERSION:
             target = _addr2tgt(message.dst_id)
-            version_str = f"{target_to_str(target)}: {message.bootloader_response.version.running_major}." \
-                          f"{message.bootloader_response.version.running_minor}." \
-                          f"{message.bootloader_response.version.running_patch}"
+            version_str = f"{target_to_str(target)}: {message.bootloader_response.version.running_version_major}." \
+                          f"{message.bootloader_response.version.running_version_minor}." \
+                          f"{message.bootloader_response.version.running_version_patch}"
             return Version(target, version_str)
         return None
 
