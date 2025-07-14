@@ -26,6 +26,7 @@ class DeviceConnectionProtocol(Protocol):
     def load_default_motor_config(self):
         default_motors_cfg_file = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()
         if default_motors_cfg_file.exists():
+            logger.notice("Reading and applying default motors config: %s", default_motors_cfg_file)
             motors_cfg = MotorConfigurationFile.from_file(default_motors_cfg_file)
             self.use_motor_configurations(motors_cfg)
         else:
@@ -38,6 +39,7 @@ class DeviceConnectionProtocol(Protocol):
     def load_default_move_config(self):
         default_move_cfg_file = CompoundMovementFile.DEFAULT_LOCATION.expanduser()
         if default_move_cfg_file.exists():
+            logger.notice("Reading and applying default move config: %s", default_move_cfg_file)
             move_cfg = CompoundMovementFile.from_file(default_move_cfg_file)
             self.use_compound_movements(move_cfg)
         else:
