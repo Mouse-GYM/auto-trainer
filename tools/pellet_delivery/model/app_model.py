@@ -282,9 +282,9 @@ class AppModel(ObservableObject):
 
         if self._hardware_configuration is None:
             for attempt in (
+                MotorConfigurationFile.DEFAULT_LOCATION.expanduser(),
                 Path.home().joinpath(".alogus_config.yaml"),
                 Path.home().joinpath("alogus_config.yaml"),
-                MotorConfigurationFile.DEFAULT_LOCATION.expanduser(),
             ):
                 if attempt.exists():
                     logger.notice("Will load motor config %s", attempt)
@@ -305,6 +305,8 @@ class AppModel(ObservableObject):
                 raise  # do not take any risk
             else:
                 self._device_connection.use_motor_configurations(motors_cfg)
+
+        self._device_connection.load_default_move_config()
 
         self.is_connected = True
 
