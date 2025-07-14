@@ -945,7 +945,12 @@ class CanInterface(DeviceInterface):
         return self._move_servo_motor(Motor.TUNNEL_GATE_SERVO, position, self.gate_config)
 
     def set_motor_x(self, position) -> bool:
-        return self.move_motor_x(position, True)
+        # NB: SET == move + saved-as-fixed:
+        res = (
+                self.move_motor_x(position, False)
+            and self.move_motor_x(position, True)
+        )
+        return res
 
     def move_motor_x(self, position, save_as_fixed: bool = False) -> bool:
         """
@@ -962,7 +967,11 @@ class CanInterface(DeviceInterface):
                                         save_as_fixed)
 
     def set_motor_y(self, position) -> bool:
-        return self.move_motor_y(position, True)
+        res = (
+                self.move_motor_y(position, False)
+            and self.move_motor_y(position, True)
+        )
+        return res
 
     def move_motor_y(self, position, save_as_fixed: bool = False) -> bool:
         """
@@ -979,7 +988,11 @@ class CanInterface(DeviceInterface):
                                         save_as_fixed)
 
     def set_motor_z(self, position) -> bool:
-        return self.move_motor_z(position, True)
+        res = (
+                self.move_motor_z(position, False)
+            and self.move_motor_z(position, True)
+        )
+        return res
 
     def move_motor_z(self, position, save_as_fixed: bool = False) -> bool:
         """
