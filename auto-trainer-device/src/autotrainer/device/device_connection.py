@@ -13,8 +13,9 @@ from .device_api import DeviceApi
 from .device_interface import ServoConfig, StepperConfig
 from .device_connection_protocol import DeviceConnectionProtocol
 from .motor_steps import CompoundMovementDataSet, MotorSteps
+from autotrainer.core.logging import get_verbose_logger
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 _REQUEST_CONNECT = -1002
 _REQUEST_DISCONNECT = -1003
@@ -117,6 +118,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         self.send_message(SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, data.release_pellet)
 
     def use_motor_configurations(self, data: MotorConfigurations):
+        logger.notice("Setting motor configurations")
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.x_config)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.y_config)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.z_config)

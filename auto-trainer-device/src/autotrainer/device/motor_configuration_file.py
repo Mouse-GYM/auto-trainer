@@ -14,18 +14,22 @@ In either case, the YAML base key for contents is either "magnet" or "pellet".
 """
 
 import logging
+
 import yaml
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Union
 
 from autotrainer.core import MotorConfigurations
 
 from .device_interface import ServoConfig, StepperConfig, Motor
+from autotrainer.core.logging import get_verbose_logger
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class MotorConfigurationFile(MotorConfigurations):
+
+    DEFAULT_LOCATION = Path("~/Autotrainer/motor_config.yaml")  # you shall use .expanduser() when you use it
 
     def __init__(self):
         """
@@ -41,7 +45,7 @@ class MotorConfigurationFile(MotorConfigurations):
         self._z_config = StepperConfig()
 
     @classmethod
-    def from_file(cls, filename):
+    def from_file(cls, filename: Union[str, Path]):
         """
         Import configurations from a file.
 
@@ -70,7 +74,7 @@ class MotorConfigurationFile(MotorConfigurations):
         inst._convert(yaml_dict)
         return inst
 
-    def _load(self, filename):
+    def _load(self, filename: Union[str, Path]):
         """
         Load configurations from a file.
 
@@ -83,10 +87,15 @@ class MotorConfigurationFile(MotorConfigurations):
         if filename.exists():
             try:
                 with open(filename, "r") as file:
-                    self._convert(yaml.safe_load(file))
-
+                    loaded = self._convert(yaml.safe_load(file))
             except Exception as e:
                 logger.error(f"Alogus motor configuration file {filename}: {e}")
+                raise
+            else:
+                logger.notice("Config %s, loaded: %s", file, loaded)
+                if len(loaded) != 7:
+                    # x + y + z + pellet load + pellet cover + tunnel-gate + tunnel-magnet
+                    raise RuntimeError(f"Expected 7 sections loaded from motor config file {filename}")
         else:
             logger.error(f"Alogus motor configuration file {filename}: No such file")
 
@@ -97,36 +106,45 @@ class MotorConfigurationFile(MotorConfigurations):
         Args:
             yaml_dict (dict): Dictionary of data
         """
+        loaded = []
         if "pellet" in yaml_dict:
             if "load" in yaml_dict["pellet"]:
                 self._load_config = ServoConfig.from_dict(yaml_dict["pellet"]["load"])
                 self._load_config.motor = Motor.PELLET_LOAD_SERVO
                 logger.info(f"load configuration: {self._load_config}")
+                loaded.append("pellet-load")
             if "barrier" in yaml_dict["pellet"]:
                 self._cover_config = ServoConfig.from_dict(yaml_dict["pellet"]["barrier"])
                 self._cover_config.motor = Motor.PELLET_COVER_SERVO
                 logger.info(f"barrier configuration: {self._cover_config}")
+                loaded.append("pellet-barrier")
             if "x" in yaml_dict["pellet"]:
                 self._x_config = StepperConfig.from_dict(yaml_dict["pellet"]["x"])
                 self._x_config.motor = Motor.PELLET_X_MOTOR
                 logger.info(f"X stepper configuration: {self._x_config}")
+                loaded.append("pellet-x")
             if "y" in yaml_dict["pellet"]:
                 self._y_config = StepperConfig.from_dict(yaml_dict["pellet"]["y"])
                 self._y_config.motor = Motor.PELLET_Y_MOTOR
                 logger.info(f"Y stepper configuration: {self._y_config}")
+                loaded.append("pellet-y")
             if "z" in yaml_dict["pellet"]:
                 self._z_config = StepperConfig.from_dict(yaml_dict["pellet"]["z"])
                 self._z_config.motor = Motor.PELLET_Z_MOTOR
                 logger.info(f"Z stepper configuration: {self._z_config}")
+                loaded.append("pellet-z")
         if "tunnel" in yaml_dict:
             if "magnet" in yaml_dict["tunnel"]:
                 self._magnet_config = ServoConfig.from_dict(yaml_dict["tunnel"]["magnet"])
                 self._magnet_config.motor = Motor.TUNNEL_MAGNET_SERVO
                 logger.info(f"Magnet stepper configuration: {self._magnet_config}")
+                loaded.append("tunnel-magnet")
             if "gate" in yaml_dict["tunnel"]:
                 self._gate_config = ServoConfig.from_dict(yaml_dict["tunnel"]["gate"])
                 self._gate_config.motor = Motor.TUNNEL_GATE_SERVO
                 logger.info(f"Gate stepper configuration: {self._gate_config}")
+                loaded.append("tunnel-gate")
+        return loaded
 
     '''
     Implement MotorConfigurations Protocol

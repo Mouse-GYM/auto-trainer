@@ -14,12 +14,12 @@ from enum import IntEnum
 from pathlib import Path
 import yaml
 
-from .motor_steps import MotorSteps
+from .motor_steps import MotorSteps, CompoundMovementDataSet
 
 logger = logging.getLogger(__name__)
 
 
-class CompoundMovementFile:
+class CompoundMovementFile(CompoundMovementDataSet):
     """
     Class that loads compound movements (MotorSteps) from either a file or
     a YAML-type dictionary.

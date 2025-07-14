@@ -321,6 +321,14 @@ def run_monitor():
     device_connection.request_connect()
     last_command = ""
 
+    default_motors_cfg_file = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()
+    if default_motors_cfg_file.exists():
+        motors_cfg = MotorConfigurationFile.from_file(default_motors_cfg_file)
+        device_connection.use_motor_configurations(motors_cfg)
+    else:
+        logger.warning("Default motor config file %s not present, no motor config auto-applied, this might be critical",
+                       default_motors_cfg_file)
+
     while True:
         if perf_count <= 0:
             while not get_input:
@@ -388,13 +396,13 @@ def run_monitor():
 
                 elif cmd == 'f' or cmd == 'file':
                     if params[0] == 'motor':
-                        file = MotorConfigurationFile.from_file(params[1])
-                        device_connection.use_motor_configurations(file)
+                        motors_cfg = MotorConfigurationFile.from_file(params[1])
+                        device_connection.use_motor_configurations(motors_cfg)
                     elif params[0] == 'move':
-                        file = CompoundMovementFile.from_file(params[1])
-                        device_connection.use_compound_movements(file)
+                        movements_cfg = CompoundMovementFile.from_file(params[1])
+                        device_connection.use_compound_movements(movements_cfg)
                     else:
-                        print(f"Unknown file request: {params[0]}")
+                        logger.error(f"Unknown file request: {params[0]}")
                     get_input = True
 
                 elif cmd == 'h' or cmd == 'home':

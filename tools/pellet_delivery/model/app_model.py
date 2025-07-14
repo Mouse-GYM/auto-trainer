@@ -280,24 +280,31 @@ class AppModel(ObservableObject):
 
         self._send_command(SystemCommandKind.REQUEST_VERSION)
 
-        if self._hardware_configuration is None or not Path(self._hardware_configuration).exists():
-            if Path.home().joinpath(".alogus_config.yaml").exists():
-                self.hardware_configuration = str(Path.home().joinpath(".alogus_config.yaml"))
-            elif Path.home().joinpath("alogus_config.yaml").exists():
-                self.hardware_configuration = str(Path.home().joinpath("alogus_config.yaml"))
+        if self._hardware_configuration is None:
+            for attempt in (
+                Path.home().joinpath(".alogus_config.yaml"),
+                Path.home().joinpath("alogus_config.yaml"),
+                MotorConfigurationFile.DEFAULT_LOCATION.expanduser(),
+            ):
+                if attempt.exists():
+                    logger.notice("Will load motor config %s", attempt)
+                    self.hardware_configuration = attempt.as_posix()
+                    break
             else:
-                self.hardware_configuration = None
+                logger.warning("No motor config file found, motors are possibly unconfigured ; this might be critical")
 
         if self._hardware_configuration is not None:
+            logger.info("Reading motor config file %s", self._hardware_configuration)
             try:
-                self._device_connection.use_motor_configurations(
-                    # MotorConfigurationFile does not take/accept argument(s) atm ?
-                    MotorConfigurationFile(self._hardware_configuration))
+                motors_cfg = MotorConfigurationFile.from_file(self._hardware_configuration)
             except Exception as err:
                 logger.error(
                     "failed to read motor configuration file %s: %s", self._hardware_configuration,
                     err)
                 self.hardware_configuration = None
+                raise  # do not take any risk
+            else:
+                self._device_connection.use_motor_configurations(motors_cfg)
 
         self.is_connected = True
 

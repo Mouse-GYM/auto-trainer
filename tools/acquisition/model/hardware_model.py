@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional
@@ -6,7 +7,7 @@ from typing import Optional
 from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.device import (DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
-                                HeadFix, PelletDelivery)
+                                HeadFix, PelletDelivery, MotorConfigurationFile)
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +159,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def play_tone(self, frequency: int, _duration: float) -> Optional[UUID]:
         return self._send_with_token(self._pellet_device, SystemCommandKind.PLAY_TONE, frequency)
 
+    def _load_motors_config(self):
+        config_path = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()
+        motors_cfg = MotorConfigurationFile.from_file(config_path)
+        self._pellet_device.use_motor_configurations(motors_cfg)
+
     def connect(self, cmd_queue: Queue, animal: Optional[AnimalSubject] = None):
         self._last_x = None
         self._last_y = None
@@ -193,6 +199,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         if self._pellet_device is not self._tunnel_device:
             self._send_command(self._pellet_device, SystemCommandKind.REQUEST_VERSION)
+
+        # load and set motors config
+        self._load_motors_config()
 
         self._send_command(self._tunnel_device, SystemCommandKind.STREAM_START)
 
