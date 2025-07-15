@@ -894,7 +894,7 @@ class CanInterface(DeviceInterface):
             logger.warning("Unhandled position: %s", position)
             return False
 
-        logger.debug("move %.3f mm with v=%.3f mm/s**2", position, velocity)
+        logger.debug("%s: move %.3f mm with v=%.3f mm/s**2", motor, position, velocity)
 
         position = mm_to_turns(position)
         velocity = mm_to_turns(velocity)
