@@ -26,6 +26,7 @@ class MainContent(QWidget):
 
         self._model = model
 
+        self._config_dialog = None
         self._is_diagnostics_visible = True
 
         self._plots = []
