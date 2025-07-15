@@ -54,7 +54,7 @@ class DeviceConnection(DeviceConnectionProtocol):
 
         self._name = name
 
-        self._read_limit: int = 5 if HAVE_CAN_DEVICE else math.inf
+        self._read_limit: int = 15 if HAVE_CAN_DEVICE else math.inf
 
         # The means of providing non-blocking access to the device.
         self._current_thread = None
@@ -208,15 +208,15 @@ class DeviceConnection(DeviceConnectionProtocol):
             # Data from the device for the device listener to process.
             heartbeat = 0
             tot_msg_read = 0
-            while self._interface.can_read():
-                messages = self._interface.read(self._read_limit)
+            if self._interface.can_read():
+                messages = self._interface.read(self._read_limit, collect_ms=15)
                 n = len(messages)
                 if n > 0:
                     self._device.notify_data(messages)
                     tot_msg_read += n
-                heartbeat += 1
-                if heartbeat > 5:
-                    break
+                # heartbeat += 1
+                # if heartbeat > 5:
+                #     break
 
             t_now = time.time()
             if t_now > t_next_cmd_queue_read:
@@ -235,10 +235,10 @@ class DeviceConnection(DeviceConnectionProtocol):
                         self._device.notify_message(cmd, data, context)
                         self._cmd_queue.task_done()
 
-            # See sleep comment above.
-            if tot_msg_read == 0:
-                # only sleep if we've read nothing from bus
-                time.sleep(0.001)
+            # # See sleep comment above.
+            # if tot_msg_read == 0:
+            #     # only sleep if we've read nothing from bus
+            #     time.sleep(0.001)
 
         if self._interface.is_open:
             self._device.disconnect()

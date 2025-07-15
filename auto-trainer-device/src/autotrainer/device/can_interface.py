@@ -589,7 +589,7 @@ class CanInterface(DeviceInterface):
         """
         return self._is_open
 
-    def read(self, max_count: int = 1) -> typing.Any:
+    def read(self, max_count: int = 1, *, collect_ms = 0) -> typing.Any:
         """
         Read a set of packets from the CANbus.
 
@@ -602,15 +602,19 @@ class CanInterface(DeviceInterface):
         messages = []
         if self._is_open:
             while len(messages) < max_count:
-                message = self._jc.ReceiveMessage()
-                if message is None:
+                msgs = self._jc.ReceiveMessage(collect_ms)  # collect_ms arg
+                if msgs is None:
                     # current jc.ReceiveMessage is non-blocking,
                     # so if we get None it means there is nothing available atm. should retry later.
                     self._cnt_none += 1
                     break
 
-                messages.append(message)
-                self._assign_address(message)
+                if collect_ms == 0:
+                    messages.append(msgs)
+                    self._assign_address(msgs)
+                else:
+                    messages.extend(msgs)
+                    self._assign_address(msgs[0])
 
                 # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
                 # significantly slow down the system without explicitly yielding, despite being in its own thread.  This
@@ -621,7 +625,7 @@ class CanInterface(DeviceInterface):
                 # but having it here induces this slow-down for every caller, and for each of their .read() execution,
                 # even when there is data that is read and while there could be more directly already available.
 
-        return [x for x in map(self._translate, messages) if x is not None]
+        return [x for x in map(self._translate, messages)]
 
     def write(self, value: typing.Any) -> int:
         """
