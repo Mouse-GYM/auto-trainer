@@ -221,14 +221,14 @@ class CanDevice(Device):
         self._data_handlers = {
             Status: lambda message: None,  # No-op for Status messages
 
-            LoadCellReading: lambda message: self._handle_load_cell_reading(message),
+            LoadCellReading: self._handle_load_cell_reading,
 
             PressureReading: lambda message: setattr(self, '_current_pressure', message.pressure),
 
             SensorStatus: lambda message: (
                 setattr(self, '_current_temperature', message.temperature_c),
                 setattr(self, '_current_humidity', message.humidity_percent)
-            )[-1],
+            ),
 
             MagnetDigitalInputs: lambda message: setattr(self, '_current_digital',
                                                          message.continuity_0),
@@ -255,24 +255,21 @@ class CanDevice(Device):
 
             ServoStatus: lambda message: self._report_motor_status(message.motor, message.position),
 
-            StepperConfig: lambda message: (
+            StepperConfig: lambda message: \
                 self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
-            )[-1],
 
-            ServoConfig: lambda message: (
+            ServoConfig: lambda message: \
                 self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
-            )[-1],
 
-            Version: lambda message: (
+            Version: lambda message: \
                 self.api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version),
-            )[-1],
 
             DoorData: lambda message: (
                 self.api.send_message(SystemStatusMessageKind.FRONT_DOOR, message.door1),
                 self.api.send_message(SystemStatusMessageKind.DRAWER_DOOR, message.door2),
                 self.api.send_message(SystemStatusMessageKind.SPARE_DOOR, message.door3),
                 self.api.send_message(SystemStatusMessageKind.EXT_BUTTON, message.ext_button)
-            )[-1] if self._api is not None else None,
+            ) if self._api is not None else None,
 
             Acknowledge: self._handle_ack,
         }

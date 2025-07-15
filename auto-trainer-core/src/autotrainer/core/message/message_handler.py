@@ -74,10 +74,7 @@ class MessageHandler(ObservableObject):
 
     def run(self):
         logger.debug(f"<{self._name}>: entering message event loop")
-        msg = None
         while True:
-            if msg is not None:
-                self._input_queue.task_done()
             msg, data = self._input_queue.get()
             if msg == TERMINATE:
                 self._input_queue.task_done()
@@ -88,7 +85,7 @@ class MessageHandler(ObservableObject):
                 self.property_changed(MessageHandler.FIRMWARE_VERSION_PROPERTY, data, None)
             else:
                 self.message_received(msg, data)
-            time.sleep(0.0001)
+            self._input_queue.task_done()
         logger.debug(f"<{self._name}>: exiting message event loop")
 
     def request_terminate(self):

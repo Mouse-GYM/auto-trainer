@@ -54,7 +54,7 @@ class DeviceConnection(DeviceConnectionProtocol):
 
         self._name = name
 
-        self._read_limit: int = 1 if HAVE_CAN_DEVICE else math.inf
+        self._read_limit: int = 5 if HAVE_CAN_DEVICE else math.inf
 
         # The means of providing non-blocking access to the device.
         self._current_thread = None
@@ -164,13 +164,14 @@ class DeviceConnection(DeviceConnectionProtocol):
         logger.info("running unconnected")
         while True:
             try:
-                cmd, data, context = self._cmd_queue.get_nowait()
+                cmd, data, context = self._cmd_queue.get(timeout=0.1)
+                self._cmd_queue.task_done()
             except Empty:
                 # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
                 # significantly slow down the system without explicitly yielding, despite being in its own thread.  This
                 # is not the case for other platforms/combinations of the above so may not be apparent when not on the
                 # deployment current platform.
-                time.sleep(0.0001)
+                # time.sleep(0.0001)
                 continue
 
             if cmd == _REQUEST_DISCONNECT:
@@ -202,34 +203,42 @@ class DeviceConnection(DeviceConnectionProtocol):
 
     def _run_connected(self) -> bool:
         logger.info("running connected")
+        t_next_cmd_queue_read = time.time()
         while True:
             # Data from the device for the device listener to process.
             heartbeat = 0
-            messages = []  # for end of while True.
+            tot_msg_read = 0
             while self._interface.can_read():
                 messages = self._interface.read(self._read_limit)
-                self._device.notify_data(messages)
+                n = len(messages)
+                if n > 0:
+                    self._device.notify_data(messages)
+                    tot_msg_read += n
                 heartbeat += 1
                 if heartbeat > 5:
                     break
-                if len(messages) == 0:
-                    # give a small break
-                    time.sleep(0.0001)
 
-            # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
-            try:
-                cmd, data, context = self._cmd_queue.get_nowait()
-
-                if cmd == _REQUEST_DISCONNECT:
-                    logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
-                    break
+            t_now = time.time()
+            if t_now > t_next_cmd_queue_read:
+                t_next_cmd_queue_read = t_now + 0.05
+                # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
+                try:
+                    cmd, data, context = self._cmd_queue.get_nowait()
+                except Empty:
+                    pass
                 else:
-                    self._device.notify_message(cmd, data, context)
-            except Empty:
-                # See sleep comment above.
-                if len(messages) == 0:
-                    # only sleep if we've read nothing from bus
-                    time.sleep(0.0001)
+                    if cmd == _REQUEST_DISCONNECT:
+                        self._cmd_queue.task_done()
+                        logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
+                        break
+                    else:
+                        self._device.notify_message(cmd, data, context)
+                        self._cmd_queue.task_done()
+
+            # See sleep comment above.
+            if tot_msg_read == 0:
+                # only sleep if we've read nothing from bus
+                time.sleep(0.001)
 
         if self._interface.is_open:
             self._device.disconnect()

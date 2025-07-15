@@ -17,8 +17,8 @@ class DeviceApi:
 
     def send_message(self, kind: int, context: object):
         """Sends a message identifier and optional data to client script or application"""
-        if self._message_callback is not None:
-            self._message_callback(kind, context)
-
         if self._message_queue is not None:
             self._message_queue.put((kind, context))
+
+        if self._message_callback is not None:
+            self._message_callback(kind, context)
