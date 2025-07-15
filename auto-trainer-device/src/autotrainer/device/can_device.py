@@ -381,7 +381,7 @@ class CanDevice(Device):
         # significantly slow down the system without explicitly yielding, despite being in its own thread.  This is
         # not the case for other platforms/combinations of the above so may not be apparent when not on the
         # deployment current platform.
-        time.sleep(0.001)
+        # time.sleep(0.001)
 
     def _handle_load_cell_reading(self, message):
         """
