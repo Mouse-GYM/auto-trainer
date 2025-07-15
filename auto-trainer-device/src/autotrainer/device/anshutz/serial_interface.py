@@ -93,7 +93,8 @@ class SerialInterface(DeviceInterface):
     def can_read(self) -> bool:
         return self.is_open and self._serial.in_waiting > 0
 
-    def read(self, max_count: int = math.inf) -> typing.Any:
+    def read(self, max_count: int = math.inf, *, collect_ms: int = 0) -> typing.Any:
+        # TODO: handle collect_ms
         if self.can_read():
             return self._serial.read(min(self._serial.in_waiting, max_count))
 

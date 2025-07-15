@@ -374,12 +374,6 @@ class CanDevice(Device):
             if handler:
                 handler(message)
 
-        # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
-        # significantly slow down the system without explicitly yielding, despite being in its own thread.  This is
-        # not the case for other platforms/combinations of the above so may not be apparent when not on the
-        # deployment current platform.
-        # time.sleep(0.001)
-
     def _handle_load_cell_reading(self, message):
         """
         Handle a load cell reading message.

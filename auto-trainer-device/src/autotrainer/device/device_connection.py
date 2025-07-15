@@ -167,11 +167,6 @@ class DeviceConnection(DeviceConnectionProtocol):
                 cmd, data, context = self._cmd_queue.get(timeout=0.1)
                 self._cmd_queue.task_done()
             except Empty:
-                # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
-                # significantly slow down the system without explicitly yielding, despite being in its own thread.  This
-                # is not the case for other platforms/combinations of the above so may not be apparent when not on the
-                # deployment current platform.
-                # time.sleep(0.0001)
                 continue
 
             if cmd == _REQUEST_DISCONNECT:
@@ -206,7 +201,6 @@ class DeviceConnection(DeviceConnectionProtocol):
         t_next_cmd_queue_read = time.time()
         while True:
             # Data from the device for the device listener to process.
-            heartbeat = 0
             tot_msg_read = 0
             if self._interface.can_read():
                 messages = self._interface.read(self._read_limit, collect_ms=15)
@@ -214,9 +208,6 @@ class DeviceConnection(DeviceConnectionProtocol):
                 if n > 0:
                     self._device.notify_data(messages)
                     tot_msg_read += n
-                # heartbeat += 1
-                # if heartbeat > 5:
-                #     break
 
             t_now = time.time()
             if t_now > t_next_cmd_queue_read:
@@ -234,11 +225,6 @@ class DeviceConnection(DeviceConnectionProtocol):
                     else:
                         self._device.notify_message(cmd, data, context)
                         self._cmd_queue.task_done()
-
-            # # See sleep comment above.
-            # if tot_msg_read == 0:
-            #     # only sleep if we've read nothing from bus
-            #     time.sleep(0.001)
 
         if self._interface.is_open:
             self._device.disconnect()

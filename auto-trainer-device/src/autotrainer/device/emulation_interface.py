@@ -84,8 +84,8 @@ class EmulationInterface(DeviceInterface):
     def can_read(self) -> bool:
         return self._is_open
 
-    def read(self, max_count: int = 1) -> typing.Any:
-
+    def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
+        # TODO: handle collect_ms
         messages = deepcopy(self._messages)
         self._messages = []
 
