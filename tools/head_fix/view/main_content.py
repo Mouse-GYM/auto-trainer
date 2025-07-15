@@ -392,6 +392,7 @@ class MainContent(QWidget):
                     (220, 220, 220))
 
     def _measurements_received(self, measurements):
+        # weights, switch, pressure, temperature, humidity
         self._load_cell_plot.cache_data(measurements[0])
         self._head_contact_plot.cache_data(measurements[1])
         self._headbar_pressure_plot.cache_data(measurements[2])

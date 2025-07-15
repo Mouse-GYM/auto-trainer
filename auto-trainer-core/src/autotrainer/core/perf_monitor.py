@@ -65,7 +65,7 @@ class PerfMonitor:
             self._next_refresh = self._start = t_perf_now
             self._next_refresh += self.report_window
 
-        if t_perf_now > self._next_refresh:
+        elif t_perf_now > self._next_refresh:
             self.cps = self._cycle_count / (t_perf_now - self._next_refresh + self.report_window)
             if self.enable_log:
                 logger.log(self.log_level, f"{self.name}: {self.cps:.1f} {self.units}")

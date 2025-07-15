@@ -390,8 +390,9 @@ class CanDevice(Device):
         Args:
             message: The LoadCellReading message
         """
-        measurement = HeadFixMeasurement(time.time(),
-                                         time.perf_counter_ns(),
+        ts_ns_now = time.time_ns()
+        measurement = HeadFixMeasurement(ts_ns_now / 1e9,
+                                         ts_ns_now,
                                          message.load,
                                          self._current_digital,
                                          self._current_pressure,
