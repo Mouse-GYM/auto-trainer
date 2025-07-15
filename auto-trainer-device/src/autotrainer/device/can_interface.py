@@ -1326,8 +1326,8 @@ class CanInterface(DeviceInterface):
         Returns:
             Populated class type (see device_interface.py) or None
         """
-        handler = self._handlers.get(message.type, lambda _: None)
-        return handler(message)
+        handler = self._handlers.get(message.type, None)
+        return None if handler is None else handler(message)
 
     @staticmethod
     def _translate_bootloader(message) -> typing.Optional[Version]:
