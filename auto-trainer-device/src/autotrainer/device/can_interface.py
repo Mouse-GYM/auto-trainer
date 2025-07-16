@@ -589,35 +589,46 @@ class CanInterface(DeviceInterface):
         """
         return self._is_open
 
+    def _read_1_msg(self, max_count, collect_ms):
+        t_end = time.time() + collect_ms / 1000
+        msgs = []
+        while True:
+            res = self._jc.ReceiveMessage()
+            if res is None:
+                if collect_ms == 0 or time.time() > t_end:
+                    return msgs
+            msgs.append(res)
+            if 0 < max_count <= len(msgs):
+                return msgs
+
+    def _read_many_msg(self, max_count: int = 1, collect_ms: int = 0):
+        return self._jc.ReceiveMessages(max_count, collect_ms)
+
     def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
         """
         Read a set of packets from the CANbus.
 
         Args:
             max_count: Maximum number of messages to return
-            collect_ms: Maximum duration to read messages ; if <= 0 only read while message are read.
+            collect_ms: Maximum duration to read messages ; if <= 0 only read while message are read,
+              on first non-available message: return what was already obtained.
 
         Returns:
             a list of data classes (see device_interface.py for list of classes)
         """
         messages = []
+        if hasattr(self._jc, "ReceiveMessages"):
+            rcv = self._read_many_msg
+        else:
+            rcv = self._read_1_msg
         if self._is_open:
-            while len(messages) < max_count:
-                msgs = self._jc.ReceiveMessage(collect_ms)
-                if msgs is None:
-                    # current jc.ReceiveMessage is non-blocking,
-                    # so if we get None it means there is nothing available atm. should retry later.
-                    self._cnt_none += 1
-                    break
-
-                if collect_ms <= 0:
-                    messages.append(msgs)
-                    self._assign_address(msgs)
-                else:
-                    messages.extend(msgs)
-                    self._assign_address(msgs[0])
-
-        return [x for x in map(self._translate, messages)]
+            msgs = rcv(max_count, collect_ms)
+            if len(msgs) == 0:
+                self._cnt_none += 1
+            else:
+                messages.extend(msgs)
+                self._assign_address(msgs[0])
+        return list(map(self._translate, messages))
 
     def write(self, value: typing.Any) -> int:
         """
@@ -854,6 +865,9 @@ class CanInterface(DeviceInterface):
         if addr is None:
             logger.warning("no addr for motor-servo=%s", motor)
             return False
+
+        logger.debug("%s: servo move %.3f mm with v=%.3f mm/s**2", motor, position, velocity)
+
         res = self._jc.ServoMove(addr, _motor_to_id(motor),
                                                        position,
                                                        velocity,

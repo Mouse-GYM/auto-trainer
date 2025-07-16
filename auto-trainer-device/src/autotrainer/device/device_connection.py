@@ -54,7 +54,7 @@ class DeviceConnection(DeviceConnectionProtocol):
 
         self._name = name
 
-        self._read_limit: int = 15 if HAVE_CAN_DEVICE else math.inf
+        self._read_limit: int = 25 if HAVE_CAN_DEVICE else math.inf
 
         # The means of providing non-blocking access to the device.
         self._current_thread = None
