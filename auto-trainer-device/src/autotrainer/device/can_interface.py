@@ -280,6 +280,8 @@ class CanInterface(DeviceInterface):
         else:
             self._jc = JerryCAN()
 
+        self._read_msgs = self._read_1_msg  # by default, will be set in open() too
+
         self._cnt_none = 0
         self._is_open = False
 
@@ -569,10 +571,29 @@ class CanInterface(DeviceInterface):
             return False
 
         self._is_open = self._jc.Open() == 0
+
+        self._read_msgs = self._read_many_msg if hasattr(self._jc, "ReceiveMessages") else self._read_1_msg
+        logger.debug("Using %s", self._read_msgs)
+
         self._cnt_none = 0
         if self._is_open:
+            tot_flushed = 0
+            t_end = time.time() + 1.5
+            while True:
+                flushed = self._read_msgs(100, collect_ms=5)  # purge whatever is available
+                tot_flushed += len(flushed)
+                for msg in flushed:
+                    self._assign_address(msg)
+                    if self.pellet_address is not None and self.magnet_address is not None:
+                        break
+                if self.pellet_address is not None and self.magnet_address is not None:
+                    break
+                if time.time() > t_end:
+                    logger.warning("Could not obtain both pellet and magnet address in time")
+                    break
+            logger.debug("pellet_address=%s magnet_address=%s ; flushed %s",
+                        self.pellet_address, self.magnet_address, tot_flushed)
             self._query_configuration()
-
         return self._is_open
 
     def close(self):
@@ -617,17 +638,12 @@ class CanInterface(DeviceInterface):
             a list of data classes (see device_interface.py for list of classes)
         """
         messages = []
-        if hasattr(self._jc, "ReceiveMessages"):
-            rcv = self._read_many_msg
-        else:
-            rcv = self._read_1_msg
         if self._is_open:
-            msgs = rcv(max_count, collect_ms)
+            msgs = self._read_msgs(max_count, collect_ms)
             if len(msgs) == 0:
                 self._cnt_none += 1
             else:
                 messages.extend(msgs)
-                self._assign_address(msgs[0])
         return list(map(self._translate, messages))
 
     def write(self, value: typing.Any) -> int:
@@ -668,16 +684,17 @@ class CanInterface(DeviceInterface):
         dropped = set()
         tot_dropped = 0
         while time.time() - now < timeout:
-            messages = self.read(1)
+            messages = self.read(50, collect_ms=5)
             if len(messages) > 0:
-                assert len(messages) == 1  # unless we change the read(1) above
-                msg = messages[0]
-                if isinstance(msg, typeof) and msg.target == target:
-                    final_res = msg
+                for msg in messages:
+                    if isinstance(msg, typeof) and msg.target == target:
+                        final_res = msg
+                        break
+                    else:
+                        dropped.add(type(msg))
+                        tot_dropped += 1
+                if final_res is not None:
                     break
-                else:
-                    dropped.add(type(msg))
-                    tot_dropped += 1
             else:
                 self._cnt_none += 1
                 time.sleep(0.001)
@@ -1201,6 +1218,7 @@ class CanInterface(DeviceInterface):
 
         addr = self._tgt2addr(target)
         if addr is None:
+            logger.warning("tgt2addr None for motor=%s target=%s", motor, target)
             return False
         res = self._jc.CfgRead(addr, msg)
         logger.debug("motor=%s: tentative request addr=%s tgt=%s => res=%s", motor, addr, target, res)
