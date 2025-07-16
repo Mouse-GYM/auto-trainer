@@ -1323,7 +1323,10 @@ class CanInterface(DeviceInterface):
             Populated class type (see device_interface.py) or None
         """
         handler = self._handlers.get(message.type, None)
-        return None if handler is None else handler(message)
+        if handler is None:
+            logger.warning("Unhandled message type: %s", message.type)
+            return None
+        return handler(message)
 
     @staticmethod
     def _translate_bootloader(message) -> typing.Optional[Version]:
