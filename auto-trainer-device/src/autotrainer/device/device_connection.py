@@ -188,8 +188,8 @@ class DeviceConnection(DeviceConnectionProtocol):
                 else:
                     logger.warning(f"<{self._name}> failed to open device")
                     return False
-            except Exception as ex:
-                logger.error(f"<{self._name}> {ex}")
+            except Exception as err:
+                logger.exception("<%s>: %s", self._name, err)
                 return False
         else:
             logger.warning(f"<{self._name}>CONNECT cmd while device already open")
