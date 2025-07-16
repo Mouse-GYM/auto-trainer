@@ -80,4 +80,4 @@ class SystemMessageHandler(MessageHandler):
         elif msg == SystemStatusMessageKind.MOTOR_CONFIGURATION:
             self._on_property_changed("config", data, None)
         else:
-            logger.warning("unhandled %s", msg)
+            logger.warning("unhandled msg %s", msg)

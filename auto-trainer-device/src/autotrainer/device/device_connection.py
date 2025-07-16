@@ -203,7 +203,7 @@ class DeviceConnection(DeviceConnectionProtocol):
             # Data from the device for the device listener to process.
             tot_msg_read = 0
             if self._interface.can_read():
-                messages = self._interface.read(self._read_limit, collect_ms=15)
+                messages = self._interface.read(self._read_limit, collect_ms=10)
                 n = len(messages)
                 if n > 0:
                     self._device.notify_data(messages)

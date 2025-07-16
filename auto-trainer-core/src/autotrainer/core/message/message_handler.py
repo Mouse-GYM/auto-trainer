@@ -79,28 +79,31 @@ class MessageHandler(ObservableObject):
 
     def run(self):
         logger.debug(f"<{self._name}>: entering message event loop")
-        t_next_check_size = time.time()
         q_get = self._input_queue.get
+        task_done = self._input_queue.task_done
+        msg_received = self.message_received
         tot_read_count = 0
+        t_next_check_size = time.time()
         while True:
             msg, data = q_get()
-            tot_read_count += 1
-            t_now = time.time()
-            if t_now > t_next_check_size:
-                logger.debug("system message handler input queue: size=%s read=%.1f / s",
-                             self._input_queue.qsize(), tot_read_count / 5)
-                t_next_check_size = t_now + 5
-                tot_read_count = 0
+            if __debug__:
+                tot_read_count += 1
+                t_now = time.time()
+                if t_now > t_next_check_size:
+                    logger.debug("system message handler input queue: size=%s read=%.1f / s",
+                                 self._input_queue.qsize(), tot_read_count / 60)
+                    t_next_check_size += 60
+                    tot_read_count = 0
             if msg == TERMINATE:
-                self._input_queue.task_done()
+                task_done()
                 break
             elif msg == SystemStatusMessageKind.ACKNOWLEDGE:
                 self.ack_received(data)
             elif msg == SystemStatusMessageKind.FIRMWARE_VERSION:
                 self.property_changed(MessageHandler.FIRMWARE_VERSION_PROPERTY, data, None)
             else:
-                self.message_received(msg, data)
-            self._input_queue.task_done()
+                msg_received(msg, data)
+            task_done()
         logger.debug(f"<{self._name}>: exiting message event loop")
 
     def request_terminate(self):

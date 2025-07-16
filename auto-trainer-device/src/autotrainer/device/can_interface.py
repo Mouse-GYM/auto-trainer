@@ -589,12 +589,13 @@ class CanInterface(DeviceInterface):
         """
         return self._is_open
 
-    def read(self, max_count: int = 1, *, collect_ms = 0) -> typing.Any:
+    def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
         """
         Read a set of packets from the CANbus.
 
         Args:
-            Maximum number of messages to return
+            max_count: Maximum number of messages to return
+            collect_ms: Maximum duration to read messages ; if <= 0 only read while message are read.
 
         Returns:
             a list of data classes (see device_interface.py for list of classes)
@@ -609,7 +610,7 @@ class CanInterface(DeviceInterface):
                     self._cnt_none += 1
                     break
 
-                if collect_ms == 0:
+                if collect_ms <= 0:
                     messages.append(msgs)
                     self._assign_address(msgs)
                 else:

@@ -60,10 +60,11 @@ class AudioSpectrumThrashMonitor(ObservableObject):
             hist.popleft()
             dropped += 1
         hist.append(([values[i] for i in self._config.bins_list], when, index))
-        t_now = time.time()
-        if t_now > self._t_next_report:
-            self._t_next_report += 5
-            logger.debug("hist size=%s cur_dropped=%s", len(hist), dropped)
+        if __debug__:
+            t_now = time.time()
+            if t_now > self._t_next_report:
+                self._t_next_report += 60
+                logger.debug("hist size=%s cur_dropped=%s", len(hist), dropped)
 
     def update(self, values: List[float], when: float = 0.0, index: int = 0):
         self._update_history(values, when, index)
