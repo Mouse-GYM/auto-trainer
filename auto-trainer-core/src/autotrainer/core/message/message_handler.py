@@ -4,11 +4,12 @@ from queue import Queue, Empty
 from threading import Thread
 from typing import Callable
 
+from autotrainer.core.logging import get_verbose_logger
 from ..observable_object import ObservableObject
 
 from .system_status_message import SystemStatusMessageKind
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 TERMINATE = -1001
 
@@ -69,13 +70,27 @@ class MessageHandler(ObservableObject):
 
     def start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
-            self._current_thread = Thread(target=self.run, name=self.__class__.__name__)
+            logger.verbose("Starting system message handler thread")
+            self._current_thread = Thread(
+                target=self.run, name=self.__class__.__name__,
+                daemon=True,  # in case main thread exits: also have the current handler thread to exit
+            )
             self._current_thread.start()
 
     def run(self):
         logger.debug(f"<{self._name}>: entering message event loop")
+        t_next_check_size = time.time()
+        q_get = self._input_queue.get
+        tot_read_count = 0
         while True:
-            msg, data = self._input_queue.get()
+            msg, data = q_get()
+            tot_read_count += 1
+            t_now = time.time()
+            if t_now > t_next_check_size:
+                logger.debug("system message handler input queue: size=%s read=%.1f / s",
+                             self._input_queue.qsize(), tot_read_count / 5)
+                t_next_check_size = t_now + 5
+                tot_read_count = 0
             if msg == TERMINATE:
                 self._input_queue.task_done()
                 break
