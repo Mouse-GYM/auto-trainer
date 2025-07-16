@@ -234,7 +234,7 @@ class CanDevice(Device):
                                                          message.continuity_0),
 
             PelletDigitalInputs: lambda message: (
-                self.api.send_message(SystemStatusMessageKind.STIMULUS_INPUTS,
+                self._api.send_message(SystemStatusMessageKind.STIMULUS_INPUTS,
                                       [message.stimulus_1,
                                        message.stimulus_2,
                                        message.stimulus_3,
@@ -243,7 +243,7 @@ class CanDevice(Device):
             ),
 
             AudioData: lambda message: (
-                self.api.send_message(SystemStatusMessageKind.AUDIO_SPECTRUM,
+                self._api.send_message(SystemStatusMessageKind.AUDIO_SPECTRUM,
                                       AudioSpectrumData(when_val=message.when,
                                                         index_val=message.index,
                                                         magnitudes_val=message.magnitudes))
@@ -256,19 +256,19 @@ class CanDevice(Device):
             ServoStatus: lambda message: self._report_motor_status(message.motor, message.position),
 
             StepperConfig: lambda message: \
-                self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
+                self._api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
 
             ServoConfig: lambda message: \
-                self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
+                self._api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
 
             Version: lambda message: \
-                self.api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version),
+                self._api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version),
 
             DoorData: lambda message: (
-                self.api.send_message(SystemStatusMessageKind.FRONT_DOOR, message.door1),
-                self.api.send_message(SystemStatusMessageKind.DRAWER_DOOR, message.door2),
-                self.api.send_message(SystemStatusMessageKind.SPARE_DOOR, message.door3),
-                self.api.send_message(SystemStatusMessageKind.EXT_BUTTON, message.ext_button)
+                self._api.send_message(SystemStatusMessageKind.FRONT_DOOR, message.door1),
+                self._api.send_message(SystemStatusMessageKind.DRAWER_DOOR, message.door2),
+                self._api.send_message(SystemStatusMessageKind.SPARE_DOOR, message.door3),
+                self._api.send_message(SystemStatusMessageKind.EXT_BUTTON, message.ext_button)
             ) if self._api is not None else None,
 
             Acknowledge: self._handle_ack,
