@@ -471,7 +471,7 @@ class BehaviorAlgorithm(ObservableObject):
         if ctx.error_detected:
             # for now: we only set once this flag, never clear it.
             return
-        distance = math.sqrt(offset.x ** 2 + offset.y ** 2 + offset.y ** 2)
+        distance = offset.distance
         prev_distance = ctx.distance
         ctx.distance = self._on_property_changed(ctx.distance_property_name, distance, prev_distance)
         if ctx.error_way is CheckThresholdWay.TRIGGER_IF_GREATER:
