@@ -54,7 +54,8 @@ class DeviceConnection(DeviceConnectionProtocol):
 
         self._name = name
 
-        self._read_limit: int = 25 if HAVE_CAN_DEVICE else math.inf
+        self._read_limit: int = 250 if HAVE_CAN_DEVICE else math.inf
+        self._collect_ms: int = 10  # so freq == 100 Hz
 
         # The means of providing non-blocking access to the device.
         self._current_thread = None
@@ -201,13 +202,10 @@ class DeviceConnection(DeviceConnectionProtocol):
         t_next_cmd_queue_read = time.time()
         while True:
             # Data from the device for the device listener to process.
-            tot_msg_read = 0
             if self._interface.can_read():
-                messages = self._interface.read(self._read_limit, collect_ms=10)
-                n = len(messages)
-                if n > 0:
+                messages = self._interface.read(self._read_limit, collect_ms=self._collect_ms)
+                if len(messages) > 0:
                     self._device.notify_data(messages)
-                    tot_msg_read += n
 
             t_now = time.time()
             if t_now > t_next_cmd_queue_read:
