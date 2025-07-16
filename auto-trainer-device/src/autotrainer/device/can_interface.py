@@ -1466,8 +1466,9 @@ class CanInterface(DeviceInterface):
         self._audio.magnitudes.clear()
         self._audio.target = _addr2tgt(message.dst_id)
         self._audio.packet_id = message.audio_data_cmd.stream_id
-        self._audio.when = time.time()
-        self._audio.index = time.perf_counter_ns()
+        t_ns_now = time.time_ns()
+        self._audio.when = t_ns_now / 1e9
+        self._audio.index = t_ns_now
         return None
 
     def _handle_audio_cont(self, message) -> None:
@@ -1493,12 +1494,17 @@ class CanInterface(DeviceInterface):
             AudioData object if a complete packet was received, None otherwise
         """
         a = None
-        if (len(self._audio.magnitudes) == 64 and
-            message.audio_data_cmd.stream_id == self._audio.packet_id):
-            a = AudioData()
-            a.magnitudes = self._audio.magnitudes.copy()
-            a.packet_id = self._audio.packet_id
-            a.target = self._audio.target
+        cur = self._audio
+        if (len(cur.magnitudes) == 64
+            and message.audio_data_cmd.stream_id == cur.packet_id
+        ):
+            a = AudioData(
+                when=cur.when,
+                index=cur.index,
+                magnitudes=cur.magnitudes.copy(),
+                packet_id=cur.packet_id,
+                target=cur.target,
+            )
 
         # Reset the audio buffer state
         self._audio.magnitudes.clear()
