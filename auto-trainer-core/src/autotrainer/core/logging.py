@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import Optional, Dict, Union, TextIO
 
 import sys
@@ -6,11 +7,12 @@ import verboselogs
 import coloredlogs
 from datetime import datetime
 
+_already_setup = False
 
 _LogLevelT = Union[str, int]
 
 DEFAULT_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
-MULTIPROC_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s[%(processName)s.%(process)d-%(threadName)s] %(message)s"
+MULTIPROC_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s[%(processName)s.%(process)d-%(threadName)s.%(thread_id)s] %(message)s"
 
 DEFAULT_FIELD_STYLES = dict(
     asctime=dict(color='white', bold=False),
@@ -42,7 +44,11 @@ def get_verbose_logger(name: Optional[str] = None) -> verboselogs.VerboseLogger:
     assert isinstance(logger, verboselogs.VerboseLogger)
     return logger
 
-_already_setup = False
+
+def _thread_id_filter(record):
+    """Inject thread_id to log records"""
+    record.thread_id = threading.get_native_id()
+    return record
 
 
 class _Formatter(coloredlogs.ColoredFormatter):
@@ -95,6 +101,7 @@ def setup_logging(
         field_styles = DEFAULT_FIELD_STYLES
     #
     console_handler = logging.StreamHandler(stream=stream)
+    console_handler.addFilter(_thread_id_filter)
     fmt = _Formatter(
         log_format,
         level_styles=level_styles,
