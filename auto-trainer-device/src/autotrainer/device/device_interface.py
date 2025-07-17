@@ -45,6 +45,7 @@ class Source:
     Base class of any data set received by the device
     """
     target: Target = None
+    timestamp_us: int = 0
 
 
 @dataclass
@@ -324,7 +325,7 @@ class ColorLed(Source):
 class AudioData(Source):
     packet_id: int = 0
     when: float = 0
-    index: int = 0
+    index: int = 0  # nb: "duplicate" with timestamp_us now
     magnitudes: List[float] = dataclasses.field(default_factory=list)
 
 

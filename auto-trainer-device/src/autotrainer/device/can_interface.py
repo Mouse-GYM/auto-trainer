@@ -281,6 +281,7 @@ class CanInterface(DeviceInterface):
             self._jc = JerryCAN()
 
         self._read_msgs = self._read_by_one_msg  # by default, will be set in open() too
+        self._get_timestamp_us = self._assign_timestamp
 
         self._cnt_none = 0
         self._is_open = False
@@ -573,7 +574,8 @@ class CanInterface(DeviceInterface):
         self._is_open = self._jc.Open() == 0
 
         self._read_msgs = self._read_by_many_msg if hasattr(self._jc, "ReceiveMessages") else self._read_by_one_msg
-        logger.debug("Using %s", self._read_msgs)
+        self._get_timestamp_us = self._copy_timestamp if hasattr(JerryCANMsg, "timestamp_us") else self._assign_timestamp
+        logger.debug("Using %s and %s", self._read_msgs, self._get_timestamp_us)
 
         self._cnt_none = 0
         if self._is_open:
@@ -610,7 +612,7 @@ class CanInterface(DeviceInterface):
         """
         return self._is_open
 
-    def _read_by_one_msg(self, max_count, collect_ms):
+    def _read_by_one_msg(self, max_count: int, collect_ms: int):
         t_end = time.time() + collect_ms / 1000
         messages = []
         while True:
@@ -623,7 +625,7 @@ class CanInterface(DeviceInterface):
             if 0 < max_count <= len(messages):
                 return messages
 
-    def _read_by_many_msg(self, max_count: int = 1, collect_ms: int = 0):
+    def _read_by_many_msg(self, max_count: int, collect_ms: int):
         return self._jc.ReceiveMessages(max_count, collect_ms)
 
     def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
@@ -1345,6 +1347,14 @@ class CanInterface(DeviceInterface):
     # def emergency_stop(self) -> bool:
     #  return self.is_open and self._jc.EStop() == 0
 
+    @staticmethod
+    def _copy_timestamp(message):
+        return message.timestamp_us
+
+    @staticmethod
+    def _assign_timestamp(message):
+        return int(time.time_ns() / 1000)
+
     def _translate(self, message) -> typing.Optional[typing.Any]:
         """
         Translate from a JerryCANCmd class to a class specific to the data type received
@@ -1359,7 +1369,11 @@ class CanInterface(DeviceInterface):
         if handler is None:
             logger.warning("Unhandled message type: %s", message.type)
             return None
-        return handler(message)
+        res = handler(message)
+        if res is not None:
+            assert isinstance(res, Source)
+            res.timestamp_us = self._get_timestamp_us(message)
+        return res
 
     @staticmethod
     def _translate_bootloader(message) -> typing.Optional[Version]:
@@ -1503,9 +1517,8 @@ class CanInterface(DeviceInterface):
         self._audio.magnitudes.clear()
         self._audio.target = _addr2tgt(message.dst_id)
         self._audio.packet_id = message.audio_data_cmd.stream_id
-        t_ns_now = time.time_ns()
-        self._audio.when = t_ns_now / 1e9
-        self._audio.index = t_ns_now
+        self._audio.when = message.timestamp_us / 1e6
+        self._audio.index = message.timestamp_us
         return None
 
     def _handle_audio_cont(self, message) -> None:
