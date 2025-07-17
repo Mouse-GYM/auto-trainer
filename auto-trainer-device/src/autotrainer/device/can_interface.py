@@ -573,7 +573,7 @@ class CanInterface(DeviceInterface):
 
         self._is_open = self._jc.Open() == 0
 
-        self._read_msgs = self._read_by_many_msg if hasattr(self._jc, "ReceiveMessages") else self._read_by_one_msg
+        self._read_msgs = self._jc.ReceiveMessages if hasattr(self._jc, "ReceiveMessages") else self._read_by_one_msg
         self._get_timestamp_us = self._copy_timestamp if hasattr(JerryCANMsg, "timestamp_us") else self._assign_timestamp
         logger.debug("Using %s and %s", self._read_msgs, self._get_timestamp_us)
 
@@ -624,9 +624,6 @@ class CanInterface(DeviceInterface):
                 messages.append(msg)
             if 0 < max_count <= len(messages):
                 return messages
-
-    def _read_by_many_msg(self, max_count: int, collect_ms: int):
-        return self._jc.ReceiveMessages(max_count, collect_ms)
 
     def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
         """
