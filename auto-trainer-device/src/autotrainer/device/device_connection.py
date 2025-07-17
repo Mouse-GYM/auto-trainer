@@ -209,12 +209,11 @@ class DeviceConnection(DeviceConnectionProtocol):
 
             t_now = time.time()
             if t_now > t_next_cmd_queue_read:
-                t_next_cmd_queue_read = t_now + 0.05
                 # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
                 try:
                     cmd, data, context = self._cmd_queue.get_nowait()
                 except Empty:
-                    pass
+                    t_next_cmd_queue_read = t_now + 0.05
                 else:
                     if cmd == _REQUEST_DISCONNECT:
                         self._cmd_queue.task_done()

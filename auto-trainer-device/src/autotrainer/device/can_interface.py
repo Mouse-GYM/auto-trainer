@@ -667,7 +667,7 @@ class CanInterface(DeviceInterface):
             value
 
         Raises:
-            NotImplementedError
+            NotImplementedErrord
         """
         raise NotImplementedError()
 
