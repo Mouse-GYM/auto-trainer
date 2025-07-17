@@ -45,20 +45,14 @@ class Source:
     Base class of any data set received by the device
     """
     target: Target = None
-    timestamp_us: int = 0
+    timestamp_us: int = dataclasses.field(init=False, default=0)
+    # init=False: preserve the original behavior/semantic of constructor with position args
+    # for subclasses adding other fields.
 
 
 @dataclass
 class MotorSource(Source):
-    _motor: Motor = Motor.NONE
-
-    @property
-    def motor(self) -> Motor:
-        return self._motor
-
-    @motor.setter
-    def motor(self, value: Motor):
-        self._motor = value
+    motor: Motor = Motor.NONE
 
 
 @dataclass

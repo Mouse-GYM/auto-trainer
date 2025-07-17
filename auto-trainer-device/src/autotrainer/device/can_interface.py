@@ -1388,7 +1388,7 @@ class CanInterface(DeviceInterface):
             version_str = f"{target_to_str(target)}: {message.bootloader_response.version.running_version_major}." \
                           f"{message.bootloader_response.version.running_version_minor}." \
                           f"{message.bootloader_response.version.running_version_patch}"
-            return Version(target, version_str)
+            return Version(target, version=version_str)
         return None
 
     def _translate_config(self, message) -> \
@@ -1514,8 +1514,9 @@ class CanInterface(DeviceInterface):
         self._audio.magnitudes.clear()
         self._audio.target = _addr2tgt(message.dst_id)
         self._audio.packet_id = message.audio_data_cmd.stream_id
-        self._audio.when = message.timestamp_us / 1e6
-        self._audio.index = message.timestamp_us
+        ts_us = self._get_timestamp_us(message)
+        self._audio.when = ts_us / 1e6
+        self._audio.index = ts_us
         return None
 
     def _handle_audio_cont(self, message) -> None:

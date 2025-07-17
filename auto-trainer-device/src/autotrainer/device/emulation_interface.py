@@ -125,7 +125,8 @@ class EmulationInterface(DeviceInterface):
 
             messages.append(
                 MagnetDigitalInputs(continuity_0=random() < 0.1, continuity_1=random() < 0.1))
-            messages.append(PelletDigitalInputs(Target.PELLET_DEVICE, True, False, True, False))
+            messages.append(PelletDigitalInputs(
+                target=Target.PELLET_DEVICE, stimulus_1=True, stimulus_2=False, stimulus_3=True, stimulus_4=False))
             messages.append(DoorData())
             messages.append(SensorStatus(temperature_c=28.0 + uniform(-2, 2),
                                          humidity_percent=50.0 + uniform(-2, 2)))

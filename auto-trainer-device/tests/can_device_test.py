@@ -59,10 +59,10 @@ def test_notify_command(device, kind, tag, data):
 
 
 @pytest.mark.parametrize("data, kind", [
-    (LoadCellReading(Target.MAGNET_DEVICE, 13), None),
-    (PressureReading(Target.MAGNET_DEVICE, 14), None),
-    (SensorStatus(Target.PELLET_DEVICE, 27.3, 64.2), None),
-    (MagnetDigitalInputs(Target.MAGNET_DEVICE, False, True), None),
+    (LoadCellReading(target=Target.MAGNET_DEVICE, load=13), None),
+    (PressureReading(Target.MAGNET_DEVICE, pressure=14), None),
+    (SensorStatus(Target.PELLET_DEVICE, temperature_c=27.3, humidity_percent=64.2), None),
+    (MagnetDigitalInputs(Target.MAGNET_DEVICE, continuity_0=False, continuity_1=True), None),
     (StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, 10, False),
      SystemStatusMessageKind.PELLET_X),
     (ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, 40),
