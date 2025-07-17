@@ -280,7 +280,7 @@ class CanInterface(DeviceInterface):
         else:
             self._jc = JerryCAN()
 
-        self._read_msgs = self._read_1_msg  # by default, will be set in open() too
+        self._read_msgs = self._read_by_one_msg  # by default, will be set in open() too
 
         self._cnt_none = 0
         self._is_open = False
@@ -572,7 +572,7 @@ class CanInterface(DeviceInterface):
 
         self._is_open = self._jc.Open() == 0
 
-        self._read_msgs = self._read_many_msg if hasattr(self._jc, "ReceiveMessages") else self._read_1_msg
+        self._read_msgs = self._read_by_many_msg if hasattr(self._jc, "ReceiveMessages") else self._read_by_one_msg
         logger.debug("Using %s", self._read_msgs)
 
         self._cnt_none = 0
@@ -610,19 +610,20 @@ class CanInterface(DeviceInterface):
         """
         return self._is_open
 
-    def _read_1_msg(self, max_count, collect_ms):
+    def _read_by_one_msg(self, max_count, collect_ms):
         t_end = time.time() + collect_ms / 1000
-        msgs = []
+        messages = []
         while True:
-            res = self._jc.ReceiveMessage()
-            if res is None:
+            msg = self._jc.ReceiveMessage()
+            if msg is None:
                 if collect_ms == 0 or time.time() > t_end:
-                    return msgs
-            msgs.append(res)
-            if 0 < max_count <= len(msgs):
-                return msgs
+                    return messages
+            else:
+                messages.append(msg)
+            if 0 < max_count <= len(messages):
+                return messages
 
-    def _read_many_msg(self, max_count: int = 1, collect_ms: int = 0):
+    def _read_by_many_msg(self, max_count: int = 1, collect_ms: int = 0):
         return self._jc.ReceiveMessages(max_count, collect_ms)
 
     def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:

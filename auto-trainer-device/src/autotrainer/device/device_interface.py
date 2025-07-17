@@ -379,10 +379,11 @@ class DeviceInterface:
     def can_read(self) -> bool:
         pass
 
-    def read(self, max_count: int = math.inf, *, collect_ms: int = 0) -> typing.Any:
+    def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
         """ Reads the available number of values from the interface up to max_count
 
         :param max_count: maximum number of values to read
+        :param collect_ms: maximum duration to read until, if <= 0 then only 1 attempt is made.
         :returns typing.Any: the data
         :rtype: typing.Any
         """
