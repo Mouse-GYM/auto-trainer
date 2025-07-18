@@ -1389,7 +1389,7 @@ class CanInterface(DeviceInterface):
         """
         if message.bootloader_response.type == JerryCANBootloaderCmd.SubCommand.VERSION:
             target = _addr2tgt(message.dst_id)
-            if hasattr(message.bootloader_response, "running_major"):
+            if hasattr(message.bootloader_response.version, "running_major"):
                 # pyjerrycan < 1.2.0
                 version_str = f"{target_to_str(target)}: {message.bootloader_response.version.running_major}." \
                               f"{message.bootloader_response.version.running_minor}." \
