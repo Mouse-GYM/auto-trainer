@@ -165,18 +165,21 @@ class AppModel(ObservableObject):
             # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
             # configured to generate messages as frequently as the real device.
             buffer_size = 10 if HAVE_CAN_DEVICE else 1
-            self._device_connection = DeviceConnection(CanDevice(buffer_size=buffer_size),
+            device_connection = self._device_connection = DeviceConnection(CanDevice(buffer_size=buffer_size),
                                                        self._message_handler.input_queue)
         else:
-            self._device_connection = DeviceConnection(
+            device_connection = self._device_connection = DeviceConnection(
                 HeadFix(port=self._user_settings.port, buffer_size=10),
                 self._message_handler.input_queue)
 
-        self._device_connection.name = "head-fix"
+        device_connection.name = "head-fix"
 
-        self._device_connection.request_connect()
+        device_connection.request_connect()
 
-        self._device_connection.send_message(SystemCommandKind.REQUEST_VERSION)
+        device_connection.load_default_motor_config()
+        device_connection.load_default_move_config()
+
+        device_connection.send_message(SystemCommandKind.REQUEST_VERSION)
 
         if self._user_settings.stream_enabled:
             self._enable_data_stream()
