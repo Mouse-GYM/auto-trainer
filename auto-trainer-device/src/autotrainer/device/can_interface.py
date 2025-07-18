@@ -17,6 +17,7 @@ import logging
 import time
 import warnings
 from enum import Enum
+from operator import attrgetter
 from typing import Type
 
 try:
@@ -280,8 +281,10 @@ class CanInterface(DeviceInterface):
         else:
             self._jc = JerryCAN()
 
-        self._read_msgs = self._read_by_one_msg  # by default, will be set in open() too
-        self._get_timestamp_us = self._assign_timestamp
+        # by default, will be set in open() too
+        self._read_msgs = self._read_by_one_msg
+        self._get_timestamp_ns = self._assign_timestamp_ns
+        self._get_index = lambda m: time.perf_counter_ns()
 
         self._cnt_none = 0
         self._is_open = False
@@ -574,8 +577,9 @@ class CanInterface(DeviceInterface):
         self._is_open = self._jc.Open() == 0
 
         self._read_msgs = self._jc.ReceiveMessages if hasattr(self._jc, "ReceiveMessages") else self._read_by_one_msg
-        self._get_timestamp_us = self._copy_timestamp if hasattr(JerryCANMsg, "timestamp_us") else self._assign_timestamp
-        logger.debug("Using %s and %s", self._read_msgs, self._get_timestamp_us)
+        self._get_timestamp_ns = attrgetter("timestamp_ns") if hasattr(JerryCANMsg, "timestamp_ns") else self._assign_timestamp_ns
+        self._get_index = attrgetter("index") if hasattr(JerryCANMsg, "index") else (lambda _: time.perf_counter_ns())
+        logger.debug("Using %s and %s", self._read_msgs, self._get_timestamp_ns)
 
         self._cnt_none = 0
         if self._is_open:
@@ -591,7 +595,10 @@ class CanInterface(DeviceInterface):
                 if self.pellet_address is not None and self.magnet_address is not None:
                     break
                 if time.time() > t_end:
-                    logger.warning("Could not obtain both pellet and magnet address in time")
+                    logger.warning("Could not obtain both pellet and magnet CAN bus addresses in time, "
+                                   "either one or both of them is/are shutdown, "
+                                   "either there is a CAN bus or CAN system related issue. "
+                                   "You shall restart the app if/when that's corrected.")
                     break
             logger.debug("pellet_address=%s magnet_address=%s ; flushed %s",
                         self.pellet_address, self.magnet_address, tot_flushed)
@@ -1345,12 +1352,8 @@ class CanInterface(DeviceInterface):
     #  return self.is_open and self._jc.EStop() == 0
 
     @staticmethod
-    def _copy_timestamp(message):
-        return message.timestamp_us
-
-    @staticmethod
-    def _assign_timestamp(message):
-        return int(time.time_ns() / 1000)
+    def _assign_timestamp_ns(message):
+        return time.time_ns()
 
     def _translate(self, message) -> typing.Optional[typing.Any]:
         """
@@ -1369,7 +1372,8 @@ class CanInterface(DeviceInterface):
         res = handler(message)
         if res is not None:
             assert isinstance(res, Source)
-            res.timestamp_us = self._get_timestamp_us(message)
+            res.timestamp_ns = self._get_timestamp_ns(message)
+            res.index = self._get_index(message)
         return res
 
     @staticmethod
@@ -1514,9 +1518,12 @@ class CanInterface(DeviceInterface):
         self._audio.magnitudes.clear()
         self._audio.target = _addr2tgt(message.dst_id)
         self._audio.packet_id = message.audio_data_cmd.stream_id
-        ts_us = self._get_timestamp_us(message)
-        self._audio.when = ts_us / 1e6
-        self._audio.index = ts_us
+        # NB: kind of duplicate:
+        self._audio.when = self._get_timestamp_ns(message) / 1e9
+        # when : timestamp_ns is already applied in self._translate() method
+        # But really duplicate:
+        # self._audio.index = self._get_index(message)
+        # index now already applied in self._translate() too
         return None
 
     def _handle_audio_cont(self, message) -> None:

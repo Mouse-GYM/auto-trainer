@@ -45,7 +45,8 @@ class Source:
     Base class of any data set received by the device
     """
     target: Target = None
-    timestamp_us: int = dataclasses.field(init=False, default=0)
+    timestamp_ns: int = dataclasses.field(init=False, default=0)
+    index: int = dataclasses.field(init=False, default=0)
     # init=False: preserve the original behavior/semantic of constructor with position args
     # for subclasses adding other fields.
 
@@ -318,8 +319,9 @@ class ColorLed(Source):
 @dataclass
 class AudioData(Source):
     packet_id: int = 0
-    when: float = 0
-    index: int = 0  # nb: "duplicate" with timestamp_us now
+    when: float = 0  # real-time unix timestamp, also in Source (Source.timestamp_ns, so as ns actually)
+    # but keeping here for now, this could become a property, eventually with setter.
+    index: int = 0  # also in Source now, keeping also for now, as it allows to pass in constructor/init
     magnitudes: List[float] = dataclasses.field(default_factory=list)
 
 
