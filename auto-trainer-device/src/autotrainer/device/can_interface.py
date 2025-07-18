@@ -651,7 +651,8 @@ class CanInterface(DeviceInterface):
                 self._cnt_none += 1
             else:
                 messages.extend(msgs)
-        return list(map(self._translate, messages))
+        # some handlers can return None, so we have to filter:
+        return list(filter(lambda v: v is not None, map(self._translate, messages)))
 
     def write(self, value: typing.Any) -> int:
         """
