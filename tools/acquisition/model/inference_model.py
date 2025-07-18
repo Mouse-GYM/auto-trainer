@@ -340,7 +340,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             model = DlcPoseModel(self._model_location, 1, 0, network_queue.batch_size)
 
         if not model.is_valid():
-            logger.warning("pellet not started because the model does not exist at the specified location")
+            logger.warning("pellet not started because the model does not exist or is not valid"
+                           " at the specified location: %s", self._model_location)
             return False
 
         self._process = PoseProcess(
