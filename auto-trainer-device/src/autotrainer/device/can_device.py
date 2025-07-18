@@ -217,9 +217,14 @@ class CanDevice(Device):
             SystemCommandKind.STREAM_STOP: lambda data: None,
         }
 
+        no_op_handler = lambda m: None
+
         # Initialize data handlers lookup table
         self._data_handlers = {
-            Status: lambda message: None,  # No-op for Status messages
+            Status: no_op_handler,  # No-op for Status messages
+            Tone: no_op_handler,
+            ColorLed: no_op_handler,
+            AnalogOutput: no_op_handler,
 
             LoadCellReading: self._handle_load_cell_reading,
 
