@@ -86,7 +86,9 @@ class AppModel(ObservableObject):
         else:
             self._stereo_params = None
             self._calib_metadata = None
-            square_size = cam_names = None
+            square_size = None
+            cam_names = None
+            cam_offsets = None
 
         self._pose_algorithm = PoseAlgorithm(
             stereo_params=self._stereo_params,
