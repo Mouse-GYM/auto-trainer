@@ -355,14 +355,15 @@ class CanDevice(Device):
         if self._pending_context is not None:
             # logger.exception("pending_context not None: %s", self._pending_context)
             logger.warning("notify message while one in progress: %s", self._pending_context)
+
         self._pending_context = context
 
         # Get and execute handler if available
         handler = self._command_handlers.get(kind)
-        if handler is not None:
+        if handler:
             handler(data)
         else:
-            logger.warning("unhandled command queue message: %s", kind)
+            logger.info(f"unhandled command queue message: {kind}")
 
     def notify_data(self, data: Any) -> None:
         """
@@ -379,9 +380,7 @@ class CanDevice(Device):
             # Get handler for the message type
             message_type = type(message)
             handler = self._data_handlers.get(message_type)
-            if handler is None:
-                logger.warning("Unhandled data message type: %s", message_type)
-            else:
+            if handler:
                 handler(message)
 
     def _handle_load_cell_reading(self, message):
