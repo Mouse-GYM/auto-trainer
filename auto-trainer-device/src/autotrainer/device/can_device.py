@@ -412,7 +412,7 @@ class CanDevice(Device):
         Note that 'completion' may only indicate that the message was sent to the
         target, not that the target is complete in executing the command.
         """
-        super()._acknowledge_command(self._pending_context)
+        self._acknowledge_command(self._pending_context)
         self._pending_context = None
 
     def _home(self, motors):
