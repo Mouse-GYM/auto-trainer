@@ -354,7 +354,7 @@ class CanDevice(Device):
 
         if self._pending_context is not None:
             # logger.exception("pending_context not None: %s", self._pending_context)
-            raise RuntimeError("cannot notify message while one in progress")
+            logger.warning("notify message while one in progress: %s", self._pending_context)
         self._pending_context = context
 
         # Get and execute handler if available
