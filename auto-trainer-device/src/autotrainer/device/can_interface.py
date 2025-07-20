@@ -694,7 +694,8 @@ class CanInterface(DeviceInterface):
         while time.time() - now < timeout:
             messages = self.read(50, collect_ms=5)
             if len(messages) > 0:
-                for msg in messages:
+                # loop reversed, given we break and so that we return the most recent one:
+                for msg in reversed(messages):
                     if isinstance(msg, typeof) and msg.target == target:
                         final_res = msg
                         break
