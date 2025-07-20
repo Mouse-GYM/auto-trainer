@@ -595,12 +595,12 @@ class CanInterface(DeviceInterface):
                 if self.pellet_address is not None and self.magnet_address is not None:
                     break
                 if time.time() > t_end:
-                    logger.warning("Could not obtain both pellet and magnet CAN bus addresses in time, "
-                                   "either one or both of them is/are shutdown, "
-                                   "either there is a CAN bus or CAN system related issue. "
-                                   "You shall restart the app if/when that's corrected.")
+                    logger.critical("Could not obtain both pellet and magnet CAN bus addresses in time, "
+                                    "either one or both of them is/are shutdown, "
+                                    "either there is a CAN bus or CAN system related issue. "
+                                    "You shall restart the app if/when that's corrected.")
                     break
-            logger.debug("pellet_address=%s magnet_address=%s ; flushed %s",
+            logger.notice("pellet_address=%s magnet_address=%s ; flushed %s",
                         self.pellet_address, self.magnet_address, tot_flushed)
             self._query_configuration()
         return self._is_open
@@ -733,6 +733,7 @@ class CanInterface(DeviceInterface):
             elif motor == Motor.TUNNEL_GATE_SERVO:
                 config = self.gate_config
             else:
+                logger.warning("Unknown motor servo config requested: motor=%s", motor)
                 config = ServoConfig()
         else:
             assert is_stepper(motor)
@@ -743,6 +744,7 @@ class CanInterface(DeviceInterface):
             elif motor == Motor.PELLET_Z_MOTOR:
                 config = self.z_config
             else:
+                logger.warning("Unknown motor stepper config requested: motor=%s", motor)
                 config = StepperConfig()
 
         return config

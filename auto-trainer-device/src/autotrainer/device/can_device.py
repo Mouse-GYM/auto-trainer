@@ -360,10 +360,10 @@ class CanDevice(Device):
 
         # Get and execute handler if available
         handler = self._command_handlers.get(kind)
-        if handler:
+        if handler is not None:
             handler(data)
         else:
-            logger.info(f"unhandled command queue message: {kind}")
+            logger.warning("unhandled command queue message: %s", kind)
 
     def notify_data(self, data: Any) -> None:
         """
@@ -378,10 +378,11 @@ class CanDevice(Device):
 
         for message in data:
             # Get handler for the message type
-            message_type = type(message)
-            handler = self._data_handlers.get(message_type)
-            if handler:
+            handler = self._data_handlers.get(type(message))
+            if handler is not None:
                 handler(message)
+            else:
+                logger.warning("Unhandled data type: %s", type(message))
 
     def _handle_load_cell_reading(self, message):
         """
