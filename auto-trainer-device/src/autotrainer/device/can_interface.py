@@ -644,13 +644,12 @@ class CanInterface(DeviceInterface):
         Returns:
             a list of data classes (see device_interface.py for list of classes)
         """
-        messages = []
         if self._is_open:
-            msgs = self._read_msgs(max_count, collect_ms)
-            if len(msgs) == 0:
+            messages = self._read_msgs(max_count, collect_ms)
+            if len(messages) == 0:
                 self._cnt_none += 1
-            else:
-                messages.extend(msgs)
+        else:
+            messages = []
         # some handlers can return None, so we have to filter:
         return list(filter(lambda v: v is not None, map(self._translate, messages)))
 
