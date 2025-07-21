@@ -1,0 +1,8 @@
+[Unit]
+Description=CAN bus setup
+
+[Service]
+ExecStart=bash -x /usr/local/sbin/can_setup.sh
+
+[Install]
+WantedBy=multi-user.target
