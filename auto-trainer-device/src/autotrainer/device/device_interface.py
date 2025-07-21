@@ -373,6 +373,9 @@ class DeviceInterface:
     def is_open(self) -> bool:
         return False
 
+    def are_addresses_valid(self):
+        raise NotImplementedError
+
     def can_read(self) -> bool:
         pass
 

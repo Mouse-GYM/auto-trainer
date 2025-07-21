@@ -177,7 +177,7 @@ class DeviceConnection(DeviceConnectionProtocol):
                 logger.debug(f"<{self._name}> message: _REQUEST_CONNECT")
                 break
             else:
-                logger.debug(f"<{self._name}> message: {cmd} ignored")
+                logger.warning("<%s> message: command %s ignored", self._name, cmd)
 
         if not self._interface.is_open:
             try:

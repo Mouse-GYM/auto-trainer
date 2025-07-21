@@ -18,7 +18,7 @@ import time
 import warnings
 from enum import Enum
 from operator import attrgetter
-from typing import Type
+from typing import Type, Optional
 
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
@@ -677,13 +677,20 @@ class CanInterface(DeviceInterface):
         """
         raise NotImplementedError()
 
-    def get_response(self, typeof: Type[MotorSource], target: Target, timeout: float = 2.0):
+    def get_response(
+        self,
+        typeof: Type[MotorSource],
+        target: Target,
+        *,
+        motor: Optional[Motor],
+        timeout: float = 2.0):
         """
         Read data until a specific response is detected
 
         Args:
             typeof: Class name to look for
             target: Source target (Pellet or Magnet)
+            motor: Optional motor to check against too
             timeout: Maximum time to wait (sec). Default=2.0
         """
         now = time.time()
@@ -691,11 +698,13 @@ class CanInterface(DeviceInterface):
         dropped = set()
         tot_dropped = 0
         while time.time() - now < timeout:
-            messages = self.read(50, collect_ms=5)
+            messages = self.read(15, collect_ms=5)
             if len(messages) > 0:
                 # loop reversed, given we break and so that we return the most recent one:
                 for msg in reversed(messages):
-                    if isinstance(msg, typeof) and msg.target == target:
+                    if (isinstance(msg, typeof) and msg.target == target
+                        and (motor is None or msg.motor == motor)
+                    ):
                         final_res = msg
                         break
                     else:
@@ -805,22 +814,36 @@ class CanInterface(DeviceInterface):
 
         return rc
 
-    def _query_motor_configuration(self, motor: Motor, config_type: Type[MotorSource]):
+    def _query_motor_configuration(
+        self,
+        motor: Motor,
+        config_type: Type[MotorSource],
+        *,
+        timeout: float = 0.5,
+    ):
         """
          Read the configurations from the remote device and print it out.
 
          Args:
              motor:
              config_type: Either a ServoConfig or StepperConfig class reference
+             timeout: Duration before failure
          """
+        t_end = time.time() + timeout
         while True:
-            self.request_motor_config(motor)
-            config = self.get_response(config_type, target_of_motor(motor), 2)
-            if config is not None and config.motor == motor:
-                self.set_motor_configuration(motor, config, False)
-                logger.info("Pulled configuration for %s", motor)
-                break
-            logger.warning("Failed to get configuration for %s", motor)
+            if self.request_motor_config(motor):
+                config = self.get_response(config_type, target_of_motor(motor),
+                                           motor=motor, timeout=0.1)
+                if config is not None:
+                    self.set_motor_configuration(motor, config, write_to_remote=False)
+                    logger.info("Pulled configuration for %s", motor)
+                    break
+                logger.error("Failed to get configuration for %s", motor)
+            else:
+                logger.error("Failed to request motor configuration for %s", motor)
+                time.sleep(0.01)
+            if time.time() > t_end:
+                raise RuntimeError("Could not get config for motor %s in time", motor)
 
     def _query_configuration(self):
         """
@@ -1156,6 +1179,7 @@ class CanInterface(DeviceInterface):
         motor_id = _motor_to_id(config.motor)
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         if addr is None:
+            logger.error("No address for target %s for motor %s", Target.PELLET_DEVICE, config.motor)
             return False
 
         max_vel = mm_to_turns(config.maximum_velocity)
@@ -1191,6 +1215,7 @@ class CanInterface(DeviceInterface):
 
         addr = self._tgt2addr(target)
         if addr is None:
+            logger.error("No address for target %s for motor %s", target, config.motor)
             return False
 
         if self._jc.ServoCfgWrite(addr, motor_id,

@@ -316,13 +316,32 @@ def run_monitor():
     mon_thread = Thread(target=monitor_message_queue, args=(msg_queue,))
     mon_thread.start()
 
-    device_connection = DeviceConnection(CanDevice(), msg_queue)
+    can_dev = CanDevice()
+    device_connection = DeviceConnection(can_dev, msg_queue)
 
     device_connection.request_connect()
-    last_command = ""
+
+    # Not necessary to ===>>>
+    # time.sleep(0.01)  # this is to allows the request connection to be executed by the device thread
+    # # and allows it to get/read the devices address at its startup
+    # end = time.time() + 1.5
+    # while time.time() < end:
+    #     if can_dev.device_interface.are_addresses_valid():
+    #         break
+    #     time.sleep(0.05)
+    # if not can_dev.device_interface.are_addresses_valid():
+    #     logger.critical("Could not read devices CAN bus addr in time")
+    # # only then we are able to set the motor configuration:
+
+    # <<<=== given the load default motor config uses the device queue to send the commands,
+    # and that the device thread goes into its main loop after having received the above request_connect(),
+    # and that before entering its main loop it already reads and assign the devices addresses,
+    # and that then it cannot miss any of the commands put into the queue in its main loop,
 
     device_connection.load_default_motor_config()
     device_connection.load_default_move_config()
+
+    last_command = ""
 
     while True:
         if perf_count <= 0:
