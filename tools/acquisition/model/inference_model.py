@@ -484,7 +484,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
             t_now = time.time()
             if t_now > t_log_counters:
-                t_log_counters = t_now + 5
+                t_log_counters = t_now + 30
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("status=%s data=%s avg_writes_h5_live=%.6f skipped_h5_live=%s",
                                 self._status, cnt_data_received,
