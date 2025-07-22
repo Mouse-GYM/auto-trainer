@@ -699,22 +699,21 @@ class CanInterface(DeviceInterface):
         tot_dropped = 0
         while time.time() - now < timeout:
             messages = self.read(15, collect_ms=5)
-            if len(messages) > 0:
-                # loop reversed, given we break and so that we return the most recent one:
-                for msg in reversed(messages):
-                    if (isinstance(msg, typeof) and msg.target == target
-                        and (motor is None or msg.motor == motor)
-                    ):
-                        final_res = msg
-                        break
-                    else:
-                        dropped.add(type(msg))
-                        tot_dropped += 1
-                if final_res is not None:
-                    break
-            else:
+            if len(messages) == 0:
                 self._cnt_none += 1
-                time.sleep(0.001)
+                continue
+            # loop reversed, given we break and so that we return the most recent one:
+            for msg in reversed(messages):
+                if (isinstance(msg, typeof) and msg.target == target
+                    and (motor is None or msg.motor == motor)
+                ):
+                    final_res = msg
+                    break
+                else:
+                    dropped.add(type(msg))
+                    tot_dropped += 1
+            if final_res is not None:
+                break
 
         logger.debug("get_response(%s): res=%s ; dropped %s msgs, types=%s",
                      typeof.__qualname__, final_res, tot_dropped, dropped)
