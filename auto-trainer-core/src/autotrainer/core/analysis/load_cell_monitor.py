@@ -179,7 +179,7 @@ class LoadCellMonitor(ObservableObject):
                     )
                     self._thrashing_detected = self._on_property_changed(
                         self.IS_THRASHING_DETECTED_PROPERTY, new_detected, cur_thrashing)
-            if not self._was_active and not cur_engaged:
+            if not self._was_active:
                 self._was_active = True
                 self._t_start_was_active = when
                 self._when = when
@@ -189,10 +189,9 @@ class LoadCellMonitor(ObservableObject):
                 self._active_debounce = _timer_load_cell_engaged(self.threshold_duration, self._ensure_active)
                 self._active_debounce.start()
         else:
+            self._active_debounce.cancel()  # always
             # not sure that we want this here:
             self._thrashing_detected = self._on_property_changed(self.IS_THRASHING_DETECTED_PROPERTY, False, self._thrashing_detected)
-            #
-            self._active_debounce.cancel()  # always
             if self._was_active:
                 self._was_active = False
                 self._t_start_was_active = None
