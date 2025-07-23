@@ -83,7 +83,7 @@ class SystemConfiguration:
                 with open(str(path) + ".yaml", "w") as file:
                     file.write(self.dump_yaml())
         except Exception as err:
-            logger.exception("Error loading config %s: %s", path, err)
+            logger.exception("Error saving config to %s: %s", path, err)
             return False
 
         return True
