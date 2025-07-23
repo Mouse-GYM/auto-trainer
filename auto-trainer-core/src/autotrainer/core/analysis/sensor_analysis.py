@@ -127,7 +127,7 @@ class SensorAnalysis(ObservableObject):
                 self._update_record_file()
 
         for m in measurements:
-            weights.append((m.weight, m.timestamp, m.when))
+            weights.append(m.weight)
             switch.append(m.switch)
             pressure.append(m.pressure)
             temperature.append(m.temperature)
