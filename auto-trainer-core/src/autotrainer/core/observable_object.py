@@ -1,3 +1,4 @@
+import os
 from typing import Protocol, Callable, Any
 
 from events import Events
@@ -68,8 +69,9 @@ class ObservableObject(Events):
             return old_value
 
         if __debug__:
-            if property_name == "head_magnet_intensity":
-                logger.debug("%s: property %r -> %s", self, property_name, new_value, stack_info=True)
+            if property_name in {v.strip() for v in os.getenv("AUTOTRAINER_DEBUG_PROPERTIES", "").split(",")}:
+                logger.debug("%s: property %r: from %s to %s", self, property_name, new_value,
+                             stack_info=True)
 
         self.property_changed(property_name, new_value, old_value)
         return new_value
