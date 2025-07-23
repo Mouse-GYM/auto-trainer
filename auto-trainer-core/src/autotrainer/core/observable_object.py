@@ -70,7 +70,7 @@ class ObservableObject(Events):
 
         if __debug__:
             if property_name in {v.strip() for v in os.getenv("AUTOTRAINER_DEBUG_PROPERTIES", "").split(",")}:
-                logger.debug("%s: property %r: from %s to %s", self, property_name, new_value,
+                logger.debug("%s: property %r: from %s to %s", self, property_name, old_value, new_value,
                              stack_info=True)
 
         self.property_changed(property_name, new_value, old_value)
