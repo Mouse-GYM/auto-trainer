@@ -220,11 +220,11 @@ class LoadCellMonitor(ObservableObject):
         if self._is_engaged:
             self._is_engaged = False
             self._t_start_was_active = None
-            self._thrashing_detected = self._on_property_changed(
-                self.IS_THRASHING_DETECTED_PROPERTY, False, self._thrashing_detected)
             EventManager.default().post_event_content(AnalysisMeasurementEventKind.loadCellEngagedChanged, context=False,
                                                       when=datetime.fromtimestamp(self._when), index=self._index)
             self.property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, False, True)
+            self._thrashing_detected = self._on_property_changed(self.IS_THRASHING_DETECTED_PROPERTY, False,
+                                                                 self._thrashing_detected)
 
     def force_engaged(self, engaged: bool) -> None:
         """
