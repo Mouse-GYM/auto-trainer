@@ -2,6 +2,10 @@ from typing import Protocol, Callable, Any
 
 from events import Events
 
+from autotrainer.core.logging import get_verbose_logger
+
+logger = get_verbose_logger(__name__)
+
 
 NewValueAny = Any
 OldValueAny = Any
@@ -63,8 +67,10 @@ class ObservableObject(Events):
         if old_value == new_value:
             return old_value
 
-        self.property_changed(property_name, new_value, old_value)
+        if __debug__:
+            logger.debug("%s: property %r -> %s", self, property_name, new_value)
 
+        self.property_changed(property_name, new_value, old_value)
         return new_value
 
 
