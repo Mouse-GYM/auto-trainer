@@ -224,8 +224,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
-            self._head_magnet_position = value
-            self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value, old_value)
+            if value != self._head_magnet_position:
+                self._head_magnet_position = value
+                self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value, old_value)
         elif name == MessageHandler.DEVICE_X_PROPERTY:
             self._last_x = value
         elif name == MessageHandler.DEVICE_Y_PROPERTY:
