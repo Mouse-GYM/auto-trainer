@@ -33,6 +33,16 @@ from .can_interface import CanInterface
 from .device_interface import *
 
 
+def _to_tuple(value: Union[str, Any]):
+    if not isinstance(value, str):
+        return value
+    if "," in value:
+        parts = value.split(",")
+        return float(parts[0].strip()), float(parts[1].strip())
+    else:
+        return float(value)
+
+
 class CanDevice(Device):
 
     def __init__(self, api: DeviceApi = None, buffer_size: int = 50, force_emulation: bool = False):
@@ -69,8 +79,8 @@ class CanDevice(Device):
         self._send_pellet = default_send_pellet()
         self._cover_pellet = default_cover_pellet()
         self._release_pellet = default_release_pellet()
-        self._open_tunnel_gate = None
-        self._close_tunnel_gate = None
+        self._open_tunnel_gate = default_open_gate()
+        self._close_tunnel_gate = default_close_gate()
         self._compound_movement = None  # Current compound movement
 
         # Initialize command handlers lookup table
@@ -81,39 +91,42 @@ class CanDevice(Device):
             SystemCommandKind.READ_MOTOR_CONFIGURATION:
                 lambda data: self._interface.request_motor_config(data),
 
-            SystemCommandKind.SET_MAGNET_INTENSITY:
-                lambda data: self._interface.set_magnet(int(data)),
+            SystemCommandKind.MOVE_MAGNET_SERVO:
+                lambda data: self._interface.move_magnet_servo(data),
 
-            SystemCommandKind.SET_LOAD_SERVO:
-                lambda data: self._interface.set_load_servo(int(data)),
+            SystemCommandKind.MOVE_LOAD_SERVO:
+                lambda data: self._interface.move_load_servo(data),
 
-            SystemCommandKind.SET_COVER_SERVO:
-                lambda data: self._interface.set_cover_servo(int(data)),
+            SystemCommandKind.MOVE_COVER_SERVO:
+                lambda data: self._interface.move_cover_servo(data),
+
+            SystemCommandKind.MOVE_GATE_SERVO:
+                lambda data: self._interface.move_gate_servo(data),
 
             SystemCommandKind.SET_X:
-                lambda data: self._interface.set_x(float(data), True),
+                lambda data: self._interface.set_motor_x(data),
 
             SystemCommandKind.SET_Y:
-                lambda data: self._interface.set_y(float(data), True),
+                lambda data: self._interface.set_motor_y(data),
 
             SystemCommandKind.SET_Z:
-                lambda data: self._interface.set_z(float(data), True),
+                lambda data: self._interface.set_motor_z(data),
 
             SystemCommandKind.MOVE_X:
-                lambda data: self._interface.set_x(float(data), False),
+                lambda data: self._interface.move_motor_x(data, False),
 
             SystemCommandKind.MOVE_Y:
-                lambda data: self._interface.set_y(float(data), False),
+                lambda data: self._interface.move_motor_y(data, False),
 
             SystemCommandKind.MOVE_Z:
-                lambda data: self._interface.set_z(float(data), False),
+                lambda data: self._interface.move_motor_z(data, False),
 
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._home([cast(Motor, data)]),
 
             SystemCommandKind.SEND_HOME:
                 lambda data: self._home(
-                    [Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR]),
+                    [Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]),
 
             SystemCommandKind.SEND_FIXED_XYZ:
                 lambda data: self._interface.fixed_position(),
@@ -172,9 +185,8 @@ class CanDevice(Device):
 
             SystemCommandKind.UPDATE_SCALE_TARE:
                 lambda data: (
-                    self._interface.tare_load_cell(),
-                    self._interface.tare_pressure_sensor()
-                )[-1],
+                    self._interface.tare_load_cell()
+                ),
 
             SystemCommandKind.SET_DIGITAL_OUTPUT:
                 lambda data: (
@@ -205,24 +217,29 @@ class CanDevice(Device):
             SystemCommandKind.STREAM_STOP: lambda data: None,
         }
 
+        no_op_handler = lambda m: None
+
         # Initialize data handlers lookup table
         self._data_handlers = {
-            Status: lambda message: None,  # No-op for Status messages
+            Status: no_op_handler,  # No-op for Status messages
+            Tone: no_op_handler,
+            ColorLed: no_op_handler,
+            AnalogOutput: no_op_handler,
 
-            LoadCellReading: lambda message: self._handle_load_cell_reading(message),
+            LoadCellReading: self._handle_load_cell_reading,
 
             PressureReading: lambda message: setattr(self, '_current_pressure', message.pressure),
 
             SensorStatus: lambda message: (
                 setattr(self, '_current_temperature', message.temperature_c),
                 setattr(self, '_current_humidity', message.humidity_percent)
-            )[-1],
+            ),
 
             MagnetDigitalInputs: lambda message: setattr(self, '_current_digital',
                                                          message.continuity_0),
 
             PelletDigitalInputs: lambda message: (
-                self.api.send_message(SystemStatusMessageKind.STIMULUS_INPUTS,
+                self._api.send_message(SystemStatusMessageKind.STIMULUS_INPUTS,
                                       [message.stimulus_1,
                                        message.stimulus_2,
                                        message.stimulus_3,
@@ -231,7 +248,7 @@ class CanDevice(Device):
             ),
 
             AudioData: lambda message: (
-                self.api.send_message(SystemStatusMessageKind.AUDIO_SPECTRUM,
+                self._api.send_message(SystemStatusMessageKind.AUDIO_SPECTRUM,
                                       AudioSpectrumData(when_val=message.when,
                                                         index_val=message.index,
                                                         magnitudes_val=message.magnitudes))
@@ -243,33 +260,35 @@ class CanDevice(Device):
 
             ServoStatus: lambda message: self._report_motor_status(message.motor, message.position),
 
-            StepperConfig: lambda message: (
-                self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
-                self._perform_next_compound_step()
-            )[-1],
+            StepperConfig: lambda message: \
+                self._api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
 
-            ServoConfig: lambda message: (
-                self.api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
-                self._perform_next_compound_step()
-            )[-1],
+            ServoConfig: lambda message: \
+                self._api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
 
-            Version: lambda message: (
-                self.api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version),
-                self._perform_next_compound_step()
-            )[-1],
+            Version: lambda message: \
+                self._api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version),
 
             DoorData: lambda message: (
-                self.api.send_message(SystemStatusMessageKind.FRONT_DOOR, message.open_state[0]),
-                self.api.send_message(SystemStatusMessageKind.DRAWER_DOOR, message.open_state[1])
-            )[-1] if self._api is not None else None,
+                self._api.send_message(SystemStatusMessageKind.FRONT_DOOR, message.door1),
+                self._api.send_message(SystemStatusMessageKind.DRAWER_DOOR, message.door2),
+                self._api.send_message(SystemStatusMessageKind.SPARE_DOOR, message.door3),
+                self._api.send_message(SystemStatusMessageKind.EXT_BUTTON, message.ext_button)
+            ) if self._api is not None else None,
 
-            Acknowledge: lambda message: (self._perform_next_compound_step()
-                                          if message.uuid == CanInterface.uuid() else None)
+            Acknowledge: self._handle_ack,
         }
 
         if not HAVE_CAN_DEVICE:
             logger.warning(
                 "Alogus hardware or hardware support not found.  Using emulation interface.")
+
+    def _handle_ack(self, msg: Acknowledge):
+        cur_can_uuid = CanInterface.uuid()
+        logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s",
+                     msg.target, msg.uuid, cur_can_uuid)
+        if msg.uuid == cur_can_uuid:
+            self._perform_next_compound_step()
 
     @property
     def api(self):
@@ -333,14 +352,18 @@ class CanDevice(Device):
         if self._interface is None:
             return
 
+        if self._pending_context is not None:
+            # logger.exception("pending_context not None: %s", self._pending_context)
+            logger.warning("notify message while one in progress: %s", self._pending_context)
+
         self._pending_context = context
 
         # Get and execute handler if available
         handler = self._command_handlers.get(kind)
-        if handler:
+        if handler is not None:
             handler(data)
         else:
-            logger.info(f"unhandled command queue message: {kind}")
+            logger.warning("unhandled command queue message: %s", kind)
 
     def notify_data(self, data: Any) -> None:
         """
@@ -355,16 +378,11 @@ class CanDevice(Device):
 
         for message in data:
             # Get handler for the message type
-            message_type = type(message)
-            handler = self._data_handlers.get(message_type)
-            if handler:
+            handler = self._data_handlers.get(type(message))
+            if handler is not None:
                 handler(message)
-
-        # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
-        # significantly slow down the system without explicitly yielding, despite being in its own thread.  This is
-        # not the case for other platforms/combinations of the above so may not be apparent when not on the
-        # deployment current platform.
-        time.sleep(0.001)
+            else:
+                logger.warning("Unhandled data type: %s", type(message))
 
     def _handle_load_cell_reading(self, message):
         """
@@ -373,8 +391,8 @@ class CanDevice(Device):
         Args:
             message: The LoadCellReading message
         """
-        measurement = HeadFixMeasurement(time.time(),
-                                         time.perf_counter_ns(),
+        measurement = HeadFixMeasurement(message.timestamp_ns / 1e9,
+                                         message.index,
                                          message.load,
                                          self._current_digital,
                                          self._current_pressure,
@@ -394,7 +412,7 @@ class CanDevice(Device):
         Note that 'completion' may only indicate that the message was sent to the
         target, not that the target is complete in executing the command.
         """
-        super()._acknowledge_command(self._pending_context)
+        self._acknowledge_command(self._pending_context)
         self._pending_context = None
 
     def _home(self, motors):
@@ -414,7 +432,8 @@ class CanDevice(Device):
         Motor.PELLET_Z_MOTOR: SystemStatusMessageKind.PELLET_Z,
         Motor.PELLET_LOAD_SERVO: SystemStatusMessageKind.PELLET_LOAD,
         Motor.PELLET_COVER_SERVO: SystemStatusMessageKind.PELLET_COVER,
-        Motor.MAGNET_SERVO: SystemStatusMessageKind.HEAD_MAGNET,
+        Motor.TUNNEL_MAGNET_SERVO: SystemStatusMessageKind.HEAD_MAGNET,
+        Motor.TUNNEL_GATE_SERVO: SystemStatusMessageKind.TUNNEL_GATE_SERVO,
     }
 
     def _report_motor_status(self, motor, position, _at_limit: bool = False):
@@ -436,58 +455,78 @@ class CanDevice(Device):
         Issue the next step in a multi-step motor sequence.
         """
         if len(self._homing_motors) > 1:
-            self._homing_motors.pop(0)
+            self._homing_motors.pop(0)  # first one is/was executed by _home() function
             self._home(self._homing_motors)
         elif self._compound_movement is not None and \
-                len(self._compound_movement) > 0:
+            len(self._compound_movement) > 0:
             step = self._compound_movement.pop(0)
 
             if "x" in step:
-                location = step["x"]
-                self._interface.set_x(location)
+                location = _to_tuple(step["x"])
+                self._interface.move_motor_x(location)
+                logger.debug(f"X to {location}")
 
             elif "y" in step:
-                location = step["y"]
-                self._interface.set_y(location)
+                location = _to_tuple(step["y"])
+                self._interface.move_motor_y(location)
+                logger.debug(f"Y to {location}")
 
             elif "z" in step:
-                location = step["z"]
-                self._interface.set_z(location)
+                location = _to_tuple(step["z"])
+                self._interface.move_motor_z(location)
+                logger.debug(f"Z to {location}")
 
             elif "load_arm" in step:
-                location = step["load_arm"]
-                self._interface.set_load_servo(location)
+                location = _to_tuple(step["load_arm"])
+                self._interface.move_load_servo(location)
+                logger.debug(f"Load Arm to {location}")
 
             elif "barrier_arm" in step:
-                location = step["barrier_arm"]
-                self._interface.set_cover_servo(location)
+                location = _to_tuple(step["barrier_arm"])
+                self._interface.move_cover_servo(location)
+                logger.debug(f"Barrier Arm to {location}")
 
             elif "magnet" in step:
-                location = step["magnet"]
-                self._interface.set_magnet(location)
+                location = _to_tuple(step["magnet"])
+                self._interface.move_magnet_servo(location)
+                logger.debug(f"Magnet to {location}")
+
+            elif "gate" in step:
+                location = _to_tuple(step["gate"])
+                self._interface.move_gate_servo(location)
+                logger.debug(f"Gate to {location}")
 
             elif "delay" in step:
-                logger.debug("delay start")
-                self._interface.delay(step["delay"])
+                duration = step["delay"]
+                self._interface.delay(duration)
+                logger.debug(f"delay for {duration}")
 
             elif "tone" in step:
                 freq, duration = step["tone"].split(',')  # (hz), (sec)
                 self._interface.emit_tone(int(freq), int(float(duration) * 1000))
+                logger.debug(f"Emit Tone at {freq} for {duration}")
 
             elif "predefined" in step:
                 predefined = step["predefined"]
                 if predefined == "send":
                     self._interface.fixed_position()
+                    logger.debug("Predefined Send")
                 elif predefined == "cover":
                     self._interface.cover_pellet()
+                    logger.debug("Predefined Cover (maximum)")
                 elif predefined == "release":
                     self._interface.release_pellet()
+                    logger.debug("Predefined Release (minimum)")
                 elif predefined == "retrieve":
                     self._interface.retrieve_pellet()
+                    logger.debug("Predefined Retrieve (maximum)")
                 elif predefined == "scoop":
                     self._interface.scoop_pellet()
+                    logger.debug("Predefined Scoop (minimum)")
                 elif predefined == "home":
-                    self._home([Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR])
+                    self._home([Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
+                else:
+                    logger.warning("unhandled predefined: %s", predefined)
         else:
             self._command_complete()
             self._compound_movement = None
@@ -553,5 +592,33 @@ def default_release_pellet() -> MotorSteps:
     return MotorSteps("release_pellet",
                       [
                           {'predefined': 'release'},
+                      ]
+                      )
+
+
+def default_open_gate() -> MotorSteps:
+    """
+    Create the default motor step sequence for releasing a pellet.
+
+    Returns:
+        A MotorSteps object containing the release pellet sequence
+    """
+    return MotorSteps("open_gate",
+                      [
+                          {'gate': '120'},
+                      ]
+                      )
+
+
+def default_close_gate() -> MotorSteps:
+    """
+    Create the default motor step sequence for releasing a pellet.
+
+    Returns:
+        A MotorSteps object containing the release pellet sequence
+    """
+    return MotorSteps("close_gate",
+                      [
+                          {'gate': '0'},
                       ]
                       )

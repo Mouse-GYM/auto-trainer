@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional
@@ -6,7 +7,7 @@ from typing import Optional
 from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.device import (DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
-                                HeadFix, PelletDelivery)
+                                HeadFix, PelletDelivery, MotorConfigurationFile, CompoundMovementFile)
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     @tunnel_identifier.setter
     def tunnel_identifier(self, value: str):
         self._tunnel_identifier = self._on_property_changed(HardwareModel.TUNNEL_IDENTIFIER_PROPERTY, value,
-                                                            self._tunnel_identifier)
+            self._tunnel_identifier)
 
     @property
     def pellet_identifier(self) -> Optional[str]:
@@ -62,7 +63,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     @pellet_identifier.setter
     def pellet_identifier(self, value: str):
         self._pellet_identifier = self._on_property_changed(HardwareModel.PELLET_IDENTIFIER_PROPERTY, value,
-                                                            self._pellet_identifier)
+            self._pellet_identifier)
 
     @property
     def pending_command_token(self) -> Optional[UUID]:
@@ -95,7 +96,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if isinstance(value, str):
             value = float(value)
 
-        return self._send_with_token(self._tunnel_device, SystemCommandKind.SET_MAGNET_INTENSITY, value)
+        return self._send_with_token(self._tunnel_device, SystemCommandKind.MOVE_MAGNET_SERVO,
+                                     value)
 
     def open_tunnel_gate(self) -> Optional[UUID]:
         return self._send_with_token(self._tunnel_device, SystemCommandKind.OPEN_TUNNEL_GATE)
@@ -107,28 +109,37 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._send_with_token(self._tunnel_device, SystemCommandKind.UPDATE_SCALE_TARE)
 
     def set_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_X, value)
+
+    def set_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Y, value)
+
+    def set_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Z, value)
+
+    def move_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
         if not absolute:
             if self._last_x is None:
                 logger.warning("relative x movement requested, but no last x position is set")
                 return None
             value += self._last_x
-        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_X, value)
+        return self._send_with_token(self._pellet_device, SystemCommandKind.MOVE_X, value)
 
-    def set_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+    def move_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
         if not absolute:
             if self._last_y is None:
                 logger.warning("relative y movement requested, but no last y position is set")
                 return None
             value += self._last_y
-        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Y, value)
+        return self._send_with_token(self._pellet_device, SystemCommandKind.MOVE_Y, value)
 
-    def set_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+    def move_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
         if not absolute:
             if self._last_z is None:
                 logger.warning("relative z movement requested, but no last z position is set")
                 return None
             value += self._last_z
-        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Z, value)
+        return self._send_with_token(self._pellet_device, SystemCommandKind.MOVE_Z, value)
 
     def send_home(self) -> Optional[UUID]:
         return self._send_with_token(self._pellet_device, SystemCommandKind.SEND_HOME)
@@ -184,10 +195,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if self._pellet_device is not self._tunnel_device:
             self._send_command(self._pellet_device, SystemCommandKind.REQUEST_VERSION)
 
+        # load and set motors and move configs
+        self._pellet_device.load_default_motor_config()
+        self._pellet_device.load_default_move_config()
+
         self._send_command(self._tunnel_device, SystemCommandKind.STREAM_START)
 
         if animal is not None:
-            self._send_command(self._tunnel_device, SystemCommandKind.SET_MAGNET_INTENSITY,
+            self._send_command(self._tunnel_device, SystemCommandKind.MOVE_MAGNET_SERVO,
                                animal.baseline_magnet_intensity)
             self._send_command(self._pellet_device, SystemCommandKind.SET_X, animal.pellet_x)
             self._send_command(self._pellet_device, SystemCommandKind.SET_Y, animal.pellet_y)

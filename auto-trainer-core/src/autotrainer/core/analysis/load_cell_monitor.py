@@ -10,10 +10,14 @@ from typing_extensions import Self
 import yaml
 import numpy
 
+from autotrainer.core.logging import get_verbose_logger
 from ..observable_object import ObservableObject
 from ..event import EventManager
 
 from .analysis_measurement_event_kind import AnalysisMeasurementEventKind
+
+
+logger = get_verbose_logger(__name__)
 
 _NO_OP_TIMER = Timer(1.0, lambda: None)
 
@@ -93,6 +97,7 @@ class LoadCellMonitor(ObservableObject):
         self._when = 0
         self._index = 0
         self._is_engaged: bool = False
+        self._t_next_hist_log = time.time()
 
         self._values_history: Deque[
             Tuple[float, float, int]
@@ -159,8 +164,20 @@ class LoadCellMonitor(ObservableObject):
     def update(self, value: Union[float, numpy.floating], when: float, index: int):
         self._update_history(value, when, index)
         cfg = self._config
+        t_start = self._t_start_was_active
+        cur_engaged = self._is_engaged
+        cur_thrashing = self._thrashing_detected
+        hist = self._values_history
+        if __debug__:
+            t_now = time.time()
+            if t_now > self._t_next_hist_log:
+                logger.verbose("hist size=%s value=%.1f index=%s start_active=%s engaged=%s was_active=%s trashing=%s",
+                               len(hist), value, index, t_start, cur_engaged, self._was_active, cur_thrashing)
+                self._t_next_hist_log += 60
+        # was not there:
         self._when = when
         self._index = index
+        # reconsider.
         value = numpy.mean([v for v, w, _ in self._values_history if when - w < cfg.threshold_duration])
         if value > cfg.weight_active_threshold:
             self._inactive_debounce.cancel()
@@ -236,9 +253,9 @@ class LoadCellMonitor(ObservableObject):
         self._cur_ptp_count = 0
         self._thrashing_detected = self._on_property_changed(
             self.IS_THRASHING_DETECTED_PROPERTY, False, self._thrashing_detected)
+        self.property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, False, True)
         EventManager.default().post_event_content(AnalysisMeasurementEventKind.loadCellEngagedChanged, context=False,
                                                   when=datetime.fromtimestamp(self._when), index=self._index)
-        self.property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, False, True)
 
     def force_engaged(self, engaged: bool) -> None:
         """

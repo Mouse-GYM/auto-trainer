@@ -1,8 +1,8 @@
 import logging
 import queue
 
-from autotrainer.core import (ObservableObject, ProjectInterval, SystemMessageHandler, SystemCommandKind,
-                              SensorAnalysis, Motor, EventManager)
+from autotrainer.core import (ObservableObject, ProjectInterval, SystemMessageHandler,
+                              SystemCommandKind, SensorAnalysis, Motor, EventManager, MessageHandler)
 from autotrainer.device import DeviceConnection, CanDevice, HeadFix, CAN_IDENTIFIER, HAVE_CAN_DEVICE
 
 from tools.head_fix.model.user_settings import UserSettings
@@ -33,6 +33,7 @@ class AppModel(ObservableObject):
         self._firmware_version = ""
 
         self._magnet_intensity = -1.0
+        self._gate_position = 0.0
         self._config = None
 
     @property
@@ -56,7 +57,8 @@ class AppModel(ObservableObject):
         if self._user_settings.port == CAN_IDENTIFIER:
             if value is None or value.find("Magnet") == -1:
                 return
-        self._firmware_version = self._on_property_changed("firmware_version", value,
+        self._firmware_version = self._on_property_changed(MessageHandler.FIRMWARE_VERSION_PROPERTY,
+                                                           value,
                                                            self._firmware_version)
 
     @property
@@ -65,8 +67,18 @@ class AppModel(ObservableObject):
 
     @magnet_intensity.setter
     def magnet_intensity(self, value: float):
-        self._magnet_intensity = self._on_property_changed("magnet_intensity", value,
-                                                           self._magnet_intensity)
+        self._magnet_intensity = self._on_property_changed(
+            MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value,
+            self._magnet_intensity)
+
+    @property
+    def gate_position(self) -> float:
+        return self._gate_position
+
+    @gate_position.setter
+    def gate_position(self, value: float):
+        self._gate_position = self._on_property_changed(MessageHandler.HEAD_GATE_PROPERTY, value,
+                                                        self._gate_position)
 
     @property
     def config(self):
@@ -74,7 +86,8 @@ class AppModel(ObservableObject):
 
     @config.setter
     def config(self, value):
-        self._config = self._on_property_changed("config", value, self._config)
+        self._config = self._on_property_changed(MessageHandler.CONFIG_PROPERTY, value,
+                                                 self._config)
 
     @property
     def message_handler(self):
@@ -84,30 +97,53 @@ class AppModel(ObservableObject):
     def analysis(self) -> SensorAnalysis:
         return self._analysis
 
-    def set_position(self, value: float):
+    def set_magnet_position(self, value: float):
         if self._device_connection is not None:
-            self._device_connection.send_message(SystemCommandKind.SET_MAGNET_INTENSITY, value)
+            self._device_connection.send_message(SystemCommandKind.MOVE_MAGNET_SERVO, value,
+                                                 context="set magnet")
+
+    def set_gate_position(self, value: float):
+        if self._device_connection is not None:
+            self._device_connection.send_message(SystemCommandKind.MOVE_GATE_SERVO, value,
+                                                 context="set gate")
+
+    def set_tone(self, freq: float, duration: float):
+        """
+        Args:
+            freq: Hz
+            duration: sec
+        """
+
+        if self._device_connection is not None:
+            self._device_connection.send_message(SystemCommandKind.PLAY_TONE, (int(freq),
+                                                                               int(duration) *
+                                                                               1000),
+                                                 context="tone")
 
     def open_tunnel_gate(self):
         if self._device_connection is not None:
-            self._device_connection.send_message(SystemCommandKind.OPEN_TUNNEL_GATE)
+            self._device_connection.send_message(SystemCommandKind.OPEN_TUNNEL_GATE,
+                                                 context="open gate")
 
     def close_tunnel_gate(self):
         if self._device_connection is not None:
-            self._device_connection.send_message(SystemCommandKind.CLOSE_TUNNEL_GATE)
+            self._device_connection.send_message(SystemCommandKind.CLOSE_TUNNEL_GATE,
+                                                 context="close gate")
 
     def set_config(self, config):
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION,
-                                                 config)
+                                                 config, context="set motor cfg")
 
     def get_config(self, motor: Motor):
         if self._device_connection is not None:
-            self._device_connection.send_message(SystemCommandKind.READ_MOTOR_CONFIGURATION, motor)
+            self._device_connection.send_message(SystemCommandKind.READ_MOTOR_CONFIGURATION, motor,
+                                                 context="get motor cfg")
 
     def tare(self) -> bool:
         if self._device_connection is not None:
-            self._device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE)
+            self._device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE,
+                                                 context="tare")
         else:
             logger.warning("attempt to tare when device thread is not initialized")
         return True
@@ -129,18 +165,21 @@ class AppModel(ObservableObject):
             # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
             # configured to generate messages as frequently as the real device.
             buffer_size = 10 if HAVE_CAN_DEVICE else 1
-            self._device_connection = DeviceConnection(CanDevice(buffer_size=buffer_size),
+            device_connection = self._device_connection = DeviceConnection(CanDevice(buffer_size=buffer_size),
                                                        self._message_handler.input_queue)
         else:
-            self._device_connection = DeviceConnection(
+            device_connection = self._device_connection = DeviceConnection(
                 HeadFix(port=self._user_settings.port, buffer_size=10),
                 self._message_handler.input_queue)
 
-        self._device_connection.name = "head-fix"
+        device_connection.name = "head-fix"
 
-        self._device_connection.request_connect()
+        device_connection.request_connect()
 
-        self._device_connection.send_message(SystemCommandKind.REQUEST_VERSION)
+        device_connection.load_default_motor_config()
+        device_connection.load_default_move_config()
+
+        device_connection.send_message(SystemCommandKind.REQUEST_VERSION)
 
         if self._user_settings.stream_enabled:
             self._enable_data_stream()
@@ -175,8 +214,10 @@ class AppModel(ObservableObject):
     def message_handler_property_changed(self, name: str, value, _old_value):
         if name == SystemMessageHandler.FIRMWARE_VERSION_PROPERTY:
             self.firmware_version = value
-        elif name == "head_magnet_intensity":
+        elif name == SystemMessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
             self.magnet_intensity = value
+        elif name == SystemMessageHandler.HEAD_GATE_PROPERTY:
+            self.gate_position = value
         elif name == "config":
             self.config = value
 
