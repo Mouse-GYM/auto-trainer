@@ -1365,17 +1365,21 @@ class CanInterface(DeviceInterface):
         Returns:
             AudioData object if a complete packet was received, None otherwise
         """
-        a = None
-        if (len(self._audio.magnitudes) == 32 and
-                message.audio_data_cmd.stream_id == self._audio.packet_id):
-            a = AudioData()
-            a.magnitudes = self._audio.magnitudes.copy()
-            a.packet_id = self._audio.packet_id
-            a.target = self._audio.target
+        cur_audio = self._audio
+        if len(cur_audio.magnitudes) == 32 and message.audio_data_cmd.stream_id == cur_audio.packet_id:
+            a = AudioData(
+                target=cur_audio.target,
+                when=cur_audio.when,
+                index=cur_audio.index,
+                magnitudes=cur_audio.magnitudes,
+                packet_id=cur_audio.packet_id,
+            )
+        else:
+            a = None
 
         # Reset the audio buffer state
-        self._audio.magnitudes.clear()
-        self._audio.packet_id = 0
+        cur_audio.magnitudes = []
+        cur_audio.packet_id = 0
 
         return a
 
