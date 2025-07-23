@@ -95,7 +95,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def update_head_magnet_intensity(self, value: float) -> Optional[UUID]:
         if isinstance(value, str):
             value = float(value)
-        if True or value != self._head_magnet_position:
+        if value != self._head_magnet_position:
             self._head_magnet_position = value
             return self._send_with_token(self._tunnel_device, SystemCommandKind.MOVE_MAGNET_SERVO,
                                          value)
@@ -224,9 +224,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
-            # if value != self._head_magnet_position:
-            self._head_magnet_position = value
-            self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value, old_value)
+            if value != self._head_magnet_position:
+                self._head_magnet_position = value
+                self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value, old_value)
         elif name == MessageHandler.DEVICE_X_PROPERTY:
             self._last_x = value
         elif name == MessageHandler.DEVICE_Y_PROPERTY:
