@@ -579,7 +579,7 @@ class CanInterface(DeviceInterface):
         self._read_msgs = self._jc.ReceiveMessages if hasattr(self._jc, "ReceiveMessages") else self._read_by_one_msg
         self._get_timestamp_ns = attrgetter("timestamp_ns") if hasattr(JerryCANMsg, "timestamp_ns") else self._assign_timestamp_ns
         self._get_index = attrgetter("index") if hasattr(JerryCANMsg, "index") else (lambda _: time.perf_counter_ns())
-        logger.debug("Using %s and %s", self._read_msgs, self._get_timestamp_ns)
+        logger.debug("Using %s and %s and %s", self._read_msgs, self._get_timestamp_ns, self._get_index)
 
         self._cnt_none = 0
         if self._is_open:
@@ -1568,8 +1568,12 @@ class CanInterface(DeviceInterface):
         Args:
             message: JerryCANMsg with continued audio data
         """
-        if self._audio.packet_id != 0 and self._audio.target == _addr2tgt(message.dst_id):
-            self._audio.magnitudes.extend(message.audio_data.magnitudes)
+        cur_audio = self._audio
+        if cur_audio.packet_id != 0 and cur_audio.target == _addr2tgt(message.dst_id):
+            cur_audio.magnitudes.extend(message.audio_data.magnitudes)
+        else:
+            logger.warning("Unknown audio cont: target=%s cur=%s magnitudes=%s",
+                           _addr2tgt(message.dst_id), cur_audio.target, message.audio_data.magnitudes)
         return None
 
     def _handle_audio_end(self, message) -> typing.Optional[AudioData]:
@@ -1584,15 +1588,23 @@ class CanInterface(DeviceInterface):
         """
 
         cur_audio = self._audio
-        if len(cur_audio.magnitudes) == 32 and message.audio_data_cmd.stream_id == cur_audio.packet_id:
-            a = AudioData(
-                target=cur_audio.target,
-                when=cur_audio.when,
-                index=cur_audio.index,
-                magnitudes=cur_audio.magnitudes,
-                packet_id=cur_audio.packet_id,
-            )
+        if message.audio_data_cmd.stream_id == cur_audio.packet_id:
+            if len(cur_audio.magnitudes) != 64:
+                logger.debug("missing or unexpected extra audio data, got %s, awaited 64 ; data skipped",
+                             len(cur_audio.magnitudes))
+                a = None
+            else:
+                # todo: could use copy.deepcopy for faster creation probably:
+                a = AudioData(
+                    target=cur_audio.target,
+                    when=cur_audio.when,
+                    index=cur_audio.index,
+                    magnitudes=cur_audio.magnitudes,
+                    packet_id=cur_audio.packet_id,
+                )
         else:
+            logger.warning("Got unknown or unexpected audio end: packet_id=%s cur=%s",
+                           message.audio_data_cmd.stream_id, cur_audio.packet_id)
             a = None
 
         # Reset the audio buffer state
