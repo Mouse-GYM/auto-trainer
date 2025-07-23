@@ -280,10 +280,6 @@ class VideoCapture(Process):
                     rec_q_list = self._record_queue_list
 
                 if not self._is_capturing:
-                    # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
-                    # massively slow down the system without explicitly yielding, despite being in its own thread.  This
-                    # not the case for other platforms/combinations of the above so may not be apparent when not on the
-                    # current deployment platform.
                     time.sleep(0.001)
                     record_start_frame_idx = None
                     rec_q_list = self._record_queue_list = []

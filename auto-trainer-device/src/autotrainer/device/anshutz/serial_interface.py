@@ -2,6 +2,7 @@ import logging
 import math
 import sys
 import typing
+from typing import Optional
 
 import serial
 import serial.tools.list_ports
@@ -55,7 +56,7 @@ class SerialInterface(DeviceInterface):
     def __init__(self, port: str, baudrate: int = 115200):
         super().__init__()
         self._port = port
-        self._serial = None
+        self._serial: Optional[serial.Serial] = None
         self._baudrate = baudrate
 
     @property
@@ -92,7 +93,8 @@ class SerialInterface(DeviceInterface):
     def can_read(self) -> bool:
         return self.is_open and self._serial.in_waiting > 0
 
-    def read(self, max_count: int = math.inf) -> typing.Any:
+    def read(self, max_count: int = math.inf, *, collect_ms: int = 0) -> typing.Any:
+        # TODO: handle collect_ms
         if self.can_read():
             return self._serial.read(min(self._serial.in_waiting, max_count))
 

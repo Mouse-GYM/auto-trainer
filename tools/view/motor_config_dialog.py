@@ -23,7 +23,8 @@ class MotorConfigDialog(QDialog):
             "X": Motor.PELLET_X_MOTOR,
             "Y": Motor.PELLET_Y_MOTOR,
             "Z": Motor.PELLET_Z_MOTOR,
-            "Magnet": Motor.MAGNET_SERVO,
+            "Magnet": Motor.TUNNEL_MAGNET_SERVO,
+            "Gate": Motor.TUNNEL_GATE_SERVO,
             "Load Arm": Motor.PELLET_LOAD_SERVO,
             "Barrier": Motor.PELLET_COVER_SERVO
         }
@@ -34,7 +35,9 @@ class MotorConfigDialog(QDialog):
                                    Motor.PELLET_Z_MOTOR)]
         self.servo_motors = [name for name, motor_id in self.motor_mapping.items()
                              if motor_id in (
-                                 Motor.MAGNET_SERVO, Motor.PELLET_LOAD_SERVO,
+                                 Motor.TUNNEL_MAGNET_SERVO,
+                                 Motor.TUNNEL_GATE_SERVO,
+                                 Motor.PELLET_LOAD_SERVO,
                                  Motor.PELLET_COVER_SERVO)]
 
         self.all_motors = self.stepper_motors + self.servo_motors
@@ -79,6 +82,11 @@ class MotorConfigDialog(QDialog):
         # Stepper-specific fields group
         self.stepper_group = QGroupBox("Stepper Parameters", self)
         stepper_layout = QFormLayout()  # Create layout without parent
+
+        self.homing_velocity_spin = QDoubleSpinBox(self)
+        self.homing_velocity_spin.setRange(0, 80)
+        self.homing_velocity_spin.setSuffix(" mm/s")
+        stepper_layout.addRow("Homing Velocity:", self.homing_velocity_spin)
 
         self.flip_orientation_check = QCheckBox(self)
         stepper_layout.addRow("Flip Motor Orientation:", self.flip_orientation_check)
@@ -148,9 +156,14 @@ class MotorConfigDialog(QDialog):
         if motor_name in self.stepper_motors:
             self.stepper_group.setVisible(True)
             self.servo_group.setVisible(False)
+            self.max_velocity_spin.setSuffix(" mm/s")
+            self.max_accel_spin.setSuffix(" mm/s²")
+
         elif motor_name in self.servo_motors:
             self.stepper_group.setVisible(False)
             self.servo_group.setVisible(True)
+            self.max_velocity_spin.setSuffix(" deg/s")
+            self.max_accel_spin.setSuffix(" deg/s²")
 
     def _query_config(self):
         motor_name = self.motor_combo.currentText()
@@ -174,6 +187,7 @@ class MotorConfigDialog(QDialog):
             config.motor = motor
             config.maximum_velocity = self.max_velocity_spin.value()
             config.maximum_acceleration = self.max_accel_spin.value()
+            config.homing_velocity = self.homing_velocity_spin.value()
             config.flip_limit_orientation = self.flip_orientation_check.isChecked()
             config.microsteps = int(self.micro_steps_combo.currentText())
             config.steps_per_revolution = self.steps_per_rev_spin.value()
@@ -253,6 +267,7 @@ class MotorConfigDialog(QDialog):
         self.max_velocity_spin.setValue(stepper_config.maximum_velocity)
         self.max_accel_spin.setValue(stepper_config.maximum_acceleration)
 
+        self.homing_velocity_spin.setValue(stepper_config.homing_velocity)
         self.flip_orientation_check.setChecked(stepper_config.flip_limit_orientation)
         index = self.micro_steps_combo.findText(str(stepper_config.microsteps))
         self.micro_steps_combo.setCurrentIndex(index)

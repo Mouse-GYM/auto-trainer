@@ -45,7 +45,15 @@ class SystemMessageHandler(MessageHandler):
         #  behaviors are complex and do not check for change themselves, this could become a bottleneck.  This could be
         #  updated to store previous values and only notify listeners on change, like a typical ObservableObject
         #  implementation.  Keeping things simple for the time being.
-        if msg == SystemStatusMessageKind.PELLET_X:
+        if msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
+            measures = self._analysis.measurements_received(data)
+            if self._measurement_callback is not None:
+                self._measurement_callback(measures)
+        elif msg == SystemStatusMessageKind.AUDIO_SPECTRUM:
+            self._analysis.audio_spectrum_received(data)
+            if self._audio_callback is not None:
+                self._audio_callback(data.magnitudes)
+        elif msg == SystemStatusMessageKind.PELLET_X:
             self.property_changed(MessageHandler.DEVICE_X_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.PELLET_Y:
             self.property_changed(MessageHandler.DEVICE_Y_PROPERTY, data, None)
@@ -57,20 +65,19 @@ class SystemMessageHandler(MessageHandler):
             self.property_changed(MessageHandler.COVER_ARM_ANGLE_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.HEAD_MAGNET:
             self.property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.TUNNEL_GATE_SERVO:
+            self.property_changed(MessageHandler.HEAD_GATE_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.FRONT_DOOR:
             self.property_changed(MessageHandler.FRONT_DOOR_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.DRAWER_DOOR:
             self.property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.SPARE_DOOR:
+            self.property_changed(MessageHandler.SPARE_DOOR_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.EXT_BUTTON:
+            self.property_changed(MessageHandler.EXT_BUTTON_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.STIMULUS_INPUTS:
             self.property_changed(MessageHandler.STIMULI_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.MOTOR_CONFIGURATION:
             self._on_property_changed("config", data, None)
-        elif msg == SystemStatusMessageKind.AUDIO_SPECTRUM:
-            self._analysis.audio_spectrum_received(data)
-            if self._audio_callback is not None:
-                self._audio_callback(data.magnitudes)
-        elif msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
-            weights, switch, pressure, temperature, humidity = self._analysis.measurements_received(
-                data)
-            if self._measurement_callback is not None:
-                self._measurement_callback((weights, switch, pressure, temperature, humidity))
+        else:
+            logger.warning("unhandled msg %s", msg)

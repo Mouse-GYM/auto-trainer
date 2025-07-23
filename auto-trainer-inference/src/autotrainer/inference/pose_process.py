@@ -83,7 +83,7 @@ class PoseProcess(Process):
         self._msg_queue = msg_queue
         self._data_queue = data_queue
 
-        self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_count=120,
+        self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_window=30,
                                          enable_log=False)
 
         self._mode = InferenceMode.Live
@@ -156,10 +156,6 @@ class PoseProcess(Process):
                 else:
                     logger.warning("Unhandled command: %s", cmd)
             except Empty:
-                # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
-                # massively slow down the system without explicitly yielding, despite being in its own thread.  This not
-                # the case for other platforms/combinations of the above so may not be apparent when not on the current
-                # deployment platform.
                 time.sleep(0.01)
 
         return True

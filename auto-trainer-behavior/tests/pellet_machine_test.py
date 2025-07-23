@@ -217,8 +217,6 @@ def test_pellet_seen(mock_system, machine, inference):
 
     mock_system.mock_pose_response(True, False)
 
-    # time.sleep(algorithm.limits.pellet_missing_time + 0.1)
-
     assert machine.state == SystemState.tunnel
     assert pellet_machine.state == PelletState.monitoring
     assert algorithm.pellet_last_seen != 0.0

@@ -56,7 +56,7 @@ class SensorAnalysis(ObservableObject):
 
         self._audio_thrashing_monitor = AudioSpectrumThrashMonitor()
 
-        self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_count=3000)
+        self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_window=30)
 
     @property
     def project_info(self) -> ProjectInfo:
@@ -104,6 +104,7 @@ class SensorAnalysis(ObservableObject):
         return self._is_headbar_switch_engaged
 
     def stream_start(self):
+        logger.verbose("SensorAnalysis: stream_start")
         self._perf_monitor.reset()
 
     def measurements_received(self, measurements: List[HeadFixMeasurement]):

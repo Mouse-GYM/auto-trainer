@@ -6,6 +6,10 @@ from typing_extensions import Self
 import numpy
 import yaml
 
+from autotrainer.core.logging import get_verbose_logger
+
+logger = get_verbose_logger(__name__)
+
 
 TareCallbackT = Optional[Callable[[], bool]]
 
@@ -99,6 +103,7 @@ class LoadCellTareMonitor:
 
     @tare_callback.setter
     def tare_callback(self, tare_callback: TareCallbackT) -> None:
+        logger.info("Setting new tare_callback: %s", tare_callback)
         self._tare_callback = tare_callback
 
     def load_configuration(self, configuration: LoadCellAutoTareConfiguration):

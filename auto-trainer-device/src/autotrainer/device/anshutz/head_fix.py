@@ -30,7 +30,7 @@ class HeadFix(GymDevice):
 
         self._measurements = list()
 
-        self._perf_monitor = PerfMonitor(name="<head-fix>", units="mps", report_count=3000)
+        self._perf_monitor = PerfMonitor(name="<head-fix>", units="mps", report_window=30)
 
     @property
     def measurements(self) -> typing.List[HeadFixMeasurement]:
@@ -49,15 +49,24 @@ class HeadFix(GymDevice):
             self._send_data(typing.cast(str, data), context)
         elif kind == SystemCommandKind.REQUEST_VERSION:
             self._send_data("Fx", context)
-        elif kind == SystemCommandKind.SET_MAGNET_INTENSITY:
+        elif kind == SystemCommandKind.MOVE_MAGNET_SERVO:
             if isinstance(data, float):
                 val = int(data)
             else:
                 val = typing.cast(int, data)
-            self._send_data(f"A{typing.cast(int, val)}x", context)
+            self._send_data(f"A{val}x", context)
             if context is not None:
-                self._commands_with_status[context] = (SystemCommandKind.SET_MAGNET_INTENSITY, val)
+                self._commands_with_status[context] = (SystemCommandKind.MOVE_MAGNET_SERVO, val)
             self.api.send_message(SystemStatusMessageKind.HEAD_MAGNET, val)
+        elif kind == SystemCommandKind.MOVE_GATE_SERVO:
+            if isinstance(data, float):
+                val = int(data)
+            else:
+                val = typing.cast(int, data)
+            self._send_data(f"A{val}x", context)
+            if context is not None:
+                self._commands_with_status[context] = (SystemCommandKind.MOVE_GATE_SERVO, val)
+            self.api.send_message(SystemStatusMessageKind.TUNNEL_GATE_SERVO, val)
         elif kind == SystemCommandKind.SETTINGS:
             self._send_data("Ox", context)
         elif kind == SystemCommandKind.UPDATE_SCALE_TARE:
@@ -74,10 +83,10 @@ class HeadFix(GymDevice):
             if context is not None:
                 Timer(0.5, lambda: self._acknowledge_command(context)).start()
         elif kind == SystemCommandKind.SET_SEND_PELLET_PROCEDURE or \
-                kind == SystemCommandKind.SET_LOAD_PELLET_PROCEDURE or \
-                kind == SystemCommandKind.SET_COVER_PELLET_PROCEDURE or \
-                kind == SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE or \
-                kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
+            kind == SystemCommandKind.SET_LOAD_PELLET_PROCEDURE or \
+            kind == SystemCommandKind.SET_COVER_PELLET_PROCEDURE or \
+            kind == SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE or \
+            kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
             pass
         else:
             logger.warning(f"unknown message kind: {kind}")
@@ -88,8 +97,10 @@ class HeadFix(GymDevice):
         super()._acknowledge_command(token)
 
         if response is not None:
-            if response[0] == SystemCommandKind.SET_MAGNET_INTENSITY:
+            if response[0] == SystemCommandKind.MOVE_MAGNET_SERVO:
                 self.api.send_message(SystemStatusMessageKind.HEAD_MAGNET, response[1])
+            elif response[0] == SystemCommandKind.MOVE_GATE_SERVO:
+                self.api.send_message(SystemStatusMessageKind.TUNNEL_GATE_SERVO, response[1])
 
     def insert_measurements(self, data: str) -> str:
         return self._handle_response("", data)
