@@ -60,8 +60,8 @@ class SystemConfiguration:
         try:
             with open(path, "r") as file_contents:
                 return SystemConfiguration.load_yaml(file_contents)
-        except Exception as ex:
-            logger.error(ex)
+        except Exception as err:
+            logger.exception("Error loading yaml config %s: %s", path, err)
 
         return None
 
@@ -89,8 +89,8 @@ class SystemConfiguration:
             if as_yaml:
                 with open(str(path) + ".yaml", "w") as file:
                     file.write(self.dump_yaml())
-        except Exception as ex:
-            logger.error(ex)
+        except Exception as err:
+            logger.exception("Error loading config %s: %s", path, err)
             return False
 
         return True

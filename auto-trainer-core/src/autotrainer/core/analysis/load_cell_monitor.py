@@ -58,8 +58,8 @@ def load_cell_configuration_representer(dumper: yaml.SafeDumper, cfg: LoadCellCo
         "minEventDuration": cfg.min_event_duration,
         "minPostEventHoldDuration": cfg.min_post_event_hold_duration,
         "thrashing_var_weight_threshold": cfg.thrashing_var_weight_threshold,
-        "thrashing_var_minimum_delay": cfg.thrashing_var_min_delay,
-        "thrashing_var_minimum_delay": cfg.thrashing_var_max_delay,
+        "thrashing_var_min_delay": cfg.thrashing_var_min_delay,
+        "thrashing_var_max_delay": cfg.thrashing_var_max_delay,
         "thrashing_min_ptp_change_count": cfg.thrashing_min_ptp_change_count,
     })
 
