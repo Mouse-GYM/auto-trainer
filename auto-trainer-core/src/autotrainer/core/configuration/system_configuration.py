@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from typing_extensions import Self
 import yaml
 
@@ -56,22 +56,15 @@ class SystemConfiguration:
         return configuration
 
     @classmethod
-    def load_yaml_file(cls, path: Path | str) -> Optional[Self]:
-        try:
-            with open(path, "r") as file_contents:
-                return SystemConfiguration.load_yaml(file_contents)
-        except Exception as err:
-            logger.exception("Error loading yaml config %s: %s", path, err)
-
-        return None
+    def load_yaml_file(cls, path: Union[Path, str]) -> Optional[Self]:
+        with open(path, "r") as file_contents:
+            return SystemConfiguration.load_yaml(file_contents)
 
     @classmethod
     def load_default(cls, location: str) -> Optional[Self]:
         path = Path(location).joinpath(SystemConfiguration._DEFAULT_NAME + ".yaml")
-
         if path.is_file():
             return SystemConfiguration.load_yaml_file(path)
-
         return None
 
     def save_default(self, location: str):
@@ -81,7 +74,7 @@ class SystemConfiguration:
     def dump_yaml(self) -> str:
         return yaml.dump(self, Dumper=get_system_configuration_dumper(), sort_keys=False)
 
-    def save_file(self, path: Path | str, as_yaml: bool = False, as_json: bool = False) -> bool:
+    def save_file(self, path: Union[Path, str], as_yaml: bool = False, as_json: bool = False) -> bool:
         try:
             if as_json:
                 with open(str(path) + ".json", "w") as file:

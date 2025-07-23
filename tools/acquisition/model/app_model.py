@@ -369,14 +369,14 @@ class AppModel(ObservableObject):
             if configuration is None:
                 logger.info(f"default not yet in use, trying last configuration")
                 location = self._preferences.last_configuration
-                configuration = SystemConfiguration.load_yaml_file(location)
-
+                if Path(location).exists():
+                    configuration = SystemConfiguration.load_yaml_file(location)
                 if configuration is not None:
                     # Migrate to new default location.
                     configuration.save_default(self._preferences.configuration_location)
         else:
             # Always allow for a custom configuration file if provided.
-            logger.info(f"using explicit configuration")
+            logger.info("using explicit configuration %s", location)
             configuration: SystemConfiguration = SystemConfiguration.load_yaml_file(location)
 
         if configuration is None:
