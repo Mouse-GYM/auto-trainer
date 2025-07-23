@@ -95,9 +95,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def update_head_magnet_intensity(self, value: float) -> Optional[UUID]:
         if isinstance(value, str):
             value = float(value)
-
-        return self._send_with_token(self._tunnel_device, SystemCommandKind.MOVE_MAGNET_SERVO,
-                                     value)
+        if value != self._head_magnet_position:
+            self._head_magnet_position = value
+            return self._send_with_token(self._tunnel_device, SystemCommandKind.MOVE_MAGNET_SERVO,
+                                         value)
+        return None
 
     def open_tunnel_gate(self) -> Optional[UUID]:
         return self._send_with_token(self._tunnel_device, SystemCommandKind.OPEN_TUNNEL_GATE)

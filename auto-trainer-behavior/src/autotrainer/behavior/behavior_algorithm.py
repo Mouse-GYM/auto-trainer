@@ -226,9 +226,10 @@ class BehaviorAlgorithm(ObservableObject):
 
     @baseline_intensity.setter
     def baseline_intensity(self, value):
-        self._baseline_intensity = self._on_property_changed(BehaviorProps.BASELINE_INTENSITY,
-                                                             value, self._baseline_intensity)
-        EventManager.default().post_event_content(BehaviorEventKind.headfixBaselineChanged, context=value)
+        if value != self._baseline_intensity:
+            EventManager.default().post_event_content(BehaviorEventKind.headfixBaselineChanged, context=value)
+            self._baseline_intensity = self._on_property_changed(BehaviorProps.BASELINE_INTENSITY,
+                                                                 value, self._baseline_intensity)
 
     @property
     def auto_clamp_intensity(self):
