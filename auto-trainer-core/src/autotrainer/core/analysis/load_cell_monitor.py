@@ -160,6 +160,7 @@ class LoadCellMonitor(ObservableObject):
             cfg.min_event_duration,
             cfg.min_post_event_hold_duration,
             cfg.thrashing_var_min_delay,
+            cfg.thrashing_var_max_delay,
         )
         while len(hist) > 0:
             h0_when = hist[0][1]
