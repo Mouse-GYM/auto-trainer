@@ -12,6 +12,11 @@ NewValueAny = Any
 OldValueAny = Any
 
 
+_debug_properties_change = {
+    v.strip() for v in os.getenv("AUTOTRAINER_DEBUG_PROPERTIES", "").split(",")
+}
+
+
 class ObservableObject(Events):
     """
     Defines a class with observable property change events.  This is a common pattern for UI frameworks in
@@ -69,7 +74,7 @@ class ObservableObject(Events):
             return old_value
 
         if __debug__:
-            if property_name in {v.strip() for v in os.getenv("AUTOTRAINER_DEBUG_PROPERTIES", "").split(",")}:
+            if property_name in _debug_properties_change:
                 logger.debug("%s: property %r: from %s to %s", self, property_name, old_value, new_value,
                              stack_info=True)
 
