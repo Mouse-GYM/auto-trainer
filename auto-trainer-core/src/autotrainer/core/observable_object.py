@@ -68,7 +68,8 @@ class ObservableObject(Events):
             return old_value
 
         if __debug__:
-            logger.debug("%s: property %r -> %s", self, property_name, new_value)
+            if property_name == "head_magnet_intensity":
+                logger.debug("%s: property %r -> %s", self, property_name, new_value, stack_info=True)
 
         self.property_changed(property_name, new_value, old_value)
         return new_value
