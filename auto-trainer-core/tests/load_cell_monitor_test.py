@@ -14,17 +14,37 @@ def load_cell_monitor():
     yield instance
 
 
-@pytest.mark.parametrize("threshold_duration, load_cell_engaged_threshold", [
-    (0.5, 2),
-    (2, 3),
+@pytest.mark.parametrize("threshold_duration", [0.2, 0.5, 0.75])
+@pytest.mark.parametrize("weight_threshold,thrashing_var_weight_threshold", [
+    (10, 25),
+    (15, 30),
+    (25, 50),
 ])
-@pytest.mark.parametrize("weight_threshold", [5, 15, 45])
-def test_detect_thrashing(load_cell_monitor, threshold_duration, load_cell_engaged_threshold, weight_threshold):
+@pytest.mark.parametrize("thrashing_var_min_delay,thrashing_var_max_delay", [
+    (0.05, 0.15),
+    (0.10, 0.30),
+    (0.20, 0.45),
+    (0.40, 0.80),
+])
+def test_detect_thrashing(
+    load_cell_monitor,
+    threshold_duration,
+    weight_threshold,
+    thrashing_var_min_delay,
+    thrashing_var_max_delay,
+    thrashing_var_weight_threshold,
+    mocker,
+):
     assert load_cell_monitor.thrashing_detected is False
 
-    load_cell_monitor.thrashing_var_weight_threshold = weight_threshold
-    load_cell_monitor.threshold_duration = threshold_duration
-    load_cell_monitor.load_cell_engaged_threshold = load_cell_engaged_threshold
+    mocker.patch("autotrainer.core.analysis.load_cell_monitor._timer_load_cell_engaged")
+
+    cfg = load_cell_monitor.config
+    cfg.threshold_duration = threshold_duration
+    cfg.weight_active_threshold = weight_threshold
+    cfg.thrashing_var_weight_threshold = thrashing_var_weight_threshold
+    cfg.thrashing_var_min_delay = thrashing_var_min_delay
+    cfg.thrashing_var_max_delay = thrashing_var_max_delay
 
     thrash_detected_list = []
 
@@ -45,7 +65,7 @@ def test_detect_thrashing(load_cell_monitor, threshold_duration, load_cell_engag
     value = 0
     update_monitor(value, t_now)
 
-    t_now += 1
+    t_now += cfg.threshold_duration
     update_monitor(value, t_now)
 
     # value is lower than threshold, so not engaged:
@@ -54,35 +74,47 @@ def test_detect_thrashing(load_cell_monitor, threshold_duration, load_cell_engag
     assert thrash_detected_list == []
 
     def patched_timer(delay, func):
-        assert delay == load_cell_monitor.threshold_duration
+        assert delay == cfg.threshold_duration
         m_timer = mock.create_autospec(Timer)
         m_timer.start.side_effect = func
         return m_timer
 
     # now set value a bit more than engaged threshold:
-    value = load_cell_monitor.load_cell_engaged_threshold + 0.0001
+    value = cfg.weight_active_threshold + 0.0001
     t_now += 0.01
 
     with mock.patch("autotrainer.core.analysis.load_cell_monitor._timer_load_cell_engaged", new=patched_timer):
-        #
-        update_monitor(value, t_now)
+        for _ in range(2):
+            # this for _ in range(..):
+            # can be necessary if/when using mean() in monitor update function,
+            # to get "current" avg value
+            update_monitor(value, t_now)
+            t_now += cfg.threshold_duration / 2
 
     assert load_cell_monitor._was_active
     assert load_cell_monitor.is_engaged
     assert not load_cell_monitor.thrashing_detected
 
-    # now set t_now above thrashing min delay:
-    t_now += load_cell_monitor.thrashing_var_minimum_delay + 0.000001
-    # and value to weight threshold:
-    value = load_cell_monitor.thrashing_var_weight_threshold
-
-    load_cell_monitor.update(value, t_now, 3)
-    # still not detected:
+    # check for thrashing:
+    t_now += 0.1
+    pushed_weight = cfg.weight_active_threshold + cfg.thrashing_var_weight_threshold + 0.1
+    # not detected atm :
     assert load_cell_monitor.thrashing_detected is False
     assert thrash_detected_list == []
 
-    t_now += 0.001
-    # now double the value (to get ptp calculated value large enough) :
-    load_cell_monitor.update(2 * value, t_now, 4)
+    for outer_loop_idx in range(cfg.thrashing_min_ptp_change_count):
+        for inner_loop_idx in range(4):
+            # makes 4 loops with high & low values, with delay being a fourth of min and max delay,
+            # this allows to effectively, and normally for any of these values,
+            # get the live ptp change count to reach the desired config value,
+            # so to trigger the thrashing_detected property/flag.
+            t_now += cfg.thrashing_var_min_delay / 4
+            update_monitor(cfg.weight_active_threshold, t_now)
+            t_now += cfg.thrashing_var_max_delay / 4
+            update_monitor(pushed_weight, t_now)
+            if outer_loop_idx == 0 and inner_loop_idx < 2:
+                # NB: this depends on min_ptp_change_count too, and actually on the delays as well
+                assert not load_cell_monitor.thrashing_detected
+
     assert load_cell_monitor.thrashing_detected is True
     assert thrash_detected_list == [True]

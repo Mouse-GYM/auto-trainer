@@ -36,7 +36,8 @@ def process_path(
             prev_changed = prev_ts_changed.get(name, None)
             if prev_changed is None:
                 prev_changed = ts
-            print(f"T={ts - t0:.2f} {name}: {prev_value} -> {ts - prev_changed:.2f}s -> {new_value} ; w={weight:.1f}")
+            if name != "is_thrashing_detected" or new_value:
+                print(f"T={ts - t0:.2f} {name}: {prev_value} -> {ts - prev_changed:.2f}s -> {new_value} ; w={weight:.1f}")
             # print(ts, ts - prev_ts_changed, name, new_value, weight)
             prev_ts_changed[name] = ts
         props[name] = new_value
@@ -49,12 +50,15 @@ def process_path(
         line = fh.readline()
         if not line:
             break
+        line = line.strip()
         if line.startswith("#"):
             if only_with_begin_end_marks:
                 if "BEGIN" in line:
                     capturing = True
+                    print(line)
                 elif "END" in line:
                     capturing = False
+                    print(line)
             continue
         if not capturing:
             t0 = None
