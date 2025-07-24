@@ -5,6 +5,9 @@ from pathlib import Path
 from PySide6.QtCore import QCoreApplication, QSettings
 
 from autotrainer.core import ObservableObject
+from autotrainer.core.logging import get_verbose_logger
+
+logger = get_verbose_logger(__name__)
 
 
 def _find_default_configuration_location() -> str:
@@ -20,26 +23,28 @@ class UserPreferences(ObservableObject):
         super().__init__()
 
         if sys.platform.startswith("win"):
-            self._settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "Colorado", "Auto Trainer")
+            settings = self._settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "Colorado", "Auto Trainer")
         else:
             QCoreApplication.setOrganizationName("Colorado")
             QCoreApplication.setOrganizationDomain("colorado.edu")
             QCoreApplication.setApplicationName("Auto Trainer")
-            self._settings = QSettings()
+            settings = self._settings = QSettings()
 
-        self._serial_number = self._settings.value("system/serial_number", "00000")
+        logger.verbose("Using setting ini file: %s", settings.fileName())
 
-        self._last_configuration = self._settings.value("system/last_configuration", "")
+        self._serial_number = settings.value("system/serial_number", "00000")
 
-        self._configuration_location = self._settings.value("system/configuration_location",
-                                                            _find_default_configuration_location())
+        self._last_configuration = settings.value("system/last_configuration", "")
 
-        self._animal_location = self._settings.value("system/animal_location", "")
+        self._configuration_location = settings.value("system/configuration_location",
+                                                      _find_default_configuration_location())
 
-        self._log_location: str = self._settings.value("system/log_location", "")
-        self._log_level = self._settings.value("system/log_level", logging.WARNING, int)
+        self._animal_location = settings.value("system/animal_location", "")
 
-        self._live_feed_refresh_rate = self._settings.value("display/refresh_rate", 15, int)
+        self._log_location: str = settings.value("system/log_location", "")
+        self._log_level = settings.value("system/log_level", logging.WARNING, int)
+
+        self._live_feed_refresh_rate = settings.value("display/refresh_rate", 15, int)
 
         # Transient values that may come from individual configuration files, but are conveniently accessed from
         # the user preferences.
