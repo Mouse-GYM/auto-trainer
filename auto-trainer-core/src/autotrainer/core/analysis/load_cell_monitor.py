@@ -151,10 +151,10 @@ class LoadCellMonitor(ObservableObject):
 
     @thrashing_detected.setter
     def thrashing_detected(self, value):
-        self._when = self._t_last_ptp_check - self._config.thrashing_var_max_delay
         if value != self._thrashing_detected:
             logger.debug("load_cell_monitor.thrashing_detected=%s", value)
             self._t_last_ptp_check += self._config.thrashing_var_max_delay
+            self._when = self._t_last_ptp_check - self._config.thrashing_var_max_delay
         self._thrashing_detected = self._on_property_changed(
             self.IS_THRASHING_DETECTED_PROPERTY, value, self._thrashing_detected)
 
