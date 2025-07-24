@@ -30,7 +30,7 @@ class UserPreferences(ObservableObject):
             QCoreApplication.setApplicationName("Auto Trainer")
             settings = self._settings = QSettings()
 
-        logger.verbose("Using setting ini file: %s", settings.fileName())
+        logger.verbose("Using setting ini file: %r", settings.fileName())
 
         self._serial_number = settings.value("system/serial_number", "00000")
 

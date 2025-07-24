@@ -2,6 +2,7 @@ import multiprocessing
 import sys
 import argparse
 import faulthandler
+import logging
 
 
 def main():
@@ -20,7 +21,9 @@ def main():
     # strtobool compatibility is all over the place.
     allow_emulation = args.allow_can_emulation.lower() in {"true", "yes", "1"}
 
-    sys.exit(run_acquisition(args.configuration, args.dev, allow_emulation))
+    exit_val = run_acquisition(args.configuration, args.dev, allow_emulation)
+    (logger.success if exit_val in (0, None) else logger.error)("acquisition finished ; exit_val=%s", exit_val)
+    sys.exit(exit_val)
 
 
 if __name__ == '__main__':
@@ -29,5 +32,5 @@ if __name__ == '__main__':
     # import autotrainer only AFTER having set mp start method,
     # otherwise it can be set by some other 3rd party dependency.
     from autotrainer.core.logging import setup_logging
-    setup_logging()
+    logger = setup_logging("autotrainer", logger_level=logging.DEBUG)
     sys.exit(main())

@@ -10,6 +10,7 @@ import yaml
 
 import humps
 
+from autotrainer.core.logging import get_verbose_logger
 from .behavior_configuration import BehaviorConfiguration, add_behavior_configuration_representers, \
     add_behavior_configuration_constructors
 from .camera_configuration import CameraConfiguration, CameraId, camera_configuration_representer, \
@@ -21,7 +22,7 @@ from .inference_configuration import InferenceConfiguration, inference_configura
 from .persistence_configuration import PersistenceConfiguration, persistence_configuration_representer, \
     persistence_configuration_constructor
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 @dataclass
@@ -75,12 +76,17 @@ class SystemConfiguration:
         return yaml.dump(self, Dumper=get_system_configuration_dumper(), sort_keys=False)
 
     def save_file(self, path: Union[Path, str], as_yaml: bool = False, as_json: bool = False) -> bool:
+        path = str(path)
         try:
             if as_json:
-                with open(str(path) + ".json", "w") as file:
+                p = f"{path}.json"
+                logger.notice("Writing to %r as json", p)
+                with open(p, "w") as file:
                     json.dump(asdict(self), file)
             if as_yaml:
-                with open(str(path) + ".yaml", "w") as file:
+                p = f"{path}.yaml"
+                logger.notice("Writing to %r as yaml", p)
+                with open(p, "w") as file:
                     file.write(self.dump_yaml())
         except Exception as err:
             logger.exception("Error saving config to %s: %s", path, err)
