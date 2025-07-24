@@ -29,17 +29,21 @@ _timer_load_cell_engaged = Timer
 
 @dataclass
 class LoadCellConfiguration:
-    weight_active_threshold: float = 10  # grams ; if above then will become engaged if above for threshold_duration
+    weight_active_threshold: float = 15  # grams ; if above then will become engaged if above for threshold_duration
     weight_inactive_threshold: float = 5  # grams
 
-    threshold_duration: float = 0.25  # duration threshold for active
+    threshold_duration: float = 0.3
+    # duration threshold for engaged or thrashing_detected, must remain during that delay to make the change
+
     min_event_duration: float = 2.0
     min_post_event_hold_duration: float = 2.0
+    # delay before inactive if was engaged/active for more than min_event_duration
 
-    thrashing_var_weight_threshold: float = 30   # grams
-    thrashing_var_min_delay: float = 0.3  # seconds
-    thrashing_var_max_delay: float = 0.6  # seconds
-    thrashing_min_ptp_change_count: int = 2  # nbr of "ptp" change needed in a row
+    thrashing_var_weight_threshold_min: float = 20   # grams
+    thrashing_var_weight_threshold_max: float = 30   # grams
+    thrashing_var_min_delay: float = 0.05  # seconds
+    thrashing_var_max_delay: float = 0.2  # seconds
+    thrashing_min_ptp_change_count: int = 3  # nbr of "ptp" change needed in a row during var_max_delay
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
@@ -65,7 +69,7 @@ def load_cell_configuration_representer(dumper: yaml.SafeDumper, cfg: LoadCellCo
         "thresholdDuration": cfg.threshold_duration,
         "minEventDuration": cfg.min_event_duration,
         "minPostEventHoldDuration": cfg.min_post_event_hold_duration,
-        "thrashing_var_weight_threshold": cfg.thrashing_var_weight_threshold,
+        "thrashing_var_weight_threshold": cfg.thrashing_var_weight_threshold_min,
         "thrashing_var_min_delay": cfg.thrashing_var_min_delay,
         "thrashing_var_max_delay": cfg.thrashing_var_max_delay,
         "thrashing_min_ptp_change_count": cfg.thrashing_min_ptp_change_count,
@@ -129,8 +133,9 @@ class LoadCellMonitor(ObservableObject):
 
     @is_engaged.setter
     def is_engaged(self, value):
-        EventManager.default().post_event_content(AnalysisMeasurementEventKind.loadCellEngagedChanged, context=value,
-                                                  when=datetime.fromtimestamp(self._when), index=self._index)
+        if value != self._is_engaged:
+            EventManager.default().post_event_content(AnalysisMeasurementEventKind.loadCellEngagedChanged, context=value,
+                                                      when=datetime.fromtimestamp(self._when), index=self._index)
         self._is_engaged = self._on_property_changed(
             LoadCellMonitor.IS_ENGAGED_PROPERTY, value, self._is_engaged)
 
@@ -140,6 +145,7 @@ class LoadCellMonitor(ObservableObject):
 
     @thrashing_detected.setter
     def thrashing_detected(self, value):
+        self._when = self._t_last_ptp_check - self._config.thrashing_var_max_delay
         if value != self._thrashing_detected:
             logger.debug("load_cell_monitor.thrashing_detected=%s", value)
         self._thrashing_detected = self._on_property_changed(
@@ -155,7 +161,7 @@ class LoadCellMonitor(ObservableObject):
 
     @property
     def thrashing_var_weight_threshold(self) -> float:
-        return self._config.thrashing_var_weight_threshold
+        return self._config.thrashing_var_weight_threshold_min
 
     @thrashing_var_weight_threshold.setter
     def thrashing_var_weight_threshold(self, value):
@@ -191,11 +197,46 @@ class LoadCellMonitor(ObservableObject):
             for h_val, h_when, _ in self._values_history
             if min_delay <= cur_when - h_when < max_delay
         ]
+        ptp_value = numpy.ptp(values)
+        if __debug__:
+            if ptp_value >= ptp_threshold:
+                logger.debug("ptp_value=%s threshold=%s", ptp_value, ptp_threshold)
         return bool(
             # NB: using bool() given value is numpy.bool_ otherwise,
             # we want to use native python bool instead, so the bool().
-            numpy.ptp(values) >= ptp_threshold
+            ptp_value >= ptp_threshold
         ) if len(values) > 0 else False
+
+    def _make_ptp_check(self, when, cfg):
+        if not (
+            self._is_engaged
+            and when - self._t_last_ptp_check >= cfg.thrashing_var_min_delay
+        ):
+            return
+        self._t_last_ptp_check = when
+        # consider ptp between now/when and cfg.thrashing_var_min_delay,
+        # and ptp between cfg.thrashing_var_min_delay and cfg.thrashing_var_max_delay
+        detected1 = self._check_ptp_threshold(
+            when, 0, cfg.thrashing_var_min_delay, cfg.thrashing_var_weight_threshold_min,
+        )
+        detected2 = self._check_ptp_threshold(
+            when, 0, cfg.thrashing_var_max_delay, cfg.thrashing_var_weight_threshold_max)
+        # self._t_last_ptp_check += cfg.thrashing_var_max_delay / cfg.thrashing_min_ptp_change_count
+        if (detected1 and detected2) or ((detected1 or detected2) and self._cur_ptp_count > 0):
+            self._cur_ptp_count += 1 if detected1 != detected2 else 1.5
+            if self._cur_ptp_count >= cfg.thrashing_min_ptp_change_count:
+                self.thrashing_detected = True
+                self._cur_ptp_count = 0
+            self._t_last_ptp_check += cfg.thrashing_var_max_delay if detected1 and detected2 else cfg.thrashing_var_min_delay
+        else:
+            if not detected1 and not detected2:
+                self._cur_ptp_count = 0
+            elif self._cur_ptp_count > 0:
+                self._cur_ptp_count -= 1
+            if self._cur_ptp_count <= 0:
+                self.thrashing_detected = False
+            self._t_last_ptp_check += cfg.thrashing_var_max_delay if self._cur_ptp_count < 0 else cfg.thrashing_var_min_delay
+
 
     def update(self, value: Union[float, numpy.floating], when: float, index: int):
         self._update_history(value, when, index)
@@ -213,7 +254,7 @@ class LoadCellMonitor(ObservableObject):
         if value >= cfg.weight_active_threshold:
             self._inactive_debounce.cancel()
             if t_start is None:
-                self._when = when
+                # self._when = when
                 self._index = index
                 self._was_active = True
                 self._cur_ptp_count = 0
@@ -224,34 +265,11 @@ class LoadCellMonitor(ObservableObject):
             else:
                 if when - self._t_start_was_active > cfg.threshold_duration:
                     self._ensure_active()
-                if (
-                    self._is_engaged
-                    and when - self._t_last_ptp_check >= cfg.thrashing_var_min_delay
-                ):
-                    self._t_last_ptp_check = when
-                    # consider ptp between now/when and cfg.thrashing_var_min_delay,
-                    # and ptp between cfg.thrashing_var_min_delay and cfg.thrashing_var_max_delay
-                    detected1 = self._check_ptp_threshold(
-                        when, cfg.thrashing_var_min_delay, cfg.thrashing_var_max_delay,
-                        cfg.thrashing_var_weight_threshold)
-                    detected2 = self._check_ptp_threshold(
-                        when, 0, cfg.thrashing_var_min_delay, cfg.thrashing_var_weight_threshold
-                    )
-                    if (detected1 and detected2) or ((detected1 or detected2) and self._cur_ptp_count > 0):
-                        self._cur_ptp_count += 1
-                        if self._cur_ptp_count >= cfg.thrashing_min_ptp_change_count:
-                            self.thrashing_detected = True
-                            self._t_last_ptp_check += 0.5 * cfg.threshold_duration
-                            self._cur_ptp_count = 0
-                    else:
-                        if self._cur_ptp_count > 0:
-                            self._cur_ptp_count -= 1
-                        if self._cur_ptp_count == 0:
-                            self.thrashing_detected = False
-                            self._t_last_ptp_check += cfg.thrashing_var_min_delay
+                self._make_ptp_check(when, cfg)
 
         elif value < cfg.weight_inactive_threshold:
             # inactive case
+            self._make_ptp_check(when, cfg)
             self._active_debounce.cancel()
             hold_time = when - self._last_engaged_start
             if hold_time >= cfg.min_event_duration:
@@ -259,28 +277,35 @@ class LoadCellMonitor(ObservableObject):
             else:
                 duration = max(cfg.min_post_event_hold_duration, cfg.min_event_duration - hold_time)
             if self._t_inactive_start is None:
-                self._t_inactive_start = self._when
-                self._when = when
-                self._index = index
+                self._t_inactive_start = when
                 self._inactive_debounce = _timer_load_cell_engaged(duration, self._ensure_inactive)
                 self._inactive_debounce.start()
             elif when - self._t_inactive_start > duration:
                 self._ensure_inactive()
 
+        else:
+            # in between
+            self._make_ptp_check(when, cfg)
+            self._inactive_debounce.cancel()
+            self._t_inactive_start = None
+
     def _ensure_active(self):
         if self._is_engaged:
             return
+        self._when = self._t_start_was_active
         self._last_engaged_start = self._t_start_was_active
-        self.is_engaged = True
+        self._t_last_ptp_check = self._t_start_was_active + self._config.thrashing_var_max_delay
+        self.is_engaged = True  # last on purpose
 
     def _ensure_inactive(self):
         if not self._is_engaged:
             return
-        self.is_engaged = False
         self._was_active = False
+        self._when = self._t_inactive_start
         self._t_start_was_active = None
         self._cur_ptp_count = 0
         self.thrashing_detected = False
+        self.is_engaged = False  # last
 
     def force_engaged(self, engaged: bool) -> None:
         """

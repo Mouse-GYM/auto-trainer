@@ -42,7 +42,8 @@ def test_detect_thrashing(
     cfg = load_cell_monitor.config
     cfg.threshold_duration = threshold_duration
     cfg.weight_active_threshold = weight_threshold
-    cfg.thrashing_var_weight_threshold = thrashing_var_weight_threshold
+    cfg.thrashing_var_weight_threshold_min = thrashing_var_weight_threshold
+    cfg.thrashing_var_weight_threshold_max = 1.5 * thrashing_var_weight_threshold
     cfg.thrashing_var_min_delay = thrashing_var_min_delay
     cfg.thrashing_var_max_delay = thrashing_var_max_delay
 
@@ -84,7 +85,7 @@ def test_detect_thrashing(
     t_now += 0.01
 
     with mock.patch("autotrainer.core.analysis.load_cell_monitor._timer_load_cell_engaged", new=patched_timer):
-        for _ in range(2):
+        for _ in range(3):
             # this for _ in range(..):
             # can be necessary if/when using mean() in monitor update function,
             # to get "current" avg value
@@ -97,20 +98,24 @@ def test_detect_thrashing(
 
     # check for thrashing:
     t_now += 0.1
-    pushed_weight = cfg.weight_active_threshold + cfg.thrashing_var_weight_threshold + 0.1
+    pushed_weight = cfg.weight_active_threshold + cfg.thrashing_var_weight_threshold_min + 0.1
     # not detected atm :
     assert load_cell_monitor.thrashing_detected is False
     assert thrash_detected_list == []
 
     for outer_loop_idx in range(cfg.thrashing_min_ptp_change_count):
         for inner_loop_idx in range(4):
-            # makes 4 loops with high & low values, with delay being a fourth of min and max delay,
+            # makes 4 loops with high & low values, with delay being a fourth of min delay,
             # this allows to effectively, and normally for any of these values,
             # get the live ptp change count to reach the desired config value,
             # so to trigger the thrashing_detected property/flag.
             t_now += cfg.thrashing_var_min_delay / 4
             update_monitor(cfg.weight_active_threshold, t_now)
-            t_now += cfg.thrashing_var_max_delay / 4
+            t_now += cfg.thrashing_var_min_delay / 4
+            update_monitor(min(cfg.weight_active_threshold / 2, cfg.thrashing_var_weight_threshold_min / 2), t_now)
+            t_now += cfg.thrashing_var_min_delay / 4
+            update_monitor(1.5 * pushed_weight, t_now)
+            t_now += cfg.thrashing_var_min_delay / 4
             update_monitor(pushed_weight, t_now)
             if outer_loop_idx == 0 and inner_loop_idx < 2:
                 # NB: this depends on min_ptp_change_count too, and actually on the delays as well
