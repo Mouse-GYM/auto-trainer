@@ -1160,9 +1160,8 @@ class CanInterface(DeviceInterface):
             logger.warning("No pellet device addr found")
             return False
 
-        # Third arg - forward/rev. Go in forward direction if the non-zero locations are negative
         res = self._jc.StepperHome(addr, _motor_to_id(motor), CanInterface.next_uuid())
-        logger.debug("addr=%s motor=%s : home request => res=%s", addr, motor, res)
+        logger.debug("addr=%s motor=%s : reset to limit request => res=%s", addr, motor, res)
         return res == 0
 
     def _write_stepper_config(self, config: StepperConfig) -> bool:
