@@ -379,7 +379,6 @@ def run_monitor():
             # 'h' - send home
             # 'H' - send homing
             # 'g' - gate servo
-            # 'h' - home stepper
             # 'k' - stepper known position
             # 'l' - load servo
             # 'm' - magnet servo
