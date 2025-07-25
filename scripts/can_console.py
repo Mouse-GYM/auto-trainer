@@ -646,7 +646,7 @@ def print_help():
           " ::Audio sound (hz) (sec)")
     print("d[elay] <sec>                      "
           " ::Delay")
-    print("R[eset]                           "
+    print("R[eset]                            "
           " ::Reset stepper motors to limit")
     print("h[ome]                             "
           " ::Go to \"home\" position (0/0/0) saved one")
