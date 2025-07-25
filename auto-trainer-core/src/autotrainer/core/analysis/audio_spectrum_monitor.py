@@ -75,7 +75,7 @@ class AudioSpectrumThrashMonitor(ObservableObject):
                 itertools.chain(*(v[0] for v in self._values_history))
             )
         )
-        percent = 100 * sum(map(int, above_threshold)) / len(self._values_history)
+        percent = 100 * sum(map(int, above_threshold)) / len(above_threshold)
         detected = percent >= cfg.threshold_percent
         t_start = self._t_start_detecting
         if detected:
