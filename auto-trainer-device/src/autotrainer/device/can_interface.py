@@ -304,6 +304,8 @@ class CanInterface(DeviceInterface):
 
         self.load_cell_factor = 21053.0
 
+        no_op = lambda msg: None
+
         # Simple handlers implemented as lambdas
         self._handlers = {
             JerryCANCmdType.HEARTBEAT: lambda msg: Heartbeat(target=_addr2tgt(msg.dst_id)),
@@ -342,6 +344,13 @@ class CanInterface(DeviceInterface):
                 humidity_percent=float(msg.temp_hum_read.humidity) / 100.0
             ),
             JerryCANCmdType.ACKNOWLEDGE: lambda msg: Acknowledge(uuid=msg.uuid),
+            # no-op handlers, to silence the warning if unknown message type
+            JerryCANCmdType.STEPPER_HOME: no_op,
+            JerryCANCmdType.STEPPER_MOVE: no_op,
+            JerryCANCmdType.CFG_WRITE: no_op,
+            JerryCANCmdType.SERVO_MOVE: no_op,
+            JerryCANCmdType.GPIO_WRITE: no_op,
+            JerryCANCmdType.DELAY: no_op,
         }
 
     @property
