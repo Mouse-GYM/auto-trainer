@@ -128,7 +128,7 @@ class CanDevice(Device):
                 lambda data: self._reset_to_limits(
                     [Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR]),
 
-            SystemCommandKind.SEND_HOME: lambda data: self._send_home(),
+            SystemCommandKind.SEND_HOME: lambda data: self._start_sequence(default_send_home()),
 
             SystemCommandKind.SEND_FIXED_XYZ:
                 lambda data: self._interface.fixed_position(),
@@ -322,6 +322,9 @@ class CanDevice(Device):
         if movements is None or movements.is_empty:
             self._command_complete()
         else:
+            cur_compound = self._compound_movement
+            if cur_compound is not None and len(cur_compound) > 0:
+                raise RuntimeError("start_sequence while one is in progress: cur=%s", cur_compound)
             self._compound_movement = movements.steps
             self._perform_next_compound_step()
 
@@ -427,11 +430,6 @@ class CanDevice(Device):
         if len(motors) > 0:
             self._interface.stepper_reset_to_limit(motors[0])
             self._reset_to_limit_motors = motors
-
-    def _send_home(self):
-        self._interface.move_motor_z(0)  # do first given might hit side of pellet bin otherwise
-        self._interface.move_motor_x(0)
-        self._interface.move_motor_y(0)
 
     _motor_to_status_kind = {
         Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_X,
@@ -542,6 +540,11 @@ class CanDevice(Device):
             self._command_complete()
             self._compound_movement = None
 
+
+def default_send_home() -> MotorSteps:
+    return MotorSteps("send_home", [
+        {'z': 0}, {'x': 0}, {'y': 0}
+    ])
 
 def default_load_pellet() -> MotorSteps:
     """
