@@ -217,7 +217,7 @@ class EmulationInterface(DeviceInterface):
     def set_motor_x(self, position) -> bool:
         return self.move_motor_x(position, True)
 
-    def move_motor_x(self, position: float, _save: bool = False) -> bool:
+    def move_motor_x(self, position: float, save_as_fixed: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute x {position}")
             self._positions[Motor.PELLET_X_MOTOR] = position + 0.00001
@@ -227,7 +227,7 @@ class EmulationInterface(DeviceInterface):
     def set_motor_y(self, position) -> bool:
         return self.move_motor_y(position, True)
 
-    def move_motor_y(self, position: float, _save: bool = False) -> bool:
+    def move_motor_y(self, position: float, save_as_fixed: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute y {position}")
             self._positions[Motor.PELLET_Y_MOTOR] = position + 0.00001
@@ -237,14 +237,14 @@ class EmulationInterface(DeviceInterface):
     def set_motor_z(self, position) -> bool:
         return self.move_motor_z(position, True)
 
-    def move_motor_z(self, position: float, _save: bool = False) -> bool:
+    def move_motor_z(self, position: float, save_as_fixed: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute z {position}")
             self._positions[Motor.PELLET_Z_MOTOR] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def move_load_servo(self, position: float, _save: bool = False) -> bool:
+    def move_load_servo(self, position: float, save_as_fixed: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set load arm {position}")
             self._positions[Motor.PELLET_LOAD_SERVO] = position + 0.00001
