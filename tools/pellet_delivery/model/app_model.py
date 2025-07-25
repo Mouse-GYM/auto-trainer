@@ -2,14 +2,18 @@ import logging
 import queue
 import uuid
 from pathlib import Path
+from typing import Optional
 
-from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
+from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind,
+                              MessageHandler, Motor,
                               EventManager)
-from autotrainer.device import CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery, DeviceConnection
+from autotrainer.core.logging import get_verbose_logger
+from autotrainer.device import (CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery,
+                                DeviceConnection, CompoundMovementFile)
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 # TODO: This is just to see if the behavior is correct.  They should end up somewhere that any application or script can
 #  access.
@@ -36,7 +40,7 @@ class AppModel(ObservableObject):
 
         self._hardware_configuration = None
 
-        self._device_connection = None
+        self._device_connection: Optional[DeviceConnection] = None
 
         self._message_handler = SystemMessageHandler(queue.Queue())
         self._message_handler.property_changed += self._message_handler_property_changed
@@ -55,6 +59,8 @@ class AppModel(ObservableObject):
 
         self._front_door = None
         self._panel_door = None
+        self._spare_door = None
+        self._ext_button = None
 
         self._stimuli = None
         self._config = None
@@ -164,7 +170,8 @@ class AppModel(ObservableObject):
 
     @front_door.setter
     def front_door(self, value):
-        self._front_door = self._on_property_changed(MessageHandler.FRONT_DOOR_PROPERTY, value, self._front_door)
+        self._front_door = self._on_property_changed(MessageHandler.FRONT_DOOR_PROPERTY, value,
+                                                     self._front_door)
 
     @property
     def panel_door(self):
@@ -172,7 +179,26 @@ class AppModel(ObservableObject):
 
     @panel_door.setter
     def panel_door(self, value):
-        self._panel_door = self._on_property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, value, self._panel_door)
+        self._panel_door = self._on_property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, value,
+                                                     self._panel_door)
+
+    @property
+    def spare_door(self):
+        return self._spare_door
+
+    @spare_door.setter
+    def spare_door(self, value):
+        self._spare_door = self._on_property_changed(MessageHandler.SPARE_DOOR_PROPERTY, value,
+                                                     self._spare_door)
+
+    @property
+    def ext_button(self):
+        return self._ext_button
+
+    @ext_button.setter
+    def ext_button(self, value):
+        self._ext_button = self._on_property_changed(MessageHandler.EXT_BUTTON_PROPERTY, value,
+                                                     self._ext_button)
 
     @property
     def stimuli(self):
@@ -180,7 +206,8 @@ class AppModel(ObservableObject):
 
     @stimuli.setter
     def stimuli(self, value):
-        self._stimuli = self._on_property_changed(MessageHandler.STIMULI_PROPERTY, value, self._stimuli)
+        self._stimuli = self._on_property_changed(MessageHandler.STIMULI_PROPERTY, value,
+                                                  self._stimuli)
 
     @property
     def config(self):
@@ -217,11 +244,25 @@ class AppModel(ObservableObject):
     def set_z(self, value: int):
         self._send_command(SystemCommandKind.SET_Z, value, context=uuid.uuid4())
 
+    def move_x(self, value: int):
+        self._send_command(SystemCommandKind.MOVE_X, value, context=uuid.uuid4())
+
+    def move_y(self, value: int):
+        self._send_command(SystemCommandKind.MOVE_Y, value, context=uuid.uuid4())
+
+    def move_z(self, value: int):
+        self._send_command(SystemCommandKind.MOVE_Z, value, context=uuid.uuid4())
+
     def set_config(self, config):
         self._send_command(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
 
     def get_config(self, motor: Motor):
         self._send_command(SystemCommandKind.READ_MOTOR_CONFIGURATION, motor)
+
+    def load_move_file(self, filename: str):
+        if self._device_connection is not None:
+            movements = CompoundMovementFile.from_file(filename)
+            self._device_connection.use_compound_movements(movements)
 
     def connect_to_device(self):
         if len(self._user_settings.port) == 0:
@@ -242,23 +283,33 @@ class AppModel(ObservableObject):
 
         self._send_command(SystemCommandKind.REQUEST_VERSION)
 
-        if self._hardware_configuration is None or not Path.exists(Path(self._hardware_configuration)):
-            if Path.home().joinpath(".alogus_config.yaml").exists():
-                self.hardware_configuration = str(Path.home().joinpath(".alogus_config.yaml"))
-            elif Path.home().joinpath("alogus_config.yaml").exists():
-                self.hardware_configuration = str(Path.home().joinpath("alogus_config.yaml"))
+        if self._hardware_configuration is None:
+            for attempt in (
+                MotorConfigurationFile.DEFAULT_LOCATION.expanduser(),
+                Path.home().joinpath(".alogus_config.yaml"),
+                Path.home().joinpath("alogus_config.yaml"),
+            ):
+                if attempt.exists():
+                    logger.notice("Will load motor config %s", attempt)
+                    self.hardware_configuration = attempt.as_posix()
+                    break
             else:
-                self.hardware_configuration = None
+                logger.warning("No motor config file found, motors are possibly unconfigured ; this might be critical")
 
         if self._hardware_configuration is not None:
+            logger.info("Reading motor config file %s", self._hardware_configuration)
             try:
-                self._device_connection.use_motor_configurations(
-                    # MotorConfigurationFile does not take/accept argument(s) atm ?
-                    MotorConfigurationFile(self._hardware_configuration))
+                motors_cfg = MotorConfigurationFile.from_file(self._hardware_configuration)
             except Exception as err:
                 logger.error(
-                    "failed to read motor configuration file %s: %s", self._hardware_configuration, err)
+                    "failed to read motor configuration file %s: %s", self._hardware_configuration,
+                    err)
                 self.hardware_configuration = None
+                raise  # do not take any risk
+            else:
+                self._device_connection.use_motor_configurations(motors_cfg)
+
+        self._device_connection.load_default_move_config()
 
         self.is_connected = True
 
@@ -304,6 +355,10 @@ class AppModel(ObservableObject):
             self.front_door = value
         elif name == MessageHandler.DRAWER_DOOR_PROPERTY:
             self.panel_door = value
+        elif name == MessageHandler.SPARE_DOOR_PROPERTY:
+            self.spare_door = value
+        elif name == MessageHandler.EXT_BUTTON_PROPERTY:
+            self.ext_button = value
         elif name == MessageHandler.STIMULI_PROPERTY:
             self.stimuli = value
         elif name == "config":
@@ -311,24 +366,22 @@ class AppModel(ObservableObject):
 
     def reader_ack_received(self, ack):
         logger.info(f"ack context received: {ack}")
-
         if self._last_command is not None and ack == self._last_command:
             self._last_command = None
             self.command_pending = False
 
-    def _send_command(self, message, data=None, context=None):
+    def _send_command(self, message, data=None, *, context=None):
         if self._last_command is not None:
-            logger.debug("ignoring command while existing command is in process")
+            logger.verbose("ignoring command %s while existing command is in process with context=%s",
+                           self._last_command)
             return
 
         if context is not None:
             # If not planning to confirm the response token, don't block the UI.
             self.command_pending = True
+            self._last_command = context
 
-        self._last_command = context
-
-        if context is not None:
-            logger.debug(f"sending message with context: {context}")
-
+        # if context is not None:
+        logger.debug("sending message %s with context: %s", message, context)
         if self._device_connection is not None:
             self._device_connection.send_message(message, data, context)

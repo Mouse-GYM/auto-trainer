@@ -41,7 +41,11 @@ class SystemStatusMessageKind(IntEnum):
     """Message will contain front door status as True (open) or False (closed)."""
     DRAWER_DOOR = 302
     """Message will contain drawer door status as True (open) or False (closed)."""
-    STIMULUS_INPUTS = 303
+    SPARE_DOOR = 303
+    """Message will contain spare door status as True (open) or False (closed)."""
+    EXT_BUTTON = 304
+    """Message will contain external button status as True (pressed) or False (released)"""
+    STIMULUS_INPUTS = 305
     """Message will contain a list of 4 states as True/False"""
     MEASUREMENTS = 401
     """Message will contain a list of MeasurementMessage objects."""

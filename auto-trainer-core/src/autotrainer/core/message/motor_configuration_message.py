@@ -8,7 +8,7 @@ Identifiers for the different motor types
 
 class Motor(IntEnum):
     NONE = 0
-    MAGNET_SERVO = 1
+    TUNNEL_MAGNET_SERVO = 1
     PELLET_X_MOTOR = 2
     PELLET_Y_MOTOR = 3
     PELLET_Z_MOTOR = 4
@@ -129,11 +129,12 @@ Protocol for access to a full set of motor configurations
 
 
 class MotorConfigurations(Protocol):
+
     @property
     def magnet_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
 
     @property
-    def tunnel_gate_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
+    def gate_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
 
     @property
     def load_config(self) -> Tuple[Motor, ServoConfigMessage]: ...

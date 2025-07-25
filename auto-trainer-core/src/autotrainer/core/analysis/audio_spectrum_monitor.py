@@ -1,5 +1,6 @@
 
 import dataclasses
+import itertools
 import math
 import operator
 import time
@@ -8,6 +9,10 @@ from functools import reduce, partial
 from typing import Optional, List
 
 from autotrainer.core import ObservableObject
+from autotrainer.core.logging import get_verbose_logger
+
+
+logger = get_verbose_logger(__name__)
 
 
 @dataclasses.dataclass
@@ -33,6 +38,7 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         self._values_history = deque()
         self._cur_detected = False
         self._t_start_detecting: Optional[float] = None
+        self._t_next_report: float = time.time()
 
     @property
     def is_thrashing_detected(self):
@@ -44,6 +50,7 @@ class AudioSpectrumThrashMonitor(ObservableObject):
 
     def _update_history(self, values, when, index):
         hist = self._values_history
+        dropped = 0
         while len(hist) > 0:
             h0_when = hist[0][1]
             # we could actually use a dichotomic lookup/search, assuming the "when" are consistent (always increasing)
@@ -51,7 +58,13 @@ class AudioSpectrumThrashMonitor(ObservableObject):
             if when - h0_when <= self._config.time_window:
                 break
             hist.popleft()
-        hist.append((values, when, index))
+            dropped += 1
+        hist.append(([values[i] for i in self._config.bins_list], when, index))
+        if __debug__:
+            t_now = time.time()
+            if t_now > self._t_next_report:
+                self._t_next_report += 60
+                logger.debug("hist size=%s cur_dropped=%s", len(hist), dropped)
 
     def update(self, values: List[float], when: float = 0.0, index: int = 0):
         self._update_history(values, when, index)
@@ -59,14 +72,10 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         above_threshold = list(
             map(
                 partial(operator.le, cfg.threshold_db),
-                reduce(
-                    lambda a, b: a + b,
-                    map(lambda bins: [bins[0][idx] for idx in cfg.bins_list], self._values_history),
-                    [],
-                ),
+                itertools.chain(*(v[0] for v in self._values_history))
             )
         )
-        percent = 100 * sum(map(int, above_threshold)) / len(self._values_history)
+        percent = 100 * sum(map(int, above_threshold)) / len(above_threshold)
         detected = percent >= cfg.threshold_percent
         t_start = self._t_start_detecting
         if detected:

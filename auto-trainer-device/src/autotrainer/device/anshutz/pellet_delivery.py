@@ -79,10 +79,34 @@ class PelletDelivery(GymDevice):
                 val = int(data)
             else:
                 val = typing.cast(int, data)
-            self._send_z = typing.cast(int, val)
+            self._send_z = val
             self._send_data(f"K{self._send_z + 10}x", context)
             if context is not None:
                 self._commands_with_status[context] = (SystemCommandKind.SET_Z, val)
+            elif kind == SystemCommandKind.MOVE_X:
+                if isinstance(data, float):
+                    val = int(data)
+                else:
+                    val = typing.cast(int, data)
+                self._send_data(f"I{val}x", context)
+                if context is not None:
+                    self._commands_with_status[context] = (SystemCommandKind.MOVE_X, val)
+            elif kind == SystemCommandKind.MOVE_Y:
+                if isinstance(data, float):
+                    val = int(data)
+                else:
+                    val = typing.cast(int, data)
+                self._send_data(f"J{val}x", context)
+                if context is not None:
+                    self._commands_with_status[context] = (SystemCommandKind.MOVE_Y, val)
+            elif kind == SystemCommandKind.MOVE_Z:
+                if isinstance(data, float):
+                    val = int(data)
+                else:
+                    val = typing.cast(int, data)
+                self._send_data(f"K{val}x", context)
+                if context is not None:
+                    self._commands_with_status[context] = (SystemCommandKind.MOVE_Z, val)
         elif kind == SystemCommandKind.PLAY_TONE:
             self._send_data(f"N{typing.cast(int, data)}x", context)
         elif kind in {
@@ -121,11 +145,11 @@ class PelletDelivery(GymDevice):
                 self.api.send_message(SystemStatusMessageKind.PELLET_COVER, 40)
             elif response[0] == SystemCommandKind.RELEASE_PELLET:
                 self.api.send_message(SystemStatusMessageKind.PELLET_COVER, 0)
-            elif response[0] == SystemCommandKind.SET_X:
+            elif response[0] == SystemCommandKind.MOVE_X:
                 self.api.send_message(SystemStatusMessageKind.PELLET_X, response[1])
-            elif response[0] == SystemCommandKind.SET_Y:
+            elif response[0] == SystemCommandKind.MOVE_Y:
                 self.api.send_message(SystemStatusMessageKind.PELLET_Y, response[1])
-            elif response[0] == SystemCommandKind.SET_Z:
+            elif response[0] == SystemCommandKind.MOVE_Z:
                 self.api.send_message(SystemStatusMessageKind.PELLET_Z, response[1])
 
     def _handle_response(self, cmd: str, data: str) -> str:

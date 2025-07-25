@@ -86,7 +86,9 @@ class AppModel(ObservableObject):
         else:
             self._stereo_params = None
             self._calib_metadata = None
-            square_size = cam_names = None
+            square_size = None
+            cam_names = None
+            cam_offsets = None
 
         self._pose_algorithm = PoseAlgorithm(
             stereo_params=self._stereo_params,
@@ -119,7 +121,7 @@ class AppModel(ObservableObject):
 
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
-        self._message_handler.property_changed += self._on_message_handler_property_changed
+        self._hardware.property_changed += self._on_hardware_property_changed
         self._behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
         self._behavior.property_changed += self._on_behavior_property_changed
 
@@ -462,14 +464,14 @@ class AppModel(ObservableObject):
             self._selected_animal.baseline_magnet_intensity = value
             self._save_animal_metadata()
 
-    def _on_message_handler_property_changed(self, name: str, value, _):
-        if name == MessageHandler.DEVICE_X_PROPERTY and self._selected_animal is not None:
+    def _on_hardware_property_changed(self, name: str, value, _):
+        if name == "set_x" and self._selected_animal is not None:
             self._selected_animal.pellet_x = value
             self._save_animal_metadata()
-        elif name == MessageHandler.DEVICE_Y_PROPERTY and self._selected_animal is not None:
+        elif name == "set_y" and self._selected_animal is not None:
             self._selected_animal.pellet_y = value
             self._save_animal_metadata()
-        elif name == MessageHandler.DEVICE_Z_PROPERTY and self._selected_animal is not None:
+        elif name == "set_z" and self._selected_animal is not None:
             self._selected_animal.pellet_z = value
             self._save_animal_metadata()
 

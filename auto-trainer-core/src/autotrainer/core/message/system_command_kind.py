@@ -18,7 +18,7 @@ class SystemCommandKind(IntEnum):
     REQUEST_VERSION = 1
 
     # Actions nominally considered part of the tunnel/head fixation unit (magnet module in some nomenclature).
-    SET_MAGNET_INTENSITY = 101
+    MOVE_MAGNET_SERVO = 101
     UPDATE_SCALE_TARE = 102
     OPEN_TUNNEL_GATE = 103
     CLOSE_TUNNEL_GATE = 104
@@ -31,8 +31,8 @@ class SystemCommandKind(IntEnum):
     SET_X = 205  # moves and sets an X position for use by SEND_FIXED_XYZ
     SET_Y = 206  # moves and sets a Y position for use by SEND_FIXED_XYZ
     SET_Z = 207  # moves and sets a Z position for use by SEND_FIXED_XYZ
-    SET_LOAD_SERVO = 208
-    SET_COVER_SERVO = 20
+    MOVE_LOAD_SERVO = 208
+    MOVE_COVER_SERVO = 209
     SEND_HOME = 210
     LOAD_PELLET = 211
     SEND_PELLET = 212
@@ -46,6 +46,7 @@ class SystemCommandKind(IntEnum):
     MOVE_X = 220  # moves X, only
     MOVE_Y = 221  # moves Y, only
     MOVE_Z = 222  # moves Z, only
+    MOVE_GATE_SERVO = 223
 
     SET_MOTOR_DRIFT = 223
 

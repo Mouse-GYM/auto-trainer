@@ -2,6 +2,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from math import floor
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +19,8 @@ class PerfMonitor:
     """User-friendly name for the performance monitor."""
     units: str = ""
     """Units for the performance monitor."""
-    report_count: int = 30
-    """Number of `cycles` for displaying performance metrics.  This is used to reduce the number of log messages."""
+    report_window: int = 15
+    """Duration between each report"""
     enable_log: bool = True
     """Allow toggling reporting while running."""
     log_level: int = logging.DEBUG
@@ -27,56 +28,50 @@ class PerfMonitor:
     cps: float = 0.0
     """Most recent cycles per second (CPS) value."""
 
-    _cycle_count: int = field(default=0, init=False, repr=False, compare=False)
-    _start: int = field(default=0, init=False, repr=False, compare=False)
+    _cycle_count: Optional[int] = field(default=None, init=False, repr=False, compare=False)
+    _start: float = field(default=0, init=False, repr=False, compare=False)
+    _next_refresh: float = field(default=0, init=False, repr=False, compare=False)
 
     def reset(self):
         """
         Resets all cycle counts and timing.  Calculations will resume on the next `add_cycle` or `add_cycles` call.
         """
-        self._cycle_count = 0
+        logger.debug("%s: reset", self.name)
+        self._cycle_count = None
 
     def add_cycle(self) -> bool:
         """
         Add a single cycle to the count.
 
         Returns:
-            bool: True if the cycle count is a multiple of `report_count` and the CPS value was/would be reported.
+            bool: True if the CPS value was reported. False otherwise.
         """
-        if self._cycle_count == 0:
-            self._start = time.perf_counter_ns()
-
-        self._cycle_count += 1
-
-        if self._cycle_count % self.report_count == 0:
-            self.cps = 1e9 * self._cycle_count / (time.perf_counter_ns() - self._start)
-            if self.enable_log:
-                logger.log(self.log_level, f"{self.name}: {self.cps:.1f} {self.units}")
-            return True
-
-        return False
+        return self.add_cycles(1)
 
     def add_cycles(self, cycles: int) -> bool:
         """
         Add a block of cycles to the count.
 
         Returns:
-            bool: True if the cycle count passed a multiple of `report_count` and the CPS value was/would be reported.
+            bool: True if the CPS value was reported. False otherwise.
         """
         if cycles <= 0:
             return False
 
-        if self._cycle_count == 0:
-            self._start = time.perf_counter_ns()
+        t_perf_now = time.time()
 
-        major = floor(self._cycle_count / self.report_count)
+        if self._cycle_count is None:
+            self._cycle_count = 0
+            self._next_refresh = self._start = t_perf_now
+            self._next_refresh += self.report_window
 
-        self._cycle_count += cycles
-
-        if self._cycle_count % self.report_count == 0 or floor(self._cycle_count / self.report_count) > major:
-            self.cps = 1e9 * self._cycle_count / (time.perf_counter_ns() - self._start)
+        elif t_perf_now > self._next_refresh:
+            self.cps = self._cycle_count / (t_perf_now - self._next_refresh + self.report_window)
             if self.enable_log:
                 logger.log(self.log_level, f"{self.name}: {self.cps:.1f} {self.units}")
+            self._next_refresh += self.report_window
+            self._cycle_count = cycles
             return True
 
+        self._cycle_count += cycles
         return False

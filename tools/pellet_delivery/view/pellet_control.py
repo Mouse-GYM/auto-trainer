@@ -1,8 +1,9 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
-    QLayout, QVBoxLayout
+    QLayout, QVBoxLayout, QFileDialog, QFrame
 
 import qtawesome as qta
 
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.message import Motor
 from autotrainer.device import is_servo
 from autotrainer.model import HardwareVersion, EnvironmentProvider
@@ -11,6 +12,9 @@ from autotrainer.pyside import ATSeparator
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.view.basic_panel import create_panel
 from tools.view.motor_config_dialog import MotorConfigDialog
+
+
+logger = get_verbose_logger(__name__)
 
 _NO_UPDATES = "(no updates)"
 
@@ -25,13 +29,19 @@ def add_position(label: str, s_min: int, s_max: int) -> (QLayout, QSpinBox):
     position_layout.addWidget(QLabel(label), 0)
 
     pos = QSpinBox()
-    pos.setMinimumWidth(140)
+    pos.setMinimumWidth(40)
     pos.setMinimum(s_min)
     pos.setMaximum(s_max)
     pos.setWrapping(False)
     position_layout.addWidget(pos, 0)
 
-    return position_layout, pos
+    moveButton = QPushButton("Move")
+    position_layout.addWidget(moveButton, 0)
+
+    setButton = QPushButton("Set")
+    position_layout.addWidget(setButton, 0)
+
+    return position_layout, pos, moveButton, setButton
 
 
 class PelletControl(QWidget):
@@ -39,6 +49,8 @@ class PelletControl(QWidget):
         super().__init__()
 
         self._app_model: AppModel = app_model
+
+        self._config_dialog = None
 
         self._app_model.property_changed += self._model_property_changed
 
@@ -96,6 +108,13 @@ class PelletControl(QWidget):
 
         b_layout.addStretch(1)
 
+        self._move_file_button = QPushButton("")
+        folder_icon = qta.icon('fa5s.folder-open')
+        self._move_file_button.setIcon(folder_icon)
+        self._move_file_button.clicked.connect(lambda: self._load_move_file())
+        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+            b_layout.addWidget(self._move_file_button)
+
         self._config_button = QPushButton("")
         gear_icon = qta.icon('fa5s.cog')  # Font Awesome 5 Solid cog icon
         self._config_button.setIcon(gear_icon)
@@ -109,35 +128,76 @@ class PelletControl(QWidget):
         s_layout = QHBoxLayout()
         s_layout.setContentsMargins(2, 2, 2, 2)
 
-        p_layout, self._x_pos = add_position("X (mm):", -10, 10)
-        self._x_pos.valueChanged.connect(self._update_x)
+        is_legacy = EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ
+
+        p_layout, self._x_pos, moveButton, setButton = add_position("X (mm):", -10, 10)
+        moveButton.clicked.connect(lambda: self._move_x())
+        setButton.clicked.connect(lambda: self._set_x())
         s_layout.addLayout(p_layout)
+
+        
+        if is_legacy:
+            moveButton.setVisible(False)
 
         s_layout.addStretch(1)
 
-        p_layout, self._y_pos = add_position("Y (mm):", -10, 10)
-        self._y_pos.valueChanged.connect(self._update_y)
-        s_layout.addLayout(p_layout)
+        line = QFrame()
+        line.setFrameShape(QFrame.VLine)
+        line.setFrameShadow(QFrame.Sunken)
+        s_layout.addWidget(line)
 
         s_layout.addStretch(1)
 
-        p_layout, self._z_pos = add_position("Z (mm):", -10, 10)
-        self._z_pos.valueChanged.connect(self._update_z)
+        p_layout, self._y_pos, moveButton, setButton = add_position("Y (mm):", -10, 10)
+        moveButton.clicked.connect(lambda: self._move_y())
+        setButton.clicked.connect(lambda: self._set_y())
         s_layout.addLayout(p_layout)
+
+        
+        if is_legacy:
+            moveButton.setVisible(False)
+
+        s_layout.addStretch(1)
+
+        line = QFrame()
+        line.setFrameShape(QFrame.VLine)
+        line.setFrameShadow(QFrame.Sunken)
+        s_layout.addWidget(line)
+
+        s_layout.addStretch(1)
+
+        p_layout, self._z_pos, moveButton, setButton = add_position("Z (mm):", -10, 10)
+        moveButton.clicked.connect(lambda: self._move_z())
+        setButton.clicked.connect(lambda: self._set_z())
+        s_layout.addLayout(p_layout)
+
+        
+        if is_legacy:
+            moveButton.setVisible(False)
 
         return s_layout
 
-    def _update_x(self):
+    def _set_x(self):
         self._app_model.set_x(self._x_pos.value())
 
-    def _update_y(self):
+    def _set_y(self):
         self._app_model.set_y(self._y_pos.value())
 
-    def _update_z(self):
+    def _set_z(self):
         self._app_model.set_z(self._z_pos.value())
+
+    def _move_x(self):
+        self._app_model.move_x(self._x_pos.value())
+
+    def _move_y(self):
+        self._app_model.move_y(self._y_pos.value())
+
+    def _move_z(self):
+        self._app_model.move_z(self._z_pos.value())
 
     def _model_property_changed(self, name: str, value, _old_value):
         if name == "travel_limits":
+            logger.debug("got & applying travel_limits: %s", value)
             self._x_pos.setMinimum(value["x"][0])
             self._x_pos.setMaximum(value["x"][1])
             self._y_pos.setMinimum(value["y"][0])
@@ -169,3 +229,19 @@ class PelletControl(QWidget):
 
     def _on_motor_selected(self, motor: Motor):
         self._app_model.get_config(motor)
+
+    def _load_move_file(self):
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle("Open File")
+        dialog.setFileMode(QFileDialog.ExistingFile)  # Allow only one file to be selected
+
+        # Optionally set filters for file types
+        dialog.setNameFilter("All Files (*)")
+
+        # Show the dialog and wait for user's response
+        if dialog.exec_():
+            # Get the selected file path(s) - will be a list
+            selected_files = dialog.selectedFiles()
+            # Return the first (and likely only) file
+
+            self._app_model.load_move_file(selected_files[0])
