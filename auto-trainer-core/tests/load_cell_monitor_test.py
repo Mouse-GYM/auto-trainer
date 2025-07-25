@@ -18,7 +18,7 @@ def load_cell_monitor():
 @pytest.mark.parametrize("weight_threshold,thrashing_var_weight_threshold", [
     (10, 25),
     (15, 30),
-    (25, 50),
+    (20, 50),
 ])
 @pytest.mark.parametrize("thrashing_var_min_delay,thrashing_var_max_delay", [
     (0.05, 0.15),
@@ -74,7 +74,10 @@ def test_detect_thrashing(
     assert not load_cell_monitor.thrashing_detected
     assert thrash_detected_list == []
 
+    patched_timer_call_count = 0
     def patched_timer(delay, func):
+        nonlocal patched_timer_call_count
+        patched_timer_call_count += 1
         assert delay == cfg.threshold_duration
         m_timer = mock.create_autospec(Timer)
         m_timer.start.side_effect = func
@@ -92,7 +95,8 @@ def test_detect_thrashing(
             update_monitor(value, t_now)
             t_now += cfg.threshold_duration / 2
 
-    assert load_cell_monitor._was_active
+    assert patched_timer_call_count == 1
+    assert load_cell_monitor._t_start_was_active is not None
     assert load_cell_monitor.is_engaged
     assert not load_cell_monitor.thrashing_detected
 
@@ -104,22 +108,43 @@ def test_detect_thrashing(
     assert thrash_detected_list == []
 
     for outer_loop_idx in range(cfg.thrashing_min_ptp_change_count):
-        for inner_loop_idx in range(4):
-            # makes 4 loops with high & low values, with delay being a fourth of min delay,
+        for inner_loop_idx in range(2):
+            # makes 2 loops with high & low values, with delay being a fourth of min delay,
             # this allows to effectively, and normally for any of these values,
             # get the live ptp change count to reach the desired config value,
             # so to trigger the thrashing_detected property/flag.
             t_now += cfg.thrashing_var_min_delay / 4
             update_monitor(cfg.weight_active_threshold, t_now)
+            if outer_loop_idx <= 1:
+                # NB: this depends on min_ptp_change_count too, and actually on the delays as well
+                assert not load_cell_monitor.thrashing_detected
+            #
             t_now += cfg.thrashing_var_min_delay / 4
             update_monitor(min(cfg.weight_active_threshold / 2, cfg.thrashing_var_weight_threshold_min / 2), t_now)
+            #
             t_now += cfg.thrashing_var_min_delay / 4
             update_monitor(1.5 * pushed_weight, t_now)
+            if outer_loop_idx < cfg.thrashing_min_ptp_change_count - 1:
+                # NB: this depends on min_ptp_change_count too, and actually on the delays as well
+                assert not load_cell_monitor.thrashing_detected
+            #
             t_now += cfg.thrashing_var_min_delay / 4
             update_monitor(pushed_weight, t_now)
-            if outer_loop_idx == 0 and inner_loop_idx < 2:
+            if outer_loop_idx == 0:
                 # NB: this depends on min_ptp_change_count too, and actually on the delays as well
                 assert not load_cell_monitor.thrashing_detected
 
+    # at the end it is detected:
     assert load_cell_monitor.thrashing_detected is True
     assert thrash_detected_list == [True]
+
+    # now, with enough time passed, put back 2 near values :
+    t_now += cfg.thrashing_var_max_delay
+    update_monitor(cfg.weight_active_threshold + 0.1, t_now)
+    #
+    t_now += cfg.thrashing_var_min_delay
+    update_monitor(cfg.weight_active_threshold + 0.2, t_now)
+
+    assert load_cell_monitor.thrashing_detected is False
+    assert thrash_detected_list == [True, False]
+    assert load_cell_monitor.is_engaged

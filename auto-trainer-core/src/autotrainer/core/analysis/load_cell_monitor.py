@@ -103,15 +103,14 @@ class LoadCellMonitor(ObservableObject):
             config = LoadCellConfiguration()
         self._config = config
         self._last_engaged_start: float = 0
-        self._was_active: bool = False
         self._t_start_was_active: Optional[float] = None
         self._t_inactive_start = 0
         self._cur_ptp_count = 0
         self._t_last_ptp_check = 0
         self._active_debounce: Timer = _NO_OP_TIMER
         self._inactive_debounce: Timer = _NO_OP_TIMER
-        self._when = 0
-        self._index = 0
+        self._when = 0  # used to pass with event when engaged is changed
+        self._index = 0  # used to pass with event when engaged is changed
         self._is_engaged: bool = False
         self._t_next_hist_log = time.time()
         self._values_history: Deque[
@@ -153,29 +152,15 @@ class LoadCellMonitor(ObservableObject):
     def thrashing_detected(self, value):
         if value != self._thrashing_detected:
             logger.debug("load_cell_monitor.thrashing_detected=%s", value)
+            self._when = self._t_last_ptp_check
             self._t_last_ptp_check += self._config.thrashing_var_max_delay
-            self._when = self._t_last_ptp_check - self._config.thrashing_var_max_delay
         self._thrashing_detected = self._on_property_changed(
             self.IS_THRASHING_DETECTED_PROPERTY, value, self._thrashing_detected)
 
-    @property
-    def thrashing_var_minimum_delay(self) -> float:
-        return self._config.thrashing_var_min_delay
-
-    @thrashing_var_minimum_delay.setter
-    def thrashing_var_minimum_delay(self, value):
-        self._config.thrashing_var_min_delay = value
-
-    @property
-    def thrashing_var_weight_threshold(self) -> float:
-        return self._config.thrashing_var_weight_threshold_min
-
-    @thrashing_var_weight_threshold.setter
-    def thrashing_var_weight_threshold(self, value):
-        self._config.thrashing_var_min_delay = value
-
     def load_configuration(self, configuration: LoadCellConfiguration):
+        # force the on_property_changed event too (if new value differs) :
         self.load_cell_engaged_threshold = configuration.weight_active_threshold
+        # before resetting the new config:
         self._config = configuration
 
     def save_configuration(self) -> LoadCellConfiguration:
@@ -204,6 +189,8 @@ class LoadCellMonitor(ObservableObject):
             for h_val, h_when, _ in self._values_history
             if min_delay <= cur_when - h_when < max_delay
         ]
+        if len(values) == 0:
+            return False
         ptp_value = numpy.ptp(values)
         if __debug__:
             if ptp_value >= ptp_threshold:
@@ -212,9 +199,9 @@ class LoadCellMonitor(ObservableObject):
             # NB: using bool() given value is numpy.bool_ otherwise,
             # we want to use native python bool instead, so the bool().
             ptp_value >= ptp_threshold
-        ) if len(values) > 0 else False
+        )
 
-    def _make_ptp_check(self, when, cfg):
+    def _make_thrashing_check(self, when, cfg):
         if not (
             self._is_engaged
             and when - self._t_last_ptp_check >= cfg.thrashing_var_min_delay
@@ -244,7 +231,6 @@ class LoadCellMonitor(ObservableObject):
             else:
                 self._t_last_ptp_check += cfg.thrashing_var_max_delay if self._cur_ptp_count < 0 and not (detected1 or detected2) else cfg.thrashing_var_min_delay
 
-
     def update(self, value: Union[float, numpy.floating], when: float, index: int):
         self._update_history(value, when, index)
         cfg = self._config
@@ -254,8 +240,8 @@ class LoadCellMonitor(ObservableObject):
         if __debug__:
             t_now = time.time()
             if t_now > self._t_next_hist_log:
-                logger.verbose("hist size=%s value=%.1f index=%s start_active=%s engaged=%s was_active=%s trashing=%s",
-                               len(self._values_history), value, index, t_start, cur_engaged, self._was_active, cur_thrashing)
+                logger.verbose("hist size=%s value=%.1f index=%s start_active=%s engaged=%s trashing=%s",
+                               len(self._values_history), value, index, t_start, cur_engaged, cur_thrashing)
                 self._t_next_hist_log += 60
         # value = numpy.mean([v for v, w, _ in self._values_history if when - w < cfg.threshold_duration])
         if value >= cfg.weight_active_threshold:
@@ -263,10 +249,9 @@ class LoadCellMonitor(ObservableObject):
             if t_start is None:
                 self._when = when
                 self._index = index
-                self._was_active = True
+                self._t_start_was_active = when
                 self._cur_ptp_count = 0
                 self._t_inactive_start = None
-                self._t_start_was_active = when
                 self._active_debounce = _timer_load_cell_engaged(cfg.threshold_duration, self._ensure_active)
                 self._active_debounce.start()
             else:
@@ -283,19 +268,18 @@ class LoadCellMonitor(ObservableObject):
                 duration = max(cfg.min_post_event_hold_duration, cfg.min_event_duration - hold_time)
             if self._t_inactive_start is None:
                 self._t_inactive_start = when
+                self._index = index
                 self._inactive_debounce = _timer_load_cell_engaged(duration, self._ensure_inactive)
                 self._inactive_debounce.start()
             elif when - self._t_inactive_start > duration:
                 self._ensure_inactive()
 
         else:
-            # in between
-            if not self._is_engaged:
-                self._active_debounce.cancel()
-                self._t_start_was_active = None
+            # in between, only cancel the inactive debounce
             self._inactive_debounce.cancel()
             self._t_inactive_start = None
-        self._make_ptp_check(when, cfg)
+        # always:
+        self._make_thrashing_check(when, cfg)
 
     def _ensure_active(self):
         if self._is_engaged:
@@ -308,7 +292,6 @@ class LoadCellMonitor(ObservableObject):
     def _ensure_inactive(self):
         if not self._is_engaged:
             return
-        self._was_active = False
         self._when = self._t_inactive_start
         self._t_start_was_active = None
         self._cur_ptp_count = 0
@@ -320,8 +303,11 @@ class LoadCellMonitor(ObservableObject):
         Primarily used for testing.  This will force the load cell monitor to be engaged or not engaged.
         """
         if engaged != self._is_engaged:
-            self._is_engaged = engaged
-            self.property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, self._is_engaged, not self._is_engaged)
-            EventManager.default().post_event_content(AnalysisMeasurementEventKind.loadCellEngagedChanged,
-                                                      context=self._is_engaged, when=datetime.fromtimestamp(time.time()),
-                                                      index=time.perf_counter_ns())
+            if len(self._values_history) == 0:
+                self._when = time.time()
+                self._index = time.perf_counter_ns()
+            else:
+                prev = self._values_history[-1]
+                self._when = prev[1]
+                self._index = prev[2]
+            self.is_engaged = engaged
