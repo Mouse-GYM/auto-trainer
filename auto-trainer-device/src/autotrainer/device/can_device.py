@@ -430,9 +430,9 @@ class CanDevice(Device):
             self._homing_motors = motors
 
     def _send_home(self):
-        self._interface.move_motor_x(0)
-        self._interface.move_motor_y(0)
-        self._interface.move_motor_z(0)
+        self._interface.set_motor_x(0)
+        self._interface.set_motor_y(0)
+        self._interface.set_motor_z(0)
 
     _motor_to_status_kind = {
         Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_X,
