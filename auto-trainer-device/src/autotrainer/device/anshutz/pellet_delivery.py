@@ -7,8 +7,9 @@ from ..device_api import DeviceApi
 
 from .serial_interface import SerialInterface
 from .gym_device import GymDevice
+from autotrainer.core.logging import get_verbose_logger
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class PelletDelivery(GymDevice):
@@ -115,9 +116,10 @@ class PelletDelivery(GymDevice):
             SystemCommandKind.SET_COVER_PELLET_PROCEDURE,
             SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE,
             SystemCommandKind.WRITE_MOTOR_CONFIGURATION,
-            SystemCommandKind.SEND_HOMING,
+            SystemCommandKind.RESET_TO_LIMITS,
         }:
             # on purpose unhandled commands
+            logger.verbose("%s voluntarily unhandled", kind)
             pass
         else:
             logger.warning(f"unknown message kind: {kind}")

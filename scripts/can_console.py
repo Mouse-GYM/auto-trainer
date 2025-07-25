@@ -377,7 +377,7 @@ def run_monitor():
             # 'd' - delay (sec)
             # 'f' - load-from-files
             # 'h' - send home
-            # 'H' - send homing
+            # 'R' - Reset to limits
             # 'g' - gate servo
             # 'k' - stepper known position
             # 'l' - load servo
@@ -426,8 +426,8 @@ def run_monitor():
                 elif cmd == 'k' or cmd == 'known':
                     device_connection.send_message(SystemCommandKind.SEND_FIXED_XYZ, context="known")
 
-                elif cmd == 'H' or cmd == 'Homing':
-                    device_connection.send_message(SystemCommandKind.SEND_HOMING)
+                elif cmd == 'R' or cmd == 'Reset':
+                    device_connection.send_message(SystemCommandKind.RESET_TO_LIMITS)
 
                 elif cmd == 'o' or cmd == 'output':
                     handle_output_command(params, device_connection)
@@ -646,10 +646,10 @@ def print_help():
           " ::Audio sound (hz) (sec)")
     print("d[elay] <sec>                      "
           " ::Delay")
-    print("H[oming]                           "
-          " ::Go to \"home\" position (0, 0, 0)")
+    print("R[eset]                           "
+          " ::Reset stepper motors to limit")
     print("h[ome]                             "
-          " ::Go to \"home\" position AND makes it the \"send/fixed\" position saved one")
+          " ::Go to \"home\" position (0/0/0) saved one")
     print("k[nown]                            "
           " ::Go to Known/Send Position (X, Y, Z)")
     print("f[ile] motor <file>                "

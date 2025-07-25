@@ -73,7 +73,7 @@ class CanDevice(Device):
 
         self._pending_context = None
 
-        self._homing_motors = []
+        self._reset_to_limit_motors = []
 
         self._load_pellet = default_load_pellet()
         self._send_pellet = default_send_pellet()
@@ -122,14 +122,13 @@ class CanDevice(Device):
                 lambda data: self._interface.move_motor_z(data, False),
 
             SystemCommandKind.SEND_TO_LIMITS:
-                lambda data: self._home([cast(Motor, data)]),
+                lambda data: self._reset_to_limits([cast(Motor, data)]),
 
-            SystemCommandKind.SEND_HOMING:
-                lambda data: self._home(
-                    [Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]),
+            SystemCommandKind.RESET_TO_LIMITS:
+                lambda data: self._reset_to_limits(
+                    [Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR]),
 
-            SystemCommandKind.SEND_HOME:
-                lambda data: self._send_home(),
+            SystemCommandKind.SEND_HOME: lambda data: self._send_home(),
 
             SystemCommandKind.SEND_FIXED_XYZ:
                 lambda data: self._interface.fixed_position(),
@@ -418,21 +417,21 @@ class CanDevice(Device):
         self._acknowledge_command(self._pending_context)
         self._pending_context = None
 
-    def _home(self, motors):
+    def _reset_to_limits(self, motors):
         """
-        Transition a stepper motor to its home position, at the limit switch.
+        Reset a stepper motor to its home position, at the limit switch.
 
         Args:
             motors: List of motors to home
         """
         if len(motors) > 0:
-            self._interface.stepper_home(motors[0])
-            self._homing_motors = motors
+            self._interface.stepper_reset_to_limit(motors[0])
+            self._reset_to_limit_motors = motors
 
     def _send_home(self):
-        self._interface.set_motor_x(0)
-        self._interface.set_motor_y(0)
-        self._interface.set_motor_z(0)
+        self._interface.move_motor_z(0)  # do first given might hit side of pellet bin otherwise
+        self._interface.move_motor_x(0)
+        self._interface.move_motor_y(0)
 
     _motor_to_status_kind = {
         Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_X,
@@ -462,11 +461,15 @@ class CanDevice(Device):
         """
         Issue the next step in a multi-step motor sequence.
         """
-        if len(self._homing_motors) > 1:
-            self._homing_motors.pop(0)  # first one is/was executed by _home() function
-            self._home(self._homing_motors)
-        elif self._compound_movement is not None and \
-            len(self._compound_movement) > 0:
+        if len(self._reset_to_limit_motors) > 1:
+            self._reset_to_limit_motors.pop(0)  # first one is/was executed by _reset_to_limits() function
+            self._reset_to_limits(self._reset_to_limit_motors)
+            if len(self._reset_to_limit_motors) == 0 and self._pending_context is not None:
+                self._command_complete()
+        elif (
+            self._compound_movement is not None
+            and len(self._compound_movement) > 0
+        ):
             step = self._compound_movement.pop(0)
 
             if "x" in step:
@@ -531,14 +534,13 @@ class CanDevice(Device):
                 elif predefined == "scoop":
                     self._interface.scoop_pellet()
                     logger.debug("Predefined Scoop (minimum)")
-                elif predefined == "home":
-                    self._home([Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
+                elif predefined == "reset_to_limits":
+                    self._reset_to_limits([Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
                 else:
                     logger.warning("unhandled predefined: %s", predefined)
         else:
             self._command_complete()
             self._compound_movement = None
-            self._homing_motors = []
 
 
 def default_load_pellet() -> MotorSteps:

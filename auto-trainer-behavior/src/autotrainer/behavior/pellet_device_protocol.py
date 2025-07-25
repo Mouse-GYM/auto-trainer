@@ -52,21 +52,22 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def send_homing(self) -> Optional[UUID]:
+    def reset_to_limits(self) -> Optional[UUID]:
         """
-        Request a move to 0, 0, 0.
+        Request a reset to limit
 
         :return: A token to expect from the device message handler when the request is complete.
         """
 
     def send_home(self) -> Optional[UUID]:
         """
-        Request a move to the pre-saved "home" position
+        Request a move to the "home (0/0/0)" position
 
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def load_pellet(self) -> Optional[UUID]:        """
+    def load_pellet(self) -> Optional[UUID]:
+        """
         Request a full load cycle to scoop the pellet from the bin.
 
         :return: A token to expect from the device message handler when the request is complete.

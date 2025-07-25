@@ -74,13 +74,13 @@ class PelletControl(QWidget):
 
         self._home_button = QPushButton("Home")
         self._home_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
-        self._home_button.clicked.connect(lambda: self._app_model.send_home())
+        self._home_button.clicked.connect(self._app_model.send_home)
         b_layout.addWidget(self._home_button)
 
-        self._homing_button = QPushButton("Homing")
-        self._homing_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
-        self._homing_button.clicked.connect(self._app_model.send_homing)
-        b_layout.addWidget(self._homing_button)
+        self._reset_limits_button = QPushButton("Reset to limits")
+        self._reset_limits_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
+        self._reset_limits_button.clicked.connect(self._app_model.reset_to_limits)
+        b_layout.addWidget(self._reset_limits_button)
 
         b_layout.addStretch(1)
 
@@ -171,7 +171,6 @@ class PelletControl(QWidget):
         setButton.clicked.connect(lambda: self._set_z())
         s_layout.addLayout(p_layout)
 
-        
         if is_legacy:
             moveButton.setVisible(False)
 

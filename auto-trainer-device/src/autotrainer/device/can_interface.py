@@ -1140,9 +1140,9 @@ class CanInterface(DeviceInterface):
         """
         return self.move_cover_servo(self.cover_config.maximum_position)
 
-    def stepper_home(self, motor: Motor) -> bool:
+    def stepper_reset_to_limit(self, motor: Motor) -> bool:
         """
-        Send the given motor (X, Y, or Z) to the 0 position
+        Reset the given motor up to its "limit"
 
         Args:
             motor:
@@ -1150,7 +1150,7 @@ class CanInterface(DeviceInterface):
         Returns:
             bool: True if successful else False
         """
-        logger.info(f"Homing Stepper Motor {motor_to_str(motor)}")
+        logger.info(f"Reset to limit Stepper Motor {motor_to_str(motor)}")
         if is_servo(motor):
             logger.warning("invalid stepper home motor: %s", motor)
             return False

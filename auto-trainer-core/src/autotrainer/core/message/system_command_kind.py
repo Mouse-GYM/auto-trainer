@@ -33,12 +33,12 @@ class SystemCommandKind(IntEnum):
     SET_Z = 207  # moves and sets a Z position for use by SEND_FIXED_XYZ
     MOVE_LOAD_SERVO = 208
     MOVE_COVER_SERVO = 209
-    SEND_HOME = 210
+    SEND_HOME = 210  # move X/Y/Z to known 0/0/0
     LOAD_PELLET = 211
     SEND_PELLET = 212
     RELEASE_PELLET = 213
     COVER_PELLET = 214
-    SEND_TO_LIMITS = 215
+    SEND_TO_LIMITS = 215  # this is for a single motor
     SET_COVER_PELLET_PROCEDURE = 216
     SET_RELEASE_PELLET_PROCEDURE = 217
     DELAY = 218
@@ -50,7 +50,7 @@ class SystemCommandKind(IntEnum):
 
     SET_MOTOR_DRIFT = 223
 
-    SEND_HOMING = 224
+    RESET_TO_LIMITS = 224  # send to limits but for all steppers
 
     # General actions.
     PLAY_TONE = 301
