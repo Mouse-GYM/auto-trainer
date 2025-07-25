@@ -174,7 +174,10 @@ class EventManager:
             index: See EventInfo.kind for a detailed description.
 
         """
-        info = EventInfo(kind, when=when or datetime.now(), index=index or time.perf_counter_ns(), context=context)
+        info = EventInfo(kind,
+                         when=datetime.now() if when is None else when,
+                         index=time.perf_counter_ns() if index is None else index,
+                         context=context)
 
         self.post_event(info)
 
