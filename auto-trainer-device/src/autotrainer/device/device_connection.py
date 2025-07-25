@@ -48,6 +48,8 @@ class DeviceConnection(DeviceConnectionProtocol):
         self._message_callback = message_callback
         self._message_queue = message_queue
         self._cmd_queue: Queue = Queue()
+        # NB: this cmd queue will be used for all the sessions/connections that will be made,
+        # we might consider creating a new one on each connection. as is the handler thread.
 
         self._api = DeviceApi(message_callback=message_callback, message_queue=message_queue)
         self._device.api = self._api
@@ -94,23 +96,24 @@ class DeviceConnection(DeviceConnectionProtocol):
         # TODO provide a mechanism for the caller to be notified when a connection attempt succeeds or fails.  Could be
         #  an optional callback provided in this call, a dedicated callback, an observable property, etc.
         self._start()
+        self._cmd_queue.put((_REQUEST_CONNECT, None, None))
 
-        if self._cmd_queue is not None:
-            self._cmd_queue.put((_REQUEST_CONNECT, None, None))
-
-    def request_disconnect(self):
+    def request_disconnect(self, wait_thread: bool = True):
         """
         Sends a disconnect request to the device connection queue.  It is framed as a request because the device may not
         be disconnected and relevant objects yet disposed when this call returns.  However, anything running and
         allocated with be terminated and disposed.
         """
         # TODO provide a mechanism for the caller to be notified when disconnection is complete.
-        if self._cmd_queue is not None:
-            self._cmd_queue.put((_REQUEST_DISCONNECT, None, None))
+        self._cmd_queue.put((_REQUEST_DISCONNECT, None, None))
+        cur_thread = self._current_thread
+        if cur_thread is not None:
+            if wait_thread:
+                cur_thread.join()
+            self._current_thread = None
 
     def send_message(self, kind: int, data: object = None, context: object = None):
-        if self._cmd_queue is not None:
-            self._cmd_queue.put_nowait((kind, data, context))
+        self._cmd_queue.put_nowait((kind, data, context))
 
     def use_compound_movements(self, data: CompoundMovementDataSet):
         self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, data.load_pellet)
