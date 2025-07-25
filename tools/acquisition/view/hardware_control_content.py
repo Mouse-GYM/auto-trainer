@@ -143,9 +143,9 @@ class HardwareControlContent(ContentWidget):
 
         button_layout = QVBoxLayout()
         button_layout.setSpacing(4)
-        self._home_button = QPushButton("Home")
-        self._home_button.clicked.connect(lambda: self._model.send_home())
-        button_layout.addWidget(self._home_button)
+        self._reset_limits_button = QPushButton("Reset to limits")
+        self._reset_limits_button.clicked.connect(lambda: self._model.reset_to_limits())
+        button_layout.addWidget(self._reset_limits_button)
         self._load_button = QPushButton("Load")
         self._load_button.clicked.connect(lambda: self._model.load_pellet())
         button_layout.addWidget(self._load_button)
