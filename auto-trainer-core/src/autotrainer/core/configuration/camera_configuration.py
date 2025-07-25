@@ -1,3 +1,5 @@
+import re
+import urllib.parse
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Dict, Any
@@ -6,6 +8,10 @@ import humps
 from typing_extensions import Self
 
 import yaml
+
+from autotrainer.core.logging import get_verbose_logger
+
+logger = get_verbose_logger(__name__)
 
 
 class CameraId(IntEnum, Enum):
@@ -39,6 +45,13 @@ class CameraConfiguration:
     port: int = 0
     path: str = ""
     params: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if "%" in self.path:
+            # this could possibly be removed later when ~all present config files would be already fixed.
+            self.path = urllib.parse.unquote(self.path)
+            logger.info("Replaced %%-encoded path from configuration with unquoted one: %r", self.path)
+        self.path = re.sub(r"/+", "/", self.path)  # sanitize
 
     @classmethod
     def from_version_zero(cls, name: str, content: dict) -> Self:
