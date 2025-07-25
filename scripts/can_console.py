@@ -426,7 +426,7 @@ def run_monitor():
                 elif cmd == 'k' or cmd == 'known':
                     device_connection.send_message(SystemCommandKind.SEND_FIXED_XYZ, context="known")
 
-                elif cmd == 'H' or cmd == 'homing':
+                elif cmd == 'H' or cmd == 'Homing':
                     device_connection.send_message(SystemCommandKind.SEND_HOMING)
 
                 elif cmd == 'o' or cmd == 'output':
@@ -646,8 +646,10 @@ def print_help():
           " ::Audio sound (hz) (sec)")
     print("d[elay] <sec>                      "
           " ::Delay")
+    print("H[oming]                           "
+          " ::Go to \"home\" position (0, 0, 0)")
     print("h[ome]                             "
-          " ::Go to Home Position (0, 0, 0)")
+          " ::Go to \"home\" position AND makes it the \"send/fixed\" position saved one")
     print("k[nown]                            "
           " ::Go to Known/Send Position (X, Y, Z)")
     print("f[ile] motor <file>                "
