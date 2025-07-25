@@ -35,13 +35,13 @@ def process_path(
         if prop_prev is None or prop_prev != new_value:
             prev_changed = prev_ts_changed.get(name, None)
             if prev_changed is None:
-                prev_changed = monitor._when
+                prev_changed = ts
             if name != "is_thrashing_detected" or new_value:
-                print(f"T={monitor._when - t0:.2f} {name}: {prev_value} -> {ts - prev_changed:.2f}s -> {new_value} ; w={weight:.1f}")
+                print(f"T={ts - t0:.2f} {name}: {prev_value} -> {ts - prev_changed:.2f}s -> {new_value} ; w={weight:.1f}")
                 # if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
                 #     print(f"real_T={monitor._t_start_was_active - t0:.2f}")
             # print(ts, ts - prev_ts_changed, name, new_value, weight)
-            prev_ts_changed[name] = monitor._when
+            prev_ts_changed[name] = ts
         props[name] = new_value
 
     monitor.property_changed += handle_prop_changed
