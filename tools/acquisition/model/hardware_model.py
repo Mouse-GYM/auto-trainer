@@ -165,6 +165,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             value += self._last_z
         return self._send_with_token(self._pellet_device, SystemCommandKind.MOVE_Z, value)
 
+    def send_homing(self) -> Optional[UUID]:
+        return self._send_with_token(self._pellet_device, SystemCommandKind.SEND_HOMING)
+
     def send_home(self) -> Optional[UUID]:
         return self._send_with_token(self._pellet_device, SystemCommandKind.SEND_HOME)
 

@@ -144,6 +144,9 @@ class DeviceState:
     def writeln(self, value: int):
         self.serial.write(f"{value}\n".encode())
 
+    def send_homing(self):
+        raise NotImplementedError("send_homing not available with %s", self.__class__)
+
     def send_home(self):
         logger.info("sending home")
 
