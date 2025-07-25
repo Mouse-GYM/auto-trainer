@@ -136,7 +136,7 @@ class EmulationInterface(DeviceInterface):
             audio = AudioData(target=Target.MAGNET_DEVICE, packet_id=1, when=time.time(),
                               index=time.perf_counter_ns())
             spectrum = []
-            for _ in range(32):
+            for _ in range(64):
                 spectrum.append(uniform(0, 20))
             audio.magnitudes = spectrum
             messages.append(audio)
