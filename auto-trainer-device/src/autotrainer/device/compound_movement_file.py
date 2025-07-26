@@ -14,18 +14,20 @@ from enum import IntEnum
 from pathlib import Path
 import yaml
 
-from .motor_steps import MotorSteps
+from .motor_steps import MotorSteps, CompoundMovementDataSet
 
 logger = logging.getLogger(__name__)
 
 
-class CompoundMovementFile:
+class CompoundMovementFile(CompoundMovementDataSet):
     """
     Class that loads compound movements (MotorSteps) from either a file or
     a YAML-type dictionary.
 
     Presents the data in the form of a CompoundMovementDataSet Protocol
     """
+
+    DEFAULT_LOCATION = Path("~/Autotrainer/move_config.yaml")  # you shall use .expanduser() when you use it
 
     class _Movement(IntEnum):
         LOAD_PELLET = 0

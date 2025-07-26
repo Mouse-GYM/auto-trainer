@@ -13,8 +13,9 @@ from .device_api import DeviceApi
 from .device_interface import ServoConfig, StepperConfig
 from .device_connection_protocol import DeviceConnectionProtocol
 from .motor_steps import CompoundMovementDataSet, MotorSteps
+from autotrainer.core.logging import get_verbose_logger
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 _REQUEST_CONNECT = -1002
 _REQUEST_DISCONNECT = -1003
@@ -53,7 +54,8 @@ class DeviceConnection(DeviceConnectionProtocol):
 
         self._name = name
 
-        self._read_limit: int = 1 if HAVE_CAN_DEVICE else math.inf
+        self._read_limit: int = 250 if HAVE_CAN_DEVICE else math.inf
+        self._collect_ms: int = 10  # so freq == 100 Hz
 
         # The means of providing non-blocking access to the device.
         self._current_thread = None
@@ -117,12 +119,14 @@ class DeviceConnection(DeviceConnectionProtocol):
         self.send_message(SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, data.release_pellet)
 
     def use_motor_configurations(self, data: MotorConfigurations):
+        logger.notice("Setting motor configurations")
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.x_config)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.y_config)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.z_config)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.load_config)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.magnet_config)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.cover_config)
+        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.gate_config)
 
     def set_load_procedure(self, load_steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, load_steps)
@@ -142,7 +146,7 @@ class DeviceConnection(DeviceConnectionProtocol):
 
     def _start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
-            self._current_thread = Thread(target=self._run)
+            self._current_thread = Thread(target=self._run, name=self._name)
             self._current_thread.start()
 
     def _run(self) -> None:
@@ -158,29 +162,26 @@ class DeviceConnection(DeviceConnectionProtocol):
         logger.debug(f"<{self._name}> thread terminated")
 
     def _run_unconnected(self) -> bool:
+        logger.info("running unconnected")
         while True:
             try:
-                cmd, data, context = self._cmd_queue.get_nowait()
-
-                if cmd == _REQUEST_DISCONNECT:
-                    logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
-                    return False
-                elif cmd == _REQUEST_CONNECT:
-                    logger.debug(f"<{self._name}> message: _REQUEST_CONNECT")
-                    break
-                else:
-                    logger.debug(f"<{self._name}> message: {cmd} ignored")
+                cmd, data, context = self._cmd_queue.get(timeout=0.1)
+                self._cmd_queue.task_done()
             except Empty:
-                # Unclear how universal this is, but the combination of [Jetson, JetPack 5, Ubuntu 20, Python] will
-                # significantly slow down the system without explicitly yielding, despite being in its own thread.  This
-                # is not the case for other platforms/combinations of the above so may not be apparent when not on the
-                # deployment current platform.
-                time.sleep(0.0001)
+                continue
+
+            if cmd == _REQUEST_DISCONNECT:
+                logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
+                return False
+            elif cmd == _REQUEST_CONNECT:
+                logger.debug(f"<{self._name}> message: _REQUEST_CONNECT")
+                break
+            else:
+                logger.warning("<%s> message: command %s ignored", self._name, cmd)
 
         if not self._interface.is_open:
             try:
                 success = self._interface.open()
-
                 if success:
                     logger.debug(f"<{self._name}> interface open")
                     self._device.connect()
@@ -188,8 +189,8 @@ class DeviceConnection(DeviceConnectionProtocol):
                 else:
                     logger.warning(f"<{self._name}> failed to open device")
                     return False
-            except Exception as ex:
-                logger.error(f"<{self._name}> {ex}")
+            except Exception as err:
+                logger.exception("<%s>: %s", self._name, err)
                 return False
         else:
             logger.warning(f"<{self._name}>CONNECT cmd while device already open")
@@ -197,27 +198,30 @@ class DeviceConnection(DeviceConnectionProtocol):
         return True
 
     def _run_connected(self) -> bool:
+        logger.info("running connected")
+        t_next_cmd_queue_read = time.time()
         while True:
             # Data from the device for the device listener to process.
-            heartbeat = 0
-            while self._interface.can_read():
-                self._device.notify_data(self._interface.read(self._read_limit))
-                heartbeat += 1
-                if heartbeat > 5:
-                    break
+            if self._interface.can_read():
+                messages = self._interface.read(self._read_limit, collect_ms=self._collect_ms)
+                if len(messages) > 0:
+                    self._device.notify_data(messages)
 
-            # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
-            try:
-                cmd, data, context = self._cmd_queue.get_nowait()
-
-                if cmd == _REQUEST_DISCONNECT:
-                    logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
-                    break
+            t_now = time.time()
+            if t_now > t_next_cmd_queue_read:
+                # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
+                try:
+                    cmd, data, context = self._cmd_queue.get_nowait()
+                except Empty:
+                    t_next_cmd_queue_read = t_now + 0.05
                 else:
-                    self._device.notify_message(cmd, data, context)
-            except Empty:
-                # See sleep comment above.
-                time.sleep(0.0001)
+                    if cmd == _REQUEST_DISCONNECT:
+                        self._cmd_queue.task_done()
+                        logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
+                        break
+                    else:
+                        self._device.notify_message(cmd, data, context)
+                        self._cmd_queue.task_done()
 
         if self._interface.is_open:
             self._device.disconnect()

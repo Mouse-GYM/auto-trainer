@@ -102,9 +102,14 @@ PyTest is not installed with via the default requirements.txt.  To enable testin
 
 `pip install -r requirements-test.txt`
 
-Run *all* default tests from the root directory:
+You also need git LFS installed & enabled in your clone repo:
 
-`pytest`
+1. install with: `sudo apt-get install git-lfs  # or yum or brew eventually`
+2. enable in current clone repo with: `git lfs --install`
+
+Now, to run *all* default tests from the root directory:
+
+`pytest` (or `pytest -v` for more verbose output of the logs)
 
 Run all tests, including functional, from the root directory:
 

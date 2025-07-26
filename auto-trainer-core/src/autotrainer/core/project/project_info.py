@@ -112,7 +112,7 @@ class ProjectInfo:
         return when.hour if interval == ProjectInterval.HOUR else when.minute
 
     def get_interval_path(self, name: str = "", interval: ProjectInterval = ProjectInterval.HOUR,
-                          skip_ensure: bool = False) -> IntervalSource | None:
+                          skip_ensure: bool = False) -> Optional[IntervalSource]:
         when = self.when if self.when is not None else datetime.now()
 
         time_format = HOUR_INTERVAL_FORMAT if interval == ProjectInterval.HOUR else MINUTE_INTERVAL_FORMAT
@@ -187,9 +187,19 @@ class ProjectInfo:
                                                           path.interval)
 
     def get_audio_spectrum_file(self, name: str = "spectrum", ext: str = "csv",
-                         interval: ProjectInterval = ProjectInterval.HOUR) -> IntervalFileInfo | None:
+                         interval: ProjectInterval = ProjectInterval.HOUR) -> Optional[IntervalFileInfo]:
         path = self.get_interval_path(name, interval)
+        return None if path is None else IntervalFileInfo(path.location,
+                                                          os.path.join(path.location, f"{path.prefix}.{ext}"),
+                                                          path.interval)
 
+    def get_webcam_presence_file(
+        self,
+        name: str = "cage",
+        ext: str = "csv",
+        interval: ProjectInterval = ProjectInterval.HOUR,
+    ) -> Optional[IntervalFileInfo]:
+        path = self.get_interval_path(name, interval)
         return None if path is None else IntervalFileInfo(path.location,
                                                           os.path.join(path.location, f"{path.prefix}.{ext}"),
                                                           path.interval)
@@ -255,6 +265,7 @@ class ProjectInfo:
                 index += 1
                 file_name = os.path.join(source.location, f"{source.prefix}_{index}.h5")
         return file_name
+
 
     def calculate_next_session_index(self) -> None:
         location, _ = self.get_day_path()

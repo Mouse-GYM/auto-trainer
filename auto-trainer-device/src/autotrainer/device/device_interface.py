@@ -13,10 +13,12 @@ There is a set of data classes that contain state and status of the gym hardware
 There is a main interface class (DeviceInterface) that defines the API for access to the abstracted
 hardware.
 """
+import dataclasses
 import math
 import typing
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import List
 
 from autotrainer.core.message import Motor
 
@@ -43,6 +45,15 @@ class Source:
     Base class of any data set received by the device
     """
     target: Target = None
+    timestamp_ns: int = dataclasses.field(init=False, default=0)
+    index: int = dataclasses.field(init=False, default=0)
+    # init=False: preserve the original behavior/semantic of constructor with position args
+    # for subclasses adding other fields.
+
+
+@dataclass
+class MotorSource(Source):
+    motor: Motor = Motor.NONE
 
 
 @dataclass
@@ -65,89 +76,79 @@ class PelletDigitalInputs(Source):
 
 
 @dataclass
-class ServoConfig(Source):
-    _motor: Motor = Motor.NONE
-    _min_position: float = 0  # (deg)
-    _max_position: float = 120  # (deg)
-    _min_pwm_duration: float = 1000  # (us)
-    _max_pwm_duration: float = 2000  # (us)
-    _max_velocity: float = 200  # (deg/sec)
-    _max_acceleration: float = 100.0  # (deg/sec^2)
+class ServoConfig(MotorSource):
+    _minimum_position: float = 0  # (deg)
+    _maximum_position: float = 120  # (deg)
+    _minimum_pwm_duration: float = 1000  # (us)
+    _maximum_pwm_duration: float = 2000  # (us)
+    _maximum_velocity: float = 200  # (deg/sec)
+    _maximum_acceleration: float = 100.0  # (deg/sec^2)
 
     @classmethod
     def from_dict(cls, data: dict):
         config = ServoConfig()
-
         if "min_pos" in data:
-            config.min_position = data["min_pos"]
+            config.minimum_position = data["min_pos"]
         if "max_pos" in data:
-            config.max_position = data["max_pos"]
+            config.maximum_position = data["max_pos"]
         if "min_pwm" in data:
-            config.min_pwm_duration_us = data["min_pwm"]
+            config.minimum_pwm_duration = data["min_pwm"]
         if "max_pwm" in data:
-            config.max_pwm_duration_us = data["max_pwm"]
+            config.maximum_pwm_duration = data["max_pwm"]
         if "max_vel" in data:
-            config.max_velocity = data["max_vel"]
+            config.maximum_velocity = data["max_vel"]
         if "max_acc" in data:
-            config.max_acceleration = data["max_acc"]
+            config.maximum_acceleration = data["max_acc"]
 
         return config
 
     @property
-    def motor(self) -> Motor:
-        return self._motor
-
-    @motor.setter
-    def motor(self, value: Motor):
-        self._motor = value
-
-    @property
     def maximum_velocity(self) -> float:
-        return self._max_velocity
+        return self._maximum_velocity
 
     @maximum_velocity.setter
     def maximum_velocity(self, value: float):
-        self._max_velocity = value
+        self._maximum_velocity = value
 
     @property
     def maximum_acceleration(self) -> float:
-        return self._max_acceleration
+        return self._maximum_acceleration
 
     @maximum_acceleration.setter
     def maximum_acceleration(self, value: float):
-        self._max_acceleration = value
+        self._maximum_acceleration = value
 
     @property
     def minimum_position(self) -> float:
-        return self._min_position
+        return self._minimum_position
 
     @minimum_position.setter
     def minimum_position(self, value: float):
-        self._min_position = value
+        self._minimum_position = value
 
     @property
     def maximum_position(self) -> float:
-        return self._max_position
+        return self._maximum_position
 
     @maximum_position.setter
     def maximum_position(self, value: float):
-        self._max_position = value
+        self._maximum_position = value
 
     @property
     def minimum_pwm_duration(self) -> float:
-        return self._min_pwm_duration
+        return self._minimum_pwm_duration
 
     @minimum_pwm_duration.setter
     def minimum_pwm_duration(self, value: float):
-        self._min_pwm_duration = value
+        self._minimum_pwm_duration = value
 
     @property
     def maximum_pwm_duration(self) -> float:
-        return self._max_pwm_duration
+        return self._maximum_pwm_duration
 
     @maximum_pwm_duration.setter
     def maximum_pwm_duration(self, value: float):
-        self._max_pwm_duration = value
+        self._maximum_pwm_duration = value
 
 
 @dataclass
@@ -172,26 +173,28 @@ class ServoStatus(Source):
 
 
 @dataclass
-class StepperConfig(Source):
-    _motor: Motor = Motor.NONE
-    _micro_steps: int = 64
+class StepperConfig(MotorSource):
+    _microsteps: int = 64
     _steps_per_revolution: float = 48.0
-    _max_velocity: float = 61  # mm/sec
-    _max_acceleration: float = 244  # mm/sec^2
+    _maximum_velocity: float = 61  # mm/sec
+    _maximum_acceleration: float = 244  # mm/sec^2
     _flip_limit_orientation: bool = False
+    _homing_velocity: float = 60  # mm/sec
 
     @classmethod
     def from_dict(cls, data: dict):
         config = StepperConfig()
 
         if "microsteps" in data:
-            config.min_step_inverted = data["microsteps"]
+            config.microsteps = data["microsteps"]
         if "steps_per_revolution" in data:
             config.steps_per_revolution = data["steps_per_revolution"]
         if "max_vel" in data:
-            config.max_velocity = data["max_vel"]
+            config.maximum_velocity = data["max_vel"]
         if "max_acc" in data:
-            config.max_acceleration = data["max_acc"]
+            config.maximum_acceleration = data["max_acc"]
+        if "home_vel" in data:
+            config.homing_velocity = data["home_vel"]
         if "flip_limit_orientation" in data:
             config.flip_limit_orientation = data["flip_limit_orientation"] == 1
 
@@ -207,27 +210,35 @@ class StepperConfig(Source):
 
     @property
     def maximum_velocity(self) -> float:
-        return self._max_velocity
+        return self._maximum_velocity
 
     @maximum_velocity.setter
     def maximum_velocity(self, value: float):
-        self._max_velocity = value
+        self._maximum_velocity = value
 
     @property
     def maximum_acceleration(self) -> float:
-        return self._max_acceleration
+        return self._maximum_acceleration
 
     @maximum_acceleration.setter
     def maximum_acceleration(self, value: float):
-        self._max_acceleration = value
+        self._maximum_acceleration = value
+
+    @property
+    def homing_velocity(self) -> float:
+        return self._homing_velocity
+
+    @homing_velocity.setter
+    def homing_velocity(self, value: float):
+        self._homing_velocity = value
 
     @property
     def microsteps(self) -> int:
-        return self._micro_steps
+        return self._microsteps
 
     @microsteps.setter
     def microsteps(self, value: int):
-        self._micro_steps = value
+        self._microsteps = value
 
     @property
     def steps_per_revolution(self) -> float:
@@ -238,7 +249,7 @@ class StepperConfig(Source):
         self._steps_per_revolution = value
 
     @property
-    def flip_limit_orientation(self) -> int:
+    def flip_limit_orientation(self) -> bool:
         return self._flip_limit_orientation
 
     @flip_limit_orientation.setter
@@ -308,14 +319,18 @@ class ColorLed(Source):
 @dataclass
 class AudioData(Source):
     packet_id: int = 0
-    when: float = 0
-    index: int = 0
-    magnitudes = []
+    when: float = 0  # real-time unix timestamp, also in Source (Source.timestamp_ns, so as ns actually)
+    # but keeping here for now, this could become a property, eventually with setter.
+    index: int = 0  # also in Source now, keeping also for now, as it allows to pass in constructor/init
+    magnitudes: List[float] = dataclasses.field(default_factory=list)
 
 
 @dataclass
 class DoorData(Source):
-    open_state = [False, False, False]
+    door1: bool = False
+    door2: bool = False
+    door3: bool = False
+    ext_button: bool = False
 
 
 @dataclass
@@ -358,13 +373,17 @@ class DeviceInterface:
     def is_open(self) -> bool:
         return False
 
+    def are_addresses_valid(self):
+        raise NotImplementedError
+
     def can_read(self) -> bool:
         pass
 
-    def read(self, max_count: int = math.inf) -> typing.Any:
+    def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
         """ Reads the available number of values from the interface up to max_count
 
         :param max_count: maximum number of values to read
+        :param collect_ms: maximum duration to read until, if <= 0 then only 1 attempt is made.
         :returns typing.Any: the data
         :rtype: typing.Any
         """

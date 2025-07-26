@@ -308,7 +308,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
     def start(self, network_queue: FixedArrayMultiQueue) -> bool:
         if self._msg_thread is None:
-            self._msg_thread = Thread(target=self._monitor_msg_queue)
+            self._msg_thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue")
             self._msg_thread.start()
 
         if self._data_thread is None:
@@ -340,7 +340,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             model = DlcPoseModel(self._model_location, 1, 0, network_queue.batch_size)
 
         if not model.is_valid():
-            logger.warning("pellet not started because the model does not exist at the specified location")
+            logger.warning("pellet not started because the model does not exist or is not valid"
+                           " at the specified location: %s", self._model_location)
             return False
 
         self._process = PoseProcess(
@@ -483,7 +484,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
             t_now = time.time()
             if t_now > t_log_counters:
-                t_log_counters = t_now + 5
+                t_log_counters = t_now + 30
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("status=%s data=%s avg_writes_h5_live=%.6f skipped_h5_live=%s",
                                 self._status, cnt_data_received,

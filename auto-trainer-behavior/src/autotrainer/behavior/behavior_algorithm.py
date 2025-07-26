@@ -132,6 +132,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._diamond_triangle_known_offset = diamond_triangle_known_offset
         self._diamond_triangle_prev_drift: Optional[Offset3DTuple] = None
+        self._diamond_triangle_last_drift_warned = time.time()
 
         self._cover_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=         BehaviorProps.COVER_PELLET_DISTANCE,
@@ -448,10 +449,14 @@ class BehaviorAlgorithm(ObservableObject):
             return
         prev = self._diamond_triangle_prev_drift
         drift = known_offset - offset
-        d_drift = None if prev is None else prev - drift
-        # not sure which abs_diff to check against:
-        if d_drift is None or any(abs(d) > 1 for d in d_drift):
-            logger.verbose("diamond triangle offset drift: %s d_drift=%s", drift, d_drift)
+        if __debug__:
+            d_drift = None if prev is None else prev - drift
+            # not sure which abs_diff to check against:
+            if d_drift is not None and any(abs(d) > 2.5 for d in d_drift):
+                t_now = time.time()
+                if t_now > self._diamond_triangle_last_drift_warned + 1:  # max 1 / s
+                    logger.verbose("diamond triangle offset drift: %s d_drift=%s", drift, d_drift)
+                    self._diamond_triangle_last_drift_warned = t_now
         if prev != drift:
             self.pellet_motor_drift_changed(drift)
         self._diamond_triangle_prev_drift = self._on_property_changed(BehaviorProps.PELLET_MOTOR_DRIFT, drift, prev)
@@ -466,7 +471,7 @@ class BehaviorAlgorithm(ObservableObject):
         if ctx.error_detected:
             # for now: we only set once this flag, never clear it.
             return
-        distance = math.sqrt(offset.x ** 2 + offset.y ** 2 + offset.y ** 2)
+        distance = offset.distance
         prev_distance = ctx.distance
         ctx.distance = self._on_property_changed(ctx.distance_property_name, distance, prev_distance)
         if ctx.error_way is CheckThresholdWay.TRIGGER_IF_GREATER:

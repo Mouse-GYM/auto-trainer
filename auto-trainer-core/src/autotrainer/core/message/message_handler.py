@@ -4,11 +4,12 @@ from queue import Queue, Empty
 from threading import Thread
 from typing import Callable
 
+from autotrainer.core.logging import get_verbose_logger
 from ..observable_object import ObservableObject
 
 from .system_status_message import SystemStatusMessageKind
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 TERMINATE = -1001
 
@@ -31,6 +32,7 @@ class MessageHandler(ObservableObject):
     FIRMWARE_VERSION_PROPERTY = "firmware_version"
 
     HEAD_MAGNET_INTENSITY_PROPERTY = "head_magnet_intensity"
+    HEAD_GATE_PROPERTY = "gate_angle"
 
     DEVICE_X_PROPERTY = "device_x"
     DEVICE_Y_PROPERTY = "device_y"
@@ -41,7 +43,11 @@ class MessageHandler(ObservableObject):
 
     FRONT_DOOR_PROPERTY = "front_door"
     DRAWER_DOOR_PROPERTY = "drawer_door"
+    SPARE_DOOR_PROPERTY = "spare_door"
+    EXT_BUTTON_PROPERTY = "ext_button"
+
     STIMULI_PROPERTY = "stimuli"
+    CONFIG_PROPERTY = "config"
 
     # type hints helper:
     # dynamic event:
@@ -64,23 +70,40 @@ class MessageHandler(ObservableObject):
 
     def start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
-            self._current_thread = Thread(target=self.run)
+            logger.verbose("Starting system message handler thread")
+            self._current_thread = Thread(
+                target=self.run, name=self.__class__.__name__,
+                daemon=True,  # in case main thread exits: also have the current handler thread to exit
+            )
             self._current_thread.start()
 
     def run(self):
         logger.debug(f"<{self._name}>: entering message event loop")
+        q_get = self._input_queue.get
+        task_done = self._input_queue.task_done
+        msg_received = self.message_received
+        tot_read_count = 0
+        t_next_check_size = time.time()
         while True:
-            msg, data = self._input_queue.get()
-            self._input_queue.task_done()  # for now we don't care when we do it, so do it first
+            msg, data = q_get()
+            if __debug__:
+                tot_read_count += 1
+                t_now = time.time()
+                if t_now > t_next_check_size:
+                    logger.debug("system message handler input queue: size=%s read=%.1f / s",
+                                 self._input_queue.qsize(), tot_read_count / 60)
+                    t_next_check_size += 60
+                    tot_read_count = 0
             if msg == TERMINATE:
+                task_done()
                 break
             elif msg == SystemStatusMessageKind.ACKNOWLEDGE:
                 self.ack_received(data)
             elif msg == SystemStatusMessageKind.FIRMWARE_VERSION:
                 self.property_changed(MessageHandler.FIRMWARE_VERSION_PROPERTY, data, None)
             else:
-                self.message_received(msg, data)
-            time.sleep(0.0001)
+                msg_received(msg, data)
+            task_done()
         logger.debug(f"<{self._name}>: exiting message event loop")
 
     def request_terminate(self):

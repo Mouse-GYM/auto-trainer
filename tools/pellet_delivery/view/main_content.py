@@ -3,6 +3,7 @@ import logging
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPlainTextEdit, QVBoxLayout
 from PySide6.QtCore import Qt, QMetaObject, Q_ARG
 
+from autotrainer.core.logging import get_verbose_logger
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.pellet_delivery.view.pellet_control import PelletControl
 from tools.pellet_delivery.view.pellet_status import PelletStatus
@@ -11,6 +12,9 @@ from tools.view.basic_panel import create_panel
 from tools.view.connection_panel import ConnectionPanel
 
 from autotrainer.pyside import TextBoxHandler
+
+
+logger = get_verbose_logger(__name__)
 
 
 def create_log_panel():
@@ -89,6 +93,7 @@ class MainContent(QWidget):
 
     def _model_property_changed(self, name: str, value: object, _: object):
         if name == "command_pending":
+            logger.debug("command_pending: %s", value)
             # Cannot call setEnabled directly, as this is being called from a different
             # thread context.
             enabled_state = (not value) and self._app_view_model.is_connected

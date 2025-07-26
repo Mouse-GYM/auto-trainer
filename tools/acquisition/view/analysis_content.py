@@ -112,7 +112,7 @@ class AnalysisContent(ContentWidget):
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
 
-        self._perf_monitor = PerfMonitor(name="headFixContent", units="mps", report_count=3000)
+        self._perf_monitor = PerfMonitor(name="headFixContent", units="mps", report_window=30)
 
         self.set_is_editable(False)
 
@@ -155,11 +155,13 @@ class AnalysisContent(ContentWidget):
                 self._plot1.getPlotItem().getViewBox().setBackgroundColor(_ACTIVE_LOAD_CELL_COLOR)
             else:
                 self._plot1.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
+        elif name == LoadCellMonitor.LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY:
+            self._load_cell.setText(str(value))
 
     def _model_property_changed(self, name, value, _):
         # If any of the values may be coming from a different thread (e.g., the device), a signal is generally needed
         # rather than direct set/update.
-        if name == "load_trigger":
+        if name == "load_trigger":  # not anymore used
             self._load_cell.setText(str(value))
 
     def _diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
