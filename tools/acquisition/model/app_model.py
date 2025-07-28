@@ -2,6 +2,7 @@ import json
 import logging
 import pickle
 import queue
+import shutil
 import time
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -13,10 +14,12 @@ import yaml
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, MessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
-                              get_system_configuration_dumper, NotificationCenter, TriggerNotification)
+                              NotificationCenter, TriggerNotification)
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
+from autotrainer.core.configuration import SystemConfigurationDumper
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.analysis.config import load_calib_stereo_params
 from autotrainer.inference import PoseAlgorithm
@@ -30,7 +33,7 @@ from tools.acquisition.model.project_dependent_protocol import ProjectDependentP
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 def _failed_camera_template(name: str, error: str):
@@ -356,28 +359,31 @@ class AppModel(ObservableObject):
 
         self._is_recording_trigger = False
 
-    def load_configuration(self, location: str):
-        if not location or not Path(location).is_file():
-            logger.info(f"did not receive explicit configuration file, trying default")
+    def load_configuration(self, location: Optional[str] = None):
+        p_location = Path(location or "")
+        if not location or not p_location.is_file():
             # Check to see if there is a file in the new default location.  If so, use it.
-            location = Path(self._preferences.configuration_location)
-            location.mkdir(parents=True, exist_ok=True)
-            configuration = SystemConfiguration.load_default(str(location))
-
+            p_location = Path(self._preferences.configuration_location)
+            p_location.mkdir(parents=True, exist_ok=True)
+            logger.info(f"did not receive explicit configuration file, trying default p_location=%s", p_location)
+            configuration = SystemConfiguration.load_default(p_location)
             # Fallback to the old last configuration preference if this device has not converted.
             # TODO - remove this once all devices have migrated.
-            if configuration is None:
+            if configuration is not None:
+                file_path = SystemConfiguration.make_default_yaml_config_path(p_location)
+            else:
                 logger.info(f"default not yet in use, trying last configuration")
-                location = self._preferences.last_configuration
-                if Path(location).exists():
-                    configuration = SystemConfiguration.load_yaml_file(location)
+                file_path = Path(self._preferences.last_configuration)
+                if file_path.is_file():
+                    configuration = SystemConfiguration.load_yaml_file(file_path)
                 if configuration is not None:
                     # Migrate to new default location.
                     configuration.save_default(self._preferences.configuration_location)
         else:
             # Always allow for a custom configuration file if provided.
             logger.info("using explicit configuration %s", location)
-            configuration: SystemConfiguration = SystemConfiguration.load_yaml_file(location)
+            file_path = Path(location)
+            configuration: SystemConfiguration = SystemConfiguration.load_yaml_file(file_path)
 
         if configuration is None:
             configuration = SystemConfiguration()
@@ -525,6 +531,6 @@ class AppModel(ObservableObject):
             with open(file_name + ".yaml", "w") as file:
                 out = info.copy()
                 out["configuration"] = configuration
-                yaml.dump(out, file, Dumper=get_system_configuration_dumper(), sort_keys=False)
+                yaml.dump(out, file, Dumper=SystemConfigurationDumper, sort_keys=False)
         except Exception as ex:
             logger.error(ex)

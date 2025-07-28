@@ -1,3 +1,4 @@
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Type
 from typing_extensions import Self
@@ -5,6 +6,7 @@ from typing_extensions import Self
 import yaml
 import humps
 
+from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor
 from ..analysis import LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer
 from ..analysis import HeadbarPressureConfiguration, headbar_pressure_configuration_representer
 from ..analysis import LoadCellConfiguration, load_cell_configuration_representer
@@ -24,14 +26,11 @@ class PelletDeliveryConfiguration:
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
-        return cls(
-            is_enabled=content.get("is_deliver_pellet_enabled", False),
-            is_pellet_cover_enabled=content.get("is_cover_pellet_enabled", False),
-            is_intersession_analysis_enabled=content.get("is_intersession_analysis_enabled", False),
-            max_pellets_per_session=content.get("max_pellets_per_session", 10),
-            max_pellets_per_day=content.get("max_pellets_per_day", 50),
-            max_pellet_missing_seconds=content.get("max_pellet_missing_seconds", 15.0)
-        )
+        return cls(**build_kwargs_apply_mapping(content, (
+            *(f.name for f in dataclasses.fields(cls)),
+            ('is_enabled', 'is_deliver_pellet_enabled'),
+            ('is_pellet_cover_enabled', 'is_cover_pellet_enabled'),
+        ), skip_remaining=True))
 
 
 @dataclass
@@ -48,14 +47,8 @@ class HeadClampConfiguration:
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
-        return cls(
-            min_baseline_intensity=content.get("min_baseline_intensity", 0.0),
-            max_baseline_intensity=content.get("max_baseline_intensity", 90.0),
-            baseline_intensity_increment=content.get("baseline_intensity_increment", 10.0),
-            auto_clamp_intensity=content.get("auto_clamp_intensity", 100.0),
-            auto_clamp_release_tone_freq=content.get("auto_clamp_release_tone_freq", 7000),
-            auto_clamp_release_tone_delay=content.get("auto_clamp_release_tone_delay", 0.1)
-        )
+        return cls(**build_kwargs_apply_mapping(content, tuple(f.name for f in dataclasses.fields(cls)),
+                                                skip_remaining=True))
 
 
 @dataclass
@@ -87,38 +80,21 @@ class BehaviorConfiguration:
 
         return configuration
 
-
-def pellet_delivery_configuration_representer(dumper: yaml.SafeDumper,
-                                              c: PelletDeliveryConfiguration) -> yaml.nodes.MappingNode:
-    return dumper.represent_mapping("!PelletDeliveryConfiguration", {
-        "isEnabled": c.is_enabled,
-        "isPelletCoverEnabled": c.is_pellet_cover_enabled,
-        "isIntersessionAnalysisEnabled": c.is_intersession_analysis_enabled,
-        "maxPelletsPerSession": c.max_pellets_per_session,
-        "maxPelletsPerDay": c.max_pellets_per_day,
-        "maxPelletMissingSeconds": c.max_pellet_missing_seconds
-    })
+    @classmethod
+    def from_version_one(cls, content):
+        return cls(
+            load_cell=LoadCellConfiguration.from_version_one(content.get("load_cell", {})),
+            headbar_pressure=HeadbarPressureConfiguration(**content.get("headbar_pressure", {})),
+            auto_tare=LoadCellAutoTareConfiguration(**content.get("auto_tare", {})),
+            head_clamp=HeadClampConfiguration(**content.get("head_clamp", {})),
+            pellet_delivery=PelletDeliveryConfiguration(**content.get("pellet_delivery", {})),
+        )
 
 
-def head_clamp_configuration_representer(dumper: yaml.SafeDumper, c: HeadClampConfiguration) -> yaml.nodes.MappingNode:
-    return dumper.represent_mapping("!HeadClampConfiguration", {
-        "minBaselineIntensity": c.min_baseline_intensity,
-        "maxBaselineIntensity": c.max_baseline_intensity,
-        "baselineIntensityIncrement": c.baseline_intensity_increment,
-        "autoClampIntensity": c.auto_clamp_intensity,
-        "autoClampReleaseToneFreq": c.auto_clamp_release_tone_freq,
-        "autoClampReleaseToneDelay": c.auto_clamp_release_tone_delay
-    })
 
-
-def behavior_configuration_representer(dumper: yaml.SafeDumper, c: BehaviorConfiguration) -> yaml.nodes.MappingNode:
-    return dumper.represent_mapping("!BehaviorConfiguration", {
-        "pelletDelivery": c.pellet_delivery,
-        "headClamp": c.head_clamp,
-        "loadCell": c.load_cell,
-        "headbarPressure": c.headbar_pressure,
-        "autoTare": c.auto_tare
-    })
+pellet_delivery_configuration_representer = make_camelize_representer("!PelletDeliveryConfiguration")
+head_clamp_configuration_representer = make_camelize_representer("!HeadClampConfiguration")
+behavior_configuration_representer = make_camelize_representer("!BehaviorConfiguration")
 
 
 def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
@@ -131,38 +107,13 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     dumper.add_representer(BehaviorConfiguration, behavior_configuration_representer)
 
 
-def pellet_delivery_configuration_constructor(loader: yaml.SafeLoader,
-                                              node: yaml.nodes.MappingNode) -> PelletDeliveryConfiguration:
-    content = loader.construct_mapping(node, deep=True)
-    return PelletDeliveryConfiguration(**humps.decamelize(content))
 
-
-def load_cell_configuration_constructor(loader: yaml.SafeLoader, node: yaml.nodes.MappingNode) -> LoadCellConfiguration:
-    content = loader.construct_mapping(node, deep=True)
-    return LoadCellConfiguration(**humps.decamelize(content))
-
-
-def headbar_pressure_configuration_constructor(loader: yaml.SafeLoader,
-                                               node: yaml.nodes.MappingNode) -> HeadbarPressureConfiguration:
-    content = loader.construct_mapping(node, deep=True)
-    return HeadbarPressureConfiguration(**humps.decamelize(content))
-
-
-def head_clamp_configuration_constructor(loader: yaml.SafeLoader,
-                                         node: yaml.nodes.MappingNode) -> HeadClampConfiguration:
-    content = loader.construct_mapping(node, deep=True)
-    return HeadClampConfiguration(**humps.decamelize(content))
-
-
-def load_cell_auto_tare_configuration_constructor(loader: yaml.SafeLoader,
-                                                  node: yaml.nodes.MappingNode) -> LoadCellAutoTareConfiguration:
-    content = loader.construct_mapping(node, deep=True)
-    return LoadCellAutoTareConfiguration(**humps.decamelize(content))
-
-
-def behavior_configuration_constructor(loader: yaml.SafeLoader, node: yaml.nodes.MappingNode) -> BehaviorConfiguration:
-    content = loader.construct_mapping(node, deep=True)
-    return BehaviorConfiguration(**humps.decamelize(content))
+pellet_delivery_configuration_constructor = make_decamelize_constructor(PelletDeliveryConfiguration)
+load_cell_configuration_constructor = make_decamelize_constructor(LoadCellConfiguration)
+headbar_pressure_configuration_constructor = make_decamelize_constructor(HeadbarPressureConfiguration)
+head_clamp_configuration_constructor = make_decamelize_constructor(HeadClampConfiguration)
+load_cell_auto_tare_configuration_constructor = make_decamelize_constructor(LoadCellAutoTareConfiguration)
+behavior_configuration_constructor = make_decamelize_constructor(BehaviorConfiguration)
 
 
 def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):

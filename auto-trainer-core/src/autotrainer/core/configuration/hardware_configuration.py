@@ -5,6 +5,8 @@ from typing_extensions import Self
 
 import yaml
 
+from autotrainer.core import make_camelize_representer, make_decamelize_constructor
+
 
 @dataclass
 class HardwareConfiguration:
@@ -23,13 +25,5 @@ class HardwareConfiguration:
         return configuration
 
 
-def hardware_configuration_representer(dumper: yaml.SafeDumper, c: HardwareConfiguration) -> yaml.nodes.MappingNode:
-    return dumper.represent_mapping("!HardwareConfiguration", {
-        "tunnelIdentifier": c.tunnel_identifier,
-        "pelletIdentifier": c.pellet_identifier
-    })
-
-
-def hardware_configuration_constructor(loader: yaml.SafeLoader, node: yaml.nodes.MappingNode) -> HardwareConfiguration:
-    content = loader.construct_mapping(node, deep=True)
-    return HardwareConfiguration(**humps.decamelize(content))
+hardware_configuration_representer = make_camelize_representer("!HardwareConfiguration")
+hardware_configuration_constructor = make_decamelize_constructor(HardwareConfiguration)

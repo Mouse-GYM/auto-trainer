@@ -7,6 +7,7 @@ from typing_extensions import Self
 import yaml
 import numpy
 
+from .. import make_camelize_representer
 from ..observable_object import ObservableObject
 from ..event import EventManager
 
@@ -26,12 +27,7 @@ class HeadbarPressureConfiguration:
         )
 
 
-def headbar_pressure_configuration_representer(dumper: yaml.SafeDumper,
-                                               c: HeadbarPressureConfiguration) -> yaml.nodes.MappingNode:
-    return dumper.represent_mapping("!HeadbarPressureConfiguration", {
-        "threshold": c.threshold,
-        "duration": c.duration
-    })
+headbar_pressure_configuration_representer = make_camelize_representer("!HeadbarPressureConfiguration")
 
 
 class HeadbarPressureMonitor(ObservableObject):

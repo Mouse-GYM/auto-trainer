@@ -2,10 +2,12 @@ from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Dict, Any
 
-import humps
 from typing_extensions import Self
 
 import yaml
+
+from autotrainer.core import make_camelize_representer, make_decamelize_constructor
+from autotrainer.core.configuration import SystemConfigurationDumper
 
 
 class CameraId(IntEnum, Enum):
@@ -39,6 +41,10 @@ class CameraConfiguration:
     port: int = 0
     path: str = ""
     params: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if not isinstance(self.id, CameraId):
+            self.id = CameraId(self.id)
 
     @classmethod
     def from_version_zero(cls, name: str, content: dict) -> Self:
@@ -78,25 +84,13 @@ class CameraConfiguration:
         )
 
 
-def camera_configuration_representer(dumper: yaml.SafeDumper, c: CameraConfiguration) -> yaml.nodes.MappingNode:
-    return dumper.represent_mapping("!CameraConfiguration", {
-        "id": c.id.value,
-        "name": c.name,
-        "isEnabled": c.is_enabled,
-        "isRecordEnabled": c.is_record_enabled,
-        "recordMode": c.record_mode,
-        "isStillImageCaptureEnabled": c.is_still_image_capture_enabled,
-        "stillImageCaptureInterval": c.still_image_capture_interval,
-        "scheme": c.scheme,
-        "host": c.host,
-        "port": c.port,
-        "path": c.path,
-        "params": c.params
-    })
+camera_configuration_representer = make_camelize_representer("!CameraConfiguration")
 
 
-def camera_configuration_constructor(loader: yaml.SafeLoader, node: yaml.nodes.MappingNode) -> CameraConfiguration:
-    content = humps.decamelize(loader.construct_mapping(node, deep=True))
-    if "id" in content:
-        content["id"] = CameraId(content["id"])
-    return CameraConfiguration(**content)
+def camera_id_representer(dumper: yaml.SafeDumper, obj):
+    return dumper.represent_data(int(obj))
+
+SystemConfigurationDumper.add_representer(CameraId, camera_id_representer)
+
+
+camera_configuration_constructor = make_decamelize_constructor(CameraConfiguration)

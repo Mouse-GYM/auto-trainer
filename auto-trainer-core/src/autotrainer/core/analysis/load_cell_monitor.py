@@ -3,7 +3,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Timer
-from typing import Callable, List, Tuple, Deque, Optional, Union
+from typing import Callable, List, Tuple, Deque, Optional, Union, Any, Dict
 
 from typing_extensions import Self
 
@@ -11,6 +11,7 @@ import yaml
 import numpy
 
 from autotrainer.core.logging import get_verbose_logger
+from .. import build_kwargs_apply_mapping, make_camelize_representer
 from ..observable_object import ObservableObject
 from ..event import EventManager
 
@@ -46,40 +47,21 @@ class LoadCellConfiguration:
     thrashing_min_ptp_change_count: int = 3  # nbr of "ptp" change needed in a row during var_max_delay
 
     @classmethod
-    def from_version_zero(cls, content: dict) -> Self:
-        kwargs = {}
-        def get_from_content(key, dest=None):
-            if dest is None:
-                dest = key
-            if key in content:
-                kwargs[dest] = content[key]
+    def from_version_zero(cls, content: Dict[str, Any]) -> Self:
+        return cls(**build_kwargs_apply_mapping(content, (
+            ('weight_active_threshold', 'load_trigger'),
+            ('threshold_duration', 'min_load_on_duration'),
+            ('min_post_event_hold_duration', 'min_load_off_duration'),
+        )))
 
-        get_from_content('load_trigger', 'weight_active_threshold')
-        get_from_content('min_load_on_duration', 'threshold_duration')
-        get_from_content('min_event_duration')
-        get_from_content('min_load_off_duration', 'min_post_event_hold_duration')
-        get_from_content('thrashing_min_ptp_change_count')
-        get_from_content('thrashing_var_weight_threshold_min')
-        get_from_content('thrashing_var_min_delay')
-        get_from_content('thrashing_var_weight_threshold_max')
-        get_from_content('thrashing_var_max_delay')
-
-        return cls(**kwargs)
+    @classmethod
+    def from_version_one(cls, content: Dict[str, Any]) -> Self:
+        return cls(**build_kwargs_apply_mapping(content, (
+            ('weight_active_threshold', 'threshold'),
+        )))
 
 
-def load_cell_configuration_representer(dumper: yaml.SafeDumper, cfg: LoadCellConfiguration) -> yaml.nodes.MappingNode:
-
-    return dumper.represent_mapping("!LoadCellConfiguration", {
-        "weight_active_threshold": cfg.weight_active_threshold,
-        "thresholdDuration": cfg.threshold_duration,
-        "minEventDuration": cfg.min_event_duration,
-        "minPostEventHoldDuration": cfg.min_post_event_hold_duration,
-        "thrashing_var_weight_threshold_min": cfg.thrashing_var_weight_threshold_min,
-        "thrashing_var_weight_threshold_max": cfg.thrashing_var_weight_threshold_max,
-        "thrashing_var_min_delay": cfg.thrashing_var_min_delay,
-        "thrashing_var_max_delay": cfg.thrashing_var_max_delay,
-        "thrashing_min_ptp_change_count": cfg.thrashing_min_ptp_change_count,
-    })
+load_cell_configuration_representer = make_camelize_representer("!LoadCellConfiguration")
 
 
 class LoadCellMonitor(ObservableObject):
@@ -152,7 +134,6 @@ class LoadCellMonitor(ObservableObject):
     def thrashing_detected(self, value):
         if value != self._thrashing_detected:
             logger.debug("load_cell_monitor.thrashing_detected=%s", value)
-            self._when = self._t_last_ptp_check
             self._t_last_ptp_check += self._config.thrashing_var_max_delay
         self._thrashing_detected = self._on_property_changed(
             self.IS_THRASHING_DETECTED_PROPERTY, value, self._thrashing_detected)
@@ -254,9 +235,8 @@ class LoadCellMonitor(ObservableObject):
                 self._t_inactive_start = None
                 self._active_debounce = _timer_load_cell_engaged(cfg.threshold_duration, self._ensure_active)
                 self._active_debounce.start()
-            else:
-                if when - self._t_start_was_active > cfg.threshold_duration:
-                    self._ensure_active()
+            elif when - t_start > cfg.threshold_duration:
+                self._ensure_active()
 
         elif value < cfg.weight_inactive_threshold:
             # inactive case
@@ -275,6 +255,7 @@ class LoadCellMonitor(ObservableObject):
                 self._ensure_inactive()
 
         else:
+            # inactive_threshold < weight < active_threshold
             # in between, only cancel the inactive debounce
             self._inactive_debounce.cancel()
             self._t_inactive_start = None
@@ -282,6 +263,9 @@ class LoadCellMonitor(ObservableObject):
         self._make_thrashing_check(when, cfg)
 
     def _ensure_active(self):
+        # nb: this can be called synchronously via update() method, or "async" via/with timer,
+        # but has no locking to prevent "double" execution (if both thread/calls pass the first next if below).
+        # not sure if we should not maybe only handle the sync one...
         if self._is_engaged:
             return
         self._when = self._t_start_was_active
