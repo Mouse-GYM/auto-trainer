@@ -98,7 +98,7 @@ class SystemMachine(StateMachine):
         )
 
     @property
-    def algorithm(self):
+    def algorithm(self) -> BehaviorAlgorithm:
         return self._algorithm
 
     @property
@@ -180,6 +180,7 @@ class SystemMachine(StateMachine):
         # using timer given when called the monitor data queue might still be writing to disk/still be in live session,
         # making the deletes to not work here
         t = _clean_raw_data_timer(3, do_clean)
+        # if that still happens (like with overloaded system), then some files will be left on disk still.
         t.start()
 
     def _session_ended(self):
@@ -187,9 +188,9 @@ class SystemMachine(StateMachine):
         # TODO: make this configurable.
         # if self._tunnel_device is not None:
         #    self._update_magnet_position(self.algorithm.baseline_intensity)
-
         project = self.project
-        can_perform_analysis = self.algorithm.can_perform_intersession_analysis()
+        algo = self.algorithm
+        can_perform_analysis = algo.can_perform_intersession_analysis()
         if can_perform_analysis and self.state == SystemState.cage:
             self.enter_intersession()
         else:
@@ -197,8 +198,8 @@ class SystemMachine(StateMachine):
             if inference is not None:
                 inference.set_inference_to_online()
             # self.exit_intersession()
-        if not can_perform_analysis and project is not None:
-            if self._algorithm.clean_raw_data_on_inactive_session:
+        if not algo.session_mouse_seen and project is not None:
+            if algo.clean_raw_data_on_inactive_session:
                 self._clean_raw_data(project)
 
     def _intersession_ended(self):
