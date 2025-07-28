@@ -351,7 +351,10 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             url += f":{conf.port}"
 
         if len(conf.path) > 0:
-            url += f"/{conf.path}"
+            # Reminder: we url-decoded, if it was encoded, in CameraConfiguration.__post_init__
+            # so here we have to quote with safe=() :
+            encoded_path = urllib.parse.quote(conf.path, safe=())
+            url += f"/{encoded_path}"
 
         if len(conf.params) > 0:
             url += "?" + urllib.parse.urlencode(conf.params)
@@ -393,12 +396,15 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 elif str(params[key]).lower() == "false":
                     params[key] = False
 
+        # undo the %-encode which happened in self.load_configuration():
+        path = urllib.parse.unquote(parsed.path)[1:]  # [:1] for strip of first leading "/"
+
         return CameraConfiguration(id=self._id, name=self._name, is_enabled=self._is_enabled,
                                    is_record_enabled=self._is_recording_enabled,
                                    record_mode=self._record_mode.value,
                                    is_still_image_capture_enabled=self._is_still_capture_enabled,
                                    still_image_capture_interval=self.still_image_capture_interval,
-                                   scheme=parsed.scheme, host=parsed.hostname, port=parsed.port or 0, path=parsed.path,
+                                   scheme=parsed.scheme, host=parsed.hostname, port=parsed.port or 0, path=path,
                                    params=params)
 
     def _wait_for_capture_status(self, expected: CaptureProcessStatus, timeout: int):

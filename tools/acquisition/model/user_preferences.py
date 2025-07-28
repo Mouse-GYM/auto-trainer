@@ -52,6 +52,8 @@ class UserPreferences(ObservableObject):
         self._tunnel_port = None
         self._pellet_port = None
 
+        self._remove_raw_data_when_inactive_session: bool = False
+
     def save(self):
         self._settings.sync()
 
@@ -132,3 +134,12 @@ class UserPreferences(ObservableObject):
     @tunnel_port.setter
     def tunnel_port(self, value: str):
         self._tunnel_port = self._on_property_changed("tunnel_port", value, self.tunnel_port)
+
+    @property
+    def remove_raw_data_when_inactive_session(self) -> bool:
+        return self._remove_raw_data_when_inactive_session
+
+    @remove_raw_data_when_inactive_session.setter
+    def remove_raw_data_when_inactive_session(self, value):
+        self._remove_raw_data_when_inactive_session = self._on_property_changed(
+            "remove_raw_data_when_inactive_session", value, self._remove_raw_data_when_inactive_session)
