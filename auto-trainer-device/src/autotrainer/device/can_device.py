@@ -337,8 +337,12 @@ class CanDevice(Device):
         assert isinstance(config, ServoConfig) or isinstance(config, StepperConfig)
         self._interface.set_motor_configuration(motor, config)
 
-    def notify_message(self, kind: int, data: Union[str, float, int, SupportsInt], context:
-    object = None) -> None:
+    def notify_message(
+        self,
+        kind: int,
+        data: Union[str, float, int, SupportsInt],
+        context: object = None,
+    ) -> None:
         """
         This method is called when a command to a target is requested. This method
         translates the application command to the appropriate call to the CanInterface
@@ -352,11 +356,14 @@ class CanDevice(Device):
         if self._interface is None:
             return
 
-        if self._pending_context is not None:
+        if self._pending_context is not None and context is not None:
             # logger.exception("pending_context not None: %s", self._pending_context)
-            logger.warning("notify message while one in progress: %s", self._pending_context)
+            logger.warning("notify message %s while one in progress: %s ; new=%s",
+                           kind, self._pending_context, context,
+                           stack_info=True)
 
-        self._pending_context = context
+        if context is not None:
+            self._pending_context = context
 
         # Get and execute handler if available
         handler = self._command_handlers.get(kind)
