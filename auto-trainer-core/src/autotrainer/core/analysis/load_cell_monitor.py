@@ -134,7 +134,6 @@ class LoadCellMonitor(ObservableObject):
     def thrashing_detected(self, value):
         if value != self._thrashing_detected:
             logger.debug("load_cell_monitor.thrashing_detected=%s", value)
-            self._t_last_ptp_check += self._config.thrashing_var_max_delay
         self._thrashing_detected = self._on_property_changed(
             self.IS_THRASHING_DETECTED_PROPERTY, value, self._thrashing_detected)
 
@@ -200,17 +199,22 @@ class LoadCellMonitor(ObservableObject):
             if self._cur_ptp_count >= cfg.thrashing_min_ptp_change_count:
                 self.thrashing_detected = True
                 self._cur_ptp_count = 0
+                # to makes longer thrashing period we could only keep it on min_ptp_change_count value,
+                # and rely on below logic
             else:
+                # put back next check
                 self._t_last_ptp_check += cfg.thrashing_var_max_delay if detected1 and detected2 else cfg.thrashing_var_min_delay
         else:
+            # following might be adapted/changed
             if not detected1 and not detected2:
                 self._cur_ptp_count = 0
+                # to makes possible longer thrashing periods, we could subtract 1.5 like here instead.
             elif self._cur_ptp_count > 0:
                 self._cur_ptp_count -= 1
             if self._cur_ptp_count <= 0:
                 self.thrashing_detected = False
             else:
-                self._t_last_ptp_check += cfg.thrashing_var_max_delay if self._cur_ptp_count < 0 and not (detected1 or detected2) else cfg.thrashing_var_min_delay
+                self._t_last_ptp_check += cfg.thrashing_var_max_delay if not (detected1 or detected2) else cfg.thrashing_var_min_delay
 
     def update(self, value: Union[float, numpy.floating], when: float, index: int):
         self._update_history(value, when, index)
