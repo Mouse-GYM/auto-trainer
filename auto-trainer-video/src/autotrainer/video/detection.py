@@ -28,6 +28,9 @@ class PresenceDetectionAttrs:
     mask_lower_zero: float = 0.1
     # zero all values in the frame below this value
 
+    max_delay_skip_threshold: float = 0.1
+    # if 2 consecutive processed frames have more than that delay between them then skip oldest and continue
+
     presence_detected: multiprocessing.Value = None
     movement_detected: multiprocessing.Value = None
     pc_sum: multiprocessing.Value = None
@@ -48,7 +51,7 @@ class VideoDetection(threading.Thread):
         self._project_info = project_info
         self._attrs = detection_attrs
         self._stop_requested = False
-        self._next_frames: Deque[Tuple[float, numpy.ndarray]] = collections.deque(maxlen=60)
+        self._next_frames: Deque[Tuple[float, numpy.ndarray]] = collections.deque(maxlen=15)
         self._prev_frame = None
         self._prev_when = None
         self._csv_header = ["Time", "Index", "Presence", "Motion"]
@@ -98,29 +101,34 @@ class VideoDetection(threading.Thread):
                 gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             else:
                 gray_frame = frame
-            if prev_frame is not None:
-                # work on frame
-                fg_mask = cv2.absdiff(prev_frame, gray_frame)
-                fg_mask[fg_mask < attrs.mask_lower_zero] = 0
-                tot_sum = numpy.sum(fg_mask)
-                pc_tot_sum = 100 * tot_sum / (fg_mask.size * (255 ** fg_mask.itemsize))
-                attrs.pc_sum.value = pc_tot_sum
-                is_detected = pc_tot_sum >= attrs.presence_sum_percent_threshold
-                if is_detected != prev_detected:
-                    attrs.presence_detected.value = is_detected
-                prev_detected = is_detected
-                self._check_path()
-                csv_writer = self._csv_writer
-                if csv_writer is not None:
-                    row_dict.update(
-                        Time=when / 1e9,
-                        Index=when,
-                        Presence=int(is_detected),
-                        Motion=0,  # TODO
-                    )
-                    csv_writer.writerow(row_dict)
-            prev_frame = gray_frame
+            save_prev_when = prev_when
+            save_prev_frame = prev_frame
             prev_when = when
+            prev_frame = gray_frame
+            if save_prev_frame is None:
+                continue
+            if when - save_prev_when >= attrs.mask_lower_zero:
+                continue
+            # work on frame
+            fg_mask = cv2.absdiff(save_prev_frame, gray_frame)
+            fg_mask[fg_mask < attrs.mask_lower_zero] = 0
+            tot_sum = numpy.sum(fg_mask)
+            pc_tot_sum = 100 * tot_sum / (fg_mask.size * (255 ** fg_mask.itemsize))
+            attrs.pc_sum.value = pc_tot_sum
+            is_detected = pc_tot_sum >= attrs.presence_sum_percent_threshold
+            if is_detected != prev_detected:
+                attrs.presence_detected.value = is_detected
+            prev_detected = is_detected
+            self._check_path()
+            csv_writer = self._csv_writer
+            if csv_writer is not None:
+                row_dict.update(
+                    Time=when / 1e9,
+                    Index=when,
+                    Presence=int(is_detected),
+                    Motion=0,  # TODO
+                )
+                csv_writer.writerow(row_dict)
         # end while not self._stop_requested
         fh = self._csv_writer_fh
         if fh is not None:
