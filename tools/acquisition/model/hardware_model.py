@@ -271,7 +271,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def _send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         if self._pending_command_token is not None:
-            logger.info(f"ignoring action due to pending command: {self._pending_command_token}")
+            logger.warning(
+                "ignoring action due to pending command: %s token=%s ; new=%s",
+                self.pending_command, self.pending_command_token, cmd
+            )
             return None
 
         token = uuid4()

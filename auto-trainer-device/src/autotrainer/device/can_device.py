@@ -72,6 +72,7 @@ class CanDevice(Device):
         self._magnet_dst: Optional[int] = None
 
         self._pending_context = None
+        self._pending_kind = None
 
         self._homing_motors = []
 
@@ -359,11 +360,12 @@ class CanDevice(Device):
         if self._pending_context is not None and context is not None:
             # logger.exception("pending_context not None: %s", self._pending_context)
             logger.warning("notify message %s while one in progress: %s ; new=%s",
-                           kind, self._pending_context, context,
+                           kind, self._pending_kind, context,
                            stack_info=True)
 
         if context is not None:
             self._pending_context = context
+            self._pending_kind = kind
 
         # Get and execute handler if available
         handler = self._command_handlers.get(kind)
@@ -419,8 +421,10 @@ class CanDevice(Device):
         Note that 'completion' may only indicate that the message was sent to the
         target, not that the target is complete in executing the command.
         """
-        self._acknowledge_command(self._pending_context)
-        self._pending_context = None
+        if self._pending_context is not None:
+            self._acknowledge_command(self._pending_context)
+            self._pending_context = None
+            self._pending_kind = None
 
     def _home(self, motors):
         """
