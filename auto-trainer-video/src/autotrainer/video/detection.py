@@ -90,12 +90,24 @@ class VideoDetection(threading.Thread):
         prev_frame = prev_when = None
         prev_detected = attrs.presence_detected.value
         row_dict = dict.fromkeys(self._csv_header)
-
+        next_log_report = time.perf_counter() + 1
+        processed_count = 0
+        timeout_count = 0
+        expired_count = 0
+        delay_report = 15
         while not self._stop_requested:
+            perf_now = time.perf_counter()
+            if next_log_report >= perf_now:
+                logger.debug("video presence detection: %s ; processed=%.1f/s timeout=%.1f/s expired_count=%.1f/s",
+                             self._next_frames, processed_count / delay_report, timeout_count / delay_report,
+                             expired_count / delay_report)
+                next_log_report = perf_now + delay_report
+                processed_count = timeout_count = expired_count = 0
             try:
                 when, frame = self._next_frames.popleft()
             except IndexError:
-                time.sleep(0.05)
+                time.sleep(0.01)
+                timeout_count += 1
                 continue
             if frame.ndim > 2:
                 gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -107,9 +119,11 @@ class VideoDetection(threading.Thread):
             prev_frame = gray_frame
             if save_prev_frame is None:
                 continue
-            if when - save_prev_when >= attrs.mask_lower_zero:
+            if when - save_prev_when >= attrs.max_delay_skip_threshold:
+                expired_count += 1
                 continue
             # work on frame
+            processed_count += 1
             fg_mask = cv2.absdiff(save_prev_frame, gray_frame)
             fg_mask[fg_mask < attrs.mask_lower_zero] = 0
             tot_sum = numpy.sum(fg_mask)
@@ -118,7 +132,8 @@ class VideoDetection(threading.Thread):
             is_detected = pc_tot_sum >= attrs.presence_sum_percent_threshold
             if is_detected != prev_detected:
                 attrs.presence_detected.value = is_detected
-            prev_detected = is_detected
+                prev_detected = is_detected
+                logger.verbose("presence detected: %.2f", pc_tot_sum)
             self._check_path()
             csv_writer = self._csv_writer
             if csv_writer is not None:
