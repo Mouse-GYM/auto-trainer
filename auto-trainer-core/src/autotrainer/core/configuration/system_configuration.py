@@ -112,7 +112,9 @@ class SystemConfiguration:
         self.save_file(path.with_suffix(""), as_yaml=True)
 
     def dump_yaml(self) -> str:
-        return yaml.dump(self, Dumper=SystemConfigurationDumper, sort_keys=True)
+        return yaml.dump(self, Dumper=SystemConfigurationDumper,
+                         # we sort/iter by dataclasses.fields() order in our representer function
+                         sort_keys=False)
 
     def save_file(self, path: Union[Path, str], as_yaml: bool = False, as_json: bool = False) -> bool:
         path = Path(path)
