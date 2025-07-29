@@ -423,8 +423,8 @@ class CanDevice(Device):
         """
         # if self._pending_context is not None:
         self._acknowledge_command(self._pending_context)
-        self._pending_context = None
         self._pending_kind = None
+        self._pending_context = None  # last
 
     def _home(self, motors):
         """
