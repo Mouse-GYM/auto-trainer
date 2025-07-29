@@ -360,8 +360,7 @@ class CanDevice(Device):
         if self._pending_context is not None and context is not None:
             # logger.exception("pending_context not None: %s", self._pending_context)
             logger.warning("notify message %s while one in progress: %s ; new=%s",
-                           kind, self._pending_kind, context,
-                           stack_info=True)
+                           kind, self._pending_kind, context)
 
         if context is not None:
             self._pending_context = context
