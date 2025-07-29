@@ -6,6 +6,12 @@ from typing import Union, List, Tuple, Dict, Any, Iterable, TypeVar, Type
 import humps
 import yaml
 
+from .logging import get_verbose_logger
+
+#
+
+logger = get_verbose_logger(__name__)
+
 #
 
 Pairs3dOffsetT = Union[List[Tuple[str, str]], Tuple[Tuple[str, str], ...]]
@@ -104,9 +110,27 @@ def make_camelize_representer(section_name: str):
 
 def make_decamelize_constructor(cls: Type[ConfigItemCls]):
 
-    def constructor(loader: yaml.SafeLoader, node: yaml.nodes.MappingNode) -> ConfigItemCls:
+    # required delayed import for now,
+    # not big deal given this function is to be called once only (per config class).
+    from .configuration import SystemConfigurationLoader
+
+    def constructor(loader: SystemConfigurationLoader, node: yaml.nodes.MappingNode) -> ConfigItemCls:
         content = loader.construct_mapping(node, deep=True)
-        return cls(**humps.decamelize(content))
+        content = humps.decamelize(content)  # decamelize first,
+        # "decamelized" names are here after checked against field names
+        if loader.safe_load:
+            names = [f.name for f in dataclasses.fields(cls)]
+            before_count = len(content)
+            content = {
+                k: v
+                for k, v in content.items()
+                if k in names
+            }
+            filtered_count = before_count - len(content)
+            if filtered_count != 0:
+                logger.verbose("%s: safe load filtered %s unknown properties/attributes",
+                               cls.__qualname__, filtered_count)
+        return cls(**content)
 
     return constructor
 
@@ -117,7 +141,8 @@ from .observable_object import ObservableObject, ObservableObjectProtocol
 from .analysis import SensorAnalysis, MeasurementData, AudioSpectrumData
 from .analysis import LoadCellMonitor, HeadbarPressureMonitor
 from .animal import AnimalSubject
-from .configuration import SystemConfiguration, BehaviorConfiguration, CameraConfiguration, CameraId
+from .configuration import SystemConfiguration, BehaviorConfiguration, CameraConfiguration, CameraId, \
+    SystemConfigurationLoader
 from .configuration import HardwareConfiguration, InferenceConfiguration, PersistenceConfiguration
 from .event import EventManager, EventInfo, EventManagerPlugin
 from .fixed_array_multiqueue import FixedArrayMultiQueue

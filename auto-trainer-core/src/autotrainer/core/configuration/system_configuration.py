@@ -12,7 +12,7 @@ import yaml
 import humps
 
 from autotrainer.core.logging import get_verbose_logger
-from . import GenericSafeLoader, SystemConfigurationLoader, SystemConfigurationDumper
+from . import GenericSafeLoader, SystemConfigurationLoader, SystemConfigurationDumper, SystemConfigurationSafeLoader
 from .. import make_camelize_representer, make_decamelize_constructor
 from .behavior_configuration import BehaviorConfiguration, add_behavior_configuration_representers, \
     add_behavior_configuration_constructors
@@ -55,7 +55,7 @@ class SystemConfiguration:
     def load_yaml(cls, data: TextIO, *, file_path: Optional[Path] = None) -> Self:
         raw_content = yaml.load(data, GenericSafeLoader)
         data.seek(0)
-        version = raw_content.get("version", 0)  # SystemConfiguration.version)
+        version = raw_content.get("version", 0)
         if version == SystemConfiguration.version:
             # easy case
             configuration = yaml.load(data, SystemConfigurationLoader)
@@ -67,19 +67,21 @@ class SystemConfiguration:
             elif version == 1:
                 configuration._deserialize_version_one(content)
             else:
+                # although we could try use SystemConfigurationSafeLoader, as below else: case.
                 raise ValueError(f"Cannot handle deserialize version {version}")
         else:
             assert version > SystemConfiguration.version
             logger.warning("Loading configuration version %s while SystemConfiguration.version=%s, "
-                           "this might, or not, succeed.",
+                           " only considering known config attributes/properties.",
                            version, SystemConfiguration.version)
-            configuration = yaml.load(data, SystemConfigurationLoader)
+            configuration = yaml.load(data, SystemConfigurationSafeLoader)
 
         if version != SystemConfiguration.version and file_path is not None:
             now = datetime.now(tz=timezone.utc)
             new_p = file_path.parent.joinpath(
                 f"{file_path.stem}.v{version}-{now.isoformat(timespec='minutes')}{file_path.suffix}")
-            logger.notice("Detected config version change, saving old config to %s", new_p)
+            logger.notice("Detected config version change/missmatch, saving old config to %s,"
+                          " and replacing with new after.", new_p)
             shutil.copy2(file_path, new_p)
             # and save new one over previous:
             configuration.save_file(file_path.with_suffix(""), as_yaml=True)
@@ -110,20 +112,20 @@ class SystemConfiguration:
         self.save_file(path.with_suffix(""), as_yaml=True)
 
     def dump_yaml(self) -> str:
-        return yaml.dump(self, Dumper=SystemConfigurationDumper, sort_keys=False)
+        return yaml.dump(self, Dumper=SystemConfigurationDumper, sort_keys=True)
 
     def save_file(self, path: Union[Path, str], as_yaml: bool = False, as_json: bool = False) -> bool:
-        path = str(path)
+        path = Path(path)
         try:
             if as_json:
-                p = f"{path}.json"
-                logger.notice("Writing to %r as json", p)
-                with open(p, "w") as file:
+                p = path.with_suffix(".json")
+                logger.notice("Writing to %r as json", p.as_posix())
+                with p.open("w") as file:
                     json.dump(asdict(self), file)
             if as_yaml:
-                p = f"{path}.yaml"
-                logger.notice("Writing to %r as yaml", p)
-                with open(p, "w") as file:
+                p = path.with_suffix(".yaml")
+                logger.notice("Writing to %r as yaml", p.as_posix())
+                with p.open("w") as file:
                     file.write(self.dump_yaml())
         except Exception as err:
             logger.exception("Error saving config to %s: %s", path, err)

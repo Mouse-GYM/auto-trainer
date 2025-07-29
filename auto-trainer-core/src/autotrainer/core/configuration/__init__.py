@@ -22,6 +22,11 @@ yaml.add_multi_constructor("", generic_constructor, Loader=GenericSafeLoader)
 
 class SystemConfigurationLoader(yaml.SafeLoader):
     """Dedicated yaml loader for SystemConfiguration"""
+    safe_load: bool = False
+
+
+class SystemConfigurationSafeLoader(SystemConfigurationLoader):
+    safe_load = True
 
 
 class SystemConfigurationDumper(yaml.SafeDumper):
