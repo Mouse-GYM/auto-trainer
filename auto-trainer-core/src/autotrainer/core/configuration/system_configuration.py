@@ -107,7 +107,7 @@ class SystemConfiguration:
 
     def save_default(self, location: Union[Path, str]):
         path = self.make_default_yaml_config_path(Path(location))
-        self.save_file(path, as_yaml=True)
+        self.save_file(path.with_suffix(""), as_yaml=True)
 
     def dump_yaml(self) -> str:
         return yaml.dump(self, Dumper=SystemConfigurationDumper, sort_keys=False)
