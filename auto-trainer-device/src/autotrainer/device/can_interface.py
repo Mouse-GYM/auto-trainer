@@ -14,6 +14,7 @@ a list of data sets that are then propagated to the rest of the application.
 """
 
 import logging
+import inspect
 import time
 import warnings
 from enum import Enum
@@ -254,6 +255,16 @@ class CanInterface(DeviceInterface):
         cls._uuid = cls._uuid + 1 & 0xFF  # maintain 8 bits
         if cls._uuid == 0:  # don't allow 0's
             cls._uuid = 1
+        if __debug__:
+            # Get the current stack frame
+            current_frame = inspect.currentframe()
+            # Get the frame of the caller (one level up)
+            caller_frame = current_frame.f_back
+            # Extract the code object from the caller's frame
+            caller_code = caller_frame.f_code
+            # Get the name of the function from the code object
+            caller_name = caller_code.co_name
+            logger.debug("next_uuid: caller=%s uuid=%s", caller_name, cls._uuid)
         return cls._uuid
 
     @classmethod
