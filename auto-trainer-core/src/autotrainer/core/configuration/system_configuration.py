@@ -150,9 +150,7 @@ class SystemConfiguration:
         self.hardware = HardwareConfiguration.from_version_zero(content)
 
         # Typo from earlier version of the file.
-        if "pellet" in content:
-            pass
-        self.inference = InferenceConfiguration.from_version_zero(content["pellet"])
+        self.inference = InferenceConfiguration.from_version_zero(content.get("pellet", {}))
 
         self.behavior = BehaviorConfiguration.from_version_zero(content)
         self.persistence = PersistenceConfiguration.from_version_zero(content)

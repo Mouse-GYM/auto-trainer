@@ -47,8 +47,11 @@ class HeadClampConfiguration:
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
-        return cls(**build_kwargs_apply_mapping(content, tuple(f.name for f in dataclasses.fields(cls)),
-                                                skip_remaining=True))
+        return cls(**build_kwargs_apply_mapping(
+            content,
+            tuple(f.name for f in dataclasses.fields(cls)),
+            skip_remaining=True,
+        ))
 
 
 @dataclass

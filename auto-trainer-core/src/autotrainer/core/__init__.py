@@ -69,7 +69,7 @@ def build_kwargs_apply_mapping(
     skip_remaining: bool = False,
 ):
     kwargs = {}
-    # content = dict(content)  # make copy of 1 level given we'll remove/pop from it
+    content = dict(content)  # make copy of 1 level given we'll remove/pop from it
     for cur_map in mapping:
         if isinstance(cur_map, str):
             dest = key = cur_map
@@ -78,10 +78,9 @@ def build_kwargs_apply_mapping(
             dest, key = cur_map
         if key in content:
             value = content.pop(key)
-            if dest not in kwargs:
-                # first one win
+            if dest not in kwargs:  # first one wins
                 kwargs[dest] = value
-    # insert whatever remains in content:
+    # insert whatever remains in content, unless skipped:
     if not skip_remaining:
         kwargs.update(content)
     return kwargs
