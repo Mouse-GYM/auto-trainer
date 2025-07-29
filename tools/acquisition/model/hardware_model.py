@@ -280,8 +280,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         token = uuid4()
 
         if self._send_command(device, cmd, data, token):
-            self.pending_command_token = token
-            self.pending_command = cmd
+            if token is not None:
+                self.pending_command_token = token  # last
+                self.pending_command = cmd
             return token
         else:
             return None
@@ -301,5 +302,5 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def _ack_received(self, token: UUID):
         if self._pending_command_token is not None and self._pending_command_token == token:
-            self.pending_command_token = None
             self.pending_command = None
+            self.pending_command_token = None
