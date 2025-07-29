@@ -5,7 +5,7 @@ import shutil
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Dict, Optional, Union, ClassVar
+from typing import List, Dict, Optional, Union, ClassVar, TextIO
 from typing_extensions import Self
 import yaml
 
@@ -52,8 +52,9 @@ class SystemConfiguration:
         self._camera_map = {}
 
     @classmethod
-    def load_yaml(cls, data, *, file_path: Optional[Path] = None) -> Self:
+    def load_yaml(cls, data: TextIO, *, file_path: Optional[Path] = None) -> Self:
         raw_content = yaml.load(data, GenericSafeLoader)
+        data.seek(0)
         version = raw_content.get("version", 0)  # SystemConfiguration.version)
         if version == SystemConfiguration.version:
             # easy case
@@ -90,8 +91,7 @@ class SystemConfiguration:
         path = Path(path)
         logger.debug("loading configuration from %r", path)
         with path.open() as fh:
-            data = fh.read()  # load_yaml makes several pass, so pre-read and pass the entire content data
-            return SystemConfiguration.load_yaml(data, file_path=path if save_backup else None)
+            return SystemConfiguration.load_yaml(fh, file_path=path if save_backup else None)
 
     @classmethod
     def make_default_yaml_config_path(cls, location: Path) -> Path:

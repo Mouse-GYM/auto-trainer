@@ -26,7 +26,7 @@ cameras:
   isStillImageCaptureEnabled: false
   stillImageCaptureInterval: 0.0
   scheme: playback
-  host: none
+  host: cam1_host
   port: 0
   path: /path_cam_right
   params:
@@ -42,7 +42,7 @@ cameras:
   isStillImageCaptureEnabled: false
   stillImageCaptureInterval: 0.0
   scheme: playback
-  host: none
+  host: cam2_host
   port: 0
   path: /path_cam_web
   params:
