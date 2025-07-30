@@ -1,15 +1,17 @@
 import logging
+import time
 from pathlib import Path
 from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional
 
-from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple
+from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple, \
+    get_verbose_logger
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.device import (DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 HeadFix, PelletDelivery, MotorConfigurationFile, CompoundMovementFile)
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol):
@@ -33,6 +35,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._pending_command: Optional[SystemCommandKind] = None
         self._pending_command_token: Optional[UUID] = None
+        self._pending_command_perf_now: Optional[float] = None
 
         message_handler.property_changed += self._message_handler_property_changed
         message_handler.ack_received += self._ack_received
@@ -183,7 +186,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._send_with_token(self._pellet_device, SystemCommandKind.COVER_PELLET)
 
     def play_tone(self, frequency: int, _duration: float) -> Optional[UUID]:
-        return self._send_with_token(self._pellet_device, SystemCommandKind.PLAY_TONE, frequency)
+        return self._send_with_token(self._pellet_device, SystemCommandKind.PLAY_TONE, (frequency, _duration))
 
     def connect(self, cmd_queue: Queue, animal: Optional[AnimalSubject] = None):
         self._last_x = None
@@ -270,19 +273,24 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                                           old_value)
 
     def _send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
+        perf_now = time.perf_counter()
         if self._pending_command_token is not None:
             logger.warning(
                 "ignoring action due to pending command: %s token=%s ; new=%s",
                 self.pending_command, self.pending_command_token, cmd
             )
-            return None
+            t_diff = perf_now - self._pending_command_perf_now
+            if t_diff < 5:
+                return None
+            logger.notice("pending_command %s for too long, giving up on wait acknowledge to process cmd=%s",
+                          self.pending_command, cmd)
 
         token = uuid4()
 
         if self._send_command(device, cmd, data, token):
-            if token is not None:
-                self.pending_command_token = token  # last
-                self.pending_command = cmd
+            self.pending_command = cmd
+            self._pending_command_perf_now = perf_now
+            self.pending_command_token = token  # last
             return token
         else:
             return None
@@ -301,6 +309,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         # self._pellet_device.set_motor_drift(drift)
 
     def _ack_received(self, token: UUID):
-        if self._pending_command_token is not None and self._pending_command_token == token:
-            self.pending_command = None
-            self.pending_command_token = None
+        cur_pending_token = self._pending_command_token
+        if cur_pending_token is not None:
+            if cur_pending_token == token:
+                self.pending_command = None
+                self.pending_command_token = None
+            elif token is not None:
+                logger.warning("pending_token != ack_received token: %s vs %s", cur_pending_token, token)
