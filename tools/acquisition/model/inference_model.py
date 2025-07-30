@@ -152,6 +152,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         ))
 
         mp_ctx = get_mp_ctx()
+        self._thread_lock = threading.RLock()
         self._data_queue = mp_ctx.Queue(maxsize=4096)
         self._cmd_queue = mp_ctx.Queue(maxsize=64)
         self._msg_queue = mp_ctx.Queue(maxsize=64)
@@ -265,6 +266,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             logger.verbose("Waited %.1fs to join previous offline thread", time.perf_counter() - perf_now)
 
     def perform_segmentation(self, configuration: SegmentationConfiguration):
+        with self._thread_lock:
+            self._perform_segmentation(configuration)
+
+    def _perform_segmentation(self, configuration: SegmentationConfiguration):
+        if self._intersession_block is not None:
+            logger.warning("_intersession_block not None, segmentation already started")
+            return
         self._check_previous_offline_thread("perform_segmentation")
         logger.info("performing segmentation on %s", configuration, stack_info=True)
         intersession_block = self._intersession_block = IntersessionBlock(
@@ -296,6 +304,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._offline_thread.start()
 
     def perform_detection(self, configuration: DetectionConfiguration):
+        with self._thread_lock:
+            if self._intersession_detection is not None:
+                logger.warning("_intersession_detection not None, skipping perform_detection")
+                return
+            self._perform_detection(configuration)
+
+    def _perform_detection(self, configuration: DetectionConfiguration):
         logger.info("performing detection analysis on %s", configuration)
         self._check_previous_offline_thread("perform_detection")
         intersession_detection = self._intersession_detection = IntersessionDetection(configuration)
@@ -1052,3 +1067,4 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             self.detection_result_ready(result)
 
         intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
+        self._intersession_detection = None
