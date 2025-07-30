@@ -677,7 +677,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         continue
 
                     if (  # prev_mode == InferenceMode.Live and
-                        len(cams_read_h5_dss) == 0
+                        pose_data is not None
+                        and len(cams_read_h5_dss) == 0
                         # and frames_indices is not None and (frames_indices >= 0).any()
                         # with random cam there might be no frame to replay, so we get immediatelly all < 0
                     ):
