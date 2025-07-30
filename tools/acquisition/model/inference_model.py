@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 import operator
 import os
@@ -122,9 +123,9 @@ class IntersessionBlock:
     configuration: SegmentationConfiguration
     frame_count: int = 0
     parts_count: int = 10
-    pose_data: numpy.ndarray = None
-    pose_data_list: List[List[numpy.ndarray]] = None
-    pose_data_dict: List[Dict[int, numpy.ndarray]] = None
+    pose_data: numpy.ndarray = dataclasses.field(repr=False, default=None)
+    pose_data_list: List[List[numpy.ndarray]] = dataclasses.field(repr=False, default=None)
+    pose_data_dict: List[Dict[int, numpy.ndarray]] = dataclasses.field(repr=False, default=None)
 
     def __post_init__(self):
         self.pose_data = numpy.empty((0, self.parts_count * 3), dtype=numpy.float32)
@@ -810,7 +811,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     else:
                         assert ib is None and pose_data is not None
                         if __debug__:
-                            logger.warning("invalid state: ib=None but pose_data%s", pose_data)
+                            logger.warning("invalid state: ib=None but pose_data_len=%s", len(pose_data))
 
             except (KeyboardInterrupt, SystemExit):
                 raise
@@ -833,8 +834,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             self._send_message(InferenceCommandMessageKind.ProcessLive)
             intersession_block.configuration.complete(intersession_block.configuration.nonce, False)
         finally:
-            logger.info("feed intersession finished. ib=%s", intersession_block)
-            self._intersession_block = None
+            logger.info("feed intersession finished. intersession_block=%s",
+                        intersession_block)
+            # self._intersession_block = None
 
     def __feed_intersession_analysis(self):
         cams = (self._project.camera_1, self._project.camera_2)
@@ -1045,4 +1047,4 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
         self._intersession_detection.configuration.complete(self._intersession_detection.configuration.nonce,
                                                             processed_ok)
-        self._intersession_block = None
+        # self._intersession_block = None
