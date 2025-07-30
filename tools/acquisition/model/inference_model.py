@@ -1022,7 +1022,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     fh.write("\n".join(map(str, chain(frames_idx_sent[cdx], [""]))))
 
         # total frame count: taking the min of all saved videos frame count:
-        self._intersession_block.frame_count = min(videos_frame_count.values())
+        intersession_block.frame_count = min(videos_frame_count.values())
 
         # also post a **full negative indices batch** to notify pose process
         # when it has reached end of offline processing:
@@ -1034,7 +1034,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
         logger.success("passed %s frames per camera frame_count=%s ; "
                        "tot_skipped_frames=%s cams_frame_idx=%s cams_sent_frame_count=%s",
-                       frame_idx, self._intersession_block.frame_count,
+                       frame_idx, intersession_block.frame_count,
                        tot_skipped_frames, cams_frame_idx, cams_sent_frame_count)
 
     def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int) -> bool:
