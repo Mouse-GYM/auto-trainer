@@ -64,7 +64,7 @@ class VideoDetection(threading.Thread):
         # not sure using a simple thread queue.Queue is not as good, possibly better (can wait on it)
         self._prev_frame = None
         self._prev_when = None
-        self._csv_header = ["Time", "Index", "Presence", "Motion"]
+        self._csv_header = ["Time", "Index", "PercentSum", "Presence", "Motion"]
         self._file_info = None
         self._csv_writer = None
         self._csv_writer_fh = None
@@ -74,8 +74,7 @@ class VideoDetection(threading.Thread):
         self._stop_requested = True
 
     def update_frame(self, when: float, frame: numpy.ndarray):
-        # convert nanosecond when to seconds:
-        self._next_frames.append((when / 1e9, frame))
+        self._next_frames.append((when, frame))
 
     def _check_path(self):
         csv_file_info = self._project_info.get_webcam_presence_file()
@@ -127,11 +126,13 @@ class VideoDetection(threading.Thread):
                 processed_count = timeout_count = expired_count = 0
                 prev_pc_values.clear()
             try:
-                when, frame = self._next_frames.popleft()
+                when_nanos, frame = self._next_frames.popleft()
             except IndexError:
                 time.sleep(0.03)  # current producer is 30 fps.
                 timeout_count += 1
                 continue
+            #
+            when = when_nanos / 1e9  # convert to second timestamp
             #
             if frame.ndim > 2:
                 gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -170,8 +171,9 @@ class VideoDetection(threading.Thread):
             csv_writer = self._csv_writer
             if csv_writer is not None:
                 row_dict.update(
-                    Time=when / 1e9,
-                    Index=when,
+                    Time=when,
+                    Index=when_nanos,
+                    PercentSum=pc_tot_sum,
                     Presence=int(is_detected),
                     Motion=0,  # TODO
                 )
