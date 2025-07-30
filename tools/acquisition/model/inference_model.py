@@ -251,26 +251,27 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             v_offsets = tuple(map(operator.neg, v_offsets))
         return Offset3DTuple(v_offsets)
 
-    def _check_previous_offline_thread(self):
+    def _check_previous_offline_thread(self, cause: str):
         cur_off = self._offline_thread
         if cur_off is not None:
             # protection, if we need more than 1 executing thread at the same time then we need a list to retain the
             # threads instead of only one of them.
             perf_now = time.perf_counter()
             if cur_off.is_alive():
-                logger.warning("Previous offline thread still alive: %s, join might block ~long", cur_off)
+                logger.warning("%s request but previous offline thread still alive: %s, join might block ~long",
+                               cause, cur_off)
             cur_off.join()
             self._offline_thread = None
             logger.verbose("Waited %.1fs to join previous offline thread", time.perf_counter() - perf_now)
 
     def perform_segmentation(self, configuration: SegmentationConfiguration):
         logger.info("performing segmentation on %s", configuration)
-        self._check_previous_offline_thread()
-        self._intersession_block = IntersessionBlock(configuration=configuration,
-                                                     parts_count=self._algorithm.part_count)
+        self._check_previous_offline_thread("perform_segmentation")
+        intersession_block = self._intersession_block = IntersessionBlock(
+            configuration=configuration, parts_count=self._algorithm.part_count)
         for _ in range(self._offline_queue.camera_count):
-            self._intersession_block.pose_data_list.append([])
-            self._intersession_block.pose_data_dict.append({})
+            intersession_block.pose_data_list.append([])
+            intersession_block.pose_data_dict.append({})
 
         self._send_message(InferenceCommandMessageKind.ProcessOffline)
         # ProcessOffline is not anymore used.
@@ -282,7 +283,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # and also reset its offline read queue side:
         # time.sleep(0.5)
         # Not anymore needed, see video_capture and below __feed_intersession_analysis.
-        self._offline_thread = Thread(target=self._feed_intersession_analysis, name="feed_intersession_analysis")
+        self._offline_thread = Thread(
+            args=(intersession_block,),
+            target=self._feed_intersession_analysis, name="feed_intersession_analysis",)
         # but then, wait again a bit of more time.
         # this is to give some time to the monitor data queue thread, to get/detect the end of recording in progress,
         # and switch to offline processing request (which is coming indirectly from the pose process),
@@ -294,9 +297,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
     def perform_detection(self, configuration: DetectionConfiguration):
         logger.info("performing detection analysis on %s", configuration)
-        self._check_previous_offline_thread()
-        self._intersession_detection = IntersessionDetection(configuration)
-        self._offline_thread = Thread(target=self._intersession_process, name="intersession_process")
+        self._check_previous_offline_thread("perform_detection")
+        intersession_detection = self._intersession_detection = IntersessionDetection(configuration)
+        project = self._project
+        self._offline_thread = Thread(target=self._intersession_process, name="intersession_process",
+                                      args=(project, intersession_detection,))
         self._offline_thread.start()
 
     def perform_live(self):
@@ -810,8 +815,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
                     else:
                         assert ib is None and pose_data is not None
-                        if __debug__:
-                            logger.warning("invalid state: ib=None but pose_data_len=%s", len(pose_data))
+                        logger.critical("invalid state: ib is None but pose_data_len=%s", len(pose_data))
 
             except (KeyboardInterrupt, SystemExit):
                 raise
@@ -821,13 +825,12 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
         # end while self._is_running
 
-    def _feed_intersession_analysis(self):
+    def _feed_intersession_analysis(self, intersession_block):
         # NB: feed intersession analysis (thread) has currently no way of being "interrupted/stopped",
         # if pose process goes away (when exit) then this will hang up to timeout: currently 15s,
         # see _put_intersession_frame().
-        intersession_block = self._intersession_block  # might prevent overwrite by other thread
         try:
-            self.__feed_intersession_analysis()
+            self.__feed_intersession_analysis(intersession_block)
         except Exception as err:
             logger.exception("_feed_intersession_analysis: error: %s", err)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError, context=str(err))
@@ -836,9 +839,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         finally:
             logger.info("feed intersession finished. intersession_block=%s",
                         intersession_block)
+            # DO NOT:
             # self._intersession_block = None
+            # it is/must be done by monitor data thread
 
-    def __feed_intersession_analysis(self):
+    def __feed_intersession_analysis(self, intersession_block):
         cams = (self._project.camera_1, self._project.camera_2)
         n_cams = len(cams)
         cur_session_nbr = self._project.session.value
@@ -1035,9 +1040,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         logger.error("cam %s: timeout waiting offline_queue has space", cam_index)
         return False
 
-    def _intersession_process(self):
+    def _intersession_process(self, project, intersession_detection):
         try:
-            result = intersession_process(self._project)
+            result = intersession_process(project)
         except Exception as err:
             logger.exception("Error processing intersession: %s", err)
             processed_ok = False
@@ -1045,6 +1050,4 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             processed_ok = True
             self.detection_result_ready(result)
 
-        self._intersession_detection.configuration.complete(self._intersession_detection.configuration.nonce,
-                                                            processed_ok)
-        # self._intersession_block = None
+        intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
