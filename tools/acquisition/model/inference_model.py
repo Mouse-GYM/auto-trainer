@@ -265,8 +265,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             logger.verbose("Waited %.1fs to join previous offline thread", time.perf_counter() - perf_now)
 
     def perform_segmentation(self, configuration: SegmentationConfiguration):
-        logger.info("performing segmentation on %s", configuration)
         self._check_previous_offline_thread("perform_segmentation")
+        logger.info("performing segmentation on %s", configuration)
         intersession_block = self._intersession_block = IntersessionBlock(
             configuration=configuration, parts_count=self._algorithm.part_count)
         for _ in range(self._offline_queue.camera_count):
