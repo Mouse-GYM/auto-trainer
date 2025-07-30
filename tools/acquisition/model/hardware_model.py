@@ -282,15 +282,15 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             t_diff = perf_now - self._pending_command_perf_now
             if t_diff < 5:
                 return None
-            logger.notice("pending_command %s for too long, giving up on wait acknowledge to process cmd=%s",
+            logger.notice("but pending_command %s for too long, giving up on wait acknowledge to process cmd=%s",
                           self.pending_command, cmd)
 
         token = uuid4()
-
         if self._send_command(device, cmd, data, token):
             self.pending_command = cmd
             self._pending_command_perf_now = perf_now
             self.pending_command_token = token  # last
+            logger.verbose("send_command cmd=%s token=%s", cmd, token)
             return token
         else:
             return None
