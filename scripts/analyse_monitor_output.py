@@ -28,21 +28,28 @@ def process_path(
     m_timer = mock.patch(f"{LoadCellMonitor.__module__}._timer_load_cell_engaged")
     m_timer.start()  # this disables the "interactive/live" "timeout" timers
     t0 = None
+    tot_thrashed = 0
+    t_start_thrashing = 0
 
     def handle_prop_changed(name, new_value, prev_value):
-        nonlocal prev_ts_changed
+        nonlocal prev_ts_changed, tot_thrashed, t_start_thrashing
         prop_prev = props.get(name, None)
         if prop_prev is None or prop_prev != new_value:
             prev_changed = prev_ts_changed.get(name, None)
             if prev_changed is None:
                 prev_changed = ts
-            if name != "is_thrashing_detected" or new_value:
+            if name != "is_thrashing_detected" or not new_value:
                 print(f"T={ts - t0:.2f} {name}: {prev_value} -> {ts - prev_changed:.2f}s -> {new_value} ; w={weight:.1f}")
                 # if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
                 #     print(f"real_T={monitor._t_start_was_active - t0:.2f}")
             # print(ts, ts - prev_ts_changed, name, new_value, weight)
             prev_ts_changed[name] = ts
         props[name] = new_value
+        if name == monitor.IS_THRASHING_DETECTED_PROPERTY:
+            if new_value:
+                t_start_thrashing = ts
+            else:
+                tot_thrashed += ts - (t0 if t_start_thrashing is None else t_start_thrashing)
 
     monitor.property_changed += handle_prop_changed
 
@@ -78,6 +85,8 @@ def process_path(
             if ts - prev > warn_diff_threshold:
                 print(f"diff={diff:.3f} ts={ts} ; prev={prev}")
         prev = ts
+    # end while True
+    print(f"tot_thrashed={tot_thrashed:.2f}s")
 
 
 def main():

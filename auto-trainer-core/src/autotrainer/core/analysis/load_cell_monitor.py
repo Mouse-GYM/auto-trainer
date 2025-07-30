@@ -201,6 +201,8 @@ class LoadCellMonitor(ObservableObject):
                 self._cur_ptp_count = 0
                 # to makes longer thrashing period we could only keep it on min_ptp_change_count value,
                 # and rely on below logic
+                self._t_last_ptp_check += cfg.thrashing_var_max_delay
+                # otherwise thrashing ON period does not last very long.
             else:
                 # put back next check
                 self._t_last_ptp_check += cfg.thrashing_var_max_delay if detected1 and detected2 else cfg.thrashing_var_min_delay
