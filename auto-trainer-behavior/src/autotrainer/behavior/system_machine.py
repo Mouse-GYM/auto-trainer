@@ -62,6 +62,8 @@ class SystemMachine(StateMachine):
 
         self._project_info = project_info
 
+        self._timer1 = None  # misc timer
+
         algorithm = self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
         algorithm.project = project_info
         algorithm.session_ending += self._session_ended
@@ -335,8 +337,12 @@ class SystemMachine(StateMachine):
             self._tunnel_device.update_head_magnet_intensity(position)
 
     def _pellet_loading(self):
-        self._timer1 = _pellet_loading_timer(2, self._consider_end_session)
-        self._timer1.start()
+        prev_t1 = self._timer1
+        if prev_t1 is None or prev_t1.finished:
+            self._timer1 = _pellet_loading_timer(2, self._consider_end_session)
+            self._timer1.start()
+        else:
+            logger.debug("%s: prev timer not finished ; prev_timer=%s", self, prev_t1)
 
     def _pellet_sending(self):
         if self.state == SystemState.tunnel:
