@@ -60,19 +60,19 @@ class IntersessionMachine(StateMachine):
 
     def after_enter_segmentation(self):
         self.events.on_analysis_started()
-        self._segmentation_configuration = SegmentationConfiguration(nonce=secrets.token_hex(),
+        segment_config = self._segmentation_configuration = SegmentationConfiguration(nonce=secrets.token_hex(),
                                                                      session_index=self._project_info.session.value,
                                                                      complete=self._segmentation_complete)
         EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationBegin,
-                                                  context=self._segmentation_configuration.nonce)
-        self._inference.perform_segmentation(self._segmentation_configuration)
+                                                  context=segment_config.nonce)
+        self._inference.perform_segmentation(segment_config)
 
     def after_enter_detection(self):
-        self._detection_configuration = DetectionConfiguration(nonce=secrets.token_hex(),
+        detect_config = self._detection_configuration = DetectionConfiguration(nonce=secrets.token_hex(),
                                                                complete=self._detection_complete)
         EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionBegin,
                                                   context=self._segmentation_configuration.nonce)
-        self._inference.perform_detection(self._detection_configuration)
+        self._inference.perform_detection(detect_config)
 
     def after_end_analysis(self):
         self.events.on_analysis_ended()
@@ -99,31 +99,35 @@ class IntersessionMachine(StateMachine):
         return can_do_detection
 
     def _segmentation_complete(self, nonce: str, success: bool):
-        if self._segmentation_configuration.nonce != nonce:
-            logger.error("mismatched segmentation nonce")
+        segment_config = self._segmentation_configuration
+        if segment_config.nonce != nonce:
+            logger.error("mismatched segmentation nonce: passed=%s cur_seg_config=%s success=%s",
+                         nonce, segment_config, success)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationNonceMismatch,
-                                                      context=f"{self._segmentation_configuration.nonce}:{nonce}")
+                                                      context=f"{segment_config.nonce}:{nonce}")
             self.end_analysis()
         else:
             if success:
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationEnd)
                 self.perform_detection()
             else:
-                logger.error("perform segmentation failed")
+                logger.error("perform segmentation failed. config=%s", segment_config)
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError)
                 self.end_analysis()
 
         self._segmentation_configuration = None
 
     def _detection_complete(self, nonce: str, success: bool):
-        if self._detection_configuration.nonce != nonce:
-            logger.error("mismatched detection nonce")
+        det_config = self._detection_configuration
+        if det_config.nonce != nonce:
+            logger.error("mismatched detection nonce: passed=%s cur_config=%s success=%s",
+                         nonce, det_config, success)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionNonceMismatch,
-                                                      context=f"{self._detection_configuration.nonce}:{nonce}")
+                                                      context=f"{det_config.nonce}:{nonce}")
             self.end_analysis()
         else:
             if not success:
-                logger.error("perform detection failed")
+                logger.error("perform detection failed. det_config=%s", det_config)
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionError)
             else:
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionEnd)

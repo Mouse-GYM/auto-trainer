@@ -227,7 +227,7 @@ class PoseProcess(Process):
                 prev_mode = self._mode
 
             # should be removed once more confident
-            if i_q is self._offline_input_queue and t_now > t_last_data + 10:
+            if i_q is self._offline_input_queue and t_now > t_last_data + 15:
                 logger.warning("auto-switching to online")
                 self._set_process_live()
                 reset_locals()

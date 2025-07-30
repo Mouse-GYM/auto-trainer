@@ -255,13 +255,15 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         if cur_off is not None:
             # protection, if we need more than 1 executing thread at the same time then we need a list to retain the
             # threads instead of only one of them.
+            perf_now = time.perf_counter()
             if cur_off.is_alive():
                 logger.warning("Previous offline thread still alive: %s, join might block ~long", cur_off)
             cur_off.join()
             self._offline_thread = None
+            logger.verbose("Waited %.1fs to join previous offline thread", time.perf_counter() - perf_now)
 
     def perform_segmentation(self, configuration: SegmentationConfiguration):
-        logger.info("performing segmentation")
+        logger.info("performing segmentation on %s", configuration)
         self._check_previous_offline_thread()
         self._intersession_block = IntersessionBlock(configuration=configuration,
                                                      parts_count=self._algorithm.part_count)
@@ -290,7 +292,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._offline_thread.start()
 
     def perform_detection(self, configuration: DetectionConfiguration):
-        logger.info("performing detection analysis")
+        logger.info("performing detection analysis on %s", configuration)
         self._check_previous_offline_thread()
         self._intersession_detection = IntersessionDetection(configuration)
         self._offline_thread = Thread(target=self._intersession_process, name="intersession_process")
@@ -822,13 +824,16 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # NB: feed intersession analysis (thread) has currently no way of being "interrupted/stopped",
         # if pose process goes away (when exit) then this will hang up to timeout: currently 15s,
         # see _put_intersession_frame().
+        intersession_block = self._intersession_block  # might prevent overwrite by other thread
         try:
             self.__feed_intersession_analysis()
         except Exception as err:
             logger.exception("_feed_intersession_analysis: error: %s", err)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError, context=str(err))
             self._send_message(InferenceCommandMessageKind.ProcessLive)
-            self._intersession_block.configuration.complete(self._intersession_block.configuration.nonce, False)
+            intersession_block.configuration.complete(intersession_block.configuration.nonce, False)
+        finally:
+            logger.info("feed intersession finished. ib=%s", intersession_block)
             self._intersession_block = None
 
     def __feed_intersession_analysis(self):
