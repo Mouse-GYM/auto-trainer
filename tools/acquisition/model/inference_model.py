@@ -698,6 +698,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         # the pose process has switched to its online queue at this point
                         for cdx in range(self._offline_queue.camera_count):
                             self._offline_queue.reset_writer(cdx)
+                        _close_fhs(cams_frame_idx_fhs)  # always
                         if ib is not None:
                             fill_live_end = True
                             for cdx, pdl, pdd, cur_h5_idx, cur_h5_dss in zip(
@@ -768,7 +769,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             ib.configuration.complete(ib.configuration.nonce, success)
                             self._intersession_block = None
                             cams_read_h5_dss = []
-                            _close_fhs(cams_frame_idx_fhs)
 
                     elif ib is not None:
                         assert pose_data is not None
