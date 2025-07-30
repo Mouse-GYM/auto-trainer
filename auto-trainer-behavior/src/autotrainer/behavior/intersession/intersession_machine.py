@@ -59,10 +59,11 @@ class IntersessionMachine(StateMachine):
         self._project_info = project
 
     def after_enter_segmentation(self):
-        self.events.on_analysis_started()
-        segment_config = self._segmentation_configuration = SegmentationConfiguration(nonce=secrets.token_hex(),
-                                                                     session_index=self._project_info.session.value,
-                                                                     complete=self._segmentation_complete)
+        self.events.on_analysis_started()  # should maybe conditioned by lower level lock too
+        segment_config = SegmentationConfiguration(nonce=secrets.token_hex(),
+                                                   session_index=self._project_info.session.value,
+                                                   complete=lambda nonce, success:
+                                                        self._segmentation_complete(nonce, success, segment_config=segment_config))
         EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationBegin,
                                                   context=segment_config.nonce)
         self._inference.perform_segmentation(segment_config)
@@ -98,8 +99,8 @@ class IntersessionMachine(StateMachine):
                     can_do_detection, p, i, d)
         return can_do_detection
 
-    def _segmentation_complete(self, nonce: str, success: bool):
-        segment_config = self._segmentation_configuration
+    def _segmentation_complete(self, nonce: str, success: bool, *, segment_config: SegmentationConfiguration):
+        # segment_config = self._segmentation_configuration
         if segment_config.nonce != nonce:
             logger.error("mismatched segmentation nonce: passed=%s cur_seg_config=%s success=%s",
                          nonce, segment_config, success)
