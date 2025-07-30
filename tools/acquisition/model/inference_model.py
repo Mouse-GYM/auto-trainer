@@ -266,7 +266,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
     def perform_segmentation(self, configuration: SegmentationConfiguration):
         self._check_previous_offline_thread("perform_segmentation")
-        logger.info("performing segmentation on %s", configuration)
+        logger.info("performing segmentation on %s", configuration, stack_info=True)
         intersession_block = self._intersession_block = IntersessionBlock(
             configuration=configuration, parts_count=self._algorithm.part_count)
         for _ in range(self._offline_queue.camera_count):
