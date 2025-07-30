@@ -115,8 +115,13 @@ class AppModel(ObservableObject):
 
         self._notes = ""
 
-        self._models: List[ProjectDependentProtol] = [self._left_camera, self._right_camera, self._top_camera,
-                                                             self._inference, self._behavior]
+        self._models: List[ProjectDependentProtol] = [
+            self._left_camera,
+            self._right_camera,
+            self._top_camera,
+            self._inference,
+            self._behavior,
+        ]
 
         self._animals: List[AnimalSubject] = []
 

@@ -238,7 +238,7 @@ class VideoCapture(Process):
                 self._video_detection = VideoDetection(self._project_info, self._detection_attrs)
                 self._video_detection.start()
 
-            logger.debug("video_detection: %s", self._video_detection)
+            logger.verbose("%s: video_detection: %s", self._name, self._video_detection)
             self._set_status(CaptureProcessStatus.RUNNING)
 
             return True
