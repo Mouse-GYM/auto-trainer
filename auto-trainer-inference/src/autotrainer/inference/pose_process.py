@@ -122,7 +122,7 @@ class PoseProcess(Process):
             self._msg_queue.put((kind, context))
 
     def _set_process_live(self):
-        logger.notice("processing live")
+        logger.notice("setting processing live")
         self._input_queue = self._live_input_queue
         self._mode = InferenceMode.Live
         self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
@@ -135,7 +135,6 @@ class PoseProcess(Process):
         # so that we process entirely the live queue up to eof_recording,
         # handling all possible live recorded frames.
         self._mode = InferenceMode.Offline
-        self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
 
     def _wait_for_start(self) -> bool:
         """
@@ -240,18 +239,22 @@ class PoseProcess(Process):
                         logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices)
 
                     if (
-                        numpy.isin(frames_indices[:, -1], [
+                        i_q is not self._live_input_queue
+                        and numpy.isin(frames_indices[:, -1], [
                             FrameIndexCategory.ONLINE_NO_RECORDING, FrameIndexCategory.SWITCH_TO_ONLINE]).any()
+                        and not numpy.isin(frames_indices[:, -1], [
+                            FrameIndexCategory.SWITCH_TO_OFFLINE_MODE, FrameIndexCategory.EOF_RECORDING]).any()
                     ):
-                        if i_q is not self._live_input_queue:
-                            self._set_process_live()
-                            reset_locals()
+                        self._set_process_live()
+                        reset_locals()
                     # elif required:
                     elif (
-                        i_q is self._live_input_queue and (
-                        frames_indices[:, -1] == FrameIndexCategory.EOF_RECORDING
+                        i_q is not self._offline_input_queue
+                        and numpy.isin(frames_indices[:, -1], [
+                            FrameIndexCategory.EOF_RECORDING, FrameIndexCategory.SWITCH_TO_OFFLINE_MODE]).any()
+                        and not numpy.isin(frames_indices[:, -1], [FrameIndexCategory.SWITCH_TO_ONLINE]).any()
                         # and certainly not (frames_indices[:, -1] == SWITCH_TO_ONLINE).any() ... or any such
-                    ).any()):
+                    ):
                         self._input_queue = self._offline_input_queue
                         self._mode = InferenceMode.Offline
                         logger.notice("Switched to offline queue: %s", frames_indices)
