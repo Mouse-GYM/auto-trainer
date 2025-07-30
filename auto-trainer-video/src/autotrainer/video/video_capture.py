@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import queue
 import time
+import os
 from dataclasses import dataclass
 from queue import Queue
 from enum import Enum, IntEnum
@@ -191,9 +192,11 @@ class VideoCapture(Process):
         self._set_status(CaptureProcessStatus.INITIALIZED)
 
     def run(self):
-
         from autotrainer.core.logging import setup_logging
-        setup_logging(root_level=logging.DEBUG)
+        log_level = os.getenv("VIDEO_CAPTURE_LOG_LEVEL", verboselogs.VERBOSE)
+        if isinstance(log_level, str) and log_level.isdigit():
+            log_level = int(log_level)
+        setup_logging(root_level=log_level)
 
         logger.info("%s: started running", self)
 
@@ -201,7 +204,6 @@ class VideoCapture(Process):
             return
 
         self._run_capture_loop()
-
         self._terminate_capture_loop()
 
     def _set_status(self, status: CaptureProcessStatus):
