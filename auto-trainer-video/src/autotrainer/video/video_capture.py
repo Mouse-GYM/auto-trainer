@@ -193,7 +193,7 @@ class VideoCapture(Process):
     def run(self):
 
         from autotrainer.core.logging import setup_logging
-        setup_logging(root_level=verboselogs.VERBOSE)
+        setup_logging(root_level=logging.DEBUG)
 
         logger.info("%s: started running", self)
 
