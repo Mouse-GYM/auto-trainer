@@ -338,11 +338,11 @@ class SystemMachine(StateMachine):
 
     def _pellet_loading(self):
         prev_t1 = self._timer1
-        if prev_t1 is None or prev_t1.finished:
+        if prev_t1 is None or prev_t1.finished.is_set():
             self._timer1 = _pellet_loading_timer(2, self._consider_end_session)
             self._timer1.start()
         else:
-            logger.debug("%s: prev timer not finished ; prev_timer=%s", self, prev_t1)
+            logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s", self, prev_t1)
 
     def _pellet_sending(self):
         if self.state == SystemState.tunnel:
