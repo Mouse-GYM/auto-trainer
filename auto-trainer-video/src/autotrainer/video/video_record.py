@@ -115,8 +115,8 @@ class VideoRecord(Thread):
                 # if frame is None or when is None:
                 if len(queue_list) == 0:
                     # Indicator for trigger disabled
-                    logger.info("Closing video file: tot frames=%s", tot_written)
                     self._close_writers()
+                    logger.info("Closed video file: tot frames written: %s", tot_written)
                     tot_written = 0
                     continue
 
@@ -125,7 +125,6 @@ class VideoRecord(Thread):
                         if self._video_writer is None:
                             # If triggered, may not be configured yet for this batch
                             self._prepare_writers()
-                            # tot_written = 0
 
                         if len(numpy.shape(frame)) < 3 or numpy.shape(frame)[2] == 1:
                             self._video_writer.write(numpy.tile(frame[:, :, numpy.newaxis], (1, 1, 3)))
@@ -184,7 +183,7 @@ class VideoRecord(Thread):
         self._prepare_image_capture()
 
     def _close_writers(self):
-        logger.info("%s: closing writers...", self)
+        logger.verbose("%s: closing writers...", self)
         self._close_image_writer()
         self._close_video_writer()
 

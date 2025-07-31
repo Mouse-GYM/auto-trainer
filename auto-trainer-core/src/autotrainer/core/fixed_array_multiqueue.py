@@ -9,11 +9,12 @@ from typing import Tuple, List, Optional
 
 import numpy
 
+from autotrainer.core import get_verbose_logger
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class FixedArrayMultiQueue:
@@ -48,6 +49,11 @@ class FixedArrayMultiQueue:
             mp_ctx = get_mp_ctx()
 
         self._name = name
+        self._barrier = mp_ctx.Barrier(cam_count)
+        self._semaphore = mp_ctx.Semaphore(cam_count)
+        for _ in range(cam_count):
+            self._semaphore.acquire()  # pre-acquire all
+        self._event = mp_ctx.Event()
         # indexing: [buffer][camera][batch_frame]
         self._buffers: List[List[List[RawArray]]] = []
 
@@ -100,6 +106,18 @@ class FixedArrayMultiQueue:
         return f"{self.__class__.__name__}({self._name!r})"
 
     @property
+    def barrier(self) -> multiprocessing.Barrier:
+        return self._barrier
+
+    @property
+    def semaphore(self) -> multiprocessing.Semaphore:
+        return self._semaphore
+
+    @property
+    def event(self):
+        return self._event
+
+    @property
     def depth(self):
         return self._depth
 
@@ -130,7 +148,7 @@ class FixedArrayMultiQueue:
         memoryview(self._is_dirty[cam_idx]).cast("B")[:] = zero
         self._overflow_count = 0
         self._put_count = 0
-        logger.debug("%s: cam-%s reset to 0", self, cam_idx)
+        logger.debug("%s: cam-%s writer index reset to 0", self, cam_idx)
 
     def reset_reader(self):
         self._read_index = 0
@@ -142,6 +160,26 @@ class FixedArrayMultiQueue:
             if not self._is_dirty[cdx][frame_idx]:
                 return False
         return True
+
+    def get_all_cam_max_frame_idx(self, camera_idx: int):
+        b = numpy.frombuffer(
+            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
+        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
+        all_max = b.max()
+        cam_max = b[camera_idx].max()
+        return all_max, cam_max
+
+    def get_cam_frame_idx(self, camera_idx: int):
+        b = numpy.frombuffer(
+            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
+        ).reshape((self._cam_count, self._depth, self._frames_per_camera))[camera_idx]
+        return b.max()
+
+    def get_max_frame_idx(self):
+        b = numpy.frombuffer(
+            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
+        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
+        return b.max()
 
     def put(self, content: numpy.ndarray, camera: int, frame_idx: Optional[int], allow_overflow: bool = True) -> BufferResult:
         buffer_index = self._buffer_index[camera]  # 0 ... up to depth - 1
@@ -244,7 +282,9 @@ class FixedArrayMultiQueue:
         t_end = time.time() + timeout
         cur_batch_idx = self._batch_index[cam_idx]
         if cur_batch_idx != 0:
-            for _ in range(self._frames_per_camera - cur_batch_idx):
+            tot_to_pad = self._frames_per_camera - cur_batch_idx
+            logger.verbose("padding cam-%s with %s %s frames", cam_idx, tot_to_pad, pad_idx)
+            for _ in range(tot_to_pad):
                 while self.put(frame, cam_idx, pad_idx, allow_overflow=False) != BufferResult.Ok:
                     if time.time() > t_end:
                         raise RuntimeError(f"timeout waiting space for cam-{cam_idx} in {self}")
