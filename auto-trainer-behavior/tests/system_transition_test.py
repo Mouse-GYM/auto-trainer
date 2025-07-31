@@ -49,7 +49,9 @@ def test_enter_exit_transitions(machine, mock_system):
     with mock_system.mock_perform_segmentation() as m_perf_segm:
         machine.exit_tunnel()
 
-    assert m_perf_segm.call_args_list == [mock.call(machine.intersession._segmentation_configuration)]
+    assert m_perf_segm.call_args_list == [
+        mock.call(machine.intersession._segmentation_configuration)
+    ]
 
     # Test with intersession enabled.
     assert machine.state == SystemState.intersession

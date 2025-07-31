@@ -63,8 +63,8 @@ class IntersessionMachine(StateMachine):
                                                    session_index=self._project_info.session.value,
                                                    complete=lambda nonce, success:
                                                         self._segmentation_complete(nonce, success, segment_config=segment_config))
-        segment_config = self._inference.perform_segmentation(segment_config)
-        if segment_config is not None:
+        res = self._inference.perform_segmentation(segment_config)
+        if res is not None:
             self._segmentation_configuration = segment_config
             self.events.on_analysis_started()  # should maybe conditioned by lower level lock too
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationBegin,
@@ -76,8 +76,8 @@ class IntersessionMachine(StateMachine):
             complete=lambda nonce, success:
                 self._detection_complete(nonce, success, detection_config=detection_config)
         )
-        detection_config = self._inference.perform_detection(detection_config)
-        if detection_config is not None:
+        res = self._inference.perform_detection(detection_config)
+        if res is not None:
             self._detection_configuration = detection_config
             EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionBegin,
                                                       context=self._segmentation_configuration.nonce)
