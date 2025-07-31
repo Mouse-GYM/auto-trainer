@@ -107,7 +107,6 @@ class IntersessionMachine(StateMachine):
         return can_do_detection
 
     def _segmentation_complete(self, nonce: str, success: bool, *, segment_config: SegmentationConfiguration):
-        # segment_config = self._segmentation_configuration
         if segment_config.nonce != nonce:
             logger.error("mismatched segmentation nonce: passed=%s cur_seg_config=%s success=%s",
                          nonce, segment_config, success)
