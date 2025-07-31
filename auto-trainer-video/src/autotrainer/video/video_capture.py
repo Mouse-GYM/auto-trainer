@@ -180,7 +180,7 @@ class VideoCapture(Process):
         self._is_running = True
         self._is_capturing = False
         self._camera = None
-        self._record = None
+        self._record: VideoRecord = None
         self._record_queue: Optional[Queue] = None
         self._record_queue_list: List = []
 
@@ -414,6 +414,7 @@ class VideoCapture(Process):
                                 rec_q_list = self._record_queue_list = []
                             rec_q.put([])
                             record_start_frame_idx = None
+                            self._record.close_event.wait()
                     elif not self._is_record_active:
                         if not _primary_acquire():
                             if frame is not frame_already_put:
@@ -427,6 +428,7 @@ class VideoCapture(Process):
                                 self._record_queue.put(rec_q_list)
                                 rec_q_list = self._record_queue_list = []
                             rec_q.put([])
+                            self._record.close_event.wait()
                             #
                             self._sync_barrier()
                             # pad:

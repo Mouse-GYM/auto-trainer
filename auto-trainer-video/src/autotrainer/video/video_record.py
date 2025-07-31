@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -80,6 +81,11 @@ class VideoRecord(Thread):
 
         self._interval_mode = ProjectInterval.NONE
         self._interval_reference = -1
+        self._close_event = threading.Event()
+
+    @property
+    def close_event(self):
+        return self._close_event
 
     def run(self):
         logger.notice("%s: running", self)
@@ -107,7 +113,7 @@ class VideoRecord(Thread):
             #     self._close_writers()
 
             try:
-                queue_list = self._input_queue.get(timeout=0.01)
+                queue_list = self._input_queue.get(timeout=0.005)
             except Empty:
                 continue
 
@@ -116,6 +122,8 @@ class VideoRecord(Thread):
                 if len(queue_list) == 0:
                     # Indicator for trigger disabled
                     self._close_writers()
+                    self._close_event.set()
+                    # self._input_queue.put(None)
                     logger.info("Closed video file: tot frames written: %s", tot_written)
                     tot_written = 0
                     continue
@@ -123,6 +131,7 @@ class VideoRecord(Thread):
                 for frame, when in queue_list:
                     if self._is_video_enabled:
                         if self._video_writer is None:
+                            self._close_event.clear()
                             # If triggered, may not be configured yet for this batch
                             self._prepare_writers()
 
