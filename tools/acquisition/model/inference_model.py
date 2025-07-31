@@ -267,12 +267,12 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
     def perform_segmentation(self, configuration: SegmentationConfiguration):
         with self._thread_lock:
-            self._perform_segmentation(configuration)
+            return self._perform_segmentation(configuration)
 
     def _perform_segmentation(self, configuration: SegmentationConfiguration):
         if self._intersession_block is not None:
             logger.warning("_intersession_block not None, segmentation already started")
-            return
+            return None
         self._check_previous_offline_thread("perform_segmentation")
         logger.info("performing segmentation on %s", configuration, stack_info=True)
         intersession_block = self._intersession_block = IntersessionBlock(
@@ -302,15 +302,16 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # NB: this might not be enough though, we probably should use a threading event (with a timeout eventually)
         # Now using thread event.
         self._offline_thread.start()
+        return configuration
 
     def perform_detection(self, configuration: DetectionConfiguration):
         with self._thread_lock:
-            if self._intersession_detection is not None:
-                logger.warning("_intersession_detection not None, skipping perform_detection")
-                return
-            self._perform_detection(configuration)
+            return self._perform_detection(configuration)
 
     def _perform_detection(self, configuration: DetectionConfiguration):
+        if self._intersession_detection is not None:
+            logger.warning("_intersession_detection not None, skipping perform_detection")
+            return None
         logger.info("performing detection analysis on %s", configuration)
         self._check_previous_offline_thread("perform_detection")
         intersession_detection = self._intersession_detection = IntersessionDetection(configuration)
@@ -318,6 +319,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._offline_thread = Thread(target=self._intersession_process, name="intersession_process",
                                       args=(project, intersession_detection,))
         self._offline_thread.start()
+        return configuration
 
     def perform_live(self):
         self.set_inference_to_online()

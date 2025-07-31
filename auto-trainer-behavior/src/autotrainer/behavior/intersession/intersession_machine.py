@@ -59,21 +59,25 @@ class IntersessionMachine(StateMachine):
         self._project_info = project
 
     def after_enter_segmentation(self):
-        self.events.on_analysis_started()  # should maybe conditioned by lower level lock too
         segment_config = SegmentationConfiguration(nonce=secrets.token_hex(),
                                                    session_index=self._project_info.session.value,
                                                    complete=lambda nonce, success:
                                                         self._segmentation_complete(nonce, success, segment_config=segment_config))
-        EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationBegin,
-                                                  context=segment_config.nonce)
-        self._inference.perform_segmentation(segment_config)
+        segment_config = self._inference.perform_segmentation(segment_config)
+        if segment_config is not None:
+            self._segmentation_configuration = segment_config
+            self.events.on_analysis_started()  # should maybe conditioned by lower level lock too
+            EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationBegin,
+                                                      context=segment_config.nonce)
 
     def after_enter_detection(self):
-        detect_config = self._detection_configuration = DetectionConfiguration(nonce=secrets.token_hex(),
+        detect_config = DetectionConfiguration(nonce=secrets.token_hex(),
                                                                complete=self._detection_complete)
-        EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionBegin,
-                                                  context=self._segmentation_configuration.nonce)
-        self._inference.perform_detection(detect_config)
+        detect_config = self._inference.perform_detection(detect_config)
+        if detect_config is not None:
+            self._detection_configuration = detect_config
+            EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionBegin,
+                                                      context=self._segmentation_configuration.nonce)
 
     def after_end_analysis(self):
         self.events.on_analysis_ended()
