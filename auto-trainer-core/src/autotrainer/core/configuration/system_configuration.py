@@ -24,6 +24,7 @@ from .inference_configuration import InferenceConfiguration, inference_configura
     inference_configuration_constructor
 from .persistence_configuration import PersistenceConfiguration, persistence_configuration_representer, \
     persistence_configuration_constructor
+from ..project.project_info import DATE_FORMAT, TIME_FORMAT
 
 logger = get_verbose_logger(__name__)
 
@@ -77,9 +78,10 @@ class SystemConfiguration:
             configuration = yaml.load(data, SystemConfigurationSafeLoader)
 
         if version != SystemConfiguration.version and file_path is not None:
-            now = datetime.now(tz=timezone.utc)
+            now = datetime.now()
+            now_str = now.strftime(f"{DATE_FORMAT}_{TIME_FORMAT}")
             new_p = file_path.parent.joinpath(
-                f"{file_path.stem}.v{version}-{now.isoformat(timespec='minutes')}{file_path.suffix}")
+                f"{file_path.stem}_v{version}_{now_str}{file_path.suffix}")
             logger.notice("Detected config version change/missmatch, saving old config to %s,"
                           " and replacing with new after.", new_p)
             shutil.copy2(file_path, new_p)
