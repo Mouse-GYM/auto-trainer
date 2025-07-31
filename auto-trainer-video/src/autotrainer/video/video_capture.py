@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import queue
 import time
 import os
@@ -97,7 +98,7 @@ class CaptureAttrs:
     """
     Attributes for VideoCapture configuration
     """
-    command_queue: Queue
+    command_queue: multiprocessing.Queue
     """Input queue for submitting commands to the capture process"""
 
     status: Value
