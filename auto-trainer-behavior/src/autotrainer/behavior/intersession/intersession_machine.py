@@ -71,11 +71,14 @@ class IntersessionMachine(StateMachine):
                                                       context=segment_config.nonce)
 
     def after_enter_detection(self):
-        detect_config = DetectionConfiguration(nonce=secrets.token_hex(),
-                                                               complete=self._detection_complete)
-        detect_config = self._inference.perform_detection(detect_config)
-        if detect_config is not None:
-            self._detection_configuration = detect_config
+        detection_config = DetectionConfiguration(
+            nonce=secrets.token_hex(),
+            complete=lambda nonce, success:
+                self._detection_complete(nonce, success, detection_config=detection_config)
+        )
+        detection_config = self._inference.perform_detection(detection_config)
+        if detection_config is not None:
+            self._detection_configuration = detection_config
             EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionBegin,
                                                       context=self._segmentation_configuration.nonce)
 
@@ -122,17 +125,16 @@ class IntersessionMachine(StateMachine):
 
         self._segmentation_configuration = None
 
-    def _detection_complete(self, nonce: str, success: bool):
-        det_config = self._detection_configuration
-        if det_config.nonce != nonce:
+    def _detection_complete(self, nonce: str, success: bool, *, detection_config: DetectionConfiguration):
+        if detection_config.nonce != nonce:
             logger.error("mismatched detection nonce: passed=%s cur_config=%s success=%s",
-                         nonce, det_config, success)
+                         nonce, detection_config, success)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionNonceMismatch,
-                                                      context=f"{det_config.nonce}:{nonce}")
+                                                      context=f"{detection_config.nonce}:{nonce}")
             self.end_analysis()
         else:
             if not success:
-                logger.error("perform detection failed. det_config=%s", det_config)
+                logger.error("perform detection failed. det_config=%s", detection_config)
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionError)
             else:
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionEnd)
