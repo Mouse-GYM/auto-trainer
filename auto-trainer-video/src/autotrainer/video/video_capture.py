@@ -418,24 +418,14 @@ class VideoCapture(Process):
                         # is not big issue to sleep here given this is not hot code path
 
                         sync_barrier()
-                        cams_dirty = [
-                            sum(map(int, net_q.get_dirty(cdx)))
-                            for cdx in range(net_q.camera_count)
-                        ]
+                        d = net_q.get_cam_missing_frames(self._camera_idx)
                         sync_barrier()
 
-                        max_dirty = max(cams_dirty)
-                        reminder_max_dirty = max_dirty % net_q.batch_size
-                        max_dirty += net_q.batch_size - reminder_max_dirty
-                        d = max_dirty - cams_dirty[self._camera_idx]
-                        logger.debug("padding %s times ; cams_dirty=%s", d, cams_dirty)
+                        logger.debug("padding %s times", d)
                         for _ in range(d):
-                            while net_q_put(empty_frame, self._camera_idx,
-                                            FrameIndexCategory.PADDING) != BufferResult.Ok:
-                                time.sleep(0.001)
+                            net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING)
                         for _ in range(self._network_queue.frames_per_camera):
-                            while net_q_put(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING) != BufferResult.Ok:
-                                time.sleep(0.001)
+                            net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING)
 
                         sync_barrier()
 

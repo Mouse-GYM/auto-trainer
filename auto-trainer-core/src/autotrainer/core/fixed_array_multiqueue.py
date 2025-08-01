@@ -161,6 +161,17 @@ class FixedArrayMultiQueue:
                 return False
         return True
 
+    def get_cam_missing_frames(self, cam_idx: int):
+        cams_dirty = [
+            sum(map(int, self.get_dirty(cdx)))
+            for cdx in range(self.camera_count)
+        ]
+        max_dirty = max(cams_dirty)
+        reminder_max_dirty = max_dirty % self.batch_size
+        max_dirty += self.batch_size - reminder_max_dirty
+        d = max_dirty - cams_dirty[cam_idx]
+        return d
+
     def get_dirty(self, cam_idx):
         return list(self._is_dirty[cam_idx])
 
@@ -183,6 +194,13 @@ class FixedArrayMultiQueue:
             memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
         ).reshape((self._cam_count, self._depth, self._frames_per_camera))
         return b.max()
+
+    def put_block(self, content: numpy.ndarray, camera: int, frame_idx: int, *, timeout: float=5):
+        timeout = time.perf_counter() + timeout
+        while self.put(content, camera, frame_idx) != BufferResult.Ok:
+            if time.perf_counter() > timeout:
+                raise RuntimeError("Timeout waiting space in queue for cam-%s", camera)
+            time.sleep(0.001)
 
     def put(self, content: numpy.ndarray, camera: int, frame_idx: Optional[int], allow_overflow: bool = True) -> BufferResult:
         buffer_index = self._buffer_index[camera]  # 0 ... up to depth - 1
@@ -285,10 +303,7 @@ class FixedArrayMultiQueue:
         t_end = time.time() + timeout
         for cdx in range(self._cam_count):
             for _ in range(self._frames_per_camera):
-                while self.put(frame, cdx, frame_idx, allow_overflow=False) != BufferResult.Ok:
-                    if time.time() > t_end:
-                        raise RuntimeError(f"cam-{cdx}: timeout waiting space in array multiqueue")
-                    time.sleep(0.005)
+                self.put_block(frame, cdx, frame_idx)
 
     def pad_cur_batch(
         self,
