@@ -1014,10 +1014,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             frame_idx += 1
         # end while frame_idx < tot_frames_to_process
 
-        # fill current batch of each cam:
-        for cdx in range(n_cams):
-            self._offline_queue.pad_cur_batch(cdx, empty_frame)
-
         if _local_do_debug:
             for cdx in range(n_cams):
                 with open(str(cams_paths[cdx][-1]) + "_sent_to_processing.txt", "w") as fh:
@@ -1025,6 +1021,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
         # total frame count: taking the min of all saved videos frame count:
         intersession_block.frame_count = min(videos_frame_count.values())
+
+        # eventual pad current batch of each cam:
+        for cdx in range(n_cams):
+            self._offline_queue.pad_cur_batch(cdx, empty_frame)
 
         # also post a **full negative indices batch** to notify pose process
         # when it has reached end of offline processing:

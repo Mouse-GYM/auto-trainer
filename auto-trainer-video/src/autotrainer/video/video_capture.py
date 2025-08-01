@@ -212,15 +212,6 @@ class VideoCapture(Process):
         self._run_capture_loop()
         self._terminate_capture_loop()
 
-    def _sync_barrier(self, timeout=10):
-        net_q = self._network_queue
-        if net_q is not None:
-            try:
-                net_q.barrier.wait(timeout=timeout)
-            except BrokenBarrierError:
-                logger.critical("multiproc network queue barrier broken")
-                raise
-
     def _set_status(self, status: CaptureProcessStatus):
         self._status.value = status
 
@@ -270,8 +261,6 @@ class VideoCapture(Process):
         cur_frame_idx = -1
         is_primary = self._attrs.is_primary
         net_q = self._network_queue
-        primary_sema = None if net_q is None else net_q.semaphore
-        primary_event = None if net_q is None else net_q.event
         record_start_frame_idx = None
         next_t_image_q = time.time()
         next_t_cmd_q = next_t_image_q
@@ -288,34 +277,47 @@ class VideoCapture(Process):
         released = False
         primary_acquired_count = 0
 
-        def _primary_acquire():
-            nonlocal primary_acquired_count, released
-            if net_q is None:
-                return True
-            if is_primary:
-                for _ in range(net_q.camera_count - primary_acquired_count - 1):
-                    if primary_sema.acquire(timeout=0):
-                        primary_acquired_count += 1
-                        logger.debug("sem acquired, current=%s", primary_acquired_count)
-                if primary_acquired_count == net_q.camera_count - 1:
-                    logger.verbose("all sem acquired, count=%s sem_val=%s ; now setting event",
-                                   primary_acquired_count, primary_sema.get_value())
-                    net_q.event.set()
-                return primary_acquired_count == net_q.camera_count - 1
-            else:
-                if not released:
-                    primary_sema.release()
-                    logger.debug("sem released")
-                    released = True
-                if net_q.event.wait(0.001):
-                    logger.debug("event obtained")
-                    return True
-                return False
+        if net_q is None:
+            sync_barrier = lambda timeout=None: None
+            primary_sema = None
+            primary_acquire = lambda: True
+            primary_release = lambda: None
+        else:
+            primary_sema = net_q.semaphore
 
-        def _primary_release():
-            nonlocal primary_acquired_count, released
-            if net_q is not None:
+            def sync_barrier(timeout=5, *, wait_barrier=net_q.barrier.wait):
+                try:
+                    wait_barrier(timeout=timeout)
+                except BrokenBarrierError:
+                    logger.critical("multiproc network queue barrier broken")
+                    raise
+
+            def primary_acquire():
+                nonlocal primary_acquired_count, released
                 if is_primary:
+                    for _ in range(net_q.camera_count - primary_acquired_count - 1):
+                        if primary_sema.acquire(timeout=0):
+                            primary_acquired_count += 1
+                            logger.debug("sem acquired, current=%s", primary_acquired_count)
+                    if primary_acquired_count == net_q.camera_count - 1:
+                        logger.verbose("all sem acquired, count=%s sem_val=%s ; now setting event",
+                                       primary_acquired_count, primary_sema.get_value())
+                        net_q.event.set()
+                    return primary_acquired_count == net_q.camera_count - 1
+                else:
+                    if not released:
+                        primary_sema.release()
+                        logger.debug("sem released")
+                        released = True
+                    if net_q.event.wait(0.001):
+                        logger.debug("event obtained")
+                        return True
+                    return False
+
+            def primary_release():
+                nonlocal primary_acquired_count, released
+                if is_primary:
+                    sync_barrier()  # necessary if non-primary cams are having the main sync_barrier before frame read
                     logger.debug("acquiring %s times before release", primary_acquired_count)
                     for _ in range(primary_acquired_count):
                         primary_sema.acquire()  # ensure we clear after all other(s) cam(s) have released
@@ -328,6 +330,7 @@ class VideoCapture(Process):
                 else:
                     logger.debug("not primary releasing")
                     primary_sema.release()
+                    sync_barrier()
                     logger.verbose("not primary released")
                     released = False
 
@@ -341,7 +344,7 @@ class VideoCapture(Process):
                         cmd, context = get_command()
                         self._handle_command(cmd, context)
                     except queue.Empty:
-                        next_t_cmd_q = t_now + 0.050  # no need check too often
+                        next_t_cmd_q = t_now + 0.02  # no need check that often
                         # we now use mp barrier to sync when needed
                     except Exception as err:
                         logger.exception("Failure executing cmd %s: %s", cmd, err)
@@ -355,17 +358,17 @@ class VideoCapture(Process):
                     continue
 
                 # # ensure primary capture first
-                if not is_primary and cur_frame_idx == -1:
-                    self._sync_barrier()
+                if not is_primary:
+                    sync_barrier()
 
                 frame, when = capture()
 
                 if cur_frame_idx == -1:
                     logger.info("%s: captured first frame", self)
 
-                if is_primary and cur_frame_idx == -1:
+                if is_primary:
                     # ensure primary capture first
-                    self._sync_barrier()
+                    sync_barrier()
 
                 cur_frame_idx += 1
 
@@ -379,66 +382,45 @@ class VideoCapture(Process):
                         else:
                             img_q.put(frame[:, :, 0])
 
-                frame_already_put = None
                 # record queue goes to video save to disk/file
-                if record_start_frame_idx is None:
-                    # The or in the above if is to make non-primary cams to continue writing to record queue,
-                    # up until the primary cam also got the message.
-                    if net_q is None:
-                        if self._is_record_active:
-                            rec_q.put([(frame, when)])  # thread queue
-                            record_start_frame_idx = cur_frame_idx
-                            frame_already_put = frame
-                    elif self._is_record_active:
-                        if _primary_acquire():
-                            self._sync_barrier()
-                            _primary_release()
-                            logger.notice("Starting record with frame %s", cur_frame_idx)
-                            record_start_frame_idx = cur_frame_idx
-                            rec_q.put([(frame, when)])  # thread queue
-                            rec_q_list = self._record_queue_list = []
-                            frame_already_put = frame
-                        # else:
-                        #     rec_q_list.append((frame, when))
-                        #     frame_already_put = frame
-                        #     if len(rec_q_list) >= self._record_batch_size:
-                        #         rec_q.put(rec_q_list)  # thread queue
-                        #         rec_q_list = self._record_queue_list = []
+                if self._is_record_active and record_start_frame_idx is None:
+                    if primary_acquire():
+                        logger.notice("Starting record with frame %s", cur_frame_idx)
+                        record_start_frame_idx = cur_frame_idx
+                        rec_q.put([(frame, when)])  # thread queue
+                        rec_q_list = self._record_queue_list = []
+                        primary_release()
 
-                if record_start_frame_idx is not None and frame is not frame_already_put:
+                elif not self._is_record_active and record_start_frame_idx is not None:
+                    # stop recording requested
                     rec_q_list = self._record_queue_list
-                    if net_q is None:
-                        if not self._is_record_active and record_start_frame_idx is not None:
-                            if len(rec_q_list) > 0:
-                                rec_q.put(rec_q_list)
-                                rec_q_list = self._record_queue_list = []
-                            rec_q.put([])
-                            record_start_frame_idx = None
-                            self._record.close_event.wait()
-                    elif not self._is_record_active:
-                        if not _primary_acquire():
-                            if frame is not frame_already_put:
-                                rec_q_list.append((frame, when))
-                        else:
-                            self._sync_barrier()
-                            # end of record/save-to-disk session/mode
-                            _primary_release()
-                            record_start_frame_idx = None
-                            if len(rec_q_list) > 0:
-                                self._record_queue.put(rec_q_list)
-                                rec_q_list = self._record_queue_list = []
-                            rec_q.put([])
-                            self._record.close_event.wait()
-                            #
-                            self._sync_barrier()
-                            # pad:
-                            net_q.pad_cur_batch(self._camera_idx, empty_frame)
-                            logger.info("sending EOF_RECORDING frame indices to signify eof recording")
+                    if not primary_acquire():
+                        # continue, all sync cams have not yet received their stop recording message
+                        rec_q_list.append((frame, when))
+                    else:
+                        # end of record/save-to-disk session/mode
+                        primary_release()
+                        record_start_frame_idx = None
+                        if len(rec_q_list) > 0:
+                            rec_q.put(rec_q_list)
+                            rec_q_list = self._record_queue_list = []
+                        rec_q.put([])
+                        self._record.close_event.wait()
+                        #
+                        logger.info("sending EOF_RECORDING frame indices to signify eof recording last frame index: %s",
+                                    cur_frame_idx)
+                        # NB: If padded then do not send extra frames batch !!
+                        # that would unsync the sync done with the padding !!
+                        if not net_q.pad_cur_batch(self._camera_idx, empty_frame, pad_idx=FrameIndexCategory.EOF_RECORDING):
                             for _ in range(self._network_queue.frames_per_camera):
                                 while net_q_put(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING) != BufferResult.Ok:
                                     time.sleep(0.001)
-                    else:
-                        rec_q_list.append((frame, when))
+                elif self._is_record_active and record_start_frame_idx is not None:
+                    # normal recording case
+                    rec_q_list.append((frame, when))
+                    if len(rec_q_list) >= self._record_batch_size:
+                        rec_q.put(rec_q_list)
+                        rec_q_list = self._record_queue_list = []
 
                 if net_q_put is not None:
                     # network queue goes to processing/inference

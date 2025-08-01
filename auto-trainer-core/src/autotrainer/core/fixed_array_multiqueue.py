@@ -278,14 +278,17 @@ class FixedArrayMultiQueue:
         *,
         timeout: float = 5,
         pad_idx: int = FrameIndexCategory.PADDING,
-    ):
+    ) -> bool:
+        """Return True if added some pad, False otherwise"""
         t_end = time.time() + timeout
         cur_batch_idx = self._batch_index[cam_idx]
-        if cur_batch_idx != 0:
-            tot_to_pad = self._frames_per_camera - cur_batch_idx
-            logger.verbose("padding cam-%s with %s %s frames", cam_idx, tot_to_pad, pad_idx)
-            for _ in range(tot_to_pad):
-                while self.put(frame, cam_idx, pad_idx, allow_overflow=False) != BufferResult.Ok:
-                    if time.time() > t_end:
-                        raise RuntimeError(f"timeout waiting space for cam-{cam_idx} in {self}")
-                    time.sleep(0.005)
+        if cur_batch_idx == 0:
+            return False
+        tot_to_pad = self._frames_per_camera - cur_batch_idx
+        logger.verbose("padding cam-%s with %s %s frames", cam_idx, tot_to_pad, pad_idx)
+        for _ in range(tot_to_pad):
+            while self.put(frame, cam_idx, pad_idx, allow_overflow=False) != BufferResult.Ok:
+                if time.time() > t_end:
+                    raise RuntimeError(f"timeout waiting space for cam-{cam_idx} in {self}")
+                time.sleep(0.005)
+        return True
