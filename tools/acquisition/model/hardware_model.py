@@ -233,6 +233,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._send_command(self._tunnel_device, SystemCommandKind.STREAM_START)
 
+        self._send_command(self._pellet_device, SystemCommandKind.SEND_HOME)
+
         if animal is not None:
             self._send_command(self._tunnel_device, SystemCommandKind.MOVE_MAGNET_SERVO,
                                animal.baseline_magnet_intensity)
