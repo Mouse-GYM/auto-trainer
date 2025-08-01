@@ -72,22 +72,22 @@ def _short_vid_file(path: Path, limit: int):
 def _close_fhs(cams_frame_idx_fhs: Optional[List[Optional[TextIO]]]):
     if cams_frame_idx_fhs is None:
         return
-    cnt_closed = 0
+    closed = []
     for idx, fh in enumerate(cams_frame_idx_fhs):
         if fh is not None:
-            cnt_closed += 1
+            closed.append(fh.name)
             logger.debug("closing %s", fh.name)
             fh.flush()
             fh.close()
             cams_frame_idx_fhs[idx] = None
-    if cnt_closed > 0:
-        logger.debug("closed %s fhs", cnt_closed)
+    if len(closed) > 0:
+        logger.verbose("closed fhs: %s", closed)
 
 
 def _close_h5(fhs: List[Optional[h5py.File]]):
     for idx, fh in enumerate(fhs or []):
         if fh is not None:
-            logger.info("exiting %s", fh.name)
+            logger.info("closing %s", fh.name)
             # fh.flush()
             fh.__exit__(None, None, None)
             fh.close()
@@ -270,9 +270,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             return self._perform_segmentation(configuration)
 
     def _perform_segmentation(self, configuration: SegmentationConfiguration):
+        offline_thread = self._offline_thread
         if self._intersession_block is not None:
             logger.warning("_intersession_block not None, segmentation already started")
-            return None
+            if offline_thread is not None and not offline_thread.is_alive():
+                logger.info("But offline thread not running, continuing")
+            else:
+                return None
         self._check_previous_offline_thread("perform_segmentation")
         logger.info("performing segmentation on %s", configuration, stack_info=True)
         intersession_block = self._intersession_block = IntersessionBlock(
@@ -716,7 +720,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         for cdx in range(self._offline_queue.camera_count):
                             self._offline_queue.reset_writer(cdx)
                         _close_fhs(cams_frame_idx_fhs)  # always
-                        if ib is not None:
+                        if ib is None:
+                            logger.warning(
+                                "Invalid state: offline + pose_data is None but intersession_block is None too ; "
+                                "frame_indices=%s", frames_indices)
+                        else:
                             fill_live_end = True
                             for cdx, pdl, pdd, cur_h5_idx, cur_h5_dss in zip(
                                 range_cams, ib.pose_data_list, ib.pose_data_dict, cams_read_h5_idx, cams_read_h5_dss
@@ -853,10 +861,23 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             logger.exception("_feed_intersession_analysis: error: %s", err)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError, context=str(err))
             self._send_message(InferenceCommandMessageKind.ProcessLive)
-            intersession_block.configuration.complete(intersession_block.configuration.nonce, False)
+            # intersession_block.configuration.complete(intersession_block.configuration.nonce, False)
+            # given we send EOF_OFFLINE_PROCESSING in the following finally clause,
+            # the callback is will be done by the monitor data thread instead.
         finally:
-            logger.info("feed intersession finished. intersession_block=%s",
-                        intersession_block)
+            empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
+            offline_q = self._offline_queue
+            # eventual pad current batch of each cam:
+            for cdx in range(offline_q.camera_count):
+                d = offline_q.get_cam_missing_frames(cdx)
+                for _ in range(d):
+                    offline_q.put_block(empty_frame, cdx, FrameIndexCategory.PADDING)
+            # also post a EOF_OFFLINE_PROCESSING to notify pose process
+            # when it has reached end of offline processing:
+            self._offline_queue.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_OFFLINE_PROCESSING)
+            # in turn the data monitor thread will detect that as well (via a None sentinel in the data queue),
+            # and close its open file handles.
+            logger.info("feed intersession finished. intersession_block=%s", intersession_block)
             # DO NOT:
             # self._intersession_block = None
             # it is/must be done by monitor data thread
@@ -1021,14 +1042,6 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
         # total frame count: taking the min of all saved videos frame count:
         intersession_block.frame_count = min(videos_frame_count.values())
-
-        # eventual pad current batch of each cam:
-        for cdx in range(n_cams):
-            self._offline_queue.pad_cur_batch(cdx, empty_frame)
-
-        # also post a **full negative indices batch** to notify pose process
-        # when it has reached end of offline processing:
-        self._offline_queue.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_OFFLINE_PROCESSING)
 
         # ProcessLiveWhenReady is async vs EOF_OFFLINE_PROCESSING just send before
         # it's not anymore actually used by pose process, but we still deliver it, for log purpose mainly.
