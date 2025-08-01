@@ -161,6 +161,9 @@ class FixedArrayMultiQueue:
                 return False
         return True
 
+    def get_dirty(self, cam_idx):
+        return list(self._is_dirty[cam_idx])
+
     def get_all_cam_max_frame_idx(self, camera_idx: int):
         b = numpy.frombuffer(
             memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
@@ -262,6 +265,22 @@ class FixedArrayMultiQueue:
         self._read_index = (read_idx_value + 1) % self._depth
         return True
 
+    def get_cam_buffer_index(self, cam_idx: int):
+        return self._buffer_index[cam_idx]
+
+    def get_cam_current_frame_indices(self, cam_idx: int):
+        buff_idx = self._buffer_index[cam_idx]
+        b = numpy.frombuffer(
+            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
+        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
+        return b[cam_idx][buff_idx]
+
+    def get_current_frame_indices(self):
+        b = numpy.frombuffer(
+            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
+        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
+        return b
+
     def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 5):
         t_end = time.time() + timeout
         for cdx in range(self._cam_count):
@@ -278,11 +297,12 @@ class FixedArrayMultiQueue:
         *,
         timeout: float = 5,
         pad_idx: int = FrameIndexCategory.PADDING,
+        force: bool = False,
     ) -> bool:
         """Return True if added some pad, False otherwise"""
         t_end = time.time() + timeout
         cur_batch_idx = self._batch_index[cam_idx]
-        if cur_batch_idx == 0:
+        if cur_batch_idx == 0 and not force:
             return False
         tot_to_pad = self._frames_per_camera - cur_batch_idx
         logger.verbose("padding cam-%s with %s %s frames", cam_idx, tot_to_pad, pad_idx)

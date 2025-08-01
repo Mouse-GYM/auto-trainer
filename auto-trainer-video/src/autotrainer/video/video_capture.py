@@ -409,12 +409,34 @@ class VideoCapture(Process):
                         #
                         logger.info("sending EOF_RECORDING frame indices to signify eof recording last frame index: %s",
                                     cur_frame_idx)
-                        # NB: If padded then do not send extra frames batch !!
-                        # that would unsync the sync done with the padding !!
-                        if not net_q.pad_cur_batch(self._camera_idx, empty_frame, pad_idx=FrameIndexCategory.EOF_RECORDING):
-                            for _ in range(self._network_queue.frames_per_camera):
-                                while net_q_put(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING) != BufferResult.Ok:
-                                    time.sleep(0.001)
+
+                        time.sleep(0.2)
+                        # this is to help ensure consumer has finished reading current frames that are already pushed
+                        # is not big issue to sleep here given this is not hot code path
+
+                        sync_barrier()
+                        cams_dirty = [
+                            sum(map(int, net_q.get_dirty(cdx)))
+                            for cdx in range(net_q.camera_count)
+                        ]
+                        sync_barrier()
+                        logger.verbose("cams dirty=%s", cams_dirty)
+                        max_dirty = max(cams_dirty)
+                        reminder_max_dirty = max_dirty % net_q.batch_size
+                        max_dirty += net_q.batch_size - reminder_max_dirty
+                        d = max_dirty - cams_dirty[self._camera_idx]
+                        logger.debug("padding %s times", d)
+                        for _ in range(d):
+                            while net_q_put(empty_frame, self._camera_idx,
+                                            FrameIndexCategory.PADDING) != BufferResult.Ok:
+                                time.sleep(0.001)
+                        # net_q.pad_cur_batch(self._camera_idx, empty_frame, force=True)
+                        for _ in range(self._network_queue.frames_per_camera):
+                            while net_q_put(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING) != BufferResult.Ok:
+                                time.sleep(0.001)
+
+                        sync_barrier()
+
                 elif self._is_record_active and record_start_frame_idx is not None:
                     # normal recording case
                     rec_q_list.append((frame, when))
