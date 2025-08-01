@@ -317,7 +317,8 @@ class VideoCapture(Process):
             def primary_release():
                 nonlocal primary_acquired_count, released
                 if is_primary:
-                    sync_barrier()  # necessary if non-primary cams are having the main sync_barrier before frame read
+                    # barrier eventually necessary if non-primary cams are doing sync_barrier before frame read
+                    sync_barrier()
                     logger.debug("acquiring %s times before release", primary_acquired_count)
                     for _ in range(primary_acquired_count):
                         primary_sema.acquire()  # ensure we clear after all other(s) cam(s) have released
@@ -358,7 +359,7 @@ class VideoCapture(Process):
                     continue
 
                 # # ensure primary capture first
-                if not is_primary:
+                if not is_primary and cur_frame_idx == -1:
                     sync_barrier()
 
                 frame, when = capture()
@@ -366,7 +367,7 @@ class VideoCapture(Process):
                 if cur_frame_idx == -1:
                     logger.info("%s: captured first frame", self)
 
-                if is_primary:
+                if is_primary and cur_frame_idx == -1:
                     # ensure primary capture first
                     sync_barrier()
 
