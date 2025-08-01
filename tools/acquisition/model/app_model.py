@@ -370,14 +370,14 @@ class AppModel(ObservableObject):
             # Check to see if there is a file in the new default location.  If so, use it.
             p_location = Path(self._preferences.configuration_location)
             p_location.mkdir(parents=True, exist_ok=True)
-            logger.info(f"did not receive explicit configuration file, trying default p_location=%s", p_location)
+            logger.info("did not receive explicit configuration file, trying default p_location=%s", p_location)
             configuration = SystemConfiguration.load_default(p_location)
             # Fallback to the old last configuration preference if this device has not converted.
             # TODO - remove this once all devices have migrated.
             if configuration is not None:
                 file_path = SystemConfiguration.make_default_yaml_config_path(p_location)
             else:
-                logger.info(f"default not yet in use, trying last configuration")
+                logger.info("default not yet in use, trying last configuration")
                 file_path = Path(self._preferences.last_configuration)
                 if file_path.is_file():
                     configuration = SystemConfiguration.load_yaml_file(file_path)
@@ -392,9 +392,9 @@ class AppModel(ObservableObject):
 
         if configuration is None:
             configuration = SystemConfiguration()
-            logger.info(f"using default configuration")
+            logger.info("using default configuration")
         else:
-            logger.info(f"using configuration from {location}")
+            logger.info("using configuration from %r", file_path.as_posix())
 
         if (camera := configuration.get_camera(CameraId.Left)) is not None:
             self._left_camera.load_configuration(camera)
