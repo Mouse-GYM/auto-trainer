@@ -405,8 +405,10 @@ class VideoCapture(Process):
                             rec_q.put(rec_q_list)
                             rec_q_list = self._record_queue_list = []
                         rec_q.put([])
+                        # wait record file is closed:
                         self._record.close_event.wait()
-                        #
+                        # so that when session analyse is enabled the feeder thread won't try to open the mp4 files
+                        # before so.
                         logger.info("sending EOF_RECORDING frame indices to signify eof recording last frame index: %s",
                                     cur_frame_idx)
 

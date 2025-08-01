@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from pathlib import Path
 from queue import Queue
@@ -49,6 +50,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._last_x: Optional[int] = None
         self._last_y: Optional[int] = None
         self._last_z: Optional[int] = None
+
+        self._lock = threading.Lock()
 
     @property
     def tunnel_identifier(self) -> Optional[str]:
@@ -273,6 +276,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                                           old_value)
 
     def _send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
+        with self._lock:
+            # ensure only 1 command can be sent at the same time
+            # NB: there are multiple threads which can act on this instance,
+            # and we don't want 2 to try send a message at the same time,
+            # or the pending command token might be overwritten.
+            return self.__send_with_token(device, cmd, data)
+
+    def __send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         perf_now = time.perf_counter()
         if self._pending_command_token is not None:
             logger.warning(
