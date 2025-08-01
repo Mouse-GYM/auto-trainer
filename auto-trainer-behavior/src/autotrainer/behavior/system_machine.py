@@ -181,8 +181,8 @@ class SystemMachine(StateMachine):
                         path.unlink(missing_ok=True)
         # using timer given when called the monitor data queue might still be writing to disk/still be in live session,
         # making the deletes to not work here
-        t = _clean_raw_data_timer(30, do_clean)
-        # changed timer to 30s: seen some cases where close of file handles in monitor data queue was bit slower,
+        t = _clean_raw_data_timer(15, do_clean)
+        # changed timer to 15s: seen some cases where close of file handles in monitor data queue was bit slower,
         # and made some of the data files not be removed (given written to after).
         # if that still happens (like with overloaded system), then some files will be left on disk still.
         t.start()
