@@ -300,7 +300,7 @@ class VideoCapture(Process):
                             primary_acquired_count += 1
                             logger.debug("sem acquired, current=%s", primary_acquired_count)
                     if primary_acquired_count == net_q.camera_count - 1:
-                        logger.verbose("all sem acquired, count=%s sem_val=%s ; now setting event",
+                        logger.debug("all sem acquired, count=%s sem_val=%s ; now setting event",
                                        primary_acquired_count, primary_sema.get_value())
                         net_q.event.set()
                     return primary_acquired_count == net_q.camera_count - 1
@@ -420,17 +420,16 @@ class VideoCapture(Process):
                             for cdx in range(net_q.camera_count)
                         ]
                         sync_barrier()
-                        logger.verbose("cams dirty=%s", cams_dirty)
+
                         max_dirty = max(cams_dirty)
                         reminder_max_dirty = max_dirty % net_q.batch_size
                         max_dirty += net_q.batch_size - reminder_max_dirty
                         d = max_dirty - cams_dirty[self._camera_idx]
-                        logger.debug("padding %s times", d)
+                        logger.debug("padding %s times ; cams_dirty=%s", d, cams_dirty)
                         for _ in range(d):
                             while net_q_put(empty_frame, self._camera_idx,
                                             FrameIndexCategory.PADDING) != BufferResult.Ok:
                                 time.sleep(0.001)
-                        # net_q.pad_cur_batch(self._camera_idx, empty_frame, force=True)
                         for _ in range(self._network_queue.frames_per_camera):
                             while net_q_put(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING) != BufferResult.Ok:
                                 time.sleep(0.001)
