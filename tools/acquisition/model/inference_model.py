@@ -258,12 +258,14 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             # protection, if we need more than 1 executing thread at the same time then we need a list to retain the
             # threads instead of only one of them.
             perf_now = time.perf_counter()
-            if cur_off.is_alive():
+            was_alive = cur_off.is_alive()
+            if was_alive:
                 logger.warning("%s request but previous offline thread still alive: %s, join might block ~long",
                                cause, cur_off)
             cur_off.join()
             self._offline_thread = None
-            logger.verbose("Waited %.1fs to join previous offline thread", time.perf_counter() - perf_now)
+            if was_alive:
+                logger.verbose("Waited %.1fs to join previous offline thread", time.perf_counter() - perf_now)
 
     def perform_segmentation(self, configuration: SegmentationConfiguration):
         with self._thread_lock:
@@ -272,7 +274,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
     def _perform_segmentation(self, configuration: SegmentationConfiguration):
         offline_thread = self._offline_thread
         if self._intersession_block is not None:
-            logger.warning("_intersession_block not None, segmentation already started")
+            logger.warning("_intersession_block not None, segmentation already started. block=%s segment_cfg=%s",
+                           self._intersession_block, configuration)
             if offline_thread is not None and not offline_thread.is_alive():
                 logger.info("But offline thread not running, continuing")
             else:
