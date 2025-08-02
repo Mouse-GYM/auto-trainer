@@ -133,7 +133,7 @@ class SystemMachine(StateMachine):
             PelletState.releasing,
             PelletState.monitoring,
         }:
-            self.algorithm.start_session()
+            self._algorithm.start_session()
 
         self._update_magnet_position(self.algorithm.baseline_intensity)
 
@@ -236,6 +236,7 @@ class SystemMachine(StateMachine):
                                                               context=self.state)
             else:
                 if self.state == SystemState.tunnel:
+                    logger.info("%s False, exiting tunnel ..", LoadCellMonitor.IS_ENGAGED_PROPERTY)
                     self.exit_tunnel()
                 else:
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
