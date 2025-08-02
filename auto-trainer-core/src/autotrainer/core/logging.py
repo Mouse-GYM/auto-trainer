@@ -64,7 +64,10 @@ class _Formatter(coloredlogs.ColoredFormatter):
         if not datefmt:
             datefmt = "%Y-%m-%d %H:%M:%S.%f"
         if self._time_precision > 0 and "%f" in datefmt:
-            v = str(record.msecs * 1000).replace(".", "").ljust(self._time_precision, '0')[:self._time_precision]
+            msec_len = len(str(int(record.msecs)))
+            v = str(record.msecs).replace(".", "")
+            v0 = "0" * (3 - msec_len)
+            v = (v0 + v)[:self._time_precision]
         else:
             v = ""
         with_dot = ".%f" in datefmt
