@@ -293,51 +293,71 @@ class CanDevice(Device):
 
     def _command_handler(self):
         cur_commands = []
-        kind = t_perf_last_command = None
+        t_perf_last_command = None
         while True:
-            if len(cur_commands) == 0:
-                try:
-                    r = self._commands_queue.get(timeout=0.005)
-                except queue.Empty:
+            try:
+                r = self._commands_queue.get(timeout=0.005)
+            except queue.Empty:
+                r = None, None, None
+            if r is None:
+                break
+            kind, data, ctx = r
+            if kind == "uuid":
+                if data == self._pending_uuid:
+                    self._pending_uuid = None
+                    cur_commands.insert(0, r)
+                else:
+                    logger.warning("Got UUID %s but not pending (%s)", data, self._pending_uuid)
                     continue
-                if r is None:
-                    break
-                cur_commands.append(r)
-            if self._pending_context is not None:
+            else:
+                if kind is not None:
+                    cur_commands.append(r)
+
+            if self._pending_context is not None and kind != "uuid":
                 if time.perf_counter() < t_perf_last_command + 5:
                     continue
+                self._pending_context = None
                 logger.warning("timeout waiting ack previous command: %s ; context=%s",
-                               kind, self._pending_context)
+                               self._pending_kind, self._pending_context)
+            if len(cur_commands) == 0:
+                continue
             kind, data, ctx = cur_commands.pop(0)
-            self._pending_context = ctx
-            self._pending_kind = kind
-            handler = self._command_handlers.get(kind)
-            if handler is not None:
-                before_uuid = self._interface.uuid()
-                handler(data)
+            before_uuid = self._interface.uuid()
+            if kind == "uuid":
+                self._perform_next_compound_step(data)
                 after_uuid = self._interface.uuid()
-                if after_uuid != before_uuid:
-                    self._pending_uuid = after_uuid
-                else:
-                    if ctx is not None:
-                        logger.critical("Handled %s with ctx=%s but CanInterface.uuid did not changed: %s",
-                                        kind, ctx, after_uuid)
-                        self._pending_context = None
-                t_perf_last_command = time.perf_counter()
             else:
-                # self._pending_context = None
-                # self._pending_kind = None
-                logger.warning("unhandled command queue message: %s", kind)
+                handler = self._command_handlers.get(kind)
+                if handler is not None:
+                    t_perf_last_command = time.perf_counter()
+                    handler(data)
+                    after_uuid = self._interface.uuid()
+                    if after_uuid != before_uuid:
+                        if ctx is not None:
+                            self._pending_context = ctx
+                else:
+                    logger.warning("unhandled command queue message: %s", kind)
+                    continue
+            if after_uuid != before_uuid:
+                self._pending_uuid = after_uuid
+            else:
+                if kind != "uuid":
+                    if ctx is not None:
+                        logger.error("Handled %s with ctx=%s but CanInterface.uuid did not changed: %s",
+                                     kind, ctx, after_uuid)
+                    self._acknowledge_command(ctx)
 
     def _handle_ack(self, msg: Acknowledge):
         cur_can_uuid = CanInterface.uuid()
         logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s pending=%s",
                      msg.target, msg.uuid, cur_can_uuid, self._pending_uuid)
         if msg.uuid == self._pending_uuid:
-            self._perform_next_compound_step()
+            # self._perform_next_compound_step(msg.uuid)
+            self._commands_queue.put(("uuid", msg.uuid, None))
         else:
             logger.debug("unknown uuid: %s vs pending=%s CanInterface.uuid=%s",
                          msg.uuid, self._pending_uuid, cur_can_uuid)
+
 
     @property
     def api(self):
@@ -510,7 +530,7 @@ class CanDevice(Device):
         if self._api is not None and kind is not None:
             self.api.send_message(kind, position)
 
-    def _perform_next_compound_step(self):
+    def _perform_next_compound_step(self, uuid: Optional[int]=None):
         """
         Issue the next step in a multi-step motor sequence.
         """
