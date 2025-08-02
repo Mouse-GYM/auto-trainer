@@ -233,7 +233,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._send_command(self._tunnel_device, SystemCommandKind.STREAM_START)
 
-        self._send_command(self._pellet_device, SystemCommandKind.SEND_HOME)
+        self.send_home()
         self.wait_pending_command_acked()
 
         if animal is not None:
