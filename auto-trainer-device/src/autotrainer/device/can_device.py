@@ -333,7 +333,7 @@ class CanDevice(Device):
         cur_can_uuid = CanInterface.uuid()
         logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s pending=%s",
                      msg.target, msg.uuid, cur_can_uuid, self._pending_uuid)
-        if msg.uuid == cur_can_uuid:
+        if msg.uuid == self._pending_uuid:
             self._perform_next_compound_step()
         else:
             logger.debug("unknown uuid: %s vs pending=%s CanInterface.uuid=%s",
