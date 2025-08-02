@@ -1,4 +1,5 @@
 import logging
+import time
 from enum import Enum
 
 from events import Events
@@ -73,6 +74,7 @@ class PelletMachine(StateMachine):
         self._pellet_device = pellet_device
 
         self._api_status_token = None
+        self._log_next_try_next_state = time.perf_counter() + 15
 
         self.machine = Machine(model=[self], states=list(PelletState),
                                transitions=PelletMachine.transitions, auto_transitions=False,
@@ -149,6 +151,9 @@ class PelletMachine(StateMachine):
 
     def can_send_pellet(self):
         can = self.can_use_pellet_command()
+        if __debug__:
+            logger.debug("can_send_pellet: can=%s state=%s token=%s",
+                         can, self._state, self._api_status_token)
         EventManager.default().post_event_content(BehaviorEventKind.pelletSendCan, context=can)
         return can
 
@@ -205,20 +210,31 @@ class PelletMachine(StateMachine):
     # endregion
 
     def _try_next_state(self, pellet_seen: bool = True, must_release: bool = False):
+        def logit():
+            t_perf_now = time.perf_counter()
+            if self._log_next_try_next_state >= t_perf_now:
+                logger.debug("try_next_state: pellet_seen=%s must_release=%s pellet_state=%s algo_system_state=%s",
+                             pellet_seen, must_release, self._state, self.algorithm.system_state)
+                # self._log_next_try_next_state = t_perf_now + 1
+
         # Always arrest to the home position during intersession.
         if self.algorithm.system_state == SystemState.intersession:
             if self.state != PelletState.home:
+                __debug__ and logit()
                 self.move_home()
             return
 
         if self.state == PelletState.loading:
+            __debug__ and logit()
             if self.algorithm.pellet_cover_enabled:
                 self.send_pellet()
             else:
                 self.prerelease_pellet()
         elif self.state == PelletState.prerelease:
+            __debug__ and logit()
             self.send_pellet()
         elif self.state == PelletState.sending:
+            __debug__ and logit()
             if self.algorithm.pellet_cover_enabled:
                 # The hardware ends the send phase with the pellet covered.  Put things in a consistent state of
                 # covered without sending an unnecessary command.
@@ -227,6 +243,7 @@ class PelletMachine(StateMachine):
             else:
                 self.monitor_pellet()
         elif self.state == PelletState.covering:
+            __debug__ and logit()
             if not pellet_seen:
                 self.load_pellet()
             else:
@@ -238,10 +255,13 @@ class PelletMachine(StateMachine):
         elif self.state == PelletState.monitoring:
             if self._algorithm.is_in_session:
                 if must_release:
+                    __debug__ and logit()
                     self.release_pellet()
                 elif not pellet_seen:
+                    __debug__ and logit()
                     self.load_pellet()
             else:
+                __debug__ and logit()
                 if not pellet_seen:
                     self.load_pellet()
                 else:
