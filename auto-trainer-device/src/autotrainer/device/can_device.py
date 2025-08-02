@@ -125,7 +125,7 @@ class CanDevice(Device):
                 lambda data: self._interface.move_motor_z(data, False),
 
             SystemCommandKind.SEND_TO_LIMITS:
-                lambda data: self._home([cast(Motor, data)]),
+                lambda data: self._home([cast(Motor, data)] if not isinstance(data, list) else data),
 
             SystemCommandKind.SEND_HOME:
                 lambda data: self._home(

@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 from typing import Optional
 
 from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple, \
-    get_verbose_logger
+    get_verbose_logger, Motor
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.device import (DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 HeadFix, PelletDelivery, MotorConfigurationFile, CompoundMovementFile)
@@ -172,6 +172,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 return None
             value += self._last_z
         return self._send_with_token(self._pellet_device, SystemCommandKind.MOVE_Z, value)
+
+    def send_to_limits(self):
+        return self._send_with_token(self._pellet_device, SystemCommandKind.SEND_TO_LIMITS,
+                                     [Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
 
     def send_home(self) -> Optional[UUID]:
         return self._send_with_token(self._pellet_device, SystemCommandKind.SEND_HOME)
