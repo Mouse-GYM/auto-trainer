@@ -294,12 +294,20 @@ class CanDevice(Device):
     def _command_handler(self):
         cur_commands = []
         t_perf_last_command = None
+        q = self._commands_queue
+        got_one = False
         while True:
             try:
-                r = self._commands_queue.get(timeout=0.005)
+                if got_one:
+                    q.task_done()
+                r = q.get(timeout=0.005)
             except queue.Empty:
                 r = None, None, None
+                got_one = False
+            else:
+                got_one = True
             if r is None:
+                q.task_done()
                 break
             kind, data, ctx = r
             if kind == "uuid":
@@ -312,13 +320,12 @@ class CanDevice(Device):
             else:
                 if kind is not None:
                     cur_commands.append(r)
-
-            if self._pending_context is not None and kind != "uuid":
-                if time.perf_counter() < t_perf_last_command + 5:
+            if self._pending_uuid is not None and kind != "uuid":
+                if time.perf_counter() < t_perf_last_command + 10:
                     continue
                 logger.warning("timeout waiting ack previous command: %s ; context=%s",
                                self._pending_kind, self._pending_context)
-                self._pending_context = None
+                self._pending_uuid = None
             if len(cur_commands) == 0:
                 continue
             kind, data, ctx = cur_commands.pop(0)
@@ -328,19 +335,19 @@ class CanDevice(Device):
                 after_uuid = self._interface.uuid()
             else:
                 handler = self._command_handlers.get(kind)
-                if handler is not None:
-                    t_perf_last_command = time.perf_counter()
-                    handler(data)
-                    after_uuid = self._interface.uuid()
-                    if after_uuid != before_uuid:
-                        if ctx is not None:
-                            self._pending_context = ctx
-                            self._pending_kind = kind
-                else:
+                if handler is None:
                     logger.warning("unhandled command queue message: %s", kind)
                     continue
+                t_perf_last_command = time.perf_counter()
+                handler(data)
+                after_uuid = self._interface.uuid()
+
             if after_uuid != before_uuid:
                 self._pending_uuid = after_uuid
+                if ctx is not None:
+                    if kind != "uuid":
+                        self._pending_context = ctx
+                        self._pending_kind = kind
             else:
                 if kind != "uuid":
                     if ctx is not None:

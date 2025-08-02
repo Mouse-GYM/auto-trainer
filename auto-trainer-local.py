@@ -32,5 +32,5 @@ if __name__ == '__main__':
     # import autotrainer only AFTER having set mp start method,
     # otherwise it can be set by some other 3rd party dependency.
     from autotrainer.core.logging import setup_logging
-    logger = setup_logging("autotrainer", logger_level=logging.DEBUG)
+    logger = setup_logging("autotrainer", logger_level=logging.DEBUG, time_precision=6)
     sys.exit(main())

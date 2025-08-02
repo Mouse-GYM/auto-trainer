@@ -244,7 +244,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self.send_home()
 
         if animal is not None:
-            self.delay(0.2)
+            self.delay(0.5)
             self.update_head_magnet_intensity(animal.baseline_magnet_intensity)
             # self._send_command(self._tunnel_device, SystemCommandKind.MOVE_MAGNET_SERVO,
             #                    animal.baseline_magnet_intensity)
@@ -312,14 +312,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         #                   self.pending_command, cmd)
 
         token = uuid4()
-        logger.debug("send_command cmd=%s token=%s", cmd, token)
+        logger.debug("send_command cmd=%s token=%s nbr=%s", cmd, token, len(self._pending_tokens))
         if self._send_command(device, cmd, data, token):
-            # self.pending_command = cmd
-            # self._pending_command_perf_now = perf_now
-            # self.pending_command_token = token  # last
             self._pending_tokens[token] = (cmd, perf_now)
             return token
         else:
+            logger.verbose("send_command failed, device not setup yet: cmd=%s token=%s", cmd, token)
+            self._pending_tokens.pop(token)
             return None
 
     # noinspection PyMethodMayBeStatic
