@@ -11,6 +11,7 @@ from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference import PoseResponse
 from autotrainer.core.pose_elements import SceneElement
+from . import IntersessionState
 
 from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorProps
@@ -200,7 +201,16 @@ class SystemMachine(StateMachine):
         else:
             inference = self._inference
             if inference is not None:
-                inference.set_inference_to_online()
+                if self._intersession.state != IntersessionState.idle:
+                    logger.verbose(
+                        "intersession state not idle: %s in progress, not setting inference back to online. "
+                        "segment_config=%s detection_config=%s",
+                        self._intersession.state,
+                        self._intersession._segmentation_configuration,
+                        self._intersession._detection_configuration,
+                    )
+                else:
+                    inference.set_inference_to_online()
             # self.exit_intersession()
         if not algo.session_mouse_seen and project is not None:
             if algo.clean_raw_data_on_inactive_session:
@@ -359,7 +369,7 @@ class SystemMachine(StateMachine):
         if (self.state == SystemState.tunnel
                 and self._pellet_machine.state in {
                     PelletState.sending, PelletState.releasing, PelletState.monitoring,
-                    PelletState.loading,
+                    # PelletState.loading,
                 }
         ):
             return

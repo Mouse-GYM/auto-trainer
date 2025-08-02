@@ -390,6 +390,13 @@ class VideoCapture(Process):
                         record_start_frame_idx = cur_frame_idx
                         rec_q.put([(frame, when)])  # thread queue
                         rec_q_list = self._record_queue_list = []
+                        if net_q is not None:
+                            sync_barrier()
+                            d = net_q.get_cam_missing_frames(self._camera_idx)
+                            sync_barrier()
+                            for _ in range(d):
+                                net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING)
+                        #
                         primary_release()
 
                 elif not self._is_record_active and record_start_frame_idx is not None:

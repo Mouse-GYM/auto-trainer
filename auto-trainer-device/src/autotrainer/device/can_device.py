@@ -12,7 +12,9 @@ import threading
 import time
 from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast
 
-logger = logging.getLogger(__name__)
+from autotrainer.core.logging import get_verbose_logger
+
+logger = get_verbose_logger(__name__)
 
 HAVE_CAN_DEVICE = False
 
@@ -75,7 +77,6 @@ class CanDevice(Device):
 
         self._pending_context = None
         self._pending_kind = None
-        self._pending_uuid = None
 
         self._homing_motors = []
 
@@ -107,14 +108,11 @@ class CanDevice(Device):
             SystemCommandKind.MOVE_GATE_SERVO:
                 lambda data: self._interface.move_gate_servo(data),
 
-            SystemCommandKind.SET_X:
-                lambda data: self._interface.set_motor_x(data),
+            SystemCommandKind.SET_X: self._set_move_x,
 
-            SystemCommandKind.SET_Y:
-                lambda data: self._interface.set_motor_y(data),
+            SystemCommandKind.SET_Y: self._set_move_y,
 
-            SystemCommandKind.SET_Z:
-                lambda data: self._interface.set_motor_z(data),
+            SystemCommandKind.SET_Z: self._set_move_z,
 
             SystemCommandKind.MOVE_X:
                 lambda data: self._interface.move_motor_x(data, False),
@@ -292,59 +290,80 @@ class CanDevice(Device):
             target=self._command_handler, name="CanCommandHandler", daemon=True)
         self._commands_handler_thread.start()
 
+    def _set_move_x(self, position):
+        steps = MotorSteps("set_move_x",
+            [{'x': position}, {'x': position, 'save_as_fixed': True}])
+        return self._start_sequence(steps)
+
+    def _set_move_y(self, position):
+        steps = MotorSteps("set_move_y",
+            [{'y': position}, {'y': position, 'save_as_fixed': True}])
+        return self._start_sequence(steps)
+
+    def _set_move_z(self, position):
+        steps = MotorSteps("set_move_z",
+            [{'z': position}, {'z': position, 'save_as_fixed': True}])
+        return self._start_sequence(steps)
+
     def _command_handler(self):
         cur_commands = []
         t_perf_last_command = None
         q = self._commands_queue
-        got_one = False
+        has_read_from_queue = False
+        pending_uuid = None
         while True:
             try:
-                if got_one:
+                if has_read_from_queue:
                     q.task_done()
                 r = q.get(timeout=0.005)
             except queue.Empty:
                 r = None, None, None
-                got_one = False
+                has_read_from_queue = False
             else:
-                got_one = True
+                has_read_from_queue = True
             if r is None:
                 q.task_done()
                 break
             kind, data, ctx = r
+            prev_commands_count = len(cur_commands)
             if kind == "uuid":
-                if data == self._pending_uuid:
-                    self._pending_uuid = None
+                if data == pending_uuid and pending_uuid is not None:
                     cur_commands.insert(0, r)
                 else:
-                    logger.warning("Got UUID %s but not pending (%s)", data, self._pending_uuid)
+                    logger.verbose("Got CAN msg ack with uuid=%s but pending_uuid=%s", data, pending_uuid)
                     continue
             else:
                 if kind is not None:
                     cur_commands.append(r)
-            if self._pending_uuid is not None and kind != "uuid":
-                if time.perf_counter() < t_perf_last_command + 10:
+            # if prev_commands_count != len(cur_commands):
+            #     logger.debug("Commands changed: %s", cur_commands)
+            if pending_uuid is not None and kind != "uuid":
+                if time.perf_counter() < t_perf_last_command + 5:  # although could be set bit lower
                     continue
                 logger.warning("timeout waiting ack previous command: %s ; context=%s",
                                self._pending_kind, self._pending_context)
-                self._pending_uuid = None
+                pending_uuid = None
             if len(cur_commands) == 0:
                 continue
             kind, data, ctx = cur_commands.pop(0)
             before_uuid = self._interface.uuid()
             if kind == "uuid":
+                logger.debug("executing ack perform next compound")
+                pending_uuid = None
                 self._perform_next_compound_step(data)
-                after_uuid = self._interface.uuid()
             else:
                 handler = self._command_handlers.get(kind)
                 if handler is None:
                     logger.warning("unhandled command queue message: %s", kind)
                     continue
-                t_perf_last_command = time.perf_counter()
+                logger.debug("executing cmd %s with ctx %s", kind, ctx)
                 handler(data)
-                after_uuid = self._interface.uuid()
-
+            after_uuid = self._interface.uuid()
+            t_perf_last_command = time.perf_counter()
             if after_uuid != before_uuid:
-                self._pending_uuid = after_uuid
+                if after_uuid != before_uuid + 1 or (before_uuid == 255 and after_uuid != 1):
+                    logger.warning("Unexpected uuid change count: before=%s after=%s", before_uuid, after_uuid)
+                pending_uuid = after_uuid
                 if ctx is not None:
                     if kind != "uuid":
                         self._pending_context = ctx
@@ -358,15 +377,9 @@ class CanDevice(Device):
 
     def _handle_ack(self, msg: Acknowledge):
         cur_can_uuid = CanInterface.uuid()
-        logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s pending=%s",
-                     msg.target, msg.uuid, cur_can_uuid, self._pending_uuid)
-        if msg.uuid == self._pending_uuid:
-            # self._perform_next_compound_step(msg.uuid)
-            self._commands_queue.put(("uuid", msg.uuid, None))
-        else:
-            logger.debug("unknown uuid: %s vs pending=%s CanInterface.uuid=%s",
-                         msg.uuid, self._pending_uuid, cur_can_uuid)
-
+        logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s",
+                     msg.target, msg.uuid, cur_can_uuid)
+        self._commands_queue.put(("uuid", msg.uuid, None))
 
     @property
     def api(self):
@@ -550,19 +563,21 @@ class CanDevice(Device):
             len(self._compound_movement) > 0:
             step = self._compound_movement.pop(0)
 
+            save_as_fixed = step.get("save_as_fixed", False)
+
             if "x" in step:
                 location = _to_tuple(step["x"])
-                self._interface.move_motor_x(location)
+                self._interface.move_motor_x(location, save_as_fixed=save_as_fixed)
                 logger.debug(f"X to {location}")
 
             elif "y" in step:
                 location = _to_tuple(step["y"])
-                self._interface.move_motor_y(location)
+                self._interface.move_motor_y(location, save_as_fixed=save_as_fixed)
                 logger.debug(f"Y to {location}")
 
             elif "z" in step:
                 location = _to_tuple(step["z"])
-                self._interface.move_motor_z(location)
+                self._interface.move_motor_z(location, save_as_fixed=save_as_fixed)
                 logger.debug(f"Z to {location}")
 
             elif "load_arm" in step:

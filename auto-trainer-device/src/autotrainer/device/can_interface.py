@@ -973,7 +973,8 @@ class CanInterface(DeviceInterface):
             logger.warning("Unhandled position: %s", position)
             return False
 
-        logger.debug("%s: move %.3f mm with v=%.3f mm/s**2", motor, position, velocity)
+        logger.debug("%s: move %.3f mm with v=%.3f mm/s**2 save_as_fixed=%s",
+                     motor, position, velocity, save_as_fixed)
 
         position = mm_to_turns(position)
         velocity = mm_to_turns(velocity)
@@ -996,8 +997,7 @@ class CanInterface(DeviceInterface):
                                                          AbsOrRel.ABSOLUTE,
                                                          save_as_fixed,
                                                          uuid)
-        logger.debug("%s: move %.3f turns with v=%.3f turns/s**2 ; res=%s uuid=%s",
-                     motor, position, velocity, res, uuid)
+        logger.debug("%s: res=%s uuid=%s", motor, res, uuid)
         return res == 0
 
     def move_magnet_servo(self, position, _unused: bool = False) -> bool:

@@ -161,14 +161,25 @@ class FixedArrayMultiQueue:
                 return False
         return True
 
-    def get_cam_missing_frames(self, cam_idx: int):
+    def pad_to_batch_size(self, pad_frame, *, timeout: float=5):
+        """Pad the queue so that all the cams are on same bucket, and the start of it."""
+        todo: List[Tuple[int, int]] = []
+        for cdx in range(self._cam_count):
+            n_pads = self.get_cam_missing_frames(cdx)
+            todo.append((cdx, n_pads))
+        timeout = time.perf_counter() + timeout
+        for cdx, n_pads in sorted(todo, key=lambda i: i[1]):  # sort on n_pads
+            for _ in range(n_pads):
+                self.put_block(pad_frame, cdx, FrameIndexCategory.PADDING)
+
+    def get_cam_missing_frames(self, cam_idx: int) -> int:
         cams_dirty = [
             sum(map(int, self.get_dirty(cdx)))
             for cdx in range(self.camera_count)
         ]
         max_dirty = max(cams_dirty)
-        reminder_max_dirty = max_dirty % self.batch_size
-        max_dirty += self.batch_size - reminder_max_dirty
+        reminder_max_dirty = max_dirty % self._frames_per_camera
+        max_dirty += self._frames_per_camera - reminder_max_dirty
         d = max_dirty - cams_dirty[cam_idx]
         return d
 
@@ -300,10 +311,12 @@ class FixedArrayMultiQueue:
         return b
 
     def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 5):
-        t_end = time.time() + timeout
+        t_end = time.perf_counter() + timeout
         for cdx in range(self._cam_count):
             for _ in range(self._frames_per_camera):
-                self.put_block(frame, cdx, frame_idx)
+                t0 = time.perf_counter()
+                self.put_block(frame, cdx, frame_idx, timeout=timeout)
+                timeout -= time.perf_counter() - t0
 
     def pad_cur_batch(
         self,
