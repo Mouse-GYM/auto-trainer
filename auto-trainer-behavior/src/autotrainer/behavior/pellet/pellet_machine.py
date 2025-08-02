@@ -149,11 +149,14 @@ class PelletMachine(StateMachine):
         EventManager.default().post_event_content(BehaviorEventKind.pelletLoadCan, context=can)
         return can
 
-    def can_send_pellet(self):
+    def can_send_pellet(self, _prev_val=[False]):
         can = self.can_use_pellet_command()
         if __debug__:
-            logger.debug("can_send_pellet: can=%s state=%s token=%s",
-                         can, self._state, self._api_status_token)
+            prev = _prev_val[0]
+            if can != prev:
+                logger.debug("can_send_pellet: can=%s state=%s token=%s",
+                             can, self._state, self._api_status_token)
+            _prev_val[0] = can
         EventManager.default().post_event_content(BehaviorEventKind.pelletSendCan, context=can)
         return can
 
