@@ -328,13 +328,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._offline_thread.start()
         return configuration
 
-    def perform_live(self):
-        self.set_inference_to_online()
+    # def perform_live(self):
+    #     self.set_inference_to_online()
 
     def set_inference_to_online(self):
         offline_queue = self._offline_queue
         if offline_queue is not None:
-            logger.notice("Setting inference back to online with SWITCH_TO_ONLINE")
+            logger.notice("Setting inference back to online with SWITCH_TO_ONLINE", stack_info=True)
             empty = numpy.zeros(offline_queue.shape, dtype=numpy.uint8)
             self._offline_queue.put_frame_index_category(empty, FrameIndexCategory.SWITCH_TO_ONLINE)
 
