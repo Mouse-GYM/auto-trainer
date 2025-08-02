@@ -7,6 +7,8 @@ class relies on the CanInterface class to send and receive data.
 """
 
 import logging
+import queue
+import threading
 import time
 from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast
 
@@ -284,6 +286,48 @@ class CanDevice(Device):
             logger.warning(
                 "Alogus hardware or hardware support not found.  Using emulation interface.")
 
+        self._commands_queue = queue.Queue()
+        self._commands_handler_thread = threading.Thread(
+            target=self._command_handler, name="CanCommandHandler", daemon=True)
+        self._commands_handler_thread.start()
+
+    def _command_handler(self):
+        cur_commands = []
+        kind = t_perf_last_command = None
+        while True:
+            if len(cur_commands) == 0:
+                try:
+                    r = self._commands_queue.get(timeout=0.005)
+                except queue.Empty:
+                    continue
+                if r is None:
+                    break
+                cur_commands.append(r)
+            if self._pending_context is not None:
+                if time.perf_counter() < t_perf_last_command + 1:
+                    continue
+                logger.warning("timeout waiting ack previous command: %s ; context=%s", kind, self._pending_context)
+            kind, data, ctx = cur_commands.pop(0)
+            self._pending_context = ctx
+            self._pending_kind = kind
+            handler = self._command_handlers.get(kind)
+            if handler is not None:
+                before_uuid = self._interface.uuid()
+                handler(data)
+                after_uuid = self._interface.uuid()
+                if after_uuid != before_uuid:
+                    self._pending_uuid = after_uuid
+                else:
+                    if ctx is not None:
+                        logger.critical("Handled %s with ctx=%s but CanInterface.uuid did not changed: %s",
+                                        kind, ctx, after_uuid)
+                        self._pending_context = None
+                t_perf_last_command = time.perf_counter()
+            else:
+                self._pending_context = None
+                self._pending_kind = None
+                logger.warning("unhandled command queue message: %s", kind)
+
     def _handle_ack(self, msg: Acknowledge):
         cur_can_uuid = CanInterface.uuid()
         logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s",
@@ -356,6 +400,9 @@ class CanDevice(Device):
         """
         if self._interface is None:
             return
+
+        self._commands_queue.put((kind, data, context))
+        return
 
         if self._pending_context is not None and context is not None:
             # logger.exception("pending_context not None: %s", self._pending_context)
