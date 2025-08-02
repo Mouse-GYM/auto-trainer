@@ -98,16 +98,15 @@ class FixedArrayQueue:
 
         return BufferResult.Ok if not is_overflow else BufferResult.Overflow
 
-    def get(self, block: bool = False, timeout: float = 0) -> numpy.ndarray:
-        step = 100
-        rest = 1 / step
-        for _ in range(0, 1 + int(timeout * 1000), step):
+    def get(self, block: bool = True, timeout: float = 0.01) -> numpy.ndarray:
+        perf_timeout = time.perf_counter() + timeout
+        while True:
             read_index = self._read_index
             if self._is_dirty[read_index].value:
                 break
-            time.sleep(rest)
-        else:
-            raise queue.Empty
+            if time.perf_counter() > perf_timeout:
+                raise queue.Empty
+            time.sleep(0.005)
 
         buffer = self._buffers[read_index]
 
