@@ -318,7 +318,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             return token
         else:
             logger.verbose("send_command failed, device not setup yet: cmd=%s token=%s", cmd, token)
-            self._pending_tokens.pop(token)
             return None
 
     # noinspection PyMethodMayBeStatic

@@ -75,6 +75,7 @@ class CanDevice(Device):
 
         self._pending_context = None
         self._pending_kind = None
+        self._pending_uuid = None
 
         self._homing_motors = []
 
