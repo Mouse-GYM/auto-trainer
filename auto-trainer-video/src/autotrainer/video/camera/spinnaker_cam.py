@@ -224,10 +224,14 @@ class SpinCam(CameraBase):
     def prepare_capture(self):
         super().prepare_capture()
 
+        if self._is_primary == self._is_secondary:
+            raise RuntimeError("Camera %s configured as both primary and secondary", self._name)
+
         if self._is_primary:
             self._configure_as_primary()
             logger.info(f"<{self.name}> configured as primary")
-        elif self._is_secondary:
+
+        if self._is_secondary:
             self._configure_as_secondary()
             logger.info(f"<{self.name}> configured as secondary")
 
@@ -267,9 +271,11 @@ class SpinCam(CameraBase):
 
     def set_property(self, name: str, value: str) -> bool:
         if name == "primary":
-            self._is_primary = bool(value)
+            self._is_primary = value.lower() in {"true", "yet", "on", "1"}
+            self._is_secondary = not self._is_primary
         elif name == "secondary":
-            self._is_secondary = bool(value)
+            self._is_secondary = value.lower() in {"true", "yet", "on", "1"}
+            self._is_primary = not self._is_secondary
         elif name == "offsetx":
             self.offset_x = int(value)
         elif name == "offsety":
