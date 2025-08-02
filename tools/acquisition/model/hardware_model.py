@@ -292,16 +292,16 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def __send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         perf_now = time.perf_counter()
-        if self._pending_command_token is not None:
-            logger.warning("ignoring action due to pending command: %s token=%s ; new=%s",
-                self.pending_command, self.pending_command_token, cmd,
-                stack_info=True,
-            )
-            t_diff = perf_now - self._pending_command_perf_now
-            if t_diff < 5:
-                return None
-            logger.notice("but pending_command %s for too long, giving up on wait acknowledge to process cmd=%s",
-                          self.pending_command, cmd)
+        # if self._pending_command_token is not None:
+        #     logger.warning("ignoring action due to pending command: %s token=%s ; new=%s",
+        #         self.pending_command, self.pending_command_token, cmd,
+        #         stack_info=True,
+        #     )
+        #     t_diff = perf_now - self._pending_command_perf_now
+        #     if t_diff < 5:
+        #         return None
+        #     logger.notice("but pending_command %s for too long, giving up on wait acknowledge to process cmd=%s",
+        #                   self.pending_command, cmd)
 
         token = uuid4()
         if self._send_command(device, cmd, data, token):
