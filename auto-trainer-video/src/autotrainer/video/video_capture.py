@@ -307,10 +307,10 @@ class VideoCapture(Process):
                 else:
                     if not released:
                         primary_sema.release()
-                        logger.debug("sem released")
+                        __debug__ and logger.debug("sem released")
                         released = True
                     if net_q.event.wait(0.001):
-                        logger.debug("event obtained")
+                        __debug__ and logger.debug("event obtained")
                         return True
                     return False
 
@@ -319,20 +319,20 @@ class VideoCapture(Process):
                 if is_primary:
                     # barrier eventually necessary if non-primary cams are doing sync_barrier before frame read
                     sync_barrier()
-                    logger.debug("acquiring %s times before release", primary_acquired_count)
+                    __debug__ and logger.debug("acquiring %s times before release", primary_acquired_count)
                     for _ in range(primary_acquired_count):
                         primary_sema.acquire()  # ensure we clear after all other(s) cam(s) have released
-                    logger.verbose("primary clearing event ; sem_val=%s", primary_sema.get_value())
+                    __debug__ and logger.debug("primary clearing event ; sem_val=%s", primary_sema.get_value())
                     # after the above acquire:
                     net_q.event.clear()  # must also be after the before acquire. to ensure all cams get
                     # a chance to see the event flag
                     primary_acquired_count = 0
-                    logger.verbose("primary released ; val=%s", primary_sema.get_value())
+                    __debug__ and logger.debug("primary released ; val=%s", primary_sema.get_value())
                 else:
-                    logger.debug("not primary releasing")
+                    __debug__ and logger.debug("not primary releasing")
                     primary_sema.release()
                     sync_barrier()
-                    logger.verbose("not primary released")
+                    __debug__ and logger.debug("not primary released")
                     released = False
 
         logger.notice("%s: starting capture loop ..", self)
