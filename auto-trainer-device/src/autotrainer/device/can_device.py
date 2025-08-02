@@ -316,9 +316,9 @@ class CanDevice(Device):
             if self._pending_context is not None and kind != "uuid":
                 if time.perf_counter() < t_perf_last_command + 5:
                     continue
-                self._pending_context = None
                 logger.warning("timeout waiting ack previous command: %s ; context=%s",
                                self._pending_kind, self._pending_context)
+                self._pending_context = None
             if len(cur_commands) == 0:
                 continue
             kind, data, ctx = cur_commands.pop(0)
@@ -335,6 +335,7 @@ class CanDevice(Device):
                     if after_uuid != before_uuid:
                         if ctx is not None:
                             self._pending_context = ctx
+                            self._pending_kind = kind
                 else:
                     logger.warning("unhandled command queue message: %s", kind)
                     continue
