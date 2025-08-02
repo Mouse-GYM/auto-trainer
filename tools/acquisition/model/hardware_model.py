@@ -234,6 +234,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._send_command(self._tunnel_device, SystemCommandKind.STREAM_START)
 
         self._send_command(self._pellet_device, SystemCommandKind.SEND_HOME)
+        self.wait_pending_command_acked()
 
         if animal is not None:
             self._send_command(self._tunnel_device, SystemCommandKind.MOVE_MAGNET_SERVO,
@@ -288,8 +289,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def __send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         perf_now = time.perf_counter()
         if self._pending_command_token is not None:
-            logger.warning(
-                "ignoring action due to pending command: %s token=%s ; new=%s",
+            logger.warning("ignoring action due to pending command: %s token=%s ; new=%s",
                 self.pending_command, self.pending_command_token, cmd,
                 stack_info=True,
             )
@@ -330,3 +330,21 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 self.pending_command_token = None
             elif token is not None:
                 logger.warning("pending_token != ack_received token: %s vs %s", cur_pending_token, token)
+
+    def wait_pending_command_acked(self, timeout: float=3):
+        cmd = self._pending_command
+        ctx = self._pending_command_token
+        if ctx is None:
+            logger.verbose("wait_pending_command_acked: context is None")
+            return
+        t_perf_start = time.perf_counter()
+        timeout = t_perf_start + timeout
+        while True:
+            t_perf = time.perf_counter()
+            if t_perf  >= timeout:
+                break
+            if self._pending_command_token is None:
+                logger.verbose("Got ack for cmd=%s token=%s ; delay=%.6f", cmd, ctx, t_perf - t_perf_start)
+                return
+            time.sleep(0.005)
+        raise RuntimeError(f"timeout waiting ack of pending command={cmd} token={self._pending_command_token}")
