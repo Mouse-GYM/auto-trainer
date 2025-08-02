@@ -34,7 +34,8 @@ class DeviceConnectionProtocol(Protocol):
                 "Default motor config file %s not present, no motor config auto-applied, this might be critical",
                 default_motors_cfg_file)
 
-    def use_motor_configurations(self, data: MotorConfigurations): ...
+    def use_motor_configurations(self, data: MotorConfigurations):
+        """Apply the given motor configuration"""
 
     def load_default_move_config(self):
         default_move_cfg_file = CompoundMovementFile.DEFAULT_LOCATION.expanduser()
@@ -47,4 +48,5 @@ class DeviceConnectionProtocol(Protocol):
                 "Default move config file %s not present, no move config auto-applied, this might be critical",
                 default_move_cfg_file)
 
-    def use_compound_movements(self, data: CompoundMovementDataSet): ...
+    def use_compound_movements(self, data: CompoundMovementDataSet):
+        """Apply the given motor compound movement"""

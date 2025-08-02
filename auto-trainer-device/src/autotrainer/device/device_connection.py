@@ -54,8 +54,8 @@ class DeviceConnection(DeviceConnectionProtocol):
 
         self._name = name
 
-        self._read_limit: int = 250 if HAVE_CAN_DEVICE else math.inf
-        self._collect_ms: int = 10  # so freq == 100 Hz
+        self._read_limit: int = 50 if HAVE_CAN_DEVICE else math.inf
+        self._collect_ms: int = 5  # so freq == 200 Hz
 
         # The means of providing non-blocking access to the device.
         self._current_thread = None
@@ -199,7 +199,7 @@ class DeviceConnection(DeviceConnectionProtocol):
 
     def _run_connected(self) -> bool:
         logger.info("running connected")
-        t_next_cmd_queue_read = time.time()
+        t_next_cmd_queue_read = time.perf_counter()
         while True:
             # Data from the device for the device listener to process.
             if self._interface.can_read():
@@ -207,13 +207,13 @@ class DeviceConnection(DeviceConnectionProtocol):
                 if len(messages) > 0:
                     self._device.notify_data(messages)
 
-            t_now = time.time()
-            if t_now > t_next_cmd_queue_read:
+            t_perf_now = time.perf_counter()
+            if t_perf_now > t_next_cmd_queue_read:
                 # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
                 try:
                     cmd, data, context = self._cmd_queue.get_nowait()
                 except Empty:
-                    t_next_cmd_queue_read = t_now + 0.05
+                    t_next_cmd_queue_read = t_perf_now + 0.05
                 else:
                     if cmd == _REQUEST_DISCONNECT:
                         self._cmd_queue.task_done()
