@@ -304,9 +304,10 @@ class CanDevice(Device):
                     break
                 cur_commands.append(r)
             if self._pending_context is not None:
-                if time.perf_counter() < t_perf_last_command + 1:
+                if time.perf_counter() < t_perf_last_command + 5:
                     continue
-                logger.warning("timeout waiting ack previous command: %s ; context=%s", kind, self._pending_context)
+                logger.warning("timeout waiting ack previous command: %s ; context=%s",
+                               kind, self._pending_context)
             kind, data, ctx = cur_commands.pop(0)
             self._pending_context = ctx
             self._pending_kind = kind
@@ -324,16 +325,19 @@ class CanDevice(Device):
                         self._pending_context = None
                 t_perf_last_command = time.perf_counter()
             else:
-                self._pending_context = None
-                self._pending_kind = None
+                # self._pending_context = None
+                # self._pending_kind = None
                 logger.warning("unhandled command queue message: %s", kind)
 
     def _handle_ack(self, msg: Acknowledge):
         cur_can_uuid = CanInterface.uuid()
-        logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s",
-                     msg.target, msg.uuid, cur_can_uuid)
+        logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s pending=%s",
+                     msg.target, msg.uuid, cur_can_uuid, self._pending_uuid)
         if msg.uuid == cur_can_uuid:
             self._perform_next_compound_step()
+        else:
+            logger.debug("unknown uuid: %s vs pending=%s CanInterface.uuid=%s",
+                         msg.uuid, self._pending_uuid, cur_can_uuid)
 
     @property
     def api(self):
@@ -461,13 +465,12 @@ class CanDevice(Device):
                                    self._measurements.copy())
             self._measurements = list()
 
-    def _command_complete(self) -> None:
+    def _command_complete(self, uuid: int = None) -> None:
         """
         On completion of a command, the class reports that to a DeviceAPI class.
         Note that 'completion' may only indicate that the message was sent to the
         target, not that the target is complete in executing the command.
         """
-        # if self._pending_context is not None:
         self._acknowledge_command(self._pending_context)
         self._pending_kind = None
         self._pending_context = None  # last

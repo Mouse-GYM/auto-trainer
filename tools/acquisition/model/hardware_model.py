@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 from queue import Queue
 from uuid import UUID, uuid4
-from typing import Optional
+from typing import Optional, List, Tuple, Dict
 
 from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple, \
     get_verbose_logger, Motor
@@ -37,6 +37,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._pending_command: Optional[SystemCommandKind] = None
         self._pending_command_token: Optional[UUID] = None
         self._pending_command_perf_now: Optional[float] = None
+        self._pending_tokens: Dict[UUID, Tuple[SystemCommandKind, float]] = {}
 
         message_handler.property_changed += self._message_handler_property_changed
         message_handler.ack_received += self._ack_received
@@ -195,6 +196,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def play_tone(self, frequency: int, _duration: float) -> Optional[UUID]:
         return self._send_with_token(self._pellet_device, SystemCommandKind.PLAY_TONE, (frequency, _duration))
 
+    def delay(self, amount: float):
+        return self._send_with_token(self._pellet_device, SystemCommandKind.DELAY, amount)
+
     def connect(self, cmd_queue: Queue, animal: Optional[AnimalSubject] = None):
         self._last_x = None
         self._last_y = None
@@ -237,15 +241,19 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._send_command(self._tunnel_device, SystemCommandKind.STREAM_START)
 
-        self.send_to_limits()
-        self.wait_pending_command_acked()
+        self.send_home()
 
         if animal is not None:
-            self._send_command(self._tunnel_device, SystemCommandKind.MOVE_MAGNET_SERVO,
-                               animal.baseline_magnet_intensity)
-            self._send_command(self._pellet_device, SystemCommandKind.SET_X, animal.pellet_x)
-            self._send_command(self._pellet_device, SystemCommandKind.SET_Y, animal.pellet_y)
-            self._send_command(self._pellet_device, SystemCommandKind.SET_Z, animal.pellet_z)
+            self.delay(0.2)
+            self.update_head_magnet_intensity(animal.baseline_magnet_intensity)
+            # self._send_command(self._tunnel_device, SystemCommandKind.MOVE_MAGNET_SERVO,
+            #                    animal.baseline_magnet_intensity)
+            self.set_x(animal.pellet_x)
+            self.set_z(animal.pellet_z)
+            self.set_y(animal.pellet_y)
+            # self._send_command(self._pellet_device, SystemCommandKind.SET_X, animal.pellet_x)
+            # self._send_command(self._pellet_device, SystemCommandKind.SET_Y, animal.pellet_y)
+            # self._send_command(self._pellet_device, SystemCommandKind.SET_Z, animal.pellet_z)
 
     def disconnect(self):
         if self._tunnel_device is not None:
@@ -304,11 +312,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         #                   self.pending_command, cmd)
 
         token = uuid4()
+        logger.debug("send_command cmd=%s token=%s", cmd, token)
         if self._send_command(device, cmd, data, token):
-            self.pending_command = cmd
-            self._pending_command_perf_now = perf_now
-            self.pending_command_token = token  # last
-            logger.verbose("send_command cmd=%s token=%s", cmd, token)
+            # self.pending_command = cmd
+            # self._pending_command_perf_now = perf_now
+            # self.pending_command_token = token  # last
+            self._pending_tokens[token] = (cmd, perf_now)
             return token
         else:
             return None
@@ -327,28 +336,30 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         # self._pellet_device.set_motor_drift(drift)
 
     def _ack_received(self, token: UUID):
-        cur_pending_token = self._pending_command_token
-        if cur_pending_token is not None:
-            if cur_pending_token == token:
-                self.pending_command = None
-                self.pending_command_token = None
-            elif token is not None:
-                logger.warning("pending_token != ack_received token: %s vs %s", cur_pending_token, token)
+        if token is not None and token not in self._pending_tokens:
+            logger.warning("pending_token != ack_received token: %s vs pending_tokens=%s", token, self._pending_tokens)
+        else:
+            v = self._pending_tokens.pop(token, None)
+            if v is None:
+                return
+            #
+            # cur_pending_token = self._pending_command_token
+            # if cur_pending_token is not None:
+            #     if cur_pending_token == token:
+            #         self.pending_command = None
+            #         self.pending_command_token = None
+            #     elif token is not None:
+            #         logger.warning("pending_token != ack_received token: %s vs %s", cur_pending_token, token)
 
-    def wait_pending_command_acked(self, timeout: float=3):
-        cmd = self._pending_command
-        ctx = self._pending_command_token
-        if ctx is None:
-            logger.verbose("wait_pending_command_acked: context is None")
-            return
+    def wait_pending_command_acked(self, token, timeout: float=3):
         t_perf_start = time.perf_counter()
         timeout = t_perf_start + timeout
         while True:
             t_perf = time.perf_counter()
             if t_perf  >= timeout:
                 break
-            if self._pending_command_token is None:
-                logger.verbose("Got ack for cmd=%s token=%s ; delay=%.6f", cmd, ctx, t_perf - t_perf_start)
+            if token not in self._pending_tokens:
+                logger.verbose("Got ack for token=%s ; delay=%.6f", token, t_perf - t_perf_start)
                 return
             time.sleep(0.005)
-        raise RuntimeError(f"timeout waiting ack of pending command={cmd} token={self._pending_command_token}")
+        raise RuntimeError(f"timeout waiting ack of pending token={token}")
