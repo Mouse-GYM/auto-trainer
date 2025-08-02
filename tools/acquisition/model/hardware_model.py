@@ -290,7 +290,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if self._pending_command_token is not None:
             logger.warning(
                 "ignoring action due to pending command: %s token=%s ; new=%s",
-                self.pending_command, self.pending_command_token, cmd
+                self.pending_command, self.pending_command_token, cmd,
+                stack_info=True,
             )
             t_diff = perf_now - self._pending_command_perf_now
             if t_diff < 5:
