@@ -98,7 +98,7 @@ class FixedArrayMultiQueue:
         self._frame_indexing: List[int] = list(numpy.repeat(range(self._frames_per_camera), self._cam_count))
         self._camera_indexing: List[int] = list(numpy.tile(range(self._cam_count), self._frames_per_camera))
 
-        self._next_counts_log_time = time.time()
+        self._next_counts_log_time = time.perf_counter()
         self._overflow_count = 0
         self._put_count = 0
 
@@ -207,8 +207,8 @@ class FixedArrayMultiQueue:
         batch_index = self._batch_index[camera]  # 0 ... up to frames per camera - 1
         dirty_idx = buffer_index * self._frames_per_camera + batch_index
         is_overflow = self._is_dirty[camera][dirty_idx]
-        t = time.time()
-        if t > self._next_counts_log_time:
+        t_perf = time.perf_counter()
+        if t_perf > self._next_counts_log_time:
             self._next_counts_log_time += 10
             logger.debug("%s[%s]: put=%s overflow=%s", self, camera, self._put_count, self._overflow_count)
             self._put_count = self._overflow_count = 0
