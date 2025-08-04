@@ -177,7 +177,6 @@ class SystemMachine(StateMachine):
 
     def after_enter_intersession(self):
         self._intersession.perform_segmentation()
-        self._pellet_machine.move_home()
 
     def before_exit_intersession_to_cage(self):
         self._algorithm.system_state = SystemState.cage

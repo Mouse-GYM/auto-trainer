@@ -232,9 +232,9 @@ class PelletMachine(StateMachine):
 
         # Always arrest to the home position during intersession.
         if self.algorithm.system_state == SystemState.intersession:
-            # if self.state != PelletState.home:
-            #     __debug__ and logit()
-            #     self.move_home()
+            if self.state != PelletState.retract:
+                __debug__ and logit()
+                self.move_retract()
             return
 
         if self.state == PelletState.loading:
