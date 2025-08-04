@@ -514,6 +514,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         tot_skipped = 0
         t_start_offline = 0
 
+        t_perf_live_check_data_queue_size = time.perf_counter() + 5
+
         ib: Optional[IntersessionBlock] = self._intersession_block  # start with what is there
 
         while self._is_running:
@@ -539,6 +541,14 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
             if prev_mode != mode:
                 logger.verbose("Detected inference mode change -> %s frames=%s", mode, frames_indices)
+
+            if mode == InferenceMode.Live:
+                perf_now = time.perf_counter()
+                if perf_now >= t_perf_live_check_data_queue_size:
+                    skip_update = self._data_queue.qsize() > 7
+                    t_perf_live_check_data_queue_size = perf_now + (0.05 if skip_update else 1.5)
+            else:
+                skip_update = False
 
             next_prev_mode = mode
 
@@ -664,6 +674,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 cam_indices.clear()
                             # pose_fhs[cdx]...
 
+                    if skip_update:
+                        continue
+
                     new_pose_data = []
                     got_done = False
                     for fx in range(self._frames_per_camera):
@@ -686,6 +699,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             continue
                         pose_data = new_pose_data
                     #
+
                     response = self._algorithm.process(pose_data, pairs_3d_offsets=self._monitored_parts_offsets)
                     #
                     for part1, part2 in self._monitored_parts_offsets:
