@@ -178,6 +178,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._send_with_token(self._pellet_device, SystemCommandKind.SEND_TO_LIMITS,
                                      [Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
 
+    def send_retract(self):
+        return self._send_with_token(self._pellet_device, SystemCommandKind.SEND_RETRACT)
+
     def send_home(self) -> Optional[UUID]:
         return self._send_with_token(self._pellet_device, SystemCommandKind.SEND_HOME)
 

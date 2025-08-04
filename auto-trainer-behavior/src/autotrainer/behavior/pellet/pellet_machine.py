@@ -25,6 +25,7 @@ class PelletState(str, Enum):
     releasing = "releasing"
     covering = "covering"
     home = "home"
+    retract = "retract"
 
 
 class PelletMachine(StateMachine):
@@ -47,7 +48,13 @@ class PelletMachine(StateMachine):
          "conditions": "can_release_pellet"},
         {"trigger": "monitor_pellet", "source": "*", "dest": PelletState.monitoring},
         {"trigger": "move_home", "source": "*", "dest": PelletState.home, "before": "before_move_home",
-         "conditions": "can_move_home"}
+         "conditions": "can_move_home"},
+        dict(
+            trigger="move_retract",
+            source=(PelletState.sending, PelletState.releasing),
+            dest=PelletState.retract,
+            after="_move_retract",
+        ),
     ]
 
     def __init__(self, algorithm: BehaviorAlgorithm = None, msg_handler: MessageHandler = None,
@@ -192,6 +199,9 @@ class PelletMachine(StateMachine):
     def _session_ending(self):
         self._try_next_state()
 
+    def _move_retract(self):
+        self._pellet_device.send_retract()
+
     def _pellet_device_ack_received(self, token: str):
         if self._api_status_token is None:
             # External command.  Safe to ignore.
@@ -222,9 +232,9 @@ class PelletMachine(StateMachine):
 
         # Always arrest to the home position during intersession.
         if self.algorithm.system_state == SystemState.intersession:
-            if self.state != PelletState.home:
-                __debug__ and logit()
-                self.move_home()
+            # if self.state != PelletState.home:
+            #     __debug__ and logit()
+            #     self.move_home()
             return
 
         if self.state == PelletState.loading:
@@ -283,6 +293,9 @@ class PelletMachine(StateMachine):
 
     def may_move_home(self):
         pass
+
+    def move_retract(self):
+        """Trigger a "move" to retract position (y - 10 relative)"""
 
     def load_pellet(self):
         pass

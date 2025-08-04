@@ -172,10 +172,12 @@ class SystemMachine(StateMachine):
         self.algorithm.end_session()
 
     def before_enter_intersession(self):
+        # current system_state should be tunnel here
         self._algorithm.system_state = SystemState.intersession
 
     def after_enter_intersession(self):
         self._intersession.perform_segmentation()
+        self._pellet_machine.move_home()
 
     def before_exit_intersession_to_cage(self):
         self._algorithm.system_state = SystemState.cage
