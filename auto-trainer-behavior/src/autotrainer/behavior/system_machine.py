@@ -42,6 +42,8 @@ class SystemMachine(StateMachine):
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
          "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
+        {"trigger": "enter_tunnel", "source": SystemState.tunnel, "dest": SystemState.tunnel,
+         "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
 
         {"trigger": "exit_tunnel", "source": SystemState.tunnel, "dest": SystemState.cage,
          "before": "before_exit_tunnel", "after": "after_exit_tunnel"},
@@ -60,7 +62,7 @@ class SystemMachine(StateMachine):
         dict(
             trigger="exit_intersession_to_cage",
             source=SystemState.intersession, dest=SystemState.cage,
-            before="before_exit_intersession_to_tunnel",
+            before="before_exit_intersession_to_cage",
         )
     ]
 
@@ -181,6 +183,7 @@ class SystemMachine(StateMachine):
 
     def before_exit_intersession_to_tunnel(self):
         self._algorithm.system_state = SystemState.tunnel
+        self.enter_tunnel()
         self._pellet_machine.environment_changed()
 
     @staticmethod
