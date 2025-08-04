@@ -34,6 +34,8 @@ _pellet_loading_timer = Timer
 #
 
 
+
+
 class SystemMachine(StateMachine):
     states = [e for e in SystemState]
 
@@ -44,10 +46,18 @@ class SystemMachine(StateMachine):
          "before": "before_exit_tunnel", "after": "after_exit_tunnel"},
         {"trigger": "enter_intersession", "source": {SystemState.cage, SystemState.tunnel}, "dest": SystemState.intersession,
          "before": "before_enter_intersession", "after": "after_enter_intersession"},
-        # {"trigger": "enter_intersession", "source": SystemState.cage, "dest": SystemState.intersession,
-        #  "before": "before_enter_intersession", "after": "after_enter_intersession"},
         {"trigger": "exit_intersession", "source": SystemState.intersession, "dest": SystemState.cage,
-         "before": "before_exit_intersession"}
+         "before": "before_exit_intersession"},
+        dict(
+            trigger="exit_intersession_to_tunnel",
+            source=SystemState.intersession, dest=SystemState.tunnel,
+            before="before_exit_intersession_to_tunnel",
+        ),
+        dict(
+            trigger="exit_intersession_to_cage",
+            source=SystemState.intersession, dest=SystemState.cage,
+            before="before_exit_intersession_to_tunnel",
+        )
     ]
 
     def __init__(self,
@@ -161,8 +171,12 @@ class SystemMachine(StateMachine):
     def after_enter_intersession(self):
         self._intersession.perform_segmentation()
 
-    def before_exit_intersession(self):
+    def before_exit_intersession_to_cage(self):
         self._algorithm.system_state = SystemState.cage
+        self._pellet_machine.environment_changed()
+
+    def before_exit_intersession_to_tunnel(self):
+        self._algorithm.system_state = SystemState.tunnel
         self._pellet_machine.environment_changed()
 
     @staticmethod
@@ -233,7 +247,10 @@ class SystemMachine(StateMachine):
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
-            self.exit_intersession()
+            if self._analysis.load_cell_monitor.is_engaged:
+                self.exit_intersession_to_tunnel()
+            else:
+                self.exit_intersession_to_cage()
 
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
@@ -435,6 +452,12 @@ class SystemMachine(StateMachine):
         pass
 
     def exit_intersession(self):
+        pass
+
+    def exit_intersession_to_tunnel(self):
+        pass
+
+    def exit_intersession_to_cage(self):
         pass
 
     def may_exit_intersession(self):
