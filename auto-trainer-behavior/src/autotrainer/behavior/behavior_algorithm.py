@@ -1,6 +1,7 @@
 import dataclasses
 import logging
 import math
+import threading
 import time
 from datetime import datetime
 from enum import Enum
@@ -88,6 +89,7 @@ class BehaviorAlgorithm(ObservableObject):
             "cover_servo_status_changed",
             "pellet_motor_drift_changed",
         ))
+        self._thread_lock = threading.RLock()
         self._project_info = None
 
         self._pellet_delivery_enabled = True
@@ -343,9 +345,11 @@ class BehaviorAlgorithm(ObservableObject):
         return self._diamond_triangle_known_offset
 
     def start_session(self):
-        if self._is_in_session:
-            logger.warning("start_session() called bu already in session")
-            return
+        with self._thread_lock:
+            if self._is_in_session:
+                logger.verbose("start_session() called but already in session")
+                return
+            self._is_in_session = True
 
         logger.notice("Starting new session recording ...")
         self._session_pellet_count = 0
@@ -355,7 +359,6 @@ class BehaviorAlgorithm(ObservableObject):
         if self._project_info is not None:
             self._project_info.calculate_next_session_index()
 
-        self._is_in_session = True
         self._set_pellet_last_seen(0.0)
         self._session_mouse_seen = False
         self._pellet_seen = False
