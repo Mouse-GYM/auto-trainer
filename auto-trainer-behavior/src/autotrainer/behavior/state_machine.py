@@ -3,8 +3,10 @@ from typing import Tuple
 
 from events import Events
 
-from autotrainer.core import MessageHandler
+from autotrainer.core.logging import get_verbose_logger
 
+
+logger = get_verbose_logger(__name__)
 
 class StateMachine:
     """Generic state machine/object mixin, with events handling"""
@@ -30,5 +32,6 @@ class StateMachine:
         if new_value == self._state:
             return
         old_value, self._state = self._state, new_value
+        logger.verbose("%s state changed: %s -> %s", self.__class__.__name__, old_value, new_value)
         self._events.state_changed(old_value, new_value)
         self._events.property_changed(StateMachine.Properties.STATE_PROPERTY, new_value, old_value)
