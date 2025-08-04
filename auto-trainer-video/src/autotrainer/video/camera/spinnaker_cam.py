@@ -80,7 +80,8 @@ class SpinCam(CameraBase):
         self._offset_x = 0
         self._offset_y = 0
 
-        self._is_secondary = False
+        self._is_primary = False
+        self._is_secondary = True
 
         self._pause_log = False
 
@@ -271,10 +272,10 @@ class SpinCam(CameraBase):
 
     def set_property(self, name: str, value: str) -> bool:
         if name == "primary":
-            self._is_primary = value.lower() in {"true", "yet", "on", "1"}
+            self._is_primary = value.lower() in {"true", "yes", "on", "1"}
             self._is_secondary = not self._is_primary
         elif name == "secondary":
-            self._is_secondary = value.lower() in {"true", "yet", "on", "1"}
+            self._is_secondary = value.lower() in {"true", "yes", "on", "1"}
             self._is_primary = not self._is_secondary
         elif name == "offsetx":
             self.offset_x = int(value)
