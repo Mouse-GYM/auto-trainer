@@ -249,6 +249,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             else:
                 url = self._camera_source.url + f"?name={self._name}"
 
+            properties = VideoManager.parse_params(url)
+            raw_primary = properties.get('primary', "").lower()
+            self._is_primary = raw_primary in {"true", "yes", "1"}
             camera = CaptureCameraAttrs(name=self._name, url=url)
 
             inference = None if network_queue is None else CaptureInferenceAttrs(
@@ -264,6 +267,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 inference=inference,
                 errors=self._errors,
                 presence_detection_attrs=presence_detection_attrs,
+                is_primary=self._is_primary,
             )
 
             rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
@@ -284,9 +288,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 self._video_capture.terminate()
                 self._video_capture = None
                 return False
-
-            properties = VideoManager.parse_params(url)
-            self._is_primary = bool(properties.get('primary', False))
 
         else:
             self._is_primary = False
@@ -358,6 +359,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
         if len(conf.params) > 0:
             url += "?" + urllib.parse.urlencode(conf.params)
+
+        logger.debug("%s: built url=%s", conf.name, url)
 
         existing = list(filter(lambda m: m.url == url, self._camera_list))
 

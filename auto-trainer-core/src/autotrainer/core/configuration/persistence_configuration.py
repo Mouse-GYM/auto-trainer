@@ -4,6 +4,8 @@ import humps
 from typing_extensions import Self
 import yaml
 
+from autotrainer.core import make_camelize_representer, make_decamelize_constructor
+
 
 @dataclass
 class PersistenceConfiguration:
@@ -16,14 +18,5 @@ class PersistenceConfiguration:
         )
 
 
-def persistence_configuration_representer(dumper: yaml.SafeDumper,
-                                          c: PersistenceConfiguration) -> yaml.nodes.MappingNode:
-    return dumper.represent_mapping("!PersistenceConfiguration", {
-        "outputLocation": c.output_location,
-    })
-
-
-def persistence_configuration_constructor(loader: yaml.SafeLoader,
-                                          node: yaml.nodes.MappingNode) -> PersistenceConfiguration:
-    content = loader.construct_mapping(node, deep=True)
-    return PersistenceConfiguration(**humps.decamelize(content))
+persistence_configuration_representer = make_camelize_representer("!PersistenceConfiguration")
+persistence_configuration_constructor = make_decamelize_constructor(PersistenceConfiguration)

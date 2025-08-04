@@ -64,7 +64,9 @@ def verify_log_location(log_location: str, device_name: str):
         log_vals.sort(reverse=True)
         idx = log_vals[0] + 1
 
-    file_handler = logging.FileHandler(f"{log_location}/{date_stamp}_{device_name}_{idx:03d}.log")
+    log_file = f"{log_location}/{date_stamp}_{device_name}_{idx:03d}.log"
+    logger.verbose("Setting log file to %s", log_file)
+    file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s\t [%(name)s] %(message)s"))
     logging.root.addHandler(file_handler)
 

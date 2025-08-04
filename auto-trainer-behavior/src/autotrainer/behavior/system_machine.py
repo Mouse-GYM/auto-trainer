@@ -11,6 +11,7 @@ from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference import PoseResponse
 from autotrainer.core.pose_elements import SceneElement
+from . import IntersessionState
 
 from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorProps
@@ -33,18 +34,36 @@ _pellet_loading_timer = Timer
 #
 
 
+
+
 class SystemMachine(StateMachine):
     states = [e for e in SystemState]
 
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
          "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
+        {"trigger": "enter_tunnel", "source": SystemState.tunnel, "dest": SystemState.tunnel,
+         "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
+
         {"trigger": "exit_tunnel", "source": SystemState.tunnel, "dest": SystemState.cage,
          "before": "before_exit_tunnel", "after": "after_exit_tunnel"},
-        {"trigger": "enter_intersession", "source": SystemState.cage, "dest": SystemState.intersession,
+        {"trigger": "enter_intersession", "source": (SystemState.cage, SystemState.tunnel), "dest": SystemState.intersession,
          "before": "before_enter_intersession", "after": "after_enter_intersession"},
-        {"trigger": "exit_intersession", "source": SystemState.intersession, "dest": SystemState.cage,
-         "before": "before_exit_intersession"}
+        dict(  # previous behavior
+            trigger="exit_intersession",
+            source=SystemState.intersession, dest=SystemState.cage,
+            before="before_exit_intersession_to_cage",
+        ),
+        dict(
+            trigger="exit_intersession_to_tunnel",
+            source=SystemState.intersession, dest=SystemState.tunnel,
+            before="before_exit_intersession_to_tunnel",
+        ),
+        dict(
+            trigger="exit_intersession_to_cage",
+            source=SystemState.intersession, dest=SystemState.cage,
+            before="before_exit_intersession_to_cage",
+        )
     ]
 
     def __init__(self,
@@ -61,6 +80,8 @@ class SystemMachine(StateMachine):
         super().__init__(initial_state=initial_state)
 
         self._project_info = project_info
+
+        self._timer1 = None  # misc timer
 
         algorithm = self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
         algorithm.project = project_info
@@ -131,7 +152,7 @@ class SystemMachine(StateMachine):
             PelletState.releasing,
             PelletState.monitoring,
         }:
-            self.algorithm.start_session()
+            self._algorithm.start_session()
 
         self._update_magnet_position(self.algorithm.baseline_intensity)
 
@@ -156,8 +177,14 @@ class SystemMachine(StateMachine):
     def after_enter_intersession(self):
         self._intersession.perform_segmentation()
 
-    def before_exit_intersession(self):
+    def before_exit_intersession_to_cage(self):
         self._algorithm.system_state = SystemState.cage
+        self._pellet_machine.environment_changed()
+
+    def before_exit_intersession_to_tunnel(self):
+        self.state = SystemState.tunnel
+        self._algorithm.system_state = SystemState.tunnel
+        self.enter_tunnel()
         self._pellet_machine.environment_changed()
 
     @staticmethod
@@ -179,7 +206,9 @@ class SystemMachine(StateMachine):
                         path.unlink(missing_ok=True)
         # using timer given when called the monitor data queue might still be writing to disk/still be in live session,
         # making the deletes to not work here
-        t = _clean_raw_data_timer(3, do_clean)
+        t = _clean_raw_data_timer(15, do_clean)
+        # changed timer to 15s: seen some cases where close of file handles in monitor data queue was bit slower,
+        # and made some of the data files not be removed (given written to after).
         # if that still happens (like with overloaded system), then some files will be left on disk still.
         t.start()
 
@@ -190,13 +219,35 @@ class SystemMachine(StateMachine):
         #    self._update_magnet_position(self.algorithm.baseline_intensity)
         project = self.project
         algo = self.algorithm
+        logger.verbose(
+            "session ended: intersession.state=%s system_machine.state=%s algo.system_state=%s "
+            "intersession_enabled=%s session_mouse_seen=%s",
+            # " segment_config=%s detection_config=%s",
+            self._intersession.state, self.state, algo.system_state,
+            algo.intersession_enabled, algo.session_mouse_seen,
+            # self._intersession._segmentation_configuration,
+            # self._intersession._detection_configuration,
+        )
+
         can_perform_analysis = algo.can_perform_intersession_analysis()
-        if can_perform_analysis and self.state == SystemState.cage:
+        if can_perform_analysis and self.state in {
+            SystemState.tunnel,
+            SystemState.cage,
+        }:
             self.enter_intersession()
         else:
             inference = self._inference
             if inference is not None:
-                inference.set_inference_to_online()
+                if self._intersession.state != IntersessionState.idle:
+                    logger.verbose(
+                        "intersession state not idle: %s in progress, not setting inference back to online. "
+                        "segment_config=%s detection_config=%s",
+                        self._intersession.state,
+                        self._intersession._segmentation_configuration,
+                        self._intersession._detection_configuration,
+                    )
+                else:
+                    inference.set_inference_to_online()
             # self.exit_intersession()
         if not algo.session_mouse_seen and project is not None:
             if algo.clean_raw_data_on_inactive_session:
@@ -204,7 +255,11 @@ class SystemMachine(StateMachine):
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
-            self.exit_intersession()
+            logger.debug("_intersession_ended: load_cell.engaged=%s", self._analysis.load_cell_monitor.is_engaged)
+            if self._analysis.load_cell_monitor.is_engaged:
+                self.exit_intersession_to_tunnel()
+            else:
+                self.exit_intersession_to_cage()
 
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
@@ -232,6 +287,7 @@ class SystemMachine(StateMachine):
                                                               context=self.state)
             else:
                 if self.state == SystemState.tunnel:
+                    logger.info("%s False, exiting tunnel ..", LoadCellMonitor.IS_ENGAGED_PROPERTY)
                     self.exit_tunnel()
                 else:
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
@@ -333,8 +389,12 @@ class SystemMachine(StateMachine):
             self._tunnel_device.update_head_magnet_intensity(position)
 
     def _pellet_loading(self):
-        self._timer1 = _pellet_loading_timer(2, self._consider_end_session)
-        self._timer1.start()
+        prev_t1 = self._timer1
+        if prev_t1 is None or prev_t1.finished.is_set():
+            self._timer1 = _pellet_loading_timer(5, self._consider_end_session)
+            self._timer1.start()
+        else:
+            logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s", self, prev_t1)
 
     def _pellet_sending(self):
         if self.state == SystemState.tunnel:
@@ -348,7 +408,10 @@ class SystemMachine(StateMachine):
         # or releasing states).  Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
         if (self.state == SystemState.tunnel
-                and self._pellet_machine.state in {PelletState.sending, PelletState.releasing, PelletState.monitoring}
+                and self._pellet_machine.state in {
+                    PelletState.sending, PelletState.releasing, PelletState.monitoring,
+                    # PelletState.loading,
+                }
         ):
             return
 
@@ -400,7 +463,19 @@ class SystemMachine(StateMachine):
     def exit_intersession(self):
         pass
 
+    def exit_intersession_to_tunnel(self):
+        pass
+
+    def exit_intersession_to_cage(self):
+        pass
+
     def may_exit_intersession(self):
+        pass
+
+    def may_exit_intersession_to_tunnel(self):
+        pass
+
+    def may_exit_intersession_to_cage(self):
         pass
 
     def is_cage(self):

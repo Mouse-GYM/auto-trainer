@@ -98,11 +98,17 @@ class MessageHandler(ObservableObject):
                 task_done()
                 break
             elif msg == SystemStatusMessageKind.ACKNOWLEDGE:
-                self.ack_received(data)
+                try:
+                    self.ack_received(data)
+                except Exception as err:
+                    logger.exception("Error during ack_received callback: %s", err)
             elif msg == SystemStatusMessageKind.FIRMWARE_VERSION:
                 self.property_changed(MessageHandler.FIRMWARE_VERSION_PROPERTY, data, None)
             else:
-                msg_received(msg, data)
+                try:
+                    msg_received(msg, data)
+                except Exception as err:
+                    logger.exception("Error during msg_received callback: msg=%s err=%s", msg, err)
             task_done()
         logger.debug(f"<{self._name}>: exiting message event loop")
 

@@ -9,11 +9,12 @@ from typing import Tuple, List, Optional
 
 import numpy
 
+from autotrainer.core import get_verbose_logger
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class FixedArrayMultiQueue:
@@ -48,6 +49,11 @@ class FixedArrayMultiQueue:
             mp_ctx = get_mp_ctx()
 
         self._name = name
+        self._barrier = mp_ctx.Barrier(cam_count)
+        self._semaphore = mp_ctx.Semaphore(cam_count)
+        for _ in range(cam_count):
+            self._semaphore.acquire()  # pre-acquire all
+        self._event = mp_ctx.Event()
         # indexing: [buffer][camera][batch_frame]
         self._buffers: List[List[List[RawArray]]] = []
 
@@ -92,12 +98,24 @@ class FixedArrayMultiQueue:
         self._frame_indexing: List[int] = list(numpy.repeat(range(self._frames_per_camera), self._cam_count))
         self._camera_indexing: List[int] = list(numpy.tile(range(self._cam_count), self._frames_per_camera))
 
-        self._next_counts_log_time = time.time()
+        self._next_counts_log_time = time.perf_counter()
         self._overflow_count = 0
         self._put_count = 0
 
     def __str__(self):
         return f"{self.__class__.__name__}({self._name!r})"
+
+    @property
+    def barrier(self) -> multiprocessing.Barrier:
+        return self._barrier
+
+    @property
+    def semaphore(self) -> multiprocessing.Semaphore:
+        return self._semaphore
+
+    @property
+    def event(self):
+        return self._event
 
     @property
     def depth(self):
@@ -130,7 +148,7 @@ class FixedArrayMultiQueue:
         memoryview(self._is_dirty[cam_idx]).cast("B")[:] = zero
         self._overflow_count = 0
         self._put_count = 0
-        logger.debug("%s: cam-%s reset to 0", self, cam_idx)
+        logger.debug("%s: cam-%s writer index reset to 0", self, cam_idx)
 
     def reset_reader(self):
         self._read_index = 0
@@ -143,13 +161,65 @@ class FixedArrayMultiQueue:
                 return False
         return True
 
+    def pad_to_batch_size(self, pad_frame, *, timeout: float=5):
+        """Pad the queue so that all the cams are on same bucket, and the start of it."""
+        todo: List[Tuple[int, int]] = []
+        for cdx in range(self._cam_count):
+            n_pads = self.get_cam_missing_frames(cdx)
+            todo.append((cdx, n_pads))
+        timeout = time.perf_counter() + timeout
+        for cdx, n_pads in sorted(todo, key=lambda i: i[1]):  # sort on n_pads
+            for _ in range(n_pads):
+                self.put_block(pad_frame, cdx, FrameIndexCategory.PADDING)
+
+    def get_cam_missing_frames(self, cam_idx: int) -> int:
+        cams_dirty = [
+            sum(map(int, self.get_dirty(cdx)))
+            for cdx in range(self.camera_count)
+        ]
+        max_dirty = max(cams_dirty)
+        reminder_max_dirty = max_dirty % self._frames_per_camera
+        max_dirty += self._frames_per_camera - reminder_max_dirty
+        d = max_dirty - cams_dirty[cam_idx]
+        return d
+
+    def get_dirty(self, cam_idx):
+        return list(self._is_dirty[cam_idx])
+
+    def get_all_cam_max_frame_idx(self, camera_idx: int):
+        b = numpy.frombuffer(
+            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
+        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
+        all_max = b.max()
+        cam_max = b[camera_idx].max()
+        return all_max, cam_max
+
+    def get_cam_frame_idx(self, camera_idx: int):
+        b = numpy.frombuffer(
+            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
+        ).reshape((self._cam_count, self._depth, self._frames_per_camera))[camera_idx]
+        return b.max()
+
+    def get_max_frame_idx(self):
+        b = numpy.frombuffer(
+            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
+        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
+        return b.max()
+
+    def put_block(self, content: numpy.ndarray, camera: int, frame_idx: int, *, timeout: float=5):
+        timeout = time.perf_counter() + timeout
+        while self.put(content, camera, frame_idx) != BufferResult.Ok:
+            if time.perf_counter() > timeout:
+                raise RuntimeError("Timeout waiting space in queue for cam-%s", camera)
+            time.sleep(0.001)
+
     def put(self, content: numpy.ndarray, camera: int, frame_idx: Optional[int], allow_overflow: bool = True) -> BufferResult:
         buffer_index = self._buffer_index[camera]  # 0 ... up to depth - 1
         batch_index = self._batch_index[camera]  # 0 ... up to frames per camera - 1
         dirty_idx = buffer_index * self._frames_per_camera + batch_index
         is_overflow = self._is_dirty[camera][dirty_idx]
-        t = time.time()
-        if t > self._next_counts_log_time:
+        t_perf = time.perf_counter()
+        if t_perf > self._next_counts_log_time:
             self._next_counts_log_time += 10
             logger.debug("%s[%s]: put=%s overflow=%s", self, camera, self._put_count, self._overflow_count)
             self._put_count = self._overflow_count = 0
@@ -224,14 +294,29 @@ class FixedArrayMultiQueue:
         self._read_index = (read_idx_value + 1) % self._depth
         return True
 
+    def get_cam_buffer_index(self, cam_idx: int):
+        return self._buffer_index[cam_idx]
+
+    def get_cam_current_frame_indices(self, cam_idx: int):
+        buff_idx = self._buffer_index[cam_idx]
+        b = numpy.frombuffer(
+            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
+        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
+        return b[cam_idx][buff_idx]
+
+    def get_current_frame_indices(self):
+        b = numpy.frombuffer(
+            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
+        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
+        return b
+
     def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 5):
-        t_end = time.time() + timeout
+        t_end = time.perf_counter() + timeout
         for cdx in range(self._cam_count):
             for _ in range(self._frames_per_camera):
-                while self.put(frame, cdx, frame_idx, allow_overflow=False) != BufferResult.Ok:
-                    if time.time() > t_end:
-                        raise RuntimeError(f"cam-{cdx}: timeout waiting space in array multiqueue")
-                    time.sleep(0.005)
+                t0 = time.perf_counter()
+                self.put_block(frame, cdx, frame_idx, timeout=timeout)
+                timeout -= time.perf_counter() - t0
 
     def pad_cur_batch(
         self,
@@ -240,12 +325,18 @@ class FixedArrayMultiQueue:
         *,
         timeout: float = 5,
         pad_idx: int = FrameIndexCategory.PADDING,
-    ):
+        force: bool = False,
+    ) -> bool:
+        """Return True if added some pad, False otherwise"""
         t_end = time.time() + timeout
         cur_batch_idx = self._batch_index[cam_idx]
-        if cur_batch_idx != 0:
-            for _ in range(self._frames_per_camera - cur_batch_idx):
-                while self.put(frame, cam_idx, pad_idx, allow_overflow=False) != BufferResult.Ok:
-                    if time.time() > t_end:
-                        raise RuntimeError(f"timeout waiting space for cam-{cam_idx} in {self}")
-                    time.sleep(0.005)
+        if cur_batch_idx == 0 and not force:
+            return False
+        tot_to_pad = self._frames_per_camera - cur_batch_idx
+        logger.verbose("padding cam-%s with %s %s frames", cam_idx, tot_to_pad, pad_idx)
+        for _ in range(tot_to_pad):
+            while self.put(frame, cam_idx, pad_idx, allow_overflow=False) != BufferResult.Ok:
+                if time.time() > t_end:
+                    raise RuntimeError(f"timeout waiting space for cam-{cam_idx} in {self}")
+                time.sleep(0.005)
+        return True

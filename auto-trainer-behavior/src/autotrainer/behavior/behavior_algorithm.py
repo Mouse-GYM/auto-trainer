@@ -1,6 +1,7 @@
 import dataclasses
 import logging
 import math
+import threading
 import time
 from datetime import datetime
 from enum import Enum
@@ -88,6 +89,7 @@ class BehaviorAlgorithm(ObservableObject):
             "cover_servo_status_changed",
             "pellet_motor_drift_changed",
         ))
+        self._thread_lock = threading.RLock()
         self._project_info = None
 
         self._pellet_delivery_enabled = True
@@ -226,9 +228,10 @@ class BehaviorAlgorithm(ObservableObject):
 
     @baseline_intensity.setter
     def baseline_intensity(self, value):
-        self._baseline_intensity = self._on_property_changed(BehaviorProps.BASELINE_INTENSITY,
-                                                             value, self._baseline_intensity)
-        EventManager.default().post_event_content(BehaviorEventKind.headfixBaselineChanged, context=value)
+        if value != self._baseline_intensity:
+            EventManager.default().post_event_content(BehaviorEventKind.headfixBaselineChanged, context=value)
+            self._baseline_intensity = self._on_property_changed(BehaviorProps.BASELINE_INTENSITY,
+                                                                 value, self._baseline_intensity)
 
     @property
     def auto_clamp_intensity(self):
@@ -342,9 +345,13 @@ class BehaviorAlgorithm(ObservableObject):
         return self._diamond_triangle_known_offset
 
     def start_session(self):
-        if self._is_in_session:
-            return
+        with self._thread_lock:
+            if self._is_in_session:
+                logger.verbose("start_session() called but already in session")
+                return
+            self._is_in_session = True
 
+        logger.notice("Starting new session recording ...")
         self._session_pellet_count = 0
 
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
@@ -352,7 +359,6 @@ class BehaviorAlgorithm(ObservableObject):
         if self._project_info is not None:
             self._project_info.calculate_next_session_index()
 
-        self._is_in_session = True
         self._set_pellet_last_seen(0.0)
         self._session_mouse_seen = False
         self._pellet_seen = False
@@ -365,12 +371,15 @@ class BehaviorAlgorithm(ObservableObject):
 
     def end_session(self):
         if self._is_in_session:
+            logger.success("Stopping session recording ...")
             EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
             post_trigger_enable(self, False)
             self._is_in_session = False
             self.session_ending()
             EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
             EventManager.default().flush()
+        else:
+            logger.warning("end_session() called but not in session")
 
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0

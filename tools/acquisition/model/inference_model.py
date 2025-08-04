@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 import operator
 import os
@@ -71,22 +72,22 @@ def _short_vid_file(path: Path, limit: int):
 def _close_fhs(cams_frame_idx_fhs: Optional[List[Optional[TextIO]]]):
     if cams_frame_idx_fhs is None:
         return
-    cnt_closed = 0
+    closed = []
     for idx, fh in enumerate(cams_frame_idx_fhs):
         if fh is not None:
-            cnt_closed += 1
+            closed.append(fh.name)
             logger.debug("closing %s", fh.name)
             fh.flush()
             fh.close()
             cams_frame_idx_fhs[idx] = None
-    if cnt_closed > 0:
-        logger.debug("closed %s fhs", cnt_closed)
+    if len(closed) > 0:
+        logger.verbose("closed fhs: %s", closed)
 
 
 def _close_h5(fhs: List[Optional[h5py.File]]):
     for idx, fh in enumerate(fhs or []):
         if fh is not None:
-            logger.info("exiting %s", fh.name)
+            logger.info("closing %s", fh.name)
             # fh.flush()
             fh.__exit__(None, None, None)
             fh.close()
@@ -122,9 +123,9 @@ class IntersessionBlock:
     configuration: SegmentationConfiguration
     frame_count: int = 0
     parts_count: int = 10
-    pose_data: numpy.ndarray = None
-    pose_data_list: List[List[numpy.ndarray]] = None
-    pose_data_dict: List[Dict[int, numpy.ndarray]] = None
+    pose_data: numpy.ndarray = dataclasses.field(repr=False, default=None)
+    pose_data_list: List[List[numpy.ndarray]] = dataclasses.field(repr=False, default=None)
+    pose_data_dict: List[Dict[int, numpy.ndarray]] = dataclasses.field(repr=False, default=None)
 
     def __post_init__(self):
         self.pose_data = numpy.empty((0, self.parts_count * 3), dtype=numpy.float32)
@@ -151,6 +152,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         ))
 
         mp_ctx = get_mp_ctx()
+        self._thread_lock = threading.RLock()
         self._data_queue = mp_ctx.Queue(maxsize=4096)
         self._cmd_queue = mp_ctx.Queue(maxsize=64)
         self._msg_queue = mp_ctx.Queue(maxsize=64)
@@ -250,24 +252,42 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             v_offsets = tuple(map(operator.neg, v_offsets))
         return Offset3DTuple(v_offsets)
 
-    def _check_previous_offline_thread(self):
+    def _check_previous_offline_thread(self, cause: str):
         cur_off = self._offline_thread
         if cur_off is not None:
             # protection, if we need more than 1 executing thread at the same time then we need a list to retain the
             # threads instead of only one of them.
-            if cur_off.is_alive():
-                logger.warning("Previous offline thread still alive: %s, join might block ~long", cur_off)
+            perf_now = time.perf_counter()
+            was_alive = cur_off.is_alive()
+            if was_alive:
+                logger.warning("%s request but previous offline thread still alive: %s, join might block ~long",
+                               cause, cur_off)
             cur_off.join()
             self._offline_thread = None
+            if was_alive:
+                logger.verbose("Waited %.1fs to join previous offline thread", time.perf_counter() - perf_now)
 
     def perform_segmentation(self, configuration: SegmentationConfiguration):
-        logger.info("performing segmentation")
-        self._check_previous_offline_thread()
-        self._intersession_block = IntersessionBlock(configuration=configuration,
-                                                     parts_count=self._algorithm.part_count)
+        with self._thread_lock:
+            return self._perform_segmentation(configuration)
+
+    def _perform_segmentation(self, configuration: SegmentationConfiguration):
+        offline_thread = self._offline_thread
+        if self._intersession_block is not None:
+            logger.warning("_intersession_block not None, segmentation already started. block=%s segment_cfg=%s",
+                           self._intersession_block, configuration)
+            if offline_thread is not None and not offline_thread.is_alive():
+                logger.info("But offline thread not running, continuing")
+            else:
+                return None
+        self._check_previous_offline_thread("perform_segmentation")
+        self._stop_recorded.clear()
+        logger.info("performing segmentation on %s", configuration)
+        intersession_block = self._intersession_block = IntersessionBlock(
+            configuration=configuration, parts_count=self._algorithm.part_count)
         for _ in range(self._offline_queue.camera_count):
-            self._intersession_block.pose_data_list.append([])
-            self._intersession_block.pose_data_dict.append({})
+            intersession_block.pose_data_list.append([])
+            intersession_block.pose_data_dict.append({})
 
         self._send_message(InferenceCommandMessageKind.ProcessOffline)
         # ProcessOffline is not anymore used.
@@ -279,7 +299,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # and also reset its offline read queue side:
         # time.sleep(0.5)
         # Not anymore needed, see video_capture and below __feed_intersession_analysis.
-        self._offline_thread = Thread(target=self._feed_intersession_analysis, name="feed_intersession_analysis")
+        self._offline_thread = Thread(
+            args=(intersession_block,),
+            target=self._feed_intersession_analysis, name="feed_intersession_analysis",)
         # but then, wait again a bit of more time.
         # this is to give some time to the monitor data queue thread, to get/detect the end of recording in progress,
         # and switch to offline processing request (which is coming indirectly from the pose process),
@@ -288,23 +310,36 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # NB: this might not be enough though, we probably should use a threading event (with a timeout eventually)
         # Now using thread event.
         self._offline_thread.start()
+        return configuration
 
     def perform_detection(self, configuration: DetectionConfiguration):
-        logger.info("performing detection analysis")
-        self._check_previous_offline_thread()
-        self._intersession_detection = IntersessionDetection(configuration)
-        self._offline_thread = Thread(target=self._intersession_process, name="intersession_process")
-        self._offline_thread.start()
+        with self._thread_lock:
+            return self._perform_detection(configuration)
 
-    def perform_live(self):
-        self.set_inference_to_online()
+    def _perform_detection(self, configuration: DetectionConfiguration):
+        if self._intersession_detection is not None:
+            logger.warning("_intersession_detection not None, skipping perform_detection")
+            return None
+        logger.info("performing detection analysis on %s", configuration)
+        self._check_previous_offline_thread("perform_detection")
+        intersession_detection = self._intersession_detection = IntersessionDetection(configuration)
+        project = self._project
+        self._offline_thread = Thread(target=self._intersession_process, name="intersession_process",
+                                      args=(project, intersession_detection,))
+        self._offline_thread.start()
+        return configuration
 
     def set_inference_to_online(self):
         offline_queue = self._offline_queue
         if offline_queue is not None:
-            logger.notice("Setting inference back to online with SWITCH_TO_ONLINE")
-            empty = numpy.zeros(offline_queue.shape, dtype=numpy.uint8)
-            self._offline_queue.put_frame_index_category(empty, FrameIndexCategory.SWITCH_TO_ONLINE)
+            ib = self._intersession_block
+            if ib is not None:
+                logger.warning("set_inference_to_online but intersession block: %s", ib)
+            else:
+                logger.notice("Setting inference back to online with SWITCH_TO_ONLINE", stack_info=True)
+                empty = numpy.zeros(offline_queue.shape, dtype=numpy.uint8)
+                # should pad in caes the cams index are unsync...
+                self._offline_queue.put_frame_index_category(empty, FrameIndexCategory.SWITCH_TO_ONLINE)
 
     def start(self, network_queue: FixedArrayMultiQueue) -> bool:
         if self._msg_thread is None:
@@ -477,14 +512,17 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         cur_h5_live_batch = [[] for _ in range_cams]
         cur_cams_indices = [[] for _ in range_cams]
         tot_skipped = 0
-
         t_start_offline = 0
+
+        t_perf_live_check_data_queue_size = time.perf_counter() + 5
+
+        ib: Optional[IntersessionBlock] = self._intersession_block  # start with what is there
 
         while self._is_running:
 
             t_now = time.time()
             if t_now > t_log_counters:
-                t_log_counters = t_now + 30
+                t_log_counters = t_now + 15
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("status=%s data=%s avg_writes_h5_live=%.6f skipped_h5_live=%s",
                                 self._status, cnt_data_received,
@@ -500,27 +538,48 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             except queue.Empty:
                 time.sleep(0.005)
                 continue
+
+            if prev_mode != mode:
+                logger.verbose("Detected inference mode change -> %s frames=%s", mode, frames_indices)
+
+            if mode == InferenceMode.Live:
+                perf_now = time.perf_counter()
+                if perf_now >= t_perf_live_check_data_queue_size:
+                    skip_update = self._data_queue.qsize() > 7
+                    t_perf_live_check_data_queue_size = perf_now + (0.05 if skip_update else 1.5)
+            else:
+                skip_update = False
+
             next_prev_mode = mode
 
             pose_data: Optional[List[numpy.ndarray]]
             frames_indices: Optional[numpy.ndarray]
 
-            if recording_in_progress:  # and cams_frame_idx_fhs is not None:
-                # thx to feed analysis which send a full SWITCH_TO_OFFLINE_MODE batch frames indices,
+            if frames_indices is not None:
+                if (not (frames_indices >= 0).all()
+                    and not (frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all()
+                ):
+                    logger.debug("mode=%s frames_indices=%s", mode, frames_indices)
+
+            if recording_in_progress and frames_indices is not None:  # and cams_frame_idx_fhs is not None:
+                # thx to camera capture which send a full EOF_RECORDING batch frames indices,
                 # this condition allows to know when to close/stopping writing to live files,
                 # and reopen for offline mode
-                if frames_indices is None or numpy.isin(
-                    frames_indices[:, -1], [
-                        FrameIndexCategory.SWITCH_TO_OFFLINE_MODE,
-                        FrameIndexCategory.SWITCH_TO_ONLINE,
-                        FrameIndexCategory.ONLINE_NO_RECORDING,
+                if numpy.isin(
+                    frames_indices[:, 0], [
+                        # FrameIndexCategory.SWITCH_TO_OFFLINE_MODE,
+                        # FrameIndexCategory.SWITCH_TO_ONLINE,
+                        # FrameIndexCategory.ONLINE_NO_RECORDING,
+                        FrameIndexCategory.EOF_RECORDING,
                     ],
                 ).any():
                     recording_in_progress = False
                     # t_start_offline = time.time()
-                    logger.notice("Detected stop of recording in progress ; status=%s ; mode=%s prev=%s frames_indices=%s",
-                                  self._status, mode, prev_mode, frames_indices)
-
+                    ib = self._intersession_block
+                    logger.notice("Detected stop of recording in progress ; status=%s ; mode=%s prev=%s frames_indices=%s ib=%s",
+                                  self._status, mode, prev_mode, frames_indices, ib)
+                    _close_fhs(cams_frame_idx_fhs)
+                    cams_frame_idx_fhs = None
                     for cdx, cam_pose_path, cur_cam_indices, cur_h5_live in zip(range_cams, pose_paths, cur_cams_indices, cur_h5_live_batch):
                         if len(cur_h5_live) == 0:
                             continue
@@ -540,35 +599,28 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         cur_h5_live.clear()
                         cur_cam_indices.clear()
                     #
-                    _close_fhs(cams_frame_idx_fhs)
-                    cams_frame_idx_fhs = None
-                    self._stop_recorded.set()
+                    if ib is not None:
+                        logger.debug("setting stop recorded")
+                        self._stop_recorded.set()  # this is for the feeder thread to know when it can open the data files
 
             cnt_data_received += 1
 
             prj = self.project
-            ib: Optional[IntersessionBlock] = self._intersession_block
             try:
-                if prev_mode != mode:
-                    logger.verbose("Detected inference mode change -> %s frames=%s", mode, frames_indices)
-
                 if (
                     not recording_in_progress
                     and pose_data is not None
-                    # and self._status == InferenceStatus.live
                     and mode == InferenceMode.Live
                     and frames_indices is not None
-                    and (frames_indices >= 0).any()
+                    and (frames_indices[:, 0] >= 0).any()
                     and prj.session.value != prev_session  # REQUIRED
                 ):
-                    self._stop_recorded.clear()  # reset the flag at start of new record,
-                    # it will be used at end of record, to signal feed analysis thread that we closed the live files.
-
                     tot_written_to_live = 0
                     recording_in_progress = True
                     prev_session = prj.session.value
-                    logger.verbose("Detected new record in progress ; status=%s mode=%s frames indices: %s",
+                    logger.notice("Detected new record in progress ; status=%s mode=%s frames indices: %s",
                                    self._status, mode, frames_indices)
+                    self._stop_recorded.clear()
                     cams_frame_idx_fhs = []
                     pose_paths = []
                     for cam in cams:
@@ -622,6 +674,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 cam_indices.clear()
                             # pose_fhs[cdx]...
 
+                    if skip_update:
+                        continue
+
                     new_pose_data = []
                     got_done = False
                     for fx in range(self._frames_per_camera):
@@ -644,6 +699,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             continue
                         pose_data = new_pose_data
                     #
+
                     response = self._algorithm.process(pose_data, pairs_3d_offsets=self._monitored_parts_offsets)
                     #
                     for part1, part2 in self._monitored_parts_offsets:
@@ -651,28 +707,32 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         prev = self._parts_offsets.get(pair_key, None)
                         cur = response.get_parts_3d_offset(part1, part2)
                         self._parts_offsets[pair_key] = cur
-                        if prev != cur:
-                            # if we wanted as "global" property event handling:
-                            # self._on_property_changed(f"parts_offset_{part1}_{part2}", cur, prev)
-                            if pair_key == (SceneElement.Diamond, SceneElement.Triangle):
-                                self.diamond_triangle_offset_changed(cur)
-                            elif pair_key == (SceneElement.Star, SceneElement.Triangle):
-                                self.star_triangle_offset_changed(cur)
-                    self.pose_response_ready(response)
+                        try:
+                            if prev != cur:
+                                # if we wanted as "global" property event handling:
+                                # self._on_property_changed(f"parts_offset_{part1}_{part2}", cur, prev)
+                                if pair_key == (SceneElement.Diamond, SceneElement.Triangle):
+                                    self.diamond_triangle_offset_changed(cur)
+                                elif pair_key == (SceneElement.Star, SceneElement.Triangle):
+                                    self.star_triangle_offset_changed(cur)
+                        except Exception as err:
+                            logger.exception("offset_changed event callback failed: %s", err)
+
+                    try:
+                        self.pose_response_ready(response)
+                    except Exception as err:
+                        logger.exception("pose_response_ready event callback failed: %s", err)
 
                 elif mode == InferenceMode.Offline:
 
-                    if frames_indices is not None and numpy.isin(frames_indices[:, -1], [
-                        FrameIndexCategory.SWITCH_TO_ONLINE,
-                        FrameIndexCategory.ONLINE_NO_RECORDING,
-                    ]).any():   # .all():
-                        continue
-
-                    if (  # prev_mode == InferenceMode.Live and
-                        len(cams_read_h5_dss) == 0
-                        # and frames_indices is not None and (frames_indices >= 0).any()
-                        # with random cam there might be no frame to replay, so we get immediatelly all < 0
+                    if (
+                        pose_data is not None
+                        and len(cams_read_h5_dss) == 0
+                        and frames_indices is not None and (frames_indices >= 0).any()
+                        # with random cam there might be no frame to replay, so we get immediately all < 0
                     ):
+                        _close_fhs(cams_frame_idx_fhs)  # just to be sure
+                        cams_frame_idx_fhs = None
                         t_start_offline = time.time()
                         logger.notice("Opening live files for offline processing ; prev_mode=%s frames=%s",
                                       prev_mode, frames_indices)
@@ -685,11 +745,14 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
                     if pose_data is None:
                         # end of intersession replay
+                        logger.verbose("detected end of inference offline processing")
                         # we can reset the offline queue here, it's safe :
                         # the pose process has switched to its online queue at this point
-                        for cdx in range(self._offline_queue.camera_count):
-                            self._offline_queue.reset_writer(cdx)
-                        if ib is not None:
+                        self._stop_recorded.clear()
+                        _close_fhs(cams_frame_idx_fhs)  # always
+                        if ib is None:
+                            logger.debug("pose_data is None and intersession_block is None")
+                        else:
                             fill_live_end = True
                             for cdx, pdl, pdd, cur_h5_idx, cur_h5_dss in zip(
                                 range_cams, ib.pose_data_list, ib.pose_data_dict, cams_read_h5_idx, cams_read_h5_dss
@@ -755,19 +818,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             except Exception as err:
                                 logger.exception("Error during intersession_inference: %s", err)
                                 success = False
-
                             ib.configuration.complete(ib.configuration.nonce, success)
+                            ib = None
                             self._intersession_block = None
                             cams_read_h5_dss = []
-                            _close_fhs(cams_frame_idx_fhs)
 
                     elif ib is not None:
                         assert pose_data is not None
-                        if (frames_indices < 0).all():
-                            # next pose_data we get/read should be None, ending the current offline session
-                            logger.debug("got all negative frame indices batch: %s", frames_indices)
-                            # this also happens when start of offline data
-                            continue
                         # we can now append the received/processed frame data:
                         skipped = 0
                         # append any of the live processed frame data that are before current
@@ -779,7 +836,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                             for fx, frame in enumerate(pose_data[cdx::len(cams)]):
                                 frame_idx = cam_fr_indices[fx]
                                 if frame_idx < 0:  # == FrameIndexCategory.PADDING:
-                                    logger.debug("cam-%s : fx=%s got negative frame idx: %s", cdx, fx, cam_fr_indices)
+                                    __debug__ and \
+                                    logger.debug("cam-%s : fx=%s got negative frame idx: %s",
+                                                 cdx, fx, cam_fr_indices)
                                     continue
                                     # break
                                 while cur_h5_ix < len(cur_h5_dss) and frame_idx > cur_h5_dss[cur_h5_ix][2]:
@@ -807,8 +866,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
                     else:
                         assert ib is None and pose_data is not None
-                        if __debug__:
-                            logger.warning("invalid state: ib=None but pose_data%s", pose_data)
+                        if (frames_indices is None or not numpy.isin(
+                            frames_indices[:, 0], [FrameIndexCategory.SWITCH_TO_ONLINE]
+                        ).any()):
+                            logger.warning("invalid state: ib is None but pose_data_len=%s cam_indices=%s",
+                                            len(pose_data), frames_indices)
 
             except (KeyboardInterrupt, SystemExit):
                 raise
@@ -818,20 +880,46 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
         # end while self._is_running
 
-    def _feed_intersession_analysis(self):
+    def _feed_intersession_analysis(self, intersession_block):
         # NB: feed intersession analysis (thread) has currently no way of being "interrupted/stopped",
         # if pose process goes away (when exit) then this will hang up to timeout: currently 15s,
         # see _put_intersession_frame().
         try:
-            self.__feed_intersession_analysis()
+            self.__feed_intersession_analysis(intersession_block)
         except Exception as err:
             logger.exception("_feed_intersession_analysis: error: %s", err)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError, context=str(err))
-            self._send_message(InferenceCommandMessageKind.ProcessLive)
-            self._intersession_block.configuration.complete(self._intersession_block.configuration.nonce, False)
-            self._intersession_block = None
+            got_error = err
+            # do not use anymore InferenceCommandMessageKind.ProcessLive
+            # self._send_message(InferenceCommandMessageKind.ProcessLive)
+            # intersession_block.configuration.complete(intersession_block.configuration.nonce, False)
+            # given we send EOF_OFFLINE_PROCESSING in the following finally clause,
+            # the callback is will be done by the monitor data thread instead.
+        else:
+            got_error = None
+        #
+        # in any case sleep a bit to allow pose process to finishes consume:
+        offline_q = self._offline_queue
+        empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
+        n_cams = offline_q.camera_count
+        # eventual pad current batch of each cam:
+        offline_q.pad_to_batch_size(empty_frame)
+        # also post a EOF_OFFLINE_PROCESSING to notify pose process
+        # when it has reached end of offline processing:
+        self._offline_queue.put_frame_index_category(
+            empty_frame,
+            FrameIndexCategory.EOF_OFFLINE_PROCESSING if got_error is None
+            else FrameIndexCategory.SWITCH_TO_ONLINE,
+        )
+        # in turn the data monitor thread will detect that as well (via a None sentinel in the data queue),
+        # and close its open file handles.
 
-    def __feed_intersession_analysis(self):
+        logger.info("feed intersession finished. intersession_block=%s", intersession_block)
+        # DO NOT:
+        # self._intersession_block = None
+        # it is/must be done by monitor data thread
+
+    def __feed_intersession_analysis(self, intersession_block):
         cams = (self._project.camera_1, self._project.camera_2)
         n_cams = len(cams)
         cur_session_nbr = self._project.session.value
@@ -842,15 +930,14 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         tot_skipped_frames = 0
         empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
         #
-        # this allows data_monitor to see/know when to switch to offline mode:
-        self._offline_queue.put_frame_index_category(empty_frame, FrameIndexCategory.SWITCH_TO_OFFLINE_MODE)
-
-        timeout = time.time() + 15  # self._intersession_wait_time
-
+        # self._intersession_wait_time
+        perf_timeout = time.perf_counter() + 15  # intersession_wait_time is too low,
+        # the pose process and data monitor thread have some delay between them,
+        # sometimes up to several seconds (4-5).
         # wait that we get the event from monitor data queue closing its write side to live files:
         logger.debug("waiting stop_recorded")
         while not self._stop_recorded.wait(1):
-            if time.time() > timeout:
+            if time.perf_counter() > perf_timeout:
                 raise RuntimeError("timeout waiting for intersession stop_recorded event")
         self._stop_recorded.clear()
         logger.notice("got stop_recorded")
@@ -871,7 +958,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         videos_frame_count[cdx] = frame_count
             if len(captures_d) >= n_cams:
                 break
-            if time.time() > timeout:
+            if time.perf_counter() > timeout:
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationInputError)
                 raise RuntimeError("timeout waiting for intersession video files")
             time.sleep(0.1)  # overkill to immediately retry
@@ -966,12 +1053,12 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
                 if all_read[cdx]:
                     cams_sent_frame_count[cdx] += 1
-                    while self._offline_queue.put(empty_frame, cdx, FrameIndexCategory.PADDING,
-                                                  allow_overflow=False) != BufferResult.Ok:
-                        time.sleep(0.005)
+                    self._offline_queue.put_block(empty_frame, cdx, FrameIndexCategory.PADDING)
                 else:
                     if not self._put_intersession_frame(cam_capture, cdx, cams_frame_idx[cdx]):
                         all_read[cdx] = True
+                        self._offline_queue.put_block(empty_frame, cdx, FrameIndexCategory.PADDING)
+                        # if we prematuraly reach the end of the video stream then give a padding instead
                     else:
                         cams_sent_frame_count[cdx] += 1
                         frames_idx_sent[cdx].append(cams_frame_idx[cdx])
@@ -984,21 +1071,13 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             frame_idx += 1
         # end while frame_idx < tot_frames_to_process
 
-        # fill current batch of each cam:
-        for cdx in range(n_cams):
-            self._offline_queue.pad_cur_batch(cdx, empty_frame)
-
         if _local_do_debug:
             for cdx in range(n_cams):
                 with open(str(cams_paths[cdx][-1]) + "_sent_to_processing.txt", "w") as fh:
                     fh.write("\n".join(map(str, chain(frames_idx_sent[cdx], [""]))))
 
         # total frame count: taking the min of all saved videos frame count:
-        self._intersession_block.frame_count = min(videos_frame_count.values())
-
-        # also post a **full negative indices batch** to notify pose process
-        # when it has reached end of offline processing:
-        self._offline_queue.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_OFFLINE_PROCESSING)
+        intersession_block.frame_count = min(videos_frame_count.values())
 
         # ProcessLiveWhenReady is async vs EOF_OFFLINE_PROCESSING just send before
         # it's not anymore actually used by pose process, but we still deliver it, for log purpose mainly.
@@ -1006,19 +1085,19 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
         logger.success("passed %s frames per camera frame_count=%s ; "
                        "tot_skipped_frames=%s cams_frame_idx=%s cams_sent_frame_count=%s",
-                       frame_idx, self._intersession_block.frame_count,
+                       frame_idx, intersession_block.frame_count,
                        tot_skipped_frames, cams_frame_idx, cams_sent_frame_count)
 
-    def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int) -> bool:
+    def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int, *, timeout: float = 20) -> bool:
         ret, frame = capture.read()
         if not ret:
             logger.debug(f"end of video at index {cam_index}")
             return False
-        timeout = time.time() + 15   # to be decided if keep or not
+        perf_timeout = time.perf_counter() + timeout
         if len(numpy.shape(frame)) >= 3:
             frame = frame[:, :, 0]
         put = self._offline_queue.put
-        while time.time() < timeout:
+        while time.perf_counter() < perf_timeout:
             if put(frame, cam_index, frame_idx, allow_overflow=False) == BufferResult.Ok:
                 return True
             # given the current array-multi-queue has no "event" handling we have to retry, at some later point,
@@ -1028,9 +1107,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         logger.error("cam %s: timeout waiting offline_queue has space", cam_index)
         return False
 
-    def _intersession_process(self):
+    def _intersession_process(self, project, intersession_detection):
         try:
-            result = intersession_process(self._project)
+            result = intersession_process(project)
         except Exception as err:
             logger.exception("Error processing intersession: %s", err)
             processed_ok = False
@@ -1038,6 +1117,5 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             processed_ok = True
             self.detection_result_ready(result)
 
-        self._intersession_detection.configuration.complete(self._intersession_detection.configuration.nonce,
-                                                            processed_ok)
-        self._intersession_block = None
+        intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
+        self._intersession_detection = None

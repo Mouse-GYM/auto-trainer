@@ -108,6 +108,7 @@ class SensorAnalysis(ObservableObject):
         self._perf_monitor.reset()
 
     def measurements_received(self, measurements: List[HeadFixMeasurement]):
+        logger.spam("Received %s measures", len(measurements))
         assert len(measurements) > 0
         weights = []
         switch = []
@@ -145,7 +146,9 @@ class SensorAnalysis(ObservableObject):
 
         first_measure = measurements[0]
         # Load cell monitor.
-        self._load_cell_monitor.update(numpy.mean(weights), first_measure.when, first_measure.timestamp)
+        # self._load_cell_monitor.update(numpy.mean(weights), first_measure.when, first_measure.timestamp)
+        for m in measurements:
+            self._load_cell_monitor.update(m.weight, m.when, m.timestamp)
 
         # Headbar analog pressure monitor.
         self._headbar_pressure_monitor.update(pressure, first_measure.when, first_measure.timestamp)

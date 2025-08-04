@@ -10,41 +10,37 @@ class TunnelDeviceProtocol(ObservableObjectProtocol, Protocol):
     and state machine.
     """
 
-    def update_head_magnet_intensity(self, position: float) -> Optional[UUID]: ...
+    def update_head_magnet_intensity(self, position: float) -> Optional[UUID]:
+        """
+        Request an update to the head magnet position.
 
-    """
-    Request an update to the head magnet position.
-    
-    Args:
-        position: The % position [0, 100] to set the head magnet.
-        
-    Returns:
-        A token to expect from the device message handler when the request is complete.
-    """
+        Args:
+            position: The % position [0, 100] to set the head magnet.
+            
+        Returns:
+            A token to expect from the device message handler when the request is complete.
+        """
 
-    def open_tunnel_gate(self) -> Optional[UUID]: ...
+    def open_tunnel_gate(self) -> Optional[UUID]:
+        """
+        Request the tunnel gate to open.
 
-    """
-    Request the tunnel gate to open.
-        
-    Returns:
-        A token to expect from the device message handler when the request is complete.
-    """
+        Returns:
+            A token to expect from the device message handler when the request is complete.
+        """
 
-    def close_tunnel_gate(self) -> Optional[UUID]: ...
+    def close_tunnel_gate(self) -> Optional[UUID]:
+        """
+        Request the tunnel gate to close.
 
-    """
-    Request the tunnel gate to close.
-        
-    Returns:
-        A token to expect from the device message handler when the request is complete.
-    """
+        Returns:
+            A token to expect from the device message handler when the request is complete.
+        """
 
-    def tare_load_cell(self) -> Optional[UUID]: ...
+    def tare_load_cell(self) -> Optional[UUID]:
+        """
+        Request the load cell perform a tare operation.
 
-    """
-    Request the load cell perform a tare operation.
-        
-    Returns:
-        A token to expect from the device message handler when the request is complete.
-    """
+        Returns:
+            A token to expect from the device message handler when the request is complete.
+        """

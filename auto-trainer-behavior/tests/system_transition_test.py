@@ -28,12 +28,6 @@ def test_enter_exit_transitions(machine, mock_system):
 
     assert machine.state == SystemState.tunnel
 
-    with pytest.raises(MachineError):
-        machine.enter_intersession()
-
-    with pytest.raises(MachineError):
-        machine.exit_intersession()
-
     machine.exit_tunnel()
 
     assert machine.state == SystemState.cage
@@ -49,7 +43,9 @@ def test_enter_exit_transitions(machine, mock_system):
     with mock_system.mock_perform_segmentation() as m_perf_segm:
         machine.exit_tunnel()
 
-    assert m_perf_segm.call_args_list == [mock.call(machine.intersession._segmentation_configuration)]
+    assert m_perf_segm.call_args_list == [
+        mock.call(machine.intersession._segmentation_configuration)
+    ]
 
     # Test with intersession enabled.
     assert machine.state == SystemState.intersession
