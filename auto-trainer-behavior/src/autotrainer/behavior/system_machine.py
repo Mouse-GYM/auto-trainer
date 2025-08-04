@@ -182,6 +182,7 @@ class SystemMachine(StateMachine):
         self._pellet_machine.environment_changed()
 
     def before_exit_intersession_to_tunnel(self):
+        self.state = SystemState.tunnel
         self._algorithm.system_state = SystemState.tunnel
         self.enter_tunnel()
         self._pellet_machine.environment_changed()
