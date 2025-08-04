@@ -297,6 +297,9 @@ class PelletMachine(StateMachine):
     def move_retract(self):
         """Trigger a "move" to retract position (y - 10 relative)"""
 
+    def may_move_retract(self):
+        pass
+
     def load_pellet(self):
         pass
 
@@ -352,6 +355,9 @@ class PelletMachine(StateMachine):
         pass
 
     def is_monitoring(self):
+        pass
+
+    def is_retracting(self):
         pass
 
     # endregion
