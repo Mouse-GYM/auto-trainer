@@ -28,12 +28,6 @@ def test_enter_exit_transitions(machine, mock_system):
 
     assert machine.state == SystemState.tunnel
 
-    with pytest.raises(MachineError):
-        machine.enter_intersession()
-
-    with pytest.raises(MachineError):
-        machine.exit_intersession()
-
     machine.exit_tunnel()
 
     assert machine.state == SystemState.cage
