@@ -42,12 +42,16 @@ class SystemMachine(StateMachine):
     transitions = [
         {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
          "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
+
         {"trigger": "exit_tunnel", "source": SystemState.tunnel, "dest": SystemState.cage,
          "before": "before_exit_tunnel", "after": "after_exit_tunnel"},
         {"trigger": "enter_intersession", "source": (SystemState.cage, SystemState.tunnel), "dest": SystemState.intersession,
          "before": "before_enter_intersession", "after": "after_enter_intersession"},
-        {"trigger": "exit_intersession", "source": SystemState.intersession, "dest": SystemState.cage,
-         "before": "before_exit_intersession"},
+        dict(  # previous behavior
+            trigger="exit_intersession",
+            source=SystemState.intersession, dest=SystemState.cage,
+            before="before_exit_intersession_to_cage",
+        ),
         dict(
             trigger="exit_intersession_to_tunnel",
             source=SystemState.intersession, dest=SystemState.tunnel,
@@ -247,6 +251,7 @@ class SystemMachine(StateMachine):
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
+            logger.debug("_intersession_ended: load_cell.engaged=%s", self._analysis.load_cell_monitor.is_engaged)
             if self._analysis.load_cell_monitor.is_engaged:
                 self.exit_intersession_to_tunnel()
             else:
@@ -461,6 +466,12 @@ class SystemMachine(StateMachine):
         pass
 
     def may_exit_intersession(self):
+        pass
+
+    def may_exit_intersession_to_tunnel(self):
+        pass
+
+    def may_exit_intersession_to_cage(self):
         pass
 
     def is_cage(self):
