@@ -94,7 +94,7 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     try_register_api_event_plugin()
 
-    window = MainWindow(app, preferences, configuration, "1.2.0", is_dev)
+    window = MainWindow(app, preferences, configuration, "2.0.0", is_dev)
 
     window.show()
 
