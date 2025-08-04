@@ -693,15 +693,21 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         prev = self._parts_offsets.get(pair_key, None)
                         cur = response.get_parts_3d_offset(part1, part2)
                         self._parts_offsets[pair_key] = cur
-                        if prev != cur:
-                            # if we wanted as "global" property event handling:
-                            # self._on_property_changed(f"parts_offset_{part1}_{part2}", cur, prev)
-                            if pair_key == (SceneElement.Diamond, SceneElement.Triangle):
-                                self.diamond_triangle_offset_changed(cur)
-                            elif pair_key == (SceneElement.Star, SceneElement.Triangle):
-                                self.star_triangle_offset_changed(cur)
+                        try:
+                            if prev != cur:
+                                # if we wanted as "global" property event handling:
+                                # self._on_property_changed(f"parts_offset_{part1}_{part2}", cur, prev)
+                                if pair_key == (SceneElement.Diamond, SceneElement.Triangle):
+                                    self.diamond_triangle_offset_changed(cur)
+                                elif pair_key == (SceneElement.Star, SceneElement.Triangle):
+                                    self.star_triangle_offset_changed(cur)
+                        except Exception as err:
+                            logger.exception("offset_changed event callback failed: %s", err)
 
-                    self.pose_response_ready(response)
+                    try:
+                        self.pose_response_ready(response)
+                    except Exception as err:
+                        logger.exception("pose_response_ready event callback failed: %s", err)
 
                 elif mode == InferenceMode.Offline:
 

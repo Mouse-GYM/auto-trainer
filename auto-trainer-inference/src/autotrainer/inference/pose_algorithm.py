@@ -402,7 +402,10 @@ class PoseAlgorithm(ObservableObject):
             locations=[locations_1, locations_2],
             parts_3d_offsets=dict(parts_3d_offsets),
         )
-        self.pose_changed(response)
+        try:
+            self.pose_changed(response)
+        except Exception as err:
+            logger.exception("pose_changed event callback failed: %s", err)
         return response
 
     def _find_parts(self, frames: List[numpy.ndarray]) -> Dict[SceneElement, PoseLocation]:
