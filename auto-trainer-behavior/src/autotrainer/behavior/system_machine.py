@@ -197,16 +197,19 @@ class SystemMachine(StateMachine):
         algo = self.algorithm
         logger.verbose(
             "session ended: intersession.state=%s system_machine.state=%s algo.system_state=%s "
-            "intersession_enabled=%s session_mouse_seen=%s"
-            " segment_config=%s detection_config=%s",
+            "intersession_enabled=%s session_mouse_seen=%s",
+            # " segment_config=%s detection_config=%s",
             self._intersession.state, self.state, algo.system_state,
             algo.intersession_enabled, algo.session_mouse_seen,
-            self._intersession._segmentation_configuration,
-            self._intersession._detection_configuration,
+            # self._intersession._segmentation_configuration,
+            # self._intersession._detection_configuration,
         )
 
         can_perform_analysis = algo.can_perform_intersession_analysis()
-        if can_perform_analysis and self.state == SystemState.cage:
+        if can_perform_analysis and self.state in {
+            SystemState.tunnel,
+            SystemState.cage,
+        }:
             self.enter_intersession()
         else:
             inference = self._inference
