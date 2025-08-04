@@ -123,6 +123,8 @@ class CanDevice(Device):
             SystemCommandKind.MOVE_Z:
                 lambda data: self._interface.move_motor_z(data, False),
 
+            SystemCommandKind.SEND_RETRACT: self._send_retract,
+
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._home([cast(Motor, data)] if not isinstance(data, list) else data),
 
@@ -304,6 +306,11 @@ class CanDevice(Device):
         steps = MotorSteps("set_move_z",
             [{'z': position}, {'z': position, 'save_as_fixed': True}])
         return self._start_sequence(steps)
+
+    def _send_retract(self, data):
+        assert data is None
+        del data
+        self._interface.move_motor_y(-10, relative=True)
 
     def _command_handler(self):
         cur_commands = []

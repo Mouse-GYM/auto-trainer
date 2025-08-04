@@ -951,6 +951,7 @@ class CanInterface(DeviceInterface):
         position,
         config: StepperConfig,
         save_as_fixed: bool,
+        relative: bool = False,
     ):
         """
         Move a stepper motor.
@@ -959,10 +960,14 @@ class CanInterface(DeviceInterface):
             motor
             position: Either a position (float) or a (position, rate (%)) pair
             config: associated motor configuration
+            save_as_fixed: To save the passed position as fixed.
             
         Returns:
             bool: True if successful else False
         """
+
+        if save_as_fixed and relative:
+            raise ValueError("Cannot move_stepper with save_as_fixed and relative")
 
         if isinstance(position, float) or isinstance(position, int):
             velocity = config.maximum_velocity
@@ -973,8 +978,8 @@ class CanInterface(DeviceInterface):
             logger.warning("Unhandled position: %s", position)
             return False
 
-        logger.debug("%s: move %.3f mm with v=%.3f mm/s**2 save_as_fixed=%s",
-                     motor, position, velocity, save_as_fixed)
+        logger.debug("%s: move %.3f mm with v=%.3f mm/s**2 save_as_fixed=%s relative=%s",
+                     motor, position, velocity, save_as_fixed, relative)
 
         position = mm_to_turns(position)
         velocity = mm_to_turns(velocity)
@@ -990,13 +995,16 @@ class CanInterface(DeviceInterface):
             logger.warning("addr None for stepper motor=%s", motor)
             return False
         uuid = CanInterface.next_uuid()
-        res = self._jc.StepperMove(addr, _motor_to_id(motor),
-                                                         position,
-                                                         velocity,
-                                                         acceleration,
-                                                         AbsOrRel.ABSOLUTE,
-                                                         save_as_fixed,
-                                                         uuid)
+        res = self._jc.StepperMove(
+            addr,
+            _motor_to_id(motor),
+            position,
+            velocity,
+            acceleration,
+            AbsOrRel.RELATIVE if relative else AbsOrRel.ABSOLUTE,
+            save_as_fixed,
+            uuid,
+        )
         logger.debug("%s: res=%s uuid=%s", motor, res, uuid)
         return res == 0
 
@@ -1033,19 +1041,29 @@ class CanInterface(DeviceInterface):
         )
         return res
 
-    def move_motor_x(self, position, save_as_fixed: bool = False) -> bool:
+    def move_motor_x(
+        self,
+        position,
+        save_as_fixed: bool = False,
+        *,
+        relative: bool = False,
+    ) -> bool:
         """
          Move the X-direction motor
 
         Args:
             position: Either a position (float) or a (position, rate (%)) pair
             save_as_fixed: Save the position as a new fixed location for this motor
+            relative: Relative movement or absolute, default absolute.
 
          Returns:
              bool: True if successful else False
          """
-        return self._move_stepper_motor(Motor.PELLET_X_MOTOR, position, self.x_config,
-                                        save_as_fixed)
+        return self._move_stepper_motor(
+            Motor.PELLET_X_MOTOR, position, self.x_config,
+            save_as_fixed,
+            relative=relative,
+        )
 
     def set_motor_y(self, position) -> bool:
         res = (
@@ -1053,19 +1071,20 @@ class CanInterface(DeviceInterface):
         )
         return res
 
-    def move_motor_y(self, position, save_as_fixed: bool = False) -> bool:
+    def move_motor_y(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
          Move the Y-direction motor
 
          Args:
              position: Either a position (float) or a (position, rate (%)) pair
              save_as_fixed: Save the position as a new fixed location for this motor
+             relative: Relative movement or absolute, default absolute.
 
          Returns:
              bool: True if successful else False
          """
         return self._move_stepper_motor(Motor.PELLET_Y_MOTOR, position, self.y_config,
-                                        save_as_fixed)
+                                        save_as_fixed, relative=relative)
 
     def set_motor_z(self, position) -> bool:
         res = (
@@ -1073,19 +1092,20 @@ class CanInterface(DeviceInterface):
         )
         return res
 
-    def move_motor_z(self, position, save_as_fixed: bool = False) -> bool:
+    def move_motor_z(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
          Move the Z-direction motor
 
          Args:
              position: Either a position (float) or a (position, rate (%)) pair
              save_as_fixed: Save the position as a new fixed location for this motor
+             relative: Relative movement or absolute, default absolute.
 
          Returns:
              bool: True if successful else False
          """
         return self._move_stepper_motor(Motor.PELLET_Z_MOTOR, position, self.z_config,
-                                        save_as_fixed)
+                                        save_as_fixed, relative=relative)
 
     def fixed_position(self) -> bool:
         """
