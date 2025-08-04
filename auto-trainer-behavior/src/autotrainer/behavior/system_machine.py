@@ -44,7 +44,7 @@ class SystemMachine(StateMachine):
          "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
         {"trigger": "exit_tunnel", "source": SystemState.tunnel, "dest": SystemState.cage,
          "before": "before_exit_tunnel", "after": "after_exit_tunnel"},
-        {"trigger": "enter_intersession", "source": {SystemState.cage, SystemState.tunnel}, "dest": SystemState.intersession,
+        {"trigger": "enter_intersession", "source": (SystemState.cage, SystemState.tunnel), "dest": SystemState.intersession,
          "before": "before_enter_intersession", "after": "after_enter_intersession"},
         {"trigger": "exit_intersession", "source": SystemState.intersession, "dest": SystemState.cage,
          "before": "before_exit_intersession"},
