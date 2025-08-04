@@ -100,6 +100,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         :return:
         """
         if value:
+            # self._analysis.load_cell_monitor.
             self._machine.enter_tunnel()
         else:
             self._machine.exit_tunnel()

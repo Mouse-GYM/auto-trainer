@@ -282,7 +282,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 return None
         self._check_previous_offline_thread("perform_segmentation")
         self._stop_recorded.clear()
-        logger.info("performing segmentation on %s", configuration, stack_info=True)
+        logger.info("performing segmentation on %s", configuration)
         intersession_block = self._intersession_block = IntersessionBlock(
             configuration=configuration, parts_count=self._algorithm.part_count)
         for _ in range(self._offline_queue.camera_count):
