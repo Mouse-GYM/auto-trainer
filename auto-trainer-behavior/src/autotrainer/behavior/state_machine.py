@@ -1,15 +1,26 @@
 from enum import Enum
-from typing import Tuple
+from typing import Tuple, Callable, Any
 
 from events import Events
 
 from autotrainer.core.logging import get_verbose_logger
 
+AnyOldValue = AnyNewValue = Any
+
 
 logger = get_verbose_logger(__name__)
 
+
+class StateMachineEvents(Events):
+
+    state_changed: Callable[[AnyOldValue, AnyNewValue], None]
+    property_changed: Callable[[str, AnyNewValue, AnyOldValue], None]
+
+
 class StateMachine:
     """Generic state machine/object mixin, with events handling"""
+
+    _events_class = StateMachineEvents
 
     class Properties(str, Enum):
         STATE_PROPERTY = "state"
@@ -17,7 +28,7 @@ class StateMachine:
     def __init__(self, *, initial_state, event_names: Tuple[str, ...] = ()):
         super().__init__()
         self._state = initial_state
-        self._events = Events(event_names + ('state_changed', 'property_changed'))
+        self._events = self._events_class(event_names + ('state_changed', 'property_changed'))
 
     @property
     def events(self):

@@ -1,6 +1,7 @@
 import logging
 import time
 from enum import Enum
+from typing import Dict, Callable, Any
 
 from events import Events
 from transitions import Machine
@@ -11,7 +12,7 @@ from autotrainer.core import EventManager, MessageHandler, ObservableObject
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..behavior_event_kind import BehaviorEventKind
 from ..pellet_device_protocol import PelletDeviceProtocol
-from ..state_machine import StateMachine
+from ..state_machine import StateMachine, StateMachineEvents
 from ..system_machine_state import SystemState
 
 logger = get_verbose_logger(__name__)
@@ -28,7 +29,14 @@ class PelletState(str, Enum):
     retract = "retract"
 
 
+class PelletMachineEvents(StateMachineEvents):
+    pellet_loading: Callable[[], None]
+    pellet_sending: Callable[[], None]
+
+
 class PelletMachine(StateMachine):
+
+    _events_class = PelletMachineEvents
 
     # Note that transitions have conditions, where applicable.  What may appear to be unconditional calls to cover,
     # release, or otherwise perform pellet transitions will not succeed and perform those actions if these conditions
