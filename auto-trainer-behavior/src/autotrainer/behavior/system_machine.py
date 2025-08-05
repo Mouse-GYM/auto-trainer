@@ -31,9 +31,8 @@ logger = get_verbose_logger(__name__)
 _clean_raw_data_timer = Timer
 _auto_clamp_release_timer = Timer
 _pellet_loading_timer = Timer
+
 #
-
-
 
 
 class SystemMachine(StateMachine):
@@ -82,7 +81,8 @@ class SystemMachine(StateMachine):
 
         self._project_info = project_info
 
-        self._timer1 = None  # misc timer
+        self._timer_consider_end_session: Optional[Timer] = None
+        self._delay_timer_consider_end_session: Optional[float] = 2.0
 
         algorithm = self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
         algorithm.project = project_info
@@ -394,12 +394,14 @@ class SystemMachine(StateMachine):
             self._tunnel_device.update_head_magnet_intensity(position)
 
     def _pellet_loading(self):
-        prev_t1 = self._timer1
-        if prev_t1 is None or prev_t1.finished.is_set():
-            self._timer1 = _pellet_loading_timer(5, self._consider_end_session)
-            self._timer1.start()
+        prev_timer = self._timer_consider_end_session
+        if prev_timer is None or prev_timer.finished.is_set():
+            self._timer_consider_end_session = _pellet_loading_timer(
+                self._delay_timer_consider_end_session, self._consider_end_session)
+            self._timer_consider_end_session.start()
         else:
-            logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s", self, prev_t1)
+            logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s",
+                           self, prev_timer)
 
     def _pellet_sending(self):
         if self.state == SystemState.tunnel:
