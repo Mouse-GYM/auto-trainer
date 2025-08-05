@@ -37,7 +37,7 @@ class PelletMachine(StateMachine):
         {"trigger": "load_pellet", "source": [PelletState.monitoring, PelletState.covering],
          "dest": PelletState.loading, "before": "before_load_pellet", "after": "after_load_pellet",
          "conditions": "can_load_pellet"},
-        {"trigger": "send_pellet", "source": [PelletState.loading, PelletState.home, PelletState.prerelease],
+        {"trigger": "send_pellet", "source": [PelletState.loading, PelletState.home, PelletState.prerelease, PelletState.retract],
          "dest": PelletState.sending, "before": "before_send_pellet", "conditions": "can_send_pellet"},
         {"trigger": "prerelease_pellet", "source": [PelletState.loading, PelletState.home],
          "dest": PelletState.prerelease, "before": "before_prerelease_pellet", "conditions": "can_prerelease_pellet"},
@@ -51,7 +51,13 @@ class PelletMachine(StateMachine):
          "conditions": "can_move_home"},
         dict(
             trigger="move_retract",
-            source=(PelletState.sending, PelletState.releasing, PelletState.covering, PelletState.monitoring),
+            source=(
+                PelletState.loading,
+                PelletState.sending,
+                PelletState.releasing,
+                PelletState.covering,
+                PelletState.monitoring,
+            ),
             dest=PelletState.retract,
             after="_move_retract",
         ),
@@ -237,7 +243,7 @@ class PelletMachine(StateMachine):
                 self.move_retract()
             return
 
-        if self.state == PelletState.loading:
+        if self.state in {PelletState.loading, PelletState.retract}:
             __debug__ and logit()
             if self.algorithm.pellet_cover_enabled:
                 self.send_pellet()
