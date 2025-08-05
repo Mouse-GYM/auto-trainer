@@ -28,9 +28,9 @@ class SystemCommandKind(IntEnum):
     WRITE_MOTOR_CONFIGURATION = 202
     SET_LOAD_PELLET_PROCEDURE = 203
     SET_SEND_PELLET_PROCEDURE = 204
-    SET_X = 205  # moves and sets an X position for use by SEND_FIXED_XYZ
-    SET_Y = 206  # moves and sets a Y position for use by SEND_FIXED_XYZ
-    SET_Z = 207  # moves and sets a Z position for use by SEND_FIXED_XYZ
+    SET_X = 205  # sets the X position for use by SEND_FIXED_XYZ
+    SET_Y = 206  # sets the Y position for use by SEND_FIXED_XYZ
+    SET_Z = 207  # sets the Z position for use by SEND_FIXED_XYZ
     MOVE_LOAD_SERVO = 208
     MOVE_COVER_SERVO = 209
     SEND_HOME = 210

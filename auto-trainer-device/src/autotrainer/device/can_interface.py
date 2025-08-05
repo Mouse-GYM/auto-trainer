@@ -1076,10 +1076,7 @@ class CanInterface(DeviceInterface):
 
     def set_motor_x(self, position) -> bool:
         # NB: SET == saved-as-fixed:
-        res = (
-                self.move_motor_x(position, True)
-        )
-        return res
+        return self.move_motor_x(position, save_as_fixed=True)
 
     def move_motor_x(
         self,
@@ -1094,22 +1091,17 @@ class CanInterface(DeviceInterface):
         Args:
             position: Either a position (float) or a (position, rate (%)) pair
             save_as_fixed: Save the position as a new fixed location for this motor
+                If True then the position is only saved-as-fixed, the motor is not moved.
             relative: Relative movement or absolute, default absolute.
 
          Returns:
              bool: True if successful else False
          """
-        return self._move_stepper_motor(
-            Motor.PELLET_X_MOTOR, position, self.x_config,
-            save_as_fixed,
-            relative=relative,
-        )
+        return self._move_stepper_motor(Motor.PELLET_X_MOTOR, position, self.x_config,
+                                        save_as_fixed=save_as_fixed, relative=relative)
 
     def set_motor_y(self, position) -> bool:
-        res = (
-                self.move_motor_y(position, True)
-        )
-        return res
+        return self.move_motor_y(position, save_as_fixed=True)
 
     def move_motor_y(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
@@ -1118,19 +1110,17 @@ class CanInterface(DeviceInterface):
          Args:
              position: Either a position (float) or a (position, rate (%)) pair
              save_as_fixed: Save the position as a new fixed location for this motor
+                If True then the position is only saved-as-fixed, the motor is not moved.
              relative: Relative movement or absolute, default absolute.
 
          Returns:
              bool: True if successful else False
          """
         return self._move_stepper_motor(Motor.PELLET_Y_MOTOR, position, self.y_config,
-                                        save_as_fixed, relative=relative)
+                                        save_as_fixed=save_as_fixed, relative=relative)
 
     def set_motor_z(self, position) -> bool:
-        res = (
-                self.move_motor_z(position, True)
-        )
-        return res
+        return self.move_motor_z(position, save_as_fixed=True)
 
     def move_motor_z(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
@@ -1139,13 +1129,14 @@ class CanInterface(DeviceInterface):
          Args:
              position: Either a position (float) or a (position, rate (%)) pair
              save_as_fixed: Save the position as a new fixed location for this motor
+                If True then the position is only saved-as-fixed, the motor is not moved.
              relative: Relative movement or absolute, default absolute.
 
          Returns:
              bool: True if successful else False
          """
         return self._move_stepper_motor(Motor.PELLET_Z_MOTOR, position, self.z_config,
-                                        save_as_fixed, relative=relative)
+                                        save_as_fixed=save_as_fixed, relative=relative)
 
     def fixed_position(self) -> bool:
         """

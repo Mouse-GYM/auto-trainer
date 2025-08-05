@@ -417,24 +417,27 @@ class VideoCapture(Process):
                         self._record.close_event.wait()
                         # so that when session analyse is enabled the feeder thread won't try to open the mp4 files
                         # before so.
-                        logger.info("sending EOF_RECORDING frame indices to signify eof recording last frame index: %s",
-                                    cur_frame_idx)
 
-                        time.sleep(0.2)
-                        # this is to help ensure consumer has finished reading current frames that are already pushed
-                        # is not big issue to sleep here given this is not hot code path
+                        if net_q is not None:
+                            logger.info(
+                                "sending EOF_RECORDING frame indices to signify eof recording last frame index: %s",
+                                cur_frame_idx)
 
-                        sync_barrier()
-                        d = net_q.get_cam_missing_frames(self._camera_idx)
-                        sync_barrier()
+                            time.sleep(0.2)
+                            # this is to help ensure consumer has finished reading current frames that are already pushed
+                            # is not big issue to sleep here given this is not hot code path
 
-                        logger.debug("padding %s times", d)
-                        for _ in range(d):
-                            net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING)
-                        for _ in range(self._network_queue.frames_per_camera):
-                            net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING)
+                            sync_barrier()
+                            d = net_q.get_cam_missing_frames(self._camera_idx)
+                            sync_barrier()
 
-                        sync_barrier()
+                            logger.debug("padding %s times", d)
+                            for _ in range(d):
+                                net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING)
+                            for _ in range(self._network_queue.frames_per_camera):
+                                net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING)
+
+                            sync_barrier()
 
                 elif self._is_record_active and record_start_frame_idx is not None:
                     # normal recording case
