@@ -76,7 +76,7 @@ class VideoRecord(Thread):
         self._video_writer = None
         self._video_timestamp_file = None
 
-        self._image_location: str
+        self._image_location: Optional[str] = None
         self._last_image_timestamp = time.perf_counter()
 
         self._interval_mode = ProjectInterval.NONE
