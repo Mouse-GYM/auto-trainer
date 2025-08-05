@@ -961,7 +961,8 @@ class CanInterface(DeviceInterface):
             position: Either a position (float) or a (position, rate (%)) pair
             config: associated motor configuration
             save_as_fixed: To save the passed position as fixed.
-            
+            relative: Relative movement or absolute, default absolute.
+
         Returns:
             bool: True if successful else False
         """
@@ -985,10 +986,11 @@ class CanInterface(DeviceInterface):
         velocity = mm_to_turns(velocity)
         acceleration = mm_to_turns(config.maximum_acceleration)
 
-        if position < 0:
-            position = 0
-        elif position > 15:
-            position = 15
+        if not relative:
+            if position < 0:
+                position = 0
+            elif position > 15:
+                position = 15
 
         addr = self._tgt2addr(target_of_motor(motor))
         if addr is None:
