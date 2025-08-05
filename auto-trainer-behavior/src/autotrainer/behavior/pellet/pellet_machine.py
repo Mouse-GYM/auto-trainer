@@ -51,7 +51,7 @@ class PelletMachine(StateMachine):
          "conditions": "can_move_home"},
         dict(
             trigger="move_retract",
-            source=(PelletState.sending, PelletState.releasing),
+            source=(PelletState.sending, PelletState.releasing, PelletState.covering, PelletState.monitoring),
             dest=PelletState.retract,
             after="_move_retract",
         ),
@@ -357,7 +357,7 @@ class PelletMachine(StateMachine):
     def is_monitoring(self):
         pass
 
-    def is_retracting(self):
+    def is_retract(self):
         pass
 
     # endregion
