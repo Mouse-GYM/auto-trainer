@@ -379,7 +379,7 @@ class BehaviorAlgorithm(ObservableObject):
             EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
             EventManager.default().flush()
         else:
-            logger.warning("end_session() called but not in session")
+            logger.warning("end_session() called but not in session", stack_info=True)
 
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0

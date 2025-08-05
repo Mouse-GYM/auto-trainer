@@ -154,6 +154,7 @@ class SystemMachine(StateMachine):
             PelletState.monitoring,
             PelletState.retract,
         }:
+            # not sure about this
             self._algorithm.start_session()
 
         self._update_magnet_position(self.algorithm.baseline_intensity)
