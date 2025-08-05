@@ -378,7 +378,6 @@ class BehaviorAlgorithm(ObservableObject):
         logger.success("Stopping session recording ...")
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
         post_trigger_enable(self, False)
-        self._is_in_session = False
         self.session_ending()
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
