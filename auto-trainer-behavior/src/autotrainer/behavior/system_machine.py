@@ -31,9 +31,8 @@ logger = get_verbose_logger(__name__)
 _clean_raw_data_timer = Timer
 _auto_clamp_release_timer = Timer
 _pellet_loading_timer = Timer
+
 #
-
-
 
 
 class SystemMachine(StateMachine):
@@ -47,6 +46,7 @@ class SystemMachine(StateMachine):
 
         {"trigger": "exit_tunnel", "source": SystemState.tunnel, "dest": SystemState.cage,
          "before": "before_exit_tunnel", "after": "after_exit_tunnel"},
+
         {"trigger": "enter_intersession", "source": (SystemState.cage, SystemState.tunnel), "dest": SystemState.intersession,
          "before": "before_enter_intersession", "after": "after_enter_intersession"},
         dict(  # previous behavior
@@ -81,7 +81,8 @@ class SystemMachine(StateMachine):
 
         self._project_info = project_info
 
-        self._timer1 = None  # misc timer
+        self._timer_consider_end_session: Optional[Timer] = None
+        self._delay_timer_consider_end_session: Optional[float] = 2.0
 
         algorithm = self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
         algorithm.project = project_info
@@ -151,7 +152,9 @@ class SystemMachine(StateMachine):
             PelletState.covering,
             PelletState.releasing,
             PelletState.monitoring,
+            PelletState.retract,
         }:
+            # not sure about this
             self._algorithm.start_session()
 
         self._update_magnet_position(self.algorithm.baseline_intensity)
@@ -172,6 +175,7 @@ class SystemMachine(StateMachine):
         self.algorithm.end_session()
 
     def before_enter_intersession(self):
+        # current system_state should be tunnel here
         self._algorithm.system_state = SystemState.intersession
 
     def after_enter_intersession(self):
@@ -221,9 +225,10 @@ class SystemMachine(StateMachine):
         algo = self.algorithm
         logger.verbose(
             "session ended: intersession.state=%s system_machine.state=%s algo.system_state=%s "
-            "intersession_enabled=%s session_mouse_seen=%s",
+            "pellet_machine.state=%s intersession_enabled=%s session_mouse_seen=%s",
             # " segment_config=%s detection_config=%s",
             self._intersession.state, self.state, algo.system_state,
+            self._pellet_machine.state,
             algo.intersession_enabled, algo.session_mouse_seen,
             # self._intersession._segmentation_configuration,
             # self._intersession._detection_configuration,
@@ -286,7 +291,7 @@ class SystemMachine(StateMachine):
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                                               context=self.state)
             else:
-                if self.state == SystemState.tunnel:
+                if self.state == SystemState.tunnel and self.intersession.state == IntersessionState.idle:
                     logger.info("%s False, exiting tunnel ..", LoadCellMonitor.IS_ENGAGED_PROPERTY)
                     self.exit_tunnel()
                 else:
@@ -389,12 +394,14 @@ class SystemMachine(StateMachine):
             self._tunnel_device.update_head_magnet_intensity(position)
 
     def _pellet_loading(self):
-        prev_t1 = self._timer1
-        if prev_t1 is None or prev_t1.finished.is_set():
-            self._timer1 = _pellet_loading_timer(5, self._consider_end_session)
-            self._timer1.start()
+        prev_timer = self._timer_consider_end_session
+        if prev_timer is None or prev_timer.finished.is_set():
+            self._timer_consider_end_session = _pellet_loading_timer(
+                self._delay_timer_consider_end_session, self._consider_end_session)
+            self._timer_consider_end_session.start()
         else:
-            logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s", self, prev_t1)
+            logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s",
+                           self, prev_timer)
 
     def _pellet_sending(self):
         if self.state == SystemState.tunnel:

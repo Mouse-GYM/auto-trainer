@@ -1,8 +1,16 @@
 from datetime import datetime
+from unittest import mock
 
 import pytest
 
-from autotrainer.behavior import PelletState, SystemState, PelletMachine
+from autotrainer.behavior import PelletState, SystemState, PelletMachine, PelletDeviceProtocol
+
+
+@pytest.fixture()
+def pellet_machine():
+    m_pellet_device = mock.create_autospec(PelletDeviceProtocol)
+    pellet_machine = PelletMachine(pellet_device=m_pellet_device)
+    return pellet_machine
 
 
 def test_enter_exit_default(mock_system, machine):
@@ -304,20 +312,25 @@ def test_session_limit(mock_system, machine):
 
 @pytest.mark.parametrize("pellet_seen", [True, False])
 @pytest.mark.parametrize("must_release", [True, False])
-@pytest.mark.parametrize("pellet_state", sorted(PelletState))
-def test_move_home_when_intersession(pellet_state, pellet_seen, must_release):
-    pellet_machine = PelletMachine()
+@pytest.mark.parametrize("pellet_state",
+                         set(PelletState)
+                         - {
+                             PelletState.monitoring,
+                             PelletState.home,
+                             PelletState.loading,
+                             PelletState.prerelease,
+                         })
+def test_move_home_when_intersession(pellet_machine, pellet_state, pellet_seen, must_release):
     pellet_machine.state = pellet_state
     pellet_machine.algorithm.system_state = SystemState.intersession
     pellet_machine._try_next_state(pellet_seen=pellet_seen, must_release=must_release)
-    assert pellet_machine.state is PelletState.home
+    assert pellet_machine.state is PelletState.retract
 
 
 @pytest.mark.parametrize("pellet_seen", [True, False])
 @pytest.mark.parametrize("must_release", [True, False])
 @pytest.mark.parametrize("system_state", sorted(set(SystemState) - {SystemState.intersession}))
-def test_send_pellet_when_home(system_state, pellet_seen, must_release):
-    pellet_machine = PelletMachine()
+def test_send_pellet_when_home(pellet_machine, system_state, pellet_seen, must_release):
     pellet_machine.state = PelletState.home
     pellet_machine.algorithm.system_state = system_state
     pellet_machine._try_next_state(pellet_seen=pellet_seen, must_release=must_release)

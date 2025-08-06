@@ -9,6 +9,7 @@ from enum import IntEnum
 
 from autotrainer.core import SystemStatusMessageKind, SystemCommandKind, EventManager
 from autotrainer.core.logging import setup_logging
+from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import CanDevice, DeviceConnection, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
     CompoundMovementFile, MotorConfigurationFile
@@ -505,7 +506,7 @@ motor_to_move_command = {
     Motor.TUNNEL_MAGNET_SERVO: SystemCommandKind.MOVE_MAGNET_SERVO,
     Motor.TUNNEL_GATE_SERVO: SystemCommandKind.MOVE_GATE_SERVO,
     Motor.PELLET_COVER_SERVO: SystemCommandKind.MOVE_COVER_SERVO,
-    Motor.PELLET_LOAD_SERVO: SystemCommandKind.MOVE_LOAD_SERVO
+    Motor.PELLET_LOAD_SERVO: SystemCommandKind.MOVE_LOAD_SERVO,
 }
 
 
@@ -525,8 +526,13 @@ def handle_motor_command(motor: Motor, params, device_connection):
 
     # set position
     elif params[0] == 'move':
-        device_connection.send_message(motor_to_move_command[motor],
-                                       data=move_parameter(params[1:]), context="motor move")
+        relative = params[1].startswith(tuple("-+"))
+        float_params = move_parameter(params[1:])
+        device_connection.send_message(
+            motor_to_move_command[motor],
+            data=SystemDataArgsKwargs(args=(float_params,), kwargs=dict(relative=relative)),
+            context="motor move",
+        )
 
     # set position (no 'move')
     elif numeric:

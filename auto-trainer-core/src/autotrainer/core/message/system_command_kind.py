@@ -50,6 +50,8 @@ class SystemCommandKind(IntEnum):
 
     SET_MOTOR_DRIFT = 223
 
+    SEND_RETRACT = 224  # make y - 10, or 0 if lower.
+
     # General actions.
     PLAY_TONE = 301
     SET_RGB_LED = 302

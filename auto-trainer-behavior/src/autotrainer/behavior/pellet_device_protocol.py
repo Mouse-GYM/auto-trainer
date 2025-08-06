@@ -58,6 +58,11 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
         :return: A token to expect from the device message handler when the request is complete.
         """
 
+    def send_retract(self) -> Optional[UUID]:
+        """Request a move to y - 10 (relative)
+        :return: A token to expect from the device message handler when the request is complete.
+        """
+
     def load_pellet(self) -> Optional[UUID]:        """
         Request a full load cycle to scoop the pellet from the bin.
 

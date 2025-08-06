@@ -10,9 +10,11 @@ import logging
 import queue
 import threading
 import time
+from functools import partial
 from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast
 
 from autotrainer.core.logging import get_verbose_logger
+from ..core.message import SystemDataArgsKwargs
 
 logger = get_verbose_logger(__name__)
 
@@ -45,6 +47,17 @@ def _to_tuple(value: Union[str, Any]):
         return float(parts[0].strip()), float(parts[1].strip())
     else:
         return float(value)
+
+
+def unpack_data_arg(data):
+    if isinstance(data, SystemDataArgsKwargs):
+        return data.args, data.kwargs
+    return (data,), {}
+
+
+def apply_system_command_with_data_args(func, data):
+    args, kwargs = unpack_data_arg(data)
+    return func(*args, **kwargs)
 
 
 class CanDevice(Device):
@@ -114,14 +127,16 @@ class CanDevice(Device):
 
             SystemCommandKind.SET_Z: self._interface.set_motor_z,
 
-            SystemCommandKind.MOVE_X:
-                lambda data: self._interface.move_motor_x(data, False),
+            SystemCommandKind.MOVE_X: partial(apply_system_command_with_data_args,
+                                              self._interface.move_motor_x),
 
-            SystemCommandKind.MOVE_Y:
-                lambda data: self._interface.move_motor_y(data, False),
+            SystemCommandKind.MOVE_Y: partial(apply_system_command_with_data_args,
+                                              self._interface.move_motor_y),
 
-            SystemCommandKind.MOVE_Z:
-                lambda data: self._interface.move_motor_z(data, False),
+            SystemCommandKind.MOVE_Z: partial(apply_system_command_with_data_args,
+                                              self._interface.move_motor_z),
+
+            SystemCommandKind.SEND_RETRACT: self._send_retract,
 
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._home([cast(Motor, data)] if not isinstance(data, list) else data),
@@ -304,6 +319,11 @@ class CanDevice(Device):
         steps = MotorSteps("set_move_z",
             [{'z': position}, {'z': position, 'save_as_fixed': True}])
         return self._start_sequence(steps)
+
+    def _send_retract(self, data):
+        assert data is None
+        del data
+        self._interface.move_motor_y(-10, relative=True)
 
     def _command_handler(self):
         cur_commands = []

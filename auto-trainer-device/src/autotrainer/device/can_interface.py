@@ -19,7 +19,7 @@ import time
 import warnings
 from enum import Enum
 from operator import attrgetter
-from typing import Type, Optional
+from typing import Type, Optional, Dict
 
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
@@ -42,6 +42,9 @@ from .stepper_motor import mm_to_turns, turns_to_mm
 
 
 logger = get_verbose_logger(__name__)
+
+
+_STEPPER_MAX_TURNS = 15  # absolute max nbr of turns for each stepper, hardcoded for now.
 
 
 def _is_pellet_by_addr(addr: int) -> bool:
@@ -307,6 +310,8 @@ class CanInterface(DeviceInterface):
         self.gate_config = ServoConfig()
         self.load_config = ServoConfig()
         self.cover_config = ServoConfig()
+
+        self._motor_configs = {}
         self.x_config = StepperConfig()
         self.y_config = StepperConfig()
         self.z_config = StepperConfig()
@@ -316,6 +321,12 @@ class CanInterface(DeviceInterface):
         self.load_cell_factor = 21053.0
 
         no_op = lambda msg: None
+
+        self._last_positions: Dict[Motor, Optional[float]] = {
+            Motor.PELLET_X_MOTOR: None,
+            Motor.PELLET_Y_MOTOR: None,
+            Motor.PELLET_Z_MOTOR: None,
+        }
 
         # Simple handlers implemented as lambdas
         self._handlers = {
@@ -348,7 +359,7 @@ class CanInterface(DeviceInterface):
             JerryCANCmdType.AUDIO_MAGNITUDE_DATA_END: self._handle_audio_end,
             JerryCANCmdType.DOOR_SENSOR: self._translate_door_sensor,
             JerryCANCmdType.SERVO_STATUS: self._translate_servo_status,
-            JerryCANCmdType.STEPPER_STATUS: self._translate_stepper_status,
+            JerryCANCmdType.STEPPER_STATUS: self._handle_stepper_status,
             JerryCANCmdType.TEMP_HUM_READ: lambda msg: SensorStatus(
                 target=_addr2tgt(msg.dst_id),
                 temperature_c=float(msg.temp_hum_read.temperature) / 100.0,
@@ -444,13 +455,17 @@ class CanInterface(DeviceInterface):
         self._cover_config.motor = Motor.PELLET_COVER_SERVO
         self._cover_config.target = target_of_motor(self._cover_config.motor)
 
+    def _set_motor_config(self, config):
+        config.target = target_of_motor(config.motor)
+        self._motor_configs[config.motor] = config
+
     @property
     def x_config(self):
         """
         Returns:
             Handle to the X stepper motor configuration
         """
-        return self._x_config
+        return self._motor_configs[Motor.PELLET_X_MOTOR]
 
     @x_config.setter
     def x_config(self, config: StepperConfig):
@@ -460,9 +475,9 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        self._x_config = config if config is not None else StepperConfig()
-        self._x_config.motor = Motor.PELLET_X_MOTOR
-        self._x_config.target = target_of_motor(self._x_config.motor)
+        config = config if config is not None else StepperConfig()
+        config.motor = Motor.PELLET_X_MOTOR
+        self._set_motor_config(config)
 
     @property
     def y_config(self):
@@ -470,7 +485,7 @@ class CanInterface(DeviceInterface):
         Returns:
             Handle to the Y stepper motor configuration
         """
-        return self._y_config
+        return self._motor_configs[Motor.PELLET_Y_MOTOR]
 
     @y_config.setter
     def y_config(self, config: StepperConfig):
@@ -480,9 +495,9 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        self._y_config = config if config is not None else StepperConfig()
-        self._y_config.motor = Motor.PELLET_Y_MOTOR
-        self._y_config.target = target_of_motor(self._y_config.motor)
+        config = config if config is not None else StepperConfig()
+        config.motor = Motor.PELLET_Y_MOTOR
+        self._set_motor_config(config)
 
     @property
     def z_config(self):
@@ -490,7 +505,7 @@ class CanInterface(DeviceInterface):
         Returns:
             Handle to the Z stepper motor configuration
         """
-        return self._z_config
+        return self._motor_configs[Motor.PELLET_Z_MOTOR]
 
     @z_config.setter
     def z_config(self, config: StepperConfig):
@@ -500,9 +515,9 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        self._z_config = config if config is not None else StepperConfig()
-        self._z_config.motor = Motor.PELLET_Z_MOTOR
-        self._z_config.target = target_of_motor(self._z_config.motor)
+        config = config if config is not None else StepperConfig()
+        config.motor = Motor.PELLET_Z_MOTOR
+        self._set_motor_config(config)
 
     @property
     def pellet_address(self):
@@ -713,25 +728,28 @@ class CanInterface(DeviceInterface):
             motor: Optional motor to check against too
             timeout: Maximum time to wait (sec). Default=2.0
         """
-        now = time.time()
+        perf_timeout = time.perf_counter() + timeout
         final_res = None
         dropped = set()
         tot_dropped = 0
-        while time.time() - now < timeout:
+        logger.debug("get_response: typeof=%s target=%s motor=%s", typeof, target, motor)
+        while time.perf_counter() < perf_timeout:
             messages = self.read(15, collect_ms=5)
             if len(messages) == 0:
                 self._cnt_none += 1
                 continue
             # loop reversed, given we break and so that we return the most recent one:
             for msg in reversed(messages):
-                if (isinstance(msg, typeof) and msg.target == target
-                    and (motor is None or msg.motor == motor)
-                ):
-                    final_res = msg
-                    break
-                else:
-                    dropped.add(type(msg))
-                    tot_dropped += 1
+                if isinstance(msg, typeof):
+                    # logger.debug("got msg of typeof ; msg.target=%s msg.motor=%s", msg.target, msg.motor)
+                    if (
+                        msg.target == target
+                        and (motor is None or msg.motor == motor)
+                    ):
+                        final_res = msg
+                        break
+                dropped.add(type(msg))
+                tot_dropped += 1
             if final_res is not None:
                 break
 
@@ -951,6 +969,7 @@ class CanInterface(DeviceInterface):
         position,
         config: StepperConfig,
         save_as_fixed: bool,
+        relative: bool = False,
     ):
         """
         Move a stepper motor.
@@ -959,10 +978,15 @@ class CanInterface(DeviceInterface):
             motor
             position: Either a position (float) or a (position, rate (%)) pair
             config: associated motor configuration
-            
+            save_as_fixed: To save the passed position as fixed.
+            relative: Relative movement or absolute, default absolute.
+
         Returns:
             bool: True if successful else False
         """
+
+        if save_as_fixed and relative:
+            raise ValueError("Cannot move_stepper with save_as_fixed and relative")
 
         if isinstance(position, float) or isinstance(position, int):
             velocity = config.maximum_velocity
@@ -973,30 +997,54 @@ class CanInterface(DeviceInterface):
             logger.warning("Unhandled position: %s", position)
             return False
 
-        logger.debug("%s: move %.3f mm with v=%.3f mm/s**2 save_as_fixed=%s",
-                     motor, position, velocity, save_as_fixed)
+        logger.debug("%s: move %.3f mm with v=%.3f mm/s**2 save_as_fixed=%s relative=%s",
+                     motor, position, velocity, save_as_fixed, relative)
 
-        position = mm_to_turns(position)
-        velocity = mm_to_turns(velocity)
-        acceleration = mm_to_turns(config.maximum_acceleration)
+        turns_position = mm_to_turns(position)
+        turns_velocity = mm_to_turns(velocity)
+        turns_acceleration = mm_to_turns(config.maximum_acceleration)
 
-        if position < 0:
-            position = 0
-        elif position > 15:
-            position = 15
+        if relative:
+            max_pos = turns_to_mm(_STEPPER_MAX_TURNS)
+            if motor in self._last_positions:
+                last_pos = self._last_positions[motor]
+                if last_pos is None:
+                    logger.error("Motor %s: refusing relative movement with no last_pos known", motor)
+                    return False
+                tentative = last_pos + position
+                if tentative < 0:
+                    position -= tentative
+                    turns_position = mm_to_turns(position)
+                    logger.verbose("Limiting relative move to %s", position)
+                elif tentative > max_pos:
+                    position = max_pos - last_pos
+                    turns_position = mm_to_turns(position)
+                    logger.verbose("Limiting relative move to %s", position)
+                # force set our last receive position:
+                self._last_positions[motor] += position
+                # so that multiple consecutive relative movement (without having received a stepper status in between),
+                # won't make the checks to be missed.
+        else:
+            if turns_position < 0:
+                turns_position = 0
+            elif turns_position > _STEPPER_MAX_TURNS:
+                turns_position = _STEPPER_MAX_TURNS
 
         addr = self._tgt2addr(target_of_motor(motor))
         if addr is None:
             logger.warning("addr None for stepper motor=%s", motor)
             return False
         uuid = CanInterface.next_uuid()
-        res = self._jc.StepperMove(addr, _motor_to_id(motor),
-                                                         position,
-                                                         velocity,
-                                                         acceleration,
-                                                         AbsOrRel.ABSOLUTE,
-                                                         save_as_fixed,
-                                                         uuid)
+        res = self._jc.StepperMove(
+            addr,
+            _motor_to_id(motor),
+            turns_position,
+            turns_velocity,
+            turns_acceleration,
+            AbsOrRel.RELATIVE if relative else AbsOrRel.ABSOLUTE,
+            save_as_fixed,
+            uuid,
+        )
         logger.debug("%s: res=%s uuid=%s", motor, res, uuid)
         return res == 0
 
@@ -1030,54 +1078,65 @@ class CanInterface(DeviceInterface):
         # NB: SET == saved-as-fixed:
         return self.move_motor_x(position, save_as_fixed=True)
 
-    def move_motor_x(self, position, save_as_fixed: bool = False) -> bool:
+    def move_motor_x(
+        self,
+        position,
+        save_as_fixed: bool = False,
+        *,
+        relative: bool = False,
+    ) -> bool:
         """
          Move the X-direction motor
 
         Args:
             position: Either a position (float) or a (position, rate (%)) pair
             save_as_fixed: Save the position as a new fixed location for this motor
+                If True then the position is only saved-as-fixed, the motor is not moved.
+            relative: Relative movement or absolute, default absolute.
 
          Returns:
              bool: True if successful else False
          """
         return self._move_stepper_motor(Motor.PELLET_X_MOTOR, position, self.x_config,
-                                        save_as_fixed=save_as_fixed)
+                                        save_as_fixed=save_as_fixed, relative=relative)
 
     def set_motor_y(self, position) -> bool:
         return self.move_motor_y(position, save_as_fixed=True)
 
-    def move_motor_y(self, position, save_as_fixed: bool = False) -> bool:
+    def move_motor_y(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
          Move the Y-direction motor
 
          Args:
              position: Either a position (float) or a (position, rate (%)) pair
              save_as_fixed: Save the position as a new fixed location for this motor
+                If True then the position is only saved-as-fixed, the motor is not moved.
+             relative: Relative movement or absolute, default absolute.
 
          Returns:
              bool: True if successful else False
          """
         return self._move_stepper_motor(Motor.PELLET_Y_MOTOR, position, self.y_config,
-                                        save_as_fixed=save_as_fixed)
+                                        save_as_fixed=save_as_fixed, relative=relative)
 
     def set_motor_z(self, position) -> bool:
         return self.move_motor_z(position, save_as_fixed=True)
 
-    def move_motor_z(self, position, save_as_fixed: bool = False) -> bool:
+    def move_motor_z(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
          Move the Z-direction motor
 
          Args:
              position: Either a position (float) or a (position, rate (%)) pair
-             save_as_fixed: Save the position as a new fixed location for this motor. Default False.
-             If save_as_fixed is True then the position is only saved-as-fixed, the motor is not moved.
+             save_as_fixed: Save the position as a new fixed location for this motor
+                If True then the position is only saved-as-fixed, the motor is not moved.
+             relative: Relative movement or absolute, default absolute.
 
          Returns:
              bool: True if successful else False
          """
         return self._move_stepper_motor(Motor.PELLET_Z_MOTOR, position, self.z_config,
-                                        save_as_fixed=save_as_fixed)
+                                        save_as_fixed=save_as_fixed, relative=relative)
 
     def fixed_position(self) -> bool:
         """
@@ -1473,6 +1532,7 @@ class CanInterface(DeviceInterface):
             return self._translate_servo_config(message)
         elif message.cfg_response.type == JerryCANCfgMsg.Type.STEPPER:
             return self._translate_stepper_config(message)
+        logger.warning("Unknown config type: %s", message.cfg_response.type)
         return None
 
     def _translate_servo_config(self, message) -> ServoConfig:
@@ -1683,6 +1743,12 @@ class CanInterface(DeviceInterface):
 
         return ServoStatus(target, motor, message.servo_status.position)
 
+    def _handle_stepper_status(self, message):
+        status = self._translate_stepper_status(message)
+        if status.motor in self._last_positions:
+            self._last_positions[status.motor] = status.position
+        return status
+
     @staticmethod
     def _translate_stepper_status(message) -> typing.Optional[StepperStatus]:
         """
@@ -1696,13 +1762,14 @@ class CanInterface(DeviceInterface):
         """
         target = _addr2tgt(message.dst_id)
         motor = _id_to_motor(target, False, message.stepper_status.motor_id)
-
         if motor == Motor.NONE:
+            logger.warning("_translate_stepper_status: target=%s motor=%s dst_id=%s motor_id=%s",
+                           target, motor, message.dst_id, message.stepper_status.motor_id)
             return None
-
-        return StepperStatus(
-            target,
-            motor,
-            turns_to_mm(message.stepper_status.position),
-            message.stepper_status.limit_switch
+        status = StepperStatus(
+            target=target,
+            motor=motor,
+            position=turns_to_mm(message.stepper_status.position),
+            limit_switch=message.stepper_status.limit_switch
         )
+        return status

@@ -1,6 +1,7 @@
 import logging
 import time
 from enum import Enum
+from typing import Dict, Callable, Any
 
 from events import Events
 from transitions import Machine
@@ -11,7 +12,7 @@ from autotrainer.core import EventManager, MessageHandler, ObservableObject
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..behavior_event_kind import BehaviorEventKind
 from ..pellet_device_protocol import PelletDeviceProtocol
-from ..state_machine import StateMachine
+from ..state_machine import StateMachine, StateMachineEvents
 from ..system_machine_state import SystemState
 
 logger = get_verbose_logger(__name__)
@@ -25,9 +26,17 @@ class PelletState(str, Enum):
     releasing = "releasing"
     covering = "covering"
     home = "home"
+    retract = "retract"
+
+
+class PelletMachineEvents(StateMachineEvents):
+    pellet_loading: Callable[[], None]
+    pellet_sending: Callable[[], None]
 
 
 class PelletMachine(StateMachine):
+
+    _events_class = PelletMachineEvents
 
     # Note that transitions have conditions, where applicable.  What may appear to be unconditional calls to cover,
     # release, or otherwise perform pellet transitions will not succeed and perform those actions if these conditions
@@ -36,7 +45,7 @@ class PelletMachine(StateMachine):
         {"trigger": "load_pellet", "source": [PelletState.monitoring, PelletState.covering],
          "dest": PelletState.loading, "before": "before_load_pellet", "after": "after_load_pellet",
          "conditions": "can_load_pellet"},
-        {"trigger": "send_pellet", "source": [PelletState.loading, PelletState.home, PelletState.prerelease],
+        {"trigger": "send_pellet", "source": [PelletState.loading, PelletState.home, PelletState.prerelease, PelletState.retract],
          "dest": PelletState.sending, "before": "before_send_pellet", "conditions": "can_send_pellet"},
         {"trigger": "prerelease_pellet", "source": [PelletState.loading, PelletState.home],
          "dest": PelletState.prerelease, "before": "before_prerelease_pellet", "conditions": "can_prerelease_pellet"},
@@ -47,7 +56,19 @@ class PelletMachine(StateMachine):
          "conditions": "can_release_pellet"},
         {"trigger": "monitor_pellet", "source": "*", "dest": PelletState.monitoring},
         {"trigger": "move_home", "source": "*", "dest": PelletState.home, "before": "before_move_home",
-         "conditions": "can_move_home"}
+         "conditions": "can_move_home"},
+        dict(
+            trigger="move_retract",
+            source=(
+                PelletState.loading,
+                PelletState.sending,
+                PelletState.releasing,
+                PelletState.covering,
+                PelletState.monitoring,
+            ),
+            dest=PelletState.retract,
+            after="_move_retract",
+        ),
     ]
 
     def __init__(self, algorithm: BehaviorAlgorithm = None, msg_handler: MessageHandler = None,
@@ -192,6 +213,9 @@ class PelletMachine(StateMachine):
     def _session_ending(self):
         self._try_next_state()
 
+    def _move_retract(self):
+        self._pellet_device.send_retract()
+
     def _pellet_device_ack_received(self, token: str):
         if self._api_status_token is None:
             # External command.  Safe to ignore.
@@ -222,12 +246,12 @@ class PelletMachine(StateMachine):
 
         # Always arrest to the home position during intersession.
         if self.algorithm.system_state == SystemState.intersession:
-            if self.state != PelletState.home:
+            if self.state != PelletState.retract:
                 __debug__ and logit()
-                self.move_home()
+                self.move_retract()
             return
 
-        if self.state == PelletState.loading:
+        if self.state in {PelletState.loading, PelletState.retract}:
             __debug__ and logit()
             if self.algorithm.pellet_cover_enabled:
                 self.send_pellet()
@@ -282,6 +306,12 @@ class PelletMachine(StateMachine):
         pass
 
     def may_move_home(self):
+        pass
+
+    def move_retract(self):
+        """Trigger a "move" to retract position (y - 10 relative)"""
+
+    def may_move_retract(self):
         pass
 
     def load_pellet(self):
@@ -339,6 +369,9 @@ class PelletMachine(StateMachine):
         pass
 
     def is_monitoring(self):
+        pass
+
+    def is_retract(self):
         pass
 
     # endregion

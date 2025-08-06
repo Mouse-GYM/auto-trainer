@@ -147,20 +147,37 @@ def test_intersession_enabled(mock_system, machine):
     system changes are as expected.
     :return: None
     """
+    pellet_machine = machine._pellet_machine
+
     machine.algorithm.intersession_enabled = True
 
+    assert machine.state == SystemState.cage
+    assert machine.algorithm.system_state == machine.state
+    assert pellet_machine.state == PelletState.monitoring
+
     machine._analysis.load_cell_monitor.force_engaged(True)
+
+    assert machine.state == SystemState.tunnel
+    assert machine.algorithm.system_state == machine.state
+    assert pellet_machine.state == PelletState.releasing
 
     mock_system.mock_pose_response(False, True)
 
     with mock_system.mock_perform_segmentation():
         machine._analysis.load_cell_monitor.force_engaged(False)
 
+    # mock_system.pellet_state_trans
     assert machine.state == SystemState.intersession
+    assert machine.algorithm.system_state == machine.state
     assert mock_system.machine_state_trans == [
         SystemState.tunnel,
         SystemState.cage,
         SystemState.intersession,
+    ]
+    assert mock_system.pellet_state_trans == [
+        PelletState.releasing,
+        PelletState.monitoring,
+        PelletState.retract,
     ]
 
 

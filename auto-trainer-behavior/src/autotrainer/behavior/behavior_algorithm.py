@@ -370,16 +370,17 @@ class BehaviorAlgorithm(ObservableObject):
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
 
     def end_session(self):
-        if self._is_in_session:
-            logger.success("Stopping session recording ...")
-            EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
-            post_trigger_enable(self, False)
+        with self._thread_lock:
+            if not self._is_in_session:
+                logger.warning("end_session() called but not in session", stack_info=True)
+                return
             self._is_in_session = False
-            self.session_ending()
-            EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
-            EventManager.default().flush()
-        else:
-            logger.warning("end_session() called but not in session")
+        logger.success("Stopping session recording ...")
+        EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
+        post_trigger_enable(self, False)
+        self.session_ending()
+        EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
+        EventManager.default().flush()
 
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0
