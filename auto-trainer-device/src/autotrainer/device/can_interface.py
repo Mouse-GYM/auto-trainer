@@ -1388,7 +1388,7 @@ class CanInterface(DeviceInterface):
         Emit a tone for the animal to hear
 
         Args:
-            frequency: Freqency of tone (Hz)
+            frequency: Frequency of tone (Hz)
             duration_ms: Duration of tone (milliseconds)
 
         Returns:

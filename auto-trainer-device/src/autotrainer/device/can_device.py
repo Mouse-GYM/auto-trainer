@@ -225,8 +225,8 @@ class CanDevice(Device):
 
             SystemCommandKind.PLAY_TONE:
                 lambda data: (
-                    self._interface.emit_tone(data[0], data[1])
-                    if isinstance(data, tuple) else None
+                    self._interface.emit_tone(data[0], data[1]) if isinstance(data, tuple)
+                    else self._interface.emit_tone(data, 500)  # 500 millisecond
                 ),
 
             # No-op handlers
