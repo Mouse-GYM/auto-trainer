@@ -1,6 +1,7 @@
 import logging
 import secrets
 from enum import Enum
+from typing import Callable
 
 from transitions import Machine
 
@@ -9,7 +10,7 @@ from ..behavior_event_kind import BehaviorEventKind
 
 from ..inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
 from ..behavior_algorithm import BehaviorAlgorithm
-from ..state_machine import StateMachine
+from ..state_machine import StateMachine, StateMachineEvents
 from autotrainer.core.logging import get_verbose_logger
 
 logger = get_verbose_logger(__name__)
@@ -21,7 +22,14 @@ class IntersessionState(str, Enum):
     detection = "detection"
 
 
+class IntersessionMachineEvents(StateMachineEvents):
+    on_analysis_started: Callable[[], None]
+    on_analysis_ended: Callable[[], None]
+
+
 class IntersessionMachine(StateMachine):
+    _events_class = IntersessionMachineEvents
+
     states = [e for e in IntersessionState]
 
     transitions = [
