@@ -248,7 +248,8 @@ class MainWindow(QMainWindow):
             self._model.behavior.algorithm.clean_raw_data_on_inactive_session = value
 
     def _internal_simulate_trigger(self):
-        self._model.behavior.trigger_tunnel(self.capture_trigger_action.isChecked())
+        is_checked = self.capture_trigger_action.isChecked()
+        self._model.analysis.load_cell_monitor.force_engaged(is_checked)
 
     def _internal_set_force_detector_seen(self):
         new_value = self.force_detector_action.isChecked()
