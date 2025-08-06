@@ -493,20 +493,24 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 logger.exception("Error processing msg %s: %s", msg, err)
 
     def _monitor_data_queue(self):
+        pose_data: Optional[List[numpy.ndarray]]
+        frames_indices: Optional[numpy.ndarray]
+
         cams = [self.project.camera_1, self.project.camera_2]
         n_cams = len(cams)
         range_cams = range(n_cams)
         cams_frame_idx_fhs = None
         pose_paths: List[Path] = []
-        axis_labels = ("x", "y", "likelihood")
+        # axis_labels = ("x", "y", "likelihood")
         cams_read_h5_dss: List[h5py.Dataset] = []
         cams_read_h5_idx: List[int] = []
         recording_in_progress = False
         next_prev_mode = None
         prev_session = None
         tot_written_to_live = None
-        t_log_counters = time.time()
         cnt_data_received = 0
+        skip_update = False
+        pose_data = []
 
         writes_h5_live_durations = []
         cur_h5_live_batch = [[] for _ in range_cams]
@@ -514,18 +518,61 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         tot_skipped = 0
         t_start_offline = 0
 
+        t_log_counters = time.perf_counter()
         t_perf_live_check_data_queue_size = time.perf_counter() + 5
 
         ib: Optional[IntersessionBlock] = self._intersession_block  # start with what is there
 
+        def get_next_pose_data(timeout: Optional[float] = 0.05):
+            nonlocal pose_data
+            prev_pose_data = pose_data
+            tot_flushed = 0
+            if prev_pose_data is None:
+                cur_qsize = self._data_queue.qsize()
+                assert prev_mode == InferenceMode.Offline
+                assert recording_in_progress is False
+                # ensure we won't try flush again if the queue is actually empty on first try:
+                pose_data = []
+            else:
+                cur_qsize = 0
+
+            next_pose_data = next_mode = next_frames_indices = None
+
+            while True:
+                if prev_pose_data is None:
+                    try:
+                        next_pose_data, next_mode, next_frames_indices = self._data_queue.get_nowait()
+                    except queue.Empty:
+                        if tot_flushed > 0:
+                            # defensive:
+                            # will so return the previous next_pose_data, next_mode, next_frames_indices
+                            break
+                        raise  # nothing we can do, so re-raise to caller
+                else:
+                    next_pose_data, next_mode, next_frames_indices = self._data_queue.get(timeout=timeout)
+                    break
+                if (
+                    next_mode != InferenceMode.Live
+                    or next_frames_indices is None
+                    or not (next_frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all()
+                    or tot_flushed >= cur_qsize - 1  # so return the last one
+                ):
+                    break
+                tot_flushed += 1
+            # end while True
+            if prev_pose_data is None:
+                logger.verbose("flushed queue after end of offline processing ; size=%s flushed=%s",
+                               cur_qsize, tot_flushed)
+            return next_pose_data, next_mode, next_frames_indices
+
         while self._is_running:
 
-            t_now = time.time()
-            if t_now > t_log_counters:
-                t_log_counters = t_now + 15
+            perf_now = time.perf_counter()
+            if perf_now > t_log_counters:
+                t_log_counters = perf_now + 15
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug("status=%s data=%s avg_writes_h5_live=%.6f skipped_h5_live=%s",
-                                self._status, cnt_data_received,
+                    logger.debug("status=%s qlen=%s data=%s avg_writes_h5_live=%.6f skipped_h5_live=%s",
+                                self._status, self._data_queue.qsize(), cnt_data_received,
                                 0 if len(writes_h5_live_durations) == 0 else mean(writes_h5_live_durations),
                                  tot_skipped)
                 cnt_data_received = 0
@@ -533,10 +580,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 writes_h5_live_durations.clear()
 
             prev_mode = next_prev_mode  # don't forget
+
             try:
-                (pose_data, mode, frames_indices) = self._data_queue.get_nowait()
+                (pose_data, mode, frames_indices) = get_next_pose_data()
             except queue.Empty:
-                time.sleep(0.005)
                 continue
 
             if prev_mode != mode:
@@ -546,14 +593,11 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                 perf_now = time.perf_counter()
                 if perf_now >= t_perf_live_check_data_queue_size:
                     skip_update = self._data_queue.qsize() > 7
-                    t_perf_live_check_data_queue_size = perf_now + (0.05 if skip_update else 1.5)
+                    t_perf_live_check_data_queue_size = perf_now + (0.5 if skip_update else 2.5)
             else:
                 skip_update = False
 
             next_prev_mode = mode
-
-            pose_data: Optional[List[numpy.ndarray]]
-            frames_indices: Optional[numpy.ndarray]
 
             if frames_indices is not None:
                 if (not (frames_indices >= 0).all()
@@ -749,10 +793,14 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         # we can reset the offline queue here, it's safe :
                         # the pose process has switched to its online queue at this point
                         self._stop_recorded.clear()
-                        _close_fhs(cams_frame_idx_fhs)  # always
+                        _close_fhs(cams_frame_idx_fhs)  # defensive as supposed to be close already
+                        cams_frame_idx_fhs = None
                         if ib is None:
-                            logger.debug("pose_data is None and intersession_block is None")
+                            # also not supposed to
+                            logger.warning("pose_data is None and intersession_block is None")
                         else:
+                            # TODO: we should offload all this entire else: block to another thread,
+                            #  so to be able to resume as quickly as possible to read the live stream
                             fill_live_end = True
                             for cdx, pdl, pdd, cur_h5_idx, cur_h5_dss in zip(
                                 range_cams, ib.pose_data_list, ib.pose_data_dict, cams_read_h5_idx, cams_read_h5_dss
@@ -810,6 +858,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 logger.notice("assembled %s pose responses, speed=%.3f/s (vstack=%s)"
                                               " now calling intersession_inference()",
                                               min_nbr_pd, 2 * min_nbr_pd / (time.time() - t_start_offline), ib.pose_data.shape[0])
+
                                 intersession_inference(ib.pose_data, self._algorithm.part_names,
                                                        self._project)
                                 success = True

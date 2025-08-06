@@ -260,7 +260,8 @@ class SystemMachine(StateMachine):
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
-            logger.debug("_intersession_ended: load_cell.engaged=%s", self._analysis.load_cell_monitor.is_engaged)
+            logger.debug("_intersession_ended: load_cell.engaged=%s",
+                         self._analysis.load_cell_monitor.is_engaged)
             if self._analysis.load_cell_monitor.is_engaged:
                 self.exit_intersession_to_tunnel()
             else:
