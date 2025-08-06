@@ -94,6 +94,7 @@ class LoadCellMonitor(ObservableObject):
         self._when = 0  # used to pass with event when engaged is changed
         self._index = 0  # used to pass with event when engaged is changed
         self._is_engaged: bool = False
+        self._force_engaged: bool = False
         self._t_next_hist_log = time.time()
         self._values_history: Deque[
             Tuple[float, float, int]
@@ -116,11 +117,14 @@ class LoadCellMonitor(ObservableObject):
 
     @property
     def is_engaged(self) -> bool:
-        return self._is_engaged
+        return self._force_engaged or self._is_engaged
 
     @is_engaged.setter
     def is_engaged(self, value):
+        if self._force_engaged:
+            value = True
         if value != self._is_engaged:
+            logger.debug("is_engaged: %s -> %s", self._is_engaged, value)
             EventManager.default().post_event_content(AnalysisMeasurementEventKind.loadCellEngagedChanged, context=value,
                                                       when=datetime.fromtimestamp(self._when), index=self._index)
         self._is_engaged = self._on_property_changed(
@@ -292,6 +296,7 @@ class LoadCellMonitor(ObservableObject):
         """
         Primarily used for testing.  This will force the load cell monitor to be engaged or not engaged.
         """
+        logger.verbose("Force engaged: %s", engaged)
         if engaged != self._is_engaged:
             if len(self._values_history) == 0:
                 self._when = time.time()
@@ -300,4 +305,5 @@ class LoadCellMonitor(ObservableObject):
                 prev = self._values_history[-1]
                 self._when = prev[1]
                 self._index = prev[2]
-            self.is_engaged = engaged
+        self._force_engaged = engaged
+        self.is_engaged = engaged
