@@ -275,11 +275,14 @@ class PelletMachine(StateMachine):
             else:
                 self.monitor_pellet()
         elif self.state == PelletState.covering:
-            __debug__ and logit()
             if not pellet_seen:
-                self.load_pellet()
+                if self.can_load_pellet():
+                    __debug__ and logit()
+                    self.load_pellet()
             else:
-                self.release_pellet()
+                if self.can_release_pellet():
+                    __debug__ and logit()
+                    self.release_pellet()
         elif self.state == PelletState.releasing:
             self.monitor_pellet()
         elif self.state == PelletState.home:
