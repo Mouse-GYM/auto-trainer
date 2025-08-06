@@ -930,8 +930,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         tot_skipped_frames = 0
         empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
         #
-        # self._intersession_wait_time
-        perf_timeout = time.perf_counter() + 15  # intersession_wait_time is too low,
+        perf_timeout = time.perf_counter() + 15  # intersession_wait_time is too small,
         # the pose process and data monitor thread have some delay between them,
         # sometimes up to several seconds (4-5).
         # wait that we get the event from monitor data queue closing its write side to live files:
@@ -958,7 +957,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         videos_frame_count[cdx] = frame_count
             if len(captures_d) >= n_cams:
                 break
-            if time.perf_counter() > timeout:
+            if time.perf_counter() > perf_timeout:
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationInputError)
                 raise RuntimeError("timeout waiting for intersession video files")
             time.sleep(0.1)  # overkill to immediately retry
