@@ -381,7 +381,8 @@ class CanDevice(Device):
             after_uuid = self._interface.uuid()
             t_perf_last_command = time.perf_counter()
             if after_uuid != before_uuid:
-                if after_uuid != before_uuid + 1 or (before_uuid == 255 and after_uuid != 1):
+                # for now we have this rule:
+                if after_uuid != before_uuid + 1 and (before_uuid != 255 or after_uuid != 1):
                     logger.warning("Unexpected uuid change count: before=%s after=%s", before_uuid, after_uuid)
                 pending_uuid = after_uuid
                 if ctx is not None:
