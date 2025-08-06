@@ -116,8 +116,8 @@ class AppModel(ObservableObject):
 
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.PLAY_TONE, (int(freq),
-                                                                               int(duration) *
-                                                                               1000),
+                                                                               int(duration *
+                                                                               1000)),
                                                  context="tone")
 
     def open_tunnel_gate(self):

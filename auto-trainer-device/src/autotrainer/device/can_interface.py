@@ -255,6 +255,8 @@ class CanInterface(DeviceInterface):
         Returns:
             int: Next UUID to use
         """
+        # TODO: we should randomize the uuid we use to pass to our CAN messages,
+        #  this would prevent possible conflict with a second client connected on the bus.
         cls._uuid = cls._uuid + 1 & 0xFF  # maintain 8 bits
         if cls._uuid == 0:  # don't allow 0's
             cls._uuid = 1
@@ -1386,7 +1388,7 @@ class CanInterface(DeviceInterface):
         Emit a tone for the animal to hear
 
         Args:
-            frequency: Freqency of tone (Hz)
+            frequency: Frequency of tone (Hz)
             duration_ms: Duration of tone (milliseconds)
 
         Returns:

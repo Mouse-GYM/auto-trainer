@@ -196,8 +196,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def cover_pellet(self) -> Optional[UUID]:
         return self._send_with_token(self._pellet_device, SystemCommandKind.COVER_PELLET)
 
-    def play_tone(self, frequency: int, _duration: float) -> Optional[UUID]:
-        return self._send_with_token(self._pellet_device, SystemCommandKind.PLAY_TONE, (frequency, _duration))
+    def play_tone(self, frequency: int, duration: float) -> Optional[UUID]:
+        """Play a tone
+        :param frequency: in Hz (integer)
+        :param duration: in seconds (float)
+        """
+        duration_ms = int(duration * 1000)
+        return self._send_with_token(self._pellet_device, SystemCommandKind.PLAY_TONE, (frequency, duration_ms))
 
     def delay(self, amount: float):
         return self._send_with_token(self._pellet_device, SystemCommandKind.DELAY, amount)
