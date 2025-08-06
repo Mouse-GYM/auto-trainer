@@ -249,7 +249,7 @@ class PelletMachine(StateMachine):
                 if algo.pellet_cover_enabled:
                     # The hardware ends the send phase with the pellet covered.  Put things in a consistent state of
                     # covered without sending an unnecessary command.
-                    self.state = PelletState.covering
+                    self.state = PelletState.monitoring
                     # alternatively we could simply allow this states transition
                     self.cover_pellet()
                 # could also decide to execute the move_retract before the cover_pellet.
@@ -268,9 +268,9 @@ class PelletMachine(StateMachine):
         elif self.state == PelletState.sending:
             __debug__ and logit()
             if algo.pellet_cover_enabled:
-                # The hardware ends the send phase with the pellet covered.  Put things in a consistent state of
-                # covered without sending an unnecessary command.
+                # Put things in a consistent state of monitoring without sending an unnecessary command.
                 self.state = PelletState.covering
+                # alternatively we could simply allow this states transition
                 self.release_pellet()
             else:
                 self.monitor_pellet()
