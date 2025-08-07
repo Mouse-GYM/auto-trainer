@@ -192,7 +192,7 @@ class VideoRecord(Thread):
         self._prepare_image_capture()
 
     def _close_writers(self):
-        logger.verbose("%s: closing writers...", self)
+        logger.spam("%s: closing writers...", self)
         self._close_image_writer()
         self._close_video_writer()
 

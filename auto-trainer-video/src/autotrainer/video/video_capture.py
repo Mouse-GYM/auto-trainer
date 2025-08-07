@@ -394,8 +394,12 @@ class VideoCapture(Process):
                             sync_barrier()
                             d = net_q.get_cam_missing_frames(self._camera_idx)
                             sync_barrier()
+                            timeout = 5
                             for _ in range(d):
-                                net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING)
+                                t0 = time.perf_counter()
+                                net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING,
+                                                timeout=timeout)
+                                timeout -= time.perf_counter() - t0
                         #
                         primary_release()
 
@@ -419,7 +423,7 @@ class VideoCapture(Process):
                         # before so.
 
                         if net_q is not None:
-                            logger.info(
+                            logger.verbose(
                                 "sending EOF_RECORDING frame indices to signify eof recording last frame index: %s",
                                 cur_frame_idx)
 
@@ -431,11 +435,18 @@ class VideoCapture(Process):
                             d = net_q.get_cam_missing_frames(self._camera_idx)
                             sync_barrier()
 
-                            logger.debug("padding %s times", d)
+                            # logger.debug("padding %s times", d)
+                            timeout = 5
                             for _ in range(d):
-                                net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING)
+                                t0 = time.perf_counter()
+                                net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING,
+                                                timeout=timeout)
+                                timeout -= time.perf_counter() - t0
                             for _ in range(self._network_queue.frames_per_camera):
-                                net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING)
+                                t0 = time.perf_counter()
+                                net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.EOF_RECORDING,
+                                                timeout=timeout)
+                                timeout -= time.perf_counter() - t0
 
                             sync_barrier()
 

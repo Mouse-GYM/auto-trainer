@@ -336,9 +336,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             if ib is not None:
                 logger.warning("set_inference_to_online but intersession block: %s", ib)
             else:
-                logger.notice("Setting inference back to online with SWITCH_TO_ONLINE", stack_info=True)
+                logger.notice("Setting inference back to online with SWITCH_TO_ONLINE")
                 empty = numpy.zeros(offline_queue.shape, dtype=numpy.uint8)
                 # should pad in caes the cams index are unsync...
+                self._offline_queue.pad_to_batch_size(empty)
                 self._offline_queue.put_frame_index_category(empty, FrameIndexCategory.SWITCH_TO_ONLINE)
 
     def start(self, network_queue: FixedArrayMultiQueue) -> bool:
@@ -950,10 +951,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # in any case sleep a bit to allow pose process to finishes consume:
         offline_q = self._offline_queue
         empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
-        n_cams = offline_q.camera_count
         # eventual pad current batch of each cam:
         offline_q.pad_to_batch_size(empty_frame)
-        # also post a EOF_OFFLINE_PROCESSING to notify pose process
+        # also post a EOF_OFFLINE_PROCESSING or SWITCH_TO_ONLINE to notify pose process
         # when it has reached end of offline processing:
         self._offline_queue.put_frame_index_category(
             empty_frame,

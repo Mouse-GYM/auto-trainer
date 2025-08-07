@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from enum import Enum
 from typing import Dict, Callable, Any
@@ -49,8 +50,12 @@ class PelletMachine(StateMachine):
          "dest": PelletState.sending, "before": "before_send_pellet", "conditions": "can_send_pellet"},
         {"trigger": "prerelease_pellet", "source": [PelletState.loading, PelletState.home],
          "dest": PelletState.prerelease, "before": "before_prerelease_pellet", "conditions": "can_prerelease_pellet"},
-        {"trigger": "cover_pellet", "source": PelletState.monitoring, "dest": PelletState.covering,
-         "before": "before_cover_pellet", "conditions": "can_cover_pellet"},
+
+        dict(
+            trigger="cover_pellet", source=[PelletState.monitoring, PelletState.retract], dest=PelletState.covering,
+            before="before_cover_pellet", conditions="can_cover_pellet",
+        ),
+
         {"trigger": "release_pellet", "source": [PelletState.covering, PelletState.monitoring],
          "dest": PelletState.releasing, "before": "before_release_pellet",
          "conditions": "can_release_pellet"},
@@ -100,6 +105,8 @@ class PelletMachine(StateMachine):
                                transitions=PelletMachine.transitions, auto_transitions=False,
                                initial=initial_state, model_override=True,
                        )
+
+        self._thread_lock = threading.Lock()
 
     @property
     def algorithm(self):
@@ -236,6 +243,10 @@ class PelletMachine(StateMachine):
     # endregion
 
     def _try_next_state(self, pellet_seen: bool = True, must_release: bool = False):
+        with self._thread_lock:
+            self.__try_next_state(pellet_seen, must_release)
+
+    def __try_next_state(self, pellet_seen: bool = True, must_release: bool = False):
         def logit():
             logger.debug("try_next_state: pellet_seen=%s must_release=%s pellet_state=%s algo_system_state=%s",
                          pellet_seen, must_release, self._state, self.algorithm.system_state)
