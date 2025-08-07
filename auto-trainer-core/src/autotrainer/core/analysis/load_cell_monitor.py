@@ -247,6 +247,7 @@ class LoadCellMonitor(ObservableObject):
                 self._active_debounce = _timer_load_cell_engaged(cfg.threshold_duration, self._ensure_active)
                 self._active_debounce.start()
             elif when - t_start > cfg.threshold_duration:
+                self._active_debounce.cancel()
                 self._ensure_active()
 
         elif value < cfg.weight_inactive_threshold:
@@ -264,6 +265,7 @@ class LoadCellMonitor(ObservableObject):
                 self._inactive_debounce = _timer_load_cell_engaged(duration, self._ensure_inactive)
                 self._inactive_debounce.start()
             elif when - self._t_inactive_start > duration:
+                self._inactive_debounce.cancel()
                 self._ensure_inactive()
 
         else:
