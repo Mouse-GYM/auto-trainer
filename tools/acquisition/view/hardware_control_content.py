@@ -5,7 +5,7 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import (QLabel, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout,
                                QFormLayout, QStackedLayout)
 
-from autotrainer.core import MessageHandler, AnimalSubject
+from autotrainer.core import AnimalSubject
 from autotrainer.model import EnvironmentProvider, HardwareVersion
 from autotrainer.pyside import CardWidget
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -38,7 +38,18 @@ class HardwareControlContent(ContentWidget):
 
         self._model = model
 
-        self._card_widget = CardWidget()
+        # Header
+        layout = QHBoxLayout()
+
+        layout.addWidget(QLabel("Tunnel:"))
+        self._tunnel_version = QLabel("(unknown version)")
+        layout.addWidget(self._tunnel_version)
+
+        layout.addWidget(QLabel("Pellet:"))
+        self._pellet_version = QLabel("(unknown version)")
+        layout.addWidget(self._pellet_version)
+
+        self._card_widget = CardWidget(title="Hardware Control", header_right_layout=layout)
 
         if EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ:
             self._travel_limits = _anshutz_travel_limits
@@ -164,30 +175,6 @@ class HardwareControlContent(ContentWidget):
 
         self._card_widget.setContentLayout(layout)
 
-        # Header
-        self._header = QWidget(None)
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-
-        self._title = QLabel("Hardware Control")
-        self._title.setStyleSheet("font-weight: bold")
-        layout.addWidget(self._title)
-
-        layout.addStretch(1)
-
-        layout.addWidget(QLabel("Tunnel:"))
-        self._tunnel_version = QLabel("(unknown version)")
-        layout.addWidget(self._tunnel_version)
-
-        layout.addWidget(QLabel("Pellet:"))
-        self._pellet_version = QLabel("(unknown version)")
-        layout.addWidget(self._pellet_version)
-
-        self._header.setLayout(layout)
-
-        self._card_widget.header.setContent(self._header)
-
         # Footer
         self._basic_footer = QWidget(None)
 
@@ -234,11 +221,11 @@ class HardwareControlContent(ContentWidget):
     def _update_title(self, value: str):
         if value:
             if value.find("emulator") != -1:
-                self._title.setText(f"Hardware Control: Alogus Emulation")
+                self._card_widget.header.setTitle(f"Hardware Control: Alogus Emulation")
             else:
-                self._title.setText(f"Hardware Control: {EnvironmentProvider.hardware_version()}")
+                self._card_widget.header.setTitle(f"Hardware Control: {EnvironmentProvider.hardware_version()}")
         else:
-            self._title.setText("Hardware Control")
+            self._card_widget.header.setTitle("Hardware Control")
 
     def _model_property_changed(self, property_name: str, value, _):
         if property_name == HardwareModel.TUNNEL_VERSION_PROPERTY:

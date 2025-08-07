@@ -5,12 +5,15 @@ import sys
 from PySide6 import QtGui
 
 from autotrainer.core.event import try_register_api_event_plugin
-from autotrainer.core.logging import get_verbose_logger, DEFAULT_LOG_FORMAT, MULTIPROC_LOG_FORMAT, PreciseTimeFormatter, \
-    DateTimeFormats
+from autotrainer.core.logging import (get_verbose_logger, MULTIPROC_LOG_FORMAT, PreciseTimeFormatter, DateTimeFormats)
+from autotrainer.pyside import CardHeader
 
 logger = get_verbose_logger(__name__)
 
 missing_file = "The configuration file {0} does not exist.  A default configuration will be loaded."
+
+CardHeader.DEFAULT_BACKGROUND_COLOR = "#cfb87c"
+CardHeader.DEFAULT_TITLE_COLOR = "black"
 
 
 def verify_configuration(configuration: str):

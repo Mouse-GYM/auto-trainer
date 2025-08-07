@@ -2,8 +2,8 @@ import logging
 import qtawesome as qta
 
 from PySide6.QtCore import Qt, Signal, QTimer, Slot
-from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
-    QCheckBox, QLineEdit, QFileDialog, QPlainTextEdit, QVBoxLayout, QDoubleSpinBox
+from PySide6.QtWidgets import (QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox,
+                               QCheckBox, QLineEdit, QFileDialog, QPlainTextEdit, QVBoxLayout, QDoubleSpinBox)
 
 from autotrainer.core import PerfMonitor, LoadCellMonitor, ProjectInfo, MessageHandler
 from autotrainer.core.message import Motor
@@ -11,8 +11,8 @@ from autotrainer.device import is_servo
 from autotrainer.model import EnvironmentProvider, HardwareVersion
 from autotrainer.pyside import PGWidget, CardWidget, TextBoxHandler
 
-from tools.view.connection_panel import ConnectionPanel
-from tools.view.motor_config_dialog import MotorConfigDialog
+from autotrainer.pyside import ConnectionPanel
+from autotrainer.pyside import MotorConfigDialog
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ class MainContent(QWidget):
             position_layout.addWidget(QLabel("Gate"))
 
         self._curr_gate_position = QLabel("(-)")
-        
+
         if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
             position_layout.addWidget(self._curr_gate_position)
 
@@ -137,28 +137,28 @@ class MainContent(QWidget):
         self._gate_position.setValue(0)
         self._gate_position.setWrapping(False)
         self._gate_position.setEnabled(False)
-        
+
         if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
             position_layout.addWidget(self._gate_position, 0, Qt.AlignLeft)
 
         self._update_gate_button = QPushButton("Update")
         self._update_gate_button.setEnabled(False)
         self._update_gate_button.clicked.connect(self._set_gate_position)
-        
+
         if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
             position_layout.addWidget(self._update_gate_button, 0)
 
         self._open_gate = QPushButton("Open Gate")
         self._open_gate.setEnabled(False)
         self._open_gate.clicked.connect(self._model.open_tunnel_gate)
-        
+
         if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
             position_layout.addWidget(self._open_gate, 0)
 
         self._close_gate = QPushButton("Close Gate")
         self._close_gate.setEnabled(False)
         self._close_gate.clicked.connect(self._model.close_tunnel_gate)
-        
+
         if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
             position_layout.addWidget(self._close_gate, 0)
 
@@ -178,7 +178,7 @@ class MainContent(QWidget):
 
         row_layout.addLayout(position_layout)
 
-        panel = CardWidget(background_color=None, header_background_color="#00b6de")
+        panel = CardWidget(title="Control", background_color=None, header_background_color="#00b6de")
         panel.setContentLayout(row_layout)
 
         header = QWidget()

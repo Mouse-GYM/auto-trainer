@@ -7,11 +7,10 @@ from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.message import Motor
 from autotrainer.device import is_servo
 from autotrainer.model import HardwareVersion, EnvironmentProvider
-from autotrainer.pyside import ATSeparator
+from autotrainer.pyside import Separator, CardWidget
 
 from tools.pellet_delivery.model.app_model import AppModel
-from tools.view.basic_panel import create_panel
-from tools.view.motor_config_dialog import MotorConfigDialog
+from autotrainer.pyside import MotorConfigDialog
 
 
 logger = get_verbose_logger(__name__)
@@ -35,13 +34,13 @@ def add_position(label: str, s_min: int, s_max: int) -> (QLayout, QSpinBox):
     pos.setWrapping(False)
     position_layout.addWidget(pos, 0)
 
-    moveButton = QPushButton("Move")
-    position_layout.addWidget(moveButton, 0)
+    move_button = QPushButton("Move")
+    position_layout.addWidget(move_button, 0)
 
-    setButton = QPushButton("Set")
-    position_layout.addWidget(setButton, 0)
+    set_button = QPushButton("Set")
+    position_layout.addWidget(set_button, 0)
 
-    return position_layout, pos, moveButton, setButton
+    return position_layout, pos, move_button, set_button
 
 
 class PelletControl(QWidget):
@@ -55,10 +54,11 @@ class PelletControl(QWidget):
         self._app_model.property_changed += self._model_property_changed
 
         layout = QVBoxLayout()
-        panel = create_panel("Control", layout)
         layout.addLayout(self._create_button_layout())
-        layout.addWidget(ATSeparator("#dedede"))
+        layout.addWidget(Separator("#dedede"))
         layout.addLayout(self._create_move_layout())
+
+        panel = CardWidget(title="Control", content_layout=layout)
 
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)

@@ -12,7 +12,8 @@ _DEFAULT_STYLE = "border-color: #ddd; border-width: 1px; border-style: solid; bo
 
 
 class CardWidget(QWidget):
-    def __init__(self, background_color: Optional[str] = "white", header_background_color: str = "#cfb87c"):
+    def __init__(self, background_color: str = "white", title: str = "", header_background_color: Optional[str] = None,
+                 content_layout: Optional[QLayout] = None, header_right_layout: Optional[QWidget | QLayout] = None):
         super().__init__()
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -29,7 +30,11 @@ class CardWidget(QWidget):
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(0)
 
-        self._header = CardHeader(background_color=header_background_color)
+        self._header = CardHeader(title=title, background_color=header_background_color)
+
+        if header_right_layout is not None:
+            self._header.setRightContent(header_right_layout)
+
         self._layout.addWidget(self._header, 0, 0)
 
         self._footer = CardFooter()
@@ -38,6 +43,9 @@ class CardWidget(QWidget):
         self.setLayout(self._layout)
 
         self._layout.setRowStretch(1, 1)
+
+        if content_layout is not None:
+            self.setContentLayout(content_layout)
 
         self._last_widget = None
 

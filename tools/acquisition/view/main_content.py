@@ -3,14 +3,15 @@ from typing import Tuple
 
 from PySide6 import QtCore
 from PySide6.QtCore import QTimer, Slot
-from PySide6.QtWidgets import QGridLayout
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout
 
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference import PoseResponse, PoseAlgorithm
-from autotrainer.pyside import ATSeparator
+from autotrainer.pyside import Separator
 
 from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.view.alarm_content import AlarmContent
 from tools.acquisition.view.analysis_content import AnalysisContent
 from tools.acquisition.view.content_widget import ContentWidget
 from tools.acquisition.view.behavior_content import BehaviorContent
@@ -18,7 +19,6 @@ from tools.acquisition.view.camera_content import CameraContent
 from tools.acquisition.view.diagnostics_content import DiagnosticsContent
 from tools.acquisition.view.hardware_control_content import HardwareControlContent
 from tools.acquisition.view.hardware_status_content import HardwareStatusContent
-
 
 logger = get_verbose_logger(__name__)
 
@@ -63,7 +63,7 @@ class MainContent(ContentWidget):
 
         self._top_camera_content = CameraContent(self._model.top_camera)
         self._top_camera_content.camera_view.setTitle("Top Camera")
-        # self._top_camera_content.camera_view.setSize(450, 300)
+        self._top_camera_content.camera_view.setSize(450, 300)
 
         self._layout.addWidget(self._top_camera_content, 0, 4, 1, 2)
         self._content_widgets.append(self._top_camera_content)
@@ -79,15 +79,23 @@ class MainContent(ContentWidget):
         self._layout.addWidget(self._analysis_content, 1, 3, 1, 3)
         self._content_widgets.append(self._analysis_content)
 
-        # Third row - hardware
+        # Third row - hardware & alarms
 
         self._hardware_control_content = HardwareControlContent(self._model.hardware)
         self._layout.addWidget(self._hardware_control_content, 2, 0, 1, 3)
         self._content_widgets.append(self._hardware_control_content)
 
+        sub_layout = QHBoxLayout()
+
         hardware_status_content = HardwareStatusContent(self._model.message_handler)
-        self._layout.addWidget(hardware_status_content, 2, 3, 1, 3)
+        sub_layout.addWidget(hardware_status_content, 1)
         self._content_widgets.append(hardware_status_content)
+
+        alarm_content = AlarmContent(self._model.message_handler)
+        sub_layout.addWidget(alarm_content, 0)
+        # self._content_widgets.append(hardware_status_content)
+
+        self._layout.addLayout(sub_layout, 2, 3, 1, 3)
 
         # Optional fourth row - diagnostics
 
@@ -96,7 +104,7 @@ class MainContent(ContentWidget):
 
         self._layout.setRowStretch(1, 1)
 
-        self._layout.addWidget(ATSeparator("#b9b9b9"), 5, 0, 1, 8)
+        self._layout.addWidget(Separator("#b9b9b9"), 5, 0, 1, 8)
 
         self.setLayout(self._layout)
 
@@ -118,7 +126,6 @@ class MainContent(ContentWidget):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.update_image)
         self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
-
 
     @Slot()
     def update_image(self):

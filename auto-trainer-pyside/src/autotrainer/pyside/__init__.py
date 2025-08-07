@@ -1,14 +1,16 @@
-from .capture.QtCaptureView import QCaptureView
-from .capture.QtGLImageView import QGLImageView
-from .ATProgressIndicator import ATProgressIndicator
-from .ATSeparator import ATSeparator
-from .ATSerialPortComboBox import ATSerialPortComboBox
+from .capture import QCaptureView
+from .capture import QGLImageView
+
+from .hardware import (ConnectionPanel, MotorConfigDialog, HardwarePortComboBox)
+
+from .ProgressIndicator import ProgressIndicator
+from .Separator import Separator
 from .CardWidget import CardWidget
 from .CardHeader import CardHeader
 from .CardFooter import CardFooter
 from .PGWidget import PGWidget
+from .StatusIcon import StatusIcon
 from .TextBoxHandler import TextBoxHandler
-from .QtSimpleGroupBox import QSimpleGroupBox
 from .QtSwitch import QSwitch
 from .QtLabeledSwitch import QLabeledSwitch
 from .QtIndicator import QtIndicator

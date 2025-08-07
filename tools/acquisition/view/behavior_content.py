@@ -1,6 +1,6 @@
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QLabel, QFileDialog, QWidget, QVBoxLayout, \
-    QHBoxLayout, QStackedLayout, QGridLayout, QSpinBox, QPushButton
+from PySide6.QtWidgets import (QLabel, QFileDialog, QWidget, QVBoxLayout,
+                               QHBoxLayout, QStackedLayout, QGridLayout, QSpinBox, QPushButton)
 
 from autotrainer.pyside import CardWidget, QSwitch
 from tools.acquisition.model.inference_model import InferenceModel
@@ -18,7 +18,8 @@ class BehaviorContent(ContentWidget):
         self._inference_model = inference_model
         self._analysis = behavior_model.analysis
 
-        self._card_widget = CardWidget()
+        self._inference_status = QLabel("")
+        self._card_widget = CardWidget(title="Behavior", header_right_layout=self._inference_status)
 
         content = QWidget(None)
         content_layout = QGridLayout(None)
@@ -71,24 +72,6 @@ class BehaviorContent(ContentWidget):
 
         content.setLayout(content_layout)
         self._card_widget.setContentWidget(content)
-
-        # Header
-        self._header = QWidget(None)
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        title = QLabel("Behavior")
-        title.setStyleSheet("font-weight: bold")
-        layout.addWidget(title)
-
-        layout.addStretch(1)
-
-        self._inference_status = QLabel("")
-        layout.addWidget(self._inference_status)
-
-        self._header.setLayout(layout)
-
-        self._card_widget.header.setContent(self._header)
 
         # Footer
         self._basic_footer = QWidget(None)

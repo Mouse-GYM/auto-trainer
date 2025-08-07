@@ -1,60 +1,45 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QFormLayout, QLabel
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QFormLayout
 
 from autotrainer.core import MessageHandler
+from autotrainer.pyside import CardWidget, StatusIcon
 from tools.pellet_delivery.model.app_model import AppModel
-from tools.view.basic_panel import create_panel
-
-import qtawesome as qta
-
-
-class Led(QLabel):
-    LED_SIZE = 18
-
-    def __init__(self, use_red: bool = False, parent=None):
-        super(Led, self).__init__(parent)
-
-        self._use_red = use_red
-        self.setFixedSize(Led.LED_SIZE, Led.LED_SIZE)
-        self.green_led = qta.icon('fa5s.life-ring', color='green')
-        self.red_led = qta.icon('fa5s.life-ring', color='red')
-        self.gray_led = qta.icon('fa5s.life-ring', color='gray')
-
-        self.off()
-
-    def on(self):
-        self.setPixmap(self.green_led.pixmap(Led.LED_SIZE, Led.LED_SIZE))
-
-    def off(self):
-        led = self.red_led if self._use_red else self.gray_led
-        self.setPixmap(led.pixmap(Led.LED_SIZE, Led.LED_SIZE))
-
-    def set_light(self, setting: bool):
-        self.on() if setting else self.off()
 
 
 def _create_door_panel():
     layout = QFormLayout()
-    front_door = Led()
+    layout.setHorizontalSpacing(8)
+
+    front_door = StatusIcon.doorIcon()
     layout.addRow("Front Door:", front_door)
 
-    drawer_door = Led()
+    drawer_door = StatusIcon.doorIcon()
     layout.addRow("Drawer Door:", drawer_door)
 
-    ext_button = Led()
+    ext_button = StatusIcon.doorIcon()
     layout.addRow("Ext Button:", ext_button)
 
-    return front_door, drawer_door, ext_button, create_panel("Doors", layout)
+    layout.setContentsMargins(8, 8, 8, 8)
+
+    panel = CardWidget(title="Doors", content_layout=layout)
+
+    return front_door, drawer_door, ext_button, panel
 
 
 def _create_stimulus_panel():
     layout = QFormLayout()
-    inputs = []
-    for i in range(4):
-        box = Led()
-        inputs.append(box)
-        layout.addRow("Stimulus #" + str(i + 1) + ':', box)
+    layout.setHorizontalSpacing(8)
 
-    return inputs, create_panel("Stimulus", layout)
+    inputs = []
+    for idx in range(4):
+        box = StatusIcon()
+        inputs.append(box)
+        layout.addRow("Stimulus #" + str(idx + 1) + ':', box)
+
+    layout.setContentsMargins(8, 8, 8, 8)
+
+    panel = CardWidget(title="Stimulus", content_layout=layout)
+
+    return inputs, panel
 
 
 class PelletState(QWidget):
@@ -79,15 +64,15 @@ class PelletState(QWidget):
     def _model_property_changed(self, name: str, value, _old_value):
         if name == "is_connected":
             if not value:
-                self._front_door.set_light(False)
-                self._drawer_door.set_light(False)
-                self._ext_button.set_light(False)
+                self._front_door.setStatus(False)
+                self._drawer_door.setStatus(False)
+                self._ext_button.setStatus(False)
         elif name == MessageHandler.FRONT_DOOR_PROPERTY:
-            self._front_door.set_light(bool(value))
+            self._front_door.setStatus(bool(value))
         elif name == MessageHandler.DRAWER_DOOR_PROPERTY:
-            self._drawer_door.set_light(bool(value))
+            self._drawer_door.setStatus(bool(value))
         elif name == MessageHandler.EXT_BUTTON_PROPERTY:
-            self._ext_button.set_light(bool(value))
+            self._ext_button.setStatus(bool(value))
         elif name == MessageHandler.STIMULI_PROPERTY:
             for v, box in zip(value, self._stimulus):
-                box.set_light(bool(v))
+                box.setStatus(bool(v))

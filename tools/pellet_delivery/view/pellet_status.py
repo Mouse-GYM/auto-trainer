@@ -1,16 +1,14 @@
-from PySide6.QtWidgets import QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
-    QLayout, QVBoxLayout, \
-    QFormLayout
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QFormLayout
 
 from autotrainer.pyside import CardWidget
 from tools.pellet_delivery.model.app_model import AppModel
-from tools.view.basic_panel import create_panel
 
 _NO_UPDATES = "(no updates)"
 
 
 def create_motor_panel():
     layout = QFormLayout()
+    layout.setHorizontalSpacing(8)
     x = QLabel(_NO_UPDATES)
     y = QLabel(_NO_UPDATES)
     z = QLabel(_NO_UPDATES)
@@ -19,11 +17,16 @@ def create_motor_panel():
     layout.addRow("Y (mm):", y)
     layout.addRow("Z (mm):", z)
 
-    return x, y, z, create_panel("Motors", layout)
+    layout.setContentsMargins(8, 8, 8, 8)
+
+    panel = CardWidget(title="Motors", content_layout=layout)
+
+    return x, y, z, panel
 
 
 def create_servo_panel():
     layout = QFormLayout()
+    layout.setHorizontalSpacing(8)
 
     load_arm = QLabel(_NO_UPDATES)
     cover_arm = QLabel(_NO_UPDATES)
@@ -31,7 +34,11 @@ def create_servo_panel():
     layout.addRow("Load Arm (\u00b0):", load_arm)
     layout.addRow("Cover Arm (\u00b0):", cover_arm)
 
-    return load_arm, cover_arm, create_panel("Servos", layout)
+    layout.setContentsMargins(8, 8, 8, 8)
+
+    panel = CardWidget(title="Servos", content_layout=layout)
+
+    return load_arm, cover_arm, panel
 
 
 class PelletStatus(QWidget):

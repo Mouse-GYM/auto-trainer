@@ -20,7 +20,7 @@ class HardwareStatusContent(ContentWidget):
 
         self._model = message_handler
 
-        self._card_widget = CardWidget(None)
+        self._card_widget = CardWidget(title="Hardware Status")
 
         self._model.property_changed += self._model_property_changed
 
@@ -36,17 +36,13 @@ class HardwareStatusContent(ContentWidget):
         label.setStyleSheet("font-weight: bold")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label, 0, 2)
-        label = QLabel("Other")
-        label.setStyleSheet("font-weight: bold")
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label, 0, 4)
 
         form_layout = QFormLayout(None)
         form_layout.setHorizontalSpacing(8)
         form_layout.setVerticalSpacing(4)
 
         self._head_magnet = QLabel("(no updates)")
-        form_layout.addRow("Head magnet intensity (%):", self._head_magnet)
+        form_layout.addRow("Head magnet (%):", self._head_magnet)
 
         layout.addLayout(form_layout, 1, 0)
 
@@ -72,22 +68,6 @@ class HardwareStatusContent(ContentWidget):
         layout.setColumnStretch(3, 1)
 
         self._card_widget.setContentLayout(layout)
-
-        # Header
-        self._header = QWidget(None)
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-
-        title = QLabel("Hardware Status")
-        title.setStyleSheet("font-weight: bold")
-        layout.addWidget(title)
-
-        layout.addStretch(1)
-
-        self._header.setLayout(layout)
-
-        self._card_widget.header.setContent(self._header)
 
         # Final layout
         layout = QVBoxLayout()

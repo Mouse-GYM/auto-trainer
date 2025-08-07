@@ -6,7 +6,7 @@ from PySide6.QtCore import Slot
 from PySide6.QtWidgets import QGridLayout
 
 from autotrainer.core import NotificationCenter, TriggerNotification, Notification
-from autotrainer.inference import PoseTuple, PoseAlgorithm, PoseLocation
+from autotrainer.inference import PoseLocation
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.pyside.capture.QtCaptureView import ImageData
 from autotrainer.video import VideoRecordMode
