@@ -125,7 +125,7 @@ class LoadCellMonitor(ObservableObject):
 
     @property
     def is_engaged(self) -> bool:
-        return self._is_engaged or self._force_engaged
+        return self._is_engaged
 
     @is_engaged.setter
     def is_engaged(self, value):
@@ -225,6 +225,9 @@ class LoadCellMonitor(ObservableObject):
                 self._t_last_ptp_check += cfg.thrashing_var_max_delay if not (detected1 or detected2) else cfg.thrashing_var_min_delay
 
     def update(self, value: Union[float, numpy.floating], when: float, index: int):
+        if self._force_engaged:
+            # debug code
+            value = self._config.weight_active_threshold + 0.1
         self._update_history(value, when, index)
         cfg = self._config
         t_start = self._t_start_was_active
@@ -252,7 +255,7 @@ class LoadCellMonitor(ObservableObject):
                 self._active_debounce.cancel()
                 self._ensure_active()
 
-        elif value < cfg.weight_inactive_threshold and not self._force_engaged:
+        elif value < cfg.weight_inactive_threshold:
             # inactive case
             self._active_debounce.cancel()
             hold_time = when - self._last_engaged_start
@@ -314,12 +317,3 @@ class LoadCellMonitor(ObservableObject):
         """
         logger.verbose("Force engaged: %s", engaged)
         self._force_engaged = engaged
-        if engaged != self._is_engaged:
-            if len(self._values_history) == 0:
-                self._when = time.time()
-                self._index = time.perf_counter_ns()
-            else:
-                prev = self._values_history[-1]
-                self._when = prev[1]
-                self._index = prev[2]
-        self._is_engaged = self._generate_engaged_event(engaged)
