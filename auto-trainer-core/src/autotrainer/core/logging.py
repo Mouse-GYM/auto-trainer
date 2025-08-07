@@ -14,6 +14,13 @@ _LogLevelT = Union[str, int]
 DEFAULT_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 MULTIPROC_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s[%(processName)s.%(process)d-%(threadName)s.%(thread_id)s] %(message)s"
 
+
+class DateTimeFormats:
+    hour_time_precise = "%H:%M:%S.%f"
+    month_day_time_precise = f"%m/%d {hour_time_precise}"
+    year_precise = f"%Y/%m/%d {hour_time_precise}"
+
+
 DEFAULT_FIELD_STYLES = dict(
     asctime=dict(color='white', bold=False),
     hostname=dict(color='magenta'),
@@ -51,7 +58,8 @@ def _thread_id_filter(record):
     return record
 
 
-class _Formatter(coloredlogs.ColoredFormatter):
+class PreciseTimeFormatter(logging.Formatter):
+    """A logger formatter with time precision handling"""
 
     converter = datetime.fromtimestamp
 
@@ -62,7 +70,7 @@ class _Formatter(coloredlogs.ColoredFormatter):
     def formatTime(self, record, datefmt=None):
         ct = self.converter(record.created)
         if not datefmt:
-            datefmt = "%Y-%m-%d %H:%M:%S.%f"
+            datefmt = DateTimeFormats.year_precise  # "%Y-%m-%d %H:%M:%S.%f"
         if self._time_precision > 0 and "%f" in datefmt:
             msec_len = len(str(int(record.msecs)))
             v = str(record.msecs).replace(".", "")
@@ -77,6 +85,10 @@ class _Formatter(coloredlogs.ColoredFormatter):
         return s
 
 
+class ColoredPreciseTimeFormatter(PreciseTimeFormatter, coloredlogs.ColoredFormatter):
+    """A colored logger formatter with time precision handling"""
+
+
 def setup_logging(
     name: str = "main",
     *,
@@ -84,8 +96,8 @@ def setup_logging(
     logger_level: _LogLevelT = logging.NOTSET,
     root_level: _LogLevelT = logging.INFO,
     log_format: str = MULTIPROC_LOG_FORMAT,
-    date_format: str = "%H:%M:%S.%f",
-    time_precision: int = 3,  # for sub seconds precision
+    date_format: str = DateTimeFormats.hour_time_precise,
+    time_precision: int = 3,  # for sub seconds precision, nbr of digits after the dot.
     level_styles: Optional[Dict[str, Dict[str, str]]] = None,
     field_styles: Optional[Dict[str, Dict[str, str]]] = None,
     stream: TextIO = sys.stdout,
@@ -105,7 +117,7 @@ def setup_logging(
     #
     console_handler = logging.StreamHandler(stream=stream)
     console_handler.addFilter(_thread_id_filter)
-    fmt = _Formatter(
+    fmt = ColoredPreciseTimeFormatter(
         log_format,
         level_styles=level_styles,
         field_styles=field_styles,
