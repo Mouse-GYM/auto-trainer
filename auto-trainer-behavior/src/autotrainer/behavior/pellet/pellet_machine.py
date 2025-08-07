@@ -49,8 +49,12 @@ class PelletMachine(StateMachine):
          "dest": PelletState.sending, "before": "before_send_pellet", "conditions": "can_send_pellet"},
         {"trigger": "prerelease_pellet", "source": [PelletState.loading, PelletState.home],
          "dest": PelletState.prerelease, "before": "before_prerelease_pellet", "conditions": "can_prerelease_pellet"},
-        {"trigger": "cover_pellet", "source": PelletState.monitoring, "dest": PelletState.covering,
-         "before": "before_cover_pellet", "conditions": "can_cover_pellet"},
+
+        dict(
+            trigger="cover_pellet", source=[PelletState.monitoring, PelletState.retract], dest=PelletState.covering,
+            before="before_cover_pellet", conditions="can_cover_pellet",
+        ),
+
         {"trigger": "release_pellet", "source": [PelletState.covering, PelletState.monitoring],
          "dest": PelletState.releasing, "before": "before_release_pellet",
          "conditions": "can_release_pellet"},
