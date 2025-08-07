@@ -5,7 +5,8 @@ import sys
 from PySide6 import QtGui
 
 from autotrainer.core.event import try_register_api_event_plugin
-from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.logging import get_verbose_logger, DEFAULT_LOG_FORMAT, MULTIPROC_LOG_FORMAT, PreciseTimeFormatter, \
+    DateTimeFormats
 
 logger = get_verbose_logger(__name__)
 
@@ -67,7 +68,13 @@ def verify_log_location(log_location: str, device_name: str):
     log_file = f"{log_location}/{date_stamp}_{device_name}_{idx:03d}.log"
     logger.verbose("Setting log file to %s", log_file)
     file_handler = logging.FileHandler(log_file)
-    file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s\t [%(name)s] %(message)s"))
+    file_handler.setFormatter(
+        PreciseTimeFormatter(
+            MULTIPROC_LOG_FORMAT,
+            datefmt=DateTimeFormats.year_precise,
+            time_precision=6,
+        )
+    )
     logging.root.addHandler(file_handler)
 
 
