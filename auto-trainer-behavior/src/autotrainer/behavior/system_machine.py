@@ -370,7 +370,8 @@ class SystemMachine(StateMachine):
         self._algorithm.mouse_seen(response.mouse_seen)
         if not self._algorithm.pellet_delivery_enabled:
             return
-        self._pellet_machine.pellet_seen(response.pellet_seen)
+        self._pellet_machine.pellet_seen(response.pellet_seen,
+                                         triangle_seen=response.triangle_seen)
 
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.

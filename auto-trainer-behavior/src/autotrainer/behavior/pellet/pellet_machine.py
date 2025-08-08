@@ -203,12 +203,12 @@ class PelletMachine(StateMachine):
         # return True
         return self._api_status_token is None
 
-    def pellet_seen(self, seen: bool):
+    def pellet_seen(self, seen: bool, *, triangle_seen: bool = True):
         # with self._thread_lock:
         #     if seen == self._prev_pellet_seen:
         #         return
         #     self._prev_pellet_seen = seen
-        self._try_next_state(seen, caller="pellet_seen")
+        self._try_next_state(seen, caller="pellet_seen", triangle_seen=triangle_seen)
 
     # region Callbacks
     def _session_starting(self):
@@ -244,18 +244,30 @@ class PelletMachine(StateMachine):
 
     # endregion
 
-    def _try_next_state(self, pellet_seen: bool = True, must_release: bool = False,
-                        *,
-                        caller: str = "not-provided",
-                        ):
+    def _try_next_state(
+        self,
+        pellet_seen: bool = True,
+        must_release: bool = False,
+        *,
+        caller: str = "not-provided",
+        triangle_seen: bool = True,
+    ):
         with self._thread_lock:
-            self.__try_next_state(pellet_seen, must_release, caller=caller)
+            self.__try_next_state(pellet_seen, must_release,
+                                  caller=caller, triangle_seen=triangle_seen)
 
     environment_changed = _try_next_state  # remove 1 unnecessary stack level
     # def environment_changed(self):
     #     self._try_next_state()
 
-    def __try_next_state(self, pellet_seen: bool = True, must_release: bool = False, *, caller: str):
+    def __try_next_state(
+        self,
+        pellet_seen: bool = True,
+        must_release: bool = False,
+        *,
+        caller: str,
+        triangle_seen: bool = True,
+    ):
 
         algo = self._algorithm
 
@@ -324,17 +336,19 @@ class PelletMachine(StateMachine):
         elif self.state == PelletState.monitoring:
             if algo.is_in_session:
                 if must_release:
-                    __debug__ and logit("release_when_in_session")
-                    self.release_pellet()
-                elif not pellet_seen:
-                    __debug__ and logit("load_pellet_in_session")
-                    self.load_pellet()
+                    if self.can_use_pellet_command():
+                        __debug__ and logit("release_when_in_session")
+                        self.release_pellet()
+                elif not pellet_seen and triangle_seen:
+                    if self.can_use_pellet_command():
+                        __debug__ and logit("load_pellet_in_session")
+                        self.load_pellet()
             else:
-                if not pellet_seen:
+                if not pellet_seen and triangle_seen:
                     if self.can_use_pellet_command():
                         __debug__ and logit("load_pellet_in_monitoring")
                         self.load_pellet()
-                else:
+                elif pellet_seen:
                     if self.can_cover_pellet():
                         __debug__ and logit("cover_pellet_in_monitoring")
                         self.cover_pellet()
