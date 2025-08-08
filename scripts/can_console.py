@@ -530,7 +530,7 @@ def handle_motor_command(motor: Motor, params, device_connection):
         float_params = move_parameter(params[1:])
         device_connection.send_message(
             motor_to_move_command[motor],
-            data=SystemDataArgsKwargs(args=(float_params,), kwargs=dict(relative=relative)),
+            data=SystemDataArgsKwargs(float_params, relative=relative),
             context="motor move",
         )
 

@@ -91,8 +91,10 @@ def machine(tunnel_device, pellet_device, inference, system_msg_handler, project
 class MockSystemMachine:
     """Allow make test case on a fully prepared 'SystemMachine' instance, with many helper methods included"""
 
-    def _init(self, machine):
+    def _init(self, machine: SystemMachine):
+        self._ts_now = 0
         self._machine = machine
+        self._load_cell = machine._analysis.load_cell_monitor  # noqa
         # register state_changed (and system_state_changed for algo at end) transition recorder,
         # so that can be used to ensure/assert that the given states have passed through all the desired values,
         # and in any desired specific order - or not.
@@ -139,9 +141,14 @@ class MockSystemMachine:
         with mock.patch.object(self.inference, 'perform_detection') as m_det:
             yield m_det
 
-    def mock_pose_response(self, pellet_seen: bool, mouse_seen: bool):
+    def mock_pose_response(self, pellet_seen: bool, mouse_seen: bool, triangle_seen: bool=True):
         """Send/trigger a PoseResponse via pose_algorithm.pose_changed event"""
-        parts_flag = {"Pellet": pellet_seen, "Tongue": mouse_seen, "Nose": mouse_seen}
+        parts_flag = {
+            "Pellet": pellet_seen,
+            "Tongue": mouse_seen,
+            "Nose": mouse_seen,
+            "Triangle": triangle_seen,
+        }
         parts_flags = (parts_flag, parts_flag, parts_flag)
         response = PoseResponse(sequence=1, parts_flags=parts_flags, locations=[])
         self.inference.pose_algorithm.pose_changed(response)
@@ -207,6 +214,20 @@ class MockSystemMachine:
     def mock_complete_detection(self, success: bool):
         det_cfg = self._machine.intersession._detection_configuration
         det_cfg.complete(det_cfg.nonce, success)
+
+    def make_load_cell_active(self):
+        # NB: this could be moved to auto-trainer-core (where load_cell_monitor is defined),
+        # so to be reused by auto-trainer-core/tests dedicated to load cell monitor.
+        self._ts_now += self._load_cell.config.threshold_duration + 0.001
+        self._load_cell.update(self._load_cell.config.weight_active_threshold + 0.001, self._ts_now, self._ts_now)
+        self._ts_now += self._load_cell.config.threshold_duration + 0.001
+        self._load_cell.update(self._load_cell.config.weight_active_threshold + 0.001, self._ts_now, self._ts_now)
+
+    def make_load_cell_inactive(self):
+        self._ts_now += self._load_cell.config.threshold_duration + 0.001
+        self._load_cell.update(self._load_cell.config.weight_inactive_threshold - 0.001, self._ts_now, self._ts_now)
+        self._ts_now += self._load_cell.config.min_post_event_hold_duration + 0.001
+        self._load_cell.update(0, self._ts_now, self._ts_now)
 
 
 @pytest.fixture

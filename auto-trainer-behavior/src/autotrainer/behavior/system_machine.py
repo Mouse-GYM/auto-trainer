@@ -183,13 +183,13 @@ class SystemMachine(StateMachine):
 
     def before_exit_intersession_to_cage(self):
         self._algorithm.system_state = SystemState.cage
-        self._pellet_machine.environment_changed()
+        self._pellet_machine.environment_changed(caller="before_exit_intersession_to_cage")
 
     def before_exit_intersession_to_tunnel(self):
         self.state = SystemState.tunnel
         self._algorithm.system_state = SystemState.tunnel
         self.enter_tunnel()
-        self._pellet_machine.environment_changed()
+        self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
 
     @staticmethod
     def _clean_raw_data(project):
@@ -370,7 +370,8 @@ class SystemMachine(StateMachine):
         self._algorithm.mouse_seen(response.mouse_seen)
         if not self._algorithm.pellet_delivery_enabled:
             return
-        self._pellet_machine.pellet_seen(response.pellet_seen)
+        self._pellet_machine.pellet_seen(response.pellet_seen,
+                                         triangle_seen=response.triangle_seen)
 
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.
@@ -395,14 +396,15 @@ class SystemMachine(StateMachine):
             self._tunnel_device.update_head_magnet_intensity(position)
 
     def _pellet_loading(self):
-        prev_timer = self._timer_consider_end_session
-        if prev_timer is None or prev_timer.finished.is_set():
-            self._timer_consider_end_session = _pellet_loading_timer(
-                self._delay_timer_consider_end_session, self._consider_end_session)
-            self._timer_consider_end_session.start()
-        else:
-            logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s",
-                           self, prev_timer)
+        if self._algorithm.is_in_session:
+            prev_timer = self._timer_consider_end_session
+            if prev_timer is None or prev_timer.finished.is_set():
+                self._timer_consider_end_session = _pellet_loading_timer(
+                    self._delay_timer_consider_end_session, self._consider_end_session)
+                self._timer_consider_end_session.start()
+            else:
+                logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s",
+                               self, prev_timer)
 
     def _pellet_sending(self):
         if self.state == SystemState.tunnel:
@@ -412,14 +414,16 @@ class SystemMachine(StateMachine):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
 
     def _consider_end_session(self):
-        # Do not end if the mouse is still in the tunnel and (a pellet is seen or the pellet deliver is in the sending
-        # or releasing states).  Otherwise, there will be no trigger to start a new session and recording (tunnel entry
+        # Do not end if the mouse is still in the tunnel and a pellet is seen or the pellet deliver is in the sending
+        # or releasing states. Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
-        if (self.state == SystemState.tunnel
+        if (not self._algorithm.is_in_session
+            or (self.state == SystemState.tunnel
                 and self._pellet_machine.state in {
                     PelletState.sending, PelletState.releasing, PelletState.monitoring,
                     # PelletState.loading,
                 }
+            )
         ):
             return
 

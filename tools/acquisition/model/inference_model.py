@@ -336,9 +336,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             if ib is not None:
                 logger.warning("set_inference_to_online but intersession block: %s", ib)
             else:
-                logger.notice("Setting inference back to online with SWITCH_TO_ONLINE", stack_info=True)
+                logger.notice("Setting inference back to online with SWITCH_TO_ONLINE")
                 empty = numpy.zeros(offline_queue.shape, dtype=numpy.uint8)
                 # should pad in caes the cams index are unsync...
+                self._offline_queue.pad_to_batch_size(empty)
                 self._offline_queue.put_frame_index_category(empty, FrameIndexCategory.SWITCH_TO_ONLINE)
 
     def start(self, network_queue: FixedArrayMultiQueue) -> bool:
@@ -517,6 +518,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         cur_cams_indices = [[] for _ in range_cams]
         tot_skipped = 0
         t_start_offline = 0
+        skip_next_pose_data = 0
 
         t_log_counters = time.perf_counter()
         t_perf_live_check_data_queue_size = time.perf_counter() + 5
@@ -555,7 +557,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     next_mode != InferenceMode.Live
                     or next_frames_indices is None
                     or not (next_frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all()
-                    or tot_flushed >= cur_qsize - 1  # so return the last one
+                    or tot_flushed >= cur_qsize # - 1  # so return the last one
+                    # removed -1 :
+                    # all the previous data in the queue might be, or is, from BEFORE the start of the intersession,
+                    # otherwise we would be possibly executing some state events using too old data.
                 ):
                     break
                 tot_flushed += 1
@@ -563,6 +568,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             if prev_pose_data is None:
                 logger.verbose("flushed queue after end of offline processing ; size=%s flushed=%s",
                                cur_qsize, tot_flushed)
+                nonlocal skip_next_pose_data
+                skip_next_pose_data = 3
             return next_pose_data, next_mode, next_frames_indices
 
         while self._is_running:
@@ -717,6 +724,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 cam_h5_live.clear()
                                 cam_indices.clear()
                             # pose_fhs[cdx]...
+
+                    if skip_next_pose_data > 0:
+                        skip_next_pose_data -= 1
+                        continue
 
                     if skip_update:
                         continue
@@ -950,10 +961,9 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         # in any case sleep a bit to allow pose process to finishes consume:
         offline_q = self._offline_queue
         empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
-        n_cams = offline_q.camera_count
         # eventual pad current batch of each cam:
         offline_q.pad_to_batch_size(empty_frame)
-        # also post a EOF_OFFLINE_PROCESSING to notify pose process
+        # also post a EOF_OFFLINE_PROCESSING or SWITCH_TO_ONLINE to notify pose process
         # when it has reached end of offline processing:
         self._offline_queue.put_frame_index_category(
             empty_frame,
@@ -1106,7 +1116,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     if not self._put_intersession_frame(cam_capture, cdx, cams_frame_idx[cdx]):
                         all_read[cdx] = True
                         self._offline_queue.put_block(empty_frame, cdx, FrameIndexCategory.PADDING)
-                        # if we prematuraly reach the end of the video stream then give a padding instead
+                        # if we prematurely reach the end of the video stream then give a padding instead
                     else:
                         cams_sent_frame_count[cdx] += 1
                         frames_idx_sent[cdx].append(cams_frame_idx[cdx])

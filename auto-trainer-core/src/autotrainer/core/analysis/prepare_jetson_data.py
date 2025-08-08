@@ -38,7 +38,7 @@ def identify_dropped_frames(timestamp_file, frame_rate):
         np.ndarray: A binary vector with 0 for successful frames and 1 for dropped frames.
     """
     # Load timestamps from the file
-    timestamps_df = pd.read_csv(timestamp_file, header=None, names=['timestamp', 'other_column'])
+    timestamps_df = pd.read_csv(timestamp_file, header=None, names=['timestamp', 'other_column', 'frame_when'])
     timestamps_ns = timestamps_df['timestamp'].values  # Extract timestamp column
     timestamps_s = timestamps_ns / 1e9  # Convert nanoseconds to seconds
 

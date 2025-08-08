@@ -109,7 +109,6 @@ class PoseProcess(Process):
             self._send_message(InferenceStatusMessageKind.Initialized, self._model.body_parts)
             should_process = self._wait_for_start()
             if should_process:
-                self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
                 self._process()
         except Exception as err:
             logger.exception("Error during processing: %s", err)
@@ -164,6 +163,7 @@ class PoseProcess(Process):
         # gpus = tf.config.experimental.list_physical_devices('GPU')
         # for gpu in gpus:
         #     tf.config.experimental.set_memory_growth(gpu, True)
+        sent_live = False  # on first processed capture
         frame_buffer = numpy.ndarray(
             (self._input_queue.batch_size,  # nbr cams * frames per cam (3 atm)
              *self._input_queue.shape,  # W, H
@@ -284,6 +284,11 @@ class PoseProcess(Process):
                      # of the frames_indices numpy array happens after the return of the queue put()..
                      # which is not totally impossible.
                      ))
+
+            if not sent_live:
+                self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
+                sent_live = True
+
             if perf_add_c():
                 self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
 

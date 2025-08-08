@@ -6,6 +6,11 @@ from typing import Any, Tuple, Dict
 class SystemDataArgsKwargs:
     """A dedicated dataclass to pass data any desired args and/or kwargs as a single value for system commands"""
 
+    def __init__(self, *args, **kwargs):
+        # super().__init__(args=args, kwargs=kwargs)
+        self.args = args
+        self.kwargs = kwargs
+
     args: Tuple[Any] = ()
     kwargs: Dict[str, Any] = dataclasses.field(default_factory=dict)
 

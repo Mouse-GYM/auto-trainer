@@ -121,11 +121,14 @@ class CanDevice(Device):
             SystemCommandKind.MOVE_GATE_SERVO:
                 lambda data: self._interface.move_gate_servo(data),
 
-            SystemCommandKind.SET_X: self._interface.set_motor_x,
+            SystemCommandKind.SET_X: partial(apply_system_command_with_data_args,
+                                             self._interface.set_motor_x),
 
-            SystemCommandKind.SET_Y: self._interface.set_motor_y,
+            SystemCommandKind.SET_Y: partial(apply_system_command_with_data_args,
+                                                   self._interface.set_motor_y),
 
-            SystemCommandKind.SET_Z: self._interface.set_motor_z,
+            SystemCommandKind.SET_Z: partial(apply_system_command_with_data_args,
+                                             self._interface.set_motor_z),
 
             SystemCommandKind.MOVE_X: partial(apply_system_command_with_data_args,
                                               self._interface.move_motor_x),
@@ -513,13 +516,15 @@ class CanDevice(Device):
         Args:
             message: The LoadCellReading message
         """
-        measurement = HeadFixMeasurement(message.timestamp_ns / 1e9,
-                                         message.index,
-                                         message.load,
-                                         self._current_digital,
-                                         self._current_pressure,
-                                         self._current_temperature,
-                                         self._current_humidity)
+        measurement = HeadFixMeasurement(
+            when=message.timestamp_ns / 1e9,
+            timestamp=message.index,
+            weight=message.load,
+            switch=self._current_digital,
+            pressure=self._current_pressure,
+            temperature=self._current_temperature,
+            humidity=self._current_humidity,
+        )
 
         self._measurements.append(measurement)
 

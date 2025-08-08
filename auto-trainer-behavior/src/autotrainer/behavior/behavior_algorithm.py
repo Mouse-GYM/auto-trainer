@@ -372,7 +372,7 @@ class BehaviorAlgorithm(ObservableObject):
     def end_session(self):
         with self._thread_lock:
             if not self._is_in_session:
-                logger.warning("end_session() called but not in session", stack_info=True)
+                logger.debug("end_session() called but not in session", stack_info=True)
                 return
             self._is_in_session = False
         logger.success("Stopping session recording ...")

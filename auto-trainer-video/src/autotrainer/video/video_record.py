@@ -124,11 +124,12 @@ class VideoRecord(Thread):
                     self._close_writers()
                     self._close_event.set()
                     # self._input_queue.put(None)
-                    logger.info("Closed video file: tot frames written: %s", tot_written)
+                    logger.info("Closed video file: tot frames written: %s ; last_when=%s",
+                                tot_written, last_when)
                     tot_written = 0
                     continue
 
-                for frame, when in queue_list:
+                for frame, when, other_when in queue_list:
                     if self._is_video_enabled:
                         if self._video_writer is None:
                             self._close_event.clear()
@@ -142,7 +143,8 @@ class VideoRecord(Thread):
                         tot_written += 1
 
                         if self._video_timestamp_file is not None:
-                            self._video_timestamp_file.write(f"{when}, {1e9 / (when - last_when)}\n")
+                            d = when - last_when
+                            self._video_timestamp_file.write(f"{when}, {1e9 / d if d != 0 else 0}, {other_when}\n")
                             last_when = when
 
                     if 0 < self._image_interval <= when - self._last_image_timestamp:
@@ -186,13 +188,13 @@ class VideoRecord(Thread):
                 self._prepare_writers()
 
     def _prepare_writers(self):
-        logger.verbose("%s: preparing writers...", self)
+        logger.debug("%s: preparing writers...", self)
         self._interval_reference = self._project_info.get_interval(self._interval_mode)
         self._prepare_video_writer()
         self._prepare_image_capture()
 
     def _close_writers(self):
-        logger.verbose("%s: closing writers...", self)
+        logger.spam("%s: closing writers...", self)
         self._close_image_writer()
         self._close_video_writer()
 
@@ -213,7 +215,7 @@ class VideoRecord(Thread):
             logger.warning("_prepare_video_writer but _is_video_enabled False")
             return
 
-        self._record_start = time.time()
+        self._record_start = time.time()  # currently unused
 
         video_file, timestamp_file, _ = self._project_info.get_video_path(
             self._name, interval=self._interval_mode, allow_overwrite=True)

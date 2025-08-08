@@ -161,27 +161,32 @@ class FixedArrayMultiQueue:
                 return False
         return True
 
-    def pad_to_batch_size(self, pad_frame, *, timeout: float=5):
+    def pad_to_batch_size(self, pad_frame, *, timeout: float=10):
         """Pad the queue so that all the cams are on same bucket, and the start of it."""
         todo: List[Tuple[int, int]] = []
         for cdx in range(self._cam_count):
             n_pads = self.get_cam_missing_frames(cdx)
             todo.append((cdx, n_pads))
-        timeout = time.perf_counter() + timeout
         for cdx, n_pads in sorted(todo, key=lambda i: i[1]):  # sort on n_pads
             for _ in range(n_pads):
-                self.put_block(pad_frame, cdx, FrameIndexCategory.PADDING)
+                t0 = time.perf_counter()
+                self.put_block(pad_frame, cdx, FrameIndexCategory.PADDING, timeout=timeout)
+                timeout -= time.perf_counter() - t0
 
     def get_cam_missing_frames(self, cam_idx: int) -> int:
+        """Returns the number of missing frame for camera idx,
+        to fill in the batch up to the max camera writer"""
         cams_dirty = [
             sum(map(int, self.get_dirty(cdx)))
             for cdx in range(self.camera_count)
         ]
         max_dirty = max(cams_dirty)
         reminder_max_dirty = max_dirty % self._frames_per_camera
-        max_dirty += self._frames_per_camera - reminder_max_dirty
-        d = max_dirty - cams_dirty[cam_idx]
-        return d
+        missing_frames_for_max = (self._frames_per_camera - reminder_max_dirty) % self._frames_per_camera
+        logger.debug("get_cam_missing_frames: %s", cams_dirty)
+        max_dirty += missing_frames_for_max  # add what's missing to the max to make it fill an entire batch
+        # and the final result is the diff between the corrected max dirty and the current cams dirty
+        return max_dirty - cams_dirty[cam_idx]
 
     def get_dirty(self, cam_idx):
         return list(self._is_dirty[cam_idx])
@@ -206,11 +211,11 @@ class FixedArrayMultiQueue:
         ).reshape((self._cam_count, self._depth, self._frames_per_camera))
         return b.max()
 
-    def put_block(self, content: numpy.ndarray, camera: int, frame_idx: int, *, timeout: float=5):
+    def put_block(self, content: numpy.ndarray, camera: int, frame_idx: int, *, timeout: float=10):
         timeout = time.perf_counter() + timeout
         while self.put(content, camera, frame_idx) != BufferResult.Ok:
             if time.perf_counter() > timeout:
-                raise RuntimeError("Timeout waiting space in queue for cam-%s", camera)
+                raise RuntimeError(f"Timeout waiting space in queue for cam-{camera}")
             time.sleep(0.001)
 
     def put(self, content: numpy.ndarray, camera: int, frame_idx: Optional[int], allow_overflow: bool = True) -> BufferResult:
@@ -310,33 +315,9 @@ class FixedArrayMultiQueue:
         ).reshape((self._cam_count, self._depth, self._frames_per_camera))
         return b
 
-    def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 5):
-        t_end = time.perf_counter() + timeout
+    def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 10):
         for cdx in range(self._cam_count):
             for _ in range(self._frames_per_camera):
                 t0 = time.perf_counter()
                 self.put_block(frame, cdx, frame_idx, timeout=timeout)
                 timeout -= time.perf_counter() - t0
-
-    def pad_cur_batch(
-        self,
-        cam_idx: int,
-        frame: numpy.ndarray,
-        *,
-        timeout: float = 5,
-        pad_idx: int = FrameIndexCategory.PADDING,
-        force: bool = False,
-    ) -> bool:
-        """Return True if added some pad, False otherwise"""
-        t_end = time.time() + timeout
-        cur_batch_idx = self._batch_index[cam_idx]
-        if cur_batch_idx == 0 and not force:
-            return False
-        tot_to_pad = self._frames_per_camera - cur_batch_idx
-        logger.verbose("padding cam-%s with %s %s frames", cam_idx, tot_to_pad, pad_idx)
-        for _ in range(tot_to_pad):
-            while self.put(frame, cam_idx, pad_idx, allow_overflow=False) != BufferResult.Ok:
-                if time.time() > t_end:
-                    raise RuntimeError(f"timeout waiting space for cam-{cam_idx} in {self}")
-                time.sleep(0.005)
-        return True
