@@ -70,9 +70,10 @@ class PelletMachine(StateMachine):
         dict(
             trigger="move_retract",
             source=(
-                PelletState.loading,
-                PelletState.sending,
+                PelletState.loading,  # not sure
+                PelletState.sending,  # not sure
                 PelletState.releasing,
+                PelletState.prerelease,
                 PelletState.covering,
                 PelletState.monitoring,
             ),
