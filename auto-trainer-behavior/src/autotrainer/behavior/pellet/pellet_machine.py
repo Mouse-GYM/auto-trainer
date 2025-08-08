@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 from enum import Enum
-from typing import Dict, Callable, Any
+from typing import Dict, Callable, Any, Optional
 
 from events import Events
 from transitions import Machine
@@ -111,6 +111,8 @@ class PelletMachine(StateMachine):
                                transitions=PelletMachine.transitions, auto_transitions=False,
                                initial=initial_state, model_override=True,
                        )
+
+        self._cur_timer_try_next_state: Optional[threading.Timer] = None
 
         self._thread_lock = threading.RLock()  # required re-entrant lock !!
 
@@ -320,8 +322,11 @@ class PelletMachine(StateMachine):
                     # alternatively we could simply allow this states transition
                     self.release_pellet()
                 else:
-                    Timer(0.1, self._try_next_state, args=(pellet_seen, must_release),
-                          kwargs=dict(caller="timer", triange_seen=triangle_seen)).start()
+                    if self._cur_timer_try_next_state is None or self._cur_timer_try_next_state.finished.is_set():
+                        self._cur_timer_try_next_state = threading.Timer(
+                            0.1, self._try_next_state, args=(pellet_seen, must_release),
+                            kwargs=dict(caller="timer", triangle_seen=triangle_seen))
+                        self._cur_timer_try_next_state.start()
             else:
                 __debug__ and logit("monitor_when_send_cover_not_enabled")
                 self.monitor_pellet()
