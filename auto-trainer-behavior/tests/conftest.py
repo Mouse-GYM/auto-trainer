@@ -141,9 +141,14 @@ class MockSystemMachine:
         with mock.patch.object(self.inference, 'perform_detection') as m_det:
             yield m_det
 
-    def mock_pose_response(self, pellet_seen: bool, mouse_seen: bool):
+    def mock_pose_response(self, pellet_seen: bool, mouse_seen: bool, triangle_seen: bool=True):
         """Send/trigger a PoseResponse via pose_algorithm.pose_changed event"""
-        parts_flag = {"Pellet": pellet_seen, "Tongue": mouse_seen, "Nose": mouse_seen}
+        parts_flag = {
+            "Pellet": pellet_seen,
+            "Tongue": mouse_seen,
+            "Nose": mouse_seen,
+            "Triangle": triangle_seen,
+        }
         parts_flags = (parts_flag, parts_flag, parts_flag)
         response = PoseResponse(sequence=1, parts_flags=parts_flags, locations=[])
         self.inference.pose_algorithm.pose_changed(response)

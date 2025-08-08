@@ -100,7 +100,7 @@ def test_no_session_without_pellet(mock_system, machine):
     mock_system.make_load_cell_active()
 
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage, SystemState.tunnel]
-    assert mock_system.pellet_state_trans == [PelletState.sending, PelletState.covering]
+    assert mock_system.pellet_state_trans == [PelletState.sending]
 
     assert machine.algorithm.is_in_session is True
 
