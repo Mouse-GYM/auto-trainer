@@ -556,7 +556,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     next_mode != InferenceMode.Live
                     or next_frames_indices is None
                     or not (next_frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all()
-                    or tot_flushed >= cur_qsize - 1  # so return the last one
+                    or tot_flushed >= cur_qsize # - 1  # so return the last one
+                    # removed -1 :
+                    # all the previous data in the queue might be, or is, from BEFORE the start of the intersession,
+                    # otherwise we would be possibly executing some state events using too old data.
                 ):
                     break
                 tot_flushed += 1
