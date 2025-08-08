@@ -9,6 +9,7 @@ from typing import Optional, List, Tuple, Dict
 from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple, \
     get_verbose_logger, Motor
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
+from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 HeadFix, PelletDelivery, MotorConfigurationFile, CompoundMovementFile)
 
@@ -118,37 +119,40 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._send_with_token(self._tunnel_device, SystemCommandKind.UPDATE_SCALE_TARE)
 
     def set_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
-        if not absolute:
-            if self._last_x is None:
-                logger.warning("relative x movement requested, but no last x position is set")
-                return None
-            value += self._last_x
+        # if not absolute:
+        #     if self._last_x is None:
+        #         logger.warning("relative x movement requested, but no last x position is set")
+        #         return None
+            # value += self._last_x
         # Send this whether the command succeeds or not.  It is the desired released position for future pellet releases
         # regardless of whether the command succeeds this particular time.
-        self._on_property_changed("set_x", value, self._last_x)
-        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_X, value)
+        # self._on_property_changed("set_x", value, self._last_x)
+        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_X,
+                                     SystemDataArgsKwargs(value, relative=not absolute))
 
     def set_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
-        if not absolute:
-            if self._last_y is None:
-                logger.warning("relative y movement requested, but no last y position is set")
-                return None
-            value += self._last_y
+        # if not absolute:
+        #     if self._last_y is None:
+        #         logger.warning("relative y movement requested, but no last y position is set")
+        #         return None
+        #     value += self._last_y
         # Send this whether the command succeeds or not.  It is the desired released position for future pellet releases
         # regardless of whether the command succeeds this particular time.
-        self._on_property_changed("set_y", value, self._last_y)
-        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Y, value)
+        # self._on_property_changed("set_y", value, self._last_y)
+        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Y,
+                                     SystemDataArgsKwargs(value, relative=not absolute))
 
     def set_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
-        if not absolute:
-            if self._last_z is None:
-                logger.warning("relative z movement requested, but no last z position is set")
-                return None
-            value += self._last_z
+        # if not absolute:
+            # if self._last_z is None:
+            #     logger.warning("relative z movement requested, but no last z position is set")
+            #     return None
+            # value += self._last_z
         # Send this whether the command succeeds or not.  It is the desired released position for future pellet releases
         # regardless of whether the command succeeds this particular time.
         self._on_property_changed("set_z", value, self._last_z)
-        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Z, value)
+        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Z,
+                                     SystemDataArgsKwargs(value, relative=not absolute))
 
     def move_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
         if not absolute:

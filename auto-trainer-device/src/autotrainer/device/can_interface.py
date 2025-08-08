@@ -987,8 +987,8 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
 
-        if save_as_fixed and relative:
-            raise ValueError("Cannot move_stepper with save_as_fixed and relative")
+        # if save_as_fixed and relative:
+        #     raise ValueError("Cannot move_stepper with save_as_fixed and relative")
 
         if isinstance(position, float) or isinstance(position, int):
             velocity = config.maximum_velocity
@@ -1076,9 +1076,9 @@ class CanInterface(DeviceInterface):
         """
         return self._move_servo_motor(Motor.TUNNEL_GATE_SERVO, position, self.gate_config)
 
-    def set_motor_x(self, position) -> bool:
+    def set_motor_x(self, position: float, *, relative: bool = False) -> bool:
         # NB: SET == saved-as-fixed:
-        return self.move_motor_x(position, save_as_fixed=True)
+        return self.move_motor_x(position, save_as_fixed=True, relative=relative)
 
     def move_motor_x(
         self,
@@ -1102,8 +1102,8 @@ class CanInterface(DeviceInterface):
         return self._move_stepper_motor(Motor.PELLET_X_MOTOR, position, self.x_config,
                                         save_as_fixed=save_as_fixed, relative=relative)
 
-    def set_motor_y(self, position) -> bool:
-        return self.move_motor_y(position, save_as_fixed=True)
+    def set_motor_y(self, position, *, relative: bool = False) -> bool:
+        return self.move_motor_y(position, save_as_fixed=True, relative=relative)
 
     def move_motor_y(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
@@ -1121,8 +1121,8 @@ class CanInterface(DeviceInterface):
         return self._move_stepper_motor(Motor.PELLET_Y_MOTOR, position, self.y_config,
                                         save_as_fixed=save_as_fixed, relative=relative)
 
-    def set_motor_z(self, position) -> bool:
-        return self.move_motor_z(position, save_as_fixed=True)
+    def set_motor_z(self, position, *, relative: bool = False) -> bool:
+        return self.move_motor_z(position, save_as_fixed=True, relative=relative)
 
     def move_motor_z(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
