@@ -123,6 +123,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._send_with_token(self._tunnel_device, SystemCommandKind.UPDATE_SCALE_TARE)
 
     def set_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+        prev_last = self._last_set_x
         if absolute:
             self._last_set_x = value
         else:
@@ -130,14 +131,15 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 logger.warning("relative x set requested, but no last_set_x position is set")
                 return None
             self._last_set_x += value
-            value = self._last_set_x
+            # value = self._last_set_x  # using/keeping the absolute, or not
         # Send this whether the command succeeds or not.  It is the desired released position for future pellet releases
         # regardless of whether the command succeeds this particular time.
-        self._on_property_changed("set_x", value, self._last_x)
+        self._on_property_changed("set_x", self._last_set_x, prev_last)
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_X,
-                                     SystemDataArgsKwargs(value, relative=False))
+                                     SystemDataArgsKwargs(value, relative=not absolute))
 
     def set_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+        prev_last = self._last_set_y
         if absolute:
             self._last_set_y = value
         else:
@@ -145,14 +147,15 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 logger.warning("relative y set requested, but no last_set_x position is set")
                 return None
             self._last_set_y += value
-            value = self._last_set_y
+            # value = self._last_set_y
         # Send this whether the command succeeds or not.  It is the desired released position for future pellet releases
         # regardless of whether the command succeeds this particular time.
-        self._on_property_changed("set_y", value, self._last_y)
+        self._on_property_changed("set_y", self._last_set_y, prev_last)
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Y,
-                                     SystemDataArgsKwargs(value, relative=False))
+                                     SystemDataArgsKwargs(value, relative=not absolute))
 
     def set_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+        prev_last = self._last_set_z
         if absolute:
             self._last_set_z = value
         else:
@@ -160,12 +163,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 logger.warning("relative y set requested, but no last_set_x position is set")
                 return None
             self._last_set_z += value
-            value = self._last_set_z
+            # value = self._last_set_z
         # Send this whether the command succeeds or not.  It is the desired released position for future pellet releases
         # regardless of whether the command succeeds this particular time.
-        self._on_property_changed("set_z", value, self._last_z)
+        self._on_property_changed("set_z", self._last_set_z, prev_last)
         return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Z,
-                                     SystemDataArgsKwargs(value, relative=False))
+                                     SystemDataArgsKwargs(value, relative=not absolute))
 
     def move_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
         if not absolute:
