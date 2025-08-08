@@ -72,6 +72,9 @@ class LoadCellMonitor(ObservableObject):
     whether to start and stop "sessions" of an experiment.
     """
 
+    use_timer: bool = False
+    # to use timer to allow triggering active/inactive, or not.
+
     LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY = "load_cell_engaged_threshold"
     IS_ENGAGED_PROPERTY = "is_engaged"
     IS_THRASHING_DETECTED_PROPERTY = "is_thrashing_detected"
@@ -249,8 +252,9 @@ class LoadCellMonitor(ObservableObject):
                 self._cur_ptp_count = 0
                 self._t_inactive_start = None
                 logger.debug("considering to engage within %.3f seconds", cfg.threshold_duration)
-                self._active_debounce = _timer_load_cell_engaged(cfg.threshold_duration, self._ensure_active)
-                self._active_debounce.start()
+                if self.use_timer:
+                    self._active_debounce = _timer_load_cell_engaged(cfg.threshold_duration, self._ensure_active)
+                    self._active_debounce.start()
             elif when - t_start > cfg.threshold_duration:
                 self._active_debounce.cancel()
                 self._ensure_active()
@@ -267,8 +271,9 @@ class LoadCellMonitor(ObservableObject):
                 logger.debug("considering to disengage within %.3f seconds", duration)
                 self._t_inactive_start = when
                 self._index = index
-                self._inactive_debounce = _timer_load_cell_engaged(duration, self._ensure_inactive)
-                self._inactive_debounce.start()
+                if self.use_timer:
+                    self._inactive_debounce = _timer_load_cell_engaged(duration, self._ensure_inactive)
+                    self._inactive_debounce.start()
             elif when - self._t_inactive_start > duration:
                 self._inactive_debounce.cancel()
                 self._ensure_inactive()

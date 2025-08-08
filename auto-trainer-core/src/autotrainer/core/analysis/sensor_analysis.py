@@ -82,7 +82,7 @@ class SensorAnalysis(ObservableObject):
         self._interval = value
 
     @property
-    def load_cell_monitor(self):
+    def load_cell_monitor(self) -> LoadCellMonitor:
         return self._load_cell_monitor
 
     @property

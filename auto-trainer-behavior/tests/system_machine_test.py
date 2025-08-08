@@ -42,7 +42,7 @@ def test_enter_exit_tunnel(mock_system, machine):
     assert machine.algorithm._is_in_session is False
 
     # Should trigger enter tunnel, new session, and associated changes.
-    machine._analysis.load_cell_monitor.force_engaged(True)
+    mock_system.make_load_cell_active()
 
     assert machine.state == SystemState.tunnel
     assert tun_dev.update_head_magnet_intensity.call_args_list == [
@@ -53,7 +53,7 @@ def test_enter_exit_tunnel(mock_system, machine):
 
     # Exit tunnel and end session.
     # machine.mock_analysis.mock_load_cell_engaged(False)
-    machine._analysis.load_cell_monitor.force_engaged(False)
+    mock_system.make_load_cell_inactive()
 
     assert machine.state == SystemState.cage
     assert machine.algorithm._is_in_session is False
@@ -76,14 +76,14 @@ def test_no_session_without_pellet(mock_system, machine):
 
     assert mock_system.machine_state_trans == []
 
-    machine._analysis.load_cell_monitor.force_engaged(True)
+    mock_system.make_load_cell_active()
 
     assert mock_system.pellet_state_trans == []
     assert mock_system.machine_state_trans == [SystemState.tunnel]
     # Pellet machine not sending/releasing/monitoring - should not start.
     assert machine.algorithm.is_in_session is False
 
-    machine._analysis.load_cell_monitor.force_engaged(False)
+    mock_system.make_load_cell_inactive()
 
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]
 
@@ -97,34 +97,35 @@ def test_no_session_without_pellet(mock_system, machine):
 
     assert mock_system.pellet_state_trans == [PelletState.sending]
 
-    machine._analysis.load_cell_monitor.force_engaged(True)
+    mock_system.make_load_cell_active()
 
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage, SystemState.tunnel]
     assert mock_system.pellet_state_trans == [PelletState.sending, PelletState.covering]
 
     assert machine.algorithm.is_in_session is True
 
-    machine._analysis.load_cell_monitor.force_engaged(False)
+    mock_system.make_load_cell_inactive()
+
     assert mock_system.machine_state_trans == 2 * [SystemState.tunnel, SystemState.cage]
     # Acknowledge send command -> should go to releasing.
     machine._msg_handler.ack_received(pellet_machine._api_status_token)
 
-    machine._analysis.load_cell_monitor.force_engaged(True)
+    mock_system.make_load_cell_active()
 
     assert machine.algorithm.is_in_session is True
     assert machine.pellet.state == PelletState.releasing
 
-    machine._analysis.load_cell_monitor.force_engaged(False)
+    mock_system.make_load_cell_inactive()
 
     # Acknowledge release command -> should go to monitoring.
     machine._msg_handler.ack_received(pellet_machine._api_status_token)
     assert machine.pellet.state == PelletState.covering
 
-    machine._analysis.load_cell_monitor.force_engaged(True)
+    mock_system.make_load_cell_active()
 
     assert machine.algorithm.is_in_session is True
 
-    machine._analysis.load_cell_monitor.force_engaged(False)
+    mock_system.make_load_cell_inactive()
 
     assert machine.state == SystemState.cage
     assert mock_system.machine_state_trans == 4 * [
@@ -155,7 +156,7 @@ def test_intersession_enabled(mock_system, machine):
     assert machine.algorithm.system_state == machine.state
     assert pellet_machine.state == PelletState.monitoring
 
-    machine._analysis.load_cell_monitor.force_engaged(True)
+    mock_system.make_load_cell_active()
 
     assert machine.state == SystemState.tunnel
     assert machine.algorithm.system_state == machine.state
@@ -164,9 +165,9 @@ def test_intersession_enabled(mock_system, machine):
     mock_system.mock_pose_response(False, True)
 
     with mock_system.mock_perform_segmentation():
-        machine._analysis.load_cell_monitor.force_engaged(False)
+        mock_system.make_load_cell_inactive()
+        assert not machine._analysis.load_cell_monitor.is_engaged
 
-    # mock_system.pellet_state_trans
     assert machine.state == SystemState.intersession
     assert machine.algorithm.system_state == machine.state
     assert mock_system.machine_state_trans == [
