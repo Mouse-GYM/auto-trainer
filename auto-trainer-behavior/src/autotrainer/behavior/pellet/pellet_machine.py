@@ -43,7 +43,7 @@ class PelletMachine(StateMachine):
     # release, or otherwise perform pellet transitions will not succeed and perform those actions if these conditions
     # are met.
     transitions = [
-        {"trigger": "load_pellet", "source": [PelletState.monitoring, PelletState.covering],
+        {"trigger": "load_pellet", "source": [PelletState.monitoring, PelletState.covering, PelletState.retract],
          "dest": PelletState.loading, "before": "before_load_pellet", "after": "after_load_pellet",
          "conditions": "can_load_pellet"},
         {"trigger": "send_pellet", "source": [PelletState.loading, PelletState.home, PelletState.prerelease, PelletState.retract],
@@ -120,9 +120,6 @@ class PelletMachine(StateMachine):
     @property
     def events(self):
         return self._events
-
-    def environment_changed(self):
-        self._try_next_state()
 
     def before_move_home(self):
         if self._pellet_device is not None:
@@ -251,71 +248,88 @@ class PelletMachine(StateMachine):
         with self._thread_lock:
             self.__try_next_state(pellet_seen, must_release)
 
+    environment_changed = _try_next_state  # remove 1 unnecessary stack level
+    # def environment_changed(self):
+    #     self._try_next_state()
+
     def __try_next_state(self, pellet_seen: bool = True, must_release: bool = False):
-        def logit():
-            logger.debug("try_next_state: pellet_seen=%s must_release=%s pellet_state=%s algo_system_state=%s",
-                         pellet_seen, must_release, self._state, self.algorithm.system_state)
 
         algo = self._algorithm
 
+        def logit(reason: str = "unknown"):
+            logger.debug(
+                "try_next_state: %s -> pellet_seen=%s session_mouse_seen=%s must_release=%s pellet_state=%s algo_system_state=%s",
+             reason, pellet_seen, algo.session_mouse_seen, must_release, self._state, self.algorithm.system_state,
+            stack_info=True, stacklevel=3)
+
         # Always arrest to the home position during intersession.
         if algo.system_state == SystemState.intersession:
-            if self.state != PelletState.retract:
-                __debug__ and logit()
+            if not pellet_seen and self.can_load_pellet():
+                __debug__ and logit("load_pellet_during_intersession")
+                self.load_pellet()
+            elif self.state != PelletState.retract:
                 if algo.pellet_cover_enabled:
+                    __debug__ and logit("cover_pellet_before_retract_when_intersession")
                     # Need monitoring state to be able to cover_pellet, atm,
                     self.state = PelletState.monitoring
-                    # alternatively we could simply allow this states transition.
+                    # alternatively we could simply allow this states transition.I ca
                     self.cover_pellet()
                 # could also decide to execute the move_retract before the cover_pellet.
+                __debug__ and logit("move_retract_when_intersession")
                 self.move_retract()
             return
 
         if self.state in {PelletState.loading, PelletState.retract}:
-            __debug__ and logit()
             if algo.pellet_cover_enabled:
+                __debug__ and logit("send_pellet_when_loaded_or_retract_not_intersession")
                 self.send_pellet()
             else:
+                __debug__ and logit("prerelease_when_load_or_retract")
                 self.prerelease_pellet()
         elif self.state == PelletState.prerelease:
-            __debug__ and logit()
+            __debug__ and logit("send_pellet_when_prereleased")
             self.send_pellet()
         elif self.state == PelletState.sending:
-            __debug__ and logit()
             if algo.pellet_cover_enabled:
+                __debug__ and logit("release_when_sent_cover_enabled")
                 # Put things in a consistent state of covering without sending an unnecessary command.
                 self.state = PelletState.covering
                 # alternatively we could simply allow this states transition
                 self.release_pellet()
             else:
+                __debug__ and logit("monitor_when_send_cover_not_enabled")
                 self.monitor_pellet()
         elif self.state == PelletState.covering:
             if not pellet_seen:
                 if self.can_load_pellet():
-                    __debug__ and logit()
+                    __debug__ and logit("load_pellet_when_covered_and_pellet_not_seen")
                     self.load_pellet()
             else:
                 if self.can_release_pellet():
-                    __debug__ and logit()
+                    __debug__ and logit("release_pellet_when_seen_and_can_release")
                     self.release_pellet()
         elif self.state == PelletState.releasing:
+            __debug__ and logit("monitor_when_released")
             self.monitor_pellet()
         elif self.state == PelletState.home:
+            __debug__ and logit("send_pellet_when_home")
             self.send_pellet()
         elif self.state == PelletState.monitoring:
             if algo.is_in_session:
                 if must_release:
-                    __debug__ and logit()
+                    __debug__ and logit("release_when_in_session")
                     self.release_pellet()
                 elif not pellet_seen:
-                    __debug__ and logit()
+                    __debug__ and logit("load_pellet_in_session")
                     self.load_pellet()
             else:
-                __debug__ and logit()
                 if not pellet_seen:
+                    __debug__ and logit("load_pellet_in_monitoring")
                     self.load_pellet()
                 else:
-                    self.cover_pellet()
+                    if self.can_cover_pellet():
+                        __debug__ and logit("cover_pellet_in_monitoring")
+                        self.cover_pellet()
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
