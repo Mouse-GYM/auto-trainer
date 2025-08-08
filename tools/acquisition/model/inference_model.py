@@ -1109,7 +1109,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                     if not self._put_intersession_frame(cam_capture, cdx, cams_frame_idx[cdx]):
                         all_read[cdx] = True
                         self._offline_queue.put_block(empty_frame, cdx, FrameIndexCategory.PADDING)
-                        # if we prematuraly reach the end of the video stream then give a padding instead
+                        # if we prematurely reach the end of the video stream then give a padding instead
                     else:
                         cams_sent_frame_count[cdx] += 1
                         frames_idx_sent[cdx].append(cams_frame_idx[cdx])
