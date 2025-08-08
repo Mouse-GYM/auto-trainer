@@ -284,8 +284,8 @@ class PelletMachine(StateMachine):
             #     self.load_pellet()
             if self.state != PelletState.retract:
                 if algo.pellet_cover_enabled:
-                    __debug__ and logit("cover_pellet_before_retract_when_intersession")
                     if self.can_cover_pellet():
+                        __debug__ and logit("cover_pellet_before_retract_when_intersession")
                         # Need monitoring state to be able to cover_pellet, atm,
                         self.state = PelletState.monitoring
                         # alternatively we could simply allow this states transition.I ca
@@ -340,12 +340,12 @@ class PelletMachine(StateMachine):
                         __debug__ and logit("release_when_in_session")
                         self.release_pellet()
                 elif not pellet_seen and triangle_seen:
-                    if self.can_use_pellet_command():
+                    if self.can_load_pellet():
                         __debug__ and logit("load_pellet_in_session")
                         self.load_pellet()
             else:
                 if not pellet_seen and triangle_seen:
-                    if self.can_use_pellet_command():
+                    if self.can_load_pellet():
                         __debug__ and logit("load_pellet_in_monitoring")
                         self.load_pellet()
                 elif pellet_seen:
