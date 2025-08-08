@@ -41,12 +41,7 @@ class QCaptureView(QWidget):
         self._next_frame_points: Dict[SceneElement, PoseLocation] = {}
         self._are_points_dirty = False
 
-        self._card_widget = CardWidget()
-
         # Header
-        self._title = QLabel("Capture")
-        self._title.setStyleSheet("font-weight: bold")
-
         self._camera = QComboBox()
         self._camera.currentIndexChanged.connect(self._source_changed)
 
@@ -54,13 +49,10 @@ class QCaptureView(QWidget):
 
         top_layout = QHBoxLayout()
         top_layout.setContentsMargins(0, 0, 0, 0)
-        top_layout.addWidget(self._title)
-        top_layout.addStretch(1)
         top_layout.addWidget(self._camera)
         top_layout.addWidget(self._camera_name)
-        widget = QWidget()
-        widget.setLayout(top_layout)
-        self._card_widget.header.setContent(widget)
+
+        self._card_widget = CardWidget(title="Capture", header_right_layout=top_layout)
 
         # Content/Image
         widget = QWidget()
@@ -141,7 +133,7 @@ class QCaptureView(QWidget):
             self._camera.addItem(camera.name, camera)
 
     def setTitle(self, title: str):
-        self._title.setText(title)
+        self._card_widget.header.setTitle(title)
 
     def setSize(self, width: int, height: int):
         self._image_width = width

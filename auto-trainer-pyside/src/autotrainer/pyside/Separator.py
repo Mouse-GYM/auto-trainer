@@ -2,7 +2,7 @@ from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QFrame
 
 
-class ATSeparator(QFrame):
+class Separator(QFrame):
     def __init__(self, color: str = "#b9b9b9"):
         super().__init__()
 

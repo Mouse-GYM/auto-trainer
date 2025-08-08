@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QComboBox
 
 
-class ATSerialPortComboBox(QComboBox):
+class HardwarePortComboBox(QComboBox):
     def __init__(self, ports: list = None, port: str = None):
         super().__init__()
 

@@ -8,8 +8,7 @@ from tools.pellet_delivery.model.app_model import AppModel
 from tools.pellet_delivery.view.pellet_control import PelletControl
 from tools.pellet_delivery.view.pellet_status import PelletStatus
 from tools.pellet_delivery.view.pellet_state import PelletState
-from tools.view.basic_panel import create_panel
-from tools.view.connection_panel import ConnectionPanel
+from autotrainer.pyside import ConnectionPanel, CardWidget
 
 from autotrainer.pyside import TextBoxHandler
 
@@ -25,7 +24,9 @@ def create_log_panel():
     log_output.setStyleSheet("border: none")
     layout.addWidget(log_output)
 
-    return log_output, create_panel("Logs", layout)
+    panel = CardWidget(title="Logs", content_layout=layout)
+
+    return log_output, panel
 
 
 class MainContent(QWidget):

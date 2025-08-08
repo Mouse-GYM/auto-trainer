@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox, QLabel
 
 from autotrainer.device import get_available_hardware
 from autotrainer.model import EnvironmentProvider, HardwareVersion
-from autotrainer.pyside import ATSeparator, ATSerialPortComboBox
+from autotrainer.pyside import Separator, HardwarePortComboBox
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
@@ -96,11 +96,11 @@ class PreferencesContent(QWidget):
         else:
             ports = get_available_hardware(allow_can_emulation=EnvironmentProvider.allow_can_emulation())
 
-            self._tunnel_combo_box = ATSerialPortComboBox(ports, self._model.hardware.tunnel_identifier)
+            self._tunnel_combo_box = HardwarePortComboBox(ports, self._model.hardware.tunnel_identifier)
             self._tunnel_combo_box.currentIndexChanged.connect(self._tunnel_identifier_selection_changed)
             form_layout.addRow("Tunnel Identifier:", self._tunnel_combo_box)
 
-            self._pellet_combo_box = ATSerialPortComboBox(ports, self._model.hardware.pellet_identifier)
+            self._pellet_combo_box = HardwarePortComboBox(ports, self._model.hardware.pellet_identifier)
             self._pellet_combo_box.currentIndexChanged.connect(self._pellet_identifier_selection_changed)
             form_layout.addRow("Pellet Identifier:", self._pellet_combo_box)
 

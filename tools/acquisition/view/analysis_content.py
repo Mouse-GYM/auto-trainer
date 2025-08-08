@@ -6,7 +6,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
 
 from autotrainer.core import PerfMonitor, MessageHandler, SensorAnalysis, LoadCellMonitor, Offset3DTuple
-from autotrainer.pyside import PGWidget, ATSerialPortComboBox, CardWidget, QtIndicator
+from autotrainer.pyside import PGWidget, HardwarePortComboBox, CardWidget, QtIndicator
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 
@@ -34,36 +34,8 @@ class AnalysisContent(ContentWidget):
 
         self._analysis = analysis
 
-        self._card_widget = CardWidget()
-
-        content = QWidget(None)
-        content.setLayout(QHBoxLayout())
-
-        self._plot1 = PGWidget()
-        self._plot1.setBackground("w")
-        self._plot1.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
-        self._plot1.setMinimumHeight(140)
-        self._plot1.getViewBox().setRange(yRange=[0, 50])
-        self._plot1.scale_x = 100.0
-
-        self._plot1.getAxis("left").setLabel("Weight (g)")
-        ticks = [0, 10, 25, 40, 50]
-        self._plot1.getAxis("left").setTicks([[(tick, str(tick)) for tick in ticks]])
-        self._plot1.getAxis("bottom").setLabel("Time (s)")
-
-        content.layout().addWidget(self._plot1)
-
-        self._card_widget.setContentWidget(content)
-
         # Header
-        self._header = QWidget(None)
         layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-
-        title = QLabel("Analysis")
-        title.setStyleSheet("font-weight: bold")
-        layout.addWidget(title)
 
         layout.addWidget(QLabel("D-T:"))
         self._triangle_diamond_offset = QLabel("n/a")
@@ -86,9 +58,26 @@ class AnalysisContent(ContentWidget):
         self._headbar_switch_engaged = QtIndicator(text="Headbar DIO Switch")
         layout.addWidget(self._headbar_switch_engaged)
 
-        self._header.setLayout(layout)
+        self._card_widget = CardWidget(title="Analysis", header_right_layout=layout)
 
-        self._card_widget.header.setContent(self._header)
+        content = QWidget(None)
+        content.setLayout(QHBoxLayout())
+
+        self._plot1 = PGWidget()
+        self._plot1.setBackground("w")
+        self._plot1.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
+        self._plot1.setMinimumHeight(140)
+        self._plot1.getViewBox().setRange(yRange=[0, 50])
+        self._plot1.scale_x = 100.0
+
+        self._plot1.getAxis("left").setLabel("Weight (g)")
+        ticks = [0, 10, 25, 40, 50]
+        self._plot1.getAxis("left").setTicks([[(tick, str(tick)) for tick in ticks]])
+        self._plot1.getAxis("bottom").setLabel("Time (s)")
+
+        content.layout().addWidget(self._plot1)
+
+        self._card_widget.setContentWidget(content)
 
         # Footer
         self._footer = QWidget(None)

@@ -1,13 +1,13 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QPushButton
 from PySide6.QtGui import QIcon
+import qtawesome as qta
 
 from autotrainer.device import get_available_hardware
-from autotrainer.pyside import ATSerialPortComboBox
 
-from .basic_panel import create_panel
+from .HardwarePortComboBox import HardwarePortComboBox
 
-import qtawesome as qta
+from ..CardWidget import CardWidget
 
 
 class ConnectionPanel(QWidget):
@@ -30,7 +30,7 @@ class ConnectionPanel(QWidget):
 
         layout.addWidget(QLabel("Port:"))
 
-        self._port_combobox = ATSerialPortComboBox(port=self._app_view_model.user_settings.port)
+        self._port_combobox = HardwarePortComboBox(port=self._app_view_model.user_settings.port)
         self._port_combobox.setMinimumWidth(140)
         self._port_combobox.currentIndexChanged.connect(self._port_selection_changed)
 
@@ -52,7 +52,7 @@ class ConnectionPanel(QWidget):
         self._connection_status.setStyleSheet("color: white")
         self._connection_status.setContentsMargins(0, 0, 4, 0)
 
-        panel = create_panel("Connection", layout, self._connection_status)
+        panel = CardWidget(title="Connection", content_layout=layout, header_right_layout=self._connection_status)
 
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)

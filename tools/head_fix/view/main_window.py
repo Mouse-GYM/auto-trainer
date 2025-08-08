@@ -2,7 +2,7 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QMainWindow, QStatusBar, QApplication, QVBoxLayout, QWidget
 
-from autotrainer.pyside import ATSeparator
+from autotrainer.pyside import Separator
 from tools.head_fix.model.app_model import AppModel
 from tools.head_fix.view.main_content import MainContent
 
@@ -30,9 +30,9 @@ class MainWindow(QMainWindow):
         container = QWidget()
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(ATSeparator("#b9b9b9"))
+        layout.addWidget(Separator("#b9b9b9"))
         layout.addWidget(self.main_content)
-        layout.addWidget(ATSeparator("#b9b9b9"))
+        layout.addWidget(Separator("#b9b9b9"))
         layout.setStretch(1, 1)
         container.setLayout(layout)
 

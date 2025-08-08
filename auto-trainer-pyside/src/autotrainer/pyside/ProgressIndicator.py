@@ -3,7 +3,7 @@ from PySide6.QtGui import Qt, QColor, QPen, QPainterPath, QPainter
 from PySide6.QtWidgets import QWidget
 
 
-class ATProgressIndicator(QWidget):
+class ProgressIndicator(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._offset = 0
