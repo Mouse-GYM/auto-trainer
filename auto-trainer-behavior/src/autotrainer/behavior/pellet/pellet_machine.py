@@ -273,8 +273,9 @@ class PelletMachine(StateMachine):
 
         def logit(reason: str = "unknown"):
             logger.debug(
-                "try_next_state from %s: %s -> pellet_seen=%s session_mouse_seen=%s must_release=%s pellet_state=%s algo_system_state=%s",
-             caller, reason, pellet_seen, algo.session_mouse_seen, must_release, self._state, self.algorithm.system_state,
+                "try_next_state from %s: %s -> pellet_seen=%s triangle_seen=%s session_mouse_seen=%s must_release=%s pellet_state=%s algo_system_state=%s",
+             caller, reason, pellet_seen, triangle_seen,
+                algo.session_mouse_seen, must_release, self._state, self.algorithm.system_state,
             stacklevel=3)
 
         # Always arrest to the retract position during intersession.
