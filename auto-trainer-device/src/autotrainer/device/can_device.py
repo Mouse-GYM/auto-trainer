@@ -516,13 +516,15 @@ class CanDevice(Device):
         Args:
             message: The LoadCellReading message
         """
-        measurement = HeadFixMeasurement(message.timestamp_ns / 1e9,
-                                         message.index,
-                                         message.load,
-                                         self._current_digital,
-                                         self._current_pressure,
-                                         self._current_temperature,
-                                         self._current_humidity)
+        measurement = HeadFixMeasurement(
+            when=message.timestamp_ns / 1e9,
+            timestamp=message.index,
+            weight=message.load,
+            switch=self._current_digital,
+            pressure=self._current_pressure,
+            temperature=self._current_temperature,
+            humidity=self._current_humidity,
+        )
 
         self._measurements.append(measurement)
 
