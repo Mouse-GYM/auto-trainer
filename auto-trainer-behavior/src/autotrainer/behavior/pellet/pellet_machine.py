@@ -296,7 +296,8 @@ class PelletMachine(StateMachine):
                 self.move_retract()
             return
 
-        if self.state in {PelletState.loading, PelletState.retract}:
+        cur_state = self.state
+        if cur_state in {PelletState.loading, PelletState.retract}:
             if algo.pellet_cover_enabled:
                 if self.can_use_pellet_command():
                     __debug__ and logit("send_pellet_when_loaded_or_retract_not_intersession")
@@ -304,11 +305,11 @@ class PelletMachine(StateMachine):
             else:
                 __debug__ and logit("prerelease_when_load_or_retract")
                 self.prerelease_pellet()
-        elif self.state == PelletState.prerelease:
+        elif cur_state == PelletState.prerelease:
             __debug__ and logit("send_pellet_when_prereleased")
             if self.can_send_pellet():
                 self.send_pellet()
-        elif self.state == PelletState.sending:
+        elif cur_state == PelletState.sending:
             if algo.pellet_cover_enabled:
                 # Put things in a consistent state of covering without sending an unnecessary command.
                 if self.can_use_pellet_command():
@@ -319,7 +320,7 @@ class PelletMachine(StateMachine):
             else:
                 __debug__ and logit("monitor_when_send_cover_not_enabled")
                 self.monitor_pellet()
-        elif self.state == PelletState.covering:
+        elif cur_state == PelletState.covering:
             if not pellet_seen:
                 if self.can_load_pellet():
                     __debug__ and logit("load_pellet_when_covered_and_pellet_not_seen")
@@ -328,13 +329,13 @@ class PelletMachine(StateMachine):
                 if self.can_release_pellet():
                     __debug__ and logit("release_pellet_when_seen_and_can_release")
                     self.release_pellet()
-        elif self.state == PelletState.releasing:
+        elif cur_state == PelletState.releasing:
             __debug__ and logit("monitor_when_released")
             self.monitor_pellet()
-        elif self.state == PelletState.home:
+        elif cur_state == PelletState.home:
             __debug__ and logit("send_pellet_when_home")
             self.send_pellet()
-        elif self.state == PelletState.monitoring:
+        elif cur_state == PelletState.monitoring:
             if algo.is_in_session:
                 if must_release:
                     if self.can_use_pellet_command():
@@ -353,6 +354,8 @@ class PelletMachine(StateMachine):
                     if self.can_cover_pellet():
                         __debug__ and logit("cover_pellet_in_monitoring")
                         self.cover_pellet()
+        else:
+            pass  # unhandled state
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
