@@ -282,7 +282,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             self._last_x = value
         elif name == MessageHandler.DEVICE_Y_PROPERTY:
             self._last_y = value
-        elif name == MessageHandler.DEVICE_Y_PROPERTY:
+        elif name == MessageHandler.DEVICE_Z_PROPERTY:
             self._last_z = value
         elif name == MessageHandler.FIRMWARE_VERSION_PROPERTY and value is not None:
             version = str(value).lower()
