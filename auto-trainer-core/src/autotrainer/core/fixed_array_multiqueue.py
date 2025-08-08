@@ -161,7 +161,7 @@ class FixedArrayMultiQueue:
                 return False
         return True
 
-    def pad_to_batch_size(self, pad_frame, *, timeout: float=5):
+    def pad_to_batch_size(self, pad_frame, *, timeout: float=10):
         """Pad the queue so that all the cams are on same bucket, and the start of it."""
         todo: List[Tuple[int, int]] = []
         for cdx in range(self._cam_count):
@@ -211,7 +211,7 @@ class FixedArrayMultiQueue:
         ).reshape((self._cam_count, self._depth, self._frames_per_camera))
         return b.max()
 
-    def put_block(self, content: numpy.ndarray, camera: int, frame_idx: int, *, timeout: float=5):
+    def put_block(self, content: numpy.ndarray, camera: int, frame_idx: int, *, timeout: float=10):
         timeout = time.perf_counter() + timeout
         while self.put(content, camera, frame_idx) != BufferResult.Ok:
             if time.perf_counter() > timeout:
@@ -315,7 +315,7 @@ class FixedArrayMultiQueue:
         ).reshape((self._cam_count, self._depth, self._frames_per_camera))
         return b
 
-    def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 5):
+    def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 10):
         for cdx in range(self._cam_count):
             for _ in range(self._frames_per_camera):
                 t0 = time.perf_counter()

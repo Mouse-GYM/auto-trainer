@@ -402,7 +402,7 @@ class VideoCapture(Process):
                             sync_barrier()
                             d = net_q.get_cam_missing_frames(self._camera_idx)
                             sync_barrier()
-                            timeout = 5
+                            timeout = 10
                             for _ in range(d):
                                 t0 = time.perf_counter()
                                 net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING,
@@ -446,7 +446,7 @@ class VideoCapture(Process):
                             sync_barrier()
 
                             # logger.debug("padding %s times", d)
-                            timeout = 5
+                            timeout = 10
                             for _ in range(d):
                                 t0 = time.perf_counter()
                                 net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING,
