@@ -317,6 +317,9 @@ class PelletMachine(StateMachine):
                     self.state = PelletState.covering
                     # alternatively we could simply allow this states transition
                     self.release_pellet()
+                else:
+                    Timer(0.1, self._try_next_state, args=(pellet_seen, must_release),
+                          kwargs=dict(caller="timer", triange_seen=triangle_seen)).start()
             else:
                 __debug__ and logit("monitor_when_send_cover_not_enabled")
                 self.monitor_pellet()
