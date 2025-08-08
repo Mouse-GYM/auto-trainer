@@ -296,9 +296,9 @@ class PelletMachine(StateMachine):
                 self.send_pellet()
         elif self.state == PelletState.sending:
             if algo.pellet_cover_enabled:
-                __debug__ and logit("release_when_sent_cover_enabled")
                 # Put things in a consistent state of covering without sending an unnecessary command.
                 if self.can_use_pellet_command():
+                    __debug__ and logit("release_when_sent_cover_enabled")
                     self.state = PelletState.covering
                     # alternatively we could simply allow this states transition
                     self.release_pellet()
@@ -330,8 +330,9 @@ class PelletMachine(StateMachine):
                     self.load_pellet()
             else:
                 if not pellet_seen:
-                    __debug__ and logit("load_pellet_in_monitoring")
-                    self.load_pellet()
+                    if self.can_use_pellet_command():
+                        __debug__ and logit("load_pellet_in_monitoring")
+                        self.load_pellet()
                 else:
                     if self.can_cover_pellet():
                         __debug__ and logit("cover_pellet_in_monitoring")
