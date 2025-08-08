@@ -285,8 +285,9 @@ class PelletMachine(StateMachine):
 
         if self.state in {PelletState.loading, PelletState.retract}:
             if algo.pellet_cover_enabled:
-                __debug__ and logit("send_pellet_when_loaded_or_retract_not_intersession")
-                self.send_pellet()
+                if self.can_use_pellet_command():
+                    __debug__ and logit("send_pellet_when_loaded_or_retract_not_intersession")
+                    self.send_pellet()
             else:
                 __debug__ and logit("prerelease_when_load_or_retract")
                 self.prerelease_pellet()
