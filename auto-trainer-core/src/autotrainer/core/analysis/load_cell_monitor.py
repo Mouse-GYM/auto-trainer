@@ -105,7 +105,7 @@ class LoadCellMonitor(ObservableObject):
             # data, when, index
         ] = deque()
         self._thrashing_detected: bool = False
-        self._thread_lock = threading.Lock()
+        self._thread_lock = threading.RLock()  # might be required re-entrant lock !!
 
     @property
     def config(self) -> LoadCellConfiguration:

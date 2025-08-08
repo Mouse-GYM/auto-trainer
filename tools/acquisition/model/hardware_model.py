@@ -52,7 +52,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._last_y: Optional[int] = None
         self._last_z: Optional[int] = None
 
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # might be required re-entrant lock !!
 
     @property
     def tunnel_identifier(self) -> Optional[str]:

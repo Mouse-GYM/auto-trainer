@@ -111,7 +111,7 @@ class PelletMachine(StateMachine):
                                initial=initial_state, model_override=True,
                        )
 
-        self._thread_lock = threading.Lock()
+        self._thread_lock = threading.RLock()  # required re-entrant lock !!
 
     @property
     def algorithm(self):
