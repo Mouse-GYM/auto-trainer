@@ -245,12 +245,12 @@ class LoadCellMonitor(ObservableObject):
         value = numpy.mean([v for v, w, _ in self._values_history if when - w < cfg.threshold_duration])
         if value >= cfg.weight_active_threshold:
             self._inactive_debounce.cancel()
+            self._t_inactive_start = None
             if t_start is None:
                 self._when = when
                 self._index = index
                 self._t_start_was_active = when
                 self._cur_ptp_count = 0
-                self._t_inactive_start = None
                 logger.debug("considering to engage within %.3f seconds", cfg.threshold_duration)
                 if self.use_timer:
                     self._active_debounce = _timer_load_cell_engaged(cfg.threshold_duration, self._ensure_active)
