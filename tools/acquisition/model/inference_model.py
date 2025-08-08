@@ -518,6 +518,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         cur_cams_indices = [[] for _ in range_cams]
         tot_skipped = 0
         t_start_offline = 0
+        skip_next_pose_data = 0
 
         t_log_counters = time.perf_counter()
         t_perf_live_check_data_queue_size = time.perf_counter() + 5
@@ -567,6 +568,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
             if prev_pose_data is None:
                 logger.verbose("flushed queue after end of offline processing ; size=%s flushed=%s",
                                cur_qsize, tot_flushed)
+                nonlocal skip_next_pose_data
+                skip_next_pose_data = 3
             return next_pose_data, next_mode, next_frames_indices
 
         while self._is_running:
@@ -721,6 +724,10 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                                 cam_h5_live.clear()
                                 cam_indices.clear()
                             # pose_fhs[cdx]...
+
+                    if skip_next_pose_data > 0:
+                        skip_next_pose_data -= 1
+                        continue
 
                     if skip_update:
                         continue
