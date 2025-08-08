@@ -105,6 +105,7 @@ class PelletMachine(StateMachine):
         self._pellet_device = pellet_device
 
         self._api_status_token = None
+        self._prev_pellet_seen = None
 
         self.machine = Machine(model=[self], states=list(PelletState),
                                transitions=PelletMachine.transitions, auto_transitions=False,
@@ -178,14 +179,8 @@ class PelletMachine(StateMachine):
         EventManager.default().post_event_content(BehaviorEventKind.pelletLoadCan, context=can)
         return can
 
-    def can_send_pellet(self, _prev_val=[False]):
+    def can_send_pellet(self):
         can = self.can_use_pellet_command()
-        if __debug__:
-            prev = _prev_val[0]
-            if can != prev:
-                logger.debug("can_send_pellet: can=%s state=%s token=%s",
-                             can, self._state, self._api_status_token)
-            _prev_val[0] = can
         EventManager.default().post_event_content(BehaviorEventKind.pelletSendCan, context=can)
         return can
 
@@ -205,10 +200,15 @@ class PelletMachine(StateMachine):
         return can
 
     def can_use_pellet_command(self):
+        # return True
         return self._api_status_token is None
 
     def pellet_seen(self, seen: bool):
-        self._try_next_state(seen)
+        # with self._thread_lock:
+        #     if seen == self._prev_pellet_seen:
+        #         return
+        #     self._prev_pellet_seen = seen
+        self._try_next_state(seen, caller="pellet_seen")
 
     # region Callbacks
     def _session_starting(self):
@@ -216,10 +216,10 @@ class PelletMachine(StateMachine):
         # must release could be set to False.  However, given how critical it is that the pellet is not covered when
         # disabled, go ahead and request a release under all conditions, even though it should be a no-op in that
         # instance.
-        self._try_next_state(True, True)
+        self._try_next_state(True, True, caller="session_starting")
 
     def _session_ending(self):
-        self._try_next_state()
+        self._try_next_state(caller="session_ending")
 
     def _move_retract(self):
         self._pellet_device.send_retract()
@@ -240,29 +240,32 @@ class PelletMachine(StateMachine):
 
         self._api_status_token = None
 
-        self._try_next_state()
+        self._try_next_state(caller="pellet_device_ack_received")
 
     # endregion
 
-    def _try_next_state(self, pellet_seen: bool = True, must_release: bool = False):
+    def _try_next_state(self, pellet_seen: bool = True, must_release: bool = False,
+                        *,
+                        caller: str = "not-provided",
+                        ):
         with self._thread_lock:
-            self.__try_next_state(pellet_seen, must_release)
+            self.__try_next_state(pellet_seen, must_release, caller=caller)
 
     environment_changed = _try_next_state  # remove 1 unnecessary stack level
     # def environment_changed(self):
     #     self._try_next_state()
 
-    def __try_next_state(self, pellet_seen: bool = True, must_release: bool = False):
+    def __try_next_state(self, pellet_seen: bool = True, must_release: bool = False, *, caller: str):
 
         algo = self._algorithm
 
         def logit(reason: str = "unknown"):
             logger.debug(
-                "try_next_state: %s -> pellet_seen=%s session_mouse_seen=%s must_release=%s pellet_state=%s algo_system_state=%s",
-             reason, pellet_seen, algo.session_mouse_seen, must_release, self._state, self.algorithm.system_state,
-            stack_info=True, stacklevel=3)
+                "try_next_state from %s: %s -> pellet_seen=%s session_mouse_seen=%s must_release=%s pellet_state=%s algo_system_state=%s",
+             caller, reason, pellet_seen, algo.session_mouse_seen, must_release, self._state, self.algorithm.system_state,
+            stacklevel=3)
 
-        # Always arrest to the home position during intersession.
+        # Always arrest to the retract position during intersession.
         if algo.system_state == SystemState.intersession:
             if not pellet_seen and self.can_load_pellet():
                 __debug__ and logit("load_pellet_during_intersession")
@@ -270,10 +273,11 @@ class PelletMachine(StateMachine):
             elif self.state != PelletState.retract:
                 if algo.pellet_cover_enabled:
                     __debug__ and logit("cover_pellet_before_retract_when_intersession")
-                    # Need monitoring state to be able to cover_pellet, atm,
-                    self.state = PelletState.monitoring
-                    # alternatively we could simply allow this states transition.I ca
-                    self.cover_pellet()
+                    if self.can_cover_pellet():
+                        # Need monitoring state to be able to cover_pellet, atm,
+                        self.state = PelletState.monitoring
+                        # alternatively we could simply allow this states transition.I ca
+                        self.cover_pellet()
                 # could also decide to execute the move_retract before the cover_pellet.
                 __debug__ and logit("move_retract_when_intersession")
                 self.move_retract()
@@ -288,14 +292,16 @@ class PelletMachine(StateMachine):
                 self.prerelease_pellet()
         elif self.state == PelletState.prerelease:
             __debug__ and logit("send_pellet_when_prereleased")
-            self.send_pellet()
+            if self.can_send_pellet():
+                self.send_pellet()
         elif self.state == PelletState.sending:
             if algo.pellet_cover_enabled:
                 __debug__ and logit("release_when_sent_cover_enabled")
                 # Put things in a consistent state of covering without sending an unnecessary command.
-                self.state = PelletState.covering
-                # alternatively we could simply allow this states transition
-                self.release_pellet()
+                if self.can_use_pellet_command():
+                    self.state = PelletState.covering
+                    # alternatively we could simply allow this states transition
+                    self.release_pellet()
             else:
                 __debug__ and logit("monitor_when_send_cover_not_enabled")
                 self.monitor_pellet()

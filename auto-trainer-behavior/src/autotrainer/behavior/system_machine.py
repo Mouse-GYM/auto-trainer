@@ -183,13 +183,13 @@ class SystemMachine(StateMachine):
 
     def before_exit_intersession_to_cage(self):
         self._algorithm.system_state = SystemState.cage
-        self._pellet_machine.environment_changed()
+        self._pellet_machine.environment_changed(caller="before_exit_intersession_to_cage")
 
     def before_exit_intersession_to_tunnel(self):
         self.state = SystemState.tunnel
         self._algorithm.system_state = SystemState.tunnel
         self.enter_tunnel()
-        self._pellet_machine.environment_changed()
+        self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
 
     @staticmethod
     def _clean_raw_data(project):
