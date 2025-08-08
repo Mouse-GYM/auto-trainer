@@ -1008,7 +1008,7 @@ class CanInterface(DeviceInterface):
 
         if relative:
             max_pos = turns_to_mm(_STEPPER_MAX_TURNS)
-            if motor in self._last_positions:
+            if not save_as_fixed and motor in self._last_positions:
                 last_pos = self._last_positions[motor]
                 if last_pos is None:
                     logger.error("Motor %s: refusing relative movement with no last_pos known", motor)
