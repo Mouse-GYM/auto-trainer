@@ -225,6 +225,8 @@ class PelletMachine(StateMachine):
         self._pellet_device.send_retract()
 
     def _pellet_device_ack_received(self, token: str):
+        logger.debug("pellet_ack_received: %s", token)
+
         if self._api_status_token is None:
             # External command.  Safe to ignore.
             return
