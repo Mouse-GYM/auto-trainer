@@ -70,8 +70,10 @@ class AppModel(ObservableObject):
 
         self._inference_queue = None
 
-        calib_src_dir = (Path("~/Autotrainer/4mm_6r_8c_4x") if calib_dir is None
-                         else calib_dir).expanduser()
+        calib_src_dir = (
+            Path("~/Autotrainer/4mm_6r_8c_4x") if calib_dir is None
+            else calib_dir
+        ).expanduser()
         if calib_src_dir.exists():
             self._stereo_params = load_calib_stereo_params(
                 calib_src_dir.joinpath('camera_matrix', 'stereo_params.pickle')
@@ -101,7 +103,7 @@ class AppModel(ObservableObject):
             cam_offsets=cam_offsets,
         )
 
-        self._inference = InferenceModel(self._pose_algorithm)
+        self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir)
 
         self._behavior = BehaviorModel(self._message_handler, self._analysis, self._hardware, self._inference)
 

@@ -72,14 +72,19 @@ video_write_ext = "mp4" if sys.platform.startswith("linux") else "mkv"
 
 
 @dataclass
+class SessionRawInt:
+    value: int
+
+
+@dataclass
 class ProjectInfo:
-    session: Value = None
     root: str = ""
     device_id: str = ""
     when: datetime = None
     ensure_exists: bool = False
     camera_1: str = ""
     camera_2: str = ""
+    session: Union[Value, SessionRawInt] = None  # noqa
 
     def __post_init__(self):
         if self.session is None:
