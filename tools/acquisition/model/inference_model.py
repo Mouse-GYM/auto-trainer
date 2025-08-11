@@ -1202,7 +1202,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
         self._intersession_detection = None
         if processed_ok:
-            # posting the result after having completed and set to None current detection.
+            # posting the result ready after having completed and set to None current detection.
             self.detection_result_ready(result)
-            # so that any exception in it won't prevent the above completion to be effective.
+            # so that any exception in the posting won't prevent the above completion to be effective.
             # Given a dedicated thread is running this, it would anyway have exited when this function returns.
