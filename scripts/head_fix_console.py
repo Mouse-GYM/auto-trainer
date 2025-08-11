@@ -78,6 +78,8 @@ def run_monitor(port: str, timeout: int):
 
     device_connection.request_connect()
 
+    device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE)
+
     while True:
         if timeout > 0:
             # Run for the request time and exit.  Primarily supports automated testing by ensuring can launch and close

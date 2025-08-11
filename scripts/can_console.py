@@ -342,6 +342,8 @@ def run_monitor():
     device_connection.load_default_motor_config()
     device_connection.load_default_move_config()
 
+    device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE)
+
     last_command = ""
 
     while True:
