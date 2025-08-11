@@ -1,5 +1,7 @@
+import copy
 import dataclasses
 import logging
+import multiprocessing
 import operator
 import os
 import queue
@@ -20,15 +22,17 @@ import h5py
 import numpy
 import numpy as np
 import pandas
+import verboselogs
 
 from autotrainer.core import FixedArrayMultiQueue, ObservableObject, ProjectInfo, EventManager, clear_queue, \
     InferenceConfiguration, Offset3DTuple
 from autotrainer.core.fixed_array_queue import BufferResult
-from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.logging import get_verbose_logger, setup_logging
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
     intersession_process, BehaviorEventKind, InferenceProtocol
 from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
+from autotrainer.core.project.project_info import SessionRawInt
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     DlcPoseModel, MemoryPoseModel, InferenceMode, PoseResponse
 from autotrainer.core.pose_elements import SceneElement
@@ -1165,15 +1169,29 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         logger.error("cam %s: timeout waiting offline_queue has space", cam_index)
         return False
 
-    def _intersession_process(self, project, intersession_detection):
-        try:
-            result = intersession_process(project)
-        except Exception as err:
-            logger.exception("Error processing intersession: %s", err)
-            processed_ok = False
-        else:
-            processed_ok = True
-            self.detection_result_ready(result)
+    @staticmethod
+    def _launch_intersession_process(project: ProjectInfo, *, logger_level=verboselogs.VERBOSE):
+        setup_logging("autotrainer", logger_level=logger_level)
+        return intersession_process(project)
 
+    def _intersession_process(self, project: ProjectInfo, intersession_detection):
+        project = ProjectInfo(**vars(project))
+        # multiprocess does not accept to pass shared value other than inheritance,
+        # so get the value and assign it as SessionRawInt (which discard the shared value reference)
+        project.session = SessionRawInt(project.session.value)
+        with multiprocessing.Pool(processes=1) as pool:
+            try:
+                async_res = pool.apply_async(self._launch_intersession_process, args=(project,))
+                result = async_res.get()
+            except Exception as err:
+                logger.exception("Error processing intersession: %s", err)
+                processed_ok = False
+            else:
+                processed_ok = True
         intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
         self._intersession_detection = None
+        if processed_ok:
+            # posting the result after having completed and set to None current detection.
+            self.detection_result_ready(result)
+            # so that any exception in it won't prevent the above completion to be effective.
+            # Given a dedicated thread is running this, it would anyway have exited when this function returns.
