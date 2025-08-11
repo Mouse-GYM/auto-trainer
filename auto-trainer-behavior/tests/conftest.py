@@ -218,16 +218,20 @@ class MockSystemMachine:
     def make_load_cell_active(self):
         # NB: this could be moved to auto-trainer-core (where load_cell_monitor is defined),
         # so to be reused by auto-trainer-core/tests dedicated to load cell monitor.
-        self._ts_now += self._load_cell.config.threshold_duration + 0.001
-        self._load_cell.update(self._load_cell.config.weight_active_threshold + 0.001, self._ts_now, self._ts_now)
-        self._ts_now += self._load_cell.config.threshold_duration + 0.001
-        self._load_cell.update(self._load_cell.config.weight_active_threshold + 0.001, self._ts_now, self._ts_now)
+        batch_count = self._load_cell._engaged_batch_count
+        for _ in range(2 * batch_count):
+            self._ts_now += self._load_cell.config.threshold_duration / batch_count + 0.001
+            self._load_cell.update(self._load_cell.config.weight_active_threshold + 0.001, self._ts_now, self._ts_now)
+        # self._ts_now += self._load_cell.config.threshold_duration + 0.001
+        # self._load_cell.update(self._load_cell.config.weight_active_threshold + 0.001, self._ts_now, self._ts_now)
 
     def make_load_cell_inactive(self):
-        self._ts_now += self._load_cell.config.threshold_duration + 0.001
-        self._load_cell.update(self._load_cell.config.weight_inactive_threshold - 0.001, self._ts_now, self._ts_now)
-        self._ts_now += self._load_cell.config.min_post_event_hold_duration + 0.001
-        self._load_cell.update(0, self._ts_now, self._ts_now)
+        batch_count = self._load_cell._engaged_batch_count
+        for _ in range(3 * batch_count):
+            self._ts_now += self._load_cell.config.min_post_event_hold_duration / batch_count + 0.001
+            self._load_cell.update(self._load_cell.config.weight_inactive_threshold - 0.001, self._ts_now, self._ts_now)
+            # self._ts_now += self._load_cell.config.min_post_event_hold_duration + 0.001
+            # self._load_cell.update(0, self._ts_now, self._ts_now)
 
 
 @pytest.fixture

@@ -85,15 +85,16 @@ def test_detect_load_cell_animal_thrashing(
 
     # now set value a bit more than engaged threshold:
     value = cfg.weight_active_threshold + 0.0001
-    t_now += cfg.min_post_event_hold_duration
+    t_now += cfg.min_event_duration
+
+    batch_count = load_cell_monitor._engaged_batch_count
 
     with mock.patch("autotrainer.core.analysis.load_cell_monitor._timer_load_cell_engaged", new=patched_timer):
-        for _ in range(3):
-            # this for _ in range(..):
-            # can be necessary if/when using mean() in monitor update function,
+        for loop_idx in range(3 * batch_count):
+            # this for range loop can be necessary if/when using mean() in monitor update function,
             # to get "current" avg value
             update_monitor(value, t_now)
-            t_now += cfg.threshold_duration / 2 + 0.001
+            t_now += cfg.threshold_duration / batch_count + 0.001
 
     assert patched_timer_call_count == (1 if load_cell_monitor.use_timer else 0)
     assert load_cell_monitor._t_start_was_active is not None

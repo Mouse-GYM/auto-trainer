@@ -17,10 +17,15 @@ def process_path(
     *,
     warn_diff_threshold: float,
     only_with_begin_end_marks: bool = False,
+    active_threshold: float,
+    inactive_threshold: float,
 ):
     prev = None
     fh.readline()  # drop header
-    cfg = LoadCellConfiguration()
+    cfg = LoadCellConfiguration(
+        weight_active_threshold=active_threshold,
+        weight_inactive_threshold=inactive_threshold,
+    )
     monitor = LoadCellMonitor(config=cfg)
 
     prev_ts_changed = {}
@@ -54,6 +59,7 @@ def process_path(
     monitor.property_changed += handle_prop_changed
 
     capturing = not only_with_begin_end_marks
+    ts = None
 
     while True:
         line = fh.readline()
@@ -86,6 +92,7 @@ def process_path(
                 print(f"diff={diff:.3f} ts={ts} ; prev={prev}")
         prev = ts
     # end while True
+    print(f"ts={ts:.3f}")
     print(f"tot_thrashed={tot_thrashed:.2f}s")
 
 
@@ -95,6 +102,8 @@ def main():
     parser.add_argument("--warn_diff_threshold", type=float, default=0.1)
     parser.add_argument("--only_with_begin_end_marks", action="store_true", default=False,
                         help="Only process values between # BEGIN and # END comment lines")
+    parser.add_argument("--active_threshold", type=float, default=5)
+    parser.add_argument("--inactive_threshold", type=float, default=2)
 
     args = parser.parse_args()
 
@@ -103,7 +112,10 @@ def main():
     with path.open() as fh:
         process_path(fh,
                      warn_diff_threshold=args.warn_diff_threshold,
-                     only_with_begin_end_marks=args.only_with_begin_end_marks)
+                     only_with_begin_end_marks=args.only_with_begin_end_marks,
+                     active_threshold=args.active_threshold,
+                     inactive_threshold=args.inactive_threshold,
+                     )
 
     print("finished")
 
