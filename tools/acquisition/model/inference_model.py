@@ -146,6 +146,8 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
 
     def __init__(self,
         pose_algorithm: PoseAlgorithm,
+        *,
+        calib_dir: Optional[Path] = None
     ):
         super().__init__(event_names=(
             'pose_response_ready',
@@ -169,6 +171,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         self._algorithm = pose_algorithm
         # self._algorithm.pose_changed += self._pose_changed
         # no need, we have the pose response in the monitor data queue function
+        self._calib_dir = calib_dir
 
         self._msg_thread = None
         self._data_thread = None
@@ -1170,18 +1173,26 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         return False
 
     @staticmethod
-    def _launch_intersession_process(project: ProjectInfo, *, logger_level=verboselogs.VERBOSE):
+    def _launch_intersession_process(
+        project: ProjectInfo,
+        *,
+        calib_dir: Optional[Path],
+        logger_level=verboselogs.VERBOSE,
+    ):
         setup_logging("autotrainer", logger_level=logger_level)
-        return intersession_process(project)
+        return intersession_process(project, calib_dir=calib_dir)
 
-    def _intersession_process(self, project: ProjectInfo, intersession_detection):
+    def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
         project = ProjectInfo(**vars(project))
         # multiprocess does not accept to pass shared value other than inheritance,
         # so get the value and assign it as SessionRawInt (which discard the shared value reference)
         project.session = SessionRawInt(project.session.value)
         with multiprocessing.Pool(processes=1) as pool:
             try:
-                async_res = pool.apply_async(self._launch_intersession_process, args=(project,))
+                async_res = pool.apply_async(self._launch_intersession_process,
+                                             args=(project,),
+                                             kwds=dict(calib_dir=self._calib_dir),
+                                             )
                 result = async_res.get()
             except Exception as err:
                 logger.exception("Error processing intersession: %s", err)
