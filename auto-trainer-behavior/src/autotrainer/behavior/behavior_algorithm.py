@@ -15,6 +15,7 @@ from autotrainer.core import ObservableObject, EventManager, BehaviorConfigurati
 
 from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
+from .intersession import IntersessionState
 
 logger = get_verbose_logger(__name__)
 
@@ -114,6 +115,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._pellet_last_seen = 0.0
 
         self._system_state = SystemState.cage
+        self._intersession_state = IntersessionState.idle
 
         self._today = None
 
@@ -171,6 +173,14 @@ class BehaviorAlgorithm(ObservableObject):
     @system_state.setter
     def system_state(self, value: SystemState):
         self._system_state = value
+
+    @property
+    def intersession_state(self) -> IntersessionState:
+        return self._intersession_state
+
+    @intersession_state.setter
+    def intersession_state(self, value: IntersessionState):
+        self._intersession_state = value
 
     @property
     def is_in_session(self) -> bool:

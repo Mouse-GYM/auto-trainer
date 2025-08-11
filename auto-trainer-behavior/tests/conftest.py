@@ -68,6 +68,7 @@ def system_msg_queue():
 
 @pytest.fixture
 def system_msg_handler(system_msg_queue):
+    # now/atm unused
     handler = SystemMessageHandler(system_msg_queue)
     handler.start()
     yield handler
@@ -76,13 +77,12 @@ def system_msg_handler(system_msg_queue):
 
 
 @pytest.fixture
-def machine(tunnel_device, pellet_device, inference, system_msg_handler, project_info):
+def machine(tunnel_device, pellet_device, inference, project_info):
     machine = SystemMachine(
         tunnel_device=tunnel_device,
         pellet_device=pellet_device,
         analysis=SensorAnalysis(),
         inference=inference,
-        msg_handler=system_msg_handler,
         project_info=project_info,
     )
     return machine
@@ -160,7 +160,7 @@ class MockSystemMachine:
 
     def mock_pellet_ack(self):
         """Ack the previous sent pellet command"""
-        self.msg_handler.ack_received(self.pellet._api_status_token)
+        self.pellet._pellet_device_ack_received(self.pellet._api_status_token)
 
     def mock_pellet_missing(self, should_release: bool = True, was_covered: bool = False, mouse_seen: bool = False,
                             should_prerelease: bool = False):
@@ -186,24 +186,24 @@ class MockSystemMachine:
         """
 
         pellet = self.pellet
-        msg_handler = self.msg_handler
+        ack_received = pellet._pellet_device_ack_received
 
         if not was_covered:
             assert pellet.state == PelletState.loading
 
-            msg_handler.ack_received(pellet._api_status_token)
+            ack_received(pellet._api_status_token)
             if should_prerelease:
                 assert pellet.state == PelletState.prerelease
-                msg_handler.ack_received(pellet._api_status_token)
+                ack_received(pellet._api_status_token)
 
             assert pellet.state == PelletState.sending
 
-            msg_handler.ack_received(pellet._api_status_token)
+            ack_received(pellet._api_status_token)
 
         if should_release:
             if not should_prerelease:
                 assert pellet.state == PelletState.releasing
-                msg_handler.ack_received(pellet._api_status_token)
+                ack_received(pellet._api_status_token)
 
             assert pellet.state == PelletState.monitoring
 
@@ -222,16 +222,12 @@ class MockSystemMachine:
         for _ in range(2 * batch_count):
             self._ts_now += self._load_cell.config.threshold_duration / batch_count + 0.001
             self._load_cell.update(self._load_cell.config.weight_active_threshold + 0.001, self._ts_now, self._ts_now)
-        # self._ts_now += self._load_cell.config.threshold_duration + 0.001
-        # self._load_cell.update(self._load_cell.config.weight_active_threshold + 0.001, self._ts_now, self._ts_now)
 
     def make_load_cell_inactive(self):
         batch_count = self._load_cell._engaged_batch_count
         for _ in range(3 * batch_count):
             self._ts_now += self._load_cell.config.min_post_event_hold_duration / batch_count + 0.001
             self._load_cell.update(self._load_cell.config.weight_inactive_threshold - 0.001, self._ts_now, self._ts_now)
-            # self._ts_now += self._load_cell.config.min_post_event_hold_duration + 0.001
-            # self._load_cell.update(0, self._ts_now, self._ts_now)
 
 
 @pytest.fixture

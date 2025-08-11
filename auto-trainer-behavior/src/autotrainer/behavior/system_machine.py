@@ -11,13 +11,12 @@ from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference import PoseResponse
 from autotrainer.core.pose_elements import SceneElement
-from . import IntersessionState
 
 from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorProps
 from .behavior_event_kind import BehaviorEventKind
 from .inference_protocol import InferenceProtocol
-from .intersession import IntersessionMachine
+from .intersession import IntersessionMachine, IntersessionState
 from .pellet import PelletMachine, PelletState
 from .pellet_device_protocol import PelletDeviceProtocol
 from .state_machine import StateMachine
@@ -106,13 +105,14 @@ class SystemMachine(StateMachine):
 
         self._pellet_device = pellet_device
 
-        self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
-        self._pellet_machine.events.pellet_loading += self._pellet_loading
-        self._pellet_machine.events.pellet_sending += self._pellet_sending
-        self._pellet_machine.events.state_changed += self._pellet_state_changed
+        pellet_machine = self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
+        pellet_machine.events.pellet_loading += self._pellet_loading
+        pellet_machine.events.pellet_sending += self._pellet_sending
+        pellet_machine.events.state_changed += self._pellet_state_changed
 
-        self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
-        self._intersession.events.on_analysis_ended += self._intersession_ended
+        intersession_machine = self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
+        intersession_machine.events.on_analysis_ended += self._intersession_ended
+        intersession_machine.events.state_changed += self._intersession_state_changed
 
         self.machine = Machine(
             model=[self], states=SystemMachine.states, transitions=SystemMachine.transitions,
@@ -412,6 +412,9 @@ class SystemMachine(StateMachine):
 
     def _pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
+
+    def _intersession_state_changed(self, old_value, new_value):
+        self._algorithm.intersession_state = new_value
 
     def _consider_end_session(self):
         # Do not end if the mouse is still in the tunnel and a pellet is seen or the pellet deliver is in the sending
