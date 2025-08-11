@@ -56,8 +56,8 @@ class AlarmContent(ContentWidget):
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
 
-        self.front_door_changed.connect(lambda b: self._front_door_status.setStatus(b))
-        self.slide_door_changed.connect(lambda b: self._slide_door_status.setStatus(b))
+        self.front_door_changed.connect(self._front_door_status.setStatus)
+        self.slide_door_changed.connect(self._slide_door_status.setStatus)
 
         self._hardware_model.property_changed += self._model_property_changed
 
