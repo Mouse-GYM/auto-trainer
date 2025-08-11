@@ -54,6 +54,9 @@ class AppModel(ObservableObject):
         self._x = None
         self._y = None
         self._z = None
+        self._send_x = None
+        self._send_y = None
+        self._send_z = None
         self._load_arm = None
         self._cover_arm = None
 
@@ -130,6 +133,30 @@ class AppModel(ObservableObject):
     @z.setter
     def z(self, value):
         self._z = self._on_property_changed("z", value, self._z)
+
+    @property
+    def send_x(self):
+        return self._send_x
+
+    @send_x.setter
+    def send_x(self, value):
+        self._send_x = self._on_property_changed("send_x", value, self._send_x)
+
+    @property
+    def send_y(self):
+        return self._send_y
+
+    @send_y.setter
+    def send_y(self, value):
+        self._send_y = self._on_property_changed("send_y", value, self._send_y)
+
+    @property
+    def send_z(self):
+        return self._send_z
+
+    @send_z.setter
+    def send_z(self, value):
+        self._send_z = self._on_property_changed("send_z", value, self._send_z)
 
     @property
     def load_arm(self):
@@ -338,12 +365,15 @@ class AppModel(ObservableObject):
     def _message_handler_property_changed(self, name: str, value, _old_value):
         if name == SystemMessageHandler.FIRMWARE_VERSION_PROPERTY:
             self.firmware_version = value
-        elif name == MessageHandler.DEVICE_X_PROPERTY:
-            self.x = value
-        elif name == MessageHandler.DEVICE_Y_PROPERTY:
-            self.y = value
-        elif name == MessageHandler.DEVICE_Z_PROPERTY:
-            self.z = value
+        elif name == MessageHandler.STEPPER_X_PROPERTY:
+            self.x = value.position
+            self.send_x = value.send_position
+        elif name == MessageHandler.STEPPER_Y_PROPERTY:
+            self.y = value.position
+            self.send_y = value.send_position
+        elif name == MessageHandler.STEPPER_Z_PROPERTY:
+            self.z = value.position
+            self.send_z = value.send_position
         elif name == MessageHandler.LOAD_ARM_ANGLE_PROPERTY:
             self.load_arm = value
         elif name == MessageHandler.COVER_ARM_ANGLE_PROPERTY:

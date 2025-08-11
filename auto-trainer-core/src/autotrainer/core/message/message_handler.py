@@ -38,6 +38,10 @@ class MessageHandler(ObservableObject):
     DEVICE_Y_PROPERTY = "device_y"
     DEVICE_Z_PROPERTY = "device_z"
 
+    STEPPER_X_PROPERTY = "stepper_x"
+    STEPPER_Y_PROPERTY = "stepper_y"
+    STEPPER_Z_PROPERTY = "stepper_z"
+
     LOAD_ARM_ANGLE_PROPERTY = "load_angle"
     COVER_ARM_ANGLE_PROPERTY = "cover_angle"
 

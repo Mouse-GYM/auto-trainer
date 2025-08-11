@@ -23,11 +23,11 @@ class SystemStatusMessageKind(IntEnum):
     """Message will contain the firmware version of the device as a string."""
     # TODO: This needs to be more complex than a string now that different modules are part of the same device and
     #  connection.
-    PELLET_X = 201
+    PELLET_MOTOR_X = 201
     """Message will contain the pellet X motor status as a StepperStatusMessage."""
-    PELLET_Y = 202
+    PELLET_MOTOR_Y = 202
     """Message will contain the pellet Y motor status as a StepperStatusMessage."""
-    PELLET_Z = 203
+    PELLET_MOTOR_Z = 203
     """Message will contain the pellet Z motor status as a StepperStatusMessage."""
     PELLET_LOAD = 204
     """Message will contain the pellet load arm servo status as a ServoStatusMessage."""
@@ -37,6 +37,12 @@ class SystemStatusMessageKind(IntEnum):
     """Message will contain the head fixation magnet servo status as a ServoStatusMessage."""
     TUNNEL_GATE_SERVO = 207
     """Message will contain the tunnel gate servo status as a ServoStatusMessage."""
+    PELLET_X = 208
+    """Message will contain the pellet X motor position as a float."""
+    PELLET_Y = 209
+    """Message will contain the pellet Y motor position as a float."""
+    PELLET_Z = 210
+    """Message will contain the pellet Z motor position as a float."""
     FRONT_DOOR = 301
     """Message will contain front door status as True (open) or False (closed)."""
     DRAWER_DOOR = 302
@@ -64,17 +70,17 @@ class SystemStatusMessageKind(IntEnum):
 
 class StepperStatusMessage(Protocol):
     @property
-    def location(self) -> float:
+    def position(self) -> float:
         """Current motor position in mm."""
         pass
 
     @property
-    def status(self) -> int:
-        """Current servo status value."""
+    def send_position(self) -> float:
+        """Current motor delivery position in mm."""
         pass
 
     @property
-    def limit_hit(self) -> bool:
+    def is_at_limit(self) -> bool:
         """True if the limit switch has been hit, otherwise False."""
         pass
 

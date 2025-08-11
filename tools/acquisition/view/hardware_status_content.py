@@ -12,6 +12,9 @@ class HardwareStatusContent(ContentWidget):
     pellet_x_changed = Signal(float, name="pellet_x_changed")
     pellet_y_changed = Signal(float, name="pellet_y_changed")
     pellet_z_changed = Signal(float, name="pellet_z_changed")
+    send_x_changed = Signal(float, name="send_x_changed")
+    send_y_changed = Signal(float, name="send_y_changed")
+    send_z_changed = Signal(float, name="send_z_changed")
     load_arm_changed = Signal(float, name="load_arm_changed")
     cover_arm_changed = Signal(float, name="cover_arm_changed")
 
@@ -56,6 +59,12 @@ class HardwareStatusContent(ContentWidget):
         form_layout.addRow("Y (mm):", self._pellet_y)
         self._pellet_z = QLabel("(no updates)")
         form_layout.addRow("Z (mm):", self._pellet_z)
+        self._send_x = QLabel("(no updates)")
+        form_layout.addRow("Send X (mm):", self._send_x)
+        self._send_y = QLabel("(no updates)")
+        form_layout.addRow("Send Y (mm):", self._send_y)
+        self._send_z = QLabel("(no updates)")
+        form_layout.addRow("Send Z (mm):", self._send_z)
         self._load_arm = QLabel("(no updates)")
         form_layout.addRow("Load Arm (\u00b0):", self._load_arm)
         self._cover_arm = QLabel("(no updates)")
@@ -78,6 +87,9 @@ class HardwareStatusContent(ContentWidget):
         self.pellet_x_changed.connect(lambda x: self._pellet_x.setText(str(round(x, 1))))
         self.pellet_y_changed.connect(lambda x: self._pellet_y.setText(str(round(x, 1))))
         self.pellet_z_changed.connect(lambda x: self._pellet_z.setText(str(round(x, 1))))
+        self.send_x_changed.connect(lambda x: self._send_x.setText(str(round(x, 1))))
+        self.send_y_changed.connect(lambda x: self._send_y.setText(str(round(x, 1))))
+        self.send_z_changed.connect(lambda x: self._send_z.setText(str(round(x, 1))))
         self.load_arm_changed.connect(lambda x: self._load_arm.setText(str(round(x, 1))))
         self.cover_arm_changed.connect(lambda x: self._cover_arm.setText(str(round(x, 1))))
 
@@ -86,12 +98,15 @@ class HardwareStatusContent(ContentWidget):
         # rather than direct set/update.
         if property_name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
             self.head_magnet_changed.emit(value)
-        elif property_name == MessageHandler.DEVICE_X_PROPERTY:
-            self.pellet_x_changed.emit(value)
-        elif property_name == MessageHandler.DEVICE_Y_PROPERTY:
-            self.pellet_y_changed.emit(value)
-        elif property_name == MessageHandler.DEVICE_Z_PROPERTY:
-            self.pellet_z_changed.emit(value)
+        elif property_name == MessageHandler.STEPPER_X_PROPERTY:
+            self.pellet_x_changed.emit(value.position)
+            self.send_x_changed.emit(value.send_position)
+        elif property_name == MessageHandler.STEPPER_Y_PROPERTY:
+            self.pellet_y_changed.emit(value.position)
+            self.send_y_changed.emit(value.send_position)
+        elif property_name == MessageHandler.STEPPER_Z_PROPERTY:
+            self.pellet_z_changed.emit(value.position)
+            self.send_z_changed.emit(value.send_position)
         elif property_name == MessageHandler.LOAD_ARM_ANGLE_PROPERTY:
             self.load_arm_changed.emit(value)
         elif property_name == MessageHandler.COVER_ARM_ANGLE_PROPERTY:

@@ -56,6 +56,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._last_y: Optional[float] = None
         self._last_z: Optional[float] = None
 
+        self._send_x: Optional[float] = None
+        self._send_y: Optional[float] = None
+        self._send_z: Optional[float] = None
+
         self._last_set_x: Optional[float] = None
         self._last_set_y: Optional[float] = None
         self._last_set_z: Optional[float] = None
@@ -100,6 +104,29 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def pending_command(self, value: Optional[SystemCommandKind]):
         self._pending_command = self._on_property_changed(HardwareModel.PENDING_COMMAND_PROPERTY, value,
                                                           self._pending_command)
+    @property
+    def send_x(self):
+        return self._send_x
+
+    @send_x.setter
+    def send_x(self, value):
+        self._send_x = self._on_property_changed("send_x", value, self._send_x)
+
+    @property
+    def send_y(self):
+        return self._send_y
+
+    @send_y.setter
+    def send_y(self, value):
+        self._send_y = self._on_property_changed("send_y", value, self._send_y)
+
+    @property
+    def send_z(self):
+        return self._send_z
+
+    @send_z.setter
+    def send_z(self, value):
+        self._send_z = self._on_property_changed("send_z", value, self._send_z)
 
     @property
     def front_door_open(self):
@@ -323,12 +350,15 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
             self._head_magnet_position = self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value,
                                                                    self._head_magnet_position)
-        elif name == MessageHandler.DEVICE_X_PROPERTY:
-            self._last_x = value
-        elif name == MessageHandler.DEVICE_Y_PROPERTY:
-            self._last_y = value
-        elif name == MessageHandler.DEVICE_Z_PROPERTY:
-            self._last_z = value
+        elif name == MessageHandler.STEPPER_X_PROPERTY:
+            self._last_x = value.position
+            self.send_x = value.send_position
+        elif name == MessageHandler.STEPPER_Y_PROPERTY:
+            self._last_y = value.position
+            self.send_y = value.send_position
+        elif name == MessageHandler.STEPPER_Z_PROPERTY:
+            self._last_z = value.position
+            self.send_z = value.send_position
         elif name == MessageHandler.FRONT_DOOR_PROPERTY:
             self.front_door_open = value
         elif name == MessageHandler.DRAWER_DOOR_PROPERTY:
