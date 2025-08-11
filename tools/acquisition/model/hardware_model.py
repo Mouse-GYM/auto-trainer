@@ -144,7 +144,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             self._last_set_y = value
         else:
             if self._last_set_y is None:
-                logger.warning("relative y set requested, but no last_set_x position is set")
+                logger.warning("relative y set requested, but no last_set_y position is set")
                 return None
             self._last_set_y += value
             # value = self._last_set_y
@@ -160,7 +160,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             self._last_set_z = value
         else:
             if self._last_set_z is None:
-                logger.warning("relative y set requested, but no last_set_x position is set")
+                logger.warning("relative z set requested, but no last_set_z position is set")
                 return None
             self._last_set_z += value
             # value = self._last_set_z
