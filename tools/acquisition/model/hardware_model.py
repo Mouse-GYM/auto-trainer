@@ -330,9 +330,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             self.set_x(animal.pellet_x)
             self.set_z(animal.pellet_z)
             self.set_y(animal.pellet_y)
-            # self._send_command(self._pellet_device, SystemCommandKind.SET_X, animal.pellet_x)
-            # self._send_command(self._pellet_device, SystemCommandKind.SET_Y, animal.pellet_y)
-            # self._send_command(self._pellet_device, SystemCommandKind.SET_Z, animal.pellet_z)
+            self.send_pellet()
 
     def disconnect(self):
         if self._tunnel_device is not None:
