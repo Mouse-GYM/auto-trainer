@@ -6,8 +6,8 @@ from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional, List, Tuple, Dict
 
-from autotrainer.core import ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple, \
-    get_verbose_logger, Motor
+from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
+                              get_verbose_logger, Motor)
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
@@ -25,6 +25,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     PENDING_COMMAND_TOKEN_PROPERTY = "pending_command_token"
     PENDING_COMMAND_PROPERTY = "pending_command"
+
+    FRONT_DOOR_PROPERTY = "front_door"
+    SLIDE_DOOR_PROPERTY = "slide_door"
 
     def __init__(self, message_handler: MessageHandler):
         super().__init__()
@@ -57,6 +60,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._last_set_y: Optional[float] = None
         self._last_set_z: Optional[float] = None
 
+        self._front_door_open: bool = False
+        self._slide_door_open: bool = False
+
         self._lock = threading.RLock()  # might be required re-entrant lock !!
 
     @property
@@ -66,7 +72,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     @tunnel_identifier.setter
     def tunnel_identifier(self, value: str):
         self._tunnel_identifier = self._on_property_changed(HardwareModel.TUNNEL_IDENTIFIER_PROPERTY, value,
-            self._tunnel_identifier)
+                                                            self._tunnel_identifier)
 
     @property
     def pellet_identifier(self) -> Optional[str]:
@@ -75,7 +81,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     @pellet_identifier.setter
     def pellet_identifier(self, value: str):
         self._pellet_identifier = self._on_property_changed(HardwareModel.PELLET_IDENTIFIER_PROPERTY, value,
-            self._pellet_identifier)
+                                                            self._pellet_identifier)
 
     @property
     def pending_command_token(self) -> Optional[UUID]:
@@ -94,6 +100,24 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def pending_command(self, value: Optional[SystemCommandKind]):
         self._pending_command = self._on_property_changed(HardwareModel.PENDING_COMMAND_PROPERTY, value,
                                                           self._pending_command)
+
+    @property
+    def front_door_open(self):
+        return self._front_door_open
+
+    @front_door_open.setter
+    def front_door_open(self, value: bool):
+        self._front_door_open = self._on_property_changed(HardwareModel.FRONT_DOOR_PROPERTY, value,
+                                                          self._front_door_open)
+
+    @property
+    def slide_door_open(self):
+        return self._slide_door_open
+
+    @slide_door_open.setter
+    def slide_door_open(self, value: bool):
+        self._slide_door_open = self._on_property_changed(HardwareModel.SLIDE_DOOR_PROPERTY, value,
+                                                          self._slide_door_open)
 
     @property
     def head_magnet_intensity(self) -> Optional[float]:
@@ -297,13 +321,18 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
-            self._head_magnet_position = self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value, self._head_magnet_position)
+            self._head_magnet_position = self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value,
+                                                                   self._head_magnet_position)
         elif name == MessageHandler.DEVICE_X_PROPERTY:
             self._last_x = value
         elif name == MessageHandler.DEVICE_Y_PROPERTY:
             self._last_y = value
         elif name == MessageHandler.DEVICE_Z_PROPERTY:
             self._last_z = value
+        elif name == MessageHandler.FRONT_DOOR_PROPERTY:
+            self.front_door_open = value
+        elif name == MessageHandler.DRAWER_DOOR_PROPERTY:
+            self.slide_door_open = value
         elif name == MessageHandler.FIRMWARE_VERSION_PROPERTY and value is not None:
             version = str(value).lower()
             if version.find("module") != -1:
@@ -377,12 +406,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             #     elif token is not None:
             #         logger.warning("pending_token != ack_received token: %s vs %s", cur_pending_token, token)
 
-    def wait_pending_command_acked(self, token, timeout: float=3):
+    def wait_pending_command_acked(self, token, timeout: float = 3):
         t_perf_start = time.perf_counter()
         timeout = t_perf_start + timeout
         while True:
             t_perf = time.perf_counter()
-            if t_perf  >= timeout:
+            if t_perf >= timeout:
                 break
             if token not in self._pending_tokens:
                 logger.verbose("Got ack for token=%s ; delay=%.6f", token, t_perf - t_perf_start)

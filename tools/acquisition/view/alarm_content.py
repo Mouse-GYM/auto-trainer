@@ -1,7 +1,8 @@
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QFormLayout
 
-from autotrainer.core import MessageHandler
 from autotrainer.pyside import CardWidget, StatusIcon
+from tools.acquisition.model.hardware_model import HardwareModel
 
 from tools.acquisition.view.content_widget import ContentWidget
 
@@ -10,11 +11,13 @@ class AlarmContent(ContentWidget):
     """
     Widget to display alarm content.
     """
+    front_door_changed = Signal(bool, name="front_door_changed")
+    slide_door_changed = Signal(bool, name="slide_door_changed")
 
-    def __init__(self, msg_handler: MessageHandler):
+    def __init__(self, hardware_model: HardwareModel):
         super().__init__()
 
-        self._msg_handler = msg_handler
+        self._hardware_model = hardware_model
 
         self._card_widget = CardWidget(header_background_color="red")
 
@@ -53,5 +56,16 @@ class AlarmContent(ContentWidget):
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
 
+        self.front_door_changed.connect(self._front_door_status.setStatus)
+        self.slide_door_changed.connect(self._slide_door_status.setStatus)
+
+        self._hardware_model.property_changed += self._model_property_changed
+
     def set_is_capture_active(self, is_editable: bool):
         self._card_widget.setEnabled(is_editable)
+
+    def _model_property_changed(self, property_name: str, value, old_value):
+        if property_name == HardwareModel.FRONT_DOOR_PROPERTY:
+            self.front_door_changed.emit(value)
+        elif property_name == HardwareModel.SLIDE_DOOR_PROPERTY:
+            self.slide_door_changed.emit(value)

@@ -290,10 +290,10 @@ class CanDevice(Device):
                 self._api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version),
 
             DoorData: lambda message: (
-                self._api.send_message(SystemStatusMessageKind.FRONT_DOOR, message.door1),
-                self._api.send_message(SystemStatusMessageKind.DRAWER_DOOR, message.door2),
-                self._api.send_message(SystemStatusMessageKind.SPARE_DOOR, message.door3),
-                self._api.send_message(SystemStatusMessageKind.EXT_BUTTON, message.ext_button)
+                self._api.send_message(SystemStatusMessageKind.FRONT_DOOR, message.door1 != 0),
+                self._api.send_message(SystemStatusMessageKind.DRAWER_DOOR, message.door2 != 0),
+                self._api.send_message(SystemStatusMessageKind.SPARE_DOOR, message.door3 != 0),
+                self._api.send_message(SystemStatusMessageKind.EXT_BUTTON, message.ext_button != 0)
             ) if self._api is not None else None,
 
             Acknowledge: self._handle_ack,

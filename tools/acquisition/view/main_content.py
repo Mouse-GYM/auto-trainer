@@ -91,7 +91,7 @@ class MainContent(ContentWidget):
         sub_layout.addWidget(hardware_status_content, 1)
         self._content_widgets.append(hardware_status_content)
 
-        alarm_content = AlarmContent(self._model.message_handler)
+        alarm_content = AlarmContent(self._model.hardware)
         sub_layout.addWidget(alarm_content, 0)
         # self._content_widgets.append(hardware_status_content)
 
