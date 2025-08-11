@@ -255,7 +255,8 @@ class LoadCellMonitor(ObservableObject):
         if self._cur_idx >= self._engaged_batch_count:
             self._cur_idx = 0
             n_values = len(self._values_history)
-            prev_n_values = [(v, w) for v, w, _ in itertools.islice(self._values_history, n_values - 10, n_values)]
+            prev_n_values = [(v, w) for v, w, _ in itertools.islice(self._values_history,
+                                                                    n_values - self._engaged_batch_count, n_values)]
             when = prev_n_values[0][1]  # using the first one when
             value = numpy.mean([prev[0] for prev in prev_n_values])
             if value >= cfg.weight_active_threshold:
