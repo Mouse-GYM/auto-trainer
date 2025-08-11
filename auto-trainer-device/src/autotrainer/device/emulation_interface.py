@@ -97,16 +97,19 @@ class EmulationInterface(DeviceInterface):
             messages.append(
                 StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR,
                               self._positions[Motor.PELLET_X_MOTOR],
+                              0.0,
                               self._positions[Motor.PELLET_X_MOTOR] == 0))
 
             messages.append(
                 StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Y_MOTOR,
                               self._positions[Motor.PELLET_Y_MOTOR],
+                              0.0,
                               self._positions[Motor.PELLET_Y_MOTOR] == 0))
 
             messages.append(
                 StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR,
                               self._positions[Motor.PELLET_Z_MOTOR],
+                              0.0,
                               self._positions[Motor.PELLET_Z_MOTOR] == 0))
 
             messages.append(

@@ -59,6 +59,15 @@ class SystemMessageHandler(MessageHandler):
             self.property_changed(MessageHandler.DEVICE_Y_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.PELLET_Z:
             self.property_changed(MessageHandler.DEVICE_Z_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.PELLET_MOTOR_X:
+            self.property_changed(MessageHandler.DEVICE_X_PROPERTY, data.position, None)
+            self.property_changed(MessageHandler.STEPPER_X_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.PELLET_MOTOR_Y:
+            self.property_changed(MessageHandler.DEVICE_Y_PROPERTY, data.position, None)
+            self.property_changed(MessageHandler.STEPPER_Y_PROPERTY, data, None)
+        elif msg == SystemStatusMessageKind.PELLET_MOTOR_Z:
+            self.property_changed(MessageHandler.DEVICE_Z_PROPERTY, data.position, None)
+            self.property_changed(MessageHandler.STEPPER_Z_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.PELLET_LOAD:
             self.property_changed(MessageHandler.LOAD_ARM_ANGLE_PROPERTY, data, None)
         elif msg == SystemStatusMessageKind.PELLET_COVER:

@@ -21,6 +21,7 @@ from enum import IntEnum
 from typing import List
 
 from autotrainer.core.message import Motor
+from autotrainer.core.message.system_status_message import StepperStatusMessage
 
 
 class Target(IntEnum):
@@ -258,16 +259,18 @@ class StepperConfig(MotorSource):
 
 
 @dataclass
-class StepperStatus(Source):
+class StepperStatus(Source, StepperStatusMessage):
     _motor: Motor = Motor.NONE
     _position: float = 0  # (mm)
+    _send_position: float = 0 # (mm)
     _limit_switch: bool = False
 
-    def __init__(self, target: Target, motor: Motor, position: float, limit_switch: bool):
+    def __init__(self, target: Target, motor: Motor, position: float, send_position: float, limit_switch: bool):
         super().__init__(target)
 
         self._motor = motor
         self._position = position
+        self._send_position = send_position
         self._limit_switch = limit_switch
 
     @property
@@ -276,12 +279,13 @@ class StepperStatus(Source):
 
     @property
     def position(self) -> float:
-        """Current motor position in turns."""
+        """Current motor position in mm."""
         return self._position
-
+    
     @property
-    def status(self) -> int:
-        return 0
+    def send_position(self) -> float:
+        """Current send motor position in mm."""
+        return self._send_position
 
     @property
     def is_at_limit(self) -> bool:

@@ -14,7 +14,9 @@ from functools import partial
 from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast
 
 from autotrainer.core.logging import get_verbose_logger
+
 from ..core.message import SystemDataArgsKwargs
+from .device_interface import StepperStatus
 
 logger = get_verbose_logger(__name__)
 
@@ -274,11 +276,9 @@ class CanDevice(Device):
                                                         magnitudes_val=message.magnitudes))
             ),
 
-            StepperStatus: lambda message: self._report_motor_status(message.motor,
-                                                                     message.position,
-                                                                     message.is_at_limit),
+            StepperStatus: lambda message: self._report_stepper_status(message),
 
-            ServoStatus: lambda message: self._report_motor_status(message.motor, message.position),
+            ServoStatus: lambda message: self._report_servo_status(message.motor, message.position),
 
             StepperConfig: lambda message: \
                 self._api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
@@ -555,18 +555,33 @@ class CanDevice(Device):
             self._homing_motors = motors
 
     _motor_to_status_kind = {
-        Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_X,
-        Motor.PELLET_Y_MOTOR: SystemStatusMessageKind.PELLET_Y,
-        Motor.PELLET_Z_MOTOR: SystemStatusMessageKind.PELLET_Z,
+        Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_MOTOR_X,
+        Motor.PELLET_Y_MOTOR: SystemStatusMessageKind.PELLET_MOTOR_Y,
+        Motor.PELLET_Z_MOTOR: SystemStatusMessageKind.PELLET_MOTOR_Z,
         Motor.PELLET_LOAD_SERVO: SystemStatusMessageKind.PELLET_LOAD,
         Motor.PELLET_COVER_SERVO: SystemStatusMessageKind.PELLET_COVER,
         Motor.TUNNEL_MAGNET_SERVO: SystemStatusMessageKind.HEAD_MAGNET,
         Motor.TUNNEL_GATE_SERVO: SystemStatusMessageKind.TUNNEL_GATE_SERVO,
     }
 
-    def _report_motor_status(self, motor, position, _at_limit: bool = False):
+    def _report_stepper_status(self, message: StepperStatus):
         """
-        Report motor status to the API.
+        Report stepper status to the API.
+
+        Args:
+            motor: The motor that has reported its status
+            position: The current position of the motor
+            _at_limit: Whether the motor is at its limit switch
+        """
+
+        kind = CanDevice._motor_to_status_kind.get(message.motor, None)
+
+        if self._api is not None and kind is not None:
+            self.api.send_message(kind, message)
+
+    def _report_servo_status(self, motor, position):
+        """
+        Report servo status to the API.
 
         Args:
             motor: The motor that has reported its status
@@ -575,6 +590,7 @@ class CanDevice(Device):
         """
 
         kind = CanDevice._motor_to_status_kind.get(motor, None)
+
         if self._api is not None and kind is not None:
             self.api.send_message(kind, position)
 

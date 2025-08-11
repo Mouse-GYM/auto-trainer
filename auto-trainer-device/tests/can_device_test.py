@@ -63,7 +63,7 @@ def test_notify_command(device, kind, tag, data):
     (PressureReading(Target.MAGNET_DEVICE, pressure=14), None),
     (SensorStatus(Target.PELLET_DEVICE, temperature_c=27.3, humidity_percent=64.2), None),
     (MagnetDigitalInputs(Target.MAGNET_DEVICE, continuity_0=False, continuity_1=True), None),
-    (StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, 10, False),
+    (StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, 10, 2.0, False),
      SystemStatusMessageKind.PELLET_X),
     (ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, 40),
      SystemStatusMessageKind.PELLET_LOAD),
