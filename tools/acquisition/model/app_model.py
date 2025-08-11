@@ -199,15 +199,16 @@ class AppModel(ObservableObject):
 
     @selected_animal.setter
     def selected_animal(self, value: Optional[AnimalSubject]):
-        self._selected_animal = self._on_property_changed("selected_animal", value, self._selected_animal)
-
-        if self._selected_animal is not None:
+        selected_animal = self._selected_animal = self._on_property_changed("selected_animal", value, self._selected_animal)
+        if selected_animal is not None:
+            hardware = self.hardware
             self.property_changed("animal_name", self.animal_name, self.animal_name)
-            self.behavior.algorithm.baseline_intensity = self._selected_animal.baseline_magnet_intensity
-            self.hardware.update_head_magnet_intensity(self._selected_animal.baseline_magnet_intensity)
-            self.hardware.set_x(self._selected_animal.pellet_x)
-            self.hardware.set_y(self._selected_animal.pellet_y)
-            self.hardware.set_z(self._selected_animal.pellet_z)
+            self.behavior.algorithm.baseline_intensity = selected_animal.baseline_magnet_intensity
+            hardware.update_head_magnet_intensity(selected_animal.baseline_magnet_intensity)
+            hardware.set_x(self._selected_animal.pellet_x)
+            hardware.set_y(self._selected_animal.pellet_y)
+            hardware.set_z(self._selected_animal.pellet_z)
+            hardware.send_pellet()
         else:
             self.property_changed("animal_name", "(none)", "(none)")
 
