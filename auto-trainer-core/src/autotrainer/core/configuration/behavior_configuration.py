@@ -4,7 +4,6 @@ from typing import Type
 from typing_extensions import Self
 
 import yaml
-import humps
 
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor
 from ..analysis import LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer
@@ -20,6 +19,7 @@ class PelletDeliveryConfiguration:
     is_enabled: bool = False
     is_pellet_cover_enabled: bool = False
     is_intersession_analysis_enabled: bool = False
+    is_intersession_pellet_shift_enabled: bool = False
     max_pellets_per_session: int = 10
     max_pellets_per_day: int = 50
     max_pellet_missing_seconds: float = 15.0
@@ -94,7 +94,6 @@ class BehaviorConfiguration:
         )
 
 
-
 pellet_delivery_configuration_representer = make_camelize_representer("!PelletDeliveryConfiguration")
 head_clamp_configuration_representer = make_camelize_representer("!HeadClampConfiguration")
 behavior_configuration_representer = make_camelize_representer("!BehaviorConfiguration")
@@ -108,7 +107,6 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     dumper.add_representer(LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer)
 
     dumper.add_representer(BehaviorConfiguration, behavior_configuration_representer)
-
 
 
 pellet_delivery_configuration_constructor = make_decamelize_constructor(PelletDeliveryConfiguration)

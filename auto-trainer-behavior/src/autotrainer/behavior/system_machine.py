@@ -438,7 +438,7 @@ class SystemMachine(StateMachine):
         if res.pellets_presented > 0:
             self._algorithm.pellets_presented = res.pellets_presented
         dev = self._pellet_device
-        if dev is not None:
+        if dev is not None and self.algorithm.intersession_pellet_shift_enabled:
             for val, meth, kind in ((res.pellet_x, dev.set_x, BehaviorEventKind.intersessionShiftX),
                                     (res.pellet_y, dev.set_y, BehaviorEventKind.intersessionShiftY),
                                     (res.pellet_z, dev.set_z, BehaviorEventKind.intersessionShiftZ)):

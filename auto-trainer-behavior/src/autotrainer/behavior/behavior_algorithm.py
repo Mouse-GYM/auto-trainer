@@ -16,8 +16,8 @@ from autotrainer.core import ObservableObject, EventManager, BehaviorConfigurati
 from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
 
-
 logger = get_verbose_logger(__name__)
+
 
 class CheckThresholdWay(str, Enum):
     TRIGGER_IF_GREATER = "trigger_if_greater"
@@ -55,6 +55,7 @@ class BehaviorProps(str, Enum):
     DAY_PELLET_COUNT = 'day_pellet_count'
     HEAD_FIXATION_ENABLED = 'head_fixation_enabled'
     INTERSESSION_ENABLED = 'intersession_enabled'
+    INTERSESSION_PELLET_SHIFT_ENABLED = 'intersession_pellet_shift_enabled'
     PELLET_DELIVERY_ENABLED = 'pellet_delivery_enabled'
     PELLET_COVER_ENABLED = 'pellet_cover_enabled'
     SESSION_PELLET_COUNT = 'session_pellet_count'
@@ -66,7 +67,6 @@ class BehaviorProps(str, Enum):
 
 
 class BehaviorAlgorithm(ObservableObject):
-
     # dynamic events type hints,
     # helps IDE search/completion/type-verification:
     session_starting: Callable[[], None]
@@ -76,12 +76,12 @@ class BehaviorAlgorithm(ObservableObject):
     cover_servo_status_changed: Callable[[CoverServoStatus], None]
 
     def __init__(
-        self,
-        *,
-        diamond_triangle_known_offset: Optional[Offset3DTuple] = Offset3DTuple(0, 0, 0),  # None,
-        cover_error_min_distance_threshold: float = 2,  # math.inf,   # probably millimeter
-        release_error_min_distance_threshold: float = 2,  # math.inf,
-        cover_release_min_duration_threshold: float = 3,  # seconds
+            self,
+            *,
+            diamond_triangle_known_offset: Optional[Offset3DTuple] = Offset3DTuple(0, 0, 0),  # None,
+            cover_error_min_distance_threshold: float = 2,  # math.inf,   # probably millimeter
+            release_error_min_distance_threshold: float = 2,  # math.inf,
+            cover_release_min_duration_threshold: float = 3,  # seconds
     ):
         super().__init__(event_names=(
             "session_starting",
@@ -96,6 +96,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._pellet_cover_enabled = True
 
         self._intersession_enabled = False
+        self._intersession_pellet_shift_enabled = False
         self._head_fixation_enabled = False
         self._clean_raw_data_on_inactive_session = False
 
@@ -137,18 +138,18 @@ class BehaviorAlgorithm(ObservableObject):
         self._diamond_triangle_last_drift_warned = time.time()
 
         self._cover_pellet_distance_ctx = CheckElementDistanceContext(
-            distance_property_name=         BehaviorProps.COVER_PELLET_DISTANCE,
-            error_distance_threshold=       cover_error_min_distance_threshold,
-            error_min_duration_threshold=   cover_release_min_duration_threshold,
-            error_way=                      CheckThresholdWay.TRIGGER_IF_SMALLER,
-            cover_servo_status=             CoverServoStatus.COVER_POSITION_ERROR,
+            distance_property_name=BehaviorProps.COVER_PELLET_DISTANCE,
+            error_distance_threshold=cover_error_min_distance_threshold,
+            error_min_duration_threshold=cover_release_min_duration_threshold,
+            error_way=CheckThresholdWay.TRIGGER_IF_SMALLER,
+            cover_servo_status=CoverServoStatus.COVER_POSITION_ERROR,
         )
         self._release_pellet_distance_ctx = CheckElementDistanceContext(
-            distance_property_name=         BehaviorProps.RELEASE_PELLET_DISTANCE,
-            error_distance_threshold=       release_error_min_distance_threshold,
-            error_min_duration_threshold=   cover_release_min_duration_threshold,
-            error_way=                      CheckThresholdWay.TRIGGER_IF_GREATER,
-            cover_servo_status=             CoverServoStatus.RELEASE_POSITION_ERROR,
+            distance_property_name=BehaviorProps.RELEASE_PELLET_DISTANCE,
+            error_distance_threshold=release_error_min_distance_threshold,
+            error_min_duration_threshold=cover_release_min_duration_threshold,
+            error_way=CheckThresholdWay.TRIGGER_IF_GREATER,
+            cover_servo_status=CoverServoStatus.RELEASE_POSITION_ERROR,
         )
 
     @property
@@ -201,6 +202,17 @@ class BehaviorAlgorithm(ObservableObject):
     def intersession_enabled(self, value: bool):
         self._intersession_enabled = self._on_property_changed(BehaviorProps.INTERSESSION_ENABLED,
                                                                value, self._intersession_enabled)
+
+    @property
+    def intersession_pellet_shift_enabled(self):
+        return self._intersession_pellet_shift_enabled
+
+    @intersession_pellet_shift_enabled.setter
+    def intersession_pellet_shift_enabled(self, value: bool):
+        self._intersession_pellet_shift_enabled = self._on_property_changed(
+            BehaviorProps.INTERSESSION_PELLET_SHIFT_ENABLED,
+            value,
+            self._intersession_pellet_shift_enabled)
 
     @property
     def head_fixation_enabled(self):
@@ -429,6 +441,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.pellet_missing_time = configuration.pellet_delivery.max_pellet_missing_seconds
         self.max_pellets_per_session = configuration.pellet_delivery.max_pellets_per_session
         self.max_pellets_per_day = configuration.pellet_delivery.max_pellets_per_day
+        self.intersession_pellet_shift_enabled = configuration.pellet_delivery.is_intersession_pellet_shift_enabled
 
         self.min_baseline_intensity = configuration.head_clamp.min_baseline_intensity
         self.max_baseline_intensity = configuration.head_clamp.max_baseline_intensity
