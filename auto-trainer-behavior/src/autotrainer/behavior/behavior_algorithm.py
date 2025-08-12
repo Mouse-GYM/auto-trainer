@@ -344,14 +344,14 @@ class BehaviorAlgorithm(ObservableObject):
     def diamond_triangle_known_offset(self):
         return self._diamond_triangle_known_offset
 
-    def start_session(self):
+    def start_session(self, caller: str="unknown"):
         with self._thread_lock:
             if self._is_in_session:
-                logger.verbose("start_session() called but already in session")
+                logger.verbose("start_session() called from %s but already in session", caller)
                 return
             self._is_in_session = True
 
-        logger.notice("Starting new session recording ...")
+        logger.notice("Starting new session recording from %s ...", caller)
         self._session_pellet_count = 0
 
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)

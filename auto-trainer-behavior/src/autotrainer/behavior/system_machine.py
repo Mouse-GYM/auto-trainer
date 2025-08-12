@@ -49,6 +49,7 @@ class SystemMachine(StateMachine):
 
         {"trigger": "enter_intersession", "source": (SystemState.cage, SystemState.tunnel), "dest": SystemState.intersession,
          "before": "before_enter_intersession", "after": "after_enter_intersession"},
+
         dict(  # previous behavior
             trigger="exit_intersession",
             source=SystemState.intersession, dest=SystemState.cage,
@@ -154,11 +155,13 @@ class SystemMachine(StateMachine):
             PelletState.monitoring,
             PelletState.retract,
         }:
-            # not sure about this
-            self._algorithm.start_session()
+            if self._intersession.state == IntersessionState.idle:
+                self._algorithm.start_session("before_enter_tunnel")
+            else:
+                logger.notice("Not starting session: intersession state=%s", self._intersession.state)
+                # TODO: should we launch timer to retry ?
 
         self._update_magnet_position(self.algorithm.baseline_intensity)
-
         self._algorithm.system_state = SystemState.tunnel
 
     def after_enter_tunnel(self):
@@ -239,6 +242,7 @@ class SystemMachine(StateMachine):
             SystemState.tunnel,
             SystemState.cage,
         }:
+            assert self._intersession.state == IntersessionState.idle
             self.enter_intersession()
         else:
             inference = self._inference
@@ -408,7 +412,10 @@ class SystemMachine(StateMachine):
 
     def _pellet_sending(self):
         if self.state == SystemState.tunnel:
-            self.algorithm.start_session()
+            if self._intersession.state == IntersessionState.idle:
+                self.algorithm.start_session("_pellet_sending")
+            else:
+                logger.notice("Refusing start session if intersession state=%s", self._intersession.state)
 
     def _pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)

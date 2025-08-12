@@ -91,6 +91,7 @@ class IntersessionMachine(StateMachine):
                                                       context=self._segmentation_configuration.nonce)
 
     def after_end_analysis(self):
+        self._segmentation_configuration = self._detection_configuration = None
         self.events.on_analysis_ended()
 
     def can_perform_segmentation(self):
@@ -99,8 +100,9 @@ class IntersessionMachine(StateMachine):
         s = self._segmentation_configuration is not None
         EventManager.default().post_event_content(
             BehaviorEventKind.intersessionSegmentationCan, context=f"{p}:{i}:{not s}")
-        res = p and i and not s
-        logger.debug("can_perform_segmentation=%s: prj=%s inference=%s segment=%s", res, p, i, s)
+        res = p and i and not s and self._state == IntersessionState.idle
+        logger.debug("can_perform_segmentation=%s: prj=%s inference=%s segment=% state=%s",
+                     res, p, i, s, self._state)
         return res
 
     def can_perform_detection(self):
@@ -109,9 +111,9 @@ class IntersessionMachine(StateMachine):
         d = self._detection_configuration is None
         EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionCan,
                                                   context=f"{p}:{i}:{d}")
-        can_do_detection = p and i and d
-        logger.debug("can_perform_detection=%s ; prj=%s inference=%s detection_config=%s",
-                    can_do_detection, p, i, d)
+        can_do_detection = p and i and d and self._state == IntersessionState.segmentation
+        logger.debug("can_perform_detection=%s ; prj=%s inference=%s detection_config=%s state=%s",
+                    can_do_detection, p, i, d, self._state)
         return can_do_detection
 
     def _segmentation_complete(self, nonce: str, success: bool, *, segment_config: SegmentationConfiguration):
@@ -133,6 +135,7 @@ class IntersessionMachine(StateMachine):
         self._segmentation_configuration = None
 
     def _detection_complete(self, nonce: str, success: bool, *, detection_config: DetectionConfiguration):
+        self._detection_configuration = None  # set it directly
         if detection_config.nonce != nonce:
             logger.error("mismatched detection nonce: passed=%s cur_config=%s success=%s",
                          nonce, detection_config, success)
@@ -147,8 +150,6 @@ class IntersessionMachine(StateMachine):
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionEnd)
 
             self.end_analysis()
-
-        self._detection_configuration = None
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
