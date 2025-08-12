@@ -2,6 +2,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QLabel, QFileDialog, QWidget, QVBoxLayout,
                                QHBoxLayout, QStackedLayout, QGridLayout, QSpinBox, QPushButton)
 
+from autotrainer.behavior.behavior_algorithm import BehaviorProps
 from autotrainer.pyside import CardWidget, QSwitch
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
@@ -28,27 +29,45 @@ class BehaviorContent(ContentWidget):
 
         content_layout.addWidget(QLabel("Live Analysis:"), 0, 0)
         self._inference_enabled = QSwitch()
-        self._inference_enabled.stateChanged.connect(self._is_enabled_state_changed)
+        self._inference_enabled.stateChanged.connect(self._is_inference_enabled_state_changed)
+        self._inference_enabled.setToolTip("Enables real-time pose inference during live sessions (mouse in tunnel).")
         content_layout.addWidget(self._inference_enabled, 0, 1)
 
         content_layout.addWidget(QLabel("Deliver Pellets:"), 1, 0)
         self._pellet_delivery_toggle = QSwitch()
         self._pellet_delivery_toggle.stateChanged.connect(self._pellet_delivery_state_changed)
+        self._pellet_delivery_toggle.setToolTip(
+            "Enables pellet load-send-release cycles based on pellet detection and related factors.")
         content_layout.addWidget(self._pellet_delivery_toggle, 1, 1)
 
         content_layout.addWidget(QLabel("Cover Pellets:"), 2, 0)
         self._pellet_cover_toggle = QSwitch()
         self._pellet_cover_toggle.stateChanged.connect(self._pellet_cover_toggle_state_changed)
+        self._pellet_cover_toggle.setToolTip(
+            "Covers the pellet when the mouse is not in the tunnel.  Release then generates a tone when the tunnel is "
+            "entered.")
         content_layout.addWidget(self._pellet_cover_toggle, 2, 1)
 
         content_layout.addWidget(QLabel("Intersession Analysis:"), 0, 2)
         self._intersession_toggle = QSwitch()
         self._intersession_toggle.stateChanged.connect(self._intersession_toggle_state_changed)
+        self._intersession_toggle.setToolTip(
+            "Enables reach detection and segmentation after each session where the mouse is seen.  This may modify "
+            "pellet counts and adjust the pellet delivery position.")
         content_layout.addWidget(self._intersession_toggle, 0, 3)
+
+        content_layout.addWidget(QLabel("Intersession Pellet Shift:"), 1, 2)
+        self._allow_intersession_shift_toggle = QSwitch()
+        self._allow_intersession_shift_toggle.stateChanged.connect(self._allow_intersession_shift_toggle_state_changed)
+        self._allow_intersession_shift_toggle.setToolTip(
+            "Enables adjustment of the pellet delivery position based on post-session reach analysis.")
+        content_layout.addWidget(self._allow_intersession_shift_toggle, 1, 3)
 
         content_layout.addWidget(QLabel("Auto-Clamp:"), 0, 4)
         self._head_fixation_toggle = QSwitch()
         self._head_fixation_toggle.stateChanged.connect(self._head_fixation_toggle_state_changed)
+        self._head_fixation_toggle.setToolTip(
+            "Enables automatic magnet adjustment to 100% when the headbar detector is triggered.")
         content_layout.addWidget(self._head_fixation_toggle, 0, 5)
 
         content_layout.addWidget(QLabel("Auto-Clamp Threshold:"), 1, 4)
@@ -57,7 +76,10 @@ class BehaviorContent(ContentWidget):
         self._auto_clamp_threshold.setMinimum(0)
         self._auto_clamp_threshold.setMaximum(1023)
         self._auto_clamp_threshold.setWrapping(False)
-        self._auto_clamp_threshold.valueChanged.connect(self._update_auto_clamp_intensity)
+        self._auto_clamp_threshold.valueChanged.connect(self._update_headbar_pressure_threshold)
+        self._auto_clamp_threshold.setEnabled(self._behavior_model.algorithm.head_fixation_enabled)
+        self._auto_clamp_threshold.setToolTip(
+            "A value that adjusts the sensitivity of the headbar detector for it to be considered engaged.")
         content_layout.addWidget(self._auto_clamp_threshold, 1, 5)
 
         baseline_layout = QHBoxLayout()
@@ -106,12 +128,16 @@ class BehaviorContent(ContentWidget):
         self._pellet_delivery_toggle.setChecked(self._behavior_model.algorithm.pellet_delivery_enabled)
         self._pellet_cover_toggle.setChecked(self._behavior_model.algorithm.pellet_cover_enabled)
         self._intersession_toggle.setChecked(self._behavior_model.is_intersession_enabled)
+        self._allow_intersession_shift_toggle.setChecked(
+            self._behavior_model.algorithm.intersession_pellet_shift_enabled)
+
         self._behavior_model.algorithm.property_changed += self._algorithm_property_changed
         self._analysis.headbar_pressure_monitor.property_changed += self._force_detector_property_changed
-
         self._behavior_model.property_changed += self._behavior_model_property_changed
 
         self.status_changed.connect(lambda x: self._inference_status.setText(x))
+
+        self._is_inference_enabled_state_changed(self._inference_model.is_enabled)
 
         self.set_is_editable(False)
 
@@ -121,15 +147,17 @@ class BehaviorContent(ContentWidget):
     def set_is_capture_active(self, is_active: bool):
         self._inference_enabled.setEnabled(not is_active)
 
-    def _is_enabled_state_changed(self, x: int):
+    def _is_inference_enabled_state_changed(self, x: int):
         self._inference_model.is_enabled = x != 0
         self._pellet_delivery_toggle.setEnabled(self._inference_model.is_enabled)
         self._pellet_cover_toggle.setEnabled(
             self._inference_model.is_enabled and self._behavior_model.algorithm.pellet_delivery_enabled)
+        self._intersession_toggle.setEnabled(self._inference_model.is_enabled)
+        self._allow_intersession_shift_toggle.setEnabled(
+            self._inference_model.is_enabled and self._behavior_model.is_intersession_enabled)
 
     def _pellet_delivery_state_changed(self, x: int):
         self._behavior_model.algorithm.pellet_delivery_enabled = x != 0
-        self._pellet_cover_toggle.setEnabled(self._behavior_model.algorithm.pellet_delivery_enabled)
 
     def _pellet_cover_toggle_state_changed(self, x: int):
         self._behavior_model.algorithm.pellet_cover_enabled = x != 0
@@ -137,13 +165,16 @@ class BehaviorContent(ContentWidget):
     def _intersession_toggle_state_changed(self, x: int):
         self._behavior_model.is_intersession_enabled = x != 0
 
+    def _allow_intersession_shift_toggle_state_changed(self, x: int):
+        self._behavior_model.algorithm.intersession_pellet_shift_enabled = x != 0
+
     def _head_fixation_toggle_state_changed(self, x: int):
         self._behavior_model.algorithm.head_fixation_enabled = x != 0
 
     def _location_changed(self):
         self._inference_model.model_location = self._location.text()
 
-    def _update_auto_clamp_intensity(self, value):
+    def _update_headbar_pressure_threshold(self, value):
         self._analysis.headbar_pressure_monitor.load_cell_engaged_threshold = value
 
     def _make_position_baseline(self):
@@ -157,16 +188,21 @@ class BehaviorContent(ContentWidget):
             self._inference_model.model_location = dirname
 
     def _algorithm_property_changed(self, name, value, _):
-        if name == "pellet_delivery_enabled":
+        if name == BehaviorProps.PELLET_DELIVERY_ENABLED:
             self._pellet_delivery_toggle.setChecked(value)
-        elif name == "pellet_cover_enabled":
+        elif name == BehaviorProps.PELLET_COVER_ENABLED:
             self._pellet_cover_toggle.setChecked(value)
-        elif name == "baseline_intensity":
+        elif name == BehaviorProps.BASELINE_INTENSITY:
             self._baseline.setText(f"{value}%")
+        elif name == BehaviorProps.HEAD_FIXATION_ENABLED:
+            self._auto_clamp_threshold.setEnabled(value)
+        elif name == BehaviorProps.INTERSESSION_PELLET_SHIFT_ENABLED:
+            self._allow_intersession_shift_toggle.setChecked(value)
 
     def _behavior_model_property_changed(self, name, value, _):
         if name == "is_intersession_enabled":
             self._intersession_toggle.setChecked(value)
+            self._allow_intersession_shift_toggle.setEnabled(value)
 
     def _force_detector_property_changed(self, name, value, _):
         if name == "threshold":

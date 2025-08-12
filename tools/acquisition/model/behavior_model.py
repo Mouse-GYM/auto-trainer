@@ -69,6 +69,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     def save_configuration(self) -> BehaviorConfiguration:
         configuration = BehaviorConfiguration()
         configuration.pellet_delivery.is_intersession_analysis_enabled = self._is_intersession_enabled
+        configuration.pellet_delivery.is_intersession_pellet_shift_enabled = (
+            self._machine.algorithm.intersession_pellet_shift_enabled)
 
         self._machine.algorithm.update_configuration(configuration)
 

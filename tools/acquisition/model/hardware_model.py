@@ -104,6 +104,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def pending_command(self, value: Optional[SystemCommandKind]):
         self._pending_command = self._on_property_changed(HardwareModel.PENDING_COMMAND_PROPERTY, value,
                                                           self._pending_command)
+
     @property
     def send_x(self):
         return self._send_x
