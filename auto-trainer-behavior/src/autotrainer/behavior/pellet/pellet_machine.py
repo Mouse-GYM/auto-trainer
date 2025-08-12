@@ -193,7 +193,7 @@ class PelletMachine(StateMachine):
         return can
 
     def can_prerelease_pellet(self):
-        can = self.can_use_pellet_command() and self._algorithm.can_release_pellet()
+        can = self.can_use_pellet_command()
         EventManager.default().post_event_content(BehaviorEventKind.pelletPrereleaseCan, context=can)
         return can
 
