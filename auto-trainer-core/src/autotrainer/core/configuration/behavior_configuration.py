@@ -19,7 +19,7 @@ class PelletDeliveryConfiguration:
     is_enabled: bool = False
     is_pellet_cover_enabled: bool = False
     is_intersession_analysis_enabled: bool = False
-    is_intersession_pellet_shift_enabled: bool = False
+    is_intersession_pellet_shift_enabled: bool = True
     max_pellets_per_session: int = 10
     max_pellets_per_day: int = 50
     max_pellet_missing_seconds: float = 15.0
