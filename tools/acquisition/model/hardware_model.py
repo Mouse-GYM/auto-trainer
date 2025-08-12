@@ -322,6 +322,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self.send_home()
 
+        self._send_command(self._tunnel_device, SystemCommandKind.UPDATE_SCALE_TARE)
+
         if animal is not None:
             self.delay(0.5)
             self.update_head_magnet_intensity(animal.baseline_magnet_intensity)
