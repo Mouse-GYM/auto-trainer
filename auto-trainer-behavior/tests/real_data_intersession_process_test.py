@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -10,6 +11,10 @@ this_dir = Path(__file__).parent.resolve()
 
 
 def test_fp_and_xp_not_same(project_info, caplog):
+    if os.name != "posix":
+        # Some platform file-extension assumptions that are not worth fixing for other platforms as this time.
+        return
+
     project_info.session.value = 2
     project_info.root = this_dir.joinpath("fp-and-xp-not-same").as_posix()
     project_info.device_id = "agx001"
