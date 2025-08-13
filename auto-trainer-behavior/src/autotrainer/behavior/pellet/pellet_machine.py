@@ -282,7 +282,7 @@ class PelletMachine(StateMachine):
             if is_from_timer:
                 func = logger.notice
             elif retrying:
-                func = logger.warning
+                func = logger.debug
             else:
                 func = logger.verbose
             func(
@@ -298,8 +298,11 @@ class PelletMachine(StateMachine):
             cur_timer = self._cur_timer_try_next_state
             nonlocal reason, retrying
             retrying = True
+            # retry shortly currently disabled.
             reason = "would have retried shortly"
+            logit()
             return
+
             if is_from_timer:
                 reason = "skipping timer re-retry"
             elif cur_timer is None or cur_timer.finished.is_set():
@@ -323,11 +326,13 @@ class PelletMachine(StateMachine):
                         logit()
                         # Need monitoring state to be able to cover_pellet, atm,
                         self.state = PelletState.monitoring
-                        # alternatively we could simply allow this states transition.I ca
+                        # alternatively we could simply allow this states transition.
                         self.cover_pellet()
                     else:
                         retry_shortly()
-                        covering_retrying = True
+                        # covering_retrying = True
+                        # given retry disabled atm.
+
                 # could also decide to execute the move_retract before the cover_pellet.
                 if not covering_retrying:
                     # only if not covering_retrying
@@ -373,16 +378,6 @@ class PelletMachine(StateMachine):
                 else:
                     retry_shortly()
             else:
-                # if algo.is_in_session:
-                #     reason = "release_when_send_an_is_in_session"
-                #     if self.can_use_pellet_command():
-                #         __debug__ and logit()
-                #         self.state = PelletState.covering
-                #         # alternatively we could simply allow this states transition
-                #         self.release_pellet()
-                #     else:
-                #         retry_shortly()
-                # else:
                 reason = "monitor_when_send_cover_not_enabled"
                 logit()
                 self.monitor_pellet()
@@ -411,7 +406,6 @@ class PelletMachine(StateMachine):
             self.monitor_pellet()
 
         elif cur_state == PelletState.home:
-            # if pellet_seen:
             reason = "send_pellet_when_home"
             if self.can_use_pellet_command():
                 logit()
