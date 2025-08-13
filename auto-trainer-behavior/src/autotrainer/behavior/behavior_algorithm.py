@@ -404,15 +404,23 @@ class BehaviorAlgorithm(ObservableObject):
         return self.pellet_delivery_enabled and (time.time() - self.pellet_last_seen >= self.limits.pellet_missing_time)
 
     def can_release_pellet(self) -> bool:
-        self._check_date()
+        # self._check_date()
 
-        if not self.pellet_cover_enabled:
-            if self.system_state.tunnel:
-                return self.session_pellet_count <= self.limits.max_pellets_per_session
-            else:
-                return True
+        if self.pellet_cover_enabled:
+            return self._is_in_session
 
-        return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
+        return True
+
+        # TODO: Covering for session counts is on hold due to a) not knowing actual consumed, only load cycles (
+        # determining consumed happens during intersession) and b) need to determine whether said limit should
+        # reset per session or per tunnel entrance (which can have multiple "sessions" when a pellet is dropped).
+        # if not self.pellet_cover_enabled:
+        #    if self.system_state == SystemState.tunnel:
+        #        return self.session_pellet_count <= self.limits.max_pellets_per_session
+        #    else:
+        #        return True
+        #
+        # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_perform_intersession_analysis(self):
         return self.intersession_enabled and self.session_mouse_seen
