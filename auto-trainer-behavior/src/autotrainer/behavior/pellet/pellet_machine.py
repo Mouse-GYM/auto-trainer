@@ -116,8 +116,6 @@ class PelletMachine(StateMachine):
 
         self._cur_timer_try_next_state: Optional[threading.Timer] = None
 
-        self._thread_lock = threading.RLock()  # required re-entrant lock !!
-
     @property
     def algorithm(self):
         return self._algorithm
@@ -256,7 +254,7 @@ class PelletMachine(StateMachine):
     ):
         # always use the thread lock, given this can be called from different threads at the same time,
         # so possibly completely intermixed/leaved, which we want to protect from, so:
-        with self._thread_lock:
+        with self._algorithm.thread_lock:
             self.__try_next_state(pellet_seen, must_release,
                                   caller=caller, triangle_seen=triangle_seen, is_from_timer=from_timer)
 

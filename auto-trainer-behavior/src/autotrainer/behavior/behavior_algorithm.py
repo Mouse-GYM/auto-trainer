@@ -155,6 +155,10 @@ class BehaviorAlgorithm(ObservableObject):
         )
 
     @property
+    def thread_lock(self):
+        return self._thread_lock
+
+    @property
     def limits(self) -> Self:
         return self
 
