@@ -292,29 +292,11 @@ class PelletMachine(StateMachine):
                 self._state, algo.system_state, algo.intersession_state,
             stacklevel=3)
 
-        def retry_shortly(retry_enabled=False):
-            cur_timer = self._cur_timer_try_next_state
-            nonlocal reason, retrying
-            retrying = True
-            if not retry_enabled:
-                # retry shortly currently disabled.
-                reason = f"would have retried shortly {reason}"
-                logit()
-                return
-
-            if is_from_timer:
-                reason = "skipping timer re-retry"
-            elif cur_timer is None or cur_timer.finished.is_set():
-                cur_timer = self._cur_timer_try_next_state = threading.Timer(
-                    0.1, self._try_next_state, args=(pellet_seen, must_release),
-                    kwargs=dict(caller=f"{reason}", triangle_seen=triangle_seen, from_timer=True))
-                cur_timer.start()
-                reason = f"timer->{reason}"
-                logit()
-            else:
-                logger.warning("Skipping retry, previous timer not finished")
-                reason = "current try_next_state retry timer is busy"
-                logit()
+        def log_could_retry_shortly():
+            # retry shortly currently disabled.
+            nonlocal reason
+            reason = f"would have retried shortly {reason}"
+            logit()
 
         # Always arrest to the retract position during intersession.
         if algo.system_state == SystemState.intersession:
@@ -329,7 +311,7 @@ class PelletMachine(StateMachine):
                         # alternatively we could simply allow this states transition.
                         self.cover_pellet()
                     else:
-                        retry_shortly()
+                        log_could_retry_shortly()
                         # covering_retrying = True
                         # given retry disabled atm.
 
@@ -349,14 +331,14 @@ class PelletMachine(StateMachine):
                     logit()
                     self.send_pellet()
                 else:
-                    retry_shortly()
+                    log_could_retry_shortly()
             else:
                 reason = "prerelease_when_load_or_retract"
                 if self.can_use_pellet_command():
                     logit()
                     self.prerelease_pellet()
                 else:
-                    retry_shortly()
+                    log_could_retry_shortly()
 
         elif cur_state == PelletState.prerelease:
             reason = "send_pellet_when_prereleased"
@@ -364,7 +346,7 @@ class PelletMachine(StateMachine):
                 logit()
                 self.send_pellet()
             else:
-                retry_shortly()
+                log_could_retry_shortly()
 
         elif cur_state == PelletState.sending:
             if algo.pellet_cover_enabled:
@@ -376,7 +358,7 @@ class PelletMachine(StateMachine):
                     # alternatively we could simply allow this states transition
                     self.release_pellet()
                 else:
-                    retry_shortly()
+                    log_could_retry_shortly()
             else:
                 reason = "monitor_when_send_cover_not_enabled"
                 logit()
@@ -390,7 +372,7 @@ class PelletMachine(StateMachine):
                         logit()
                         self.load_pellet()
                     else:
-                        retry_shortly()
+                        log_could_retry_shortly()
             else:
                 if algo.can_release_pellet():
                     reason = "send_pellet_when_seen_and_can_release"
@@ -398,7 +380,7 @@ class PelletMachine(StateMachine):
                         logit()
                         self.release_pellet()
                     else:
-                        retry_shortly()
+                        log_could_retry_shortly()
 
         elif cur_state == PelletState.releasing:
             reason = "monitor_when_released"
@@ -411,7 +393,7 @@ class PelletMachine(StateMachine):
                 logit()
                 self.send_pellet()
             else:
-                retry_shortly()
+                log_could_retry_shortly()
         elif cur_state == PelletState.monitoring:
             if algo.is_in_session:
                 if must_release:
@@ -420,14 +402,14 @@ class PelletMachine(StateMachine):
                         logit()
                         self.release_pellet()
                     else:
-                        retry_shortly()
+                        log_could_retry_shortly()
                 elif not pellet_seen and triangle_seen:
                     reason = "load_pellet_when_insession_pellet_not_seen"
                     if self.can_load_pellet():
                         logit()
                         self.load_pellet()
                     else:
-                        retry_shortly()
+                        log_could_retry_shortly()
             else:
                 if not pellet_seen and triangle_seen:
                     if algo.can_load_pellet():
@@ -436,7 +418,7 @@ class PelletMachine(StateMachine):
                             logit()
                             self.load_pellet()
                         else:
-                            retry_shortly()
+                            log_could_retry_shortly()
                 elif pellet_seen:
                     if algo.can_cover_pellet():
                         reason = "cover_pellet_in_monitoring"
@@ -444,7 +426,7 @@ class PelletMachine(StateMachine):
                             logit()
                             self.cover_pellet()
                         else:
-                            retry_shortly()
+                            log_could_retry_shortly()
         else:
             pass  # unhandled state
 
