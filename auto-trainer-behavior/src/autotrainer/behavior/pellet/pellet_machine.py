@@ -294,7 +294,8 @@ class PelletMachine(StateMachine):
 
         def log_could_retry_shortly():
             # retry shortly currently disabled.
-            nonlocal reason
+            nonlocal reason, retrying
+            retrying = True
             reason = f"would have retried shortly {reason}"
             logit()
 
