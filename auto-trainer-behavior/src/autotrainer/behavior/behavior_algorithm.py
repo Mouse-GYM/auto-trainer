@@ -372,7 +372,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     def _start_session(self):
         if self._is_in_session:
-            logger.verbose("start_session() called but already in session")
+            logger.warning("start_session() called but already in session")
             return
         logger.notice("Starting new session recording ...")
         self._is_in_session = True
@@ -399,7 +399,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     def _end_session(self):
         if not self._is_in_session:
-            logger.debug("end_session() called but not in session", stack_info=True)
+            logger.warning("end_session() called but not in session", stack_info=True)
             return
         self._is_in_session = False
         logger.success("Stopping session recording ...")
