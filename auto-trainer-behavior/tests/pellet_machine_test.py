@@ -153,18 +153,18 @@ def test_cover_pellet_disabled(mock_system, machine):
     """
     machine.algorithm.pellet_missing_time = 0.1
 
-    pellet_machine = machine.pellet
+    pellet = machine.pellet
 
     # Turn off cover behavior
     machine.algorithm.pellet_cover_enabled = False
 
     machine.enter_tunnel()
 
-    assert pellet_machine.state == PelletState.releasing
+    assert pellet.state == PelletState.releasing
 
     mock_system.mock_pellet_ack()
 
-    assert pellet_machine.state == PelletState.monitoring
+    assert pellet.state == PelletState.monitoring
 
     # Send a pose response with pellet not seen which should trigger a load/release cycle while in tunnel.
     mock_system.mock_pellet_missing(should_prerelease=True)
@@ -172,7 +172,7 @@ def test_cover_pellet_disabled(mock_system, machine):
     machine.exit_tunnel()
 
     # Nothing should have changed.
-    assert pellet_machine.state == PelletState.monitoring
+    assert pellet.state == PelletState.monitoring
 
     machine.enter_tunnel()
 
@@ -182,7 +182,7 @@ def test_cover_pellet_disabled(mock_system, machine):
     machine.exit_tunnel()
 
     # Nothing should have changed.
-    assert pellet_machine.state == PelletState.monitoring
+    assert pellet.state == PelletState.monitoring
 
     # Send a pose response with pellet not seen which should trigger a load/cover cycle while out of tunnel.
     mock_system.mock_pose_response(False, False)

@@ -141,7 +141,7 @@ class MockSystemMachine:
         with mock.patch.object(self.inference, 'perform_detection') as m_det:
             yield m_det
 
-    def mock_pose_response(self, pellet_seen: bool, mouse_seen: bool, triangle_seen: bool=True):
+    def mock_pose_response(self, pellet_seen: bool, mouse_seen: bool, triangle_seen: bool=True, ack_pellet: bool=False):
         """Send/trigger a PoseResponse via pose_algorithm.pose_changed event"""
         parts_flag = {
             "Pellet": pellet_seen,
@@ -152,6 +152,8 @@ class MockSystemMachine:
         parts_flags = (parts_flag, parts_flag, parts_flag)
         response = PoseResponse(sequence=1, parts_flags=parts_flags, locations=[])
         self.inference.pose_algorithm.pose_changed(response)
+        if self.pellet._api_status_token is not None and ack_pellet:
+            self.pellet._pellet_device_ack_received(self.pellet._api_status_token)
 
     def expect_cover_command(self):
         # An explicit cover command should have been set.  Should be in covering state and have an ack from the command.

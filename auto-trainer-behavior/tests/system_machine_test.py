@@ -163,7 +163,9 @@ def test_intersession_enabled(mock_system, machine):
     assert machine.algorithm.system_state == machine.state
     assert pellet_machine.state == PelletState.releasing
 
-    mock_system.mock_pose_response(False, True)
+    mock_system.mock_pose_response(False, True, ack_pellet=True)
+
+    assert pellet_machine.state == PelletState.monitoring
 
     with mock_system.mock_perform_segmentation():
         mock_system.make_load_cell_inactive()
@@ -179,15 +181,11 @@ def test_intersession_enabled(mock_system, machine):
     assert mock_system.pellet_state_trans == [
         PelletState.releasing,
         PelletState.monitoring,
-    ]
-    assert pellet_machine._api_status_token is not None
-    pellet_machine._pellet_device_ack_received(pellet_machine._api_status_token)
-    assert mock_system.pellet_state_trans == [
-        PelletState.releasing,
-        PelletState.monitoring,
-        PelletState.covering,  # double transition
+        PelletState.covering,   # double transition
         PelletState.retract,
     ]
+    assert pellet_machine._api_status_token is not None, \
+        "An API status token should be in use for the previous retract"
 
 
 def test_inference_detection_ready(machine):
