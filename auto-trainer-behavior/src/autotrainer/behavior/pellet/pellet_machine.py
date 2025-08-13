@@ -282,7 +282,7 @@ class PelletMachine(StateMachine):
             if is_from_timer:
                 func = logger.notice
             elif retrying:
-                func = logger.debug
+                func = logger.verbose if reason == "release_when_sent_cover_enabled" else logger.debug
             else:
                 func = logger.verbose
             func(
@@ -298,10 +298,11 @@ class PelletMachine(StateMachine):
             cur_timer = self._cur_timer_try_next_state
             nonlocal reason, retrying
             retrying = True
-            # retry shortly currently disabled.
-            reason = "would have retried shortly"
-            logit()
-            return
+            if reason != "release_when_sent_cover_enabled":
+                # retry shortly currently disabled.
+                reason = f"would have retried shortly {reason}"
+                logit()
+                return
 
             if is_from_timer:
                 reason = "skipping timer re-retry"
@@ -313,6 +314,7 @@ class PelletMachine(StateMachine):
                 reason = f"timer->{reason}"
                 logit()
             else:
+                logger.warning("Skipping retry, previous timer not finished")
                 reason = "current try_next_state retry timer is busy"
                 logit()
 
