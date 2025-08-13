@@ -280,7 +280,7 @@ class PelletMachine(StateMachine):
             if is_from_timer:
                 func = logger.notice
             elif retrying:
-                func = logger.debug
+                func = logger.spam if reason != "release_when_sent_cover_enabled" else logger.debug
             else:
                 func = logger.verbose
             func(
