@@ -366,12 +366,13 @@ class SystemMachine(StateMachine):
             self._handle_star_triangle_offset_changed(
                 response.get_parts_3d_offset(SceneElement.Star, SceneElement.Triangle))
         #
-        self._algorithm.pellet_seen(response.pellet_seen)
-        self._algorithm.mouse_seen(response.mouse_seen)
+        algo = self._algorithm
+        algo.pellet_seen(response.pellet_seen)
+        algo.mouse_seen(response.mouse_seen)
+        algo.triangle_seen(response.triangle_seen)
         if not self._algorithm.pellet_delivery_enabled:
             return
-        self._pellet_machine.pellet_seen(response.pellet_seen,
-                                         triangle_seen=response.triangle_seen)
+        self._pellet_machine.pellet_seen(response.pellet_seen)
 
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.

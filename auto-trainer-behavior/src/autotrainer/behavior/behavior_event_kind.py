@@ -47,6 +47,8 @@ class BehaviorEventKind(IntEnum, Enum):
     pelletPresented = 1502
     pelletSuccessfulReach = 1503
 
+    triangleSeen = 1550
+
     headfixBaselineChanged = 1601
     headfixLoadCellChanged = 1602
     headfixLoadCellChangedInIntersession = 1603
