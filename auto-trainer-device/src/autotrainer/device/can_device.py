@@ -81,6 +81,8 @@ class CanDevice(Device):
         self._measurement_buffer_count = buffer_size
         self._measurements: List[HeadFixMeasurement] = []
 
+        self._retract_distance = -15
+
         self._current_pressure = 0
         self._current_digital = 0
         self._current_temperature = 0
@@ -326,7 +328,7 @@ class CanDevice(Device):
     def _send_retract(self, data):
         assert data is None
         del data
-        self._interface.move_motor_y(-10, relative=True)
+        self._interface.move_motor_y(self._retract_distance, relative=True)
 
     def _command_handler(self):
         cur_commands = []
