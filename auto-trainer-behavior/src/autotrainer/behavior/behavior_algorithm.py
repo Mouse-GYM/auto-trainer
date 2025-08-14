@@ -15,6 +15,7 @@ from autotrainer.core import ObservableObject, EventManager, BehaviorConfigurati
 
 from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
+from .intersession import IntersessionState
 
 logger = get_verbose_logger(__name__)
 
@@ -114,6 +115,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._pellet_last_seen = 0.0
 
         self._system_state = SystemState.cage
+        self._intersession_state = IntersessionState.idle
 
         self._today = None
 
@@ -153,6 +155,10 @@ class BehaviorAlgorithm(ObservableObject):
         )
 
     @property
+    def thread_lock(self):
+        return self._thread_lock
+
+    @property
     def limits(self) -> Self:
         return self
 
@@ -171,6 +177,14 @@ class BehaviorAlgorithm(ObservableObject):
     @system_state.setter
     def system_state(self, value: SystemState):
         self._system_state = value
+
+    @property
+    def intersession_state(self) -> IntersessionState:
+        return self._intersession_state
+
+    @intersession_state.setter
+    def intersession_state(self, value: IntersessionState):
+        self._intersession_state = value
 
     @property
     def is_in_session(self) -> bool:
@@ -358,12 +372,14 @@ class BehaviorAlgorithm(ObservableObject):
 
     def start_session(self):
         with self._thread_lock:
-            if self._is_in_session:
-                logger.verbose("start_session() called but already in session")
-                return
-            self._is_in_session = True
+            self._start_session()
 
+    def _start_session(self):
+        if self._is_in_session:
+            logger.warning("start_session() called but already in session")
+            return
         logger.notice("Starting new session recording ...")
+        self._is_in_session = True
         self._session_pellet_count = 0
 
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
@@ -383,10 +399,13 @@ class BehaviorAlgorithm(ObservableObject):
 
     def end_session(self):
         with self._thread_lock:
-            if not self._is_in_session:
-                logger.debug("end_session() called but not in session", stack_info=True)
-                return
-            self._is_in_session = False
+            self._end_session()
+
+    def _end_session(self):
+        if not self._is_in_session:
+            logger.warning("end_session() called but not in session", stack_info=True)
+            return
+        self._is_in_session = False
         logger.success("Stopping session recording ...")
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
         post_trigger_enable(self, False)

@@ -1,11 +1,10 @@
-import logging
 import secrets
-from enum import Enum
 from typing import Callable
 
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager, ObservableObject
+from autotrainer.core import ProjectInfo, EventManager
+from . import IntersessionState
 from ..behavior_event_kind import BehaviorEventKind
 
 from ..inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
@@ -14,12 +13,6 @@ from ..state_machine import StateMachine, StateMachineEvents
 from autotrainer.core.logging import get_verbose_logger
 
 logger = get_verbose_logger(__name__)
-
-
-class IntersessionState(str, Enum):
-    idle = "idle"
-    segmentation = "segmentation"
-    detection = "detection"
 
 
 class IntersessionMachineEvents(StateMachineEvents):

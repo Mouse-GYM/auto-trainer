@@ -65,6 +65,7 @@ def test_enter_exit_tunnel(mock_system, machine):
 
 
 def test_no_session_without_pellet(mock_system, machine):
+    ack_received = machine.pellet._pellet_device_ack_received
 
     assert machine.algorithm.is_in_session is False
 
@@ -93,7 +94,7 @@ def test_no_session_without_pellet(mock_system, machine):
     # Acknowledge load command -> should go to sending.
     pellet_machine = machine._pellet_machine
     assert isinstance(pellet_machine, PelletMachine)
-    machine._msg_handler.ack_received(pellet_machine._api_status_token)
+    ack_received(pellet_machine._api_status_token)
 
     assert mock_system.pellet_state_trans == [PelletState.sending]
 
@@ -108,7 +109,7 @@ def test_no_session_without_pellet(mock_system, machine):
 
     assert mock_system.machine_state_trans == 2 * [SystemState.tunnel, SystemState.cage]
     # Acknowledge send command -> should go to releasing.
-    machine._msg_handler.ack_received(pellet_machine._api_status_token)
+    ack_received(pellet_machine._api_status_token)
 
     mock_system.make_load_cell_active()
 
@@ -118,7 +119,7 @@ def test_no_session_without_pellet(mock_system, machine):
     mock_system.make_load_cell_inactive()
 
     # Acknowledge release command -> should go to monitoring.
-    machine._msg_handler.ack_received(pellet_machine._api_status_token)
+    ack_received(pellet_machine._api_status_token)
     assert machine.pellet.state == PelletState.covering
 
     mock_system.make_load_cell_active()
@@ -162,7 +163,9 @@ def test_intersession_enabled(mock_system, machine):
     assert machine.algorithm.system_state == machine.state
     assert pellet_machine.state == PelletState.releasing
 
-    mock_system.mock_pose_response(False, True)
+    mock_system.mock_pose_response(False, True, ack_pellet=True)
+
+    assert pellet_machine.state == PelletState.monitoring
 
     with mock_system.mock_perform_segmentation():
         mock_system.make_load_cell_inactive()
@@ -178,8 +181,11 @@ def test_intersession_enabled(mock_system, machine):
     assert mock_system.pellet_state_trans == [
         PelletState.releasing,
         PelletState.monitoring,
+        PelletState.covering,   # double transition
         PelletState.retract,
     ]
+    assert pellet_machine._api_status_token is not None, \
+        "An API status token should be in use for the previous retract"
 
 
 def test_inference_detection_ready(machine):

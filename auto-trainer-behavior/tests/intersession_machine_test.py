@@ -3,7 +3,8 @@ from unittest import mock
 import pytest
 from transitions import MachineError
 
-from autotrainer.behavior import IntersessionState, SegmentationConfiguration, DetectionConfiguration
+from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration
+from autotrainer.behavior.intersession import IntersessionState
 
 
 def test_intersession(
