@@ -310,12 +310,11 @@ class PoseAlgorithm(ObservableObject):
         left_frames = all_frames[0::2]
         right_frames = all_frames[1::2]
 
-        return self.process_frames(all_frames, left_frames, right_frames,
+        return self.process_frames(left_frames, right_frames,
                                    pairs_3d_offsets=pairs_3d_offsets)
 
     def process_frames(
         self,
-        all_frames: List[numpy.ndarray],
         *per_cam_frames: List[numpy.ndarray],
         pairs_3d_offsets: Pairs3dOffsetT,
     ) -> PoseResponse:
@@ -323,7 +322,6 @@ class PoseAlgorithm(ObservableObject):
         Function to process frames with all cameras frame results separated. Each frame is
         already reshaped to (num_body_parts, 3).
         Args:
-            all_frames: frames in order as output from DLC
             per_cam_frames: tuple of all frames per cam, sorted, for each cam, sorted.
             pairs_3d_offsets: List of 2-tuple pairs of parts to compute their 3d offsets.
         Returns:

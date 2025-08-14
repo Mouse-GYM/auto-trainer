@@ -204,8 +204,8 @@ class PelletMachine(StateMachine):
     def can_use_pellet_command(self):
         return self._api_status_token is None
 
-    def pellet_seen(self, seen: bool, *, triangle_seen: bool = True):
-        self._try_next_state(seen, caller="pellet_seen", triangle_seen=triangle_seen)
+    def pellet_seen(self, seen: bool):
+        self._try_next_state(seen, caller="pellet_seen")
 
     # region Callbacks
     def _session_starting(self):
@@ -249,14 +249,13 @@ class PelletMachine(StateMachine):
         must_release: bool = False,
         *,
         caller: str = "not-provided",
-        triangle_seen: bool = True,
         from_timer: bool = False,
     ):
         # always use the thread lock, given this can be called from different threads at the same time,
         # so possibly completely intermixed/leaved, which we want to protect from, so:
         with self._algorithm.thread_lock:
             self.__try_next_state(pellet_seen, must_release,
-                                  caller=caller, triangle_seen=triangle_seen, is_from_timer=from_timer)
+                                  caller=caller, is_from_timer=from_timer)
 
     environment_changed = _try_next_state  # remove 1 unnecessary stack level
     # def environment_changed(self):
@@ -284,10 +283,10 @@ class PelletMachine(StateMachine):
             else:
                 func = logger.verbose
             func(
-                "try_next_state from %s (timer=%s): %s -> in_session=%s pellet_seen=%s triangle_seen=%s "
+                "try_next_state from %s (timer=%s): %s -> in_session=%s pellet_seen=%s triangle_recently_seen=%s "
                 "session_mouse_seen=%s session_pellet_count=%s must_release=%s "
                 "pellet_state=%s algo_system_state=%s intersession_state=%s",
-                caller, is_from_timer, reason, algo.is_in_session, pellet_seen, triangle_seen,
+                caller, is_from_timer, reason, algo.is_in_session, pellet_seen, algo.triangle_recently_seen,
                 algo.session_mouse_seen, algo.session_pellet_count, must_release,
                 self._state, algo.system_state, algo.intersession_state,
             stacklevel=3)
@@ -367,7 +366,7 @@ class PelletMachine(StateMachine):
 
         elif cur_state == PelletState.covering:
             if not pellet_seen:
-                if triangle_seen:
+                if algo.triangle_recently_seen:
                     reason = "load_pellet_when_covered_and_pellet_not_seen"
                     if self.can_load_pellet():
                         logit()
@@ -404,7 +403,7 @@ class PelletMachine(StateMachine):
                         self.release_pellet()
                     else:
                         log_could_retry_shortly()
-                elif not pellet_seen and triangle_seen:
+                elif not pellet_seen and algo.triangle_recently_seen:
                     reason = "load_pellet_when_insession_pellet_not_seen"
                     if self.can_load_pellet():
                         logit()
@@ -412,7 +411,7 @@ class PelletMachine(StateMachine):
                     else:
                         log_could_retry_shortly()
             else:
-                if not pellet_seen and triangle_seen:
+                if not pellet_seen and algo.triangle_recently_seen:
                     if algo.can_load_pellet():
                         reason = "load_pellet_in_monitoring"
                         if self.can_use_pellet_command():

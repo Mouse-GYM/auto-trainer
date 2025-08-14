@@ -111,8 +111,10 @@ class BehaviorAlgorithm(ObservableObject):
         self._session_pellet_count = 0
         self._session_mouse_seen = False
         self._pellet_seen = False
+        self._triangle_seen = False
 
         self._pellet_last_seen = 0.0
+        self._triangle_last_seen = 0.0
 
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
@@ -129,6 +131,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.max_pellets_per_headfix_session: int = 10
         self.max_pellets_per_day: int = 50
         self.pellet_missing_time: float = 1.0
+        self.triangle_missing_time: float = 1.0
 
         self._pellets_presented: int = 0
         self._successful_reaches: int = 0
@@ -291,8 +294,20 @@ class BehaviorAlgorithm(ObservableObject):
         EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseDelayChanged, context=value)
 
     @property
+    def triangle_last_seen(self) -> float:
+        return self._triangle_last_seen
+
+    @property
+    def triangle_recently_seen(self) -> bool:
+        return time.perf_counter() - self._triangle_last_seen < self.limits.triangle_missing_time
+
+    @property
     def pellet_last_seen(self) -> float:
         return self._pellet_last_seen
+
+    def _set_triangle_last_seen(self, value: float):
+        prev, self._triangle_last_seen = self._triangle_last_seen, value
+        # self._on_property_changed("triangle_last_seen", value, prev)
 
     def _set_pellet_last_seen(self, value: float):
         self._pellet_last_seen = self._on_property_changed("pellet_last_seen", value, self._pellet_last_seen)
@@ -388,6 +403,7 @@ class BehaviorAlgorithm(ObservableObject):
             self._project_info.calculate_next_session_index()
 
         self._set_pellet_last_seen(0.0)
+        self._set_triangle_last_seen(0.0)
         self._session_mouse_seen = False
         self._pellet_seen = False
 
@@ -420,7 +436,10 @@ class BehaviorAlgorithm(ObservableObject):
         return self.pellet_cover_enabled
 
     def can_load_pellet(self):
-        return self.pellet_delivery_enabled and (time.time() - self.pellet_last_seen >= self.limits.pellet_missing_time)
+        return (
+            self.pellet_delivery_enabled
+            and time.perf_counter() - self._pellet_last_seen >= self.limits.pellet_missing_time
+        )
 
     def can_release_pellet(self) -> bool:
         # self._check_date()
@@ -444,13 +463,19 @@ class BehaviorAlgorithm(ObservableObject):
     def can_perform_intersession_analysis(self):
         return self.intersession_enabled and self.session_mouse_seen
 
+    def triangle_seen(self, seen: bool = True):
+        if self._triangle_seen != seen:
+            self._triangle_seen = seen
+            EventManager.default().post_event_content(BehaviorEventKind.triangleSeen, context=seen)
+        if seen:
+            self._set_triangle_last_seen(time.perf_counter())
+
     def pellet_seen(self, seen: bool = True):
         if self._pellet_seen != seen:
             self._pellet_seen = seen
             EventManager.default().post_event_content(BehaviorEventKind.pelletSeen, context=seen)
-
         if seen:
-            self._set_pellet_last_seen(time.time())
+            self._set_pellet_last_seen(time.perf_counter())
 
     def pellet_loaded(self):
         self.session_pellet_count += 1
