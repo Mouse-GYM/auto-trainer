@@ -14,8 +14,7 @@ from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDevi
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler
 from autotrainer.core import ProjectInfo
 from autotrainer.device import DeviceConnectionProtocol
-from autotrainer.inference import PoseAlgorithm, PoseResponse
-
+from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 
 from tools.acquisition.model.inference_model import InferenceModel
 
@@ -56,7 +55,9 @@ def pose_algo():
 
 @pytest.fixture
 def inference(pose_algo):
-    return InferenceModel(pose_algorithm=pose_algo)
+    inference = InferenceModel(pose_algorithm=pose_algo)
+    inference._set_status(InferenceStatus.live)
+    return inference
 
 
 @pytest.fixture
