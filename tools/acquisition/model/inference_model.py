@@ -1,4 +1,3 @@
-import copy
 import dataclasses
 import logging
 import multiprocessing
@@ -14,7 +13,6 @@ from pathlib import Path
 from statistics import mean
 from typing import Optional, List, Dict, TextIO, Tuple
 from dataclasses import dataclass
-from enum import Enum
 from threading import Thread
 
 import cv2
@@ -34,7 +32,7 @@ from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.project.project_info import SessionRawInt
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
-    DlcPoseModel, MemoryPoseModel, InferenceMode, PoseResponse
+    DlcPoseModel, MemoryPoseModel, InferenceMode, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
@@ -113,15 +111,6 @@ def open_h5_file(file_path: Path):
     return datasets
 
 
-class InferenceStatus(str, Enum):
-    stopped = "Stopped"
-    loading = "Loading"
-    waiting = "Waiting"
-    live = "Live"
-    intersession = "Intersession"
-    stopping = "Stopping"
-
-
 @dataclass
 class IntersessionBlock:
     configuration: SegmentationConfiguration
@@ -142,7 +131,7 @@ class IntersessionDetection:
     configuration: DetectionConfiguration
 
 
-class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol):
+class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
     def __init__(self,
         pose_algorithm: PoseAlgorithm,
@@ -461,7 +450,7 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
         )
 
     def _set_status(self, status: InferenceStatus):
-        self._status = self._on_property_changed("status", status, self._status)
+        self._status = self._on_property_changed(self.STATUS, status, self._status)
 
     def _send_message(self, kind: InferenceCommandMessageKind, context: typing.Any = None):
         cmd_queue = self._cmd_queue
@@ -495,6 +484,12 @@ class InferenceModel(ObservableObject, InferenceProtocol, ProjectDependentProtol
                         self._set_status(InferenceStatus.live)
                     else:
                         self._set_status(InferenceStatus.intersession)
+                elif msg in {
+                    InferenceStatusMessageKind.Created,
+                    InferenceStatusMessageKind.Terminated,
+                }:
+                    # no-op handler
+                    pass
                 else:
                     logger.warning("Unhandled msg: %s", msg)
             except Exception as err:

@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 from typing import Protocol, Callable, Tuple, Optional
 
-from autotrainer.core import Offset3DTuple
+from autotrainer.core import Offset3DTuple, ObservableObject
+from autotrainer.inference import InferenceStatus
 
 
 # NB: not importing autotrainer.inference
 
-# from autotrainer.inference import PoseAlgorithm
+from autotrainer.inference import PoseAlgorithm
 # prevents increased chance of import loop/cycle,
 # given, for instance, InferenceProtocol is subclassed by InferenceModel which is also referred to by PoseAlgo
 
@@ -24,7 +25,10 @@ class DetectionConfiguration:
     complete: Callable[[str, bool], None]
 
 
-class InferenceProtocol(Protocol):
+class _InferenceProtocol(Protocol):
+
+    status: InferenceStatus
+
     @property
     def pose_algorithm(self) -> "autotrainer.inference.PoseAlgorithm": ...
 
@@ -46,6 +50,12 @@ class InferenceProtocol(Protocol):
     algo_initialised: Callable[["autotrainer.inference.PoseAlgorithm"], None]
     diamond_triangle_offset_changed: Callable[[Optional[Offset3DTuple]], None]
     star_triangle_offset_changed: Callable[[Optional[Offset3DTuple]], None]
+
+
+
+class InferenceProtocol(ObservableObject, _InferenceProtocol):
+
+    STATUS = "status"
 
 
 if __debug__ and False:

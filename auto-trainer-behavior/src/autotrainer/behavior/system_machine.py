@@ -9,7 +9,7 @@ from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorA
                               HeadbarPressureMonitor)
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.inference import PoseResponse
+from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement
 
 from .analysis.intersession_process import IntersessionResponse
@@ -29,7 +29,7 @@ logger = get_verbose_logger(__name__)
 # NB: this is to ensure we can patch the exact desired one (and only that one) from tests:
 _clean_raw_data_timer = Timer
 _auto_clamp_release_timer = Timer
-_pellet_loading_timer = Timer
+_consider_end_session_timer = Timer
 
 #
 
@@ -38,9 +38,7 @@ class SystemMachine(StateMachine):
     states = [e for e in SystemState]
 
     transitions = [
-        {"trigger": "enter_tunnel", "source": SystemState.cage, "dest": SystemState.tunnel,
-         "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
-        {"trigger": "enter_tunnel", "source": SystemState.tunnel, "dest": SystemState.tunnel,
+        {"trigger": "enter_tunnel", "source": [SystemState.cage, SystemState.tunnel], "dest": SystemState.tunnel,
          "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
 
         {"trigger": "exit_tunnel", "source": SystemState.tunnel, "dest": SystemState.cage,
@@ -102,6 +100,7 @@ class SystemMachine(StateMachine):
             if inference.pose_algorithm is not None:
                 inference.pose_algorithm.pose_changed += self._pose_changed
             inference.detection_result_ready += self._handle_detection_result
+            inference.property_changed += self._handle_inference_property_changed
 
         self._pellet_device = pellet_device
 
@@ -267,6 +266,18 @@ class SystemMachine(StateMachine):
             else:
                 self.exit_intersession_to_cage()
 
+    def _handle_inference_property_changed(self, name: str, new_status, prev_status):
+        if name == InferenceProtocol.STATUS:
+            if (
+                new_status == InferenceStatus.live
+                and self.state == SystemState.cage
+            ):
+                assert prev_status == InferenceStatus.waiting
+                if self._analysis.load_cell_monitor.is_engaged:
+                    self.enter_tunnel()
+                # this is only used at app starts, so unregister:
+                self._inference.property_changed -= self._handle_inference_property_changed
+
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
             # TODO new need event kind
@@ -287,7 +298,11 @@ class SystemMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
             if value:
                 if self.state == SystemState.cage:
-                    self.enter_tunnel()
+                    # when app start inference is slow and takes several 10s to become live,
+                    # so we have to check it:
+                    if self._inference.status == InferenceStatus.live:
+                        self.enter_tunnel()
+                    # see _handle_inference_property_changed
                 else:
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                                               context=self.state)
@@ -400,7 +415,7 @@ class SystemMachine(StateMachine):
         if self._algorithm.is_in_session:
             prev_timer = self._timer_consider_end_session
             if prev_timer is None or prev_timer.finished.is_set():
-                self._timer_consider_end_session = _pellet_loading_timer(
+                self._timer_consider_end_session = _consider_end_session_timer(
                     self._delay_timer_consider_end_session, self._consider_end_session)
                 self._timer_consider_end_session.start()
             else:
