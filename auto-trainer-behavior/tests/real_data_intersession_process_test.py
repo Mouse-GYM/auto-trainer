@@ -10,10 +10,10 @@ from autotrainer.behavior.analysis import IntersessionResponse
 this_dir = Path(__file__).parent.resolve()
 
 
+import pytest
+
+@pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")
 def test_fp_and_xp_not_same(project_info, caplog):
-    if os.name != "posix":
-        # Some platform file-extension assumptions that are not worth fixing for other platforms as this time.
-        return
 
     project_info.session.value = 2
     project_info.root = this_dir.joinpath("fp-and-xp-not-same").as_posix()
