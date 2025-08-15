@@ -21,6 +21,7 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__(None)
 
         self._app = app
+
         self._is_dev = is_dev
 
         self._preferences = user_preferences
@@ -105,7 +106,6 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._model.on_close()
-
         event.accept()
 
     def moveEvent(self, e):
@@ -287,11 +287,19 @@ class MainWindow(QMainWindow):
     def _reload_animals(self, animals):
         self._animal_dropdown.clear()
 
+        # get current selected animal before adding them,
+        # given when adding that's modifying the currently selected one too,
+        # which reset the preference selected to that one...
+        find_animal_name = (
+            self._preferences.selected_animal if self._model.selected_animal is None
+            else self._model.selected_animal.name
+        )
+
         for animal in animals:
             self._animal_dropdown.addItem(animal.name, animal)
 
-        if self._model.selected_animal is not None:
-            index = self._animal_dropdown.findText(self._model.selected_animal.name)
+        if find_animal_name is not None:
+            index = self._animal_dropdown.findText(find_animal_name)
             if index != -1:
                 self._animal_dropdown.setCurrentIndex(index)
         else:

@@ -19,6 +19,18 @@ def _find_default_data_location() -> str:
 
 
 class UserPreferences(ObservableObject):
+
+    CONFIGURATION_LOCATION = "configuration_location"
+    SERIAL_NUMBER = "serial_number"
+    LIVE_FEED_REFRESH_RATE = "live_feed_refresh_rate"
+    LOG_LOCATION = "log_location"
+    LOG_LEVEL = "log_level"
+    SELECTED_ANIMAL = "selected_animal"
+    ANIMAL_LOCATION = "animal_location"
+    PELLET_PORT = "pellet_port"
+    TUNNEL_PORT = "tunnel_port"
+    REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION = "remove_raw_data_when_inactive_session"
+
     def __init__(self):
         super().__init__()
 
@@ -40,6 +52,7 @@ class UserPreferences(ObservableObject):
                                                       _find_default_configuration_location())
 
         self._animal_location = settings.value("system/animal_location", "")
+        self._selected_animal = settings.value("system/selected_animal", "")
 
         self._log_location: str = settings.value("system/log_location", "")
         self._log_level = settings.value("system/log_level", logging.WARNING, int)
@@ -55,6 +68,7 @@ class UserPreferences(ObservableObject):
         self._remove_raw_data_when_inactive_session: bool = False
 
     def save(self):
+        logger.verbose("Saving ini config to %s", self._settings.fileName())
         self._settings.sync()
 
     @property
@@ -67,7 +81,7 @@ class UserPreferences(ObservableObject):
 
     @configuration_location.setter
     def configuration_location(self, value: str) -> None:
-        self._configuration_location = self._on_property_changed("configuration_location", value,
+        self._configuration_location = self._on_property_changed(self.CONFIGURATION_LOCATION, value,
                                                                  self._configuration_location)
         self._settings.setValue("system/configuration_location", self._configuration_location)
 
@@ -77,7 +91,7 @@ class UserPreferences(ObservableObject):
 
     @serial_number.setter
     def serial_number(self, value: str):
-        self._serial_number = self._on_property_changed("serial_number", value, self.serial_number)
+        self._serial_number = self._on_property_changed(self.SERIAL_NUMBER, value, self.serial_number)
         self._settings.setValue("system/serial_number", self._serial_number)
 
     @property
@@ -86,7 +100,7 @@ class UserPreferences(ObservableObject):
 
     @live_feed_refresh_rate.setter
     def live_feed_refresh_rate(self, value: int):
-        self._live_feed_refresh_rate = self._on_property_changed("live_feed_refresh_rate", value,
+        self._live_feed_refresh_rate = self._on_property_changed(self.LIVE_FEED_REFRESH_RATE, value,
                                                                  self.live_feed_refresh_rate)
         self._settings.setValue("display/refresh_rate", self._live_feed_refresh_rate)
 
@@ -96,8 +110,20 @@ class UserPreferences(ObservableObject):
 
     @log_location.setter
     def log_location(self, value: str) -> None:
-        self._log_location = self._on_property_changed("log_location", value, self.log_location)
+        self._log_location = self._on_property_changed(self.LOG_LOCATION, value, self.log_location)
         self._settings.setValue("system/log_location", self._log_location)
+
+    @property
+    def selected_animal(self) -> str:
+        return self._selected_animal
+
+    @selected_animal.setter
+    def selected_animal(self, value: str):
+        # set new value first,
+        prev, self._selected_animal = self._selected_animal, value
+        # then eventually trigger the on_property_changed event:
+        self._on_property_changed(self.SELECTED_ANIMAL, value, prev)
+        self._settings.setValue("system/selected_animal", value)
 
     @property
     def animal_location(self) -> str:
@@ -105,7 +131,7 @@ class UserPreferences(ObservableObject):
 
     @animal_location.setter
     def animal_location(self, value: str) -> None:
-        self._animal_location = self._on_property_changed("animal_location", value, self.animal_location)
+        self._animal_location = self._on_property_changed(self.ANIMAL_LOCATION, value, self.animal_location)
         self._settings.setValue("system/animal_location", self._animal_location)
 
     @property
@@ -114,7 +140,7 @@ class UserPreferences(ObservableObject):
 
     @log_level.setter
     def log_level(self, value: int):
-        self._log_level = self._on_property_changed("log_level", value, self.log_level)
+        self._log_level = self._on_property_changed(self.LOG_LEVEL, value, self.log_level)
         self._settings.setValue("system/log_level", self._log_level)
 
     # Transient Values
@@ -125,7 +151,7 @@ class UserPreferences(ObservableObject):
 
     @pellet_port.setter
     def pellet_port(self, value: str):
-        self._pellet_port = self._on_property_changed("pellet_port", value, self.pellet_port)
+        self._pellet_port = self._on_property_changed(self.PELLET_PORT, value, self.pellet_port)
 
     @property
     def tunnel_port(self) -> str:
@@ -133,7 +159,7 @@ class UserPreferences(ObservableObject):
 
     @tunnel_port.setter
     def tunnel_port(self, value: str):
-        self._tunnel_port = self._on_property_changed("tunnel_port", value, self.tunnel_port)
+        self._tunnel_port = self._on_property_changed(self.TUNNEL_PORT, value, self.tunnel_port)
 
     @property
     def remove_raw_data_when_inactive_session(self) -> bool:
@@ -142,4 +168,4 @@ class UserPreferences(ObservableObject):
     @remove_raw_data_when_inactive_session.setter
     def remove_raw_data_when_inactive_session(self, value):
         self._remove_raw_data_when_inactive_session = self._on_property_changed(
-            "remove_raw_data_when_inactive_session", value, self._remove_raw_data_when_inactive_session)
+            self.REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION, value, self._remove_raw_data_when_inactive_session)

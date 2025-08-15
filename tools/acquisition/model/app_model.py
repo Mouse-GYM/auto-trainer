@@ -134,6 +134,7 @@ class AppModel(ObservableObject):
         self._hardware.property_changed += self._on_hardware_property_changed
         self._behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
         self._behavior.property_changed += self._on_behavior_property_changed
+        preferences.property_changed += self._on_preferences_property_changed
 
         self._load_animals()
 
@@ -198,11 +199,13 @@ class AppModel(ObservableObject):
         return self._selected_animal
 
     @selected_animal.setter
-    def selected_animal(self, value: Optional[AnimalSubject]):
-        selected_animal = self._selected_animal = self._on_property_changed("selected_animal", value, self._selected_animal)
-        if selected_animal is not None:
+    def selected_animal(self, selected_animal: Optional[AnimalSubject]):
+        prev, self._selected_animal = self._selected_animal, selected_animal
+        self._on_property_changed("selected_animal", selected_animal, prev)
+        self._preferences.selected_animal = "" if selected_animal is None else selected_animal.name
+        if selected_animal is not None and prev != selected_animal:
             hardware = self.hardware
-            self.property_changed("animal_name", self.animal_name, self.animal_name)
+            self.property_changed("animal_name", selected_animal.name, self.animal_name)
             self.behavior.algorithm.baseline_intensity = selected_animal.baseline_magnet_intensity
             hardware.update_head_magnet_intensity(selected_animal.baseline_magnet_intensity)
             hardware.set_x(self._selected_animal.pellet_x)
@@ -232,6 +235,8 @@ class AppModel(ObservableObject):
 
     @animal_name.setter
     def animal_name(self, value: str):
+        # not used actually
+        self._preferences.selected_animal = value
         self._animal_name = self._on_property_changed("animal_name", value, self._animal_name)
 
     @property
@@ -250,12 +255,11 @@ class AppModel(ObservableObject):
 
         if len(animal) == 0:
             animal = AnimalSubject(name)
-            animal.to_file(str(Path(self._preferences.animal_location).joinpath(f"{name}.json")))
+            animal.to_file(Path(self._preferences.animal_location).joinpath(f"{name}.json"))
 
             # Ensure property change events for listeners
-            animals = self._animals.copy()
+            animals = self._animals.copy()  # not sure why we don't append directly instead of copy+append+setattr
             animals.append(animal)
-
             self.animals = animals
         else:
             animal = animal[0]
@@ -264,6 +268,7 @@ class AppModel(ObservableObject):
             self.selected_animal = animal
 
     def on_capture_start(self) -> bool:
+
         self._project_info = ProjectInfo(root=self.output_location, device_id=self._preferences.serial_number,
                                          ensure_exists=True, camera_1=self._left_camera.name,
                                          camera_2=self._right_camera.name, )
@@ -428,6 +433,7 @@ class AppModel(ObservableObject):
         self._message_handler.start()
 
     def on_close(self):
+        self._preferences.save()
         if self._inference is not None:
             self._inference.terminate()
 
@@ -460,7 +466,13 @@ class AppModel(ObservableObject):
         if path.exists() and path.is_dir():
             files = [x.name for x in path.iterdir() if not x.is_dir() and ".json" in x.name]
             loaded = [AnimalSubject.from_file(str(path.joinpath(x))) for x in files]
-            animals = [x for x in loaded if x is not None]
+            animals = sorted((x for x in loaded if x is not None), key=lambda a: a.name)
+
+        pref_animal = self._preferences.selected_animal
+        for animal in animals:
+            if pref_animal == animal.name:
+                self.selected_animal = animal
+                break
 
         self.animals = animals
 
@@ -470,29 +482,43 @@ class AppModel(ObservableObject):
         if notification.context and self._project_info is not None:
             self._save_metadata(self._project_info.get_metadata_file(-1), self._project_info.session.value)
 
-    def _on_behavior_property_changed(self, name: str, new_value, old_value):
+    @staticmethod
+    def _on_behavior_property_changed(name: str, new_value, old_value):
         logger.debug("behavior property changed: %s: %s -> %s", name, old_value, new_value)
 
+    def _on_preferences_property_changed(self, name: str, new_value, old_value):
+        if name == UserPreferences.SELECTED_ANIMAL:
+            for animal in self._animals:
+                if animal.name == new_value:
+                    self.selected_animal = animal
+                    break
+
     def _on_behavior_algo_property_changed(self, name: str, value, _):
-        if name == BehaviorProps.BASELINE_INTENSITY and self._selected_animal is not None:
+        cur_selected_animal = self._selected_animal
+        if cur_selected_animal is None:
+            return
+        if name == BehaviorProps.BASELINE_INTENSITY:
             self._selected_animal.baseline_magnet_intensity = value
-            self._save_animal_metadata()
+            self._save_animal_metadata(cur_selected_animal)
 
     def _on_hardware_property_changed(self, name: str, value, _):
-        if name == "set_x" and self._selected_animal is not None:
-            self._selected_animal.pellet_x = value
-            self._save_animal_metadata()
-        elif name == "set_y" and self._selected_animal is not None:
-            self._selected_animal.pellet_y = value
-            self._save_animal_metadata()
-        elif name == "set_z" and self._selected_animal is not None:
-            self._selected_animal.pellet_z = value
-            self._save_animal_metadata()
+        cur_selected_animal = self._selected_animal
+        if cur_selected_animal is None:
+            return
+        if name == "set_x":
+            cur_selected_animal.pellet_x = value
+        elif name == "set_y":
+            cur_selected_animal.pellet_y = value
+        elif name == "set_z":
+            cur_selected_animal.pellet_z = value
+        else:
+            return
+        self._save_animal_metadata(cur_selected_animal)
 
-    def _save_animal_metadata(self):
-        if self._selected_animal is not None:
-            self._selected_animal.to_file(
-                str(Path(self._preferences.animal_location).joinpath(f"{self._selected_animal.name}.json")))
+    def _save_animal_metadata(self, animal):
+        if animal is not None:
+            animal.to_file(
+                Path(self._preferences.animal_location).joinpath(f"{animal.name}.json"))
 
     def _create_configuration(self) -> SystemConfiguration:
         hardware_configuration = HardwareConfiguration(tunnel_identifier=self._hardware.tunnel_identifier,
