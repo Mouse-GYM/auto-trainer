@@ -1,14 +1,20 @@
 from typing import Protocol
 
-from autotrainer.core import MotorConfigurations
+
+from autotrainer.core import MotorConfigurations, Offset3DTuple, Motor
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.device import MotorConfigurationFile, CompoundMovementFile
+from autotrainer.device import MotorConfigurationFile, CompoundMovementFile, Device
 from autotrainer.device.motor_steps import CompoundMovementDataSet
 
 logger = get_verbose_logger(__name__)
 
 
 class DeviceConnectionProtocol(Protocol):
+
+    @property
+    def device(self) -> Device:
+        """Get the associated physical device"""
+
     @property
     def read_limit(self) -> int: ...
 
