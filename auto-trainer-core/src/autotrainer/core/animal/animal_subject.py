@@ -1,6 +1,9 @@
 import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +20,7 @@ class AnimalSubject:
     pellet_z: int = 0
 
     @classmethod
-    def from_file(cls, file_path: str):
+    def from_file(cls, file_path: str) -> Optional[Self]:
         animal = AnimalSubject()
 
         with open(file_path, "r") as file:
@@ -39,7 +42,7 @@ class AnimalSubject:
 
         return animal
 
-    def to_file(self, file_path: str):
+    def to_file(self, file_path: Path):
         data = {
             "name": self.name,
             "baseline_magnet_intensity": self.baseline_magnet_intensity,
@@ -47,6 +50,5 @@ class AnimalSubject:
             "pellet_y": self.pellet_y,
             "pellet_z": self.pellet_z
         }
-
-        with open(file_path, "w") as file:
-            json.dump(data, file)
+        with file_path.open("w") as fh:
+            json.dump(data, fh)
