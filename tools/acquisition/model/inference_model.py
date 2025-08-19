@@ -334,8 +334,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             else:
                 logger.notice("Setting inference back to online with SWITCH_TO_ONLINE")
                 empty = numpy.zeros(offline_queue.shape, dtype=numpy.uint8)
-                # should pad in caes the cams index are unsync...
-                self._offline_queue.pad_to_batch_size(empty)
+                # should pad in case the cams index are unsync...
+                # self._offline_queue.pad_to_batch_size(empty)
+                # NO: the offline queue should be always sync, as only 1 writer at the same time.
                 self._offline_queue.put_frame_index_category(empty, FrameIndexCategory.SWITCH_TO_ONLINE)
 
     def start(self, network_queue: FixedArrayMultiQueue) -> bool:
@@ -899,7 +900,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                                 frame_idx = cam_fr_indices[fx]
                                 if frame_idx < 0:  # == FrameIndexCategory.PADDING:
                                     __debug__ and \
-                                    logger.debug("cam-%s : fx=%s got negative frame idx: %s",
+                                    logger.spam("cam-%s : fx=%s got negative frame idx: %s",
                                                  cdx, fx, cam_fr_indices)
                                     continue
                                     # break
@@ -963,11 +964,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # in any case sleep a bit to allow pose process to finishes consume:
         offline_q = self._offline_queue
         empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
+        # NO:
         # eventual pad current batch of each cam:
-        offline_q.pad_to_batch_size(empty_frame)
+        # offline_q.pad_to_batch_size(empty_frame)
+        # the main feed loop already ensures same nbr of frames is sent for each cam.
         # also post a EOF_OFFLINE_PROCESSING or SWITCH_TO_ONLINE to notify pose process
         # when it has reached end of offline processing:
-        self._offline_queue.put_frame_index_category(
+        offline_q.put_frame_index_category(
             empty_frame,
             FrameIndexCategory.EOF_OFFLINE_PROCESSING if got_error is None
             else FrameIndexCategory.SWITCH_TO_ONLINE,
@@ -981,6 +984,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # it is/must be done by monitor data thread
 
     def __feed_intersession_analysis(self, intersession_block):
+        offline_q = self._offline_queue
         cams = (self._project.camera_1, self._project.camera_2)
         n_cams = len(cams)
         cur_session_nbr = self._project.session.value
@@ -1112,7 +1116,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                     tot_skipped_frames += skipped
 
                 if all_read[cdx]:
-                    cams_sent_frame_count[cdx] += 1
                     self._offline_queue.put_block(empty_frame, cdx, FrameIndexCategory.PADDING)
                 else:
                     if not self._put_intersession_frame(cam_capture, cdx, cams_frame_idx[cdx]):
@@ -1120,9 +1123,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                         self._offline_queue.put_block(empty_frame, cdx, FrameIndexCategory.PADDING)
                         # if we prematurely reach the end of the video stream then give a padding instead
                     else:
-                        cams_sent_frame_count[cdx] += 1
                         frames_idx_sent[cdx].append(cams_frame_idx[cdx])
                         cams_frame_idx[cdx] += 1
+                cams_sent_frame_count[cdx] += 1
             # end for cdx ...
             if all(all_read):
                 logger.info("reached end of all video cams: %s ; frame_idx=%s", all_read, frame_idx)
@@ -1130,6 +1133,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
             frame_idx += 1
         # end while frame_idx < tot_frames_to_process
+
+        # need to pad the current batch
+        missing_for_batch = (offline_q.frames_per_camera - frame_idx % offline_q.frames_per_camera) % offline_q.frames_per_camera
+        for _ in range(missing_for_batch):
+            for cdx in range(n_cams):
+                offline_q.put_block(empty_frame, cdx, FrameIndexCategory.PADDING)
 
         if _local_do_debug:
             for cdx in range(n_cams):
