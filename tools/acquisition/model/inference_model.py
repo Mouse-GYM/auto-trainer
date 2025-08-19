@@ -1135,7 +1135,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # end while frame_idx < tot_frames_to_process
 
         # need to pad the current batch
-        missing_for_batch = (offline_q.frames_per_camera - frame_idx % offline_q.frames_per_camera) % offline_q.frames_per_camera
+        # we've written same nbr of frames to all cams, so can use cams_sent_frame_count[0]
+        missing_for_batch = (offline_q.frames_per_camera - cams_sent_frame_count[0] % offline_q.frames_per_camera) % offline_q.frames_per_camera
         for _ in range(missing_for_batch):
             for cdx in range(n_cams):
                 offline_q.put_block(empty_frame, cdx, FrameIndexCategory.PADDING)
