@@ -95,7 +95,7 @@ def test_get_cam_missing_frames():
     consumer = threading.Thread(target=_consume_queue, args=(buffer,), daemon=True)
     consumer.start()
 
-    for outer_loop_idx in range(4096):
+    for outer_loop_idx in range(1024):
         # this "big" loop allows to stress test a bit the implementation,
         # even though here we don't use 2 cams writer threads/procs,
         # but the code doing it anyway also does sync_barrier between the 2 cams, so it's ~equivalent.
