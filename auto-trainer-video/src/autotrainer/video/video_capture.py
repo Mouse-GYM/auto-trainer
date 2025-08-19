@@ -399,15 +399,17 @@ class VideoCapture(Process):
                         record_q.put([(frame, when, perf_now_ns)])  # thread queue
                         record_q_list = self._record_queue_list = []
                         if net_q is not None:
-                            sync_barrier()
-                            d = net_q.get_cam_missing_frames(self._camera_idx)
-                            sync_barrier()
-                            timeout = 10
-                            for _ in range(d):
-                                t0 = time.perf_counter()
-                                net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING,
-                                                timeout=timeout)
-                                timeout -= time.perf_counter() - t0
+                            pass
+                            # we are supposed already sync at this time
+                            # sync_barrier()
+                            # d = net_q.get_cam_missing_frames(self._camera_idx)
+                            # sync_barrier()
+                            # timeout = 10
+                            # for _ in range(d):
+                            #     t0 = time.perf_counter()
+                            #     net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING,
+                            #                     timeout=timeout)
+                            #     timeout -= time.perf_counter() - t0
                         #
                         primary_release()
 
@@ -440,6 +442,13 @@ class VideoCapture(Process):
                             # time.sleep(0.2)
                             # this is to help ensure consumer has finished reading current frames that are already pushed
                             # is not big issue to sleep here given this is not hot code path
+
+                            sync_barrier()
+                            # set the tot_frames in different sync_barrier session than the next get_cam_missing_frames
+                            net_q.set_cam_tot_frames(self._camera_idx, cnt_net_q_put)
+                            cnt_net_q_put = 0
+                            # convenience: can set back to 0 given will now be same in all cams,
+                            # and also aligned with frames_per_camera_per_batch
 
                             sync_barrier()
                             d = net_q.get_cam_missing_frames(self._camera_idx)

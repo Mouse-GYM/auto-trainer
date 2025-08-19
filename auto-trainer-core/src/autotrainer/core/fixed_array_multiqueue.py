@@ -92,6 +92,11 @@ class FixedArrayMultiQueue:
             for _ in range(self._cam_count)
         ]
 
+        self._cams_tot_frames = [
+            mp_ctx.Value(ctypes.c_int64)
+            for _ in range(self._cam_count)
+        ]
+
         # a single shared array for all frames indices of all cameras:
         self._frame_indices = mp_ctx.RawArray(ctypes.c_int64, self._depth * self._frames_per_camera * self._cam_count)
 
@@ -141,6 +146,11 @@ class FixedArrayMultiQueue:
     def buffer_index(self) -> int:
         return self._buffer_index[0]
 
+    def set_cam_tot_frames(self, cam_idx: int, tot_frames: int):
+        """Set the total nbr of frames for cam_idx for eventual sync between camera writers"""
+        # See self.get_cam_missing_frames()
+        self._cams_tot_frames[cam_idx].value = tot_frames
+
     def reset_writer(self, cam_idx: int):
         self._buffer_index[cam_idx] = 0
         self._batch_index[cam_idx] = 0
@@ -176,40 +186,14 @@ class FixedArrayMultiQueue:
     def get_cam_missing_frames(self, cam_idx: int) -> int:
         """Returns the number of missing frame for camera idx,
         to fill in the batch up to the max camera writer"""
-        cams_dirty = [
-            sum(map(int, self.get_dirty(cdx)))
-            for cdx in range(self.camera_count)
-        ]
-        max_dirty = max(cams_dirty)
-        reminder_max_dirty = max_dirty % self._frames_per_camera
-        missing_frames_for_max = (self._frames_per_camera - reminder_max_dirty) % self._frames_per_camera
-        logger.debug("get_cam_missing_frames: %s", cams_dirty)
-        max_dirty += missing_frames_for_max  # add what's missing to the max to make it fill an entire batch
-        # and the final result is the diff between the corrected max dirty and the current cams dirty
-        return max_dirty - cams_dirty[cam_idx]
-
-    def get_dirty(self, cam_idx):
-        return list(self._is_dirty[cam_idx])
-
-    def get_all_cam_max_frame_idx(self, camera_idx: int):
-        b = numpy.frombuffer(
-            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
-        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
-        all_max = b.max()
-        cam_max = b[camera_idx].max()
-        return all_max, cam_max
-
-    def get_cam_frame_idx(self, camera_idx: int):
-        b = numpy.frombuffer(
-            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
-        ).reshape((self._cam_count, self._depth, self._frames_per_camera))[camera_idx]
-        return b.max()
-
-    def get_max_frame_idx(self):
-        b = numpy.frombuffer(
-            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
-        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
-        return b.max()
+        tot_puts = [self._cams_tot_frames[cdx].value for cdx in range(self._cam_count)]
+        max_tot_put = max(tot_puts)
+        reminder_max = max_tot_put % self._frames_per_camera
+        missing_max = (self._frames_per_camera - reminder_max) % self._frames_per_camera
+        max_tot_put += missing_max
+        res = max_tot_put - tot_puts[cam_idx]
+        logger.debug("get_cam_missing_frames(%s): res=%s tot_puts=%s", cam_idx, res, tot_puts)
+        return res
 
     def put_block(self, content: numpy.ndarray, camera: int, frame_idx: int, *, timeout: float=10):
         timeout = time.perf_counter() + timeout
@@ -286,6 +270,7 @@ class FixedArrayMultiQueue:
                 (self._cam_count, self._depth, self._frames_per_camera)
             )[:, read_idx_value, :]
 
+        # set dirty flag back to False for what we've read:
         dx = read_idx_value * self._frames_per_camera
         for cdx in range(self._cam_count):
             self._is_dirty[cdx][dx : dx + self._frames_per_camera] = [False] * self._frames_per_camera
