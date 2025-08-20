@@ -1,7 +1,7 @@
 from typing import Dict
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QSurfaceFormat, QBrush, QPixmap, QPen
+from PySide6.QtGui import QImage, QSurfaceFormat, QBrush, QPixmap, QPen, QPainter, QFont
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QHBoxLayout, QGraphicsPixmapItem, \
     QGraphicsEllipseItem
@@ -85,10 +85,17 @@ class QGLImageView(QWidget):
         self._raw_img_scale_w = scale_w
         self._raw_img_scale_h = scale_h
 
-    def set_data(self, image: QImage):
+    def set_data(self, image: QImage, text_overlay: str=""):
         # retain a ref the used image to keep it alive after calling function also return
         self._cur_image = image
         pixmap = QPixmap.fromImage(image)
+        if text_overlay:
+            painter = QPainter(pixmap)
+            font = QFont("Times", 14)
+            painter.setFont(font)
+            painter.setPen(Qt.GlobalColor.yellow)
+            with painter:
+                painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, text_overlay)
         if self._pixmap is None:
             self._pixmap = QGraphicsPixmapItem(pixmap)
             self._pixmap.setZValue(0)

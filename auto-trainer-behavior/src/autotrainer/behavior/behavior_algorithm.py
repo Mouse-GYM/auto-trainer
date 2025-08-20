@@ -50,7 +50,7 @@ class CheckElementDistanceContext:
     error_start_timestamp: Optional[float] = None
 
 
-class BehaviorProps(str, Enum):
+class BehaviorAlgoProps(str, Enum):
     AUTO_CLAMP_INTENSITY = 'auto_clamp_intensity'
     BASELINE_INTENSITY = 'baseline_intensity'
     DAY_PELLET_COUNT = 'day_pellet_count'
@@ -65,6 +65,8 @@ class BehaviorProps(str, Enum):
     COVER_SERVO_STATUS = 'cover_servo_status'
     COVER_PELLET_DISTANCE = "cover_pellet_distance"
     RELEASE_PELLET_DISTANCE = "release_pellet_distance"
+
+    INTERSESSION_STATE = 'intersession_state'
 
 
 class BehaviorAlgorithm(ObservableObject):
@@ -146,14 +148,14 @@ class BehaviorAlgorithm(ObservableObject):
         self._diamond_triangle_last_drift_warned = time.time()
 
         self._cover_pellet_distance_ctx = CheckElementDistanceContext(
-            distance_property_name=BehaviorProps.COVER_PELLET_DISTANCE,
+            distance_property_name=BehaviorAlgoProps.COVER_PELLET_DISTANCE,
             error_distance_threshold=cover_error_min_distance_threshold,
             error_min_duration_threshold=cover_release_min_duration_threshold,
             error_way=CheckThresholdWay.TRIGGER_IF_SMALLER,
             cover_servo_status=CoverServoStatus.COVER_POSITION_ERROR,
         )
         self._release_pellet_distance_ctx = CheckElementDistanceContext(
-            distance_property_name=BehaviorProps.RELEASE_PELLET_DISTANCE,
+            distance_property_name=BehaviorAlgoProps.RELEASE_PELLET_DISTANCE,
             error_distance_threshold=release_error_min_distance_threshold,
             error_min_duration_threshold=cover_release_min_duration_threshold,
             error_way=CheckThresholdWay.TRIGGER_IF_GREATER,
@@ -190,7 +192,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @intersession_state.setter
     def intersession_state(self, value: IntersessionState):
-        self._intersession_state = value
+        self._intersession_state = self._on_property_changed(BehaviorAlgoProps.INTERSESSION_STATE, value, self._intersession_state)
 
     @property
     def is_in_session(self) -> bool:
@@ -202,7 +204,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @pellet_delivery_enabled.setter
     def pellet_delivery_enabled(self, value: bool):
-        self._pellet_delivery_enabled = self._on_property_changed(BehaviorProps.PELLET_DELIVERY_ENABLED,
+        self._pellet_delivery_enabled = self._on_property_changed(BehaviorAlgoProps.PELLET_DELIVERY_ENABLED,
                                                                   value, self._pellet_delivery_enabled)
 
     @property
@@ -211,7 +213,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @pellet_cover_enabled.setter
     def pellet_cover_enabled(self, value: bool):
-        self._pellet_cover_enabled = self._on_property_changed(BehaviorProps.PELLET_COVER_ENABLED,
+        self._pellet_cover_enabled = self._on_property_changed(BehaviorAlgoProps.PELLET_COVER_ENABLED,
                                                                value, self._pellet_cover_enabled)
 
     @property
@@ -220,7 +222,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @intersession_enabled.setter
     def intersession_enabled(self, value: bool):
-        self._intersession_enabled = self._on_property_changed(BehaviorProps.INTERSESSION_ENABLED,
+        self._intersession_enabled = self._on_property_changed(BehaviorAlgoProps.INTERSESSION_ENABLED,
                                                                value, self._intersession_enabled)
 
     @property
@@ -230,7 +232,7 @@ class BehaviorAlgorithm(ObservableObject):
     @intersession_pellet_shift_enabled.setter
     def intersession_pellet_shift_enabled(self, value: bool):
         self._intersession_pellet_shift_enabled = self._on_property_changed(
-            BehaviorProps.INTERSESSION_PELLET_SHIFT_ENABLED,
+            BehaviorAlgoProps.INTERSESSION_PELLET_SHIFT_ENABLED,
             value,
             self._intersession_pellet_shift_enabled)
 
@@ -241,7 +243,7 @@ class BehaviorAlgorithm(ObservableObject):
     @head_fixation_enabled.setter
     def head_fixation_enabled(self, value: bool):
         old_value = self._head_fixation_enabled
-        self._head_fixation_enabled = self._on_property_changed(BehaviorProps.HEAD_FIXATION_ENABLED,
+        self._head_fixation_enabled = self._on_property_changed(BehaviorAlgoProps.HEAD_FIXATION_ENABLED,
                                                                 value, self._head_fixation_enabled)
         if old_value != self._head_fixation_enabled:
             logger.info(f"auto-clamp enabled changed to: {self._head_fixation_enabled}")
@@ -262,7 +264,7 @@ class BehaviorAlgorithm(ObservableObject):
     def baseline_intensity(self, value):
         if value != self._baseline_intensity:
             EventManager.default().post_event_content(BehaviorEventKind.headfixBaselineChanged, context=value)
-            self._baseline_intensity = self._on_property_changed(BehaviorProps.BASELINE_INTENSITY,
+            self._baseline_intensity = self._on_property_changed(BehaviorAlgoProps.BASELINE_INTENSITY,
                                                                  value, self._baseline_intensity)
 
     @property
@@ -271,7 +273,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @auto_clamp_intensity.setter
     def auto_clamp_intensity(self, value):
-        self._auto_clamp_intensity = self._on_property_changed(BehaviorProps.AUTO_CLAMP_INTENSITY,
+        self._auto_clamp_intensity = self._on_property_changed(BehaviorAlgoProps.AUTO_CLAMP_INTENSITY,
                                                                value, self._auto_clamp_intensity)
         EventManager.default().post_event_content(BehaviorEventKind.autoClampIntensityChanged, context=value)
 
@@ -322,7 +324,7 @@ class BehaviorAlgorithm(ObservableObject):
     @day_pellet_count.setter
     def day_pellet_count(self, value: int):
         prev_value = self._day_pellet_count
-        self._day_pellet_count = self._on_property_changed(BehaviorProps.DAY_PELLET_COUNT,
+        self._day_pellet_count = self._on_property_changed(BehaviorAlgoProps.DAY_PELLET_COUNT,
                                                            value, self._day_pellet_count)
         incr = value - prev_value
         if incr > 0:
@@ -337,7 +339,7 @@ class BehaviorAlgorithm(ObservableObject):
     @session_pellet_count.setter
     def session_pellet_count(self, value):
         prev = self._session_pellet_count
-        self._session_pellet_count = self._on_property_changed(BehaviorProps.SESSION_PELLET_COUNT,
+        self._session_pellet_count = self._on_property_changed(BehaviorAlgoProps.SESSION_PELLET_COUNT,
                                                                value, self._session_pellet_count)
         incr = value - prev
         if incr > 0:
@@ -379,7 +381,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @cover_servo_status.setter
     def cover_servo_status(self, status: CoverServoStatus):
-        self._cover_servo_status = self._on_property_changed(BehaviorProps.COVER_SERVO_STATUS,
+        self._cover_servo_status = self._on_property_changed(BehaviorAlgoProps.COVER_SERVO_STATUS,
                                                              status, self._cover_servo_status)
         if status is CoverServoStatus.OK:
             logger.notice("Set cover servo status to %s", status)
@@ -541,7 +543,7 @@ class BehaviorAlgorithm(ObservableObject):
                     self._diamond_triangle_last_drift_warned = t_now
         if prev != drift:
             self.pellet_motor_drift_changed(drift)
-        self._diamond_triangle_prev_drift = self._on_property_changed(BehaviorProps.PELLET_MOTOR_DRIFT, drift, prev)
+        self._diamond_triangle_prev_drift = self._on_property_changed(BehaviorAlgoProps.PELLET_MOTOR_DRIFT, drift, prev)
 
     def handle_cover_pellet_offset(self, offset: Offset3DTuple):
         self._handle_check_element_distance(self._cover_pellet_distance_ctx, offset)
@@ -583,7 +585,7 @@ class BehaviorAlgorithm(ObservableObject):
                 new_status = CoverServoStatus(prev_status | ctx.cover_servo_status)
                 self.cover_servo_status_changed(new_status)
                 self._cover_servo_status = self._on_property_changed(
-                    BehaviorProps.COVER_SERVO_STATUS, new_status, prev_status)
+                    BehaviorAlgoProps.COVER_SERVO_STATUS, new_status, prev_status)
 
     def _start_day(self):
         self._day_pellet_count = 0

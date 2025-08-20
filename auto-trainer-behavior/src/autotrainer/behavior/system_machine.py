@@ -14,7 +14,7 @@ from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement
 
 from .analysis.intersession_process import IntersessionResponse
-from .behavior_algorithm import BehaviorAlgorithm, BehaviorProps
+from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
 from .behavior_event_kind import BehaviorEventKind
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine, IntersessionState
@@ -402,7 +402,7 @@ class SystemMachine(StateMachine):
                     timer = _auto_clamp_release_timer(self.algorithm.auto_clamp_release_delay,
                                   lambda: self._update_magnet_position(self.algorithm.baseline_intensity))
                     timer.start()
-        elif name == BehaviorProps.PELLET_MOTOR_DRIFT:
+        elif name == BehaviorAlgoProps.PELLET_MOTOR_DRIFT:
             if new_value is not None:
                 self._pellet_device.set_motor_drift(new_value)
 

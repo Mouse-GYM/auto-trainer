@@ -11,6 +11,7 @@ from typing import Optional, List
 
 import yaml
 
+from autotrainer.behavior import IntersessionState, SystemState
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, MessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
@@ -22,8 +23,8 @@ from autotrainer.core.configuration import SystemConfigurationDumper
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.analysis.config import load_calib_stereo_params
-from autotrainer.inference import PoseAlgorithm
-from autotrainer.behavior.behavior_algorithm import BehaviorProps
+from autotrainer.inference import PoseAlgorithm, InferenceStatus
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.video.detection import PresenceDetectionAttrs
 
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -135,6 +136,7 @@ class AppModel(ObservableObject):
         self._behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
         self._behavior.property_changed += self._on_behavior_property_changed
         preferences.property_changed += self._on_preferences_property_changed
+        self._inference.property_changed += self._on_inference_property_changed
 
         self._load_animals()
 
@@ -497,9 +499,15 @@ class AppModel(ObservableObject):
         cur_selected_animal = self._selected_animal
         if cur_selected_animal is None:
             return
-        if name == BehaviorProps.BASELINE_INTENSITY:
+        if name == BehaviorAlgoProps.BASELINE_INTENSITY:
             self._selected_animal.baseline_magnet_intensity = value
             self._save_animal_metadata(cur_selected_animal)
+        elif name == BehaviorAlgoProps.INTERSESSION_STATE:
+            left_cam = self._left_camera
+            if value != IntersessionState.idle:
+                left_cam.text_overlay = f"Intersession: {value}"
+            else:
+                left_cam.text_overlay = None
 
     def _on_hardware_property_changed(self, name: str, value, _):
         cur_selected_animal = self._selected_animal
@@ -514,6 +522,24 @@ class AppModel(ObservableObject):
         else:
             return
         self._save_animal_metadata(cur_selected_animal)
+
+    def _on_inference_property_changed(self, name: str, new_value, old_value):
+        if name == InferenceModel.STATUS:
+            algo = self._behavior.algorithm
+            new_is_live = new_value == InferenceStatus.live
+            left_cam = self._left_camera
+            left_cam.display_dots_detection = new_is_live
+            self._right_camera.display_dots_detection = new_is_live
+            if new_is_live:
+                if algo.intersession_state == IntersessionState.idle:
+                    left_cam.text_overlay = None
+                else:
+                    left_cam.text_overlay = f"Intersession: {algo.intersession_state}"
+            else:
+                if algo.intersession_state == IntersessionState.idle:
+                    left_cam.text_overlay = f"Inference: {new_value}"
+                else:
+                    left_cam.text_overlay = f"Intersession: {algo.intersession_state}"
 
     def _save_animal_metadata(self, animal):
         if animal is not None:

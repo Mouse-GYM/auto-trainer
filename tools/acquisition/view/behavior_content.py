@@ -2,7 +2,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QLabel, QFileDialog, QWidget, QVBoxLayout,
                                QHBoxLayout, QStackedLayout, QGridLayout, QSpinBox, QPushButton)
 
-from autotrainer.behavior.behavior_algorithm import BehaviorProps
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.pyside import CardWidget, QSwitch
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
@@ -188,15 +188,15 @@ class BehaviorContent(ContentWidget):
             self._inference_model.model_location = dirname
 
     def _algorithm_property_changed(self, name, value, _):
-        if name == BehaviorProps.PELLET_DELIVERY_ENABLED:
+        if name == BehaviorAlgoProps.PELLET_DELIVERY_ENABLED:
             self._pellet_delivery_toggle.setChecked(value)
-        elif name == BehaviorProps.PELLET_COVER_ENABLED:
+        elif name == BehaviorAlgoProps.PELLET_COVER_ENABLED:
             self._pellet_cover_toggle.setChecked(value)
-        elif name == BehaviorProps.BASELINE_INTENSITY:
+        elif name == BehaviorAlgoProps.BASELINE_INTENSITY:
             self._baseline.setText(f"{value}%")
-        elif name == BehaviorProps.HEAD_FIXATION_ENABLED:
+        elif name == BehaviorAlgoProps.HEAD_FIXATION_ENABLED:
             self._auto_clamp_threshold.setEnabled(value)
-        elif name == BehaviorProps.INTERSESSION_PELLET_SHIFT_ENABLED:
+        elif name == BehaviorAlgoProps.INTERSESSION_PELLET_SHIFT_ENABLED:
             self._allow_intersession_shift_toggle.setChecked(value)
 
     def _behavior_model_property_changed(self, name, value, _):
