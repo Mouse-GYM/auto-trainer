@@ -108,6 +108,9 @@ class BehaviorAlgorithm(ObservableObject):
         self._day_pellet_count = 0
 
         self._is_in_session = False
+        self._in_session_reason = "NA"
+        self._out_session_reason = "NA"
+
         self._session_pellet_count = 0
         self._session_mouse_seen = False
         self._pellet_seen = False
@@ -385,16 +388,18 @@ class BehaviorAlgorithm(ObservableObject):
     def diamond_triangle_known_offset(self):
         return self._diamond_triangle_known_offset
 
-    def start_session(self):
+    def start_session(self, *, reason: str="NA"):
         with self._thread_lock:
-            self._start_session()
+            self._start_session(reason=reason)
 
-    def _start_session(self):
+    def _start_session(self, *, reason: str):
         if self._is_in_session:
-            logger.warning("start_session() called but already in session")
+            logger.warning("%s: start_session() called but already in session (%s)",
+                           reason, self._in_session_reason)
             return
-        logger.notice("Starting new session recording ...")
+        logger.success("%s: starting new session recording ...", reason)
         self._is_in_session = True
+        self._in_session_reason = reason
         self._session_pellet_count = 0
 
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
@@ -413,16 +418,18 @@ class BehaviorAlgorithm(ObservableObject):
 
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
 
-    def end_session(self):
+    def end_session(self, *, reason: str="NA"):
         with self._thread_lock:
-            self._end_session()
+            self._end_session(reason=reason)
 
-    def _end_session(self):
+    def _end_session(self, *, reason: str):
         if not self._is_in_session:
-            logger.warning("end_session() called but not in session", stack_info=True)
+            logger.warning("%s: end_session() called but not in session (out reason: %s)",
+                           reason, self._out_session_reason)
             return
         self._is_in_session = False
-        logger.success("Stopping session recording ...")
+        self._out_session_reason = reason
+        logger.success("%s: stopping session recording", reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
         post_trigger_enable(self, False)
         self.session_ending()
