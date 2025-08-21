@@ -1,5 +1,5 @@
 import dataclasses
-import logging
+import logging.config
 import multiprocessing
 import operator
 import os
@@ -25,7 +25,7 @@ import verboselogs
 from autotrainer.core import FixedArrayMultiQueue, ObservableObject, ProjectInfo, EventManager, clear_queue, \
     InferenceConfiguration, Offset3DTuple
 from autotrainer.core.fixed_array_queue import BufferResult
-from autotrainer.core.logging import get_verbose_logger, setup_logging
+from autotrainer.core.logging import get_verbose_logger, setup_logging, get_multiprocess_log_queue, make_log_dict_config
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
     intersession_process, BehaviorEventKind, InferenceProtocol
 from autotrainer.core.message import FrameIndexCategory
@@ -1182,9 +1182,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         project: ProjectInfo,
         *,
         calib_dir: Optional[Path],
-        logger_level=verboselogs.VERBOSE,
     ):
-        setup_logging("autotrainer", logger_level=logger_level)
         return intersession_process(project, calib_dir=calib_dir)
 
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
@@ -1192,7 +1190,21 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # multiprocess does not accept to pass shared value other than inheritance,
         # so get the value and assign it as SessionRawInt (which discard the shared value reference)
         project.session = SessionRawInt(project.session.value)
-        with multiprocessing.Pool(processes=1) as pool:
+
+        log_q = get_multiprocess_log_queue()
+        if log_q is not None:
+            log_dict_config = make_log_dict_config(root_log_level=logging.root.level, log_queue=log_q)
+            pool_initfunc = logging.config.dictConfig
+            pool_initargs = (log_dict_config,)
+        else:
+            pool_initfunc = setup_logging
+            pool_initargs = ()
+
+        with multiprocessing.Pool(
+            processes=1,
+            initializer=pool_initfunc,
+            initargs=pool_initargs,
+        ) as pool:
             try:
                 async_res = pool.apply_async(self._launch_intersession_process,
                                              args=(project,),

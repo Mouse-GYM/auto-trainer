@@ -28,9 +28,21 @@ def main():
 
 if __name__ == '__main__':
     faulthandler.enable()
-    multiprocessing.set_start_method("spawn")  # MUST BE SET VERY EARLY BEFORE MOST IMPORTS
+    fork_method = "spawn"  # please check python multiprocessing fork method documentation
+    multiprocessing.set_start_method(fork_method)  # MUST BE SET VERY EARLY BEFORE MOST IMPORTS
     # import autotrainer only AFTER having set mp start method,
     # otherwise it can be set by some other 3rd party dependency.
-    from autotrainer.core.logging import setup_logging
-    logger = setup_logging("autotrainer", logger_level=logging.DEBUG, time_precision=6)
-    sys.exit(main())
+    from autotrainer.core.logging import setup_logging, stop_multiproc_logging
+
+    logger = setup_logging(
+        "autotrainer",
+        # logger_level=logging.DEBUG,
+        time_precision=6,
+        multiprocess_enabled=True,
+        fork_method=fork_method,
+        use_log_queue_handler=True,
+    )
+    try:
+        sys.exit(main())
+    finally:
+        stop_multiproc_logging()

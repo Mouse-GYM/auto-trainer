@@ -307,11 +307,13 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _update_log_level(value: int):
-        logging.getLogger("tools").setLevel(value)
-        logging.getLogger("autotrainer").setLevel(value)
-        logging.getLogger("inference_algorithms").setLevel(value)
-
-        if value == logging.DEBUG:
-            logging.getLogger("transitions").setLevel(logging.INFO)
-        else:
-            logging.getLogger("transitions").setLevel(logging.WARNING)
+        pass
+        # controlled via console and file handlers now
+        # logging.getLogger("tools").setLevel(value)
+        # logging.getLogger("autotrainer").setLevel(value)
+        # logging.getLogger("inference_algorithms").setLevel(value)
+        #
+        # if value == logging.DEBUG:
+        #     logging.getLogger("transitions").setLevel(logging.INFO)
+        # else:
+        #     logging.getLogger("transitions").setLevel(logging.WARNING)

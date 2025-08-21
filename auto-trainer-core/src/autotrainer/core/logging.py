@@ -1,21 +1,51 @@
-import logging
+import copy
+import logging.handlers
+import multiprocessing
 import threading
-from typing import Optional, Dict, Union, TextIO
+from typing import Optional, Dict, Union, TextIO, List
 
 import sys
 import verboselogs
 import coloredlogs
 from datetime import datetime
 
-_already_setup = False
-
 _LogLevelT = Union[str, int]
+
+
+_already_setup = False
+_multiprocess_log_queue: Optional[multiprocessing.Queue] = None
+_queue_listener: Optional[logging.handlers.QueueListener] = None
+_queue_handler: Optional[logging.Handler] = None
+_console_handler: Optional[logging.StreamHandler] = None
+_root_handler = None
+
 
 DEFAULT_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 MULTIPROC_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s[%(processName)s.%(process)d-%(threadName)s.%(thread_id)s] %(message)s"
 
 
+# these loggers can be too verbose:
+_limit_loggers_level = {
+    'botocore': {
+        'level': 'INFO'
+    },
+    'boto3': {
+        'level': 'INFO'
+    },
+    'urllib3': {
+        'level': 'INFO'
+    },
+    'py4j': {
+        'level': 'INFO'
+    },
+    'h5py': {
+        'level': 'INFO'
+    }
+}
+
+
 class DateTimeFormats:
+    # could be an enum eventually
     hour_time_precise = "%H:%M:%S.%f"
     month_day_time_precise = f"%m/%d {hour_time_precise}"
     year_precise = f"%Y/%m/%d {hour_time_precise}"
@@ -52,10 +82,34 @@ def get_verbose_logger(name: Optional[str] = None) -> verboselogs.VerboseLogger:
     return logger
 
 
-def _thread_id_filter(record):
-    """Inject thread_id to log records"""
-    record.thread_id = threading.get_native_id()
-    return record
+def get_root_handler():
+    return _root_handler
+
+def get_console_handler() -> logging.Handler:
+    return _console_handler
+
+def get_multiprocess_log_queue() -> Optional[multiprocessing.Queue]:
+    return _multiprocess_log_queue
+
+
+def get_queue_listener() -> Optional[logging.handlers.QueueListener]:
+    return _queue_listener
+
+
+def get_queue_handler():
+    return _queue_handler
+
+
+class ThreadIdFilter(logging.Filter):
+
+    def filter(self, record):
+        """Inject thread_id to log records"""
+        if not hasattr(record, "thread_id"):
+            record.thread_id = threading.get_native_id()
+        return True
+
+
+thread_id_filter = ThreadIdFilter()
 
 
 class PreciseTimeFormatter(logging.Formatter):
@@ -89,20 +143,55 @@ class ColoredPreciseTimeFormatter(PreciseTimeFormatter, coloredlogs.ColoredForma
     """A colored logger formatter with time precision handling"""
 
 
+def stop_multiproc_logging():
+    global _multiprocess_log_queue, _queue_listener, _queue_handler, _console_handler
+    if _queue_listener is not None:
+        # must be before following log queue close()
+        _queue_listener.stop()
+        _queue_listener = None
+
+    if _multiprocess_log_queue is not None:
+        _multiprocess_log_queue.close()
+        _multiprocess_log_queue.join_thread()
+        _multiprocess_log_queue = None
+
+    if _queue_handler is not None:
+        _queue_handler.close()
+        _queue_handler = None
+
+
+class WithThreadIdQueueListener(logging.handlers.QueueListener):
+    def prepare(self, record):
+        thread_id_filter.filter(record)
+        return record
+
+
+class WithThreadIdQueueHandler(logging.handlers.QueueHandler):
+
+    def prepare(self, record):
+        record = super().prepare(record)
+        thread_id_filter.filter(record)
+        return record
+
+
 def setup_logging(
-    name: str = "main",
+    name: str = "autotrainer",
     *,
     base_logger_name: Optional[str] = None,  # i.e: "root" logger if None
     logger_level: _LogLevelT = logging.NOTSET,
-    root_level: _LogLevelT = logging.INFO,
+    root_level: _LogLevelT = logging.NOTSET,
     log_format: str = MULTIPROC_LOG_FORMAT,
     date_format: str = DateTimeFormats.hour_time_precise,
     time_precision: int = 3,  # for sub seconds precision, nbr of digits after the dot.
     level_styles: Optional[Dict[str, Dict[str, str]]] = None,
     field_styles: Optional[Dict[str, Dict[str, str]]] = None,
     stream: TextIO = sys.stdout,
+    multiprocess_enabled: bool = False,
+    fork_method: str = "spawn",
+    use_log_queue_handler: bool = False,
 ) -> verboselogs.VerboseLogger:
     global _already_setup
+    global _multiprocess_log_queue, _queue_listener, _queue_handler, _console_handler, _root_handler
 
     if _already_setup:
         return get_verbose_logger(name)
@@ -115,8 +204,29 @@ def setup_logging(
     if field_styles is None:
         field_styles = DEFAULT_FIELD_STYLES
     #
-    console_handler = logging.StreamHandler(stream=stream)
-    console_handler.addFilter(_thread_id_filter)
+    stop_multiproc_logging()
+    #
+    console_handler = _console_handler = logging.StreamHandler(stream=stream)
+    #
+    if multiprocess_enabled:
+        # using queue created using the desired fork method context:
+        multiproc_ctx = multiprocessing.get_context(fork_method)
+        _multiprocess_log_queue = log_queue = multiproc_ctx.Queue()
+        listener = WithThreadIdQueueListener(
+            log_queue, console_handler,
+            respect_handler_level=True,
+        )
+        listener.start()
+        _queue_listener = listener  # keep global ref to ensure it stays alive
+        queue_handler = WithThreadIdQueueHandler(log_queue)
+        # queue_handler.setLevel(1)
+        _queue_handler = queue_handler  # keep global ref to ensure it stays alive
+        root_handler = console_handler if not use_log_queue_handler else queue_handler
+    else:
+        root_handler = console_handler
+    _root_handler = root_handler
+    #
+    console_handler.addFilter(thread_id_filter)
     fmt = ColoredPreciseTimeFormatter(
         log_format,
         level_styles=level_styles,
@@ -125,9 +235,7 @@ def setup_logging(
         time_precision=time_precision,
     )
     console_handler.setFormatter(fmt)
-    console_handler.setLevel(logger_level)
-
-    root_handler = console_handler
+    # console_handler.setLevel(logger_level)
 
     base_logger = get_verbose_logger(base_logger_name)
     base_logger.addHandler(root_handler)
@@ -140,14 +248,44 @@ def setup_logging(
     logging.getLogger("autotrainer").setLevel(logger_level)
     logging.getLogger("inference_algorithms").setLevel(logger_level)
 
-    logger = get_verbose_logger(name)
-    logger.setLevel(logger_level)
+    for _limit_name, v in _limit_loggers_level.items():
+        logging.getLogger(_limit_name).setLevel(v["level"])
+
+    desired_logger = get_verbose_logger(name)
+    desired_logger.setLevel(logger_level)
 
     _already_setup = True
 
-    return logger
+    return desired_logger
 
 
 def set_logger_level(context: Dict[str, Union[str, int]]):
     for name, value in context.items():
         logging.getLogger(name).setLevel(value)
+
+
+def make_log_dict_config(*, root_log_level, log_queue):
+    # usable by logging.config.dictConfig
+    dct_cfg = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'handlers': {
+            'queue': {
+                'class': 'autotrainer.core.logging.WithThreadIdQueueHandler',
+                'queue': log_queue,
+                'level': logging.NOTSET,  # pass everything to the listener
+            }
+        },
+        # root logger is here:
+        'root': {
+            'handlers': ['queue'],
+            # with its own level here:
+            'level': logging.NOTSET,  # root_log_level,
+        },
+        # but eventual level of other loggers have to be defined here:
+        'loggers': copy.deepcopy(_limit_loggers_level),
+    }
+    return dct_cfg
+
+
+logger = get_verbose_logger(__name__)

@@ -269,7 +269,7 @@ class CanInterface(DeviceInterface):
             caller_code = caller_frame.f_code
             # Get the name of the function from the code object
             caller_name = caller_code.co_name
-            logger.verbose("next_uuid: caller=%s uuid=%s", caller_name, cls._uuid)
+            logger.debug("next_uuid: caller=%s uuid=%s", caller_name, cls._uuid)
         return cls._uuid
 
     @classmethod

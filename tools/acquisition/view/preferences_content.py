@@ -5,6 +5,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton, \
     QFileDialog, QTabWidget, QVBoxLayout, QCheckBox
 
+from autotrainer.core.logging import get_console_handler
 from autotrainer.device import get_available_hardware
 from autotrainer.model import EnvironmentProvider, HardwareVersion
 from autotrainer.pyside import Separator, HardwarePortComboBox
@@ -213,7 +214,9 @@ class PreferencesContent(QWidget):
 
     def _log_level_changed(self, value):
         if value != -1:
-            self._preferences.log_level = self._log_level_combobox.itemData(value)
+            new_level = self._log_level_combobox.itemData(value)
+            self._preferences.log_level = new_level
+            get_console_handler().setLevel(new_level)
 
     def _log_location_changed(self, value: str):
         self._preferences.log_location = value

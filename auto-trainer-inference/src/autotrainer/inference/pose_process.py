@@ -1,14 +1,14 @@
-import logging
+import logging.config
 import time
 from enum import IntEnum
 from multiprocessing import Process, Queue
 from queue import Empty
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Dict
 
 import numpy
 
 from autotrainer.core import FixedArrayMultiQueue, PerfMonitor
-from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.logging import get_verbose_logger, get_multiprocess_log_queue, make_log_dict_config, setup_logging
 from autotrainer.core.message import FrameIndexCategory
 from .pose_model import PoseModel
 
@@ -73,7 +73,16 @@ class PoseProcess(Process):
         :param cmd_queue: an input Queue for starting, terminating, and changing queues
         :param msg_queue: an output Queue for status and performance messages
         """
-        super().__init__(name=self.__class__.__name__)
+        log_q = get_multiprocess_log_queue()
+        log_dict_config = (
+            None if log_q is None
+            else make_log_dict_config(root_log_level=logging.root.level,
+                                      log_queue=log_q))
+        super().__init__(
+            name=self.__class__.__name__,
+            target=self._do_run,
+            kwargs=dict(log_dict_config=log_dict_config),
+        )
 
         self._model = model
 
@@ -91,9 +100,11 @@ class PoseProcess(Process):
 
         self._process_live_when_ready = False
 
-    def run(self):
-        from autotrainer.core.logging import setup_logging
-        setup_logging(root_level=logging.DEBUG)
+    def _do_run(self, *, log_dict_config: Optional[Dict]):
+        if log_dict_config is None:
+            setup_logging()
+        else:
+            logging.config.dictConfig(log_dict_config)
 
         logger.info("entering pose_predict")
         self._send_message(InferenceStatusMessageKind.Created)
