@@ -46,6 +46,7 @@ class PelletMachine(StateMachine):
         {"trigger": "load_pellet", "source": [PelletState.monitoring, PelletState.covering, PelletState.retract],
          "dest": PelletState.loading, "before": "before_load_pellet", "after": "after_load_pellet",
          "conditions": "can_load_pellet"},
+
         {"trigger": "send_pellet", "source": [PelletState.loading, PelletState.home, PelletState.prerelease, PelletState.retract],
          "dest": PelletState.sending, "before": "before_send_pellet", "conditions": "can_send_pellet"},
 
@@ -213,6 +214,12 @@ class PelletMachine(StateMachine):
         # must release could be set to False.  However, given how critical it is that the pellet is not covered when
         # disabled, go ahead and request a release under all conditions, even though it should be a no-op in that
         # instance.
+        if self._pellet_device is not None:
+            self._pellet_device.delay(1)
+        # this can be called right when cameras have been requested to start,
+        # but camera start is done async, so give a small delay before trying next state,
+        # which would be send_pellet+release pellet,
+        # but could be missed in the video recording given async start of the cams recording.
         self._try_next_state(True, True, caller="session_starting")
 
     def _session_ending(self):

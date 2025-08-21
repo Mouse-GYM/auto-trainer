@@ -10,6 +10,9 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     and state machine.
     """
 
+    def delay(self, amount: float):
+        """Request to delay that amount of seconds"""
+
     def set_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
         """
         Change the X stepper location and set it as the X-axis pellet release location.

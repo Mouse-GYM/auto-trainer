@@ -412,7 +412,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._session_mouse_seen = False
         self._pellet_seen = False
 
-        post_trigger_enable(self, True)
+        post_trigger_enable(self, True)  # NB: this is what trigger the cameras start recording
 
         self.session_starting()
 
