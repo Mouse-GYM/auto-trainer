@@ -394,8 +394,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     def _start_session(self, *, reason: str):
         if self._is_in_session:
-            logger.warning("%s: start_session() called but already in session (%s)",
-                           reason, self._in_session_reason)
+            logger.warning("%s: start_session() called but already in session",
+                           reason)
             return
         logger.success("%s: starting new session recording ...", reason)
         self._is_in_session = True
@@ -427,7 +427,7 @@ class BehaviorAlgorithm(ObservableObject):
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._out_session_reason)
             return
-        self._is_in_session = False
+        self._is_in_session = False  # must be first, to ensure next actions/callbacks don't see it as True
         self._out_session_reason = reason
         logger.success("%s: stopping session recording", reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
