@@ -1,7 +1,7 @@
 from typing import Optional
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol
-from autotrainer.behavior.behavior_algorithm import BehaviorProps
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import ObservableObject, ProjectInfo, MessageHandler, SensorAnalysis, BehaviorConfiguration
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -88,7 +88,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             self.algorithm.baseline_intensity = self._hardware_model.head_magnet_intensity
 
     def _on_algorithm_property_changed(self, property_name: str, value, _):
-        if property_name == BehaviorProps.INTERSESSION_ENABLED:
+        if property_name == BehaviorAlgoProps.INTERSESSION_ENABLED:
             self._is_intersession_enabled = value
 
     def trigger_tunnel(self, value: bool):

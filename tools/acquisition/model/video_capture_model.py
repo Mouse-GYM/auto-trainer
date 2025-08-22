@@ -4,7 +4,7 @@ import pathlib
 import time
 import logging
 from multiprocessing.context import BaseContext
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from multiprocessing import Queue, Value, Array
 from threading import Event
 import urllib
@@ -47,6 +47,18 @@ def create_camera_list():
 
 
 class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
+
+    CAMERA_PROP = "camera"
+    CAMERA_LIST_PROP = "camera_list"
+    IS_ENABLED_PROP = "is_enabled"
+    IS_RECORDING_ENABLED_PROP = "is_recording_enabled"
+    RECORD_MODE_PROP = "record_mode"
+    IS_STILL_CAPTURE_ENABLED_PROP = "is_still_capture_enabled"
+    STILL_IMAGE_CAPTURE_INTERVAL_PROP = "still_image_capture_interval"
+    SHAPE_PROP = "shape"
+    TEXT_OVERLAY_PROP = "text_overlay"
+    DISPLAY_DOTS_DETECTION_PROP = "display_dots_detection"
+
     def __init__(
         self,
         name: str,
@@ -59,6 +71,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
         if mp_ctx is None:
             mp_ctx = get_mp_ctx()
+
+        self._text_overlay: Optional[str] = None
 
         self._id = CameraId.Left
 
@@ -89,6 +103,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._record_rotate_interval = 3600
         self._is_still_capture_enabled = False
         self._still_image_capture_interval = 0.0
+        self._display_dots_detection = True
 
         self._display_update_fcn = None
 
@@ -137,7 +152,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
         self._update_camera_source(value)
 
-        self.property_changed("camera", value, old_value)
+        self.property_changed(self.CAMERA_PROP, value, old_value)
 
     @property
     def is_enabled(self) -> bool:
@@ -145,7 +160,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @is_enabled.setter
     def is_enabled(self, value: bool):
-        self._is_enabled = self._on_property_changed("is_enabled", value, self._is_enabled)
+        self._is_enabled = self._on_property_changed(self.IS_ENABLED_PROP, value, self._is_enabled)
 
     @property
     def is_recording_enabled(self) -> bool:
@@ -153,7 +168,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @is_recording_enabled.setter
     def is_recording_enabled(self, value: bool):
-        self._is_recording_enabled = self._on_property_changed("is_recording_enabled", value,
+        self._is_recording_enabled = self._on_property_changed(self.IS_RECORDING_ENABLED_PROP, value,
                                                                self._is_recording_enabled)
 
     @property
@@ -162,7 +177,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @record_mode.setter
     def record_mode(self, value: VideoRecordMode):
-        self._record_mode = self._on_property_changed("record_mode", value, self._record_mode)
+        self._record_mode = self._on_property_changed(self.RECORD_MODE_PROP, value, self._record_mode)
 
     @property
     def is_still_capture_enabled(self) -> bool:
@@ -170,7 +185,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @is_still_capture_enabled.setter
     def is_still_capture_enabled(self, value: bool):
-        self._is_still_capture_enabled = self._on_property_changed("is_still_capture_enabled", value,
+        self._is_still_capture_enabled = self._on_property_changed(self.IS_STILL_CAPTURE_ENABLED_PROP, value,
                                                                    self._is_still_capture_enabled)
 
     @property
@@ -179,7 +194,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @still_image_capture_interval.setter
     def still_image_capture_interval(self, value: float):
-        self._still_image_capture_interval = self._on_property_changed("still_image_capture_interval", value,
+        self._still_image_capture_interval = self._on_property_changed(self.STILL_IMAGE_CAPTURE_INTERVAL_PROP, value,
                                                                        self._still_image_capture_interval)
 
     @property
@@ -187,7 +202,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         return self._is_primary
 
     @property
-    def shape(self) -> (int, int):
+    def shape(self) -> Tuple[int, int]:
         """
         Be aware this is the shape as seen by the cameras ndarray frames which is row x col not width x height.
         """
@@ -201,11 +216,27 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @shape.setter
     def shape(self, value):
-        self._shape = self._on_property_changed("shape", value, self._shape)
+        self._shape = self._on_property_changed(self.SHAPE_PROP, value, self._shape)
 
     @property
     def last_error(self) -> str:
         return self._last_error
+
+    @property
+    def display_dots_detection(self):
+        return self._display_dots_detection
+
+    @display_dots_detection.setter
+    def display_dots_detection(self, value):
+        self._display_dots_detection = self._on_property_changed(self.DISPLAY_DOTS_DETECTION_PROP, value, self._display_dots_detection)
+
+    @property
+    def text_overlay(self):
+        return self._text_overlay
+
+    @text_overlay.setter
+    def text_overlay(self, value):
+        self._text_overlay = self._on_property_changed(self.TEXT_OVERLAY_PROP, value, self._text_overlay)
 
     @property
     def is_trace_enabled(self) -> bool:
@@ -376,7 +407,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 idx += 1
             source = CaptureCameraAttrs(name=non_duplicate, url=url)
             self._camera_list.insert(0, source)
-            self.property_changed("camera_list", self._camera_list, self._camera_list)
+            self.property_changed(self.CAMERA_LIST_PROP, self._camera_list, self._camera_list)
         else:
             source = existing[0]
 
