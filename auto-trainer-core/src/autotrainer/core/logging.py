@@ -1,7 +1,13 @@
 import copy
+import dataclasses
 import logging.handlers
 import multiprocessing
+import os
+import signal
 import threading
+import time
+from queue import Empty
+from multiprocessing import Process
 from typing import Optional, Dict, Union, TextIO, List
 
 import sys
@@ -74,18 +80,121 @@ DEFAULT_LEVEL_STYLES = dict(
 )
 
 
+@dataclasses.dataclass
+class LogConfig:
+    base_logger_name: Optional[str] = None  # i.e: "root" logger if None
+    logger_level: _LogLevelT = logging.NOTSET
+    root_level: _LogLevelT = logging.NOTSET
+    log_format: str = MULTIPROC_LOG_FORMAT
+    date_format: str = DateTimeFormats.hour_time_precise
+    time_precision: int = 3,  # for sub seconds precision, nbr of digits after the dot.
+    level_styles: Dict[str, Dict[str, str]] = dataclasses.field(default_factory=copy.deepcopy(DEFAULT_LEVEL_STYLES))
+    field_styles: Dict[str, Dict[str, str]] = dataclasses.field(default_factory=copy.deepcopy(DEFAULT_FIELD_STYLES))
+    stream: str = "sys.stdout"
+
+
+class LogQueueListenerProc(Process):
+
+    def __init__(
+        self,
+        log_queue,
+        log_config: LogConfig,
+    ):
+        super().__init__(daemon=True)
+        self._queue = log_queue
+        self._command_queue = multiprocessing.Queue()
+        self._config = log_config
+        self._console_handler = None
+
+    def set_handler_level(self, name, level):
+        self._send_command(("set_handler_level", name, level))
+
+    def _set_handler_level(self, name, level):
+        self._console_handler.setLevel(level)
+
+    def _send_command(self, data):
+        self._command_queue.put(data)
+
+    def add_file_handler(self, path):
+        self._send_command(("add_file_handler", path))
+
+    def _add_file_handler(self, path):
+        logger.info("Adding file handler ...")
+        file_handler = logging.FileHandler(path)
+        file_handler.addFilter(thread_id_filter)
+        file_handler.setFormatter(
+            PreciseTimeFormatter(
+                MULTIPROC_LOG_FORMAT,
+                datefmt=DateTimeFormats.year_precise,
+                time_precision=6,
+            )
+        )
+        file_handler.setLevel(verboselogs.SPAM + 1)  # writes everything up to DEBUG which reaches it
+        logging.root.addHandler(file_handler)
+        logger.info("logging.root..handlers=%s", logging.root.handlers)
+
+    def stop(self):
+        self._send_command(None)
+        os.kill(self.pid, signal.SIGINT)
+        self.join()
+
+    def run(self):
+        cfg = self._config
+        stream = sys.stdout  # for now
+        self._console_handler = console_handler = logging.StreamHandler(stream=stream)
+        console_handler.addFilter(thread_id_filter)
+        fmt = ColoredPreciseTimeFormatter(
+            cfg.log_format,
+            level_styles=cfg.level_styles,
+            field_styles=cfg.field_styles,
+            datefmt=cfg.date_format,
+            time_precision=cfg.time_precision,
+        )
+        console_handler.setFormatter(fmt)
+
+        root_handler = console_handler
+
+        base_logger = get_verbose_logger(cfg.base_logger_name)
+        base_logger.addHandler(root_handler)
+        base_logger.setLevel(cfg.root_level)
+
+        thread = WithThreadIdQueueListener(self._queue, console_handler, respect_handler_level=True)
+        thread.start()
+
+        command_q = self._command_queue
+        try:
+            while True:
+                try:
+                    data = command_q.get(1)
+                except Empty:
+                    continue
+                if data is None:
+                    break
+                cmd = data[0]
+                args = data[1:]
+                meth = getattr(self, f"_{cmd}", None)
+                if meth is None:
+                    logger.warning("unknown command: %sr", cmd)
+                    continue
+                meth(*args)
+        except (KeyboardInterrupt, SystemExit):
+            pass
+        thread.stop()
+
 
 def get_root_handler():
     return _root_handler
 
+
 def get_console_handler() -> logging.Handler:
     return _console_handler
+
 
 def get_multiprocess_log_queue() -> Optional[multiprocessing.Queue]:
     return _multiprocess_log_queue
 
 
-def get_queue_listener() -> Optional[logging.handlers.QueueListener]:
+def get_queue_listener() -> Optional[LogQueueListenerProc]:
     return _queue_listener
 
 
@@ -202,46 +311,59 @@ def setup_logging(
     if field_styles is None:
         field_styles = DEFAULT_FIELD_STYLES
     #
+    cfg = LogConfig(
+        base_logger_name=base_logger_name,
+    logger_level=logger_level,
+    root_level=root_level,
+    log_format=log_format,
+    date_format=date_format,
+    time_precision=time_precision,
+    level_styles=level_styles,
+    field_styles=field_styles,
+    # stream: TextIO = sys.stdout,
+    )
+    #
     stop_multiproc_logging()
     #
-    console_handler = _console_handler = logging.StreamHandler(stream=stream)
+    base_logger = get_verbose_logger(base_logger_name)
     #
     if multiprocess_enabled:
         # using queue created using the desired fork method context:
         multiproc_ctx = multiprocessing.get_context(fork_method)
         _multiprocess_log_queue = log_queue = multiproc_ctx.Queue()
-        listener = WithThreadIdQueueListener(
-            log_queue, console_handler,
-            respect_handler_level=True,
-        )
+
+        listener = LogQueueListenerProc(log_queue, cfg)
         listener.start()
         _queue_listener = listener  # keep global ref to ensure it stays alive
         queue_handler = WithThreadIdQueueHandler(log_queue)
         # queue_handler.setLevel(1)
         _queue_handler = queue_handler  # keep global ref to ensure it stays alive
-        root_handler = console_handler if not use_log_queue_handler else queue_handler
+        # root_handler = console_handler if not use_log_queue_handler else queue_handler
+        root_handler = _root_handler = queue_handler
+        console_handler = _console_handler = logging.Handler()
+        console_handler.setLevel = lambda l: listener.set_handler_level("console_handler", l)
     else:
+        console_handler = _console_handler = logging.StreamHandler(stream=stream)
+        root_handler = _root_handler = console_handler
+    #
+        console_handler.addFilter(thread_id_filter)
+        fmt = ColoredPreciseTimeFormatter(
+            log_format,
+            level_styles=level_styles,
+            field_styles=field_styles,
+            datefmt=date_format,
+            time_precision=time_precision,
+        )
+        console_handler.setFormatter(fmt)
+        # console_handler.setLevel(logger_level)
+
         root_handler = console_handler
-    _root_handler = root_handler
-    #
-    console_handler.addFilter(thread_id_filter)
-    fmt = ColoredPreciseTimeFormatter(
-        log_format,
-        level_styles=level_styles,
-        field_styles=field_styles,
-        datefmt=date_format,
-        time_precision=time_precision,
-    )
-    console_handler.setFormatter(fmt)
-    # console_handler.setLevel(logger_level)
-
-    root_handler = console_handler
-
-    base_logger = get_verbose_logger(base_logger_name)
-    base_logger.addHandler(root_handler)
-    base_logger.setLevel(root_level)
+        base_logger.addHandler(root_handler)
+        base_logger.setLevel(root_level)
 
     #
+
+    logger.info("Setup logging ; %s", base_logger.handlers)
 
     get_verbose_logger("transitions").setLevel(logger_level)
     get_verbose_logger("tools").setLevel(logger_level)
