@@ -23,6 +23,7 @@ from . import DiamondTriangleOffsetConfig
 from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
+from ..core.configuration.behavior_configuration import PelletDeliveryConfiguration
 
 logger = get_verbose_logger(__name__)
 
@@ -74,6 +75,9 @@ class BehaviorProps(str, Enum):
     COVER_PELLET_DISTANCE = "cover_pellet_distance"
     RELEASE_PELLET_DISTANCE = "release_pellet_distance"
 
+    USE_TRIANGLE_PELLET_DISTANCE_TOO_FAR = "use_triangle_pellet_distance_too_far"
+    TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"
+
 
 class BehaviorAlgorithm(ObservableObject):
     # dynamic events type hints,
@@ -117,6 +121,9 @@ class BehaviorAlgorithm(ObservableObject):
         self._day_pellet_count = 0
 
         self._is_in_session = False
+        self._in_session_reason = "NA"
+        self._out_session_reason = "NA"
+
         self._session_pellet_count = 0
         self._session_mouse_seen = False
         self._pellet_seen = False
@@ -124,6 +131,10 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._pellet_last_seen = 0.0
         self._triangle_last_seen = 0.0
+        self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
+        self._use_triangle_pellet_distance_too_far = False
+        self._triangle_pellet_diff_too_far_threshold: float = PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold
+        self._triangle_pellet_expected_distance = PelletDeliveryConfiguration.triangle_pellet_expected_distance
 
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
@@ -317,6 +328,51 @@ class BehaviorAlgorithm(ObservableObject):
     def pellet_last_seen(self) -> float:
         return self._pellet_last_seen
 
+    @property
+    def triangle_pellet_offset(self) -> Offset3DTuple:
+        return self._triangle_pellet_last_offset
+
+    @triangle_pellet_offset.setter
+    def triangle_pellet_offset(self, value):
+        prev, self._triangle_pellet_last_offset = self._triangle_pellet_last_offset, value
+        self._on_property_changed(BehaviorProps.TRIANGLE_PELLET_DISTANCE, self.triangle_pellet_distance, prev.distance)
+
+    @property
+    def triangle_pellet_distance(self) -> float:
+        return self._triangle_pellet_last_offset.distance
+
+    @property
+    def use_triangle_pellet_distance_too_far(self) -> bool:
+        return self._use_triangle_pellet_distance_too_far
+
+    @use_triangle_pellet_distance_too_far.setter
+    def use_triangle_pellet_distance_too_far(self, value):
+        prev, self._use_triangle_pellet_distance_too_far = self._use_triangle_pellet_distance_too_far, value
+        self._on_property_changed(BehaviorProps.USE_TRIANGLE_PELLET_DISTANCE_TOO_FAR, value, prev)
+
+    @property
+    def triangle_pellet_expected_distance(self):
+        return self._triangle_pellet_expected_distance
+
+    @triangle_pellet_expected_distance.setter
+    def triangle_pellet_expected_distance(self, value):
+        prev, self._triangle_pellet_expected_distance = self._triangle_pellet_expected_distance, value
+        # self._on_property_changed(BehaviorProps)
+
+    @property
+    def triangle_pellet_diff_too_far_threshold(self):
+        return self._triangle_pellet_diff_too_far_threshold
+
+    @triangle_pellet_diff_too_far_threshold.setter
+    def triangle_pellet_diff_too_far_threshold(self, value):
+        prev, self._triangle_pellet_diff_too_far_threshold = self._triangle_pellet_diff_too_far_threshold, value
+
+    def is_triangle_pellet_distance_too_far(self) -> bool:
+        return (
+            abs(self.triangle_pellet_distance - self._triangle_pellet_expected_distance)
+            >= self._triangle_pellet_diff_too_far_threshold
+        ) if self._use_triangle_pellet_distance_too_far else False
+
     def _set_triangle_last_seen(self, value: float):
         prev, self._triangle_last_seen = self._triangle_last_seen, value
         # self._on_property_changed("triangle_last_seen", value, prev)
@@ -418,18 +474,20 @@ class BehaviorAlgorithm(ObservableObject):
                     cfg_path
                 )
 
-    def start_session(self):
+    def start_session(self, *, reason: str="NA"):
         with self._thread_lock:
-            self._start_session()
+            self._start_session(reason=reason)
 
-    def _start_session(self):
+    def _start_session(self, *, reason: str):
         if self._is_in_session:
-            logger.warning("start_session() called but already in session")
+            logger.warning("%s: start_session() called but already in session (%s)",
+                           reason, self._in_session_reason)
             return
-        logger.notice("Starting new session recording ...")
-        EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
 
+        logger.success("%s: starting new session recording ...", reason)
+        EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
         self._is_in_session = True
+        self._in_session_reason = reason
         self._session_pellet_count = 0
 
         if self._project_info is not None:
@@ -450,15 +508,18 @@ class BehaviorAlgorithm(ObservableObject):
 
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
 
-    def end_session(self):
+    def end_session(self, *, reason: str="NA"):
         with self._thread_lock:
-            self._end_session()
+            self._end_session(reason=reason)
 
-    def _end_session(self):
+    def _end_session(self, *, reason: str):
         if not self._is_in_session:
-            logger.warning("end_session() called but not in session", stack_info=True)
+            logger.warning("%s: end_session() called but not in session (out reason: %s)",
+                           reason, self._out_session_reason)
             return
-        logger.success("Stopping session recording ...")
+        logger.success("%s: stopping session recording", reason)
+        self._is_in_session = False
+        self._out_session_reason = reason
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
         post_trigger_enable(self, False)  # tells cameras processes to stop recording
         self._is_in_session = False  # last, but before following session_ending(),
@@ -527,12 +588,15 @@ class BehaviorAlgorithm(ObservableObject):
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
 
     def load_configuration(self, configuration: BehaviorConfiguration):
-        self.pellet_delivery_enabled = configuration.pellet_delivery.is_enabled
-        self.pellet_cover_enabled = configuration.pellet_delivery.is_pellet_cover_enabled
-        self.pellet_missing_time = configuration.pellet_delivery.max_pellet_missing_seconds
-        self.max_pellets_per_session = configuration.pellet_delivery.max_pellets_per_session
-        self.max_pellets_per_day = configuration.pellet_delivery.max_pellets_per_day
-        self.intersession_pellet_shift_enabled = configuration.pellet_delivery.is_intersession_pellet_shift_enabled
+        pellet_deliver_cfg = configuration.pellet_delivery
+        self.pellet_delivery_enabled = pellet_deliver_cfg.is_enabled
+        self.pellet_cover_enabled = pellet_deliver_cfg.is_pellet_cover_enabled
+        self.pellet_missing_time = pellet_deliver_cfg.max_pellet_missing_seconds
+        self.max_pellets_per_session = pellet_deliver_cfg.max_pellets_per_session
+        self.max_pellets_per_day = pellet_deliver_cfg.max_pellets_per_day
+        self.intersession_pellet_shift_enabled = pellet_deliver_cfg.is_intersession_pellet_shift_enabled
+        self.use_triangle_pellet_distance_too_far = pellet_deliver_cfg.use_triangle_pellet_distance_too_far
+        self.triangle_pellet_diff_too_far_threshold = pellet_deliver_cfg.triangle_pellet_diff_too_far_threshold
 
         self.auto_correct_motors_drift = configuration.pellet_delivery.auto_correct_motors_drift
 
@@ -545,12 +609,16 @@ class BehaviorAlgorithm(ObservableObject):
         self.auto_clamp_release_delay = configuration.head_clamp.auto_clamp_release_tone_delay
 
     def update_configuration(self, configuration: BehaviorConfiguration):
-        configuration.pellet_delivery.is_enabled = self.pellet_delivery_enabled
-        configuration.pellet_delivery.is_pellet_cover_enabled = self.pellet_cover_enabled
-        configuration.pellet_delivery.max_pellet_missing_seconds = self.pellet_missing_time
-        configuration.pellet_delivery.max_pellets_per_session = self.max_pellets_per_session
-        configuration.pellet_delivery.max_pellets_per_day = self.max_pellets_per_day
-        configuration.pellet_delivery.auto_correct_motors_drift = self._auto_correct_motors_drift
+        pellet_cfg = configuration.pellet_delivery
+        pellet_cfg.is_enabled = self.pellet_delivery_enabled
+        pellet_cfg.is_pellet_cover_enabled = self.pellet_cover_enabled
+        pellet_cfg.max_pellet_missing_seconds = self.pellet_missing_time
+        pellet_cfg.max_pellets_per_session = self.max_pellets_per_session
+        pellet_cfg.max_pellets_per_day = self.max_pellets_per_day
+        pellet_cfg.auto_correct_motors_drift = self._auto_correct_motors_drift
+        pellet_cfg.use_triangle_pellet_distance_too_far = self.use_triangle_pellet_distance_too_far
+        pellet_cfg.triangle_pellet_expected_distance = self.triangle_pellet_expected_distance
+        pellet_cfg.triangle_pellet_diff_too_far_threshold = self.triangle_pellet_diff_too_far_threshold
 
         configuration.head_clamp.min_baseline_intensity = self.min_baseline_intensity
         configuration.head_clamp.max_baseline_intensity = self.max_baseline_intensity

@@ -286,7 +286,6 @@ class PelletMachine(StateMachine):
         must_release: bool = False,
         *,
         caller: str,
-        triangle_seen: bool = True,
         is_from_timer: bool = False,
     ):
 
@@ -422,15 +421,15 @@ class PelletMachine(StateMachine):
                         self.release_pellet()
                     else:
                         log_could_retry_shortly()
-                elif not pellet_seen and algo.triangle_recently_seen:
-                    reason = "load_pellet_when_insession_pellet_not_seen"
+                elif (not pellet_seen and algo.triangle_recently_seen) or algo.is_triangle_pellet_distance_too_far():
+                    reason = "load_pellet_when_insession_pellet_not_seen_or_too_far"
                     if self.can_load_pellet():
                         logit()
                         self.load_pellet()
                     else:
                         log_could_retry_shortly()
             else:
-                if not pellet_seen and algo.triangle_recently_seen:
+                if (not pellet_seen or algo.is_triangle_pellet_distance_too_far()) and algo.triangle_recently_seen:
                     if algo.can_load_pellet():
                         reason = "load_pellet_in_monitoring"
                         if self.can_use_pellet_command():

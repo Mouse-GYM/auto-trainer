@@ -1,3 +1,4 @@
+import copy
 import dataclasses
 import io
 from pathlib import Path
@@ -5,7 +6,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autotrainer.core import SystemConfiguration, CameraId, HardwareConfiguration, InferenceConfiguration
+from autotrainer.core import SystemConfiguration, CameraId, HardwareConfiguration, InferenceConfiguration, \
+    PersistenceConfiguration
 from autotrainer.core.analysis import LoadCellConfiguration, HeadbarPressureConfiguration, LoadCellAutoTareConfiguration
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
 
@@ -13,6 +15,50 @@ fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
 v0_config_path = fixtures_path.joinpath("v0_config.yaml")
 v1_config_path = fixtures_path.joinpath("v1_config.yaml")
+
+#
+
+current_default_config = {
+        # apart the version and persistence.output_location, these are all the defaults values
+         'version': SystemConfiguration.version,
+         'cameras': [],
+         'hardware': {'tunnel_identifier': HardwareConfiguration.tunnel_identifier,
+                      'pellet_identifier': HardwareConfiguration.pellet_identifier},
+         'inference': {'pose_model_location': InferenceConfiguration.pose_model_location,
+          'is_enabled': InferenceConfiguration.is_enabled,
+          'intersession_wait_time': InferenceConfiguration.intersession_wait_time},
+         'behavior': {'pellet_delivery': {'is_enabled': PelletDeliveryConfiguration.is_enabled,
+           'is_pellet_cover_enabled': PelletDeliveryConfiguration.is_pellet_cover_enabled,
+           'is_intersession_analysis_enabled': PelletDeliveryConfiguration.is_intersession_analysis_enabled,
+           'is_intersession_pellet_shift_enabled': PelletDeliveryConfiguration.is_intersession_pellet_shift_enabled,
+           'max_pellets_per_session': PelletDeliveryConfiguration.max_pellets_per_session,
+           'max_pellets_per_day': PelletDeliveryConfiguration.max_pellets_per_day,
+           'max_pellet_missing_seconds': PelletDeliveryConfiguration.max_pellet_missing_seconds,
+           'triangle_pellet_expected_distance': PelletDeliveryConfiguration.triangle_pellet_expected_distance,
+           'triangle_pellet_diff_too_far_threshold': PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold,
+           'use_triangle_pellet_distance_too_far': PelletDeliveryConfiguration.use_triangle_pellet_distance_too_far,
+                                          },
+          'head_clamp': {'min_baseline_intensity': HeadClampConfiguration.min_baseline_intensity,
+           'max_baseline_intensity': HeadClampConfiguration.max_baseline_intensity,
+           'baseline_intensity_increment': HeadClampConfiguration.baseline_intensity_increment,
+           'auto_clamp_intensity': HeadClampConfiguration.auto_clamp_intensity,
+           'auto_clamp_release_tone_freq': HeadClampConfiguration.auto_clamp_release_tone_freq,
+           'auto_clamp_release_tone_delay': HeadClampConfiguration.auto_clamp_release_tone_delay},
+          'load_cell': {'weight_active_threshold': LoadCellConfiguration.weight_active_threshold,
+           'weight_inactive_threshold': LoadCellConfiguration.weight_inactive_threshold,
+           'threshold_duration': LoadCellConfiguration.threshold_duration,
+           'min_event_duration': LoadCellConfiguration.min_event_duration,
+           'min_post_event_hold_duration': LoadCellConfiguration.min_post_event_hold_duration,
+           'thrashing_var_weight_threshold_min': LoadCellConfiguration.thrashing_var_weight_threshold_min,
+           'thrashing_var_weight_threshold_max': LoadCellConfiguration.thrashing_var_weight_threshold_max,
+           'thrashing_var_min_delay': LoadCellConfiguration.thrashing_var_min_delay,
+           'thrashing_var_max_delay': LoadCellConfiguration.thrashing_var_max_delay,
+           'thrashing_min_ptp_change_count': LoadCellConfiguration.thrashing_min_ptp_change_count},
+          'headbar_pressure': {'threshold': HeadbarPressureConfiguration.threshold, 'duration': HeadbarPressureConfiguration.duration},
+          'auto_tare': {'threshold': LoadCellAutoTareConfiguration.threshold,
+                        'range_threshold': LoadCellAutoTareConfiguration.range_threshold,
+                        'duration': LoadCellAutoTareConfiguration.duration}},
+         'persistence': {'output_location': PersistenceConfiguration.output_location}}
 
 
 v0_expected_result_config = {'version': 2,
@@ -64,7 +110,10 @@ v0_expected_result_config = {'version': 2,
    'max_pellets_per_day': 25,
    'max_pellet_missing_seconds': 10.0,
    'auto_correct_motors_drift': False,
-                                  },
+   'triangle_pellet_expected_distance': PelletDeliveryConfiguration.triangle_pellet_expected_distance,
+   'triangle_pellet_diff_too_far_threshold': PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold,
+   'use_triangle_pellet_distance_too_far': PelletDeliveryConfiguration.use_triangle_pellet_distance_too_far,
+    },
   'head_clamp': {'min_baseline_intensity': 5.0,
    'max_baseline_intensity': 80.0,
    'baseline_intensity_increment': 15.0,
@@ -141,7 +190,9 @@ def test_load_version_1():
                                          'max_pellet_missing_seconds': 15.0,
                                          'max_pellets_per_day': 75,
                                          'max_pellets_per_session': 10,
-                                         'auto_correct_motors_drift': False,
+                                         'auto_correct_motors_drift': False,                                         'triangle_pellet_expected_distance': PelletDeliveryConfiguration.triangle_pellet_expected_distance,
+                                         'triangle_pellet_diff_too_far_threshold': PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold,
+                                         'use_triangle_pellet_distance_too_far': PelletDeliveryConfiguration.use_triangle_pellet_distance_too_far,
                                          }},
         'cameras': [{'host': None,
                      'id': CameraId.Left,
@@ -209,42 +260,8 @@ persistence: !PersistenceConfiguration
 """
     cfg = SystemConfiguration.load_yaml(io.StringIO(config_text))
     assert isinstance(cfg, SystemConfiguration)
-    assert dataclasses.asdict(cfg) == {
-        # apart the version and persistence.output_location, these are all the defaults values
-         'version': 3,
-         'cameras': [],
-         'hardware': {'tunnel_identifier': HardwareConfiguration.tunnel_identifier,
-                      'pellet_identifier': HardwareConfiguration.pellet_identifier},
-         'inference': {'pose_model_location': InferenceConfiguration.pose_model_location,
-          'is_enabled': InferenceConfiguration.is_enabled,
-          'intersession_wait_time': InferenceConfiguration.intersession_wait_time},
-         'behavior': {'pellet_delivery': {'is_enabled': PelletDeliveryConfiguration.is_enabled,
-           'is_pellet_cover_enabled': PelletDeliveryConfiguration.is_pellet_cover_enabled,
-           'is_intersession_analysis_enabled': PelletDeliveryConfiguration.is_intersession_analysis_enabled,
-           'is_intersession_pellet_shift_enabled': PelletDeliveryConfiguration.is_intersession_pellet_shift_enabled,
-           'max_pellets_per_session': PelletDeliveryConfiguration.max_pellets_per_session,
-           'max_pellets_per_day': PelletDeliveryConfiguration.max_pellets_per_day,
-           'max_pellet_missing_seconds': PelletDeliveryConfiguration.max_pellet_missing_seconds,
-           'auto_correct_motors_drift': PelletDeliveryConfiguration.auto_correct_motors_drift,
-            },
-          'head_clamp': {'min_baseline_intensity': HeadClampConfiguration.min_baseline_intensity,
-           'max_baseline_intensity': HeadClampConfiguration.max_baseline_intensity,
-           'baseline_intensity_increment': HeadClampConfiguration.baseline_intensity_increment,
-           'auto_clamp_intensity': HeadClampConfiguration.auto_clamp_intensity,
-           'auto_clamp_release_tone_freq': HeadClampConfiguration.auto_clamp_release_tone_freq,
-           'auto_clamp_release_tone_delay': HeadClampConfiguration.auto_clamp_release_tone_delay},
-          'load_cell': {'weight_active_threshold': LoadCellConfiguration.weight_active_threshold,
-           'weight_inactive_threshold': LoadCellConfiguration.weight_inactive_threshold,
-           'threshold_duration': LoadCellConfiguration.threshold_duration,
-           'min_event_duration': LoadCellConfiguration.min_event_duration,
-           'min_post_event_hold_duration': LoadCellConfiguration.min_post_event_hold_duration,
-           'thrashing_var_weight_threshold_min': LoadCellConfiguration.thrashing_var_weight_threshold_min,
-           'thrashing_var_weight_threshold_max': LoadCellConfiguration.thrashing_var_weight_threshold_max,
-           'thrashing_var_min_delay': LoadCellConfiguration.thrashing_var_min_delay,
-           'thrashing_var_max_delay': LoadCellConfiguration.thrashing_var_max_delay,
-           'thrashing_min_ptp_change_count': LoadCellConfiguration.thrashing_min_ptp_change_count},
-          'headbar_pressure': {'threshold': HeadbarPressureConfiguration.threshold, 'duration': HeadbarPressureConfiguration.duration},
-          'auto_tare': {'threshold': LoadCellAutoTareConfiguration.threshold,
-                        'range_threshold': LoadCellAutoTareConfiguration.range_threshold,
-                        'duration': LoadCellAutoTareConfiguration.duration}},
-         'persistence': {'output_location': '/output_location_path'}}
+    expected_result = copy.deepcopy(current_default_config)
+    # apart the version and persistence.output_location, these are all the defaults values
+    expected_result["version"] = 3
+    expected_result["persistence"]["output_location"] = "/output_location_path"
+    assert dataclasses.asdict(cfg) == expected_result

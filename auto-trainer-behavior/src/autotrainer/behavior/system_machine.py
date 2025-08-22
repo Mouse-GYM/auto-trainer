@@ -1,3 +1,4 @@
+from functools import partial
 from itertools import chain
 from pathlib import Path
 from threading import Timer
@@ -144,7 +145,7 @@ class SystemMachine(StateMachine):
         self._algorithm.project = self._project_info
         self._intersession.project = self._project_info
 
-    def before_enter_tunnel(self):
+    def before_enter_tunnel(self, *, reason: str="NA"):
         EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
 
         self.algorithm.reset_session_pellet_count()
@@ -156,25 +157,23 @@ class SystemMachine(StateMachine):
             PelletState.monitoring,
             PelletState.retract,
         }:
-            # not sure about this
-            self._algorithm.start_session()
+            self._algorithm.start_session(reason=f"{reason}->before_enter_tunnel")
 
         self._update_magnet_position(self.algorithm.baseline_intensity)
 
         self._algorithm.system_state = SystemState.tunnel
 
-    def after_enter_tunnel(self):
+    def after_enter_tunnel(self, *, reason: str="NA"):
         if self._analysis is not None:
             self._evaluate_auto_clamp(self._analysis.headbar_pressure_monitor.is_engaged)
 
-    def before_exit_tunnel(self):
+    def before_exit_tunnel(self, *, reason: str="NA"):
         self._algorithm.system_state = SystemState.cage
 
-    def after_exit_tunnel(self):
+    def after_exit_tunnel(self, *, reason: str="NA"):
         self._update_magnet_position(self.algorithm.baseline_intensity)
-
         EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
-        self.algorithm.end_session()
+        self.algorithm.end_session(reason=f"{reason}->after_exit_tunnel")
 
     def before_enter_intersession(self):
         # current system_state should be tunnel here
@@ -192,7 +191,7 @@ class SystemMachine(StateMachine):
         # set/force tunnel state required now, otherwise enter_tunnel is refused here after,
         # another possibility would be to have a dedicated trigger like "re_enter_tunnel_from_end_of_intersession"
         self._algorithm.system_state = SystemState.tunnel
-        self.enter_tunnel()
+        self.enter_tunnel(reason="exit_intersession_to_tunnel")
         self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
 
     @staticmethod
@@ -285,7 +284,7 @@ class SystemMachine(StateMachine):
             ):
                 assert prev_status == InferenceStatus.waiting
                 if self._analysis.load_cell_monitor.is_engaged:
-                    self.enter_tunnel()
+                    self.enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
                 # this is only used at app starts, so unregister:
                 self._inference.property_changed -= self._handle_inference_property_changed
 
@@ -312,7 +311,7 @@ class SystemMachine(StateMachine):
                     # when app start inference is slow and takes several 10s to become live,
                     # so we have to check it:
                     if self._inference.status == InferenceStatus.live:
-                        self.enter_tunnel()
+                        self.enter_tunnel(reason="load_cell_engaged_when_in_cage")
                     # see _handle_inference_property_changed
                 else:
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
@@ -320,7 +319,7 @@ class SystemMachine(StateMachine):
             else:
                 if self.state == SystemState.tunnel and self.intersession.state == IntersessionState.idle:
                     logger.info("%s False, exiting tunnel ..", LoadCellMonitor.IS_ENGAGED_PROPERTY)
-                    self.exit_tunnel()
+                    self.exit_tunnel(reason="load_cell_disengaged_when_tunnel")
                 else:
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                                               context=self.state)
@@ -367,6 +366,11 @@ class SystemMachine(StateMachine):
                 self._algorithm.handle_diamond_triangle_offset(
                     offset, last_position, flips=self._motor_axis_flips)
 
+    def _handle_triangle_pellet_offset_changed(self, offset: Optional[Offset3DTuple]):
+        if offset is None:
+            return
+        self._algorithm.triangle_pellet_offset = offset
+
     def _handle_star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if offset is None:
             return
@@ -374,7 +378,7 @@ class SystemMachine(StateMachine):
         if not pellet_machine.can_use_pellet_command():
             # never consider any release or cover check when pellet cannot be used yet.
             return
-        algo = self.algorithm
+        algo = self._algorithm
         check_cover_distance = not algo.is_in_session and (
             (pellet_machine.state == PelletState.monitoring and algo.pellet_cover_enabled)
             or (pellet_machine.state == PelletState.covering)
@@ -393,8 +397,12 @@ class SystemMachine(StateMachine):
         if response.pellet_seen:
             self._handle_diamond_triangle_offset_changed(
                 response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
+
             self._handle_star_triangle_offset_changed(
                 response.get_parts_3d_offset(SceneElement.Star, SceneElement.Triangle))
+
+            self._handle_triangle_pellet_offset_changed(
+                response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
         #
         algo = self._algorithm
         algo.pellet_seen(response.pellet_seen)
@@ -440,7 +448,8 @@ class SystemMachine(StateMachine):
             prev_timer = self._timer_consider_end_session
             if prev_timer is None or prev_timer.finished.is_set():
                 self._timer_consider_end_session = _consider_end_session_timer(
-                    self._delay_timer_consider_end_session, self._consider_end_session)
+                    self._delay_timer_consider_end_session,
+                    partial(self._consider_end_session, reason="pellet_loading"))
                 self._timer_consider_end_session.start()
             else:
                 logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s",
@@ -448,7 +457,7 @@ class SystemMachine(StateMachine):
 
     def _pellet_sending(self):
         if self.state == SystemState.tunnel:
-            self.algorithm.start_session()
+            self.algorithm.start_session(reason="pellet_sending")
 
     def _pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
@@ -456,7 +465,7 @@ class SystemMachine(StateMachine):
     def _intersession_state_changed(self, old_value, new_value):
         self._algorithm.intersession_state = new_value
 
-    def _consider_end_session(self):
+    def _consider_end_session(self, *, reason: str="NA"):
         # Do not end if the mouse is still in the tunnel and a pellet is seen or the pellet deliver is in the sending
         # or releasing states. Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
@@ -470,7 +479,7 @@ class SystemMachine(StateMachine):
         ):
             return
 
-        self.algorithm.end_session()
+        self.algorithm.end_session(reason=f"{reason}->consider_end_session")
 
     def _handle_detection_result(self, res: IntersessionResponse):
         algo = self._algorithm
@@ -498,13 +507,13 @@ class SystemMachine(StateMachine):
     def may_trigger(self):
         pass
 
-    def enter_tunnel(self):
+    def enter_tunnel(self, *, reason: str="NA"):
         pass
 
     def may_enter_tunnel(self):
         pass
 
-    def exit_tunnel(self):
+    def exit_tunnel(self, *, reason: str="NA"):
         pass
 
     def may_exit_tunnel(self):
