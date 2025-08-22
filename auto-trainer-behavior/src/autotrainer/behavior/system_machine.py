@@ -415,7 +415,7 @@ class SystemMachine(StateMachine):
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.
         pellet_dev = self._pellet_device
-        if name == BehaviorProps.HEAD_FIXATION_ENABLED:
+        if name == BehaviorAlgoProps.HEAD_FIXATION_ENABLED:
             if not new_value:
                 logger.debug("auto-clamp disabled (backing off to baseline intensity)")
                 if self.algorithm.is_in_session:
@@ -429,7 +429,7 @@ class SystemMachine(StateMachine):
                     timer.start()
         elif name == BehaviorAlgoProps.PELLET_MOTOR_DRIFT:
             if new_value is not None:
-                self._pellet_device.set_motor_drift(new_value)
+                self._pellet_device.set_motors_drift(new_value)
 
         elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
             pellet_dev.set_auto_correct_motor_drift(new_value)
