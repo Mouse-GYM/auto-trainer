@@ -14,14 +14,25 @@ There is a main interface class (DeviceInterface) that defines the API for acces
 hardware.
 """
 import dataclasses
+import logging
 import math
 import typing
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import List
+from typing import List, Union
 
+from autotrainer.core import Offset3DTuple, get_verbose_logger
 from autotrainer.core.message import Motor
 from autotrainer.core.message.system_status_message import StepperStatusMessage
+
+logger = get_verbose_logger(__name__)
+
+
+_map_idx_motors = {
+    0: Motor.PELLET_X_MOTOR,
+    1: Motor.PELLET_Y_MOTOR,
+    2: Motor.PELLET_Z_MOTOR,
+}
 
 
 class Target(IntEnum):
@@ -264,14 +275,25 @@ class StepperStatus(Source, StepperStatusMessage):
     _position: float = 0  # (mm)
     _send_position: float = 0 # (mm)
     _limit_switch: bool = False
+    position_error: bool = False
 
-    def __init__(self, target: Target, motor: Motor, position: float, send_position: float, limit_switch: bool):
+    def __init__(
+        self,
+        target: Target,
+        motor: Motor,
+        position: float,
+        send_position: float,
+        limit_switch: bool,
+        *,
+        position_error: bool = False,
+    ):
         super().__init__(target)
 
         self._motor = motor
         self._position = position
         self._send_position = send_position
         self._limit_switch = limit_switch
+        self.position_error = position_error
 
     @property
     def motor(self) -> Motor:
@@ -358,8 +380,20 @@ class Acknowledge(Source):
     uuid: int = 0
 
 
+_zero_position = Offset3DTuple(0, 0, 0)
+
+
 class DeviceInterface:
-    """ Defines the required methods for a class that provides low-level communication with a device, such as serial"""
+    """Base class that provides low-level communication with a device, such as serial, or CAN"""
+
+    def __init__(self):
+        super().__init__()
+        self._auto_correct_motor_drift = False
+        self._motors_drift = _zero_position
+        self._active_motors_drift = _zero_position
+        self._max_motor_drift_error_threshold = 2  # mm
+        self._motors_drift_error = [False, False, False]
+        self._prev_send_pos = _zero_position
 
     def open(self) -> bool:
         """ Opens the interface
@@ -406,3 +440,44 @@ class DeviceInterface:
         :param value: The string to be written
         :return: the number of bytes written"""
         pass
+
+    def get_motor_configuration(self, motor: Motor) -> Union[ServoConfig, StepperConfig]:
+        """Return current motor config"""
+
+    def set_auto_correct_motor_drift(self, value):
+        """Set the auto correct motor drift"""
+        prev = self._auto_correct_motor_drift
+        # must be done by caller via independent system command kind
+        # if not value and prev:
+        #     self.set_motors_drift(Offset3DTuple(0, 0, 0))
+        if value != prev:
+            logger.verbose("auto_correct_motor_drift: %s -> %s", prev, value)
+            self._auto_correct_motor_drift = value
+            if not value:
+                self._motors_drift = Offset3DTuple(0, 0, 0)
+
+    def set_motors_drift(self, drifts: Offset3DTuple):
+        prev_drifts = self._motors_drift
+        self._motors_drift = drifts
+        logger.debug("Received new motors drift: %s ; prev=%s",
+                     drifts.humanize(), prev_drifts.humanize())
+        for motor_axis_idx, motor in enumerate((Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR)):
+            axis_drift = drifts[motor_axis_idx]
+            if abs(axis_drift) > self._max_motor_drift_error_threshold:
+                logger.critical("%s drift over error threshold: %.3f", motor, axis_drift)
+                self._motors_drift_error[motor_axis_idx] = True
+                axis_drift = self._max_motor_drift_error_threshold
+                drifts = drifts.replace(**{"xyz"[motor_axis_idx]: axis_drift})
+            else:
+                if self._motors_drift_error[motor_axis_idx]:
+                    logger.notice("%s recovered from axis position error ; new drift = %.3f prev = %.3f",
+                                  motor, drifts[motor_axis_idx], prev_drifts[motor_axis_idx])
+                    self._motors_drift_error[motor_axis_idx] = False
+            # Must be called via SystemCommandKind message:
+            # save-as-fixed with 0 relative,
+            # this will make the current saved-as-fixed to be auto-corrected:
+            # self.move_motor(motor, 0, relative=True, save_as_fixed=True)
+
+    def move_motor(self, motor: Motor, position, *, save_as_fixed: bool = False, relative: bool = False):
+        # only for steppers, XYZ
+        raise NotImplementedError

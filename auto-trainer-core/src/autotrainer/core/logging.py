@@ -74,13 +74,6 @@ DEFAULT_LEVEL_STYLES = dict(
 )
 
 
-def get_verbose_logger(name: Optional[str] = None) -> verboselogs.VerboseLogger:
-    logger = logging.getLogger(name)
-    if not isinstance(logger, verboselogs.VerboseLogger):
-        logger.__class__ = verboselogs.VerboseLogger
-    assert isinstance(logger, verboselogs.VerboseLogger)
-    return logger
-
 
 def get_root_handler():
     return _root_handler
@@ -174,6 +167,11 @@ class WithThreadIdQueueHandler(logging.handlers.QueueHandler):
         return record
 
 
+class VerboseLoggerWithThreadId(verboselogs.VerboseLogger):
+    def filter(self, record):
+        return thread_id_filter.filter(record)
+
+
 def setup_logging(
     name: str = "autotrainer",
     *,
@@ -237,16 +235,18 @@ def setup_logging(
     console_handler.setFormatter(fmt)
     # console_handler.setLevel(logger_level)
 
+    root_handler = console_handler
+
     base_logger = get_verbose_logger(base_logger_name)
     base_logger.addHandler(root_handler)
     base_logger.setLevel(root_level)
 
     #
 
-    logging.getLogger("transitions").setLevel(logger_level)
-    logging.getLogger("tools").setLevel(logger_level)
-    logging.getLogger("autotrainer").setLevel(logger_level)
-    logging.getLogger("inference_algorithms").setLevel(logger_level)
+    get_verbose_logger("transitions").setLevel(logger_level)
+    get_verbose_logger("tools").setLevel(logger_level)
+    get_verbose_logger("autotrainer").setLevel(logger_level)
+    get_verbose_logger("inference_algorithms").setLevel(logger_level)
 
     for _limit_name, v in _limit_loggers_level.items():
         logging.getLogger(_limit_name).setLevel(v["level"])
@@ -286,6 +286,14 @@ def make_log_dict_config(*, root_log_level, log_queue):
         'loggers': copy.deepcopy(_limit_loggers_level),
     }
     return dct_cfg
+
+
+def get_verbose_logger(name: Optional[str] = None) -> VerboseLoggerWithThreadId:
+    obj = logging.getLogger(name)
+    if not isinstance(obj, VerboseLoggerWithThreadId):
+        obj.__class__ = VerboseLoggerWithThreadId
+    assert isinstance(obj, VerboseLoggerWithThreadId)
+    return obj
 
 
 logger = get_verbose_logger(__name__)

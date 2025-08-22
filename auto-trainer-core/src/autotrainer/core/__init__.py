@@ -1,10 +1,11 @@
 import dataclasses
 import math
 from collections import namedtuple
-from typing import Union, List, Tuple, Dict, Any, Iterable, TypeVar, Type
+from typing import Union, List, Tuple, Dict, Any, Iterable, TypeVar, Type, Optional
 
 import humps
 import yaml
+from typing_extensions import Self
 
 from .logging import get_verbose_logger
 
@@ -41,6 +42,17 @@ class Offset3DTuple(_Offset3DTuple):
 
     __str__ = __repr__
 
+    def replace(self, x: Optional[float] = None, y: Optional[float] = None, z: Optional[float] = None) -> Self:
+        return self.__class__(
+            self.x if x is None else x,
+            self.y if y is None else y,
+            self.z if z is None else z,
+        )
+
+    def humanize(self, n_digits: int = 2):
+        x, y, z = self
+        return f"({x:.0{n_digits}f}, {y:.0{n_digits}f}, {z:.0{n_digits}f})"
+
     def __add__(self, other):
         if hasattr(other, "__len__") and len(other) == 3:
             return self.__class__(*(v1 + v2 for v1, v2 in zip(self, other)))
@@ -60,6 +72,16 @@ class Offset3DTuple(_Offset3DTuple):
 
     def __neg__(self):
         return self.__class__(-self.x, -self.y, -self.z)
+
+    def __mul__(self, other):
+        if hasattr(other, "__len__") and len(other) == 3:
+            return self.__class__(*(v1 * v2 for v1, v2 in zip(self, other)))
+        return self.__class__(*(v * other for v in self))
+
+    def __truediv__(self, other):
+        if hasattr(other, "__len__") and len(other) == 3:
+            return self.__class__(*(v1 / v2 for v1, v2 in zip(self, other)))
+        return self.__class__(*(v / other for v in self))
 
     @property
     def distance(self) -> float:

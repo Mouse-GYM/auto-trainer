@@ -2,12 +2,12 @@ from functools import partial
 from itertools import chain
 from pathlib import Path
 from threading import Timer
-from typing import Optional
+from typing import Optional, List, Tuple
 
 from transitions import Machine
 
 from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor,
-                              HeadbarPressureMonitor)
+                              HeadbarPressureMonitor, Motor)
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference import PoseResponse, InferenceStatus
@@ -82,8 +82,11 @@ class SystemMachine(StateMachine):
         self._timer_consider_end_session: Optional[Timer] = None
         self._delay_timer_consider_end_session: Optional[float] = 2.0
 
+        self._motor_axis_flips = Offset3DTuple(1, 1, 1)
+
         algorithm = self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
         algorithm.project = project_info
+        algorithm.session_starting += self._session_starting
         algorithm.session_ending += self._session_ended
         algorithm.property_changed += self._algorithm_property_changed
 
@@ -185,6 +188,8 @@ class SystemMachine(StateMachine):
 
     def before_exit_intersession_to_tunnel(self):
         self.state = SystemState.tunnel
+        # set/force tunnel state required now, otherwise enter_tunnel is refused here after,
+        # another possibility would be to have a dedicated trigger like "re_enter_tunnel_from_end_of_intersession"
         self._algorithm.system_state = SystemState.tunnel
         self.enter_tunnel(reason="exit_intersession_to_tunnel")
         self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
@@ -213,6 +218,12 @@ class SystemMachine(StateMachine):
         # and made some of the data files not be removed (given written to after).
         # if that still happens (like with overloaded system), then some files will be left on disk still.
         t.start()
+
+    def _session_starting(self):
+        pellet_dev = self._pellet_device
+        if pellet_dev is not None:
+            self._motor_axis_flips = pellet_dev.get_motor_flips()
+            logger.debug("read motor axis flips: %s", self._motor_axis_flips)
 
     def _session_ended(self):
         # 5/16/25 should not remove auto-clamp at session end for current testing.
@@ -345,11 +356,20 @@ class SystemMachine(StateMachine):
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if (
             offset is not None
-            and self._state != SystemState.intersession
+            and self._state == SystemState.tunnel
             and self._pellet_machine.state == PelletState.monitoring
             and self._pellet_machine.can_use_pellet_command()
         ):
-            self._algorithm.handle_diamond_triangle_offset(offset)
+            # last_set_position = self._pellet_device.last_set_position
+            last_position = self._pellet_device.last_position
+            if last_position is not None and offset is not None:
+                self._algorithm.handle_diamond_triangle_offset(
+                    offset, last_position, flips=self._motor_axis_flips)
+
+    def _handle_triangle_pellet_offset_changed(self, offset: Optional[Offset3DTuple]):
+        if offset is None:
+            return
+        self._algorithm.triangle_pellet_offset = offset
 
     def _handle_star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if offset is None:
@@ -358,7 +378,7 @@ class SystemMachine(StateMachine):
         if not pellet_machine.can_use_pellet_command():
             # never consider any release or cover check when pellet cannot be used yet.
             return
-        algo = self.algorithm
+        algo = self._algorithm
         check_cover_distance = not algo.is_in_session and (
             (pellet_machine.state == PelletState.monitoring and algo.pellet_cover_enabled)
             or (pellet_machine.state == PelletState.covering)
@@ -377,8 +397,12 @@ class SystemMachine(StateMachine):
         if response.pellet_seen:
             self._handle_diamond_triangle_offset_changed(
                 response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
+
             self._handle_star_triangle_offset_changed(
                 response.get_parts_3d_offset(SceneElement.Star, SceneElement.Triangle))
+
+            self._handle_triangle_pellet_offset_changed(
+                response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
         #
         algo = self._algorithm
         algo.pellet_seen(response.pellet_seen)
@@ -390,12 +414,13 @@ class SystemMachine(StateMachine):
 
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.
-        if name == "head_fixation_enabled":
+        pellet_dev = self._pellet_device
+        if name == BehaviorProps.HEAD_FIXATION_ENABLED:
             if not new_value:
                 logger.debug("auto-clamp disabled (backing off to baseline intensity)")
                 if self.algorithm.is_in_session:
                     logger.debug("\tsending tone to indicate auto-clamp disabled")
-                    self._pellet_device.play_tone(self.algorithm.auto_clamp_release_tone_freq, 0.5)
+                    pellet_dev.play_tone(self.algorithm.auto_clamp_release_tone_freq, 0.5)
                 if self._tunnel_device is not None:
                     logger.debug(
                         f"\tchanging magnet intensity to baseline in {self.algorithm.auto_clamp_release_delay} seconds")
@@ -403,8 +428,16 @@ class SystemMachine(StateMachine):
                                   lambda: self._update_magnet_position(self.algorithm.baseline_intensity))
                     timer.start()
         elif name == BehaviorProps.PELLET_MOTOR_DRIFT:
-            if new_value is not None:
-                self._pellet_device.set_motor_drift(new_value)
+            pass
+            # if new_value is not None:
+            #     self._pellet_device.set_motors_drift(new_value)
+        elif name == BehaviorProps.AUTO_CORRECT_MOTOR_DRIFT:
+            pellet_dev.set_auto_correct_motor_drift(new_value)
+            if not new_value:
+                # ensure the current deliver position is corrected (no more drift applied):
+                pellet_dev.set_motors_drift(Offset3DTuple(0, 0, 0))
+                for set_coord in (pellet_dev.set_x, pellet_dev.set_y, pellet_dev.set_z):
+                    set_coord(0, absolute=False)
 
     def _update_magnet_position(self, position: int):
         if self._tunnel_device is not None:
@@ -449,13 +482,14 @@ class SystemMachine(StateMachine):
         self.algorithm.end_session(reason=f"{reason}->consider_end_session")
 
     def _handle_detection_result(self, res: IntersessionResponse):
+        algo = self._algorithm
         if res.food_consumed > 0:
-            self._algorithm.day_pellet_count += res.food_consumed
-            self._algorithm.session_pellet_count += res.food_consumed
+            algo.day_pellet_count += res.food_consumed
+            algo.session_pellet_count += res.food_consumed
         if res.successful_reaches > 0:
-            self._algorithm.successful_reaches = res.successful_reaches
+            algo.successful_reaches = res.successful_reaches
         if res.pellets_presented > 0:
-            self._algorithm.pellets_presented = res.pellets_presented
+            algo.pellets_presented = res.pellets_presented
         dev = self._pellet_device
         if dev is not None and self.algorithm.intersession_pellet_shift_enabled:
             for val, meth, kind in ((res.pellet_x, dev.set_x, BehaviorEventKind.intersessionShiftX),

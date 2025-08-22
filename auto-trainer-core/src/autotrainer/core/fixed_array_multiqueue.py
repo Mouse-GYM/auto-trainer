@@ -209,7 +209,7 @@ class FixedArrayMultiQueue:
         is_overflow = self._is_dirty[camera][dirty_idx]
         t_perf = time.perf_counter()
         if t_perf > self._next_counts_log_time:
-            self._next_counts_log_time += 10
+            self._next_counts_log_time = t_perf + 15
             logger.debug("%s[%s]: put=%s overflow=%s", self, camera, self._put_count, self._overflow_count)
             self._put_count = self._overflow_count = 0
         if is_overflow:

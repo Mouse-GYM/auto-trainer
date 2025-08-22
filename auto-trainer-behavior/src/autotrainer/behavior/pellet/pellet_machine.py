@@ -8,7 +8,7 @@ from events import Events
 from transitions import Machine
 
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core import EventManager, MessageHandler, ObservableObject
+from autotrainer.core import EventManager, MessageHandler, ObservableObject, Offset3DTuple, Motor
 
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..behavior_event_kind import BehaviorEventKind
@@ -216,13 +216,32 @@ class PelletMachine(StateMachine):
         self._try_next_state(True, True, caller="session_starting")
 
     def _session_ending(self):
+        algo = self._algorithm
+        logger.verbose("%s: _session_ending() called", self)
+        dev = self._pellet_device
+        # optional apply of measured motor drifts,
+        drifts = algo.get_diamond_triangle_drifts(reset=True)  # always, to reset the recorded values list too.
+        if dev is not None:
+            correct_drift = algo.auto_correct_motors_drift
+            if drifts is not None and correct_drift:
+                # not sure for:
+                # flips = dev.get_motor_flips()
+                # drifts *= flips
+                dev.set_motors_drift(drifts)
+            if not (algo.session_mouse_seen and algo.intersession_enabled):
+                # force also a send_pellet, only if not gonna go to intersession
+                dev.send_pellet()
+                # otherwise there is a retract pellet which is executed with next/following try_next_state.
+        # execute try next state AFTER having applied motor drifts,
+        # given next state will move/send the pellet back to deliver/SEND position
         self._try_next_state(caller="session_ending")
 
     def _move_retract(self):
         self._pellet_device.send_retract()
 
-    def _pellet_device_ack_received(self, token: str):
-        logger.debug("pellet_ack_received: %s", token)
+    def _pellet_device_ack_received(self, token: Optional[str]):
+        if token is not None:
+            logger.debug("pellet_ack_received: %s", token)
 
         if self._api_status_token is None:
             # External command.  Safe to ignore.
@@ -267,7 +286,6 @@ class PelletMachine(StateMachine):
         must_release: bool = False,
         *,
         caller: str,
-        triangle_seen: bool = True,
         is_from_timer: bool = False,
     ):
 
@@ -403,15 +421,15 @@ class PelletMachine(StateMachine):
                         self.release_pellet()
                     else:
                         log_could_retry_shortly()
-                elif not pellet_seen and algo.triangle_recently_seen:
-                    reason = "load_pellet_when_insession_pellet_not_seen"
+                elif (not pellet_seen and algo.triangle_recently_seen) or algo.is_triangle_pellet_distance_too_far():
+                    reason = "load_pellet_when_insession_pellet_not_seen_or_too_far"
                     if self.can_load_pellet():
                         logit()
                         self.load_pellet()
                     else:
                         log_could_retry_shortly()
             else:
-                if not pellet_seen and algo.triangle_recently_seen:
+                if (not pellet_seen or algo.is_triangle_pellet_distance_too_far()) and algo.triangle_recently_seen:
                     if algo.can_load_pellet():
                         reason = "load_pellet_in_monitoring"
                         if self.can_use_pellet_command():

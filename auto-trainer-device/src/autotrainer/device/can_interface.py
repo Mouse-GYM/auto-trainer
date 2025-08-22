@@ -19,7 +19,7 @@ import time
 import warnings
 from enum import Enum
 from operator import attrgetter
-from typing import Type, Optional, Dict
+from typing import Type, Optional, Dict, Union, Any
 
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
@@ -35,9 +35,34 @@ else:
         warnings.warn(f"expected pyjerrycan >= 1.2.0 ; got {jerry_v}", UserWarning)
 
 
-from autotrainer.core.message import Motor
 from autotrainer.core.logging import get_verbose_logger
-from .device_interface import *
+from .device_interface import (
+    DeviceInterface,
+    Acknowledge,
+    AnalogOutput,
+    AnalogOutputs,
+    AudioData,
+    DoorData,
+    Heartbeat,
+    LoadCellReading,
+    PressureReading,
+    Motor,
+    DigitalOutputs,
+    Source,
+    Status,
+    Target,
+    Tone,
+    ColorLed,
+    MagnetDigitalInputs,
+    MotorSource,
+    PelletDigitalInputs,
+    ServoConfig,
+    StepperConfig,
+    SensorStatus,
+    ServoStatus,
+    StepperStatus,
+    Version,
+)
 from .stepper_motor import mm_to_turns, turns_to_mm
 
 
@@ -45,6 +70,7 @@ logger = get_verbose_logger(__name__)
 
 
 _STEPPER_MAX_TURNS = 15  # absolute max nbr of turns for each stepper, hardcoded for now.
+_STEPPER_MAX_POS = turns_to_mm(_STEPPER_MAX_TURNS)
 
 
 def _is_pellet_by_addr(addr: int) -> bool:
@@ -157,8 +183,33 @@ def _motor_to_id(motor: Motor) -> int:
     motor_id = _MOTOR_TO_ID_MAP[motor]
     return motor_id.value
 
+_motor_to_axis_idx_map = {
+    Motor.PELLET_X_MOTOR: 0,
+    Motor.PELLET_Y_MOTOR: 1,
+    Motor.PELLET_Z_MOTOR: 2,
+}
+def _motor_to_axis_idx(
+    motor: Motor,
+    *,
+    _map=_motor_to_axis_idx_map,  # noqa
+) -> int:
+    value = _map.get(motor, None)
+    if value is None:
+        raise ValueError(f"Invalid motor for offset idx map: {motor}")
+    return value
 
-def is_servo(motor: Motor) -> bool:
+
+_servo_motors = {
+    Motor.TUNNEL_MAGNET_SERVO,
+    Motor.TUNNEL_GATE_SERVO,
+    Motor.PELLET_LOAD_SERVO,
+    Motor.PELLET_COVER_SERVO,
+}
+
+def is_servo(motor: Motor,
+             *,
+             _servo_motors=_servo_motors,  # noqa
+             ) -> bool:
     """
     Args:
         motor: motor identifier
@@ -166,10 +217,7 @@ def is_servo(motor: Motor) -> bool:
     Returns:
         bool: True if the motor is a servo motor, False otherwise
     """
-    return motor == Motor.TUNNEL_MAGNET_SERVO or \
-        motor == Motor.TUNNEL_GATE_SERVO or \
-        motor == Motor.PELLET_LOAD_SERVO or \
-        motor == Motor.PELLET_COVER_SERVO
+    return motor in _servo_motors
 
 
 def is_stepper(motor: Motor) -> bool:
@@ -183,7 +231,15 @@ def is_stepper(motor: Motor) -> bool:
     return not is_servo(motor)
 
 
-def target_of_motor(motor: Motor) -> Target:
+_tunnel_servos = {
+    Motor.TUNNEL_MAGNET_SERVO,
+    Motor.TUNNEL_GATE_SERVO,
+}
+
+def target_of_motor(motor: Motor,
+                    *,
+                    _tunnel_servos=_tunnel_servos,  # noqa
+                    ) -> Target:
     """
     Args:
         motor: motor identifier
@@ -191,9 +247,10 @@ def target_of_motor(motor: Motor) -> Target:
     Returns:
         Target: the hardware target that the motor resides on
     """
-    return Target.MAGNET_DEVICE \
-        if (motor == Motor.TUNNEL_MAGNET_SERVO or motor == Motor.TUNNEL_GATE_SERVO) \
+    return (
+        Target.MAGNET_DEVICE if motor in _tunnel_servos
         else Target.PELLET_DEVICE
+    )
 
 
 def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
@@ -246,7 +303,7 @@ class CanInterface(DeviceInterface):
 
     # UUIDs are used in a command/acknowledge protocol to know when a command is complete
     # A UUID of 0 is an invalid UUID.
-    # UUIDs in the CAN message are 8 bits, so UUIDs here are maintined to 8 bits
+    # UUIDs in the CAN message are 8 bits, so UUIDs here are maintained to 8 bits
     _uuid: int = 1
 
     @classmethod
@@ -305,8 +362,8 @@ class CanInterface(DeviceInterface):
         self._cnt_none = 0
         self._is_open = False
 
-        self._pellet_addr: typing.Optional[int] = None
-        self._magnet_addr: typing.Optional[int] = None
+        self._pellet_addr: Optional[int] = None
+        self._magnet_addr: Optional[int] = None
 
         self.magnet_config = ServoConfig()
         self.gate_config = ServoConfig()
@@ -621,7 +678,7 @@ class CanInterface(DeviceInterface):
         self._cnt_none = 0
         if self._is_open:
             tot_flushed = 0
-            t_end = time.time() + 1.5
+            t_end = time.perf_counter() + 1.5
             while True:
                 flushed = self._read_msgs(100, collect_ms=5)  # purge whatever is available
                 tot_flushed += len(flushed)
@@ -631,7 +688,7 @@ class CanInterface(DeviceInterface):
                         break
                 if self.pellet_address is not None and self.magnet_address is not None:
                     break
-                if time.time() > t_end:
+                if time.perf_counter() > t_end:
                     logger.critical("Could not obtain both pellet and magnet CAN bus addresses in time, "
                                     "either one or both of them is/are shutdown, "
                                     "either there is a CAN bus or CAN system related issue. "
@@ -657,19 +714,19 @@ class CanInterface(DeviceInterface):
         return self._is_open
 
     def _read_by_one_msg(self, max_count: int, collect_ms: int):
-        t_end = time.time() + collect_ms / 1000
+        t_end = time.perf_counter() + collect_ms / 1000
         messages = []
         while True:
             msg = self._jc.ReceiveMessage()
             if msg is None:
-                if collect_ms == 0 or time.time() > t_end:
+                if collect_ms == 0 or time.perf_counter() > t_end:
                     return messages
             else:
                 messages.append(msg)
             if 0 < max_count <= len(messages):
                 return messages
 
-    def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
+    def read(self, max_count: int = 1, *, collect_ms: int = 0) -> Any:
         """
         Read a set of packets from the CANbus.
 
@@ -690,7 +747,7 @@ class CanInterface(DeviceInterface):
         # some handlers can return None, so we have to filter:
         return list(filter(lambda v: v is not None, map(self._translate, messages)))
 
-    def write(self, value: typing.Any) -> int:
+    def write(self, value: Any) -> int:
         """
         Do not allow the application to write unknown messages to the CANbus
 
@@ -760,7 +817,7 @@ class CanInterface(DeviceInterface):
 
         return final_res
 
-    def get_motor_configuration(self, motor: Motor):
+    def get_motor_configuration(self, motor: Motor) -> Union[ServoConfig, StepperConfig]:
         """
         Args:
             motor
@@ -986,28 +1043,50 @@ class CanInterface(DeviceInterface):
         Returns:
             bool: True if successful else False
         """
-
-        # if save_as_fixed and relative:
-        #     raise ValueError("Cannot move_stepper with save_as_fixed and relative")
-
-        if isinstance(position, float) or isinstance(position, int):
-            velocity = config.maximum_velocity
-        elif isinstance(position, tuple):
-            velocity = float(position[1]) / 100.0 * config.maximum_velocity
-            position = float(position[0])
-        else:
-            logger.warning("Unhandled position: %s", position)
+        addr = self._tgt2addr(target_of_motor(motor))
+        if addr is None:
+            logger.error("%s: target addr is None", motor)
             return False
 
-        logger.debug("%s: move %.3f mm with v=%.3f mm/s**2 save_as_fixed=%s relative=%s",
-                     motor, position, velocity, save_as_fixed, relative)
+        if isinstance(position, (float, int)):
+            velocity = config.maximum_velocity
+        elif isinstance(position, tuple) and len(position) == 2:
+            position = float(position[0])
+            velocity = float(position[1]) / 100.0 * config.maximum_velocity
+        else:
+            logger.error("Unhandled position type: %s ; value=%r", type(position), position)
+            return False
 
-        turns_position = mm_to_turns(position)
+        motor_axis_idx = _motor_to_axis_idx(motor)
+        axis_prev_send_pos = self._prev_send_pos[motor_axis_idx]
+        char_coord = "xyz"[motor_axis_idx]
+
+        if save_as_fixed:
+            if relative:
+                # force absolute for save_as_fixed position,
+                # this allows to only account 1 time for the possible auto-corrected drift
+                relative = False
+                position += axis_prev_send_pos
+            self._prev_send_pos = self._prev_send_pos.replace(**{char_coord: position})
+
+        corrected_position = position
+        if save_as_fixed and self._auto_correct_motor_drift:
+            axis_drift = self._motors_drift[motor_axis_idx]
+            self._active_motors_drift = self._active_motors_drift.replace(**{char_coord: axis_drift})
+            corrected_position = position - axis_drift
+            # logger.debug("%s: corrected %.3f -> %.3f", motor, position, corrected_position)
+
+        logger.verbose("%s: %s %s %.3f mm (corrected %.3f) with v=%.3f mm/s**2",
+                     motor,
+                       ("move", "save_as_fixed")[save_as_fixed],
+                       ("absolute", "relative")[relative],
+                       position, corrected_position, velocity)
+
+        turns_position = mm_to_turns(corrected_position)
         turns_velocity = mm_to_turns(velocity)
         turns_acceleration = mm_to_turns(config.maximum_acceleration)
 
         if relative:
-            max_pos = turns_to_mm(_STEPPER_MAX_TURNS)
             if not save_as_fixed and motor in self._last_positions:
                 last_pos = self._last_positions[motor]
                 if last_pos is None:
@@ -1018,8 +1097,8 @@ class CanInterface(DeviceInterface):
                     position -= tentative
                     turns_position = mm_to_turns(position)
                     logger.verbose("Limiting relative move to %s", position)
-                elif tentative > max_pos:
-                    position = max_pos - last_pos
+                elif tentative > _STEPPER_MAX_POS:
+                    position = _STEPPER_MAX_POS - last_pos
                     turns_position = mm_to_turns(position)
                     logger.verbose("Limiting relative move to %s", position)
                 # force set our last receive position:
@@ -1029,13 +1108,11 @@ class CanInterface(DeviceInterface):
         else:
             if turns_position < 0:
                 turns_position = 0
+                logger.debug("limited turns_position to 0")
             elif turns_position > _STEPPER_MAX_TURNS:
                 turns_position = _STEPPER_MAX_TURNS
+                logger.debug("limited turns_position to max")
 
-        addr = self._tgt2addr(target_of_motor(motor))
-        if addr is None:
-            logger.warning("addr None for stepper motor=%s", motor)
-            return False
         uuid = CanInterface.next_uuid()
         res = self._jc.StepperMove(
             addr,
@@ -1079,6 +1156,13 @@ class CanInterface(DeviceInterface):
     def set_motor_x(self, position: float, *, relative: bool = False) -> bool:
         # NB: SET == saved-as-fixed:
         return self.move_motor_x(position, save_as_fixed=True, relative=relative)
+
+    def move_motor(self, motor: Motor, position, *, save_as_fixed: bool = False, relative: bool = False):
+        # only for steppers, XYZ
+        return self._move_stepper_motor(
+            motor, position, self._motor_configs[motor],
+            save_as_fixed=save_as_fixed, relative=relative,
+        )
 
     def move_motor_x(
         self,
@@ -1472,7 +1556,7 @@ class CanInterface(DeviceInterface):
     def _assign_timestamp_ns(message):
         return time.time_ns()
 
-    def _translate(self, message) -> typing.Optional[typing.Any]:
+    def _translate(self, message) -> Optional[Any]:
         """
         Translate from a JerryCANCmd class to a class specific to the data type received
 
@@ -1494,7 +1578,7 @@ class CanInterface(DeviceInterface):
         return res
 
     @staticmethod
-    def _translate_bootloader(message) -> typing.Optional[Version]:
+    def _translate_bootloader(message) -> Optional[Version]:
         """
         Translate bootloader response messages.
 
@@ -1520,7 +1604,7 @@ class CanInterface(DeviceInterface):
         return None
 
     def _translate_config(self, message) -> \
-        typing.Optional[typing.Union[ServoConfig, StepperConfig]]:
+        Optional[Union[ServoConfig, StepperConfig]]:
         """
         Translate configuration response messages for servo or stepper motors.
 
@@ -1589,7 +1673,7 @@ class CanInterface(DeviceInterface):
         return config
 
     @staticmethod
-    def _translate_gpio(message) -> typing.Union[MagnetDigitalInputs, PelletDigitalInputs]:
+    def _translate_gpio(message) -> Union[MagnetDigitalInputs, PelletDigitalInputs]:
         """
         Translate GPIO read response messages.
 
@@ -1615,7 +1699,7 @@ class CanInterface(DeviceInterface):
             return gpios
 
     @staticmethod
-    def _translate_analog_out(message) -> typing.Optional[AnalogOutput]:
+    def _translate_analog_out(message) -> Optional[AnalogOutput]:
         """
         Translate analog output response messages.
 
@@ -1667,7 +1751,7 @@ class CanInterface(DeviceInterface):
                            _addr2tgt(message.dst_id), cur_audio.target, message.audio_data.magnitudes)
         return None
 
-    def _handle_audio_end(self, message) -> typing.Optional[AudioData]:
+    def _handle_audio_end(self, message) -> Optional[AudioData]:
         """
         Handle the end of audio magnitude data stream.
 
@@ -1727,7 +1811,7 @@ class CanInterface(DeviceInterface):
         return door
 
     @staticmethod
-    def _translate_servo_status(message) -> typing.Optional[ServoStatus]:
+    def _translate_servo_status(message) -> Optional[ServoStatus]:
         """
         Translate servo status response messages.
 
@@ -1747,12 +1831,13 @@ class CanInterface(DeviceInterface):
 
     def _handle_stepper_status(self, message):
         status = self._translate_stepper_status(message)
+        if status is None:
+            return None
         if status.motor in self._last_positions:
             self._last_positions[status.motor] = status.position
         return status
 
-    @staticmethod
-    def _translate_stepper_status(message) -> typing.Optional[StepperStatus]:
+    def _translate_stepper_status(self, message) -> Optional[StepperStatus]:
         """
         Translate stepper status response messages.
 
@@ -1768,11 +1853,16 @@ class CanInterface(DeviceInterface):
             logger.warning("_translate_stepper_status: target=%s motor=%s dst_id=%s motor_id=%s",
                            target, motor, message.dst_id, message.stepper_status.motor_id)
             return None
+        motor_axis_idx = _motor_to_axis_idx(motor)
+        motor_send_pos = turns_to_mm(message.stepper_status.send_position)
+        if self._auto_correct_motor_drift:
+            motor_send_pos += self._active_motors_drift[motor_axis_idx]
         status = StepperStatus(
             target=target,
             motor=motor,
             position=turns_to_mm(message.stepper_status.position),
-            send_position=turns_to_mm(message.stepper_status.send_position),
-            limit_switch=message.stepper_status.limit_switch
+            send_position=motor_send_pos,
+            limit_switch=message.stepper_status.limit_switch,
+            position_error=self._motors_drift_error[motor_axis_idx],
         )
         return status

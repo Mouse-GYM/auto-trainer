@@ -50,7 +50,7 @@ class _InferenceProtocol(Protocol):
     algo_initialised: Callable[["autotrainer.inference.PoseAlgorithm"], None]
     diamond_triangle_offset_changed: Callable[[Optional[Offset3DTuple]], None]
     star_triangle_offset_changed: Callable[[Optional[Offset3DTuple]], None]
-
+    triangle_pellet_offset_changed: Callable[[Optional[Offset3DTuple]], None]
 
 
 class InferenceProtocol(ObservableObject, _InferenceProtocol):

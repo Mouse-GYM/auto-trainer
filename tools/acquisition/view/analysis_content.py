@@ -5,6 +5,7 @@ from typing import Tuple, Optional
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
 
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import PerfMonitor, MessageHandler, SensorAnalysis, LoadCellMonitor, Offset3DTuple
 from autotrainer.pyside import PGWidget, HardwarePortComboBox, CardWidget, QtIndicator
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -12,7 +13,8 @@ from tools.acquisition.model.inference_model import InferenceModel
 
 from tools.acquisition.view.content_widget import ContentWidget
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
+
 
 _ACTIVE_LOAD_CELL_COLOR = (0, 250, 154)
 _INACTIVE_LOAD_CELL_COLOR = (240, 240, 240)
@@ -109,6 +111,7 @@ class AnalysisContent(ContentWidget):
 
         inference_model.star_triangle_offset_changed += self._star_triangle_offset_changed
         inference_model.diamond_triangle_offset_changed += self._diamond_triangle_offset_changed
+        inference_model.triangle_pellet_offset_changed += self._triangle_pellet_offset_changed
 
         self._analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
 
@@ -160,3 +163,10 @@ class AnalysisContent(ContentWidget):
         self.star_triangle_offset_changed.emit(
             "n/a" if offset is None else f"{offset.distance:.2f} mm"
         )
+
+    @staticmethod
+    def _triangle_pellet_offset_changed(offset: Optional[Offset3DTuple]):
+        # todo: do we display on UI ?
+        if offset is None:
+            return
+        logger.spam("triangle pellet offset: %s distance=%.3f", offset, offset.distance)
