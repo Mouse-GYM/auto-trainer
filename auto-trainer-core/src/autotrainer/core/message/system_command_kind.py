@@ -48,9 +48,10 @@ class SystemCommandKind(IntEnum):
     MOVE_Z = 222  # moves Z, only
     MOVE_GATE_SERVO = 223
 
-    SET_MOTOR_DRIFT = 223
+    SEND_RETRACT = 224  # make y - 15, or 0 if lower.
 
-    SEND_RETRACT = 224  # make y - 10, or 0 if lower.
+    SET_MOTOR_DRIFT = 225
+    SET_AUTO_CORRECT_DRIFT = 226
 
     # General actions.
     PLAY_TONE = 301

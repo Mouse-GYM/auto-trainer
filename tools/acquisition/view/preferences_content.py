@@ -5,7 +5,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton, \
     QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox
 
-from autotrainer.core import get_verbose_logger
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.device import get_available_hardware
 from autotrainer.model import EnvironmentProvider, HardwareVersion
 from autotrainer.pyside import Separator, HardwarePortComboBox, QSwitch
@@ -131,6 +131,15 @@ class PreferencesContent(QWidget):
         layout.addWidget(button)
 
         form_layout.addRow("Inference model:", layout)
+
+        self._auto_correct_motors_drift_toggle = QSwitch()
+        self._auto_correct_motors_drift_toggle.setChecked(self._model.behavior.algorithm.auto_correct_motors_drift)
+        def auto_correct_motors_drift_toggle_changed(value: int):
+            enabled = value != 0
+            logger.verbose("auto_correct_motors_drift_toggle_changed: %s", enabled)
+            self._model.behavior.algorithm.auto_correct_motors_drift = enabled
+        self._auto_correct_motors_drift_toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
+        form_layout.addRow("Auto-correct motors drift:", self._auto_correct_motors_drift_toggle)
 
         self._use_triangle_pellet_distance = algo.use_triangle_pellet_distance_too_far
         self._toggle_use_triangle_pellet_distance = QSwitch()

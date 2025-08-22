@@ -1,4 +1,5 @@
 import math
+import statistics
 
 import numpy
 import pytest
@@ -122,3 +123,33 @@ def test_repr_and_str():
 ])
 def test_distance(offset, exp_distance):
     assert offset.distance == exp_distance
+
+
+@pytest.mark.parametrize("offset, other, result", [
+    [(1, -0.5, 0), (1, 2, 3), (1, -1, 0)],
+    [(0, 1, 0), (1, 5, 1), (0, 5, 0)],
+    [(0, 0, -1), (1, 2, 3), (0, 0, -3)],
+    [(1, 2, 3), 3, (3, 6, 9)],
+])
+def test_multiply(offset, other, result):
+    offset = Offset3DTuple(offset)
+    # result = Offset3DTuple(result)
+    assert offset * other == result
+
+
+@pytest.mark.parametrize("offset, other, result", [
+    [(6, -3, 9), 3,          (2, -1, 3)],
+    [(6, -3, 9), (2, -1, 3), (3, 3, 3)],
+])
+def test_divide(offset, other, result):
+    offset = Offset3DTuple(offset)
+    result = Offset3DTuple(result)
+    assert offset / other == result
+
+
+@pytest.mark.parametrize("offset, digits, expected", [
+    [Offset3DTuple(1/3, 1/7, 1/9), 2, '(0.33, 0.14, 0.11)'],
+    [Offset3DTuple(1/3, 1/7, 1/9), 3, '(0.333, 0.143, 0.111)'],
+])
+def test_humanize(offset, digits, expected):
+    assert offset.humanize(n_digits=digits) == expected

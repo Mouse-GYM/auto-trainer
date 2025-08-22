@@ -341,7 +341,8 @@ class AppModel(ObservableObject):
                 camera.on_capture_start()
 
         logger.debug("connecting hardware ...")
-        self.hardware.connect(self._message_handler.input_queue, self._selected_animal)
+        self._hardware.connect(self._message_handler.input_queue, self._selected_animal)
+        self._hardware.set_auto_correct_motor_drift(self._behavior.algorithm.auto_correct_motors_drift)
         logger.info("finished connecting hardware")
 
         return True
@@ -484,9 +485,10 @@ class AppModel(ObservableObject):
         if notification.context and self._project_info is not None:
             self._save_metadata(self._project_info.get_metadata_file(-1), self._project_info.session.value)
 
-    @staticmethod
-    def _on_behavior_property_changed(name: str, new_value, old_value):
+    def _on_behavior_property_changed(self, name: str, new_value, old_value):
         logger.debug("behavior property changed: %s: %s -> %s", name, old_value, new_value)
+        if name == BehaviorProps.AUTO_CORRECT_MOTOR_DRIFT:
+            self._hardware.set_auto_correct_motor_drift(new_value)
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
         if name == UserPreferences.SELECTED_ANIMAL:

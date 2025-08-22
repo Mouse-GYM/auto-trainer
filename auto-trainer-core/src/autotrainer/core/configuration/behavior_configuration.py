@@ -23,6 +23,7 @@ class PelletDeliveryConfiguration:
     max_pellets_per_session: int = 10
     max_pellets_per_day: int = 50
     max_pellet_missing_seconds: float = 15.0
+    auto_correct_motors_drift: bool = False
     use_triangle_pellet_distance_too_far: bool = False
     triangle_pellet_expected_distance: float = 5  # mm
     triangle_pellet_diff_too_far_threshold: float = 1  # mm
@@ -108,7 +109,6 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     dumper.add_representer(HeadClampConfiguration, head_clamp_configuration_representer)
     dumper.add_representer(HeadbarPressureConfiguration, headbar_pressure_configuration_representer)
     dumper.add_representer(LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer)
-
     dumper.add_representer(BehaviorConfiguration, behavior_configuration_representer)
 
 

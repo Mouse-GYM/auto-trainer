@@ -1,19 +1,24 @@
 import logging
+import math
 import threading
 import time
 from pathlib import Path
 from queue import Queue
 from uuid import UUID, uuid4
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, List, Tuple, Dict, Union
 
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor)
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, CAN_IDENTIFIER, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
-                                HeadFix, PelletDelivery, MotorConfigurationFile, CompoundMovementFile)
+                                HeadFix, PelletDelivery, MotorConfigurationFile, CompoundMovementFile, StepperConfig,
+                                ServoConfig)
 
 logger = get_verbose_logger(__name__)
+
+
+_nans_offset3dtuple = Offset3DTuple(math.nan, math.nan, math.nan)
 
 
 class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol):
@@ -49,20 +54,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._head_magnet_position: Optional[float] = None
 
         # Support for relative x, y, z movements and whether they are persistent as the Send position various between
-        # hardware implementations.  One the Alogus hardware is used exclusively, it should be possible to remove these
+        # hardware implementations. One the Alogus hardware is used exclusively, it should be possible to remove these
         # and rely on SET_X/Y/Z commands with the extra arguments that support relative and/or movements that should
         # not affect the Send position.
-        self._last_x: Optional[float] = None
-        self._last_y: Optional[float] = None
-        self._last_z: Optional[float] = None
+        self._last_coordinates = _nans_offset3dtuple
+        self._last_set_coordinates = _nans_offset3dtuple  # what we've SET
 
-        self._send_x: Optional[float] = None
-        self._send_y: Optional[float] = None
-        self._send_z: Optional[float] = None
-
-        self._last_set_x: Optional[float] = None
-        self._last_set_y: Optional[float] = None
-        self._last_set_z: Optional[float] = None
+        # what the motors report they've been SET (with possible drift corrected)
+        self._send_coordinates = _nans_offset3dtuple
 
         self._front_door_open: bool = False
         self._slide_door_open: bool = False
@@ -106,12 +105,24 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                                                           self._pending_command)
 
     @property
+    def last_position(self) -> Optional[Offset3DTuple]:
+        return self._last_coordinates
+
+    @property
+    def last_set_position(self) -> Optional[Offset3DTuple]:
+        value = self._last_set_coordinates
+        if any(map(math.isnan, value)):
+            return None
+        return value
+
+    @property
     def send_x(self):
-        return self._send_x
+        return self._send_coordinates[0]
 
     @send_x.setter
     def send_x(self, value):
-        self._send_x = self._on_property_changed("send_x", value, self._send_x)
+        prev, self._send_coordinates = self._send_coordinates, self._send_coordinates.replace(x=value)
+        self._on_property_changed("send_x", value, prev.x)
 
     @property
     def send_y(self):
@@ -119,7 +130,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @send_y.setter
     def send_y(self, value):
-        self._send_y = self._on_property_changed("send_y", value, self._send_y)
+        prev, self._send_coordinates = self._send_coordinates, self._send_coordinates.replace(y=value)
+        self._on_property_changed("send_y", value, prev.y)
 
     @property
     def send_z(self):
@@ -127,7 +139,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @send_z.setter
     def send_z(self, value):
-        self._send_z = self._on_property_changed("send_z", value, self._send_z)
+        prev, self._send_coordinates = self._send_coordinates, self._send_coordinates.replace(z=value)
+        self._on_property_changed("send_z", value, prev.z)
 
     @property
     def front_door_open(self):
@@ -174,77 +187,59 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def tare_load_cell(self) -> Optional[UUID]:
         return self._send_with_token(self._tunnel_device, SystemCommandKind.UPDATE_SCALE_TARE)
 
-    def set_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
-        prev_last = self._last_set_x
+    def _set_axis(self, value: float, *, absolute: bool = True,
+                  system_set_cmd: SystemCommandKind, coord_idx: int) -> Optional[UUID]:
+        prev_value = self._last_set_coordinates[coord_idx]
         if absolute:
-            self._last_set_x = value
+            new_value = value
         else:
-            if self._last_set_x is None:
-                logger.warning("relative x set requested, but no last_set_x position is set")
-                return None
-            self._last_set_x += value
-            # value = self._last_set_x  # using/keeping the absolute, or not
-        # Send this whether the command succeeds or not.  It is the desired released position for future pellet releases
-        # regardless of whether the command succeeds this particular time.
-        self._on_property_changed("set_x", self._last_set_x, prev_last)
-        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_X,
+            if math.isnan(prev_value):
+                err_msg = (
+                    f"Cannot SET axis with relative value when SET not already called/initialized with absolute value"
+                )
+                raise ValueError(err_msg)
+            new_value = prev_value + value
+        coord_char = "xyz"[coord_idx]
+        if new_value < 0:
+            value = 0 if absolute else -prev_value
+            new_value = 0
+            logger.debug("Axis-%s: limited move to 0 ; value=%.3f absolute=%s",
+                         "XYZ"[coord_idx], value, absolute)
+        self._on_property_changed(f"set_{coord_char}", new_value, prev_value)
+        self._last_set_coordinates = self._last_set_coordinates.replace(**{coord_char: new_value})
+        return self._send_with_token(self._pellet_device, system_set_cmd,
                                      SystemDataArgsKwargs(value, relative=not absolute))
 
-    def set_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
-        prev_last = self._last_set_y
-        if absolute:
-            self._last_set_y = value
-        else:
-            if self._last_set_y is None:
-                logger.warning("relative y set requested, but no last_set_y position is set")
-                return None
-            self._last_set_y += value
-            # value = self._last_set_y
-        # Send this whether the command succeeds or not.  It is the desired released position for future pellet releases
-        # regardless of whether the command succeeds this particular time.
-        self._on_property_changed("set_y", self._last_set_y, prev_last)
-        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Y,
-                                     SystemDataArgsKwargs(value, relative=not absolute))
+    def set_x(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_X, coord_idx=0)
 
-    def set_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
-        prev_last = self._last_set_z
-        if absolute:
-            self._last_set_z = value
-        else:
-            if self._last_set_z is None:
-                logger.warning("relative z set requested, but no last_set_z position is set")
-                return None
-            self._last_set_z += value
-            # value = self._last_set_z
-        # Send this whether the command succeeds or not.  It is the desired released position for future pellet releases
-        # regardless of whether the command succeeds this particular time.
-        self._on_property_changed("set_z", self._last_set_z, prev_last)
-        return self._send_with_token(self._pellet_device, SystemCommandKind.SET_Z,
-                                     SystemDataArgsKwargs(value, relative=not absolute))
+    def set_y(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Y, coord_idx=1)
 
-    def move_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+    def set_z(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Z, coord_idx=2)
+
+    def _move_axis(self, value: float, *, absolute: bool = True,
+                   system_move_cmd: SystemCommandKind, coord_idx: int) -> Optional[UUID]:
+        prev_value = self._last_coordinates[coord_idx]
         if not absolute:
-            if self._last_x is None:
-                logger.warning("relative x movement requested, but no last x position is set")
+            if math.isnan(prev_value):
+                logger.warning("Axis-%s: relative movement requested, but no previous position is set",
+                               "XYZ"[coord_idx])
                 return None
-            value += self._last_x
-        return self._send_with_token(self._pellet_device, SystemCommandKind.MOVE_X, value)
+            value += prev_value
+        coord_char = "xyz"[coord_idx]
+        self._last_coordinates = self._last_coordinates.replace(**{coord_char: value})
+        return self._send_with_token(self._pellet_device, system_move_cmd, value)
 
-    def move_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
-        if not absolute:
-            if self._last_y is None:
-                logger.warning("relative y movement requested, but no last y position is set")
-                return None
-            value += self._last_y
-        return self._send_with_token(self._pellet_device, SystemCommandKind.MOVE_Y, value)
+    def move_x(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
+        return self._move_axis(value, absolute=absolute, system_move_cmd=SystemCommandKind.MOVE_X, coord_idx=0)
 
-    def move_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
-        if not absolute:
-            if self._last_z is None:
-                logger.warning("relative z movement requested, but no last z position is set")
-                return None
-            value += self._last_z
-        return self._send_with_token(self._pellet_device, SystemCommandKind.MOVE_Z, value)
+    def move_y(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
+        return self._move_axis(value, absolute=absolute, system_move_cmd=SystemCommandKind.MOVE_Y, coord_idx=1)
+
+    def move_z(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
+        return self._move_axis(value, absolute=absolute, system_move_cmd=SystemCommandKind.MOVE_Z, coord_idx=2)
 
     def send_to_limits(self):
         return self._send_with_token(self._pellet_device, SystemCommandKind.SEND_TO_LIMITS,
@@ -280,9 +275,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._send_with_token(self._pellet_device, SystemCommandKind.DELAY, amount)
 
     def connect(self, cmd_queue: Queue, animal: Optional[AnimalSubject] = None):
-        self._last_x = None
-        self._last_y = None
-        self._last_z = None
+        self._last_coordinates = _nans_offset3dtuple
+        self._last_set_coordinates = _nans_offset3dtuple
 
         if self.tunnel_identifier == CAN_IDENTIFIER:
             # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
@@ -321,9 +315,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._send_command(self._tunnel_device, SystemCommandKind.STREAM_START)
 
-        self.send_home()
-
         self._send_command(self._tunnel_device, SystemCommandKind.UPDATE_SCALE_TARE)
+
+        self.send_home()
 
         if animal is not None:
             self.delay(0.5)
@@ -338,7 +332,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def disconnect(self):
         if self._tunnel_device is not None:
             self._tunnel_device.request_disconnect()
-        if self._pellet_device is not None:
+        if self._pellet_device is not None and self._pellet_device is not self._tunnel_device:
             self._pellet_device.request_disconnect()
 
         self._tunnel_device = None
@@ -352,13 +346,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             self._head_magnet_position = self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value,
                                                                    self._head_magnet_position)
         elif name == MessageHandler.STEPPER_X_PROPERTY:
-            self._last_x = value.position
+            self._last_coordinates = self._last_coordinates.replace(x=value.position)
             self.send_x = value.send_position
         elif name == MessageHandler.STEPPER_Y_PROPERTY:
-            self._last_y = value.position
+            self._last_coordinates = self._last_coordinates.replace(y=value.position)
             self.send_y = value.send_position
         elif name == MessageHandler.STEPPER_Z_PROPERTY:
-            self._last_z = value.position
+            self._last_coordinates = self._last_coordinates.replace(z=value.position)
             self.send_z = value.send_position
         elif name == MessageHandler.FRONT_DOOR_PROPERTY:
             self.front_door_open = value
@@ -388,16 +382,15 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def __send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         perf_now = time.perf_counter()
-        # if self._pending_command_token is not None:
-        #     logger.warning("ignoring action due to pending command: %s token=%s ; new=%s",
-        #         self.pending_command, self.pending_command_token, cmd,
-        #         stack_info=True,
-        #     )
-        #     t_diff = perf_now - self._pending_command_perf_now
-        #     if t_diff < 5:
-        #         return None
-        #     logger.notice("but pending_command %s for too long, giving up on wait acknowledge to process cmd=%s",
-        #                   self.pending_command, cmd)
+        expired_tokens = set()
+        for pending_token, (pending_cmd, pending_t_perf) in self._pending_tokens.items():
+            age_second = perf_now - pending_t_perf
+            if age_second > 30:
+                logger.warning("Giving up on pending cmd %s for too long ; token=%s age=%s seconds",
+                               cmd, self.pending_command, age_second)
+                expired_tokens.add(pending_token)
+        for expired in expired_tokens:
+            self._pending_tokens.pop(expired, None)
 
         token = uuid4()
         logger.debug("send_command cmd=%s token=%s nbr=%s", cmd, token, len(self._pending_tokens))
@@ -416,26 +409,31 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         return False
 
-    def set_motor_drift(self, drift: Offset3DTuple):
+    def set_motors_drift(self, drift: Offset3DTuple):
         """Apply the pellet motor drift"""
-        # TODO: when changes applied to auto-trainer-device files:
-        # self._pellet_device.set_motor_drift(drift)
+        dev = self._pellet_device
+        dev.send_message(SystemCommandKind.SET_MOTOR_DRIFT, drift)
+        # self._pellet_device.device.device_interface.set_motors_drift(drift)
+        # this ensure the next send_to_fixed_pos command will get the corrected position:
+        for cmd_kind in (SystemCommandKind.SET_X, SystemCommandKind.SET_Y, SystemCommandKind.SET_Z):
+            dev.send_message(cmd_kind, SystemDataArgsKwargs(0, relative=True))
+
+    def set_auto_correct_motor_drift(self, enabled: bool):
+        dev = self._pellet_device
+        if dev is not None:
+            # self._pellet_device.device.device_interface.set_auto_correct_motor_drift(enabled)
+            dev.send_message(SystemCommandKind.SET_AUTO_CORRECT_DRIFT, enabled)
+            if not enabled:
+                # ensure we disable the previous drift:
+                for cmd_kind in (SystemCommandKind.SET_X, SystemCommandKind.SET_Y, SystemCommandKind.SET_Z):
+                    dev.send_message(cmd_kind, SystemDataArgsKwargs(0, relative=True))
 
     def _ack_received(self, token: UUID):
         if token is not None and token not in self._pending_tokens:
-            logger.warning("pending_token != ack_received token: %s vs pending_tokens=%s", token, self._pending_tokens)
+            logger.warning("pending_token != ack_received token: %s vs pending_tokens=%s",
+                           token, self._pending_tokens)
         else:
-            v = self._pending_tokens.pop(token, None)
-            if v is None:
-                return
-            #
-            # cur_pending_token = self._pending_command_token
-            # if cur_pending_token is not None:
-            #     if cur_pending_token == token:
-            #         self.pending_command = None
-            #         self.pending_command_token = None
-            #     elif token is not None:
-            #         logger.warning("pending_token != ack_received token: %s vs %s", cur_pending_token, token)
+            self._pending_tokens.pop(token, None)
 
     def wait_pending_command_acked(self, token, timeout: float = 3):
         t_perf_start = time.perf_counter()
@@ -449,3 +447,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 return
             time.sleep(0.005)
         raise RuntimeError(f"timeout waiting ack of pending token={token}")
+
+    def get_motor_config(self, motor: Motor) -> Union[StepperConfig, ServoConfig]:
+        return self._pellet_device.device.device_interface.get_motor_configuration(motor)

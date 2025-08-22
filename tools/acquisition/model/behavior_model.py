@@ -1,6 +1,7 @@
 from typing import Optional
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol
+from autotrainer.behavior.behavior_algorithm import BehaviorProps
 from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import ObservableObject, ProjectInfo, MessageHandler, SensorAnalysis, BehaviorConfiguration
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -63,7 +64,6 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
 
     def load_configuration(self, configuration: BehaviorConfiguration):
         self.is_intersession_enabled = configuration.pellet_delivery.is_intersession_analysis_enabled
-
         self._machine.algorithm.load_configuration(configuration)
 
     def save_configuration(self) -> BehaviorConfiguration:
@@ -88,10 +88,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             self.algorithm.baseline_intensity = self._hardware_model.head_magnet_intensity
 
     def _on_algorithm_property_changed(self, property_name: str, value, _):
-        if property_name == "intersession_enabled":
+        if property_name == BehaviorProps.INTERSESSION_ENABLED:
             self._is_intersession_enabled = value
 
     def trigger_tunnel(self, value: bool):
+        # currently unused
         """
         Provides the ability to manually trigger tunnel enter/exit state changes independent of load cell events.
         Future load cell events will still have the expected behavior.  This is primarily supported for testing and
