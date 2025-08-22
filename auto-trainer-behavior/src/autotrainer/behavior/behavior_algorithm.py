@@ -1,17 +1,24 @@
 import dataclasses
 import logging
 import math
+import operator
+import statistics
 import threading
 import time
 from datetime import datetime
 from enum import Enum
-from typing import Callable, Optional
+from functools import reduce
+from pathlib import Path
+from typing import Callable, Optional, Tuple, List
 
 from typing import Callable
+
+import yaml
 from typing_extensions import Self
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import ObservableObject, EventManager, BehaviorConfiguration, post_trigger_enable, Offset3DTuple
+from . import DiamondTriangleOffsetConfig
 
 from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
@@ -62,6 +69,7 @@ class BehaviorProps(str, Enum):
     PELLET_COVER_ENABLED = 'pellet_cover_enabled'
     SESSION_PELLET_COUNT = 'session_pellet_count'
 
+    AUTO_CORRECT_MOTOR_DRIFT = 'auto_correct_motor_drift'
     PELLET_MOTOR_DRIFT = 'pellet_motor_drift'
     COVER_SERVO_STATUS = 'cover_servo_status'
     COVER_PELLET_DISTANCE = "cover_pellet_distance"
@@ -83,10 +91,10 @@ class BehaviorAlgorithm(ObservableObject):
     def __init__(
             self,
             *,
-            diamond_triangle_known_offset: Optional[Offset3DTuple] = Offset3DTuple(0, 0, 0),  # None,
             cover_error_min_distance_threshold: float = 2,  # math.inf,   # probably millimeter
             release_error_min_distance_threshold: float = 2,  # math.inf,
             cover_release_min_duration_threshold: float = 3,  # seconds
+            diamond_triangle_offset_config_path: Optional[Path] = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH,
     ):
         super().__init__(event_names=(
             "session_starting",
@@ -104,6 +112,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._intersession_pellet_shift_enabled = False
         self._head_fixation_enabled = False
         self._clean_raw_data_on_inactive_session = False
+        self._auto_correct_motors_drift = False
 
         self._auto_clamp_intensity = 100
         self._auto_clamp_release_tone_freq = 7000
@@ -149,9 +158,12 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._cover_servo_status = CoverServoStatus.OK
 
-        self._diamond_triangle_known_offset = diamond_triangle_known_offset
-        self._diamond_triangle_prev_drift: Optional[Offset3DTuple] = None
-        self._diamond_triangle_last_drift_warned = time.time()
+        self._diamond_triangle_offest_config_path = diamond_triangle_offset_config_path
+        self._load_diamond_config()
+
+        self._diamond_triangle_drift: Optional[Offset3DTuple] = None
+        self._diamond_triangle_prev_drifts: List[Offset3DTuple] = []
+        self._diamond_triangle_last_drift_warned = time.perf_counter()
 
         self._cover_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=BehaviorProps.COVER_PELLET_DISTANCE,
@@ -438,8 +450,29 @@ class BehaviorAlgorithm(ObservableObject):
             logger.notice("Set cover servo status to %s", status)
 
     @property
-    def diamond_triangle_known_offset(self):
-        return self._diamond_triangle_known_offset
+    def diamond_triangle_drift(self) -> Optional[Offset3DTuple]:
+        return self._diamond_triangle_drift
+
+    @property
+    def auto_correct_motors_drift(self) -> bool:
+        return self._auto_correct_motors_drift
+
+    @auto_correct_motors_drift.setter
+    def auto_correct_motors_drift(self, value):
+        prev, self._auto_correct_motors_drift = self._auto_correct_motors_drift, value
+        self._on_property_changed(BehaviorProps.AUTO_CORRECT_MOTOR_DRIFT, value, prev)
+
+    def _load_diamond_config(self):
+        cfg_path = self._diamond_triangle_offest_config_path
+        if cfg_path is None:
+            logger.notice("No diamond-triangle offset config path provided")
+        else:
+            if not cfg_path.expanduser().is_file():
+                logger.warning("Diamond triangle config %r not a file", cfg_path.as_posix())
+            else:
+                self._diamond_triangle_offset_config = DiamondTriangleOffsetConfig.from_file(
+                    cfg_path
+                )
 
     def start_session(self, *, reason: str="NA"):
         with self._thread_lock:
@@ -450,12 +483,12 @@ class BehaviorAlgorithm(ObservableObject):
             logger.warning("%s: start_session() called but already in session (%s)",
                            reason, self._in_session_reason)
             return
+
         logger.success("%s: starting new session recording ...", reason)
+        EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
         self._is_in_session = True
         self._in_session_reason = reason
         self._session_pellet_count = 0
-
-        EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
 
         if self._project_info is not None:
             self._project_info.calculate_next_session_index()
@@ -465,7 +498,11 @@ class BehaviorAlgorithm(ObservableObject):
         self._session_mouse_seen = False
         self._pellet_seen = False
 
+        # this is what send the trigger the enable recording at camera level,
+        # but must be done after calculate next session index !!
         post_trigger_enable(self, True)
+
+        self._load_diamond_config()
 
         self.session_starting()
 
@@ -480,14 +517,17 @@ class BehaviorAlgorithm(ObservableObject):
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._out_session_reason)
             return
+        logger.success("%s: stopping session recording", reason)
         self._is_in_session = False
         self._out_session_reason = reason
-        logger.success("%s: stopping session recording", reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
-        post_trigger_enable(self, False)
+        post_trigger_enable(self, False)  # tells cameras processes to stop recording
+        self._is_in_session = False  # last, but before following session_ending(),
+        # test_covered_load_cycle rely on that atm.
         self.session_ending()
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
+
 
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0
@@ -558,6 +598,8 @@ class BehaviorAlgorithm(ObservableObject):
         self.use_triangle_pellet_distance_too_far = pellet_deliver_cfg.use_triangle_pellet_distance_too_far
         self.triangle_pellet_diff_too_far_threshold = pellet_deliver_cfg.triangle_pellet_diff_too_far_threshold
 
+        self.auto_correct_motors_drift = configuration.pellet_delivery.auto_correct_motors_drift
+
         self.min_baseline_intensity = configuration.head_clamp.min_baseline_intensity
         self.max_baseline_intensity = configuration.head_clamp.max_baseline_intensity
         self.baseline_intensity_increment = configuration.head_clamp.baseline_intensity_increment
@@ -573,6 +615,7 @@ class BehaviorAlgorithm(ObservableObject):
         pellet_cfg.max_pellet_missing_seconds = self.pellet_missing_time
         pellet_cfg.max_pellets_per_session = self.max_pellets_per_session
         pellet_cfg.max_pellets_per_day = self.max_pellets_per_day
+        pellet_cfg.auto_correct_motors_drift = self._auto_correct_motors_drift
         pellet_cfg.use_triangle_pellet_distance_too_far = self.use_triangle_pellet_distance_too_far
         pellet_cfg.triangle_pellet_expected_distance = self.triangle_pellet_expected_distance
         pellet_cfg.triangle_pellet_diff_too_far_threshold = self.triangle_pellet_diff_too_far_threshold
@@ -585,23 +628,49 @@ class BehaviorAlgorithm(ObservableObject):
         configuration.head_clamp.auto_clamp_release_tone_freq = self.auto_clamp_release_tone_freq
         configuration.head_clamp.auto_clamp_release_tone_delay = self.auto_clamp_release_delay
 
-    def handle_diamond_triangle_offset(self, offset: Offset3DTuple):
-        known_offset = self._diamond_triangle_known_offset
-        if known_offset is None:
+    def get_diamond_triangle_drifts(self, reset: bool=False) -> Offset3DTuple:
+        values = self._diamond_triangle_prev_drifts
+        tot = reduce(operator.add, values, Offset3DTuple(0, 0, 0))
+        n_vals = len(values)
+        if reset:
+            self._diamond_triangle_prev_drifts = []
+        new_drift = Offset3DTuple(0, 0, 0) if n_vals == 0 else tot / n_vals
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Motor mean drift: %s\nall motors drifts: %s",
+                         new_drift.humanize(n_digits=3), [v.humanize(n_digits=1) for v in values])
+        # put here to minimize nbr of times we update it:
+        prev, self._diamond_triangle_drift = self._diamond_triangle_drift, new_drift
+        self._on_property_changed(BehaviorProps.PELLET_MOTOR_DRIFT, new_drift, prev)
+        return new_drift
+
+    def handle_diamond_triangle_offset(
+        self,
+        offset: Offset3DTuple,
+        position: Offset3DTuple,
+        *,
+        flips: Offset3DTuple = Offset3DTuple(1, 1, 1),
+    ):
+        cfg = self._diamond_triangle_offset_config
+        if cfg is None:
             return
-        prev = self._diamond_triangle_prev_drift
-        drift = known_offset - offset
+        prev = self._diamond_triangle_drift
+        drift = flips * (cfg.measured_offset - offset) - (cfg.used_position - position)
+        if prev is None:
+            prev = Offset3DTuple(0, 0, 0)
+        logger.spam("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
+                       drift.humanize(), prev.humanize(), position.humanize(), offset.humanize())
         if __debug__:
-            d_drift = None if prev is None else prev - drift
+            d_drift = drift if prev is None else prev + drift
             # not sure which abs_diff to check against:
             if d_drift is not None and any(abs(d) > 2.5 for d in d_drift):
-                t_now = time.time()
-                if t_now > self._diamond_triangle_last_drift_warned + 1:  # max 1 / s
+                perf_now = time.perf_counter()
+                if perf_now > self._diamond_triangle_last_drift_warned + 1:  # max 1 / s
                     logger.verbose("diamond triangle offset drift: %s d_drift=%s", drift, d_drift)
-                    self._diamond_triangle_last_drift_warned = t_now
+                    self._diamond_triangle_last_drift_warned = perf_now
+        self._diamond_triangle_drift = drift
+        self._diamond_triangle_prev_drifts.append(drift)
         if prev != drift:
             self.pellet_motor_drift_changed(drift)
-        self._diamond_triangle_prev_drift = self._on_property_changed(BehaviorProps.PELLET_MOTOR_DRIFT, drift, prev)
 
     def handle_cover_pellet_offset(self, offset: Offset3DTuple):
         self._handle_check_element_distance(self._cover_pellet_distance_ctx, offset)

@@ -14,23 +14,20 @@ from functools import partial
 from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast
 
 from autotrainer.core.logging import get_verbose_logger
-
-from ..core.message import SystemDataArgsKwargs
-from .device_interface import StepperStatus
+from autotrainer.core.message import SystemDataArgsKwargs
 
 logger = get_verbose_logger(__name__)
-
-HAVE_CAN_DEVICE = False
 
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCfgMsg, JerryCANCmdType
 
     HAVE_CAN_DEVICE = True
-except (ModuleNotFoundError, TypeError, AttributeError):
-    pass
+except ModuleNotFoundError:
+    HAVE_CAN_DEVICE = False
+
 
 from autotrainer.core import SystemStatusMessageKind, SystemCommandKind, \
-    AudioSpectrumData
+    AudioSpectrumData, Offset3DTuple
 
 from .motor_steps import MotorSteps
 from .device import Device
@@ -38,7 +35,28 @@ from .emulation_interface import EmulationInterface
 from .device_api import DeviceApi
 from autotrainer.core.analysis.head_fix_measurement import HeadFixMeasurement
 from .can_interface import CanInterface
-from .device_interface import *
+from .device_interface import (
+    Acknowledge,
+    AnalogOutput,
+    AnalogOutputs,
+    AudioData,
+    DoorData,
+    LoadCellReading,
+    PressureReading,
+    Motor,
+    DigitalOutputs,
+    Status,
+    Tone,
+    ColorLed,
+    MagnetDigitalInputs,
+    PelletDigitalInputs,
+    ServoConfig,
+    StepperConfig,
+    SensorStatus,
+    ServoStatus,
+    StepperStatus,
+    Version,
+)
 
 
 def _to_tuple(value: Union[str, Any]):
@@ -105,25 +123,22 @@ class CanDevice(Device):
         self._close_tunnel_gate = default_close_gate()
         self._compound_movement = None  # Current compound movement
 
+        no_op_handler = lambda _: None
+
         # Initialize command handlers lookup table
         self._command_handlers = {
             SystemCommandKind.REQUEST_VERSION:
                 lambda data: self._interface.request_version(),
 
-            SystemCommandKind.READ_MOTOR_CONFIGURATION:
-                lambda data: self._interface.request_motor_config(data),
+            SystemCommandKind.READ_MOTOR_CONFIGURATION: self._interface.request_motor_config,
 
-            SystemCommandKind.MOVE_MAGNET_SERVO:
-                lambda data: self._interface.move_magnet_servo(data),
+            SystemCommandKind.MOVE_MAGNET_SERVO: self._interface.move_magnet_servo,
 
-            SystemCommandKind.MOVE_LOAD_SERVO:
-                lambda data: self._interface.move_load_servo(data),
+            SystemCommandKind.MOVE_LOAD_SERVO: self._interface.move_load_servo,
 
-            SystemCommandKind.MOVE_COVER_SERVO:
-                lambda data: self._interface.move_cover_servo(data),
+            SystemCommandKind.MOVE_COVER_SERVO: self._interface.move_cover_servo,
 
-            SystemCommandKind.MOVE_GATE_SERVO:
-                lambda data: self._interface.move_gate_servo(data),
+            SystemCommandKind.MOVE_GATE_SERVO: self._interface.move_gate_servo,
 
             SystemCommandKind.SET_X: partial(apply_system_command_with_data_args,
                                              self._interface.set_motor_x),
@@ -153,31 +168,29 @@ class CanDevice(Device):
                     [Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]),
 
             SystemCommandKind.SEND_FIXED_XYZ:
-                lambda data: self._interface.fixed_position(),
+                lambda _: self._interface.fixed_position(),
 
             SystemCommandKind.LOAD_PELLET:
-                lambda data: self._start_sequence(self._load_pellet),
+                lambda _: self._start_sequence(self._load_pellet),
 
             SystemCommandKind.SEND_PELLET:
-                lambda data: self._start_sequence(self._send_pellet),
+                lambda _: self._start_sequence(self._send_pellet),
 
             SystemCommandKind.RELEASE_PELLET:
-                lambda data: self._start_sequence(self._release_pellet),
+                lambda _: self._start_sequence(self._release_pellet),
 
             SystemCommandKind.COVER_PELLET:
-                lambda data: self._start_sequence(self._cover_pellet),
+                lambda _: self._start_sequence(self._cover_pellet),
 
             SystemCommandKind.OPEN_TUNNEL_GATE:
-                lambda data: self._start_sequence(self._open_tunnel_gate),
+                lambda _: self._start_sequence(self._open_tunnel_gate),
 
             SystemCommandKind.CLOSE_TUNNEL_GATE:
-                lambda data: self._start_sequence(self._close_tunnel_gate),
+                lambda _: self._start_sequence(self._close_tunnel_gate),
 
-            SystemCommandKind.DELAY:
-                lambda data: self._interface.delay(data),
+            SystemCommandKind.DELAY: self._interface.delay,
 
-            SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
-                lambda data: self._handle_write_motor_configuration(data),
+            SystemCommandKind.WRITE_MOTOR_CONFIGURATION: self._handle_write_motor_configuration,
 
             SystemCommandKind.SET_LOAD_PELLET_PROCEDURE:
                 lambda data: (
@@ -207,10 +220,7 @@ class CanDevice(Device):
                     else None
                 ),
 
-            SystemCommandKind.UPDATE_SCALE_TARE:
-                lambda data: (
-                    self._interface.tare_load_cell()
-                ),
+            SystemCommandKind.UPDATE_SCALE_TARE: lambda _: self._interface.tare_load_cell(),
 
             SystemCommandKind.SET_DIGITAL_OUTPUT:
                 lambda data: (
@@ -236,12 +246,13 @@ class CanDevice(Device):
                     else self._interface.emit_tone(data, 500)  # 500 millisecond
                 ),
 
-            # No-op handlers
-            SystemCommandKind.STREAM_START: lambda data: None,
-            SystemCommandKind.STREAM_STOP: lambda data: None,
-        }
+            SystemCommandKind.SET_MOTOR_DRIFT: self._interface.set_motors_drift,
+            SystemCommandKind.SET_AUTO_CORRECT_DRIFT: self._interface.set_auto_correct_motor_drift,
 
-        no_op_handler = lambda m: None
+            # No-op handlers
+            SystemCommandKind.STREAM_START: no_op_handler,
+            SystemCommandKind.STREAM_STOP: no_op_handler,
+        }
 
         # Initialize data handlers lookup table
         self._data_handlers = {
@@ -310,6 +321,9 @@ class CanDevice(Device):
             target=self._command_handler, name="CanCommandHandler", daemon=True)
         self._commands_handler_thread.start()
 
+    def get_motor_config(self, motor: Motor):
+        return self._interface.get_motor_configuration(motor)
+
     def _set_move_x(self, position):
         steps = MotorSteps("set_move_x",
             [{'x': position}, {'x': position, 'save_as_fixed': True}])
@@ -355,7 +369,8 @@ class CanDevice(Device):
                 if data == pending_uuid and pending_uuid is not None:
                     cur_commands.insert(0, r)
                 else:
-                    logger.verbose("Got CAN msg ack with uuid=%s but pending_uuid=%s", data, pending_uuid)
+                    if pending_uuid is not None:
+                        logger.verbose("Got CAN msg ack with uuid=%s but pending_uuid=%s", data, pending_uuid)
                     continue
             else:
                 if kind is not None:

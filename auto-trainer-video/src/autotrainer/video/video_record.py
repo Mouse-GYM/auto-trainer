@@ -74,6 +74,7 @@ class VideoRecord(Thread):
 
         self._is_video_enabled = self._video_rotate_interval >= 0
         self._video_writer = None
+        self._video_file = None
         self._video_timestamp_file = None
 
         self._image_location: Optional[str] = None
@@ -220,6 +221,7 @@ class VideoRecord(Thread):
         video_file, timestamp_file, _ = self._project_info.get_video_path(
             self._name, interval=self._interval_mode, allow_overwrite=True)
 
+        self._video_file = video_file
         logger.notice(f"<{self.name}>: video record to {video_file}")
 
         self._video_writer = cv2.VideoWriter(video_file, cv2.VideoWriter_fourcc(*'mp4v'), self._fps,
@@ -229,8 +231,9 @@ class VideoRecord(Thread):
     def _close_video_writer(self):
         if self._video_writer is not None:
             self._video_writer.release()
-            logger.debug("Released %s", self._video_writer)
+            logger.debug("Released %s", self._video_file)
             self._video_writer = None
+            self._video_file = None
 
         if self._video_timestamp_file is not None:
             self._video_timestamp_file.close()
