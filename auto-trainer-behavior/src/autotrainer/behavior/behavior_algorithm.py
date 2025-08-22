@@ -338,7 +338,7 @@ class BehaviorAlgorithm(ObservableObject):
     @use_triangle_pellet_distance_too_far.setter
     def use_triangle_pellet_distance_too_far(self, value):
         prev, self._use_triangle_pellet_distance_too_far = self._use_triangle_pellet_distance_too_far, value
-        self._on_property_changed(BehaviorProps.USE_TRIANGLE_PELLET_DISTANCE_TOO_FAR, value, prev)
+        self._on_property_changed(BehaviorAlgoProps.USE_TRIANGLE_PELLET_DISTANCE_TOO_FAR, value, prev)
 
     @property
     def triangle_pellet_expected_distance(self):

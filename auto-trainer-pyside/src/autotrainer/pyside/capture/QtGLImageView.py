@@ -91,11 +91,11 @@ class QGLImageView(QWidget):
         pixmap = QPixmap.fromImage(image)
         if text_overlay:
             painter = QPainter(pixmap)
-            font = QFont("Times", 14)
+            font = QFont("Sans-serif", 14)
             painter.setFont(font)
             painter.setPen(Qt.GlobalColor.yellow)
             with painter:
-                painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, text_overlay)
+                painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter, text_overlay)
         if self._pixmap is None:
             self._pixmap = QGraphicsPixmapItem(pixmap)
             self._pixmap.setZValue(0)
