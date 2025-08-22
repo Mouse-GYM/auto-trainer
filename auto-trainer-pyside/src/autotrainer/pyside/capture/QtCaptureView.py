@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import dataclasses
 from typing import List, Optional, Dict
-from collections import namedtuple
 
 import numpy
 from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QWidget, QLabel, QComboBox, QHBoxLayout, QVBoxLayout, QStackedLayout
 
-from autotrainer.inference import PoseTuple, PoseAlgorithm, PoseLocation
+from autotrainer.inference import PoseLocation
 from autotrainer.pyside.CardWidget import CardWidget
 from .QtGLImageView import QGLImageView
 from .QtCaptureSettings import QCaptureSettings
+
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement
+
+logger = get_verbose_logger(__name__)
 
 
 @dataclasses.dataclass
@@ -30,6 +33,7 @@ class QCaptureView(QWidget):
     def __init__(self, image_width: int = 420, image_height: int = 280):
         super().__init__()
 
+        self._text_overlay: Optional[str] = None
         self._image_width = image_width
         self._image_height = image_height
         self._fps = 0
@@ -40,6 +44,7 @@ class QCaptureView(QWidget):
 
         self._next_frame_points: Dict[SceneElement, PoseLocation] = {}
         self._are_points_dirty = False
+        self._display_dots_detection = True
 
         # Header
         self._camera = QComboBox()
@@ -101,6 +106,13 @@ class QCaptureView(QWidget):
         self.set_is_editable(False)
 
         self.recording_indicator_changed.connect(lambda b: self._setRecordingEnabledIndicator(b))
+
+    def set_text_overlay(self, value):
+        self._text_overlay = value
+        # logger.verbose("got new text overlay: %r", value)
+
+    def set_display_dots_detection(self, value):
+        self._display_dots_detection = value
 
     def set_is_capture_active(self, is_active: bool):
         self._camera.setEnabled(not is_active)
@@ -168,10 +180,11 @@ class QCaptureView(QWidget):
             padded = QImage(self._image_width, self._image_height, image.format())
             padded.fill(Qt.GlobalColor.black)
             painter = QPainter(padded)
-            painter.drawImage(0, 0, image)
+            with painter:
+                painter.drawImage(0, 0, image)
             image = padded
 
-        self._image.set_data(image)
+        self._image.set_data(image, self._text_overlay)
         self._is_frame_dirty = False
 
         # self._fps_label.setText(f"{self._fps:.1f}")
@@ -184,6 +197,9 @@ class QCaptureView(QWidget):
             self._fps = fps
 
     def update_pose(self):
+        if not self._display_dots_detection:
+            self._image.set_points({})
+            return
         if self._next_frame_points is None or not self._are_points_dirty:
             return
         self._image.set_points(self._next_frame_points)
