@@ -14,7 +14,7 @@ from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement
 
 from .analysis.intersession_process import IntersessionResponse
-from .behavior_algorithm import BehaviorAlgorithm, BehaviorProps
+from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
 from .behavior_event_kind import BehaviorEventKind
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine, IntersessionState
@@ -415,7 +415,7 @@ class SystemMachine(StateMachine):
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.
         pellet_dev = self._pellet_device
-        if name == BehaviorProps.HEAD_FIXATION_ENABLED:
+        if name == BehaviorAlgoProps.HEAD_FIXATION_ENABLED:
             if not new_value:
                 logger.debug("auto-clamp disabled (backing off to baseline intensity)")
                 if self.algorithm.is_in_session:
@@ -427,11 +427,11 @@ class SystemMachine(StateMachine):
                     timer = _auto_clamp_release_timer(self.algorithm.auto_clamp_release_delay,
                                   lambda: self._update_magnet_position(self.algorithm.baseline_intensity))
                     timer.start()
-        elif name == BehaviorProps.PELLET_MOTOR_DRIFT:
-            pass
-            # if new_value is not None:
-            #     self._pellet_device.set_motors_drift(new_value)
-        elif name == BehaviorProps.AUTO_CORRECT_MOTOR_DRIFT:
+        elif name == BehaviorAlgoProps.PELLET_MOTOR_DRIFT:
+            if new_value is not None:
+                self._pellet_device.set_motors_drift(new_value)
+
+        elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
             pellet_dev.set_auto_correct_motor_drift(new_value)
             if not new_value:
                 # ensure the current deliver position is corrected (no more drift applied):
