@@ -44,13 +44,6 @@ DEFAULT_LEVEL_STYLES = dict(
 )
 
 
-def get_verbose_logger(name: Optional[str] = None) -> verboselogs.VerboseLogger:
-    logger = logging.getLogger(name)
-    if not isinstance(logger, verboselogs.VerboseLogger):
-        logger.__class__ = verboselogs.VerboseLogger
-    assert isinstance(logger, verboselogs.VerboseLogger)
-    return logger
-
 
 def _thread_id_filter(record):
     """Inject thread_id to log records"""
@@ -89,6 +82,11 @@ class ColoredPreciseTimeFormatter(PreciseTimeFormatter, coloredlogs.ColoredForma
     """A colored logger formatter with time precision handling"""
 
 
+class VerboseLoggerWithThreadId(verboselogs.VerboseLogger):
+    def filter(self, record):
+        return _thread_id_filter(record)
+
+
 def setup_logging(
     name: str = "main",
     *,
@@ -125,7 +123,7 @@ def setup_logging(
         time_precision=time_precision,
     )
     console_handler.setFormatter(fmt)
-    console_handler.setLevel(logger_level)
+    # console_handler.setLevel(logger_level)
 
     root_handler = console_handler
 
@@ -135,10 +133,10 @@ def setup_logging(
 
     #
 
-    logging.getLogger("transitions").setLevel(logger_level)
-    logging.getLogger("tools").setLevel(logger_level)
-    logging.getLogger("autotrainer").setLevel(logger_level)
-    logging.getLogger("inference_algorithms").setLevel(logger_level)
+    get_verbose_logger("transitions").setLevel(logger_level)
+    get_verbose_logger("tools").setLevel(logger_level)
+    get_verbose_logger("autotrainer").setLevel(logger_level)
+    get_verbose_logger("inference_algorithms").setLevel(logger_level)
 
     logger = get_verbose_logger(name)
     logger.setLevel(logger_level)
@@ -151,3 +149,11 @@ def setup_logging(
 def set_logger_level(context: Dict[str, Union[str, int]]):
     for name, value in context.items():
         logging.getLogger(name).setLevel(value)
+
+
+def get_verbose_logger(name: Optional[str] = None) -> VerboseLoggerWithThreadId:
+    logger = logging.getLogger(name)
+    if not isinstance(logger, VerboseLoggerWithThreadId):
+        logger.__class__ = VerboseLoggerWithThreadId
+    assert isinstance(logger, VerboseLoggerWithThreadId)
+    return logger

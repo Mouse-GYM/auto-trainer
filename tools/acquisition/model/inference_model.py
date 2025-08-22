@@ -143,6 +143,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             'detection_result_ready',
             'diamond_triangle_offset_changed',
             'star_triangle_offset_changed',
+            'triangle_pellet_offset_changed',
             'algo_initialised',
         ))
 
@@ -184,6 +185,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._monitored_parts_offsets = [
             (SceneElement.Diamond, SceneElement.Triangle),
             (SceneElement.Star, SceneElement.Triangle),
+            (SceneElement.Triangle, SceneElement.Pellet),
         ]
         self._parts_offsets: Dict[Tuple[SceneElement, SceneElement], Offset3DTuple] = {}
 
@@ -773,6 +775,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                                     self.diamond_triangle_offset_changed(cur)
                                 elif pair_key == (SceneElement.Star, SceneElement.Triangle):
                                     self.star_triangle_offset_changed(cur)
+                                elif pair_key == (SceneElement.Triangle, SceneElement.Pellet):
+                                    self.triangle_pellet_offset_changed(cur)
                         except Exception as err:
                             logger.exception("offset_changed event callback failed: %s", err)
 

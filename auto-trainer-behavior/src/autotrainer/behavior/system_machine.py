@@ -351,6 +351,11 @@ class SystemMachine(StateMachine):
         ):
             self._algorithm.handle_diamond_triangle_offset(offset)
 
+    def _handle_triangle_pellet_offset_changed(self, offset: Optional[Offset3DTuple]):
+        if offset is None:
+            return
+        self._algorithm.triangle_pellet_offset = offset
+
     def _handle_star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if offset is None:
             return
@@ -358,7 +363,7 @@ class SystemMachine(StateMachine):
         if not pellet_machine.can_use_pellet_command():
             # never consider any release or cover check when pellet cannot be used yet.
             return
-        algo = self.algorithm
+        algo = self._algorithm
         check_cover_distance = not algo.is_in_session and (
             (pellet_machine.state == PelletState.monitoring and algo.pellet_cover_enabled)
             or (pellet_machine.state == PelletState.covering)
@@ -377,8 +382,12 @@ class SystemMachine(StateMachine):
         if response.pellet_seen:
             self._handle_diamond_triangle_offset_changed(
                 response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
+
             self._handle_star_triangle_offset_changed(
                 response.get_parts_3d_offset(SceneElement.Star, SceneElement.Triangle))
+
+            self._handle_triangle_pellet_offset_changed(
+                response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
         #
         algo = self._algorithm
         algo.pellet_seen(response.pellet_seen)
