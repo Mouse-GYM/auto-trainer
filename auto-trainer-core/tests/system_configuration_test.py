@@ -27,7 +27,9 @@ current_default_config = {
          'inference': {'pose_model_location': InferenceConfiguration.pose_model_location,
           'is_enabled': InferenceConfiguration.is_enabled,
           'intersession_wait_time': InferenceConfiguration.intersession_wait_time},
-         'behavior': {'pellet_delivery': {'is_enabled': PelletDeliveryConfiguration.is_enabled,
+         'behavior': {'pellet_delivery': {
+            'auto_correct_motors_drift': PelletDeliveryConfiguration.auto_correct_motors_drift,
+             'is_enabled': PelletDeliveryConfiguration.is_enabled,
            'is_pellet_cover_enabled': PelletDeliveryConfiguration.is_pellet_cover_enabled,
            'is_intersession_analysis_enabled': PelletDeliveryConfiguration.is_intersession_analysis_enabled,
            'is_intersession_pellet_shift_enabled': PelletDeliveryConfiguration.is_intersession_pellet_shift_enabled,
