@@ -1,5 +1,6 @@
 import copy
 import dataclasses
+import functools
 import logging.handlers
 import multiprocessing
 import os
@@ -93,6 +94,13 @@ class LogConfig:
     stream: str = "sys.stdout"
 
 
+def listener_command(func):
+    @functools.wraps(func)
+    def wrapped(self, *args, **kwargs):
+        self._send_command(func.__name__, (args, kwargs))
+    return wrapped
+
+
 class LogQueueListenerProc(Process):
 
     def __init__(
@@ -105,18 +113,21 @@ class LogQueueListenerProc(Process):
         self._command_queue = multiprocessing.Queue()
         self._config = log_config
         self._console_handler = None
+        self._listener = None
 
+    def _send_command(self, cmd, data):
+        self._command_queue.put((cmd, data))
+
+    @listener_command
     def set_handler_level(self, name, level):
-        self._send_command(("set_handler_level", name, level))
+        """Set handler level"""
 
     def _set_handler_level(self, name, level):
         self._console_handler.setLevel(level)
 
-    def _send_command(self, data):
-        self._command_queue.put(data)
-
+    @listener_command
     def add_file_handler(self, path):
-        self._send_command(("add_file_handler", path))
+        """Add file handler to path"""
 
     def _add_file_handler(self, path):
         logger.info("Adding file handler ...")
@@ -130,15 +141,17 @@ class LogQueueListenerProc(Process):
             )
         )
         file_handler.setLevel(verboselogs.SPAM + 1)  # writes everything up to DEBUG which reaches it
-        logging.root.addHandler(file_handler)
-        logger.info("logging.root..handlers=%s", logging.root.handlers)
+        self._listener.handlers += (file_handler,)
+        logger.info("logging.root.handlers=%s ; listener_handlers=%s",
+                    logging.root.handlers, self._listener.handlers)
 
     def stop(self):
-        self._send_command(None)
-        os.kill(self.pid, signal.SIGINT)
+        self._command_queue.put(None)
+        # os.kill(self.pid, signal.SIGINT)
         self.join()
 
     def run(self):
+        # print(f"{logging.root.handlers}")
         cfg = self._config
         stream = sys.stdout  # for now
         self._console_handler = console_handler = logging.StreamHandler(stream=stream)
@@ -158,28 +171,30 @@ class LogQueueListenerProc(Process):
         base_logger.addHandler(root_handler)
         base_logger.setLevel(cfg.root_level)
 
-        thread = WithThreadIdQueueListener(self._queue, console_handler, respect_handler_level=True)
-        thread.start()
+        listener = self._listener = WithThreadIdQueueListener(
+            self._queue,
+            console_handler,
+            respect_handler_level=True,
+        )
+        listener.start()
 
         command_q = self._command_queue
-        try:
-            while True:
-                try:
-                    data = command_q.get(1)
-                except Empty:
-                    continue
-                if data is None:
-                    break
-                cmd = data[0]
-                args = data[1:]
-                meth = getattr(self, f"_{cmd}", None)
-                if meth is None:
-                    logger.warning("unknown command: %sr", cmd)
-                    continue
-                meth(*args)
-        except (KeyboardInterrupt, SystemExit):
-            pass
-        thread.stop()
+        while True:
+            try:
+                data = command_q.get(1)
+            except Empty:
+                continue
+            if data is None:
+                break
+            cmd = data[0]
+            args, kwargs = data[1]
+            meth = getattr(self, f"_{cmd}", None)
+            if meth is None:
+                logger.warning("unknown command: %sr", cmd)
+                continue
+            meth(*args, **kwargs)
+        # end while True
+        listener.stop()
 
 
 def get_root_handler():
