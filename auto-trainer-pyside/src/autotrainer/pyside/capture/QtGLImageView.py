@@ -91,7 +91,7 @@ class QGLImageView(QWidget):
         pixmap = QPixmap.fromImage(image)
         if text_overlay:
             painter = QPainter(pixmap)
-            font = QFont("Sans-serif", 14)
+            font = QFont("Sans-serif", 12)
             painter.setFont(font)
             painter.setPen(Qt.GlobalColor.yellow)
             with painter:

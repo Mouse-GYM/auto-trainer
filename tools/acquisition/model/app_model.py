@@ -487,7 +487,7 @@ class AppModel(ObservableObject):
 
     def _on_behavior_property_changed(self, name: str, new_value, old_value):
         logger.debug("behavior property changed: %s: %s -> %s", name, old_value, new_value)
-        if name == BehaviorProps.AUTO_CORRECT_MOTOR_DRIFT:
+        if name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
             self._hardware.set_auto_correct_motor_drift(new_value)
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
