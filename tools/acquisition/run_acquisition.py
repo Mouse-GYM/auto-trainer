@@ -7,8 +7,8 @@ from PySide6 import QtGui
 
 from autotrainer.core.event import try_register_api_event_plugin
 from autotrainer.core.logging import (get_verbose_logger, MULTIPROC_LOG_FORMAT, PreciseTimeFormatter, DateTimeFormats,
-                                      get_queue_listener, thread_id_filter, get_console_handler, get_root_handler,
-                                      get_queue_handler)
+                                      get_log_queue_listener, thread_id_filter, get_console_handler, get_root_handler,
+                                      get_log_queue_handler, repr_logger, repr_all_loggers)
 from autotrainer.pyside import CardHeader
 
 logger = get_verbose_logger(__name__)
@@ -73,40 +73,33 @@ def verify_log_location(log_location: str, device_name: str):
 
     log_file = f"{log_location}/{date_stamp}_{device_name}_{idx:03d}.log"
     logger.verbose("Setting log file to %s", log_file)
-    file_handler = logging.FileHandler(log_file)
-    file_handler.addFilter(thread_id_filter)
-    file_handler.setFormatter(
-        PreciseTimeFormatter(
-            MULTIPROC_LOG_FORMAT,
-            datefmt=DateTimeFormats.year_precise,
-            time_precision=6,
-        )
-    )
-    file_handler.setLevel(verboselogs.SPAM + 1)  # writes everything up to DEBUG which reaches it
     #
-    q_listener = get_queue_listener()
-    r_h = get_root_handler()
-    c_h = get_console_handler()
-    q_h = get_queue_handler()
+    q_listener = get_log_queue_listener()
     if q_listener is not None:
-        q_listener.handlers += (file_handler,)
-        if r_h == c_h:
-            # root handler is console handler
-            # queue handler goes to console as well
-            logging.root.addHandler(file_handler)
-        else:
-            pass
-            # root handler is queue handler which already has console handler and we added file_handler to it
-        logger.info("q_listener.handlers=%s respect=%s",
-                    q_listener.handlers, q_listener.respect_handler_level)
+        q_listener.add_file_handler(log_file)
     else:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.addFilter(thread_id_filter)
+        file_handler.setFormatter(
+            PreciseTimeFormatter(
+                MULTIPROC_LOG_FORMAT,
+                datefmt=DateTimeFormats.year_precise,
+                time_precision=6,
+            )
+        )
+        file_handler.setLevel(verboselogs.SPAM + 1)  # writes everything up to DEBUG which reaches it
         logging.root.addHandler(file_handler)
-    l = get_verbose_logger("autotrainer")
-    logger.info("root logger: level=%s handlers=%s", logging.root.level, logging.root.handlers)
-    logger.info("console: level=%s", c_h.level)
-    logger.info("file: level=%s", file_handler.level)
-    logger.info("queue: level=%s", q_h.level)
-    logger.info("autotrainer: level=%s prop=%s handlers=%s", l.level, l.propagate, l.handlers)
+
+    # top_logger = get_verbose_logger("autotrainer")
+    # r_h = get_root_handler()
+    # c_h = get_console_handler()
+    # q_h = get_log_queue_handler()
+    # logger.info("all loggers:\n%s", repr_all_loggers())
+    # logger.info("top logger: %s", repr_logger(top_logger))
+    # logger.info("console: level=%s", c_h.level)
+    # logger.info("queue: level=%s", q_h.level)
+    # logger.info("autotrainer: level=%s prop=%s handlers=%s",
+    #             top_logger.level, top_logger.propagate, top_logger.handlers)
 
 
 def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_emulation: bool = False) -> int:
