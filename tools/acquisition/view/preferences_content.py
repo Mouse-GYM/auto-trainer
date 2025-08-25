@@ -3,14 +3,18 @@ import logging
 import verboselogs
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton, \
-    QFileDialog, QTabWidget, QVBoxLayout, QCheckBox
+    QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox
 
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.device import get_available_hardware
 from autotrainer.model import EnvironmentProvider, HardwareVersion
-from autotrainer.pyside import Separator, HardwarePortComboBox
+from autotrainer.pyside import Separator, HardwarePortComboBox, QSwitch
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
+
+
+logger = get_verbose_logger(__name__)
 
 
 class PreferencesContent(QWidget):
@@ -112,6 +116,8 @@ class PreferencesContent(QWidget):
         return tab
 
     def _create_behavior_tab(self):
+        algo = self._model.behavior.algorithm
+
         form_layout = QFormLayout(None)
 
         self._inference_model_edit = QLineEdit(None, None)
@@ -125,6 +131,48 @@ class PreferencesContent(QWidget):
         layout.addWidget(button)
 
         form_layout.addRow("Inference model:", layout)
+
+        self._auto_correct_motors_drift_toggle = QSwitch()
+        self._auto_correct_motors_drift_toggle.setChecked(self._model.behavior.algorithm.auto_correct_motors_drift)
+        def auto_correct_motors_drift_toggle_changed(value: int):
+            enabled = value != 0
+            logger.verbose("auto_correct_motors_drift_toggle_changed: %s", enabled)
+            self._model.behavior.algorithm.auto_correct_motors_drift = enabled
+        self._auto_correct_motors_drift_toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
+        form_layout.addRow("Auto-correct motors drift:", self._auto_correct_motors_drift_toggle)
+
+        self._use_triangle_pellet_distance = algo.use_triangle_pellet_distance_too_far
+        self._toggle_use_triangle_pellet_distance = QSwitch()
+        def use_triangle_pellet_distance_changed(value):
+            enabled = value != 0
+            prev, self._use_triangle_pellet_distance = self._use_triangle_pellet_distance, enabled
+            algo.use_triangle_pellet_distance_too_far = enabled
+
+        self._toggle_use_triangle_pellet_distance.stateChanged.connect(use_triangle_pellet_distance_changed)
+        self._toggle_use_triangle_pellet_distance.setChecked(algo.use_triangle_pellet_distance_too_far)
+
+        form_layout.addRow("Use triangle-pellet distance for pellet too far detection:",
+                           self._toggle_use_triangle_pellet_distance)
+
+        spin_box = self._triangle_pellet_expected_distance_spinbox = QDoubleSpinBox()
+        spin_box.setRange(0, 100)
+        spin_box.setValue(algo.triangle_pellet_expected_distance)
+        def triangle_pellet_expected_distance_changed(value):
+            algo.triangle_pellet_expected_distance = value
+
+        spin_box.valueChanged.connect(triangle_pellet_expected_distance_changed)
+
+        form_layout.addRow("Triangle-Pellet expected distance:", spin_box)
+
+        spin_box = self._triangle_pellet_diff_too_far_threshold_spinbox = QDoubleSpinBox()
+        spin_box.setRange(0, 20)
+        spin_box.setValue(algo.triangle_pellet_diff_too_far_threshold)
+        def triangle_pellet_diff_too_far_threshold_changed(value):
+            algo.triangle_pellet_diff_too_far_threshold = value
+
+        spin_box.valueChanged.connect(triangle_pellet_diff_too_far_threshold_changed)
+
+        form_layout.addRow("Triangle-Pellet diff too far threshold:", spin_box)
 
         tab = QWidget(None)
         tab.setLayout(form_layout)
@@ -213,7 +261,15 @@ class PreferencesContent(QWidget):
 
     def _log_level_changed(self, value):
         if value != -1:
-            self._preferences.log_level = self._log_level_combobox.itemData(value)
+            new_level = self._log_level_combobox.itemData(value)
+            logging.info("setting new log level: %s (value=%s)", new_level, value)
+            self._preferences.log_level = new_level
+            for logger_name in (
+                "tools",
+                "autotrainer",
+                # other ?
+            ):
+                get_verbose_logger(logger_name).setLevel(new_level)
 
     def _log_location_changed(self, value: str):
         self._preferences.log_location = value

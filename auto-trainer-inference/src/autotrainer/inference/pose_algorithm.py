@@ -192,11 +192,14 @@ class PoseAlgorithm(ObservableObject):
         # ]
         # self._all_body_parts_columns = pandas.MultiIndex.from_product([self._all_body_parts, axis_labels],
         #                                                               names=["bodyparts", "coords"])
-        self._star_triangle_diamond_parts = [
-            SceneElement.Star, SceneElement.Triangle, SceneElement.Diamond
+        self._measure_offset_parts = [
+            SceneElement.Star,
+            SceneElement.Triangle,
+            SceneElement.Diamond,
+            SceneElement.Pellet,
         ]
-        self._star_triangle_diamond_columns = pandas.MultiIndex.from_product([self._star_triangle_diamond_parts, axis_labels],
-                                                                      names=["bodyparts", "coords"])
+        self._measure_offset_parts_columns = pandas.MultiIndex.from_product([self._measure_offset_parts, axis_labels],
+                                                                            names=["bodyparts", "coords"])
 
     @property
     def part_names(self) -> list:
@@ -259,12 +262,12 @@ class PoseAlgorithm(ObservableObject):
         #
         df_2d = pandas.DataFrame(
             numpy.concatenate(per_cam_detection).reshape(len(per_cam_detection), -1),
-            columns=self._star_triangle_diamond_columns,
+            columns=self._measure_offset_parts_columns,
         )
         # df_2d = interpolate_coordinates(df_2d, p_thresh)  # not required probably
         df_3d = triangulate_3d_with_params(
             [df_2d.iloc[0:1], df_2d.iloc[1:2]],
-            body_parts=self._star_triangle_diamond_parts,
+            body_parts=self._measure_offset_parts,
             stereo_params=self._stereo_params,
             p_thresh=p_thresh,
             min_cluster=min_cluster,
@@ -276,7 +279,7 @@ class PoseAlgorithm(ObservableObject):
             stereo_file=stereo_params.as_pickle_dict(),
             center_method=center_method,
             frame_rate=1,
-            bpts=self._star_triangle_diamond_parts,
+            bpts=self._measure_offset_parts,
             calib_metadata=self._calib_metadata,
             cam_names=self._cam_names,
             cam_offsets=self._cam_offsets,
@@ -385,7 +388,7 @@ class PoseAlgorithm(ObservableObject):
 
             if len(pairs_3d_offsets) > 0:
                 df_3d = self._handle_offsets_pose_data(
-                    *(numpy.asarray([frame[gpi(p)] for p in self._star_triangle_diamond_parts]) for frame in cams_last_frame)
+                    *(numpy.asarray([frame[gpi(p)] for p in self._measure_offset_parts]) for frame in cams_last_frame)
                 )
                 for part1, part2 in pairs_3d_offsets:
                     parts_3d_offsets[part1][part2] = tuple(

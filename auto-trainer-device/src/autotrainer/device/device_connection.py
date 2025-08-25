@@ -3,9 +3,9 @@ import math
 import time
 from queue import Queue, Empty
 from threading import Thread
-from typing import Callable
+from typing import Callable, Union
 
-from autotrainer.core import MotorConfigurations, SystemCommandKind
+from autotrainer.core import MotorConfigurations, SystemCommandKind, Offset3DTuple, Motor
 
 from .can_device import HAVE_CAN_DEVICE
 from .device import Device
@@ -59,6 +59,10 @@ class DeviceConnection(DeviceConnectionProtocol):
 
         # The means of providing non-blocking access to the device.
         self._current_thread = None
+
+    @property
+    def device(self) -> Device:
+        return self._device
 
     @property
     def name(self) -> str:
@@ -140,8 +144,7 @@ class DeviceConnection(DeviceConnectionProtocol):
     def set_release_procedure(self, release_steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, release_steps)
 
-    def set_motor_configuration(self, config):
-        assert isinstance(config, ServoConfig) or isinstance(config, StepperConfig)
+    def set_motor_configuration(self, config: Union[ServoConfig, StepperConfig]):
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
 
     def _start(self):
@@ -233,3 +236,6 @@ class DeviceConnection(DeviceConnectionProtocol):
             logger.warning(f"<{self._name} DISCONNECT cmd while device already disconnected")
 
         return False
+
+    def get_motor_config(self, motor: Motor):
+        return self._device.device_interface.get_motor_config(motor)

@@ -1,7 +1,8 @@
-from typing import Protocol, Optional
+from typing import Protocol, Optional, Union
 from uuid import UUID
 
-from autotrainer.core import ObservableObjectProtocol, Offset3DTuple
+from autotrainer.core import ObservableObjectProtocol, Offset3DTuple, Motor
+from autotrainer.device import StepperConfig, ServoConfig
 
 
 class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
@@ -9,53 +10,61 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     Defines an expected/required set of commands from the pellet device that are used as part of the behavior algorithm
     and state machine.
     """
-
     def delay(self, amount: float):
         """Request to delay that amount of seconds"""
 
-    def set_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+    @property
+    def last_set_position(self) -> Optional[Offset3DTuple]:
+        """Give the last SET position (deliver position, used with SEND_PELLET command"""
+
+    @property
+    def last_position(self) -> Optional[Offset3DTuple]:
+        """Given the last actual position"""
+
+    def set_x(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
         """
         Change the X stepper location and set it as the X-axis pellet release location.
 
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def set_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+    def set_y(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
         """
         Change the Y stepper location and set it as the Y-axis pellet release location.
 
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def set_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+    def set_z(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
         """
         Change the Z stepper location and set it as the Z-axis pellet release location.
 
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def move_x(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+    def move_x(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
         """
         Move the X stepper.  This may not be supported on all device platforms.
 
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def move_y(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+    def move_y(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
         """
         Move the Y stepper.  This may not be supported on all device platforms.
 
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def move_z(self, value: int, *, absolute: bool = True) -> Optional[UUID]:
+    def move_z(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
         """
         Move the Z stepper.  This may not be supported on all device platforms.
 
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def send_home(self) -> Optional[UUID]:        """
+    def send_home(self) -> Optional[UUID]:
+        """
         Request a move to 0, 0, 0.
 
         :return: A token to expect from the device message handler when the request is complete.
@@ -66,7 +75,8 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def load_pellet(self) -> Optional[UUID]:        """
+    def load_pellet(self) -> Optional[UUID]:
+        """
         Request a full load cycle to scoop the pellet from the bin.
 
         :return: A token to expect from the device message handler when the request is complete.
@@ -100,5 +110,21 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def set_motor_drift(self, drift: Offset3DTuple):
+    def set_motors_drift(self, drift: Offset3DTuple):
         """Set the motor drift offset"""
+        raise NotImplementedError
+
+    def set_auto_correct_motor_drift(self, enabled: bool):
+        """Set auto correct motor drift"""
+        raise NotImplementedError
+
+    def get_motor_config(self, motor: Motor) -> Union[StepperConfig, ServoConfig]:
+        """Get the motor current config"""
+        raise NotImplementedError
+
+    def get_motor_flips(self):
+        return Offset3DTuple([
+            -1 if self.get_motor_config(motor).flip_limit_orientation
+            else 1
+            for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR)
+        ])

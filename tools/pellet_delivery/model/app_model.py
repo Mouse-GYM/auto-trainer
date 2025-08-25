@@ -4,6 +4,8 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+import yaml
+
 from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind,
                               MessageHandler, Motor,
                               EventManager)
@@ -259,13 +261,13 @@ class AppModel(ObservableObject):
     def cover_pellet(self):
         self._send_command(SystemCommandKind.COVER_PELLET, context=uuid.uuid4())
 
-    def set_x(self, value: int):
+    def set_x(self, value: float):
         self._send_command(SystemCommandKind.SET_X, value, context=uuid.uuid4())
 
-    def set_y(self, value: int):
+    def set_y(self, value: float):
         self._send_command(SystemCommandKind.SET_Y, value, context=uuid.uuid4())
 
-    def set_z(self, value: int):
+    def set_z(self, value: float):
         self._send_command(SystemCommandKind.SET_Z, value, context=uuid.uuid4())
 
     def move_x(self, value: int):

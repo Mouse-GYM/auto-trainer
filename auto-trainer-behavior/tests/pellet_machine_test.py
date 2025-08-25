@@ -62,7 +62,7 @@ def test_cover_pellet_enabled(mock_system, machine):
         Pellet is covered if present when leaving tunnel and released if present when entering tunnel
     :return: None
     """
-    machine.algorithm.pellet_missing_time = 0.1
+    machine.algorithm.pellet_missing_time = 0.001
 
     pellet_machine = machine.pellet
 
@@ -77,8 +77,13 @@ def test_cover_pellet_enabled(mock_system, machine):
 
     assert pellet_machine.state == PelletState.monitoring
 
+    machine._analysis.load_cell_monitor.is_engaged = False
+
+    # pellet_machine._pellet_device_ack_received(pellet_machine._api_status_token)
     # Send a pose response with pellet not seen which should trigger a load/release cycle while in tunnel.
     mock_system.mock_pellet_missing()
+
+    pellet_machine._pellet_device_ack_received(pellet_machine._api_status_token)
 
     machine.exit_tunnel()
 

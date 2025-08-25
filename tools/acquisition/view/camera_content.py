@@ -100,21 +100,25 @@ class CameraContent(ContentWidget):
             self._capture_view.recording_indicator_changed.emit(notification.context)
 
     def _model_property_changed(self, name, value, _):
-        if name == "camera":
+        if name == VideoCaptureModel.CAMERA_PROP:
             self._capture_view.setCamera(value)
-        elif name == "is_enabled":
+        elif name == VideoCaptureModel.IS_ENABLED_PROP:
             self._settings.setIsVideoCaptureEnabled(value)
-        elif name == "is_recording_enabled":
+        elif name == VideoCaptureModel.IS_RECORDING_ENABLED_PROP:
             self._settings.setIsVideoRecordEnabled(value)
-        elif name == "record_mode":
+        elif name == VideoCaptureModel.RECORD_MODE_PROP:
             self._settings.setRecordMode(value)
-        elif name == "is_still_capture_enabled":
+        elif name == VideoCaptureModel.IS_STILL_CAPTURE_ENABLED_PROP:
             self._settings.setStillImageCaptureEnabled(value)
-        elif name == "still_image_capture_interval":
+        elif name == VideoCaptureModel.STILL_IMAGE_CAPTURE_INTERVAL_PROP:
             self._settings.setStillImageCaptureInterval(value)
-        elif name == "shape":
+        elif name == VideoCaptureModel.SHAPE_PROP:
             if value is not None and value[0] != 0 and value[1] != 0:
                 # Swap because model shape is row x col == height x width
                 self._capture_view.setShape(value[1], value[0])
-        elif name == "camera_list":
+        elif name == VideoCaptureModel.CAMERA_LIST_PROP:
             self._capture_view.setCameras(self._model.camera_list)
+        elif name == VideoCaptureModel.TEXT_OVERLAY_PROP:
+            self._capture_view.set_text_overlay(value)
+        elif name == VideoCaptureModel.DISPLAY_DOTS_DETECTION_PROP:
+            self._capture_view.set_display_dots_detection(value)

@@ -143,6 +143,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             'detection_result_ready',
             'diamond_triangle_offset_changed',
             'star_triangle_offset_changed',
+            'triangle_pellet_offset_changed',
             'algo_initialised',
         ))
 
@@ -184,6 +185,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._monitored_parts_offsets = [
             (SceneElement.Diamond, SceneElement.Triangle),
             (SceneElement.Star, SceneElement.Triangle),
+            (SceneElement.Triangle, SceneElement.Pellet),
         ]
         self._parts_offsets: Dict[Tuple[SceneElement, SceneElement], Offset3DTuple] = {}
 
@@ -773,6 +775,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                                     self.diamond_triangle_offset_changed(cur)
                                 elif pair_key == (SceneElement.Star, SceneElement.Triangle):
                                     self.star_triangle_offset_changed(cur)
+                                elif pair_key == (SceneElement.Triangle, SceneElement.Pellet):
+                                    self.triangle_pellet_offset_changed(cur)
                         except Exception as err:
                             logger.exception("offset_changed event callback failed: %s", err)
 
@@ -995,7 +999,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         tot_skipped_frames = 0
         empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
         #
-        perf_timeout = time.perf_counter() + 15  # intersession_wait_time is too small,
+        perf_timeout = time.perf_counter() + 15  # intersession_wait_time is too small
         # the pose process and data monitor thread have some delay between them,
         # sometimes up to several seconds (4-5).
         # wait that we get the event from monitor data queue closing its write side to live files:
@@ -1013,10 +1017,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # NB: not anymore necessary since also controlling pose process + data_monitor with frames indices commands.
         captures_d = {}
         videos_frame_count: Dict[int, int] = {}
+        video_paths = [cams_paths[cdx][0] for cdx in range(n_cams)]
+        logger.verbose("checking can open video files %s", video_paths)
         while True:
             for cdx, cam in enumerate(cams):
                 if cdx not in captures_d:
-                    capture, frame_count = check_frame_count(cams_paths[cdx][0])
+                    capture, frame_count = check_frame_count(video_paths[cdx])
                     if capture is not None:
                         captures_d[cdx] = capture
                         videos_frame_count[cdx] = frame_count
@@ -1024,7 +1030,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 break
             if time.perf_counter() > perf_timeout:
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationInputError)
-                raise RuntimeError("timeout waiting for intersession video files")
+                raise RuntimeError(f"timeout waiting for intersession video files {video_paths}, trying continue anyway")
+
             time.sleep(0.1)  # overkill to immediately retry
 
         captures: List[cv2.VideoCapture] = [captures_d[cdx] for cdx in range(len(cams))]
@@ -1204,10 +1211,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 processed_ok = False
             else:
                 processed_ok = True
+
         intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
-        self._intersession_detection = None
+        # NB: triggering/calling the "complete" of the detection BEFORE trigger the detection_result_ready below,
+
         if processed_ok:
-            # posting the result ready after having completed and set to None current detection.
             self.detection_result_ready(result)
-            # so that any exception in the posting won't prevent the above completion to be effective.
-            # Given a dedicated thread is running this, it would anyway have exited when this function returns.
+        self._intersession_detection = None
