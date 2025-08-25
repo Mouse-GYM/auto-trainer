@@ -5,7 +5,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton, \
     QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox
 
-from autotrainer.core.logging import get_console_handler, get_verbose_logger
+from autotrainer.core.logging import get_console_handler, get_verbose_logger, repr_all_loggers
 from autotrainer.device import get_available_hardware
 from autotrainer.model import EnvironmentProvider, HardwareVersion
 from autotrainer.pyside import Separator, HardwarePortComboBox, QSwitch
@@ -200,8 +200,12 @@ class PreferencesContent(QWidget):
             verboselogs.SPAM: 6,
         }
 
-        v = levels_to_idx.get(self._preferences.log_level, 3)  # default to info
-        self._log_level_combobox.setCurrentIndex(v)
+        log_level_idx = levels_to_idx.get(self._preferences.log_level)  # default to preferences.log_level
+        if log_level_idx is None:
+            log_level_idx = min(levels_to_idx.items(), key=lambda i: abs(self._preferences.log_level - i[0]))[1]
+        self._log_level_combobox.blockSignals(True)
+        self._log_level_combobox.setCurrentIndex(log_level_idx)
+        self._log_level_combobox.blockSignals(False)
 
         self._log_location_edit = QLineEdit(None, None)
         self._log_location_edit.setText(self._preferences.log_location)
@@ -260,11 +264,12 @@ class PreferencesContent(QWidget):
         self._model.inference.model_location = value
 
     def _log_level_changed(self, value):
+        # logging.root.debug("_log_level_changed: %s", value)
+        # print("%s" % (repr_all_loggers(),))
         if value != -1:
             new_level = self._log_level_combobox.itemData(value)
             self._preferences.log_level = new_level
-            get_console_handler().setLevel(new_level)
-            logging.info("setting new log level: %s (value=%s)", new_level, value)
+            # get_console_handler().setLevel(new_level)
 
     def _log_location_changed(self, value: str):
         self._preferences.log_location = value

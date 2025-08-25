@@ -1,6 +1,7 @@
 import copy
 import dataclasses
 import functools
+import itertools
 import logging.handlers
 import multiprocessing
 import os
@@ -89,12 +90,13 @@ class LogConfig:
     log_format: str = MULTIPROC_LOG_FORMAT
     date_format: str = DateTimeFormats.hour_time_precise
     time_precision: int = 3,  # for sub seconds precision, nbr of digits after the dot.
-    level_styles: Dict[str, Dict[str, str]] = dataclasses.field(default_factory=copy.deepcopy(DEFAULT_LEVEL_STYLES))
-    field_styles: Dict[str, Dict[str, str]] = dataclasses.field(default_factory=copy.deepcopy(DEFAULT_FIELD_STYLES))
+    level_styles: Dict[str, Dict[str, str]] = dataclasses.field(default_factory=lambda: copy.deepcopy(DEFAULT_LEVEL_STYLES))
+    field_styles: Dict[str, Dict[str, str]] = dataclasses.field(default_factory=lambda: copy.deepcopy(DEFAULT_FIELD_STYLES))
     stream: str = "sys.stdout"
 
 
 def listener_command(func):
+    """Relay the given func to the log queue listener proc side"""
     @functools.wraps(func)
     def wrapped(self, *args, **kwargs):
         self._send_command(func.__name__, (args, kwargs))
@@ -123,7 +125,19 @@ class LogQueueListenerProc(Process):
         """Set handler level"""
 
     def _set_handler_level(self, name, level):
-        self._console_handler.setLevel(level)
+        if name == "console_handler":
+            self._console_handler.setLevel(level)
+        else:
+            logger.verbose("unhandled handler name: %r", name)
+
+    @listener_command
+    def set_logger_level(self, name, level):
+        """Set logger level"""
+
+    @staticmethod
+    def _set_logger_level(name, level):
+        logging.getLogger(name).setLevel(level)
+        logger.debug("set_logger_level(%s, %s)", name, level)
 
     @listener_command
     def add_file_handler(self, path):
@@ -145,6 +159,8 @@ class LogQueueListenerProc(Process):
         logger.info("logging.root.handlers=%s ; listener_handlers=%s",
                     logging.root.handlers, self._listener.handlers)
 
+    #
+
     def stop(self):
         self._command_queue.put(None)
         # os.kill(self.pid, signal.SIGINT)
@@ -155,6 +171,7 @@ class LogQueueListenerProc(Process):
         cfg = self._config
         stream = sys.stdout  # for now
         self._console_handler = console_handler = logging.StreamHandler(stream=stream)
+        console_handler.name = "console_handler"
         console_handler.addFilter(thread_id_filter)
         fmt = ColoredPreciseTimeFormatter(
             cfg.log_format,
@@ -165,23 +182,21 @@ class LogQueueListenerProc(Process):
         )
         console_handler.setFormatter(fmt)
 
-        root_handler = console_handler
-
         base_logger = get_verbose_logger(cfg.base_logger_name)
-        base_logger.addHandler(root_handler)
+        base_logger.addHandler(console_handler)
         base_logger.setLevel(cfg.root_level)
 
         listener = self._listener = WithThreadIdQueueListener(
             self._queue,
             console_handler,
-            respect_handler_level=True,
+            respect_handler_level=True,  # False,  # True,
         )
         listener.start()
 
         command_q = self._command_queue
         while True:
             try:
-                data = command_q.get(1)
+                data = command_q.get()
             except Empty:
                 continue
             if data is None:
@@ -192,7 +207,10 @@ class LogQueueListenerProc(Process):
             if meth is None:
                 logger.warning("unknown command: %sr", cmd)
                 continue
-            meth(*args, **kwargs)
+            try:
+                meth(*args, **kwargs)
+            except Exception as err:
+                logger.error("Failed executing cmd %r: %s", cmd, err)
         # end while True
         listener.stop()
 
@@ -209,11 +227,11 @@ def get_multiprocess_log_queue() -> Optional[multiprocessing.Queue]:
     return _multiprocess_log_queue
 
 
-def get_queue_listener() -> Optional[LogQueueListenerProc]:
+def get_log_queue_listener() -> Optional[LogQueueListenerProc]:
     return _queue_listener
 
 
-def get_queue_handler():
+def get_log_queue_handler():
     return _queue_handler
 
 
@@ -277,6 +295,27 @@ def stop_multiproc_logging():
         _queue_handler = None
 
 
+def repr_all_loggers():
+    vals = []
+    for k, v in itertools.chain(dict(root=logging.root).items(), logging.Logger.manager.loggerDict.items()):
+        if not isinstance(v, logging.PlaceHolder):
+            vals.append(
+                f"+ [{k.ljust(20)}] {v.__class__.__name__} lvl={v.level} prop={v.propagate} disabled={v.disabled}")
+            for h in v.handlers:
+                if not isinstance(v, logging.PlaceHolder):
+                    vals.append(f" +++ {h.name}[{h.__class__.__name__}] lvl={h.level}")
+    return "\n".join(vals)
+
+
+def repr_logger(obj: logging.Logger):
+    return (f"{obj.__class__.__name__}({obj.name} lvl={obj.level} prop={obj.propagate} disabled={obj.disabled} "
+            f"handlers={obj.handlers})")
+
+
+def repr_handler(obj: logging.Handler):
+    return f"{obj.__class__.__name__}({obj.name} lvl={obj.level})"
+
+
 class WithThreadIdQueueListener(logging.handlers.QueueListener):
     def prepare(self, record):
         thread_id_filter.filter(record)
@@ -296,6 +335,27 @@ class VerboseLoggerWithThreadId(verboselogs.VerboseLogger):
         return thread_id_filter.filter(record)
 
 
+class RelayHandler(logging.Handler):
+
+    def __init__(self, listener: LogQueueListenerProc):
+        super().__init__()
+        self.listener = listener
+
+    def setLevel(self, level):
+        self.listener.set_handler_level(self.name, level)
+
+
+class LoggerWriter:
+    def __init__(self, lvl):
+        self._lvl = lvl
+
+    def write(self, msg):
+        logging.root.log(self._lvl, msg)
+
+    def flush(self):
+        pass
+
+
 def setup_logging(
     name: str = "autotrainer",
     *,
@@ -310,7 +370,6 @@ def setup_logging(
     stream: TextIO = sys.stdout,
     multiprocess_enabled: bool = False,
     fork_method: str = "spawn",
-    use_log_queue_handler: bool = False,
 ) -> verboselogs.VerboseLogger:
     global _already_setup
     global _multiprocess_log_queue, _queue_listener, _queue_handler, _console_handler, _root_handler
@@ -328,19 +387,21 @@ def setup_logging(
     #
     cfg = LogConfig(
         base_logger_name=base_logger_name,
-    logger_level=logger_level,
-    root_level=root_level,
-    log_format=log_format,
-    date_format=date_format,
-    time_precision=time_precision,
-    level_styles=level_styles,
-    field_styles=field_styles,
-    # stream: TextIO = sys.stdout,
+        logger_level=logger_level,
+        root_level=root_level,
+        log_format=log_format,
+        date_format=date_format,
+        time_precision=time_precision,
+        level_styles=level_styles,
+        field_styles=field_styles,
+        # stream: TextIO = sys.stdout,
     )
     #
     stop_multiproc_logging()
     #
     base_logger = get_verbose_logger(base_logger_name)
+    # set the base logger level before creating possible dedicated subproc log handling:
+    base_logger.setLevel(root_level)
     #
     if multiprocess_enabled:
         # using queue created using the desired fork method context:
@@ -351,12 +412,14 @@ def setup_logging(
         listener.start()
         _queue_listener = listener  # keep global ref to ensure it stays alive
         queue_handler = WithThreadIdQueueHandler(log_queue)
-        # queue_handler.setLevel(1)
         _queue_handler = queue_handler  # keep global ref to ensure it stays alive
-        # root_handler = console_handler if not use_log_queue_handler else queue_handler
         root_handler = _root_handler = queue_handler
-        console_handler = _console_handler = logging.Handler()
-        console_handler.setLevel = lambda l: listener.set_handler_level("console_handler", l)
+        console_handler = _console_handler = RelayHandler(listener)
+        logging.Logger.setLevel = lambda self, lvl: listener.set_logger_level(self.name, lvl)
+        console_handler.name = "console_handler"
+
+        base_logger.addHandler(queue_handler)
+
     else:
         console_handler = _console_handler = logging.StreamHandler(stream=stream)
         root_handler = _root_handler = console_handler
@@ -374,11 +437,14 @@ def setup_logging(
 
         root_handler = console_handler
         base_logger.addHandler(root_handler)
-        base_logger.setLevel(root_level)
 
     #
 
-    logger.info("Setup logging ; %s", base_logger.handlers)
+    # recursion issue atm, could be left todo:
+    # sys.stdout = LoggerWriter(logging.root.info)
+    # sys.stderr = LoggerWriter(logging.root.warning)
+
+    logger.info("Setup logging ; base_logger=%s", repr_logger(base_logger))
 
     get_verbose_logger("transitions").setLevel(logger_level)
     get_verbose_logger("tools").setLevel(logger_level)
@@ -390,6 +456,15 @@ def setup_logging(
 
     desired_logger = get_verbose_logger(name)
     desired_logger.setLevel(logger_level)
+
+    top_logger = get_verbose_logger("autotrainer")
+
+    # logger.info("all loggers:\n%s", repr_all_loggers())
+    # logger.info("top logger: %s", repr_logger(top_logger))
+    # logger.info("console: level=%s", c_h.level)
+    # logger.info("queue: level=%s", q_h.level)
+    # logger.info("autotrainer: level=%s prop=%s handlers=%s",
+    #             top_logger.level, top_logger.propagate, top_logger.handlers)
 
     _already_setup = True
 
