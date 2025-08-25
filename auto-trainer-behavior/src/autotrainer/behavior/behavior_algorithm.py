@@ -673,7 +673,6 @@ class BehaviorAlgorithm(ObservableObject):
         self._diamond_triangle_prev_drifts.append(drift)
         if prev != drift:
             self.pellet_motor_drift_changed(drift)
-        self._diamond_triangle_prev_drift = self._on_property_changed(BehaviorAlgoProps.PELLET_MOTOR_DRIFT, drift, prev)
 
     def handle_cover_pellet_offset(self, offset: Offset3DTuple):
         self._handle_check_element_distance(self._cover_pellet_distance_ctx, offset)
