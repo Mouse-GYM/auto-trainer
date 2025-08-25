@@ -1,8 +1,10 @@
 import json
 import logging
+import multiprocessing
 import pickle
 import queue
 import shutil
+import threading
 import time
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -15,7 +17,7 @@ from autotrainer.behavior import IntersessionState, SystemState
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, MessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
-                              NotificationCenter, TriggerNotification)
+                              NotificationCenter, TriggerNotification, SystemStatusMessageKind)
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
@@ -25,6 +27,7 @@ from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.analysis.config import load_calib_stereo_params
 from autotrainer.inference import PoseAlgorithm, InferenceStatus
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.video import CaptureProcessStatus
 from autotrainer.video.detection import PresenceDetectionAttrs
 
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -42,25 +45,44 @@ def _failed_camera_template(name: str, error: str):
 
 
 class AppModel(ObservableObject):
-    def __init__(self, preferences: UserPreferences, app_version: str = "",
-                 *,
-                 calib_dir: Optional[Path] = None,
-                 ):
+    def __init__(
+        self,
+        preferences: UserPreferences,
+        app_version: str = "",
+        *,
+        calib_dir: Optional[Path] = None,
+    ):
         super().__init__(("on_error",))
 
         self._preferences = preferences
 
         self._app_version = app_version
 
-        self._left_camera = VideoCaptureModel("left", self._preferences, 0)
-        self._right_camera = VideoCaptureModel("right", self._preferences, 1)
+        mp_ctx = get_mp_ctx()
 
-        self._top_camera = VideoCaptureModel("web", self._preferences, -1)
+        proc_msg_queue = self._multiproc_msg_queue = mp_ctx.Queue()
+        self._handle_proc_msg_thread = threading.Thread(
+            target=self._handle_proc_msg_queue, name="handle_proc_msg_queue", daemon=True)
+        self._handle_proc_msg_thread.start()
+
+        self._left_camera = VideoCaptureModel("left", self._preferences, 0,
+                                              msg_queue=proc_msg_queue)
+        self._right_camera = VideoCaptureModel("right", self._preferences, 1,
+                                               msg_queue=proc_msg_queue)
+
+        self._top_camera = VideoCaptureModel("web", self._preferences, -1,
+                                             msg_queue=None)  # not interested to webcam status for now.
         self._top_camera_presence_detection = PresenceDetectionAttrs()
 
-        self._cameras = [self._left_camera, self._right_camera, self._top_camera]
+        self._cameras = [  # must respect camera_idx/inference_index order
+            self._left_camera,
+            self._right_camera,
+            self._top_camera,
+        ]
 
-        self._message_queue = queue.Queue()
+        self._message_queue = queue.Queue()  # only dedicated to CAN bus messages reading/handling
+        # so: using a multiprocess queue instead, would allow to put the CAN connection thread into a dedicated process,
+        # also giving more space/freedom for the main/UI process python GIL acquire/release.
         self._message_handler = SystemMessageHandler(self._message_queue)
 
         # Use the default analysis object created by the message handler.  Dereferenced here for use in the class in
@@ -139,6 +161,37 @@ class AppModel(ObservableObject):
         self._inference.property_changed += self._on_inference_property_changed
 
         self._load_animals()
+
+    def _handle_proc_msg_queue(self):
+        proc_msg_q = self._multiproc_msg_queue
+        logger.info("handle_proc_msg_queue now running")
+        while True:
+            raw = proc_msg_q.get()
+            if raw is None:
+                break
+            args = ()
+            kwargs = {}
+            if isinstance(raw, tuple):
+                if len(raw) < 1:
+                    logger.warning("Invalid status msg: %r", raw)
+                    continue
+                status = raw[0]
+                if len(raw) >= 2:
+                    args = raw[1]
+                    if len(raw) >= 3:
+                        kwargs = raw[2]
+                        if len(raw) > 3:
+                            logger.warning("Unhandled extra args to status msg: %r", raw[3:])
+            else:
+                status = raw
+            logger.info("Got %s", status)
+            if status == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
+                cam_idx, status = args
+                if self._cameras[cam_idx].is_primary:
+                    self._behavior.algorithm.capture_status = status  # first
+                    # self._behavior.system_machine.pellet.environment_changed(caller="camera-start-recording")
+        # end while True
+        logger.info("handle_proc_msg_queue exiting")
 
     @property
     def preferences(self) -> UserPreferences:
@@ -437,6 +490,7 @@ class AppModel(ObservableObject):
 
     def on_close(self):
         self._preferences.save()
+
         if self._inference is not None:
             self._inference.terminate()
 
@@ -448,6 +502,10 @@ class AppModel(ObservableObject):
         self.hardware.disconnect()
         self._message_handler.request_terminate()
         # should we self._message_handler.wait_terminated() ?
+        self._message_handler.wait_terminated()
+
+        self._multiproc_msg_queue.put(None)
+        self._handle_proc_msg_thread.join()
 
         self.save_configuration()
 

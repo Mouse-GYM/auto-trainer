@@ -15,7 +15,7 @@ from typing import Callable, Dict, Union, Optional, List
 import numpy
 import verboselogs
 
-from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo
+from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo, SystemStatusMessageKind
 from autotrainer.core.logging import get_verbose_logger, set_logger_level
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.message import FrameIndexCategory
@@ -50,16 +50,24 @@ class CaptureCommandKind(Enum):
 
 class CaptureProcessStatus(IntEnum):
     """ Valid VideoCaptureProcess states available through the status Value"""
+
+    TERMINATED = -2
+    """The capture loop is terminated"""
+
     FAILED = -1
     """Failed to configure or run process"""
-    UNKNOWN = 0,
+
+    UNKNOWN = 0
     """Uninitialized value not yet set by capture process"""
+
     INITIALIZED = 1
     """The process is created, but not started"""
+
     RUNNING = 2
     """The process is running the capture loop"""
-    TERMINATED = 3
-    """The capture loop is terminated"""
+
+    RECORDING = 3
+    """The process is recording the stream to disk"""
 
 
 @dataclass
@@ -127,6 +135,9 @@ class CaptureAttrs:
     """Optional Presence detection"""
 
     is_primary: bool = False
+
+    msg_queue: Optional[multiprocessing.Queue] = None
+    # optional msg queue to send messages to main process from camera process
 
 
 class VideoCapture(Process):
@@ -214,6 +225,9 @@ class VideoCapture(Process):
 
     def _set_status(self, status: CaptureProcessStatus):
         self._status.value = status
+        msg_q = self._attrs.msg_queue
+        if self._attrs.is_primary and msg_q is not None:
+            msg_q.put(status)
 
     def _set_error(self, error: Exception):
         self._set_status(CaptureProcessStatus.FAILED)
@@ -261,6 +275,7 @@ class VideoCapture(Process):
         cnt_net_q_put = 0
         cur_frame_idx = -1
         is_primary = self._attrs.is_primary
+        msg_q = self._attrs.msg_queue  # message queue to main process
         net_q = self._network_queue
         record_start_frame_idx = None
         next_t_image_q = time.time()
@@ -398,20 +413,12 @@ class VideoCapture(Process):
                         when -= first_frame_when
                         record_q.put([(frame, when, perf_now_ns)])  # thread queue
                         record_q_list = self._record_queue_list = []
-                        if net_q is not None:
-                            pass
-                            # we are supposed already sync at this time
-                            # sync_barrier()
-                            # d = net_q.get_cam_missing_frames(self._camera_idx)
-                            # sync_barrier()
-                            # timeout = 10
-                            # for _ in range(d):
-                            #     t0 = time.perf_counter()
-                            #     net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING,
-                            #                     timeout=timeout)
-                            #     timeout -= time.perf_counter() - t0
                         #
                         primary_release()
+
+                        if is_primary and msg_q is not None:
+                            msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
+                                       (self._camera_idx, CaptureProcessStatus.RECORDING)))
 
                 elif not self._is_record_active and record_start_frame_idx is not None:
                     # stop recording requested
@@ -468,6 +475,10 @@ class VideoCapture(Process):
                                 timeout -= time.perf_counter() - t0
 
                             sync_barrier()
+
+                        if is_primary and msg_q is not None:
+                            msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
+                                       (self._camera_idx, CaptureProcessStatus.RUNNING)))
 
                 elif self._is_record_active and record_start_frame_idx is not None:
                     # normal recording case

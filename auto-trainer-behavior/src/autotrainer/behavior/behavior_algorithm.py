@@ -24,6 +24,7 @@ from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration
+from ..video import CaptureProcessStatus
 
 logger = get_verbose_logger(__name__)
 
@@ -140,6 +141,8 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
+        self._capture_status = CaptureProcessStatus.UNKNOWN
+        self._last_capture_status_change_perf_c = time.perf_counter()
 
         self._today = None
 
@@ -213,6 +216,20 @@ class BehaviorAlgorithm(ObservableObject):
     @intersession_state.setter
     def intersession_state(self, value: IntersessionState):
         self._intersession_state = self._on_property_changed(BehaviorAlgoProps.INTERSESSION_STATE, value, self._intersession_state)
+
+    @property
+    def capture_status(self) -> CaptureProcessStatus:
+        return self._capture_status
+
+    @capture_status.setter
+    def capture_status(self, value: CaptureProcessStatus):
+        self._capture_status = value
+        self._last_capture_status_change_perf_c = time.perf_counter()
+
+    @property
+    def capture_status_age(self) -> float:
+        """Capture status age as number of seconds"""
+        return time.perf_counter() - self._last_capture_status_change_perf_c
 
     @property
     def is_in_session(self) -> bool:
@@ -543,6 +560,14 @@ class BehaviorAlgorithm(ObservableObject):
 
     def can_release_pellet(self) -> bool:
         # self._check_date()
+
+        recording_aged_enough = (
+            self._capture_status == CaptureProcessStatus.RECORDING
+            and self.capture_status_age >= 1
+        )
+
+        if not recording_aged_enough:
+            return False
 
         if self.pellet_cover_enabled:
             return self._is_in_session
