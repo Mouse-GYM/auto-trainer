@@ -40,6 +40,10 @@ from tools.acquisition.model.video_capture_model import VideoCaptureModel
 logger = get_verbose_logger(__name__)
 
 
+# allow be patched from tests
+_recording_age_enough_timer_func = threading.Timer
+
+
 def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
 
@@ -185,11 +189,19 @@ class AppModel(ObservableObject):
             else:
                 status = raw
             logger.info("Got %s", status)
+            algo = self._behavior.algorithm
             if status == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
                 cam_idx, status = args
                 if self._cameras[cam_idx].is_primary:
-                    self._behavior.algorithm.capture_status = status  # first
-                    # self._behavior.system_machine.pellet.environment_changed(caller="camera-start-recording")
+                    algo.capture_status = status  # first
+                    if status == CaptureProcessStatus.RECORDING:
+                        self._timer_recording_age_enough = _recording_age_enough_timer_func(
+                            algo.recording_age_release_pellet_threshold,
+                            lambda: self._behavior.system_machine.pellet.environment_changed(
+                                pellet_seen=True, must_release=True, caller="camera-start-recording")
+                        )
+                    else:
+                        self._timer_recording_age_enough.cancel()
         # end while True
         logger.info("handle_proc_msg_queue exiting")
 

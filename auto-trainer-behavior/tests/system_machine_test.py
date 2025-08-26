@@ -79,6 +79,8 @@ def test_no_session_without_pellet(mock_system, machine):
 
     mock_system.make_load_cell_active()
 
+    mock_system.make_recording_aged_enough()
+
     assert mock_system.pellet_state_trans == []
     assert mock_system.machine_state_trans == [SystemState.tunnel]
     # Pellet machine not sending/releasing/monitoring - should not start.
@@ -112,6 +114,7 @@ def test_no_session_without_pellet(mock_system, machine):
     ack_received(pellet_machine._api_status_token)
 
     mock_system.make_load_cell_active()
+    mock_system.make_recording_aged_enough()
 
     assert machine.algorithm.is_in_session is True
     assert machine.pellet.state == PelletState.releasing
@@ -123,6 +126,7 @@ def test_no_session_without_pellet(mock_system, machine):
     assert machine.pellet.state == PelletState.covering
 
     mock_system.make_load_cell_active()
+    mock_system.make_recording_aged_enough()
 
     assert machine.algorithm.is_in_session is True
 
@@ -157,7 +161,11 @@ def test_intersession_enabled(mock_system, machine):
     assert machine.algorithm.system_state == machine.state
     assert pellet_machine.state == PelletState.monitoring
 
-    mock_system.make_load_cell_active()
+    mock_system.make_load_cell_active()  # this trigger a start session recording
+
+    assert pellet_machine.state == PelletState.monitoring
+
+    mock_system.make_recording_aged_enough()
 
     assert machine.state == SystemState.tunnel
     assert machine.algorithm.system_state == machine.state

@@ -225,9 +225,10 @@ class VideoCapture(Process):
 
     def _set_status(self, status: CaptureProcessStatus):
         self._status.value = status
-        msg_q = self._attrs.msg_queue
-        if self._attrs.is_primary and msg_q is not None:
-            msg_q.put(status)
+        # only relaying start/stop recording equivalent in run_capture_loop method
+        # msg_q = self._attrs.msg_queue
+        # if self._attrs.is_primary and msg_q is not None:
+        #     msg_q.put(status)
 
     def _set_error(self, error: Exception):
         self._set_status(CaptureProcessStatus.FAILED)

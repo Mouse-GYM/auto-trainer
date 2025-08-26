@@ -110,7 +110,7 @@ class SystemMachine(StateMachine):
 
         pellet_machine = self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
         pellet_machine.events.pellet_loading += self._pellet_loading
-        pellet_machine.events.pellet_sending += self._pellet_sending
+        # pellet_machine.events.pellet_sending += self._pellet_sending
         # NB: _pellet_sending is used to trigger a start session, if one is not already running/recording,
         # *always*, by design, atm.
         pellet_machine.events.state_changed += self._pellet_state_changed
@@ -194,11 +194,12 @@ class SystemMachine(StateMachine):
         # another possibility would be to have a dedicated trigger like "re_enter_tunnel_from_end_of_intersession"
         self._algorithm.system_state = SystemState.tunnel
         self.enter_tunnel(reason="exit_intersession_to_tunnel")
-        if not self._algorithm.is_in_session:
-            # only needed if not start a new session,
-            # given when a new session is started, the pellet machine already receives a session_starting event/callback
-            # which already makes the necessary move(s).
-            self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
+        # # EDIT: even not sure it's needed anymore ? at least not for current tests. trying without..
+        # if not self._algorithm.is_in_session:
+        #     # only needed if not start a new session,
+        #     # given when a new session is started, the pellet machine already receives a session_starting event/callback
+        #     # which already makes the necessary move(s).
+        #     self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
 
     @staticmethod
     def _clean_raw_data(project):

@@ -24,7 +24,7 @@ from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration
-from ..video import CaptureProcessStatus
+from autotrainer.video import CaptureProcessStatus
 
 logger = get_verbose_logger(__name__)
 
@@ -121,11 +121,15 @@ class BehaviorAlgorithm(ObservableObject):
         self._auto_clamp_release_tone_freq = 7000
         self._auto_clamp_release_delay = 0.1
 
+        self._recording_age_release_pellet_threshold = 0.75
+
         self._day_pellet_count = 0
 
         self._is_in_session = False
-        self._in_session_reason = "NA"
-        self._out_session_reason = "NA"
+        self._session_start_perf_c = time.perf_counter()
+        self._start_session_reason = "NA"
+        self._stop_session_perf_c = time.perf_counter()
+        self._stop_session_reason = "NA"
 
         self._session_pellet_count = 0
         self._session_mouse_seen = False
@@ -230,6 +234,10 @@ class BehaviorAlgorithm(ObservableObject):
     def capture_status_age(self) -> float:
         """Capture status age as number of seconds"""
         return time.perf_counter() - self._last_capture_status_change_perf_c
+
+    @property
+    def recording_age_release_pellet_threshold(self):
+        return self._recording_age_release_pellet_threshold
 
     @property
     def is_in_session(self) -> bool:
@@ -506,8 +514,9 @@ class BehaviorAlgorithm(ObservableObject):
         logger.success("%s: starting new session recording ...", reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
         self._is_in_session = True
-        self._in_session_reason = reason
+        self._start_session_reason = reason
         self._session_pellet_count = 0
+        self._session_start_perf_c = time.perf_counter()
 
         if self._project_info is not None:
             self._project_info.calculate_next_session_index()
@@ -534,12 +543,13 @@ class BehaviorAlgorithm(ObservableObject):
     def _end_session(self, *, reason: str):
         if not self._is_in_session:
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
-                           reason, self._out_session_reason)
+                           reason, self._stop_session_reason)
             return
         logger.success("%s: stopping session recording", reason)
         self._is_in_session = False  # must be ~first, to ensure next actions/callbacks don't see it as True
         # but must be at least before self.session_ending() here after, given test_covered_load_cycle rely on that atm.
-        self._out_session_reason = reason
+        self._stop_session_reason = reason
+        self._stop_session_perf_c = time.perf_counter()
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self.session_ending()
@@ -561,15 +571,15 @@ class BehaviorAlgorithm(ObservableObject):
     def can_release_pellet(self) -> bool:
         # self._check_date()
 
-        recording_aged_enough = (
-            self._capture_status == CaptureProcessStatus.RECORDING
-            and self.capture_status_age >= 1
-        )
-
-        if not recording_aged_enough:
-            return False
-
         if self.pellet_cover_enabled:
+            if self._is_in_session:
+                if self._stop_session_perf_c < self._session_start_perf_c:
+                    recording_aged_enough = (
+                        self._capture_status == CaptureProcessStatus.RECORDING
+                        and self.capture_status_age >= self._recording_age_release_pellet_threshold
+                    )
+                    if not recording_aged_enough:
+                        return False
             return self._is_in_session
 
         return True

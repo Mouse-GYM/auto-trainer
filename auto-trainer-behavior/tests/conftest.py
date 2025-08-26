@@ -15,6 +15,7 @@ from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, Syste
 from autotrainer.core import ProjectInfo
 from autotrainer.device import DeviceConnectionProtocol
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
+from autotrainer.video import CaptureProcessStatus
 
 from tools.acquisition.model.inference_model import InferenceModel
 
@@ -86,6 +87,7 @@ def machine(tunnel_device, pellet_device, inference, project_info):
         inference=inference,
         project_info=project_info,
     )
+    machine.algorithm.capture_status = CaptureProcessStatus.RUNNING
     return machine
 
 
@@ -231,6 +233,12 @@ class MockSystemMachine:
         for _ in range(3 * batch_count):
             self._ts_now += self._load_cell.config.min_post_event_hold_duration / batch_count + 0.001
             self._load_cell.update(self._load_cell.config.weight_inactive_threshold - 0.001, self._ts_now, self._ts_now)
+
+    def make_recording_aged_enough(self):
+        algo = self._machine.algorithm
+        algo.capture_status = CaptureProcessStatus.RECORDING
+        algo._last_capture_status_change_perf_c -= algo.recording_age_release_pellet_threshold
+        self.pellet.environment_changed(pellet_seen=True, must_release=True, caller="simulate start recording")
 
 
 @pytest.fixture

@@ -210,6 +210,7 @@ class PelletMachine(StateMachine):
 
     # region Callbacks
     def _session_starting(self):
+        pass
         # Strictly speaking, the pellet should not be covered here when covering is disabled.  Under that condition,
         # must release could be set to False.  However, given how critical it is that the pellet is not covered when
         # disabled, go ahead and request a release under all conditions, even though it should be a no-op in that
@@ -221,13 +222,13 @@ class PelletMachine(StateMachine):
         # which would be send_pellet+release pellet,
         # but could be missed in the video recording given async start of the cams recording.
         # self._try_next_state(True, True, caller="session_starting")
-        cur_timer = self._cur_timer_try_next_state
-        if cur_timer is not None:
-            cur_timer.cancel()
-        # safety backup measure:
-        cur_timer = self._cur_timer_try_next_state = threading.Timer(1.5,
-            lambda: self._try_next_state(True, True, caller="timer_session_starting", from_timer=True))
-        cur_timer.start()
+        # cur_timer = self._cur_timer_try_next_state
+        # if cur_timer is not None:
+        #     cur_timer.cancel()
+        # # safety backup measure:
+        # cur_timer = self._cur_timer_try_next_state = threading.Timer(1.5,
+        #     lambda: self._try_next_state(True, True, caller="timer_session_starting", from_timer=True))
+        # cur_timer.start()
 
     def _session_ending(self):
         algo = self._algorithm
@@ -291,8 +292,6 @@ class PelletMachine(StateMachine):
                                   caller=caller, is_from_timer=from_timer)
 
     environment_changed = _try_next_state  # remove 1 unnecessary stack level
-    # def environment_changed(self):
-    #     self._try_next_state()
 
     def __try_next_state(
         self,
@@ -359,6 +358,7 @@ class PelletMachine(StateMachine):
             return
 
         cur_state = self.state
+
         if cur_state in {PelletState.loading, PelletState.retract}:
             if algo.can_cover_pellet():
                 reason = "send_pellet_when_loaded_or_retract_not_intersession"
@@ -429,9 +429,10 @@ class PelletMachine(StateMachine):
                 self.send_pellet()
             else:
                 log_could_retry_shortly()
+
         elif cur_state == PelletState.monitoring:
             if algo.is_in_session:
-                if must_release:
+                if must_release:  #  or (pellet_seen and self.can_release_pellet()):
                     reason = "release_when_in_session_and_must_release"
                     if self.can_use_pellet_command():
                         logit()
@@ -463,7 +464,7 @@ class PelletMachine(StateMachine):
                         else:
                             log_could_retry_shortly()
         else:
-            pass  # unhandled state
+            logger.warning("unknown state: %s", cur_state)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
