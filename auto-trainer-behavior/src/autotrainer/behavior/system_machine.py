@@ -195,11 +195,11 @@ class SystemMachine(StateMachine):
         self._algorithm.system_state = SystemState.tunnel
         self.enter_tunnel(reason="exit_intersession_to_tunnel")
         # # EDIT: even not sure it's needed anymore ? at least not for current tests. trying without..
-        # if not self._algorithm.is_in_session:
-        #     # only needed if not start a new session,
-        #     # given when a new session is started, the pellet machine already receives a session_starting event/callback
-        #     # which already makes the necessary move(s).
-        #     self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
+        if not self._algorithm.is_in_session:
+            # only needed if not start a new session,
+            # given when a new session is started, the pellet machine already receives a session_starting event/callback
+            # which already makes the necessary move(s).
+            self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
 
     @staticmethod
     def _clean_raw_data(project):
