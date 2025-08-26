@@ -283,13 +283,14 @@ class SystemMachine(StateMachine):
             else:
                 self.exit_intersession_to_cage()
 
-    def _handle_inference_property_changed(self, name: str, new_status, prev_status):
+    def _handle_inference_property_changed(self, name: str, new_value, prev_value):
         if name == InferenceProtocol.STATUS:
+            logger.verbose("Inference status change: %s -> %s ; system_state=%s",
+                         prev_value, new_value, self.state)
             if (
-                new_status == InferenceStatus.live
+                new_value == InferenceStatus.live
                 and self.state == SystemState.cage
             ):
-                assert prev_status == InferenceStatus.waiting
                 if self._analysis.load_cell_monitor.is_engaged:
                     self.enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
                 # this is only used at app starts, so unregister:
