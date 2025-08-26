@@ -22,10 +22,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     ):
         super().__init__()
 
-        self._proc_msg_queue = proc_msg_queue
-        if proc_msg_queue is not None:
-            ...
-            # CAMERA_STATUS_CHANGE
+        self._proc_msg_queue = proc_msg_queue  # actually unused, see unsure in AppModel..
         self._analysis = analysis
 
         self._machine = SystemMachine(

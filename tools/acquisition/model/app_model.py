@@ -64,11 +64,13 @@ class AppModel(ObservableObject):
 
         mp_ctx = get_mp_ctx()
 
+        # not sure this should better be in SystemMachine itself, or BehaviorAlgo or BehaviorModel ?
         proc_msg_queue = self._multiproc_msg_queue = mp_ctx.Queue()
         self._handle_proc_msg_thread = threading.Thread(
             target=self._handle_proc_msg_queue, name="handle_proc_msg_queue", daemon=True)
         self._handle_proc_msg_thread.start()
         self._timer_recording_age_enough = threading.Timer(0, lambda: None)
+        # end not sure
 
         self._left_camera = VideoCaptureModel("left", self._preferences, 0,
                                               msg_queue=proc_msg_queue)
@@ -167,6 +169,12 @@ class AppModel(ObservableObject):
 
         self._load_animals()
 
+    def _consider_release_pellet(self):
+        algo = self._behavior.algorithm
+        if algo.is_in_session:
+            self._behavior.system_machine.pellet.environment_changed(
+                pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-start-recording")
+
     def _handle_proc_msg_queue(self):
         proc_msg_q = self._multiproc_msg_queue
         logger.info("handle_proc_msg_queue now running")
@@ -180,27 +188,25 @@ class AppModel(ObservableObject):
                 if len(raw) < 1:
                     logger.warning("Invalid status msg: %r", raw)
                     continue
-                status = raw[0]
-                if len(raw) >= 2:
+                cmd = raw[0]
+                if len(raw) > 1:
                     args = raw[1]
-                    if len(raw) >= 3:
+                    if len(raw) > 2:
                         kwargs = raw[2]
                         if len(raw) > 3:
                             logger.warning("Unhandled extra args to status msg: %r", raw[3:])
             else:
-                status = raw
-            logger.info("Got %s", status)
+                cmd = raw
+            logger.info("Got %s", cmd)
             algo = self._behavior.algorithm
-            if status == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
-                cam_idx, status = args
+            if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
+                cam_idx, new_status = args
                 if self._cameras[cam_idx].is_primary:
-                    algo.capture_status = status  # first
+                    algo.capture_status = new_status  # first
                     self._timer_recording_age_enough.cancel()
-                    if status == CaptureProcessStatus.RECORDING:
+                    if new_status == CaptureProcessStatus.RECORDING:
                         new_timer = self._timer_recording_age_enough = _recording_age_enough_timer_func(
-                            algo.recording_age_release_pellet_threshold,
-                            lambda: self._behavior.system_machine.pellet.environment_changed(
-                                pellet_seen=True, must_release=True, caller="camera-start-recording")
+                            algo.recording_age_release_pellet_threshold, self._consider_release_pellet
                         )
                         new_timer.start()
         # end while True

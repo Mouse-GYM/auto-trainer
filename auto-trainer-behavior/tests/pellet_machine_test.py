@@ -1,11 +1,9 @@
-import time
 from datetime import datetime
 from unittest import mock
 
 import pytest
 
 from autotrainer.behavior import PelletState, SystemState, PelletMachine, PelletDeviceProtocol
-from autotrainer.video import CaptureProcessStatus
 
 
 @pytest.fixture()
@@ -29,8 +27,6 @@ def test_enter_exit_default(mock_system, machine):
     machine.enter_tunnel()
 
     mock_system.make_recording_aged_enough()
-    # algo.capture_status = CaptureProcessStatus.RECORDING
-    # algo._last_capture_status_change_perf_c -= 5
 
     assert pellet_m.state == PelletState.releasing
 
@@ -267,8 +263,6 @@ def test_pellet_seen(mock_system, machine, inference):
 
     assert machine.state == SystemState.tunnel
     assert pellet_dev.state == PelletState.monitoring
-
-    # assert pellet_dev.state == PelletState.monitoring
     assert algorithm.pellet_last_seen != 0.0
     assert algorithm.session_pellet_count == 0
 

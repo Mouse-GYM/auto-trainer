@@ -10,6 +10,7 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     Defines an expected/required set of commands from the pellet device that are used as part of the behavior algorithm
     and state machine.
     """
+
     def delay(self, amount: float):
         """Request to delay that amount of seconds"""
 

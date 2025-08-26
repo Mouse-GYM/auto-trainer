@@ -70,7 +70,6 @@ def test_covered_load_cycle(mock_system, machine):
     pellet_m.algorithm.start_session()
 
     mock_system.make_recording_aged_enough()
-    # pellet_m.environment_changed(pellet_seen=True, must_release=True)
 
     # Should transition to releasing if session starts while covered.
     assert_covered_was_released(pellet_m)

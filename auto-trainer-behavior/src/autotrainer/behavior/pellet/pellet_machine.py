@@ -215,20 +215,10 @@ class PelletMachine(StateMachine):
         # must release could be set to False.  However, given how critical it is that the pellet is not covered when
         # disabled, go ahead and request a release under all conditions, even though it should be a no-op in that
         # instance.
-        # if self._pellet_device is not None:
-        #     self._pellet_device.delay(1)
-        # this can be called right when cameras have been requested to start,
-        # but camera start is done async, so give a small delay before trying next state,
-        # which would be send_pellet+release pellet,
-        # but could be missed in the video recording given async start of the cams recording.
-        # self._try_next_state(True, True, caller="session_starting")
-        # cur_timer = self._cur_timer_try_next_state
-        # if cur_timer is not None:
-        #     cur_timer.cancel()
-        # # safety backup measure:
-        # cur_timer = self._cur_timer_try_next_state = threading.Timer(1.5,
-        #     lambda: self._try_next_state(True, True, caller="timer_session_starting", from_timer=True))
-        # cur_timer.start()
+        # self._try_next_state(pellet_seen=True, must_release=True, caller="session_starting")
+        # this was forcing a release pellet,
+        # but is now controlled via receiving camera capture status == RECORDING
+        # and not releasing before the desired threshold/delay.
 
     def _session_ending(self):
         algo = self._algorithm
@@ -432,7 +422,7 @@ class PelletMachine(StateMachine):
 
         elif cur_state == PelletState.monitoring:
             if algo.is_in_session:
-                if must_release:  #  or (pellet_seen and self.can_release_pellet()):
+                if must_release and pellet_seen:
                     reason = "release_when_in_session_and_must_release"
                     if self.can_use_pellet_command():
                         logit()

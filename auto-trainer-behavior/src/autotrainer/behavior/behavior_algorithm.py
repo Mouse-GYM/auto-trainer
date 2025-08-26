@@ -563,11 +563,12 @@ class BehaviorAlgorithm(ObservableObject):
     def can_cover_pellet(self):
         return self.pellet_cover_enabled
 
+    @property
+    def pellet_recently_seen(self):
+        return time.perf_counter() - self._pellet_last_seen < self.limits.pellet_missing_time
+
     def can_load_pellet(self):
-        return (
-            self.pellet_delivery_enabled
-            and time.perf_counter() - self._pellet_last_seen >= self.limits.pellet_missing_time
-        )
+        return self.pellet_delivery_enabled and not self.pellet_recently_seen
 
     def can_release_pellet(self) -> bool:
         # self._check_date()
