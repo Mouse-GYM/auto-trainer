@@ -293,7 +293,8 @@ class SystemMachine(StateMachine):
                 if self._analysis.load_cell_monitor.is_engaged:
                     self.enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
                 # this is only used at app starts, so unregister:
-                self._inference.property_changed -= self._handle_inference_property_changed
+                # self._inference.property_changed -= self._handle_inference_property_changed
+                # NO: in case of stop->start acquisition of/inside main app we still need it.
 
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
