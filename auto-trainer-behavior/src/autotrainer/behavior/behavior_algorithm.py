@@ -24,6 +24,7 @@ from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration
+from autotrainer.video.detection import PresenceDetectionAttrs
 
 logger = get_verbose_logger(__name__)
 
@@ -80,6 +81,8 @@ class BehaviorAlgoProps(str, Enum):
     USE_TRIANGLE_PELLET_DISTANCE_TOO_FAR = "use_triangle_pellet_distance_too_far"
     TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"
 
+    PRESENCE_MISSING = 'presence_missing'
+
 
 class BehaviorAlgorithm(ObservableObject):
     # dynamic events type hints,
@@ -115,7 +118,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._head_fixation_enabled = False
         self._clean_raw_data_on_inactive_session = False
         self._auto_correct_motors_drift = False
-
+        self._presence_missing_delay: float = 20
         self._auto_clamp_intensity = 100
         self._auto_clamp_release_tone_freq = 7000
         self._auto_clamp_release_delay = 0.1
@@ -160,6 +163,9 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._cover_servo_status = CoverServoStatus.OK
 
+        self._top_camera_presence_detection = PresenceDetectionAttrs()
+        self._presence_missing = False
+
         self._diamond_triangle_offest_config_path = diamond_triangle_offset_config_path
         self._load_diamond_config()
 
@@ -197,6 +203,10 @@ class BehaviorAlgorithm(ObservableObject):
     @project.setter
     def project(self, project):
         self._project_info = project
+
+    @property
+    def top_camera_presence_detection(self) -> PresenceDetectionAttrs:
+        return self._top_camera_presence_detection
 
     @property
     def system_state(self) -> SystemState:
@@ -329,6 +339,23 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def pellet_last_seen(self) -> float:
         return self._pellet_last_seen
+
+    @property
+    def presence_missing_delay(self):
+        return self._presence_missing_delay
+
+    @presence_missing_delay.setter
+    def presence_missing_delay(self, value):
+        self._presence_missing_delay = value
+
+    @property
+    def presence_missing(self) -> bool:
+        return self._presence_missing
+
+    @presence_missing.setter
+    def presence_missing(self, value):
+        self._presence_missing = self._on_property_changed(
+            BehaviorAlgoProps.PRESENCE_MISSING, value, self._presence_missing)
 
     @property
     def triangle_pellet_offset(self) -> Offset3DTuple:

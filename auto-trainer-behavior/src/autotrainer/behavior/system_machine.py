@@ -1,3 +1,4 @@
+import time
 from functools import partial
 from itertools import chain
 from pathlib import Path
@@ -31,6 +32,7 @@ logger = get_verbose_logger(__name__)
 _clean_raw_data_timer = Timer
 _auto_clamp_release_timer = Timer
 _consider_end_session_timer = Timer
+_check_missing_timer = Timer
 
 #
 
@@ -77,9 +79,17 @@ class SystemMachine(StateMachine):
         initial_state = SystemState.cage
         super().__init__(initial_state=initial_state)
 
+        self.machine = Machine(
+            model=[self], states=SystemMachine.states, transitions=SystemMachine.transitions,
+            auto_transitions=False, initial=initial_state, model_override=True,
+        )
+
         self._project_info = project_info
 
-        self._timer_consider_end_session: Optional[Timer] = None
+        no_op_timer = Timer(0, lambda: None)
+        no_op_timer.start()
+
+        self._timer_consider_end_session = no_op_timer
         self._delay_timer_consider_end_session: Optional[float] = 2.0
 
         self._motor_axis_flips = Offset3DTuple(1, 1, 1)
@@ -117,10 +127,11 @@ class SystemMachine(StateMachine):
         intersession_machine.events.on_analysis_ended += self._intersession_ended
         intersession_machine.events.state_changed += self._intersession_state_changed
 
-        self.machine = Machine(
-            model=[self], states=SystemMachine.states, transitions=SystemMachine.transitions,
-            auto_transitions=False, initial=initial_state, model_override=True,
-        )
+        # need to set it directly, when we start all state are "OFF/0": no presence detected, etc..
+        # so if that's stay as is then there need to be the timer already setup:
+        self._timer_check_missing = _check_missing_timer(self._algorithm.presence_missing_delay,
+                                                         self._check_presence_missing)
+        self._timer_check_missing.start()
 
     @property
     def algorithm(self) -> BehaviorAlgorithm:
@@ -306,7 +317,10 @@ class SystemMachine(StateMachine):
 
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
+            cur_timer_check_missing = self._timer_check_missing
+            cur_timer_check_missing.cancel()
             if value:
+                self._algorithm.presence_missing = False
                 if self.state == SystemState.cage:
                     # when app start inference is slow and takes several 10s to become live,
                     # so we have to check it:
@@ -317,6 +331,9 @@ class SystemMachine(StateMachine):
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                                               context=self.state)
             else:
+                cur_timer_check_missing = _check_missing_timer(self._algorithm.presence_missing_delay,
+                                                               self._check_presence_missing)
+                cur_timer_check_missing.start()
                 if self.state == SystemState.tunnel and self.intersession.state == IntersessionState.idle:
                     logger.info("%s False, exiting tunnel ..", LoadCellMonitor.IS_ENGAGED_PROPERTY)
                     self.exit_tunnel(reason="load_cell_disengaged_when_tunnel")
@@ -446,7 +463,7 @@ class SystemMachine(StateMachine):
     def _pellet_loading(self):
         if self._algorithm.is_in_session:
             prev_timer = self._timer_consider_end_session
-            if prev_timer is None or prev_timer.finished.is_set():
+            if prev_timer.finished.is_set():
                 self._timer_consider_end_session = _consider_end_session_timer(
                     self._delay_timer_consider_end_session,
                     partial(self._consider_end_session, reason="pellet_loading"))
@@ -498,6 +515,30 @@ class SystemMachine(StateMachine):
                 if val != 0:
                     meth(val, absolute=False)
                     EventManager.default().post_event_content(kind, context=val)
+
+    def _check_presence_missing(self):
+        self._timer_check_missing.cancel()  # in case of
+        algo = self._algorithm
+        if self._analysis.load_cell_monitor.is_engaged:
+            algo.presence_missing = False
+            return
+        # NB: for now the camera presence is not generating any message(s) but only sets multiprocess shared values,
+        # so we have to use timer:
+        if algo.top_camera_presence_detection.presence_detected:
+            algo.presence_missing = False
+            new_delay = 0.5  # we can only retry ~soon
+        else:
+            top_cam_pres_age = time.perf_counter() - algo.top_camera_presence_detection.last_absence_start_perf_c
+            top_cam_miss = algo.presence_missing_delay - top_cam_pres_age
+            load_cell_miss = algo.presence_missing_delay - self._analysis.load_cell_monitor.disengaged_age
+            if top_cam_miss <= 0 and load_cell_miss <= 0:
+                algo.presence_missing = True
+                new_delay = 0.5  # if camera presence detections goes ON/triggered (shared value only)
+            else:
+                algo.presence_missing = False
+                new_delay = max(top_cam_miss, load_cell_miss)
+        new_timer = self._timer_check_missing = _check_missing_timer(new_delay, self._check_presence_missing)
+        new_timer.start()
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

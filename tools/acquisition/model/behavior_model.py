@@ -4,14 +4,20 @@ from autotrainer.behavior import SystemMachine, InferenceProtocol
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import ObservableObject, ProjectInfo, MessageHandler, SensorAnalysis, BehaviorConfiguration
+from autotrainer.video.detection import PresenceDetectionAttrs
 from tools.acquisition.model.hardware_model import HardwareModel
 
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
 
 class BehaviorModel(ObservableObject, ProjectDependentProtol):
-    def __init__(self, msg_handler: MessageHandler, analysis: SensorAnalysis, hardware_model: HardwareModel,
-                 inference: InferenceProtocol):
+    def __init__(
+        self,
+        msg_handler: MessageHandler,
+        analysis: SensorAnalysis,
+        hardware_model: HardwareModel,
+        inference: InferenceProtocol,
+    ):
         super().__init__()
 
         self._analysis = analysis

@@ -57,7 +57,6 @@ class AppModel(ObservableObject):
 
         self._top_camera = VideoCaptureModel("web", self._preferences, -1)
         self._top_camera_presence_detection = PresenceDetectionAttrs()
-
         self._cameras = [self._left_camera, self._right_camera, self._top_camera]
 
         self._message_queue = queue.Queue()
@@ -161,8 +160,8 @@ class AppModel(ObservableObject):
         return self._top_camera
 
     @property
-    def top_camera_presence_detection(self) -> PresenceDetectionAttrs:
-        return self._top_camera_presence_detection
+    def top_camera_presence_detection(self):
+        return self._behavior.algorithm.top_camera_presence_detection
 
     @property
     def behavior(self):
@@ -313,7 +312,7 @@ class AppModel(ObservableObject):
 
         if did_start:
             did_start = did_start and self.top_camera.on_prepare_capture(
-                presence_detection_attrs=self._top_camera_presence_detection,
+                presence_detection_attrs=self._behavior.algorithm.top_camera_presence_detection,
             )
             if not did_start:
                 self.on_error("Camera Process Failed",
