@@ -77,6 +77,7 @@ class BehaviorAlgoProps(str, Enum):
     RELEASE_PELLET_DISTANCE = "release_pellet_distance"
 
     INTERSESSION_STATE = 'intersession_state'
+    CAPTURE_STATUS = 'capture_status'
 
     USE_TRIANGLE_PELLET_DISTANCE_TOO_FAR = "use_triangle_pellet_distance_too_far"
     TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"
@@ -227,8 +228,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @capture_status.setter
     def capture_status(self, value: CaptureProcessStatus):
-        self._capture_status = value
         self._last_capture_status_change_perf_c = time.perf_counter()
+        self._capture_status = self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, self._capture_status)
 
     @property
     def capture_status_age(self) -> float:
