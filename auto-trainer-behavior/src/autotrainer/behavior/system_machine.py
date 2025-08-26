@@ -28,11 +28,17 @@ from .tunnel_device_protocol import TunnelDeviceProtocol
 logger = get_verbose_logger(__name__)
 
 
+def _daemon_timer(delay, func):
+    timer = Timer(delay, func)
+    timer.daemon = True
+    return timer
+
+
 # NB: this is to ensure we can patch the exact desired one (and only that one) from tests:
-_clean_raw_data_timer = Timer
-_auto_clamp_release_timer = Timer
-_consider_end_session_timer = Timer
-_check_missing_timer = Timer
+_clean_raw_data_timer = _daemon_timer
+_auto_clamp_release_timer = _daemon_timer
+_consider_end_session_timer = _daemon_timer
+_check_missing_timer = _daemon_timer
 
 #
 
@@ -132,6 +138,23 @@ class SystemMachine(StateMachine):
         self._timer_check_missing = _check_missing_timer(self._algorithm.presence_missing_delay,
                                                          self._check_presence_missing)
         self._timer_check_missing.start()
+        self._end_timers = False
+
+    def end_timers(self):
+        self._end_timers = True
+        self._timer_consider_end_session.cancel()
+        self._timer_check_missing.cancel()
+
+    def __del__(self):
+        self.end_timers()
+
+    def __enter__(self):
+        self._end_timers = False
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._end_timers = True
+        self.end_timers()
 
     @property
     def algorithm(self) -> BehaviorAlgorithm:
@@ -289,6 +312,12 @@ class SystemMachine(StateMachine):
 
     def _handle_inference_property_changed(self, name: str, new_status, prev_status):
         if name == InferenceProtocol.STATUS:
+            if new_status in {InferenceStatus.live, InferenceStatus.intersession}:
+                self._timer_check_missing = _check_missing_timer(0.5, self._check_presence_missing)
+                self._timer_check_missing.start()
+            else:
+                self._timer_check_missing.cancel()
+                self._timer_consider_end_session.cancel()
             if (
                 new_status == InferenceStatus.live
                 and self.state == SystemState.cage
@@ -519,6 +548,10 @@ class SystemMachine(StateMachine):
     def _check_presence_missing(self):
         self._timer_check_missing.cancel()  # in case of
         algo = self._algorithm
+        if self._end_timers:
+            return
+        if self._inference.status not in {InferenceStatus.live, InferenceStatus.intersession}:
+            return
         if self._analysis.load_cell_monitor.is_engaged:
             algo.presence_missing = False
             return
