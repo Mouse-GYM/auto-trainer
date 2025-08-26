@@ -68,6 +68,7 @@ class AppModel(ObservableObject):
         self._handle_proc_msg_thread = threading.Thread(
             target=self._handle_proc_msg_queue, name="handle_proc_msg_queue", daemon=True)
         self._handle_proc_msg_thread.start()
+        self._timer_recording_age_enough = threading.Timer(0, lambda: None)
 
         self._left_camera = VideoCaptureModel("left", self._preferences, 0,
                                               msg_queue=proc_msg_queue)
@@ -194,14 +195,14 @@ class AppModel(ObservableObject):
                 cam_idx, status = args
                 if self._cameras[cam_idx].is_primary:
                     algo.capture_status = status  # first
+                    self._timer_recording_age_enough.cancel()
                     if status == CaptureProcessStatus.RECORDING:
-                        self._timer_recording_age_enough = _recording_age_enough_timer_func(
+                        new_timer = self._timer_recording_age_enough = _recording_age_enough_timer_func(
                             algo.recording_age_release_pellet_threshold,
                             lambda: self._behavior.system_machine.pellet.environment_changed(
                                 pellet_seen=True, must_release=True, caller="camera-start-recording")
                         )
-                    else:
-                        self._timer_recording_age_enough.cancel()
+                        new_timer.start()
         # end while True
         logger.info("handle_proc_msg_queue exiting")
 
