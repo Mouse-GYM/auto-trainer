@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel, QMessag
 import qtawesome as qta
 
 from autotrainer.core import EventManager
+from autotrainer.core.logging import get_console_handler
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
@@ -307,11 +308,13 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _update_log_level(value: int):
-        logging.getLogger("tools").setLevel(value)
-        logging.getLogger("autotrainer").setLevel(value)
-        logging.getLogger("inference_algorithms").setLevel(value)
-
-        if value == logging.DEBUG:
-            logging.getLogger("transitions").setLevel(logging.INFO)
-        else:
-            logging.getLogger("transitions").setLevel(logging.WARNING)
+        # controlled via console and file handlers now
+        get_console_handler().setLevel(value)
+        # logging.getLogger("tools").setLevel(value)
+        # logging.getLogger("autotrainer").setLevel(value)
+        # logging.getLogger("inference_algorithms").setLevel(value)
+        #
+        # if value == logging.DEBUG:
+        #     logging.getLogger("transitions").setLevel(logging.INFO)
+        # else:
+        #     logging.getLogger("transitions").setLevel(logging.WARNING)

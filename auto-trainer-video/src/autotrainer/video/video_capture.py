@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import logging
+import logging.config
 import multiprocessing
 import queue
+import sys
 import time
 import os
 from dataclasses import dataclass
@@ -16,7 +17,8 @@ import numpy
 import verboselogs
 
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo, SystemStatusMessageKind
-from autotrainer.core.logging import get_verbose_logger, set_logger_level
+from autotrainer.core.logging import get_verbose_logger, set_logger_level, get_multiprocess_log_queue, \
+    make_log_dict_config, thread_id_filter, setup_logging
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.message import FrameIndexCategory
 from .detection import PresenceDetectionAttrs, VideoDetection
@@ -157,7 +159,16 @@ class VideoCapture(Process):
         record_properties: Optional[VideoRecordProperties] = None,
         project_info: Optional[ProjectInfo] = None,
     ):
-        super().__init__(name=attrs.camera.name)
+        log_q = get_multiprocess_log_queue()
+        log_dict_config = (
+            None if log_q is None
+            else make_log_dict_config(root_log_level=logging.root.level,
+                                      log_queue=log_q))
+        super().__init__(
+            name=attrs.camera.name,
+            target=self._do_run,
+            kwargs=dict(log_dict_config=log_dict_config),
+        )
 
         self._attrs = attrs
         self._name = attrs.camera.name
@@ -208,12 +219,11 @@ class VideoCapture(Process):
 
         self._set_status(CaptureProcessStatus.INITIALIZED)
 
-    def run(self):
-        from autotrainer.core.logging import setup_logging
-        log_level = os.getenv("VIDEO_CAPTURE_LOG_LEVEL", verboselogs.VERBOSE)
-        if isinstance(log_level, str) and log_level.isdigit():
-            log_level = int(log_level)
-        setup_logging(root_level=log_level, time_precision=6)
+    def _do_run(self, log_dict_config: Optional[Dict]):
+        if log_dict_config is None:
+            setup_logging()
+        else:
+            logging.config.dictConfig(log_dict_config)
 
         logger.info("%s: started running ; name=%s cam_index=%s primary=%s",
                     self, self._attrs.camera.name, self._camera_idx, self._attrs.is_primary)
@@ -554,8 +564,8 @@ class VideoCapture(Process):
 
     def _enable_record(self, _: object):
         self._is_record_active = self._record_properties.should_record(True)
-        logger.info("%s: is_record_active=%s", self, self._is_record_active)
+        logger.debug("%s: is_record_active=%s", self, self._is_record_active)
 
     def _disable_record(self, _: object):
         self._is_record_active = self._record_properties.should_record(False)
-        logger.info("%s: recording disabled. is_record_active=%s", self, self._is_record_active)
+        logger.debug("%s: recording disabled. is_record_active=%s", self, self._is_record_active)
