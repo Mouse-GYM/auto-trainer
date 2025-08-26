@@ -111,8 +111,9 @@ class SystemMachine(StateMachine):
         pellet_machine = self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
         pellet_machine.events.pellet_loading += self._pellet_loading
         # pellet_machine.events.pellet_sending += self._pellet_sending
-        # NB: _pellet_sending is used to trigger a start session, if one is not already running/recording,
+        # NB: _pellet_sending was used to trigger a start session, if one is not already running/recording,
         # *always*, by design, atm.
+        # But this is already handled by load_cell_engaged property, basically.
         pellet_machine.events.state_changed += self._pellet_state_changed
 
         intersession_machine = self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
@@ -465,6 +466,7 @@ class SystemMachine(StateMachine):
                                self, prev_timer)
 
     def _pellet_sending(self):
+        # nb: not used anymore
         if self.state == SystemState.tunnel and not self._algorithm.is_in_session:
             self._algorithm.start_session(reason="pellet_sending")
 
