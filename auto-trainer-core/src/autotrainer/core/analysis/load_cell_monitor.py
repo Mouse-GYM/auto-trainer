@@ -4,7 +4,6 @@ import threading
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
-from threading import Timer
 from typing import Callable, List, Tuple, Deque, Optional, Union, Any, Dict
 
 from typing_extensions import Self
@@ -14,6 +13,7 @@ import numpy
 
 from autotrainer.core.logging import get_verbose_logger
 from .. import build_kwargs_apply_mapping, make_camelize_representer
+from ..multiproc import DaemonTimer
 from ..observable_object import ObservableObject
 from ..event import EventManager
 
@@ -22,11 +22,11 @@ from .analysis_measurement_event_kind import AnalysisMeasurementEventKind
 
 logger = get_verbose_logger(__name__)
 
-_NO_OP_TIMER = Timer(1.0, lambda: None)
+_NO_OP_TIMER = DaemonTimer(1.0, lambda: None)
 
 
 # to allow to be patched from tests:
-_timer_load_cell_engaged = Timer
+_timer_load_cell_engaged = DaemonTimer
 
 
 
@@ -97,8 +97,8 @@ class LoadCellMonitor(ObservableObject):
         self._t_inactive_start: Optional[float] = None
         self._cur_ptp_count = 0
         self._t_last_ptp_check = 0
-        self._active_debounce: Timer = _NO_OP_TIMER
-        self._inactive_debounce: Timer = _NO_OP_TIMER
+        self._active_debounce: DaemonTimer = _NO_OP_TIMER
+        self._inactive_debounce: DaemonTimer = _NO_OP_TIMER
         self._when = 0  # used to pass with event when engaged is changed
         self._index = 0  # used to pass with event when engaged is changed
         self._is_engaged: bool = False

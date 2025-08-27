@@ -136,7 +136,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     def __init__(self,
         pose_algorithm: PoseAlgorithm,
         *,
-        calib_dir: Optional[Path] = None
+        calib_dir: Optional[Path] = None,
+        msg_queue: Optional[multiprocessing.Queue] = None,
     ):
         super().__init__(event_names=(
             'pose_response_ready',
@@ -151,7 +152,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._thread_lock = threading.RLock()
         self._data_queue = mp_ctx.Queue(maxsize=4096)
         self._cmd_queue = mp_ctx.Queue(maxsize=64)
-        self._msg_queue = mp_ctx.Queue(maxsize=64)
+        if msg_queue is None:
+            msg_queue = mp_ctx.Queue(maxsize=64)
+        self._msg_queue = msg_queue
 
         self._offline_queue: Optional[FixedArrayMultiQueue] = None
         self._offline_thread: Optional[Thread] = None

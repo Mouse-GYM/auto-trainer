@@ -1,14 +1,11 @@
-import logging
-import threading
-import time
 from enum import Enum
 from typing import Dict, Callable, Any, Optional
 
-from events import Events
 from transitions import Machine
 
-from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import EventManager, MessageHandler, ObservableObject, Offset3DTuple, Motor
+from autotrainer.core.multiproc import DaemonTimer
+from autotrainer.core.logging import get_verbose_logger
 
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..behavior_event_kind import BehaviorEventKind
@@ -46,6 +43,7 @@ class PelletMachine(StateMachine):
         {"trigger": "load_pellet", "source": [PelletState.monitoring, PelletState.covering, PelletState.retract],
          "dest": PelletState.loading, "before": "before_load_pellet", "after": "after_load_pellet",
          "conditions": "can_load_pellet"},
+
         {"trigger": "send_pellet", "source": [PelletState.loading, PelletState.home, PelletState.prerelease, PelletState.retract],
          "dest": PelletState.sending, "before": "before_send_pellet", "conditions": "can_send_pellet"},
 
@@ -114,7 +112,7 @@ class PelletMachine(StateMachine):
                                initial=initial_state, model_override=True,
                        )
 
-        self._cur_timer_try_next_state: Optional[threading.Timer] = None
+        self._cur_timer_try_next_state: Optional[DaemonTimer] = None
 
     @property
     def algorithm(self):
@@ -209,11 +207,15 @@ class PelletMachine(StateMachine):
 
     # region Callbacks
     def _session_starting(self):
+        pass
         # Strictly speaking, the pellet should not be covered here when covering is disabled.  Under that condition,
         # must release could be set to False.  However, given how critical it is that the pellet is not covered when
         # disabled, go ahead and request a release under all conditions, even though it should be a no-op in that
         # instance.
-        self._try_next_state(True, True, caller="session_starting")
+        # self._try_next_state(pellet_seen=True, must_release=True, caller="session_starting")
+        # this was forcing a release pellet,
+        # but is now controlled via receiving camera capture status == RECORDING
+        # and not releasing before the desired threshold/delay.
 
     def _session_ending(self):
         algo = self._algorithm
@@ -277,8 +279,6 @@ class PelletMachine(StateMachine):
                                   caller=caller, is_from_timer=from_timer)
 
     environment_changed = _try_next_state  # remove 1 unnecessary stack level
-    # def environment_changed(self):
-    #     self._try_next_state()
 
     def __try_next_state(
         self,
@@ -288,6 +288,9 @@ class PelletMachine(StateMachine):
         caller: str,
         is_from_timer: bool = False,
     ):
+        cur_timer = self._cur_timer_try_next_state
+        if cur_timer is not None:
+            cur_timer.cancel()
 
         algo = self._algorithm
         reason: str = "unknown"
@@ -342,6 +345,7 @@ class PelletMachine(StateMachine):
             return
 
         cur_state = self.state
+
         if cur_state in {PelletState.loading, PelletState.retract}:
             if algo.can_cover_pellet():
                 reason = "send_pellet_when_loaded_or_retract_not_intersession"
@@ -412,9 +416,10 @@ class PelletMachine(StateMachine):
                 self.send_pellet()
             else:
                 log_could_retry_shortly()
+
         elif cur_state == PelletState.monitoring:
             if algo.is_in_session:
-                if must_release:
+                if must_release and pellet_seen:
                     reason = "release_when_in_session_and_must_release"
                     if self.can_use_pellet_command():
                         logit()
@@ -446,7 +451,7 @@ class PelletMachine(StateMachine):
                         else:
                             log_could_retry_shortly()
         else:
-            pass  # unhandled state
+            logger.warning("unknown state: %s", cur_state)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

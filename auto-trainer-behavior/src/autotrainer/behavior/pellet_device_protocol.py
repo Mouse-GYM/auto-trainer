@@ -11,6 +11,9 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     and state machine.
     """
 
+    def delay(self, amount: float):
+        """Request to delay that amount of seconds"""
+
     @property
     def last_set_position(self) -> Optional[Offset3DTuple]:
         """Give the last SET position (deliver position, used with SEND_PELLET command"""

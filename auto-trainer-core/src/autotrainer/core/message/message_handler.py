@@ -82,6 +82,12 @@ class MessageHandler(ObservableObject):
             self._current_thread.start()
 
     def run(self):
+        try:
+            self._run()
+        except Exception as err:
+            logger.exception("Fatal error during run: %s", err)
+
+    def _run(self):
         logger.debug(f"<{self._name}>: entering message event loop")
         q_get = self._input_queue.get
         task_done = self._input_queue.task_done

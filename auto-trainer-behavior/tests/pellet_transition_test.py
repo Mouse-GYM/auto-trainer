@@ -10,36 +10,41 @@ from autotrainer.behavior import PelletMachine, PelletState
 from .conftest import property_value_save_transitions
 
 
-def assert_load_cycle(machine: PelletMachine, should_release: bool = True) -> None:
+def assert_load_cycle(pellet_m: PelletMachine, should_release: bool = True) -> None:
     """
     This is essentially the spec of what the behavior should be each time an ack is received from the real pellet device
     for a load->release cycle.  It defines what should happen in pellet_device_ack_received().  The state machine should
     pass tests using this, and then similarly pass when using an actual pellet device or mock.
-    :param machine: InferenceMachine instance
+    :param pellet_m: InferenceMachine instance
     :param should_release: True if pellet release is expected (vs. remaining covered)
     :return: None
     """
-    machine.load_pellet()
+    pellet_m.load_pellet()
 
-    assert machine.state == PelletState.loading
+    assert pellet_m.state == PelletState.loading
 
-    machine.send_pellet()
+    pellet_m.send_pellet()
 
-    assert machine.state == PelletState.sending
+    pellet_m._pellet_device_ack_received(pellet_m._api_status_token)
+
+    assert pellet_m.state == PelletState.sending
 
     # When send completes, the machine transitions to covering in the ack that won't ever come in this testing.
-    machine.state = PelletState.covering
+    pellet_m.state = PelletState.covering
 
-    machine.release_pellet()
+    pellet_m.release_pellet()
+
+    pellet_m._pellet_device_ack_received(pellet_m._api_status_token)
 
     if should_release:
-        assert machine.state == PelletState.releasing
 
-        machine.monitor_pellet()
+        assert pellet_m.state == PelletState.releasing
 
-        assert machine.state == PelletState.monitoring
+        pellet_m.monitor_pellet()
+
+        assert pellet_m.state == PelletState.monitoring
     else:
-        assert machine.state == PelletState.covering
+        assert pellet_m.state == PelletState.covering
 
 
 def assert_covered_was_released(machine: PelletMachine) -> None:
@@ -55,33 +60,48 @@ def assert_covered_was_released(machine: PelletMachine) -> None:
     assert machine.state == PelletState.monitoring
 
 
-def test_covered_load_cycle():
-    machine = PelletMachine()
+def test_covered_load_cycle(mock_system, machine):
+    pellet_m = machine.pellet
+    # pellet_m = PelletMachine()
 
-    assert_load_cycle(machine, should_release=False)
+    assert_load_cycle(pellet_m, should_release=False)
 
     # Forcibly start a session for testing purposes.  This would normally occur at the system state level.
-    machine.algorithm.start_session()
+    pellet_m.algorithm.start_session()
+
+    mock_system.make_recording_aged_enough()
 
     # Should transition to releasing if session starts while covered.
-    assert_covered_was_released(machine)
+    assert_covered_was_released(pellet_m)
 
-    machine.algorithm.end_session()
+    assert pellet_m.state == PelletState.monitoring
+
+    pellet_m.algorithm.end_session()
+
+    pellet_m._pellet_device_ack_received(pellet_m._api_status_token)
 
     # Should return to covered at end of session
-    assert machine.state == PelletState.covering
+    assert pellet_m.state == PelletState.covering
 
-    machine.algorithm.start_session()
+    pellet_m.algorithm.start_session()
 
-    assert_covered_was_released(machine)
+    mock_system.make_recording_aged_enough()
 
-    assert machine.state == PelletState.monitoring
+    pellet_m._pellet_device_ack_received(pellet_m._api_status_token)
 
-    assert_load_cycle(machine, should_release=True)
+    assert_covered_was_released(pellet_m)
 
-    machine.algorithm.end_session()
+    assert pellet_m.state == PelletState.monitoring
 
-    assert machine.state == PelletState.covering
+    pellet_m._pellet_device_ack_received(pellet_m._api_status_token)
+
+    assert_load_cycle(pellet_m, should_release=True)
+
+    pellet_m.algorithm.end_session()
+
+    pellet_m._pellet_device_ack_received(pellet_m._api_status_token)
+
+    assert pellet_m.state == PelletState.covering
 
 
 def test_covered_disabled_load_cycle():

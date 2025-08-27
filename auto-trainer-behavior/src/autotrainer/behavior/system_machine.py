@@ -2,7 +2,6 @@ import time
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from threading import Timer
 from typing import Optional, List, Tuple
 
 from transitions import Machine
@@ -11,8 +10,10 @@ from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorA
                               HeadbarPressureMonitor, Motor)
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement
+from autotrainer.core.multiproc import DaemonTimer
+
+from autotrainer.inference import PoseResponse, InferenceStatus
 
 from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
@@ -28,17 +29,11 @@ from .tunnel_device_protocol import TunnelDeviceProtocol
 logger = get_verbose_logger(__name__)
 
 
-def _daemon_timer(delay, func):
-    timer = Timer(delay, func)
-    timer.daemon = True
-    return timer
-
-
 # NB: this is to ensure we can patch the exact desired one (and only that one) from tests:
-_clean_raw_data_timer = _daemon_timer
-_auto_clamp_release_timer = _daemon_timer
-_consider_end_session_timer = _daemon_timer
-_check_missing_timer = _daemon_timer
+_clean_raw_data_timer = DaemonTimer
+_auto_clamp_release_timer = DaemonTimer
+_consider_end_session_timer = DaemonTimer
+_check_missing_timer = DaemonTimer
 
 #
 
@@ -92,10 +87,10 @@ class SystemMachine(StateMachine):
 
         self._project_info = project_info
 
-        no_op_timer = Timer(0, lambda: None)
+        no_op_timer = DaemonTimer(0, lambda: None)
         no_op_timer.start()
-
         self._timer_consider_end_session = no_op_timer
+
         self._delay_timer_consider_end_session: Optional[float] = 2.0
 
         self._motor_axis_flips = Offset3DTuple(1, 1, 1)
@@ -126,7 +121,10 @@ class SystemMachine(StateMachine):
 
         pellet_machine = self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
         pellet_machine.events.pellet_loading += self._pellet_loading
-        pellet_machine.events.pellet_sending += self._pellet_sending
+        # pellet_machine.events.pellet_sending += self._pellet_sending
+        # NB: _pellet_sending was used to trigger a start session, if one is not already running/recording,
+        # *always*, by design, atm.
+        # But this is already handled by load_cell_engaged property, basically.
         pellet_machine.events.state_changed += self._pellet_state_changed
 
         intersession_machine = self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
@@ -209,7 +207,12 @@ class SystemMachine(StateMachine):
         # another possibility would be to have a dedicated trigger like "re_enter_tunnel_from_end_of_intersession"
         self._algorithm.system_state = SystemState.tunnel
         self.enter_tunnel(reason="exit_intersession_to_tunnel")
-        self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
+        # # EDIT: even not sure it's needed anymore ? at least not for current tests. trying without..
+        if not self._algorithm.is_in_session:
+            # only needed if not start a new session,
+            # given when a new session is started, the pellet machine already receives a session_starting event/callback
+            # which already makes the necessary move(s).
+            self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
 
     @staticmethod
     def _clean_raw_data(project):
@@ -293,23 +296,25 @@ class SystemMachine(StateMachine):
             else:
                 self.exit_intersession_to_cage()
 
-    def _handle_inference_property_changed(self, name: str, new_status, prev_status):
+    def _handle_inference_property_changed(self, name: str, new_value, prev_value):
         if name == InferenceProtocol.STATUS:
-            if new_status in {InferenceStatus.live, InferenceStatus.intersession}:
+            logger.verbose("Inference status change: %s -> %s ; system_state=%s",
+                           prev_value, new_value, self.state)
+            if new_value in {InferenceStatus.live, InferenceStatus.intersession}:
                 self._timer_check_missing = _check_missing_timer(0.5, self._check_presence_missing)
                 self._timer_check_missing.start()
             else:
                 self._timer_check_missing.cancel()
                 self._timer_consider_end_session.cancel()
             if (
-                new_status == InferenceStatus.live
+                new_value == InferenceStatus.live
                 and self.state == SystemState.cage
             ):
-                assert prev_status == InferenceStatus.waiting
                 if self._analysis.load_cell_monitor.is_engaged:
                     self.enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
                 # this is only used at app starts, so unregister:
-                self._inference.property_changed -= self._handle_inference_property_changed
+                # self._inference.property_changed -= self._handle_inference_property_changed
+                # NO: in case of stop->start acquisition of/inside main app we still need it.
 
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
@@ -485,8 +490,9 @@ class SystemMachine(StateMachine):
                                self, prev_timer)
 
     def _pellet_sending(self):
-        if self.state == SystemState.tunnel:
-            self.algorithm.start_session(reason="pellet_sending")
+        # nb: not used anymore
+        if self.state == SystemState.tunnel and not self._algorithm.is_in_session:
+            self._algorithm.start_session(reason="pellet_sending")
 
     def _pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
