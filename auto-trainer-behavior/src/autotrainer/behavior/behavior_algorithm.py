@@ -127,9 +127,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._day_pellet_count = 0
 
         self._is_in_session = False
-        self._session_start_perf_c = time.perf_counter()
         self._start_session_reason = "NA"
-        self._stop_session_perf_c = time.perf_counter()
         self._stop_session_reason = "NA"
 
         self._session_pellet_count = 0
@@ -517,7 +515,6 @@ class BehaviorAlgorithm(ObservableObject):
         self._is_in_session = True
         self._start_session_reason = reason
         self._session_pellet_count = 0
-        self._session_start_perf_c = time.perf_counter()
 
         if self._project_info is not None:
             self._project_info.calculate_next_session_index()
@@ -550,7 +547,6 @@ class BehaviorAlgorithm(ObservableObject):
         self._is_in_session = False  # must be ~first, to ensure next actions/callbacks don't see it as True
         # but must be at least before self.session_ending() here after, given test_covered_load_cycle rely on that atm.
         self._stop_session_reason = reason
-        self._stop_session_perf_c = time.perf_counter()
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self.session_ending()
@@ -574,14 +570,12 @@ class BehaviorAlgorithm(ObservableObject):
         # self._check_date()
 
         if self.pellet_cover_enabled:
-            if self._is_in_session:
-                if self._stop_session_perf_c < self._session_start_perf_c:
-                    recording_aged_enough = (
-                        self._capture_status == CaptureProcessStatus.RECORDING
-                        and self.capture_status_age >= self._recording_age_release_pellet_threshold
-                    )
-                    if not recording_aged_enough:
-                        return False
+            if (
+                self._is_in_session
+                and self._capture_status == CaptureProcessStatus.RECORDING
+                and self.capture_status_age < self._recording_age_release_pellet_threshold
+            ):
+                return False
             return self._is_in_session
 
         return True
