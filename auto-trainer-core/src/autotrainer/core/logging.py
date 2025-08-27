@@ -95,6 +95,22 @@ class LogConfig:
     stream: str = "sys.stdout"
 
 
+def make_console_handler(cfg: LogConfig):
+    stream = sys.stdout
+    console_handler = logging.StreamHandler(stream=stream)
+    console_handler.name = "console_handler"
+    console_handler.addFilter(thread_id_filter)
+    fmt = ColoredPreciseTimeFormatter(
+        cfg.log_format,
+        level_styles=cfg.level_styles,
+        field_styles=cfg.field_styles,
+        datefmt=cfg.date_format,
+        time_precision=cfg.time_precision,
+    )
+    console_handler.setFormatter(fmt)
+    return console_handler
+
+
 def listener_command(func):
     """Relay the given func to the log queue listener proc side"""
     @functools.wraps(func)
@@ -169,21 +185,14 @@ class LogQueueListenerProc(Process):
     def run(self):
         # print(f"{logging.root.handlers}")
         cfg = self._config
-        stream = sys.stdout  # for now
-        self._console_handler = console_handler = logging.StreamHandler(stream=stream)
-        console_handler.name = "console_handler"
-        console_handler.addFilter(thread_id_filter)
-        fmt = ColoredPreciseTimeFormatter(
-            cfg.log_format,
-            level_styles=cfg.level_styles,
-            field_styles=cfg.field_styles,
-            datefmt=cfg.date_format,
-            time_precision=cfg.time_precision,
-        )
-        console_handler.setFormatter(fmt)
+        #
+        console_handler = make_console_handler(cfg)
 
         base_logger = get_verbose_logger(cfg.base_logger_name)
         base_logger.addHandler(console_handler)
+
+        base_logger.setLevel(logging.INFO)
+        base_logger.info("Starting log queue listener. config=%s", self._config)
         base_logger.setLevel(cfg.root_level)
 
         listener = self._listener = WithThreadIdQueueListener(
@@ -367,7 +376,6 @@ def setup_logging(
     time_precision: int = 3,  # for sub seconds precision, nbr of digits after the dot.
     level_styles: Optional[Dict[str, Dict[str, str]]] = None,
     field_styles: Optional[Dict[str, Dict[str, str]]] = None,
-    stream: TextIO = sys.stdout,
     multiprocess_enabled: bool = False,
     fork_method: str = "spawn",
 ) -> verboselogs.VerboseLogger:
@@ -399,6 +407,10 @@ def setup_logging(
     #
     stop_multiproc_logging()
     #
+    # pre-set these too verbose loggers level:
+    for _limit_name, v in _limit_loggers_level.items():
+        logging.getLogger(_limit_name).setLevel(v["level"])
+    #
     base_logger = get_verbose_logger(base_logger_name)
     # set the base logger level before creating possible dedicated subproc log handling:
     base_logger.setLevel(root_level)
@@ -412,34 +424,18 @@ def setup_logging(
         listener.start()
         _queue_listener = listener  # keep global ref to ensure it stays alive
         queue_handler = WithThreadIdQueueHandler(log_queue)
+        queue_handler.name = "queue_handler"
         _queue_handler = queue_handler  # keep global ref to ensure it stays alive
         root_handler = _root_handler = queue_handler
-        console_handler = _console_handler = RelayHandler(listener)
+        _console_handler = RelayHandler(listener)
         logging.Logger.setLevel = lambda self, lvl: listener.set_logger_level(self.name, lvl)
-        console_handler.name = "console_handler"
-
-        base_logger.addHandler(queue_handler)
-
     else:
-        console_handler = _console_handler = logging.StreamHandler(stream=stream)
+        _console_handler = console_handler = make_console_handler(cfg)
         root_handler = _root_handler = console_handler
-    #
-        console_handler.addFilter(thread_id_filter)
-        fmt = ColoredPreciseTimeFormatter(
-            log_format,
-            level_styles=level_styles,
-            field_styles=field_styles,
-            datefmt=date_format,
-            time_precision=time_precision,
-        )
-        console_handler.setFormatter(fmt)
-        # console_handler.setLevel(logger_level)
 
-        root_handler = console_handler
-        base_logger.addHandler(root_handler)
+    base_logger.addHandler(root_handler)
 
     #
-
     # recursion issue atm, could be left todo:
     # sys.stdout = LoggerWriter(logging.root.info)
     # sys.stderr = LoggerWriter(logging.root.warning)
@@ -456,8 +452,6 @@ def setup_logging(
 
     desired_logger = get_verbose_logger(name)
     desired_logger.setLevel(logger_level)
-
-    top_logger = get_verbose_logger("autotrainer")
 
     # logger.info("all loggers:\n%s", repr_all_loggers())
     # logger.info("top logger: %s", repr_logger(top_logger))
