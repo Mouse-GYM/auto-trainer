@@ -463,7 +463,7 @@ class SystemMachine(StateMachine):
                     timer.start()
         elif name == BehaviorAlgoProps.PELLET_MOTOR_DRIFT:
             if new_value is not None:
-                self._pellet_device.set_motors_drift(new_value)
+                pellet_dev.set_motors_drift(new_value)
 
         elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
             pellet_dev.set_auto_correct_motor_drift(new_value)
