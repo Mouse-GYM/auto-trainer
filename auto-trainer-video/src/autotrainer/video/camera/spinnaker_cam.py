@@ -1,5 +1,5 @@
 import logging
-from enum import Enum
+from enum import IntEnum
 
 import PySpin
 import numpy
@@ -9,7 +9,7 @@ from .camera_base import CameraBase
 logger = logging.getLogger(__name__)
 
 
-class AcquisitionMode(Enum):
+class AcquisitionMode(IntEnum):
     Continuous = 0
     SingleFrame = 1
     MultiFrame = 2

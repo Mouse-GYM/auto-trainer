@@ -8,7 +8,7 @@ import time
 import os
 from dataclasses import dataclass
 from queue import Queue
-from enum import Enum, IntEnum
+from enum import IntEnum
 from multiprocessing import Process, Value, Array
 from threading import BrokenBarrierError
 from typing import Callable, Dict, Union, Optional, List
@@ -29,7 +29,7 @@ from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
 logger = get_verbose_logger(__name__)
 
 
-class CaptureCommandKind(Enum):
+class CaptureCommandKind(IntEnum):
     """Commands accepted by VideoCaptureProcess through the command Queue"""
     TERMINATE = 1
     """Fully terminate the Process"""

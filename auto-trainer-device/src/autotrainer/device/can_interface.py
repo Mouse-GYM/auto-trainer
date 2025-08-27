@@ -17,7 +17,7 @@ import logging
 import inspect
 import time
 import warnings
-from enum import Enum
+from enum import Enum, IntEnum
 from operator import attrgetter
 from typing import Type, Optional, Dict, Union, Any
 
@@ -150,7 +150,7 @@ def motor_to_str(motor: Motor) -> str:
     return _MOTOR_TO_STR_MAP.get(motor, "Unknown")
 
 
-class MotorInstance(Enum):
+class MotorInstance(IntEnum):
     TUNNEL_MAGNET_SERVO_ID = 0
     TUNNEL_GATE_SERVO_ID = 1
     PELLET_X_MOTOR_ID = 0
@@ -271,22 +271,22 @@ def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
 
     if target == Target.MAGNET_DEVICE:
         if isa_servo:
-            if motor_id == MotorInstance.TUNNEL_MAGNET_SERVO_ID.value:
+            if motor_id == MotorInstance.TUNNEL_MAGNET_SERVO_ID:
                 return Motor.TUNNEL_MAGNET_SERVO
-            elif motor_id == MotorInstance.TUNNEL_GATE_SERVO_ID.value:
+            elif motor_id == MotorInstance.TUNNEL_GATE_SERVO_ID:
                 return Motor.TUNNEL_GATE_SERVO
     else:
         if isa_servo:
-            if motor_id == MotorInstance.PELLET_COVER_SERVO_ID.value:
+            if motor_id == MotorInstance.PELLET_COVER_SERVO_ID:
                 return Motor.PELLET_COVER_SERVO
-            elif motor_id == MotorInstance.PELLET_LOAD_SERVO_ID.value:
+            elif motor_id == MotorInstance.PELLET_LOAD_SERVO_ID:
                 return Motor.PELLET_LOAD_SERVO
         else:
-            if motor_id == MotorInstance.PELLET_X_MOTOR_ID.value:
+            if motor_id == MotorInstance.PELLET_X_MOTOR_ID:
                 return Motor.PELLET_X_MOTOR
-            elif motor_id == MotorInstance.PELLET_Y_MOTOR_ID.value:
+            elif motor_id == MotorInstance.PELLET_Y_MOTOR_ID:
                 return Motor.PELLET_Y_MOTOR
-            elif motor_id == MotorInstance.PELLET_Z_MOTOR_ID.value:
+            elif motor_id == MotorInstance.PELLET_Z_MOTOR_ID:
                 return Motor.PELLET_Z_MOTOR
 
     return Motor.NONE
