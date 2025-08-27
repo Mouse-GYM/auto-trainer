@@ -1,7 +1,6 @@
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from threading import Timer
 from typing import Optional, List, Tuple
 
 from transitions import Machine
@@ -10,8 +9,10 @@ from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorA
                               HeadbarPressureMonitor, Motor)
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement
+from autotrainer.core.multiproc import DaemonTimer
+
+from autotrainer.inference import PoseResponse, InferenceStatus
 
 from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
@@ -28,9 +29,9 @@ logger = get_verbose_logger(__name__)
 
 
 # NB: this is to ensure we can patch the exact desired one (and only that one) from tests:
-_clean_raw_data_timer = Timer
-_auto_clamp_release_timer = Timer
-_consider_end_session_timer = Timer
+_clean_raw_data_timer = DaemonTimer
+_auto_clamp_release_timer = DaemonTimer
+_consider_end_session_timer = DaemonTimer
 
 #
 
@@ -79,7 +80,7 @@ class SystemMachine(StateMachine):
 
         self._project_info = project_info
 
-        self._timer_consider_end_session: Optional[Timer] = None
+        self._timer_consider_end_session: Optional[DaemonTimer] = None
         self._delay_timer_consider_end_session: Optional[float] = 2.0
 
         self._motor_axis_flips = Offset3DTuple(1, 1, 1)

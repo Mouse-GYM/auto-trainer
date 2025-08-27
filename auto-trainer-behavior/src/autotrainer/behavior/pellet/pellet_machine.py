@@ -1,14 +1,11 @@
-import logging
-import threading
-import time
 from enum import Enum
 from typing import Dict, Callable, Any, Optional
 
-from events import Events
 from transitions import Machine
 
-from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import EventManager, MessageHandler, ObservableObject, Offset3DTuple, Motor
+from autotrainer.core.multiproc import DaemonTimer
+from autotrainer.core.logging import get_verbose_logger
 
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..behavior_event_kind import BehaviorEventKind
@@ -115,7 +112,7 @@ class PelletMachine(StateMachine):
                                initial=initial_state, model_override=True,
                        )
 
-        self._cur_timer_try_next_state: Optional[threading.Timer] = None
+        self._cur_timer_try_next_state: Optional[DaemonTimer] = None
 
     @property
     def algorithm(self):
