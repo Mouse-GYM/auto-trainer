@@ -235,7 +235,8 @@ class BehaviorAlgorithm(ObservableObject):
         return time.perf_counter() - self._last_capture_status_change_perf_c
 
     @property
-    def recording_age_release_pellet_threshold(self):
+    def recording_age_release_pellet_threshold(self) -> float:
+        """Desired delay to wait once camera recording-started is detected, to then after release the pellet"""
         return self._recording_age_release_pellet_threshold
 
     @property

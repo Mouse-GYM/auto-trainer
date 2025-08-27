@@ -41,7 +41,7 @@ logger = get_verbose_logger(__name__)
 
 
 # allow be patched from tests
-_recording_age_enough_timer_func = DaemonTimer
+_recording_age_enough_timer = DaemonTimer
 
 
 def _failed_camera_template(name: str, error: str):
@@ -64,12 +64,13 @@ class AppModel(ObservableObject):
 
         mp_ctx = get_mp_ctx()
 
-        # not sure this should better be in SystemMachine itself, or BehaviorAlgo or BehaviorModel ?
+        # not sure this should better be in SystemMachine or BehaviorAlgo or BehaviorModel or eventually HardwareModel ?
+        # although here it's also working, so keeping for now.
         proc_msg_queue = self._multiproc_msg_queue = mp_ctx.Queue()
         self._handle_proc_msg_thread = threading.Thread(
             target=self._handle_proc_msg_queue, name="handle_proc_msg_queue", daemon=True)
         self._handle_proc_msg_thread.start()
-        self._timer_recording_age_enough = threading.Timer(0, lambda: None)
+        self._timer_recording_age_enough = _recording_age_enough_timer(0, lambda: None)
         # end not sure
 
         self._left_camera = VideoCaptureModel("left", self._preferences, 0,
@@ -171,7 +172,13 @@ class AppModel(ObservableObject):
 
     def _consider_release_pellet(self):
         algo = self._behavior.algorithm
+        # we never know the session could be just stopped,
+        # so check:
         if algo.is_in_session:
+            #   and algo.capture_status_age >= algo.recording_age_release_pellet_threshold:
+            # this is called via a timer, which are not necessarily very precise,
+            # and to be safe on all side, do not check again, the actual age could even be slightly less than the
+            # desired threshold (but very very near). So to not miss that case: do not "recheck"
             self._behavior.system_machine.pellet.environment_changed(
                 pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-start-recording")
 
@@ -205,10 +212,13 @@ class AppModel(ObservableObject):
                     algo.capture_status = new_status  # first
                     self._timer_recording_age_enough.cancel()
                     if new_status == CaptureProcessStatus.RECORDING:
-                        new_timer = self._timer_recording_age_enough = _recording_age_enough_timer_func(
+                        new_timer = self._timer_recording_age_enough = _recording_age_enough_timer(
                             algo.recording_age_release_pellet_threshold, self._consider_release_pellet
                         )
                         new_timer.start()
+                else:
+                    logger.verbose("not handling non-primary camera status, cam_idx=%s status=%s",
+                                   cam_idx, new_status)
         # end while True
         logger.info("handle_proc_msg_queue exiting")
 

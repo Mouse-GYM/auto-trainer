@@ -58,7 +58,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         # self._machine.project = value  # instead of having to do it in on_prepare_capture()
 
     @property
-    def system_machine(self):
+    def system_machine(self) -> SystemMachine:
         return self._machine
 
     @property
