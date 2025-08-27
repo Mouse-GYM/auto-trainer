@@ -86,9 +86,7 @@ def machine(tunnel_device, pellet_device, inference, project_info):
         inference=inference,
         project_info=project_info,
     )
-    with machine:
-        yield machine
-    machine.end_timers()
+    return machine
 
 
 class MockSystemMachine:

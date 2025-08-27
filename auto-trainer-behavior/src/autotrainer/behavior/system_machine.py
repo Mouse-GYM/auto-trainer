@@ -138,23 +138,6 @@ class SystemMachine(StateMachine):
         self._timer_check_missing = _check_missing_timer(self._algorithm.presence_missing_delay,
                                                          self._check_presence_missing)
         self._timer_check_missing.start()
-        self._end_timers = False
-
-    def end_timers(self):
-        self._end_timers = True
-        self._timer_consider_end_session.cancel()
-        self._timer_check_missing.cancel()
-
-    def __del__(self):
-        self.end_timers()
-
-    def __enter__(self):
-        self._end_timers = False
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._end_timers = True
-        self.end_timers()
 
     @property
     def algorithm(self) -> BehaviorAlgorithm:
@@ -548,8 +531,6 @@ class SystemMachine(StateMachine):
     def _check_presence_missing(self):
         self._timer_check_missing.cancel()  # in case of
         algo = self._algorithm
-        if self._end_timers:
-            return
         if self._inference.status not in {InferenceStatus.live, InferenceStatus.intersession}:
             return
         if self._analysis.load_cell_monitor.is_engaged:
