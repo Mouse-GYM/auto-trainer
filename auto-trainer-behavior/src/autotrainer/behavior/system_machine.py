@@ -538,6 +538,7 @@ class SystemMachine(StateMachine):
         self._timer_check_missing.cancel()  # in case of
         algo = self._algorithm
         if self._inference.status not in {InferenceStatus.live, InferenceStatus.intersession}:
+            algo.presence_missing = False
             return
         if self._analysis.load_cell_monitor.is_engaged:
             algo.presence_missing = False
