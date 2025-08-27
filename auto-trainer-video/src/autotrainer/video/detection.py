@@ -6,8 +6,9 @@ import multiprocessing
 import os
 import threading
 import time
+from operator import attrgetter
 from pathlib import Path
-from typing import Deque, Tuple
+from typing import Deque, Tuple, Optional
 
 import cv2
 import numpy
@@ -18,6 +19,19 @@ from autotrainer.core.multiproc import get_mp_ctx
 
 
 logger = get_verbose_logger(__name__)
+
+
+def _make_prop_value(name):
+    priv_name = f"_{name}"
+    def getter(self):
+        value_holder = getattr(self, priv_name)
+        return value_holder.value
+    getter.__name__ = name
+    def setter(self, value):
+        value_holder = getattr(self, priv_name)
+        value_holder.value = value
+    setter.__name__ = name
+    return property(getter, setter)
 
 
 @dataclasses.dataclass
@@ -38,18 +52,26 @@ class PresenceDetectionAttrs:
     # could be todo: allow compare with one frame on to the xth following one (second, or third, for instance),
     #  not only the very next one, that would/could allow detect slower movement/presence
 
-    presence_detected: multiprocessing.Value = None
-    movement_detected: multiprocessing.Value = None
-    pc_sum: multiprocessing.Value = None
+    _last_absence_start_perf_c: multiprocessing.Value = None  # noqa
+    _presence_detected: multiprocessing.Value = None  # noqa
+    _movement_detected: multiprocessing.Value = None  # noqa
+    _pc_sum: multiprocessing.Value = None  # noqa
 
     def __post_init__(self):
         ctx = get_mp_ctx()
-        if self.presence_detected is None:
-            self.presence_detected = ctx.Value(ctypes.c_bool)
-        if self.movement_detected is None:
-            self.movement_detected = ctx.Value(ctypes.c_bool)
-        if self.pc_sum is None:
-            self.pc_sum = ctx.Value(ctypes.c_float)
+        if self._last_absence_start_perf_c is None:
+            self._last_absence_start_perf_c = ctx.Value(ctypes.c_float)
+        if self._presence_detected is None:
+            self._presence_detected = ctx.Value(ctypes.c_bool)
+        if self._movement_detected is None:
+            self._movement_detected = ctx.Value(ctypes.c_bool)
+        if self._pc_sum is None:
+            self._pc_sum = ctx.Value(ctypes.c_float)
+
+    last_absence_start_perf_c = _make_prop_value("last_absence_start_perf_c")
+    presence_detected = _make_prop_value("presence_detected")
+    movement_detected = _make_prop_value("movement_detected")
+    pc_sum = _make_prop_value("pc_sum")
 
 
 class VideoDetection(threading.Thread):
@@ -158,14 +180,16 @@ class VideoDetection(threading.Thread):
             pc_tot_sum = round(100 * tot_sum / (fg_mask.size * (255 ** fg_mask.itemsize)),
                                0)
             if pc_tot_sum != prev_pc_sum:
-                attrs.pc_sum.value = pc_tot_sum
+                attrs.pc_sum = pc_tot_sum
                 prev_pc_sum = pc_tot_sum
                 prev_pc_values.append(pc_tot_sum)
             is_detected = pc_tot_sum >= attrs.presence_sum_percent_threshold
             if is_detected != prev_detected:
-                attrs.presence_detected.value = is_detected
-                prev_detected = is_detected
                 logger.verbose("presence detected: %.2f", pc_tot_sum)
+                prev_detected = is_detected
+                attrs.presence_detected = is_detected
+                if not is_detected:
+                    attrs.last_absence_start_perf_c = time.perf_counter()
                 prev_frame = None  # this will make us to get the following 2 next frames for next check
             self._check_path()
             csv_writer = self._csv_writer

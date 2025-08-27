@@ -102,6 +102,7 @@ class LoadCellMonitor(ObservableObject):
         self._when = 0  # used to pass with event when engaged is changed
         self._index = 0  # used to pass with event when engaged is changed
         self._is_engaged: bool = False
+        self._last_disengaged_perf_c: float = time.perf_counter()
         self._force_engaged: bool = False
         self._engaged_batch_count: int = 10  # how many last values to use as mean for check is_engaged
         # same than in HardwareModel.connect (currently hardcoded too)
@@ -140,6 +141,12 @@ class LoadCellMonitor(ObservableObject):
     def is_engaged(self, value):
         if value != self._is_engaged:
             self._is_engaged = self._generate_engaged_event(value)
+            if not value:
+                self._last_disengaged_perf_c = time.perf_counter()
+
+    @property
+    def disengaged_age(self):
+        return time.perf_counter() - self._last_disengaged_perf_c
 
     @property
     def thrashing_detected(self) -> bool:

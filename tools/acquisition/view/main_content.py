@@ -91,16 +91,15 @@ class MainContent(ContentWidget):
         sub_layout.addWidget(hardware_status_content, 1)
         self._content_widgets.append(hardware_status_content)
 
-        alarm_content = AlarmContent(self._model.hardware)
+        alarm_content = self._alarm_content = AlarmContent(self._model, self._model.hardware)
         sub_layout.addWidget(alarm_content, 0)
-        # self._content_widgets.append(hardware_status_content)
 
         self._layout.addLayout(sub_layout, 2, 3, 1, 3)
 
         # Optional fourth row - diagnostics
 
-        self._diagnostics = DiagnosticsContent(self._model)
-        self._layout.addWidget(self._diagnostics, 4, 0, 1, 6)
+        self._diagnostics_content = DiagnosticsContent(self._model)
+        self._layout.addWidget(self._diagnostics_content, 4, 0, 1, 6)
 
         self._layout.setRowStretch(1, 1)
 
@@ -131,9 +130,9 @@ class MainContent(ContentWidget):
     def update_image(self):
         model = self._model
         top_cam_pres = model.top_camera_presence_detection
-        cur_val = top_cam_pres.presence_detected.value
+        cur_val = top_cam_pres.presence_detected
         if cur_val != self._prev_top_cam_detect:
-            cur_sum = top_cam_pres.pc_sum.value
+            cur_sum = top_cam_pres.pc_sum
             logger.notice("top_camera presence detected: %s sum=%s", cur_val, cur_sum)
             self._prev_top_cam_detect = cur_val
         if model.left_camera.is_enabled:
@@ -173,7 +172,7 @@ class MainContent(ContentWidget):
             widget.on_activated()
 
     def set_diagnostics_visible(self, is_visible: bool):
-        self._diagnostics.setVisible(is_visible)
+        self._diagnostics_content.setVisible(is_visible)
         self._is_diagnostics_visible = is_visible
         if is_visible:
             self._layout.setRowStretch(1, 0)
