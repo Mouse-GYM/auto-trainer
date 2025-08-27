@@ -1,6 +1,7 @@
 import os
 from typing import Protocol, Callable, Any
 
+import verboselogs
 from events import Events
 
 from autotrainer.core.logging import get_verbose_logger
@@ -76,7 +77,7 @@ class ObservableObject(Events):
         if __debug__:
             if property_name in _debug_properties_change:
                 logger.debug("%s: property %r: from %s to %s", self, property_name, old_value, new_value,
-                             stack_info=True)
+                             stack_info=logger.level == verboselogs.SPAM)
 
         self.property_changed(property_name, new_value, old_value)
         return new_value

@@ -1,3 +1,4 @@
+import multiprocessing
 from typing import Optional
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol
@@ -10,10 +11,18 @@ from tools.acquisition.model.project_dependent_protocol import ProjectDependentP
 
 
 class BehaviorModel(ObservableObject, ProjectDependentProtol):
-    def __init__(self, msg_handler: MessageHandler, analysis: SensorAnalysis, hardware_model: HardwareModel,
-                 inference: InferenceProtocol):
+    def __init__(
+        self,
+        msg_handler: MessageHandler,
+        analysis: SensorAnalysis,
+        hardware_model: HardwareModel,
+        inference: InferenceProtocol,
+        *,
+        proc_msg_queue: Optional[multiprocessing.Queue] = None,
+    ):
         super().__init__()
 
+        self._proc_msg_queue = proc_msg_queue  # actually unused, see unsure in AppModel..
         self._analysis = analysis
 
         self._machine = SystemMachine(
@@ -47,6 +56,10 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     def project(self, value: ProjectInfo) -> None:
         self._project = value
         # self._machine.project = value  # instead of having to do it in on_prepare_capture()
+
+    @property
+    def system_machine(self) -> SystemMachine:
+        return self._machine
 
     @property
     def algorithm(self):

@@ -2,7 +2,6 @@ import logging
 import time
 import re
 import typing
-from threading import Timer
 
 from autotrainer.core import PerfMonitor, SystemCommandKind, SystemStatusMessageKind
 
@@ -11,6 +10,7 @@ from autotrainer.core.analysis.head_fix_measurement import HeadFixMeasurement
 
 from .serial_interface import SerialInterface
 from .gym_device import GymDevice
+from ...core.multiproc import DaemonTimer
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +78,10 @@ class HeadFix(GymDevice):
             self._send_data("Tx", context)
         elif kind == SystemCommandKind.OPEN_TUNNEL_GATE:
             if context is not None:
-                Timer(0.5, lambda: self._acknowledge_command(context)).start()
+                DaemonTimer(0.5, lambda: self._acknowledge_command(context)).start()
         elif kind == SystemCommandKind.CLOSE_TUNNEL_GATE:
             if context is not None:
-                Timer(0.5, lambda: self._acknowledge_command(context)).start()
+                DaemonTimer(0.5, lambda: self._acknowledge_command(context)).start()
         elif kind == SystemCommandKind.SET_SEND_PELLET_PROCEDURE or \
             kind == SystemCommandKind.SET_LOAD_PELLET_PROCEDURE or \
             kind == SystemCommandKind.SET_COVER_PELLET_PROCEDURE or \

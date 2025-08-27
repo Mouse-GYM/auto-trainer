@@ -66,7 +66,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._front_door_open: bool = False
         self._slide_door_open: bool = False
 
-        self._lock = threading.RLock()  # might be required re-entrant lock !!
+        self._lock = threading.RLock()  # **required** re-entrant lock !!
 
     @property
     def tunnel_identifier(self) -> Optional[str]:

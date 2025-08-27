@@ -66,6 +66,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         inference_index: int = -1,
         *,
         mp_ctx: Optional[BaseContext] = None,
+        msg_queue: Optional[multiprocessing.Queue] = None,
     ):
         super().__init__()
 
@@ -88,6 +89,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._video_reader_reset_event = None
         self._video_reader_stop_event = None
 
+        self._msg_queue = msg_queue  # for sending "status" message(s) to main process
         self._video_command_queue = mp_ctx.Queue(maxsize=64)
         self._video_status = mp_ctx.Value("i", CaptureProcessStatus.UNKNOWN)
         self._video_frame_index = mp_ctx.Value("i", 0)
@@ -299,6 +301,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 errors=self._errors,
                 presence_detection_attrs=presence_detection_attrs,
                 is_primary=self._is_primary,
+                msg_queue=self._msg_queue,
             )
 
             rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
