@@ -163,7 +163,7 @@ class AppModel(ObservableObject):
 
         self._hardware.property_changed += self._on_hardware_property_changed
         self._behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
-        self._behavior.property_changed += self._on_behavior_property_changed
+        self._behavior.property_changed += self._on_behavior_model_property_changed
         preferences.property_changed += self._on_preferences_property_changed
         self._inference.property_changed += self._on_inference_property_changed
 
@@ -233,7 +233,7 @@ class AppModel(ObservableObject):
         return self._top_camera
 
     @property
-    def top_camera_presence_detection(self):
+    def top_camera_presence_detection(self) -> PresenceDetectionAttrs:
         return self._top_camera_presence_detection
 
     @property
@@ -562,10 +562,8 @@ class AppModel(ObservableObject):
         if notification.context and self._project_info is not None:
             self._save_metadata(self._project_info.get_metadata_file(-1), self._project_info.session.value)
 
-    def _on_behavior_property_changed(self, name: str, new_value, old_value):
+    def _on_behavior_model_property_changed(self, name: str, new_value, old_value):
         logger.debug("behavior property changed: %s: %s -> %s", name, old_value, new_value)
-        if name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
-            self._hardware.set_auto_correct_motor_drift(new_value)
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
         if name == UserPreferences.SELECTED_ANIMAL:
@@ -587,6 +585,8 @@ class AppModel(ObservableObject):
                 left_cam.text_overlay = f"Intersession: {value}"
             else:
                 left_cam.text_overlay = None
+        elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
+            self._hardware.set_auto_correct_motor_drift(value)
 
     def _on_hardware_property_changed(self, name: str, value, _):
         cur_selected_animal = self._selected_animal
