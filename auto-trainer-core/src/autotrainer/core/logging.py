@@ -186,7 +186,7 @@ class LogQueueListenerProc(Process):
         # print(f"{logging.root.handlers}")
         cfg = self._config
         #
-        console_handler = make_console_handler(cfg)
+        console_handler = self._console_handler = make_console_handler(cfg)
 
         base_logger = get_verbose_logger(cfg.base_logger_name)
         base_logger.addHandler(console_handler)
