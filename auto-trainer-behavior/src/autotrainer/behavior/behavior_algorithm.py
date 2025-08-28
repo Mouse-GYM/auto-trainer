@@ -179,7 +179,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._diamond_triangle_drift: Optional[Offset3DTuple] = None
         self._diamond_triangle_prev_drifts: List[Offset3DTuple] = []
-        self._diamond_triangle_last_drift_warned = time.perf_counter()
+        self._diamond_triangle_last_drift_report = time.perf_counter()
 
         self._cover_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=BehaviorAlgoProps.COVER_PELLET_DISTANCE,
@@ -718,16 +718,15 @@ class BehaviorAlgorithm(ObservableObject):
         drift = flips * (cfg.measured_offset - offset) - (cfg.used_position - position)
         if prev is None:
             prev = Offset3DTuple(0, 0, 0)
-        logger.spam("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
-                       drift.humanize(), prev.humanize(), position.humanize(), offset.humanize())
         if __debug__:
             d_drift = drift if prev is None else prev + drift
             # not sure which abs_diff to check against:
             if d_drift is not None and any(abs(d) > 2.5 for d in d_drift):
                 perf_now = time.perf_counter()
-                if perf_now > self._diamond_triangle_last_drift_warned + 1:  # max 1 / s
-                    logger.verbose("diamond triangle offset drift: %s d_drift=%s", drift, d_drift)
-                    self._diamond_triangle_last_drift_warned = perf_now
+                if perf_now > self._diamond_triangle_last_drift_report + 1:  # max 1 / s
+                    logger.debug("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
+                                 drift.humanize(), prev.humanize(), position.humanize(), offset.humanize())
+                    self._diamond_triangle_last_drift_report = perf_now
         self._diamond_triangle_drift = drift
         self._diamond_triangle_prev_drifts.append(drift)
         if prev != drift:

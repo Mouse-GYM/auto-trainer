@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 import numpy
 
@@ -19,6 +20,9 @@ from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
 
 logger = get_verbose_logger(__name__)
+
+
+_MeasureValues = List[float]
 
 
 # TODO: Separate true analysis from data recording to file(s) for post-analysis.
@@ -107,8 +111,10 @@ class SensorAnalysis(ObservableObject):
         logger.verbose("SensorAnalysis: stream_start")
         self._perf_monitor.reset()
 
-    def measurements_received(self, measurements: List[HeadFixMeasurement]):
-        logger.spam("Received %s measures", len(measurements))
+    def measurements_received(
+        self,
+        measurements: List[HeadFixMeasurement],
+    ) -> Tuple[_MeasureValues, _MeasureValues, _MeasureValues, _MeasureValues, _MeasureValues]:
         assert len(measurements) > 0
         weights = []
         switch = []

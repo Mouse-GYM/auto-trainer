@@ -47,7 +47,7 @@ class SystemMessageHandler(MessageHandler):
         #  implementation.  Keeping things simple for the time being.
         if msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
             measures = self._analysis.measurements_received(data)
-            if self._measurement_callback is not None:
+            if self._measurement_callback is not None and len(measures) > 0:
                 self._measurement_callback(measures)
         elif msg == SystemStatusMessageKind.AUDIO_SPECTRUM:
             self._analysis.audio_spectrum_received(data)
