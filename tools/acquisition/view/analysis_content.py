@@ -6,7 +6,8 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
 
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core import PerfMonitor, MessageHandler, SensorAnalysis, LoadCellMonitor, Offset3DTuple
+from autotrainer.core import PerfMonitor, MessageHandler, SensorAnalysis, LoadCellMonitor, Offset3DTuple, \
+    SystemMessageHandler
 from autotrainer.pyside import PGWidget, HardwarePortComboBox, CardWidget, QtIndicator
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
@@ -29,7 +30,7 @@ class AnalysisContent(ContentWidget):
     star_triangle_offset_changed = Signal(str, name="star_triangle_offset_changed")
 
     def __init__(self, hardware_model: HardwareModel, inference_model: InferenceModel, analysis: SensorAnalysis,
-                 msg_handler: MessageHandler):
+                 msg_handler: SystemMessageHandler):
         super().__init__()
 
         self._model = hardware_model
@@ -115,7 +116,7 @@ class AnalysisContent(ContentWidget):
 
         self._analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
 
-        msg_handler.measurement_callback = self._weight_received
+        msg_handler.measurement_callback = self._measurement_received
 
     def set_is_capture_active(self, is_active: bool):
         if is_active:
@@ -123,16 +124,13 @@ class AnalysisContent(ContentWidget):
 
     def use_cache(self):
         self._plot1.use_cache()
-
         self._load_cell_monitor_engaged.setState(self._analysis.load_cell_monitor.is_engaged)
         self._headbar_switch_engaged.setState(self._analysis.is_headbar_switch_engaged)
         self._headbar_pressure_monitor_engaged.setState(self._analysis.headbar_pressure_monitor.is_engaged)
 
-    def _weight_received(self, value):
+    def _measurement_received(self, value):
         values = value[0]
-
         self._perf_monitor.add_cycles(len(values))
-
         self._plot1.cache_data(values)
 
     def _update_trigger(self):
