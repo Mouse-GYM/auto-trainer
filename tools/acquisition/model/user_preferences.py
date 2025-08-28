@@ -30,6 +30,7 @@ class UserPreferences(ObservableObject):
     PELLET_PORT = "pellet_port"
     TUNNEL_PORT = "tunnel_port"
     REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION = "remove_raw_data_when_inactive_session"
+    MEASUREMENT_GRAPH = "measurement_graph"
 
     def __init__(self):
         super().__init__()
@@ -58,6 +59,8 @@ class UserPreferences(ObservableObject):
         self._log_level = settings.value("system/log_level", logging.WARNING, int)
 
         self._live_feed_refresh_rate = settings.value("display/refresh_rate", 15, int)
+
+        self._measurement_graph = settings.value("ui/measurement_graph", "")
 
         # Transient values that may come from individual configuration files, but are conveniently accessed from
         # the user preferences.
@@ -169,3 +172,12 @@ class UserPreferences(ObservableObject):
     def remove_raw_data_when_inactive_session(self, value):
         self._remove_raw_data_when_inactive_session = self._on_property_changed(
             self.REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION, value, self._remove_raw_data_when_inactive_session)
+
+    @property
+    def measurement_graph(self) -> str:
+        return self._measurement_graph
+
+    @measurement_graph.setter
+    def measurement_graph(self, value: str) -> None:
+        self._measurement_graph = self._on_property_changed(self.MEASUREMENT_GRAPH, value, self._measurement_graph)
+        self._settings.setValue("ui/measurement_graph", value)

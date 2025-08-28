@@ -36,6 +36,7 @@ from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
+from tools.acquisition.view.analysis_content import AVAILABLE_GRAPHS
 
 logger = get_verbose_logger(__name__)
 
