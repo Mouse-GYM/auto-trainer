@@ -263,7 +263,7 @@ class AppModel(ObservableObject):
         return self._hardware
 
     @property
-    def message_handler(self) -> MessageHandler:
+    def message_handler(self) -> SystemMessageHandler:
         return self._message_handler
 
     @property
