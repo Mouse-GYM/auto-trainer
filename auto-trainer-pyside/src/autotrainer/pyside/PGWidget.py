@@ -5,9 +5,11 @@ pg.ViewBox.suggestPadding = lambda *_: 0.02
 
 
 class PGWidget(PlotWidget):
-    def __init__(self):
-        super().__init__(axisItems={"top": pg.AxisItem(orientation="top", showValues=False),
-                                    "right": pg.AxisItem(orientation="right", showValues=False)})
+    def __init__(self, parent=None):
+        super().__init__(
+            parent=parent,
+            axisItems={"top": pg.AxisItem(orientation="top", showValues=False),
+                       "right": pg.AxisItem(orientation="right", showValues=False)})
 
         self.x = []
         self.y = []

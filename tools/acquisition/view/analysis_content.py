@@ -5,7 +5,7 @@ from typing import Tuple, Optional
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
-from pyqtgraph import ViewBox
+from pyqtgraph.graphicsItems.ViewBox import ViewBox
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import PerfMonitor, MessageHandler, SensorAnalysis, LoadCellMonitor, Offset3DTuple, \
@@ -30,16 +30,18 @@ def _render_offset_3d_value(value: Optional[Offset3DTuple]) -> str:
 
 @dataclasses.dataclass
 class _GraphItem:
-    index: int
+    measure_idx: int  # correspond to index in tuple pass to measurement received callback
     name: str
     display: str
     unit: str
     y_range: Tuple[int, int]
 
 
+_weight_graph = _GraphItem(0, "weight", "Load cell weight", "gr", (-1, 101))
+
 # NB: same order than SensorAnalysis.measurements_received method
 AVAILABLE_GRAPHS = (
-    _GraphItem(0, "weight", "Load cell weight", "gr", (-1, 101)),
+    _weight_graph,
     _GraphItem(1, "switch", "Switch", "On/Off", (-1, 2)),
     _GraphItem(2, "pressure", "Pressure", "Counts", (-1, 4099)),
     _GraphItem(3, "temperature", "Temperature", "\u00b0C", (-1, 40)),
@@ -51,6 +53,23 @@ _graph_by_name = {
     graph.name: graph
     for graph in AVAILABLE_GRAPHS
 }
+
+
+def _make_graph_plot(graph: _GraphItem):
+    widget = QWidget()
+    widget.setLayout(QHBoxLayout())
+    plot = PGWidget()
+    plot.setBackground("w")
+    plot.setMinimumHeight(140)
+    plot.scale_x = 100.0
+    ticks = [0, 10, 25, 40, 50]
+    plot.getAxis("left").setTicks([[(tick, str(tick)) for tick in ticks]])
+    plot.getAxis("bottom").setLabel("Time (s)")
+    plot.getAxis("left").setLabel(f"{graph.display} {graph.unit}")
+    plot.getViewBox().setRange(yRange=graph.y_range)
+    widget.layout().addWidget(plot)
+    plot.widget = widget
+    return plot
 
 
 class AnalysisContent(ContentWidget):
@@ -98,17 +117,12 @@ class AnalysisContent(ContentWidget):
 
         self._card_widget = CardWidget(title="Analysis", header_right_layout=layout)
 
-        content = QWidget(None)
-        content.setLayout(QHBoxLayout())
-
-        self._plot1 = PGWidget()
-        self._plot1.setBackground("w")
-        self._plot1.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
-        self._plot1.setMinimumHeight(140)
-        self._plot1.scale_x = 100.0
-        ticks = [0, 10, 25, 40, 50]
-        self._plot1.getAxis("left").setTicks([[(tick, str(tick)) for tick in ticks]])
-        self._plot1.getAxis("bottom").setLabel("Time (s)")
+        self._measurement_plots = {
+            graph.name: _make_graph_plot(graph)
+            for graph in AVAILABLE_GRAPHS
+        }
+        weight_plot = self._plot_weight = self._measurement_plots[_weight_graph.name]
+        weight_plot.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
 
         self._selected_graph = None
         def on_measurement_graph_changed(graph_name: str):
@@ -116,20 +130,12 @@ class AnalysisContent(ContentWidget):
             selected = self._selected_graph
             if graph is not None and (selected is None or graph.name != self._selected_graph.name):
                 self._selected_graph = graph
-                plot = self._plot1
-                # plot.reset()  this makes the x axis value (time) to be reset too
-                plot.replace_cache([])
-                plot.update_plot([])  # force to nothing
-                plot.getAxis("left").setLabel(f"{graph.display} {graph.unit}")
-                plot.getViewBox().setRange(yRange=graph.y_range)
+                self._card_widget.setContentWidget(self._measurement_plots[graph.name])
+
         on_measurement_graph_changed(
             _graph_by_name.get(user_pref.measurement_graph, AVAILABLE_GRAPHS[0]).name
         )
         self.measurement_graph_changed.connect(on_measurement_graph_changed)
-
-        content.layout().addWidget(self._plot1)
-
-        self._card_widget.setContentWidget(content)
 
         # Footer
         self._footer = QWidget(None)
@@ -174,15 +180,20 @@ class AnalysisContent(ContentWidget):
             self._perf_monitor.reset()
 
     def use_cache(self):
-        self._plot1.use_cache()
+        for plot in self._measurement_plots.values():
+            plot.use_cache()
         self._load_cell_monitor_engaged.setState(self._analysis.load_cell_monitor.is_engaged)
         self._headbar_switch_engaged.setState(self._analysis.is_headbar_switch_engaged)
         self._headbar_pressure_monitor_engaged.setState(self._analysis.headbar_pressure_monitor.is_engaged)
 
-    def _measurement_received(self, value):
-        values = value[self._selected_graph.index]
+    def _measurement_received(self, measurements):
+        # selected = self._selected_graph
+        values = measurements[_weight_graph.measure_idx]
         self._perf_monitor.add_cycles(len(values))
-        self._plot1.cache_data(values)
+        #
+        for plot_name, plot in self._measurement_plots.items():
+            graph = _graph_by_name[plot_name]
+            plot.cache_data(measurements[graph.measure_idx])
 
     def _update_trigger(self):
         try:
@@ -193,9 +204,9 @@ class AnalysisContent(ContentWidget):
     def _load_cell_monitor_property_changed(self, name, value, _):
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
             if value:
-                self._plot1.getPlotItem().getViewBox().setBackgroundColor(_ACTIVE_LOAD_CELL_COLOR)
+                self._plot_weight.getPlotItem().getViewBox().setBackgroundColor(_ACTIVE_LOAD_CELL_COLOR)
             else:
-                self._plot1.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
+                self._plot_weight.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
         elif name == LoadCellMonitor.LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY:
             self._load_cell.setText(str(value))
 
