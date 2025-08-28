@@ -199,7 +199,7 @@ class PreferencesContent(QWidget):
 
         combo.currentIndexChanged.connect(self._on_graph_combox_changed)
 
-        form_layout.addWidget(combo)
+        form_layout.addRow("Measurement graph:", combo)
 
         tab = QWidget(None)
         tab.setLayout(form_layout)
