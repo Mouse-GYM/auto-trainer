@@ -428,6 +428,7 @@ def setup_logging(
         _queue_handler = queue_handler  # keep global ref to ensure it stays alive
         root_handler = _root_handler = queue_handler
         _console_handler = RelayHandler(listener)
+        _console_handler.name = "console_handler"  # "fake" it so that it will relay to the correct handler
         logging.Logger.setLevel = lambda self, lvl: listener.set_logger_level(self.name, lvl)
     else:
         _console_handler = console_handler = make_console_handler(cfg)
