@@ -18,9 +18,6 @@ from tools.acquisition.model.user_preferences import UserPreferences
 logger = get_verbose_logger(__name__)
 
 
-_toggle_max_width = 75
-
-
 class PreferencesContent(QWidget):
     def __init__(self, preferences: UserPreferences, model: AppModel):
         super(PreferencesContent, self).__init__(None)
@@ -156,7 +153,6 @@ class PreferencesContent(QWidget):
 
         toggle.stateChanged.connect(use_triangle_pellet_distance_changed)
         toggle.setChecked(algo.use_triangle_pellet_distance_too_far)
-        toggle.setMaximumWidth(_toggle_max_width)
         layout.addWidget(toggle)
         layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
         form_layout.addRow("Use triangle-pellet distance for pellet too far detection:", layout)
