@@ -471,8 +471,16 @@ def set_logger_level(context: Dict[str, Union[str, int]]):
         logging.getLogger(name).setLevel(value)
 
 
-def make_log_dict_config(*, root_log_level, log_queue):
+def make_log_dict_config(
+    *,
+    root_log_level: int = logging.NOTSET,
+    log_queue: Optional[multiprocessing.Queue] = None,
+) -> Optional[Dict]:
     # usable by logging.config.dictConfig
+    if log_queue is None:
+        log_queue = get_multiprocess_log_queue()
+        if log_queue is None:
+            return None
     dct_cfg = {
         'version': 1,
         'disable_existing_loggers': False,
@@ -488,6 +496,7 @@ def make_log_dict_config(*, root_log_level, log_queue):
             'handlers': ['queue'],
             # with its own level here:
             'level': logging.NOTSET,  # root_log_level,
+            # FORCE NOTSET to relay everything so that file handler can properly get DEBUG as well
         },
         # but eventual level of other loggers have to be defined here:
         'loggers': copy.deepcopy(_limit_loggers_level),
