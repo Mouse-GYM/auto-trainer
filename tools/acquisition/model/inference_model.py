@@ -1,4 +1,3 @@
-import dataclasses
 import logging.config
 import multiprocessing
 import operator
@@ -12,7 +11,6 @@ from itertools import chain
 from pathlib import Path
 from statistics import mean
 from typing import Optional, List, Dict, TextIO, Tuple
-from dataclasses import dataclass
 from threading import Thread
 
 import cv2
@@ -20,14 +18,13 @@ import h5py
 import numpy
 import numpy as np
 import pandas
-import verboselogs
 
-from autotrainer.core import FixedArrayMultiQueue, ObservableObject, ProjectInfo, EventManager, clear_queue, \
+from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
     InferenceConfiguration, Offset3DTuple
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.logging import get_verbose_logger, setup_logging, get_multiprocess_log_queue, make_log_dict_config
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
-    intersession_process, BehaviorEventKind, InferenceProtocol
+    intersession_process, BehaviorEventKind, InferenceProtocol, IntersessionBlock, IntersessionDetection
 from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.project.project_info import SessionRawInt
@@ -109,26 +106,6 @@ def open_h5_file(file_path: Path):
     datasets = h5py.File(file_path)["df_with_missing"]["table"]
     logger.debug("%s: %s entries", file_path, len(datasets))
     return datasets
-
-
-@dataclass
-class IntersessionBlock:
-    configuration: SegmentationConfiguration
-    frame_count: int = 0
-    parts_count: int = 10
-    pose_data: numpy.ndarray = dataclasses.field(repr=False, default=None)
-    pose_data_list: List[List[numpy.ndarray]] = dataclasses.field(repr=False, default=None)
-    pose_data_dict: List[Dict[int, numpy.ndarray]] = dataclasses.field(repr=False, default=None)
-
-    def __post_init__(self):
-        self.pose_data = numpy.empty((0, self.parts_count * 3), dtype=numpy.float32)
-        self.pose_data_list = []
-        self.pose_data_dict = []
-
-
-@dataclass
-class IntersessionDetection:
-    configuration: DetectionConfiguration
 
 
 class InferenceModel(InferenceProtocol, ProjectDependentProtol):

@@ -1,7 +1,9 @@
 import dataclasses
+from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, List, Dict
 
+import numpy
 import yaml
 
 from autotrainer.core import Offset3DTuple
@@ -33,6 +35,30 @@ class DiamondTriangleOffsetConfig:
 
 # Protocol first (less strict)
 from .inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
+
+
+@dataclass
+class IntersessionBlock:
+    configuration: SegmentationConfiguration
+    frame_count: int = 0
+    parts_count: int = 10
+    pose_data: numpy.ndarray = dataclasses.field(repr=False, default=None)
+    pose_data_list: List[List[numpy.ndarray]] = dataclasses.field(repr=False, default=None)
+    pose_data_dict: List[Dict[int, numpy.ndarray]] = dataclasses.field(repr=False, default=None)
+
+    def __post_init__(self):
+        self.pose_data = numpy.empty((0, self.parts_count * 3), dtype=numpy.float32)
+        self.pose_data_list = []
+        self.pose_data_dict = []
+
+
+@dataclass
+class IntersessionDetection:
+    configuration: DetectionConfiguration
+
+
+#
+
 from .pellet_device_protocol import PelletDeviceProtocol
 
 from .intersession import IntersessionState
