@@ -175,12 +175,15 @@ class AppModel(ObservableObject):
         # we never know the session could be just stopped,
         # so check:
         if algo.is_in_session:
+            logger.verbose("calling try_next_state ; %s", algo.pellet_recently_seen)
             #   and algo.capture_status_age >= algo.recording_age_release_pellet_threshold:
             # this is called via a timer, which are not necessarily very precise,
             # and to be safe on all side, do not check again, the actual age could even be slightly less than the
             # desired threshold (but very very near). So to not miss that case: do not "recheck"
             self._behavior.system_machine.pellet.environment_changed(
                 pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-start-recording")
+        else:
+            logger.verbose("consider_release_pellet but not in session")
 
     def _handle_proc_msg_queue(self):
         proc_msg_q = self._multiproc_msg_queue
@@ -190,7 +193,7 @@ class AppModel(ObservableObject):
             if raw is None:
                 break
             args = ()
-            kwargs = {}
+            kwargs = None
             if isinstance(raw, tuple):
                 if len(raw) < 1:
                     logger.warning("Invalid status msg: %r", raw)
@@ -204,7 +207,7 @@ class AppModel(ObservableObject):
                             logger.warning("Unhandled extra args to status msg: %r", raw[3:])
             else:
                 cmd = raw
-            logger.info("Got %s", cmd)
+            logger.info("Got %s ; %s // %s", cmd, args, kwargs)
             algo = self._behavior.algorithm
             if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
                 cam_idx, new_status = args
@@ -216,6 +219,8 @@ class AppModel(ObservableObject):
                             algo.recording_age_release_pellet_threshold, self._consider_release_pellet
                         )
                         new_timer.start()
+                        logger.debug("started timer for consider_release_pellet, delay=%s",
+                                     algo.recording_age_release_pellet_threshold)
                 else:
                     logger.verbose("not handling non-primary camera status, cam_idx=%s status=%s",
                                    cam_idx, new_status)

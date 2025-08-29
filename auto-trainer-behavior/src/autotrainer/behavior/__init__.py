@@ -43,13 +43,13 @@ class IntersessionBlock:
     frame_count: int = 0
     parts_count: int = 10
     pose_data: numpy.ndarray = dataclasses.field(repr=False, default=None)
-    pose_data_list: List[List[numpy.ndarray]] = dataclasses.field(repr=False, default=None)
-    pose_data_dict: List[Dict[int, numpy.ndarray]] = dataclasses.field(repr=False, default=None)
+    # pose_data_list: List[List[numpy.ndarray]] = dataclasses.field(repr=False, default=None)
+    # pose_data_dict: List[Dict[int, numpy.ndarray]] = dataclasses.field(repr=False, default=None)
 
     def __post_init__(self):
         self.pose_data = numpy.empty((0, self.parts_count * 3), dtype=numpy.float32)
-        self.pose_data_list = []
-        self.pose_data_dict = []
+        # self.pose_data_list = []
+        # self.pose_data_dict = []
 
 
 @dataclass
