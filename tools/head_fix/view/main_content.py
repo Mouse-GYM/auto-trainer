@@ -1,5 +1,7 @@
+
 import logging
 import qtawesome as qta
+from typing import Tuple
 
 from PySide6.QtCore import Qt, Signal, QTimer, Slot
 from PySide6.QtWidgets import (QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox,
@@ -310,7 +312,8 @@ class MainContent(QWidget):
         return panel
 
     # noinspection PyMethodMayBeStatic
-    def _create_plot_widget(self, title: str) -> (PGWidget, QWidget):
+
+    def _create_plot_widget(self, title: str) -> Tuple[PGWidget, QWidget]:
         plot = PGWidget()
         plot.setBackground(None)
         plot.getPlotItem().getViewBox().setBackgroundColor((220, 220, 220))

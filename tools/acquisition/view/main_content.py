@@ -74,8 +74,13 @@ class MainContent(ContentWidget):
         self._layout.addWidget(behavior_content, 1, 0, 1, 3)
         self._content_widgets.append(behavior_content)
 
-        self._analysis_content = AnalysisContent(self._model.hardware, self._model.inference, self._model.analysis,
-                                                 self._model.message_handler)
+        self._analysis_content = AnalysisContent(
+            model.hardware,
+            model.inference,
+            model.analysis,
+            model.message_handler,
+            model.preferences,
+        )
         self._layout.addWidget(self._analysis_content, 1, 3, 1, 3)
         self._content_widgets.append(self._analysis_content)
 

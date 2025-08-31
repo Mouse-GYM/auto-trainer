@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 import numpy
 
@@ -19,6 +19,10 @@ from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
 
 logger = get_verbose_logger(__name__)
+
+
+# small alias
+_MeasuresList = List[float]
 
 
 # TODO: Separate true analysis from data recording to file(s) for post-analysis.
@@ -107,14 +111,17 @@ class SensorAnalysis(ObservableObject):
         logger.verbose("SensorAnalysis: stream_start")
         self._perf_monitor.reset()
 
-    def measurements_received(self, measurements: List[HeadFixMeasurement]):
+    def measurements_received(
+        self,
+        measurements: List[HeadFixMeasurement]
+    ) -> Tuple[_MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList] :
         logger.spam("Received %s measures", len(measurements))
         assert len(measurements) > 0
-        weights = []
-        switch = []
-        pressure = []
-        temperature = []
-        humidity = []
+        weights: List[float] = []
+        switch: List[float] = []
+        pressure: List[float] = []
+        temperature: List[float] = []
+        humidity: List[float] = []
 
         if self._record_file is not None:
             file_timestamp = datetime.now()
