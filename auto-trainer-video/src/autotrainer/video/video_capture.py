@@ -549,8 +549,12 @@ class VideoCapture(Process):
         self._camera = VideoManager.create_camera(self._camera_url, self._name)
 
     def _handle_command(self, cmd: CaptureCommandKind, context: object):
-        logger.info(f"<{self._name}> executing {cmd}")
-        self.command_handler.get(cmd)(context)
+        logger.info(f"<%s> executing %s", self._name, cmd)
+        handler = self.command_handler.get(cmd)
+        if handler is None:
+            logger.warning("No handler for command %s", cmd)
+        else:
+            handler(context)
         logger.debug("status: capturing=%s recording=%s", self._is_capturing, self._is_record_active)
 
     def _user_terminate(self, _: object):

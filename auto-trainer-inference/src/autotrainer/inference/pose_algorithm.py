@@ -140,7 +140,7 @@ class PoseAlgorithm(ObservableObject):
     MIN_CONFIDENCE_PRESENT_THRESHOLD = 0.9
 
     # for type hinting
-    pose_changed: Callable[[PoseResponse], None]
+    # pose_changed: Callable[[PoseResponse], None]
 
     def __init__(
         self,
@@ -200,6 +200,26 @@ class PoseAlgorithm(ObservableObject):
         ]
         self._measure_offset_parts_columns = pandas.MultiIndex.from_product([self._measure_offset_parts, axis_labels],
                                                                             names=["bodyparts", "coords"])
+
+    @property
+    def stereo_params(self):
+        return self._stereo_params
+
+    @property
+    def calib_metadata(self):
+        return self._calib_metadata
+
+    @property
+    def square_size(self):
+        return self._square_size
+
+    @property
+    def cam_names(self):
+        return self._cam_names
+
+    @property
+    def cam_offsets(self):
+        return self._cam_offsets
 
     @property
     def part_names(self) -> list:
@@ -403,10 +423,10 @@ class PoseAlgorithm(ObservableObject):
             locations=[locations_1, locations_2],
             parts_3d_offsets=dict(parts_3d_offsets),
         )
-        try:
-            self.pose_changed(response)
-        except Exception as err:
-            logger.exception("pose_changed event callback failed: %s", err)
+        # try:
+        #     self.pose_changed(response)
+        # except Exception as err:
+        #     logger.exception("pose_changed event callback failed: %s", err)
         return response
 
     def _find_parts(self, frames: List[numpy.ndarray]) -> Dict[SceneElement, PoseLocation]:

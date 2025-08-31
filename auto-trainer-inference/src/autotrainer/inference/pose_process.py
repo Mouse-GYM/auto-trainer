@@ -10,6 +10,7 @@ import numpy
 from autotrainer.core import FixedArrayMultiQueue, PerfMonitor
 from autotrainer.core.logging import get_verbose_logger, get_multiprocess_log_queue, make_log_dict_config, setup_logging
 from autotrainer.core.message import FrameIndexCategory
+from . import DlcPoseModel, MemoryPoseModel
 from .pose_model import PoseModel
 
 
@@ -57,13 +58,15 @@ class PoseProcess(Process):
     and messages queues are expected to keep up with or drain the queues as needed.
     """
 
-    def __init__(self,
-                 model: PoseModel,
-                 live_queue: FixedArrayMultiQueue,
-                 offline_queue: Optional[FixedArrayMultiQueue],
-                 data_queue: Queue,
-                 cmd_queue: Queue,
-                 msg_queue: Queue,
+    def __init__(
+        self,
+        live_queue: FixedArrayMultiQueue,
+        offline_queue: Optional[FixedArrayMultiQueue],
+        data_queue: Queue,
+        cmd_queue: Queue,
+        msg_queue: Queue,
+        *,
+        model_location: str,
     ):
         """
         :param model: the PoseModel instance
@@ -73,18 +76,15 @@ class PoseProcess(Process):
         :param cmd_queue: an input Queue for starting, terminating, and changing queues
         :param msg_queue: an output Queue for status and performance messages
         """
-        log_q = get_multiprocess_log_queue()
-        log_dict_config = (
-            None if log_q is None
-            else make_log_dict_config(root_log_level=logging.root.level,
-                                      log_queue=log_q))
+        log_dict_config = make_log_dict_config()
         super().__init__(
             name=self.__class__.__name__,
             target=self._do_run,
             kwargs=dict(log_dict_config=log_dict_config),
         )
 
-        self._model = model
+        self._pose_model: PoseModel
+        self._model_location = model_location
 
         self._live_input_queue = live_queue
         self._offline_input_queue = offline_queue
@@ -106,20 +106,35 @@ class PoseProcess(Process):
         else:
             logging.config.dictConfig(log_dict_config)
 
-        logger.info("entering pose_predict")
         self._send_message(InferenceStatusMessageKind.Created)
+
+        model_path = self._model_location
+        if model_path is None or len(model_path) == 0:
+            logger.warning("pellet model not specified; using in-memory random data")
+            model = MemoryPoseModel(self._live_input_queue.batch_size)
+        else:
+            logger.notice("Loading DLC model %r", model_path)
+            model = DlcPoseModel(model_path, 1, 0, self._live_input_queue.batch_size)
+
+        if not model.is_valid():
+            logger.critical("pellet not started because the model does not exist or is not valid"
+                           " at the specified location: %s", model_path)
+            raise RuntimeError(f"Model at {model_path} not valid")
+
+        self._pose_model = model
 
         self._send_message(InferenceStatusMessageKind.Loading)
 
         prev_lvl = logging.root.level
         logging.root.setLevel(logging.WARN)
-        self._model.load()
+        self._pose_model.load()
         logging.root.setLevel(prev_lvl)
 
         try:
-            self._send_message(InferenceStatusMessageKind.Initialized, self._model.body_parts)
+            self._send_message(InferenceStatusMessageKind.Initialized, self._pose_model.body_parts)
             should_process = self._wait_for_start()
             if should_process:
+                logger.info("entering pose_predict")
                 self._process()
         except Exception as err:
             logger.exception("Error during processing: %s", err)
@@ -186,7 +201,7 @@ class PoseProcess(Process):
         logger.info("%s: starting processing ..", self)
         d_q_put = self._data_queue.put
         get_command = self._cmd_queue.get_nowait
-        predict = self._model.predict
+        predict = self._pose_model.predict
         perf_add_c = self._perf_monitor.add_cycle
 
         i_q: Optional[FixedArrayMultiQueue] = None
