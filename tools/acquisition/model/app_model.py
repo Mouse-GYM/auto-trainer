@@ -595,8 +595,10 @@ class AppModel(ObservableObject):
                 left_cam.text_overlay = f"Intersession: {value}"
             else:
                 left_cam.text_overlay = None
-        elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
-            self._hardware.set_auto_correct_motor_drift(value)
+
+        # elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
+        #     self._hardware.set_auto_correct_motor_drift(value)
+        # already handled by SystemMachine
 
     def _on_hardware_property_changed(self, name: str, value, _):
         cur_selected_animal = self._selected_animal

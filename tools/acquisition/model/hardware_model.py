@@ -412,6 +412,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def set_motors_drift(self, drift: Offset3DTuple):
         """Apply the pellet motor drift"""
         dev = self._pellet_device
+        if dev is None:
+            return
         dev.send_message(SystemCommandKind.SET_MOTOR_DRIFT, drift)
         # self._pellet_device.device.device_interface.set_motors_drift(drift)
         # this ensure the next send_to_fixed_pos command will get the corrected position:

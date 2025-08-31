@@ -1,9 +1,10 @@
 import logging
 
 import verboselogs
+from PySide6 import QtCore
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton, \
-    QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox
+    QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QGridLayout
 
 from autotrainer.core.logging import get_console_handler, get_verbose_logger, repr_all_loggers
 from autotrainer.device import get_available_hardware
@@ -117,43 +118,45 @@ class PreferencesContent(QWidget):
 
     def _create_behavior_tab(self):
         algo = self._model.behavior.algorithm
-
         form_layout = QFormLayout(None)
 
+        layout = QHBoxLayout()
         self._inference_model_edit = QLineEdit(None, None)
         self._inference_model_edit.setText(self._model.inference.model_location)
         self._inference_model_edit.textChanged.connect(self._inference_model_changed)
-
-        layout = QHBoxLayout()
         layout.addWidget(self._inference_model_edit)
         button = QPushButton("Select...")
         button.clicked.connect(lambda: self._browse_for_location("inference_model"))
         layout.addWidget(button)
-
         form_layout.addRow("Inference model:", layout)
-
-        self._auto_correct_motors_drift_toggle = QSwitch()
-        self._auto_correct_motors_drift_toggle.setChecked(self._model.behavior.algorithm.auto_correct_motors_drift)
+        #
+        layout = QHBoxLayout()
+        toggle = self._auto_correct_motors_drift_toggle = QSwitch()
+        toggle.setChecked(self._model.behavior.algorithm.auto_correct_motors_drift)
         def auto_correct_motors_drift_toggle_changed(value: int):
             enabled = value != 0
             logger.verbose("auto_correct_motors_drift_toggle_changed: %s", enabled)
             self._model.behavior.algorithm.auto_correct_motors_drift = enabled
-        self._auto_correct_motors_drift_toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
-        form_layout.addRow("Auto-correct motors drift:", self._auto_correct_motors_drift_toggle)
 
+        toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
+        layout.addWidget(toggle)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        form_layout.addRow("Auto-correct motors drift:", layout)
+        #
         self._use_triangle_pellet_distance = algo.use_triangle_pellet_distance_too_far
-        self._toggle_use_triangle_pellet_distance = QSwitch()
+        layout = QHBoxLayout()
+        toggle = self._toggle_use_triangle_pellet_distance = QSwitch()
         def use_triangle_pellet_distance_changed(value):
             enabled = value != 0
             prev, self._use_triangle_pellet_distance = self._use_triangle_pellet_distance, enabled
             algo.use_triangle_pellet_distance_too_far = enabled
 
-        self._toggle_use_triangle_pellet_distance.stateChanged.connect(use_triangle_pellet_distance_changed)
-        self._toggle_use_triangle_pellet_distance.setChecked(algo.use_triangle_pellet_distance_too_far)
-
-        form_layout.addRow("Use triangle-pellet distance for pellet too far detection:",
-                           self._toggle_use_triangle_pellet_distance)
-
+        toggle.stateChanged.connect(use_triangle_pellet_distance_changed)
+        toggle.setChecked(algo.use_triangle_pellet_distance_too_far)
+        layout.addWidget(toggle)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        form_layout.addRow("Use triangle-pellet distance for pellet too far detection:", layout)
+        #
         spin_box = self._triangle_pellet_expected_distance_spinbox = QDoubleSpinBox()
         spin_box.setRange(0, 100)
         spin_box.setValue(algo.triangle_pellet_expected_distance)
