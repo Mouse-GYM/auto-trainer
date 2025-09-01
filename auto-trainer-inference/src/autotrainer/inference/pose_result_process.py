@@ -131,7 +131,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             self._monitor_data_queue(project)
         except BaseException as err:
             logger.exception("Fatal error: %s", err)
-        self._cmd_queue.put(None)
         cmd_thread.join()
         logger.debug("Exiting")
 
@@ -236,7 +235,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         range_cams = range(n_cams)
         cams_frame_idx_fhs = None
         pose_paths: List[Path] = []
-        # axis_labels = ("x", "y", "likelihood")
         cams_read_h5_dss: List[h5py.Dataset] = []
         cams_read_h5_idx: List[int] = []
         recording_in_progress = False
@@ -305,7 +303,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 logger.verbose("flushed queue after end of offline processing ; size=%s flushed=%s",
                                cur_qsize, tot_flushed)
                 nonlocal skip_next_pose_data
-                skip_next_pose_data = 3
+                skip_next_pose_data = 0
             return next_pose_data, next_mode, next_frames_indices
 
         while self._is_running:
@@ -335,7 +333,10 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             if mode == InferenceMode.Live:
                 perf_now = time.perf_counter()
                 if perf_now >= t_perf_live_check_data_queue_size:
-                    skip_update = self._data_queue.qsize() > 7
+                    data_queue_size = self._data_queue.qsize()
+                    skip_update = data_queue_size > 7
+                    if skip_update:
+                        logger.warning("data queue size=%s ; skip_update", data_queue_size)
                     t_perf_live_check_data_queue_size = perf_now + (0.5 if skip_update else 2.5)
             else:
                 skip_update = False
@@ -358,9 +359,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 # and reopen for offline mode
                 if numpy.isin(
                     frames_indices[:, 0], [
-                        # FrameIndexCategory.SWITCH_TO_OFFLINE_MODE,
-                        # FrameIndexCategory.SWITCH_TO_ONLINE,
-                        # FrameIndexCategory.ONLINE_NO_RECORDING,
                         FrameIndexCategory.EOF_RECORDING,
                     ],
                 ).any():
@@ -369,7 +367,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                   mode, prev_mode, frames_indices)
                     _close_fhs(cams_frame_idx_fhs)
                     cams_frame_idx_fhs = None
-                    for cdx, cam_pose_path, cur_cam_indices, cur_h5_live in zip(range_cams, pose_paths, cur_cams_indices, cur_h5_live_batch):
+                    for cam_pose_path, cur_cam_indices, cur_h5_live in zip(pose_paths, cur_cams_indices, cur_h5_live_batch):
                         if len(cur_h5_live) == 0:
                             continue
                         cur = [a for a in cur_h5_live if len(a) > 0]  # if not necessary when correctly filtered ahead
@@ -433,7 +431,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             zip(frames_indices, pose_paths, cur_h5_live_batch, cur_cams_indices)
                         ):
                             # reminder: pose_data has 1 frame cam1, 1 frame cam2, 1 frame cam1, etc..
-                            t0 = time.time()
+                            t0 = time.perf_counter()
                             cur = pose_data[cdx::n_cams]
                             cur = {
                                 fx: f.flatten()
@@ -445,10 +443,10 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                 continue
                             cam_h5_live.append(cur)
                             cam_indices.extend(filter(lambda ix: ix >= 0, cam_fr_indices))
-                            t1 = time.time()
+                            t1 = time.perf_counter()
                             writes_h5_live_durations.append(t1 - t0)
                             if len(cam_h5_live) >= self._recording_live_batch:
-                                t0 = time.time()
+                                t0 = time.perf_counter()
                                 cur = numpy.vstack(cam_h5_live)
                                 indices = list(range(cur.shape[0]))
                                 df_xyp = pandas.DataFrame(cur,
@@ -460,7 +458,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                               mode="a",
                                               append=True,  # required as well for really concat
                                 )
-                                t1 = time.time()
+                                t1 = time.perf_counter()
                                 writes_h5_live_durations.append((t1 - t0) / self._recording_live_batch)
                                 cam_h5_live.clear()
                                 cam_indices.clear()
@@ -496,11 +494,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         pose_data = new_pose_data
                     #
                     response = pose_algo.process(pose_data, pairs_3d_offsets=self._monitored_parts_offsets)
-                    #
-                    # try:
                     self._send_msg(self.Msg.POSE_RESULT_READY, response)
-                    # except Exception as err:
-                    #     logger.exception("pose_response_ready event callback failed: %s", err)
 
                 elif mode == InferenceMode.Offline:
 

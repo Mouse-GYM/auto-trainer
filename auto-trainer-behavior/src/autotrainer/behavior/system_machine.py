@@ -112,9 +112,7 @@ class SystemMachine(StateMachine):
 
         self._inference = inference
         if inference is not None:
-            if inference.pose_algorithm is not None:
-                inference.pose_response_ready += self._pose_changed
-                # inference.pose_algorithm.pose_changed += self._pose_changed
+            inference.pose_response_ready += self._pose_changed
             inference.detection_result_ready += self._handle_detection_result
             inference.property_changed += self._handle_inference_property_changed
 

@@ -309,11 +309,8 @@ class AppModel(ObservableObject):
     def output_location(self, value: str):
         if self._output_location == value:
             return
-
         old_value = self._output_location
-
         self._output_location = value
-
         self.property_changed("output_location", value, old_value)
 
     @property
@@ -436,6 +433,7 @@ class AppModel(ObservableObject):
         return True
 
     def on_capture_stop(self):
+        logger.verbose("AppModel.on_capture_stop")
         self._inference.stop()
 
         self.hardware.disconnect()
@@ -524,6 +522,7 @@ class AppModel(ObservableObject):
         self._message_handler.start()
 
     def on_close(self):
+        logger.verbose("AppModel.on_close")
         self._preferences.save()
 
         if self._inference is not None:
