@@ -38,6 +38,7 @@ class _GraphItem:
 
 
 _weight_graph = _GraphItem(0, "weight", "Load cell weight", "gr", (-1, 101))
+_audio_graph = _GraphItem(-1, "audio", "Audio", "dB", (-1, 125))
 
 # NB: same order than SensorAnalysis.measurements_received method
 AVAILABLE_GRAPHS = (
@@ -46,7 +47,7 @@ AVAILABLE_GRAPHS = (
     _GraphItem(2, "pressure", "Pressure", "Counts", (-1, 4099)),
     _GraphItem(3, "temperature", "Temperature", "\u00b0C", (-1, 40)),
     _GraphItem(4, "humidity", "Humidity", "%", (-1, 101)),
-    _GraphItem(-1, "audio", "Audio", "dB", (-1, 125)),
+    _audio_graph,
 )
 
 
@@ -126,7 +127,7 @@ class AnalysisContent(ContentWidget):
         weight_plot = self._plot_weight = self._measurement_plots[_weight_graph.name]
         weight_plot.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
 
-        self._selected_graph = None
+        self._selected_graph: Optional[_GraphItem] = None
         def on_measurement_graph_changed(graph_name: str):
             # logger.verbose("on_measurement_graph_changed: %s", graph_name)
             graph = _graph_by_name.get(graph_name, None)
@@ -197,12 +198,13 @@ class AnalysisContent(ContentWidget):
         #
         for plot_name, plot in self._measurement_plots.items():
             graph = _graph_by_name[plot_name]
-            if graph.measure_idx >= 0:
+            if graph.measure_idx >= 0 and self._selected_graph is graph:
                 plot.cache_data(measurements[graph.measure_idx])
 
     def _audio_received(self, spectrum):
         audio_plot = self._measurement_plots["audio"]
-        audio_plot.cache_data(spectrum)
+        if self._selected_graph is _audio_graph:
+            audio_plot.cache_data(spectrum)
 
     def _update_trigger(self):
         try:
