@@ -46,6 +46,7 @@ AVAILABLE_GRAPHS = (
     _GraphItem(2, "pressure", "Pressure", "Counts", (-1, 4099)),
     _GraphItem(3, "temperature", "Temperature", "\u00b0C", (-1, 40)),
     _GraphItem(4, "humidity", "Humidity", "%", (-1, 101)),
+    _GraphItem(-1, "audio", "Audio", "dB", (-1, 125)),
 )
 
 
@@ -171,6 +172,7 @@ class AnalysisContent(ContentWidget):
         self._analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
 
         msg_handler.measurement_callback = self._measurement_received
+        msg_handler.audio_callback = self._audio_received
         user_pref.property_changed += self._on_user_pref_changed
         #
         on_measurement_graph_changed(
@@ -190,13 +192,17 @@ class AnalysisContent(ContentWidget):
         self._headbar_pressure_monitor_engaged.setState(self._analysis.headbar_pressure_monitor.is_engaged)
 
     def _measurement_received(self, measurements):
-        # selected = self._selected_graph
         values = measurements[_weight_graph.measure_idx]
         self._perf_monitor.add_cycles(len(values))
         #
         for plot_name, plot in self._measurement_plots.items():
             graph = _graph_by_name[plot_name]
-            plot.cache_data(measurements[graph.measure_idx])
+            if graph.measure_idx >= 0:
+                plot.cache_data(measurements[graph.measure_idx])
+
+    def _audio_received(self, spectrum):
+        audio_plot = self._measurement_plots["audio"]
+        audio_plot.cache_data(spectrum)
 
     def _update_trigger(self):
         try:
