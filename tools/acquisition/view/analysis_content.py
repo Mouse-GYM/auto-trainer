@@ -37,14 +37,14 @@ class _GraphItem:
     y_range: Tuple[int, int]
 
 
-_weight_graph = _GraphItem(0, "weight", "Load cell weight", "gr", (-1, 101))
+_weight_graph = _GraphItem(0, "weight", "Weight", "gr", (-1, 101))
 _audio_graph = _GraphItem(-1, "audio", "Audio", "dB", (-1, 125))
 
 # NB: same order than SensorAnalysis.measurements_received method
 AVAILABLE_GRAPHS = (
     _weight_graph,
-    _GraphItem(1, "switch", "Switch", "On/Off", (-1, 2)),
-    _GraphItem(2, "pressure", "Pressure", "Counts", (-1, 4099)),
+    _GraphItem(1, "switch", "Switch", "1/0", (-1, 2)),
+    _GraphItem(2, "pressure", "Pressure", "Cnts", (-1, 4099)),
     _GraphItem(3, "temperature", "Temperature", "\u00b0C", (-1, 40)),
     _GraphItem(4, "humidity", "Humidity", "%", (-1, 101)),
     _audio_graph,
@@ -67,7 +67,7 @@ def _make_graph_plot(graph: _GraphItem):
     ticks = [0, 10, 25, 40, 50]
     plot.getAxis("left").setTicks([[(tick, str(tick)) for tick in ticks]])
     plot.getAxis("bottom").setLabel("Time (s)")
-    plot.getAxis("left").setLabel(f"{graph.display} {graph.unit}")
+    plot.getAxis("left").setLabel(f"{graph.display} ({graph.unit})")
     plot.getViewBox().setRange(yRange=graph.y_range)
     layout.addWidget(plot)
     widget.setLayout(layout)
