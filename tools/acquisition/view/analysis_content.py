@@ -1,7 +1,7 @@
 import dataclasses
 import logging
 import math
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
@@ -57,8 +57,8 @@ _graph_by_name = {
 
 def _make_graph_plot(graph: _GraphItem):
     widget = QWidget()
-    widget.setLayout(QHBoxLayout())
-    plot = PGWidget()
+    layout = QHBoxLayout()
+    plot = PGWidget(widget)
     plot.setBackground("w")
     plot.setMinimumHeight(140)
     plot.scale_x = 100.0
@@ -67,7 +67,8 @@ def _make_graph_plot(graph: _GraphItem):
     plot.getAxis("bottom").setLabel("Time (s)")
     plot.getAxis("left").setLabel(f"{graph.display} {graph.unit}")
     plot.getViewBox().setRange(yRange=graph.y_range)
-    widget.layout().addWidget(plot)
+    layout.addWidget(plot)
+    widget.setLayout(layout)
     plot.widget = widget
     return plot
 
@@ -117,7 +118,7 @@ class AnalysisContent(ContentWidget):
 
         self._card_widget = CardWidget(title="Analysis", header_right_layout=layout)
 
-        self._measurement_plots = {
+        self._measurement_plots: Dict[str, PGWidget] = {
             graph.name: _make_graph_plot(graph)
             for graph in AVAILABLE_GRAPHS
         }
@@ -126,20 +127,14 @@ class AnalysisContent(ContentWidget):
 
         self._selected_graph = None
         def on_measurement_graph_changed(graph_name: str):
-            logger.debug("on_measurement_graph_changed: %s", graph_name)
+            # logger.verbose("on_measurement_graph_changed: %s", graph_name)
             graph = _graph_by_name.get(graph_name, None)
             selected = self._selected_graph
             if graph is not None and (selected is None or graph.name != self._selected_graph.name):
                 self._selected_graph = graph
                 measure_plot = self._measurement_plots[graph.name]
                 self._card_widget.setContentWidget(measure_plot)
-                logger.debug("set new graph: %s", measure_plot)
-                self._card_widget.repaint()
-
-        on_measurement_graph_changed(
-            _graph_by_name.get(user_pref.measurement_graph, AVAILABLE_GRAPHS[0]).name
-        )
-        self.measurement_graph_changed.connect(on_measurement_graph_changed)
+                # logger.debug("set new graph: %s", measure_plot)
 
         # Footer
         self._footer = QWidget(None)
@@ -177,7 +172,11 @@ class AnalysisContent(ContentWidget):
 
         msg_handler.measurement_callback = self._measurement_received
         user_pref.property_changed += self._on_user_pref_changed
-
+        #
+        on_measurement_graph_changed(
+            _graph_by_name.get(user_pref.measurement_graph, AVAILABLE_GRAPHS[0]).name
+        )
+        self.measurement_graph_changed.connect(on_measurement_graph_changed)
 
     def set_is_capture_active(self, is_active: bool):
         if is_active:

@@ -60,12 +60,17 @@ class CardWidget(QWidget):
     def setFooterVisible(self, visible: bool):
         self._footer.setVisible(visible)
 
-    def setContentWidget(self, widget: QWidget | None):
-        if self._last_widget is not None:
-            self._layout.removeWidget(self._last_widget)
+    def setContentWidget(self, widget: Optional[QWidget]):
+        last_w = self._last_widget
+        if last_w is not None:
+            self._layout.removeWidget(last_w)
+            last_w.setParent(None)  # THIS IS REQUIRED,
+            # otherwise the last widget will continue display itself on top of any other
+            # not already selected previously.
 
         if widget is not None:
             self._layout.addWidget(widget, 1, 0)
+            # widget.setParent(self)  # not required, this is implicit with addWidget()
 
         self._last_widget = widget
 
