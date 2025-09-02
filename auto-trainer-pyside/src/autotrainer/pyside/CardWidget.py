@@ -70,7 +70,7 @@ class CardWidget(QWidget):
             self._layout.removeWidget(last_w)
             last_w.setParent(None)  # THIS IS REQUIRED,
             # otherwise the last widget will continue display itself on top of any other
-            # not already selected previously.
+            # already selected previously.
             last_w.hide()
             last_w.update()  # force update to ensure widget is hidden
 
