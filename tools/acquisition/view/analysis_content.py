@@ -19,9 +19,10 @@ from tools.acquisition.view.content_widget import ContentWidget
 
 logger = get_verbose_logger(__name__)
 
+_GRAY_COLOR_TUPLE = (240, 240, 240)
 
 _ACTIVE_LOAD_CELL_COLOR = (0, 250, 154)
-_INACTIVE_LOAD_CELL_COLOR = (240, 240, 240)
+_INACTIVE_LOAD_CELL_COLOR = _GRAY_COLOR_TUPLE
 
 
 def _render_offset_3d_value(value: Optional[Offset3DTuple]) -> str:
@@ -72,6 +73,7 @@ def _make_graph_plot(graph: _GraphItem):
     layout.addWidget(plot)
     widget.setLayout(layout)
     plot.widget = widget
+    plot.getPlotItem().getViewBox().setBackgroundColor(_GRAY_COLOR_TUPLE)
     return plot
 
 
