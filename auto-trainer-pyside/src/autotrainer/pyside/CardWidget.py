@@ -71,8 +71,12 @@ class CardWidget(QWidget):
             last_w.setParent(None)  # THIS IS REQUIRED,
             # otherwise the last widget will continue display itself on top of any other
             # not already selected previously.
+            last_w.hide()
+            last_w.update()  # force update to ensure widget is hidden
 
         self._last_widget = widget
+        widget.show()
+        self._layout.update()  # force update to ensure layout is refreshed
 
     def setContentLayout(self, layout: QLayout):
         self._layout.addLayout(layout, 1, 0)
