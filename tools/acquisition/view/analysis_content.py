@@ -132,7 +132,7 @@ class AnalysisContent(ContentWidget):
             # logger.verbose("on_measurement_graph_changed: %s", graph_name)
             graph = _graph_by_name.get(graph_name, None)
             selected = self._selected_graph
-            if graph is not None and (selected is None or graph.name != self._selected_graph.name):
+            if graph is not None and (selected is None or graph.name != selected.name):
                 self._selected_graph = graph
                 measure_plot = self._measurement_plots[graph.name]
                 self._card_widget.setContentWidget(measure_plot)
@@ -186,8 +186,12 @@ class AnalysisContent(ContentWidget):
             self._perf_monitor.reset()
 
     def use_cache(self):
-        for plot in self._measurement_plots.values():
-            plot.use_cache()
+        selected = self._selected_graph
+        for plot_name, plot in self._measurement_plots.items():
+            if selected is not None and plot_name == selected.name:
+                plot.use_cache()
+            else:
+                plot.replace_cache([])
         self._load_cell_monitor_engaged.setState(self._analysis.load_cell_monitor.is_engaged)
         self._headbar_switch_engaged.setState(self._analysis.is_headbar_switch_engaged)
         self._headbar_pressure_monitor_engaged.setState(self._analysis.headbar_pressure_monitor.is_engaged)
@@ -196,14 +200,16 @@ class AnalysisContent(ContentWidget):
         values = measurements[_weight_graph.measure_idx]
         self._perf_monitor.add_cycles(len(values))
         #
+        selected = self._selected_graph
         for plot_name, plot in self._measurement_plots.items():
             graph = _graph_by_name[plot_name]
-            if graph.measure_idx >= 0 and self._selected_graph is graph:
+            if graph.measure_idx >= 0 and selected is not None and graph.name == selected.name:
                 plot.cache_data(measurements[graph.measure_idx])
 
     def _audio_received(self, spectrum):
-        audio_plot = self._measurement_plots["audio"]
-        if self._selected_graph is _audio_graph:
+        selected = self._selected_graph
+        if selected is not None and selected.name == _audio_graph.name:
+            audio_plot = self._measurement_plots[_audio_graph.name]
             audio_plot.cache_data(spectrum)
 
     def _update_trigger(self):
