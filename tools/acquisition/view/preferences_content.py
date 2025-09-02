@@ -189,6 +189,8 @@ class PreferencesContent(QWidget):
         graph = self._measurement_graph_combo.itemData(idx)
         if graph is not None:
             self._preferences.measurement_graph = graph.name
+        else:
+            logger.warning("graph None")
 
     def _create_analysis_tab(self):
         form_layout = QFormLayout(None)

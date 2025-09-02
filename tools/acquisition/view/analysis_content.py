@@ -126,11 +126,15 @@ class AnalysisContent(ContentWidget):
 
         self._selected_graph = None
         def on_measurement_graph_changed(graph_name: str):
+            logger.debug("on_measurement_graph_changed: %s", graph_name)
             graph = _graph_by_name.get(graph_name, None)
             selected = self._selected_graph
             if graph is not None and (selected is None or graph.name != self._selected_graph.name):
                 self._selected_graph = graph
-                self._card_widget.setContentWidget(self._measurement_plots[graph.name])
+                measure_plot = self._measurement_plots[graph.name]
+                self._card_widget.setContentWidget(measure_plot)
+                logger.debug("set new graph: %s", measure_plot)
+                self._card_widget.repaint()
 
         on_measurement_graph_changed(
             _graph_by_name.get(user_pref.measurement_graph, AVAILABLE_GRAPHS[0]).name
