@@ -3,6 +3,7 @@ import dataclasses
 import itertools
 import math
 import operator
+import os
 import time
 from collections import deque
 from functools import reduce, partial
@@ -18,10 +19,15 @@ logger = get_verbose_logger(__name__)
 @dataclasses.dataclass
 class AudioSpectrumThrashMonitorConfig:
 
-    time_window: float = 2
-    threshold_percent: float = 80
-    threshold_db: float = 10
-    bins_list: List[int] = dataclasses.field(default_factory=lambda : [30, 31, 32])
+    time_window: float = 2.0
+    threshold_percent: float = 50
+    threshold_db: float = 130
+    # NB: the values we read from CAN bus are supposedly (or we consider them as is) in dB unit.
+    # but the current value range we get/read is ~80-85 up to ~140-145, generally around ~100 for non-noisy.
+    bins_list: List[int] = dataclasses.field(default_factory=lambda : [3, 4, 5, 6])
+    # NB:
+    # with 6kHz: 3/4/5  goes from ~110 -> ~140
+    # with 8kHz: 3 goes from ~100-100 to ~135 and 5/6 goes from ~110 -> ~140
 
 
 class AudioSpectrumThrashMonitor(ObservableObject):
@@ -37,8 +43,9 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         self._config = config
         self._values_history = deque()
         self._cur_detected = False
-        self._t_start_detecting: Optional[float] = None
-        self._t_next_report: float = time.time()
+        self._when_start_detecting: Optional[float] = None
+        self._t_perf_next_report: float = time.perf_counter()
+        self._when_next_check: float = 0
 
     @property
     def is_thrashing_detected(self):
@@ -59,32 +66,47 @@ class AudioSpectrumThrashMonitor(ObservableObject):
                 break
             hist.popleft()
             dropped += 1
-        hist.append(([values[i] for i in self._config.bins_list], when, index))
+        hist.append((values, when, index))
         if __debug__:
-            t_now = time.time()
-            if t_now > self._t_next_report:
-                self._t_next_report += 60
-                logger.debug("hist size=%s cur_dropped=%s", len(hist), dropped)
+            t_perf_now = time.perf_counter()
+            if t_perf_now > self._t_perf_next_report:
+                self._t_perf_next_report = t_perf_now + float(os.getenv("AUDIO_THRASHING_LOG_REPORT_DELAY", "60"))
+                logger.debug("hist size=%s cur_dropped=%s cur_when=%.3f cur_index=%s ; values=%s",
+                             len(hist), dropped, when, index, [[f"{vv:.1f}" for vv in v[0]] for v in hist])
 
     def update(self, values: List[float], when: float = 0.0, index: int = 0):
-        self._update_history(values, when, index)
         cfg = self._config
-        above_threshold = list(
-            map(
-                partial(operator.le, cfg.threshold_db),
-                itertools.chain(*(v[0] for v in self._values_history))
-            )
-        )
-        percent = 100 * sum(map(int, above_threshold)) / len(above_threshold)
-        detected = percent >= cfg.threshold_percent
-        t_start = self._t_start_detecting
-        if detected:
+        v2 = [values[idx] for idx in cfg.bins_list]
+        self._update_history(v2, when, index)
+        is_above_thresh = partial(operator.le, cfg.threshold_db)
+        cur_above_pc = sum(map(is_above_thresh, v2)) * 100 / len(cfg.bins_list)
+        cur_value_avg = sum(v2) / len(cfg.bins_list)
+        t_start = self._when_start_detecting
+        if cur_value_avg >= cfg.threshold_db or cur_above_pc >= cfg.threshold_percent:
             if t_start is None:
-                self._t_start_detecting = when
-                detected = False
-            else:
-                detected = when - t_start >= cfg.time_window
+                self._when_start_detecting = when
+                self._when_next_check = when + cfg.time_window
+                return
         else:
-            if t_start is not None:
-                self._t_start_detecting = None
-        self.is_thrashing_detected = detected
+            if self.is_thrashing_detected:
+                logger.verbose("Thrashing ended detected: current avg=%.1f above_pc=%.1f%%",
+                               cur_value_avg, cur_above_pc)
+            self.is_thrashing_detected = False
+            self._when_start_detecting = None
+            return
+        if when < self._when_next_check:
+            return
+        self._when_next_check = when + cfg.time_window
+        values_history = self._values_history
+        avg_value = (
+            sum(itertools.chain(*(v[0] for v in values_history)))
+            / len(values_history)
+            / len(cfg.bins_list)
+        )
+        above_threshold = list(map(is_above_thresh, itertools.chain(*(v[0] for v in self._values_history))))
+        percent = 100 * sum(map(int, above_threshold)) / len(above_threshold)
+        detected = percent >= cfg.threshold_percent or avg_value >= cfg.threshold_db
+        if detected != self.is_thrashing_detected:
+            logger.verbose("Thrashing change detected: %s avg=%.1f above_pc=%.1f",
+                           detected, avg_value, percent)
+            self.is_thrashing_detected = detected
