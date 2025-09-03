@@ -648,18 +648,19 @@ class BehaviorAlgorithm(ObservableObject):
             if not was_seen:
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
 
-    def load_configuration(self, configuration: BehaviorConfiguration):
-        pellet_deliver_cfg = configuration.pellet_delivery
-        self.pellet_delivery_enabled = pellet_deliver_cfg.is_enabled
-        self.pellet_cover_enabled = pellet_deliver_cfg.is_pellet_cover_enabled
-        self.pellet_missing_time = pellet_deliver_cfg.max_pellet_missing_seconds
-        self.max_pellets_per_session = pellet_deliver_cfg.max_pellets_per_session
-        self.max_pellets_per_day = pellet_deliver_cfg.max_pellets_per_day
-        self.intersession_pellet_shift_enabled = pellet_deliver_cfg.is_intersession_pellet_shift_enabled
-        self.use_triangle_pellet_distance_too_far = pellet_deliver_cfg.use_triangle_pellet_distance_too_far
-        self.triangle_pellet_diff_too_far_threshold = pellet_deliver_cfg.triangle_pellet_diff_too_far_threshold
+    def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
+        self.pellet_delivery_enabled = cfg.is_enabled
+        self.pellet_cover_enabled = cfg.is_pellet_cover_enabled
+        self.pellet_missing_time = cfg.max_pellet_missing_seconds
+        self.max_pellets_per_session = cfg.max_pellets_per_session
+        self.max_pellets_per_day = cfg.max_pellets_per_day
+        self.intersession_pellet_shift_enabled = cfg.is_intersession_pellet_shift_enabled
+        self.use_triangle_pellet_distance_too_far = cfg.use_triangle_pellet_distance_too_far
+        self.triangle_pellet_diff_too_far_threshold = cfg.triangle_pellet_diff_too_far_threshold
+        self.auto_correct_motors_drift = cfg.auto_correct_motors_drift
 
-        self.auto_correct_motors_drift = configuration.pellet_delivery.auto_correct_motors_drift
+    def load_configuration(self, configuration: BehaviorConfiguration):
+        self._load_pellet_cfg(configuration.pellet_delivery)
 
         self.min_baseline_intensity = configuration.head_clamp.min_baseline_intensity
         self.max_baseline_intensity = configuration.head_clamp.max_baseline_intensity

@@ -48,6 +48,8 @@ class HeadClampConfiguration:
     auto_clamp_intensity: float = 100.0
     auto_clamp_release_tone_freq: int = 7000
     auto_clamp_release_tone_delay: float = 0.1
+    auto_clamp_release_duration: float = 30
+    auto_clamp_release_load_count: int = 100_000
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
