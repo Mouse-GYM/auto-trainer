@@ -1,7 +1,7 @@
 import dataclasses
 import logging
 import math
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
@@ -19,9 +19,10 @@ from tools.acquisition.view.content_widget import ContentWidget
 
 logger = get_verbose_logger(__name__)
 
+_GRAY_COLOR_TUPLE = (240, 240, 240)
 
 _ACTIVE_LOAD_CELL_COLOR = (0, 250, 154)
-_INACTIVE_LOAD_CELL_COLOR = (240, 240, 240)
+_INACTIVE_LOAD_CELL_COLOR = _GRAY_COLOR_TUPLE
 
 
 def _render_offset_3d_value(value: Optional[Offset3DTuple]) -> str:
@@ -37,15 +38,17 @@ class _GraphItem:
     y_range: Tuple[int, int]
 
 
-_weight_graph = _GraphItem(0, "weight", "Load cell weight", "gr", (-1, 101))
+_weight_graph = _GraphItem(0, "weight", "Weight", "gr", (-1, 101))
+_audio_graph = _GraphItem(-1, "audio", "Audio", "dB", (-1, 125))
 
 # NB: same order than SensorAnalysis.measurements_received method
 AVAILABLE_GRAPHS = (
     _weight_graph,
-    _GraphItem(1, "switch", "Switch", "On/Off", (-1, 2)),
-    _GraphItem(2, "pressure", "Pressure", "Counts", (-1, 4099)),
+    _GraphItem(1, "switch", "Switch", "1/0", (-1, 2)),
+    _GraphItem(2, "pressure", "Pressure", "Cnts", (-1, 4099)),
     _GraphItem(3, "temperature", "Temperature", "\u00b0C", (-1, 40)),
     _GraphItem(4, "humidity", "Humidity", "%", (-1, 101)),
+    _audio_graph,
 )
 
 
@@ -57,18 +60,20 @@ _graph_by_name = {
 
 def _make_graph_plot(graph: _GraphItem):
     widget = QWidget()
-    widget.setLayout(QHBoxLayout())
-    plot = PGWidget()
+    layout = QHBoxLayout()
+    plot = PGWidget(widget)
     plot.setBackground("w")
     plot.setMinimumHeight(140)
     plot.scale_x = 100.0
     ticks = [0, 10, 25, 40, 50]
     plot.getAxis("left").setTicks([[(tick, str(tick)) for tick in ticks]])
     plot.getAxis("bottom").setLabel("Time (s)")
-    plot.getAxis("left").setLabel(f"{graph.display} {graph.unit}")
+    plot.getAxis("left").setLabel(f"{graph.display} ({graph.unit})")
     plot.getViewBox().setRange(yRange=graph.y_range)
-    widget.layout().addWidget(plot)
+    layout.addWidget(plot)
+    widget.setLayout(layout)
     plot.widget = widget
+    plot.getPlotItem().getViewBox().setBackgroundColor(_GRAY_COLOR_TUPLE)
     return plot
 
 
@@ -117,25 +122,23 @@ class AnalysisContent(ContentWidget):
 
         self._card_widget = CardWidget(title="Analysis", header_right_layout=layout)
 
-        self._measurement_plots = {
+        self._measurement_plots: Dict[str, PGWidget] = {
             graph.name: _make_graph_plot(graph)
             for graph in AVAILABLE_GRAPHS
         }
         weight_plot = self._plot_weight = self._measurement_plots[_weight_graph.name]
         weight_plot.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
 
-        self._selected_graph = None
+        self._selected_graph: Optional[_GraphItem] = None
         def on_measurement_graph_changed(graph_name: str):
+            # logger.verbose("on_measurement_graph_changed: %s", graph_name)
             graph = _graph_by_name.get(graph_name, None)
             selected = self._selected_graph
-            if graph is not None and (selected is None or graph.name != self._selected_graph.name):
+            if graph is not None and (selected is None or graph.name != selected.name):
                 self._selected_graph = graph
-                self._card_widget.setContentWidget(self._measurement_plots[graph.name])
-
-        on_measurement_graph_changed(
-            _graph_by_name.get(user_pref.measurement_graph, AVAILABLE_GRAPHS[0]).name
-        )
-        self.measurement_graph_changed.connect(on_measurement_graph_changed)
+                measure_plot = self._measurement_plots[graph.name]
+                self._card_widget.setContentWidget(measure_plot)
+                # logger.debug("set new graph: %s", measure_plot)
 
         # Footer
         self._footer = QWidget(None)
@@ -172,28 +175,44 @@ class AnalysisContent(ContentWidget):
         self._analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
 
         msg_handler.measurement_callback = self._measurement_received
+        msg_handler.audio_callback = self._audio_received
         user_pref.property_changed += self._on_user_pref_changed
-
+        #
+        on_measurement_graph_changed(
+            _graph_by_name.get(user_pref.measurement_graph, AVAILABLE_GRAPHS[0]).name
+        )
+        self.measurement_graph_changed.connect(on_measurement_graph_changed)
 
     def set_is_capture_active(self, is_active: bool):
         if is_active:
             self._perf_monitor.reset()
 
     def use_cache(self):
-        for plot in self._measurement_plots.values():
-            plot.use_cache()
+        selected = self._selected_graph
+        for plot_name, plot in self._measurement_plots.items():
+            if selected is not None and plot_name == selected.name:
+                plot.use_cache()
+            else:
+                plot.replace_cache([])
         self._load_cell_monitor_engaged.setState(self._analysis.load_cell_monitor.is_engaged)
         self._headbar_switch_engaged.setState(self._analysis.is_headbar_switch_engaged)
         self._headbar_pressure_monitor_engaged.setState(self._analysis.headbar_pressure_monitor.is_engaged)
 
     def _measurement_received(self, measurements):
-        # selected = self._selected_graph
         values = measurements[_weight_graph.measure_idx]
         self._perf_monitor.add_cycles(len(values))
         #
+        selected = self._selected_graph
         for plot_name, plot in self._measurement_plots.items():
             graph = _graph_by_name[plot_name]
-            plot.cache_data(measurements[graph.measure_idx])
+            if graph.measure_idx >= 0 and selected is not None and graph.name == selected.name:
+                plot.cache_data(measurements[graph.measure_idx])
+
+    def _audio_received(self, spectrum):
+        selected = self._selected_graph
+        if selected is not None and selected.name == _audio_graph.name:
+            audio_plot = self._measurement_plots[_audio_graph.name]
+            audio_plot.cache_data(spectrum)
 
     def _update_trigger(self):
         try:
