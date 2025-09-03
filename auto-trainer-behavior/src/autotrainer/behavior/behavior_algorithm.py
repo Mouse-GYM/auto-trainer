@@ -18,7 +18,7 @@ from typing_extensions import Self
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import ObservableObject, EventManager, BehaviorConfiguration, post_trigger_enable, Offset3DTuple
-from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration
+from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
 
 from autotrainer.video import CaptureProcessStatus
 from autotrainer.video.detection import PresenceDetectionAttrs
@@ -165,6 +165,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.max_pellets_per_day: int = 50
         self.pellet_missing_time: float = 1.0
         self.triangle_missing_time: float = 1.0
+        self.pellet_recently_seen_time: float = 0.25
 
         self._pellets_presented: int = 0
         self._successful_reaches: int = 0
@@ -590,8 +591,16 @@ class BehaviorAlgorithm(ObservableObject):
         return self.pellet_cover_enabled
 
     @property
+    def pellet_recently_seen_time(self):
+        return self._pellet_recently_seen_time
+
+    @pellet_recently_seen_time.setter
+    def pellet_recently_seen_time(self, value):
+        self._pellet_recently_seen_time = value
+
+    @property
     def pellet_recently_seen(self):
-        return time.perf_counter() - self._pellet_last_seen < self.limits.pellet_missing_time
+        return time.perf_counter() - self._pellet_last_seen < self._pellet_recently_seen_time
 
     def can_load_pellet(self):
         return self.pellet_delivery_enabled and not self.pellet_recently_seen
@@ -659,36 +668,42 @@ class BehaviorAlgorithm(ObservableObject):
         self.triangle_pellet_diff_too_far_threshold = cfg.triangle_pellet_diff_too_far_threshold
         self.auto_correct_motors_drift = cfg.auto_correct_motors_drift
 
-    def load_configuration(self, configuration: BehaviorConfiguration):
-        self._load_pellet_cfg(configuration.pellet_delivery)
+    def _load_head_clamp_cfg(self, cfg: HeadClampConfiguration):
+        self.min_baseline_intensity = cfg.min_baseline_intensity
+        self.max_baseline_intensity = cfg.max_baseline_intensity
+        self.baseline_intensity_increment = cfg.baseline_intensity_increment
 
-        self.min_baseline_intensity = configuration.head_clamp.min_baseline_intensity
-        self.max_baseline_intensity = configuration.head_clamp.max_baseline_intensity
-        self.baseline_intensity_increment = configuration.head_clamp.baseline_intensity_increment
+        self.auto_clamp_intensity = cfg.auto_clamp_intensity
+        self.auto_clamp_release_tone_freq = cfg.auto_clamp_release_tone_freq
+        self.auto_clamp_release_delay = cfg.auto_clamp_release_tone_delay
+        self.auto_clamp_release_load_count = cfg.auto_clamp_release_load_count
 
-        self.auto_clamp_intensity = configuration.head_clamp.auto_clamp_intensity
-        self.auto_clamp_release_tone_freq = configuration.head_clamp.auto_clamp_release_tone_freq
-        self.auto_clamp_release_delay = configuration.head_clamp.auto_clamp_release_tone_delay
+    def load_configuration(self, config: BehaviorConfiguration):
+        self._load_pellet_cfg(config.pellet_delivery)
+        self._load_head_clamp_cfg(config.head_clamp)
+
+    def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
+        cfg.is_enabled = self.pellet_delivery_enabled
+        cfg.is_pellet_cover_enabled = self.pellet_cover_enabled
+        cfg.max_pellet_missing_seconds = self.pellet_missing_time
+        cfg.max_pellets_per_session = self.max_pellets_per_session
+        cfg.max_pellets_per_day = self.max_pellets_per_day
+        cfg.auto_correct_motors_drift = self._auto_correct_motors_drift
+        cfg.use_triangle_pellet_distance_too_far = self.use_triangle_pellet_distance_too_far
+        cfg.triangle_pellet_expected_distance = self.triangle_pellet_expected_distance
+        cfg.triangle_pellet_diff_too_far_threshold = self.triangle_pellet_diff_too_far_threshold
+
+    def _update_head_clamp_cfg(self, cfg: HeadClampConfiguration):
+        cfg.min_baseline_intensity = self.min_baseline_intensity
+        cfg.max_baseline_intensity = self.max_baseline_intensity
+        cfg.baseline_intensity_increment = self.baseline_intensity_increment
+        cfg.auto_clamp_intensity = self.auto_clamp_intensity
+        cfg.auto_clamp_release_tone_freq = self.auto_clamp_release_tone_freq
+        cfg.auto_clamp_release_tone_delay = self.auto_clamp_release_delay
 
     def update_configuration(self, configuration: BehaviorConfiguration):
-        pellet_cfg = configuration.pellet_delivery
-        pellet_cfg.is_enabled = self.pellet_delivery_enabled
-        pellet_cfg.is_pellet_cover_enabled = self.pellet_cover_enabled
-        pellet_cfg.max_pellet_missing_seconds = self.pellet_missing_time
-        pellet_cfg.max_pellets_per_session = self.max_pellets_per_session
-        pellet_cfg.max_pellets_per_day = self.max_pellets_per_day
-        pellet_cfg.auto_correct_motors_drift = self._auto_correct_motors_drift
-        pellet_cfg.use_triangle_pellet_distance_too_far = self.use_triangle_pellet_distance_too_far
-        pellet_cfg.triangle_pellet_expected_distance = self.triangle_pellet_expected_distance
-        pellet_cfg.triangle_pellet_diff_too_far_threshold = self.triangle_pellet_diff_too_far_threshold
-
-        configuration.head_clamp.min_baseline_intensity = self.min_baseline_intensity
-        configuration.head_clamp.max_baseline_intensity = self.max_baseline_intensity
-        configuration.head_clamp.baseline_intensity_increment = self.baseline_intensity_increment
-
-        configuration.head_clamp.auto_clamp_intensity = self.auto_clamp_intensity
-        configuration.head_clamp.auto_clamp_release_tone_freq = self.auto_clamp_release_tone_freq
-        configuration.head_clamp.auto_clamp_release_tone_delay = self.auto_clamp_release_delay
+        self._update_pellet_cfg(configuration.pellet_delivery)
+        self._update_head_clamp_cfg(configuration.head_clamp)
 
     def get_diamond_triangle_drifts(self, reset: bool=False) -> Offset3DTuple:
         values = self._diamond_triangle_prev_drifts
