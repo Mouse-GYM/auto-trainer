@@ -34,6 +34,7 @@ _clean_raw_data_timer = DaemonTimer
 _auto_clamp_release_timer = DaemonTimer
 _consider_end_session_timer = DaemonTimer
 _check_missing_timer = DaemonTimer
+_consider_disengage_autoclamp_timer = DaemonTimer
 
 #
 
@@ -89,9 +90,12 @@ class SystemMachine(StateMachine):
 
         no_op_timer = DaemonTimer(0, lambda: None)
         no_op_timer.start()
-        self._timer_consider_end_session = no_op_timer
 
+        self._timer_consider_end_session = no_op_timer
         self._delay_timer_consider_end_session: Optional[float] = 2.0
+
+        self._timer_auto_clamp_disengage = no_op_timer
+        self._disengage_auto_clamp_load_count = 0
 
         self._motor_axis_flips = Offset3DTuple(1, 1, 1)
 
@@ -360,27 +364,29 @@ class SystemMachine(StateMachine):
                                                               context=self.state)
 
     def _evaluate_auto_clamp(self, is_headbar_pressure_engaged: bool):
-        if not self.algorithm.head_fixation_enabled:
-            logger.info(f"auto-clamp disabled (no action taken)")
+        algo = self._algorithm
+        if not algo.head_fixation_enabled:
+            logger.info("auto-clamp disabled (no action taken)")
             return
-
-        logger.info(f"headbar pressure engaged: {is_headbar_pressure_engaged}")
-
+        logger.verbose("headbar pressure engaged: %s", is_headbar_pressure_engaged)
         if not is_headbar_pressure_engaged:
-            logger.info(f"auto-clamp force detector not engaged (no action taken)")
+            logger.info("auto-clamp force detector not engaged (no action taken)")
             return
-
-        logger.info(f"\tsystem state: {self.state}")
-
+        logger.debug("system state: %s", self.state)
         if self.state == SystemState.tunnel:
-            if self._tunnel_device is not None:
-                logger.info(f"\tauto-clamp setting position to {self.algorithm.auto_clamp_intensity}")
-                self._update_magnet_position(self.algorithm.auto_clamp_intensity)
+            if True or self._tunnel_device is not None:  # condition seems not necessary
+                algo = self._algorithm
+                logger.info("auto-clamp setting position to %s", algo.auto_clamp_intensity)
+                self._update_magnet_position(algo.auto_clamp_intensity)
+                self._disengage_auto_clamp_load_count = 0
+                self._timer_auto_clamp_disengage.cancel()
+                new_timer = self._timer_auto_clamp_disengage = _consider_disengage_autoclamp_timer(
+                    algo.auto_clamp_no_activity_release_delay, self._disengage_auto_clamp,
+                )
+                new_timer.start()
                 EventManager.default().post_event_content(BehaviorEventKind.headFixationEnabled)
-            else:
-                logger.warning("\tauto-clamp position not sent (head fix command is none)")
         else:
-            logger.debug("\tauto-clamp position not sent (not in tunnel)")
+            logger.debug("auto-clamp position not sent (not in tunnel)")
 
     def _load_cell_tare_requested(self):
         if self.state != SystemState.tunnel:
@@ -443,9 +449,24 @@ class SystemMachine(StateMachine):
         algo.pellet_seen(response.pellet_seen)
         algo.mouse_seen(response.mouse_seen)
         algo.triangle_seen(response.triangle_seen)
-        if not self._algorithm.pellet_delivery_enabled:
+        if not algo.pellet_delivery_enabled:
             return
         self._pellet_machine.pellet_seen(response.pellet_seen)
+
+    def _disengage_auto_clamp(self):
+        pellet_dev = self._pellet_device
+        logger.debug("sending tone to indicate auto-clamp disabled")
+        algo = self._algorithm
+        if algo.is_in_session:
+            pellet_dev.play_tone(self.algorithm.auto_clamp_release_tone_freq, 0.5)
+        if self._tunnel_device is not None:  # condition seems not necessary... but some test assert it
+            logger.debug(
+                "changing magnet intensity to baseline in %.2f seconds", algo.auto_clamp_release_tone_delay)
+            timer = _auto_clamp_release_timer(
+                algo.auto_clamp_release_tone_delay,
+                partial(self._update_magnet_position, algo.baseline_intensity),
+            )
+            timer.start()
 
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.
@@ -453,15 +474,7 @@ class SystemMachine(StateMachine):
         if name == BehaviorAlgoProps.HEAD_FIXATION_ENABLED:
             if not new_value:
                 logger.debug("auto-clamp disabled (backing off to baseline intensity)")
-                if self.algorithm.is_in_session:
-                    logger.debug("\tsending tone to indicate auto-clamp disabled")
-                    pellet_dev.play_tone(self.algorithm.auto_clamp_release_tone_freq, 0.5)
-                if self._tunnel_device is not None:
-                    logger.debug(
-                        f"\tchanging magnet intensity to baseline in {self.algorithm.auto_clamp_release_delay} seconds")
-                    timer = _auto_clamp_release_timer(self.algorithm.auto_clamp_release_delay,
-                                  lambda: self._update_magnet_position(self.algorithm.baseline_intensity))
-                    timer.start()
+                self._disengage_auto_clamp()
         elif name == BehaviorAlgoProps.PELLET_MOTOR_DRIFT:
             if new_value is not None and self._algorithm.auto_correct_motors_drift:
                 pellet_dev.set_motors_drift(new_value)
@@ -481,7 +494,12 @@ class SystemMachine(StateMachine):
             self._tunnel_device.update_head_magnet_intensity(position)
 
     def _pellet_loading(self):
-        if self._algorithm.is_in_session:
+        self._timer_auto_clamp_disengage.cancel()
+        self._disengage_auto_clamp_load_count += 1
+        algo = self._algorithm
+        if self._disengage_auto_clamp_load_count >= algo.auto_clamp_release_load_count:
+            self._disengage_auto_clamp()
+        if algo.is_in_session:
             prev_timer = self._timer_consider_end_session
             if prev_timer.finished.is_set():
                 self._timer_consider_end_session = _consider_end_session_timer(

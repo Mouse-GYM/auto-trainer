@@ -125,7 +125,9 @@ class BehaviorAlgorithm(ObservableObject):
         self._presence_missing_delay: float = 20
         self._auto_clamp_intensity = 100
         self._auto_clamp_release_tone_freq = 7000
-        self._auto_clamp_release_delay = 0.1
+        self._auto_clamp_release_tone_delay = 0.1
+        self._auto_clamp_release_load_count = HeadClampConfiguration.auto_clamp_release_load_count
+        self._auto_clamp_no_activity_release_delay = HeadClampConfiguration.auto_clamp_no_activity_release_delay
 
         self._recording_age_release_pellet_threshold = 0.75
 
@@ -165,7 +167,6 @@ class BehaviorAlgorithm(ObservableObject):
         self.max_pellets_per_day: int = 50
         self.pellet_missing_time: float = 1.0
         self.triangle_missing_time: float = 1.0
-        self.pellet_recently_seen_time: float = 0.25
 
         self._pellets_presented: int = 0
         self._successful_reaches: int = 0
@@ -347,14 +348,32 @@ class BehaviorAlgorithm(ObservableObject):
         EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseToneFreqChanged, context=value)
 
     @property
-    def auto_clamp_release_delay(self):
-        return self._auto_clamp_release_delay
+    def auto_clamp_release_tone_delay(self):
+        return self._auto_clamp_release_tone_delay
 
-    @auto_clamp_release_delay.setter
-    def auto_clamp_release_delay(self, value):
-        self._auto_clamp_release_delay = self._on_property_changed("auto_clamp_release_delay", value,
-                                                                   self._auto_clamp_release_delay)
+    @auto_clamp_release_tone_delay.setter
+    def auto_clamp_release_tone_delay(self, value):
+        self._auto_clamp_release_tone_delay = self._on_property_changed("auto_clamp_release_tone_delay", value,
+                                                                        self._auto_clamp_release_tone_delay)
         EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseDelayChanged, context=value)
+
+    @property
+    def auto_clamp_release_load_count(self):
+        return self._auto_clamp_release_load_count
+
+    @auto_clamp_release_load_count.setter
+    def auto_clamp_release_load_count(self, value):
+        self._auto_clamp_release_load_count = value
+
+    @property
+    def auto_clamp_no_activity_release_delay(self):
+        return self._auto_clamp_no_activity_release_delay
+
+    @auto_clamp_no_activity_release_delay.setter
+    def auto_clamp_no_activity_release_delay(self, value):
+        self._auto_clamp_no_activity_release_delay = value
+
+    #
 
     @property
     def triangle_last_seen(self) -> float:
@@ -591,16 +610,8 @@ class BehaviorAlgorithm(ObservableObject):
         return self.pellet_cover_enabled
 
     @property
-    def pellet_recently_seen_time(self):
-        return self._pellet_recently_seen_time
-
-    @pellet_recently_seen_time.setter
-    def pellet_recently_seen_time(self, value):
-        self._pellet_recently_seen_time = value
-
-    @property
     def pellet_recently_seen(self):
-        return time.perf_counter() - self._pellet_last_seen < self._pellet_recently_seen_time
+        return time.perf_counter() - self._pellet_last_seen < self.limits.pellet_missing_time
 
     def can_load_pellet(self):
         return self.pellet_delivery_enabled and not self.pellet_recently_seen
@@ -675,8 +686,9 @@ class BehaviorAlgorithm(ObservableObject):
 
         self.auto_clamp_intensity = cfg.auto_clamp_intensity
         self.auto_clamp_release_tone_freq = cfg.auto_clamp_release_tone_freq
-        self.auto_clamp_release_delay = cfg.auto_clamp_release_tone_delay
+        self.auto_clamp_release_tone_delay = cfg.auto_clamp_release_tone_delay
         self.auto_clamp_release_load_count = cfg.auto_clamp_release_load_count
+        self.auto_clamp_no_activity_release_delay = cfg.auto_clamp_no_activity_release_delay
 
     def load_configuration(self, config: BehaviorConfiguration):
         self._load_pellet_cfg(config.pellet_delivery)
@@ -699,7 +711,9 @@ class BehaviorAlgorithm(ObservableObject):
         cfg.baseline_intensity_increment = self.baseline_intensity_increment
         cfg.auto_clamp_intensity = self.auto_clamp_intensity
         cfg.auto_clamp_release_tone_freq = self.auto_clamp_release_tone_freq
-        cfg.auto_clamp_release_tone_delay = self.auto_clamp_release_delay
+        cfg.auto_clamp_release_tone_delay = self.auto_clamp_release_tone_delay
+        cfg.auto_clamp_release_load_count = self.auto_clamp_release_load_count
+        cfg.auto_clamp_no_activity_release_delay = self.auto_clamp_no_activity_release_delay
 
     def update_configuration(self, configuration: BehaviorConfiguration):
         self._update_pellet_cfg(configuration.pellet_delivery)
