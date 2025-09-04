@@ -532,13 +532,13 @@ class BehaviorAlgorithm(ObservableObject):
 
     def start_session(self, *, reason: str="NA"):
         with self._thread_lock:
-            self._start_session(reason=reason)
+            return self._start_session(reason=reason)
 
     def _start_session(self, *, reason: str):
         if self._is_in_session:
             logger.warning("%s: start_session() called but already in session",
                            reason)
-            return
+            return False
 
         logger.success("%s: starting new session recording ...", reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
@@ -563,16 +563,17 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_starting()
 
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
+        return True
 
     def end_session(self, *, reason: str="NA"):
         with self._thread_lock:
-            self._end_session(reason=reason)
+            return self._end_session(reason=reason)
 
     def _end_session(self, *, reason: str):
         if not self._is_in_session:
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)
-            return
+            return False
         logger.success("%s: stopping session recording", reason)
         self._is_in_session = False  # must be ~first, to ensure next actions/callbacks don't see it as True
         # but must be at least before self.session_ending() here after, given test_covered_load_cycle rely on that atm.
@@ -582,6 +583,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_ending()
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
+        return True
 
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0
