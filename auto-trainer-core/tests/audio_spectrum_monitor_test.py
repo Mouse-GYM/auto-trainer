@@ -63,20 +63,18 @@ def test_detect_thrashing():
 
     # now:
     lower_audio_db = [cfg.threshold_db - 1] * 64  # lower than threshold
+    for idx, b in enumerate(cfg.bins_list):
+        lower_audio_db[b] = cfg.threshold_db + 1
+        if 100 * idx / len(cfg.bins_list) >= cfg.threshold_percent:
+            break
     t_now += 0.1
 
     update_monitor(lower_audio_db, t_now)
-
     assert monitor.is_thrashing_detected  # still
 
-    t_now += 0.1
-    update_monitor(lower_audio_db, t_now)
+    very_low_audio = [cfg.threshold_db - 1] * 64  # lower than threshold
 
-    assert monitor.is_thrashing_detected  # again still
-    assert thrash_detected_list == [False, True]  # still too
+    update_monitor(very_low_audio, t_now)
 
-    t_now += 0.1
-    update_monitor(lower_audio_db, t_now)
-    # NB: 3 times to have more values than the previous ones still within the time window
     assert not monitor.is_thrashing_detected
     assert thrash_detected_list == [False, True, False]  # False again
