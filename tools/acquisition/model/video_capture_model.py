@@ -445,13 +445,12 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                                    params=params)
 
     def _wait_for_capture_status(self, expected: CaptureProcessStatus, timeout: int):
-        pert_timeout = time.perf_counter() + timeout
-        while True:
-            if self._video_status.value == expected:
-                return True
-            if time.perf_counter() > pert_timeout:
+        perf_timeout = time.perf_counter() + timeout
+        while self._video_status.value != expected:
+            if time.perf_counter() > perf_timeout:
                 return False
             time.sleep(0.001)
+        return True
 
     def _on_trigger(self, notification: Notification):
         if self._video_capture is not None:
