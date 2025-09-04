@@ -254,6 +254,16 @@ class CanDevice(Device):
             SystemCommandKind.STREAM_STOP: no_op_handler,
         }
 
+        def set_current_pressure(m):
+            self._current_pressure = m.pressure
+
+        def set_current_temp_humidity(m):
+            self._current_temperature = m.temperature_c
+            self._current_humidity = m.humidity_percent
+
+        def set_current_digital(m):
+            self._current_digital = m.continuity_0
+
         # Initialize data handlers lookup table
         self._data_handlers = {
             Status: no_op_handler,  # No-op for Status messages
@@ -262,16 +272,10 @@ class CanDevice(Device):
             AnalogOutput: no_op_handler,
 
             LoadCellReading: self._handle_load_cell_reading,
+            PressureReading: set_current_pressure,
+            SensorStatus: set_current_temp_humidity,
 
-            PressureReading: lambda message: setattr(self, '_current_pressure', message.pressure),
-
-            SensorStatus: lambda message: (
-                setattr(self, '_current_temperature', message.temperature_c),
-                setattr(self, '_current_humidity', message.humidity_percent)
-            ),
-
-            MagnetDigitalInputs: lambda message: setattr(self, '_current_digital',
-                                                         message.continuity_0),
+            MagnetDigitalInputs: set_current_digital,
 
             PelletDigitalInputs: lambda message: (
                 self._api.send_message(SystemStatusMessageKind.STIMULUS_INPUTS,
@@ -289,7 +293,7 @@ class CanDevice(Device):
                                                         magnitudes_val=message.magnitudes))
             ),
 
-            StepperStatus: lambda message: self._report_stepper_status(message),
+            StepperStatus: self._report_stepper_status,
 
             ServoStatus: lambda message: self._report_servo_status(message.motor, message.position),
 

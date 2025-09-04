@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Tuple, Optional
 
 import numpy
 
@@ -44,11 +45,11 @@ class CameraBase:
         logger.debug(f"<{self._name}> height: {self._height}")
 
     @property
-    def fps(self) -> float:
+    def fps(self) -> int:
         return self._fps
 
     @fps.setter
-    def fps(self, value: float) -> None:
+    def fps(self, value: int) -> None:
         self._fps = value
         logger.debug(f"<{self._name}> fps: {self._fps}")
 
@@ -78,7 +79,7 @@ class CameraBase:
 
         logger.debug(f"<{self._name}> approximate fps: ~{self._calculate_fps():.1f}")
 
-    def capture(self) -> (numpy.ndarray, int):
+    def capture(self) -> Tuple[Optional[numpy.ndarray], int]:
         """ Called repeatedly to capture the next frame
 
         Subclasses must call this method when overriding or take responsibility for increasing frame count and tracking
