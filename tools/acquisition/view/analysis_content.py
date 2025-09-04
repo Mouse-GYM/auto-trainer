@@ -248,6 +248,7 @@ class AnalysisContent(ContentWidget):
         # todo: do we display on UI ?
         if offset is None:
             return
+        # too noisy:
         # logger.spam("triangle pellet offset: %s distance=%.3f", offset, offset.distance)
 
     def _on_user_pref_changed(self, name: str, value, old_value):
