@@ -373,7 +373,7 @@ class SystemMachine(StateMachine):
             return
         logger.verbose("headbar pressure engaged: %s", is_headbar_pressure_engaged)
         if not is_headbar_pressure_engaged:
-            logger.info("auto-clamp force detector not engaged (no action taken)")
+            logger.info("auto-clamp detector not engaged (no action taken)")
             return
         logger.debug("system state: %s", self.state)
         if self.state == SystemState.tunnel:
@@ -383,10 +383,13 @@ class SystemMachine(StateMachine):
                 self._update_magnet_position(algo.auto_clamp_intensity)
                 self._disengage_auto_clamp_load_count = 0
                 self._timer_auto_clamp_disengage.cancel()
-                new_timer = self._timer_auto_clamp_disengage = _consider_disengage_autoclamp_timer(
-                    algo.auto_clamp_no_activity_release_delay, self._disengage_auto_clamp,
-                )
-                new_timer.start()
+                t_delay = algo.auto_clamp_no_activity_release_delay
+                if t_delay >= 0:
+                    logger.debug("starting new timer for disengage_auto_clamp in %.2f seconds", t_delay)
+                    new_timer = self._timer_auto_clamp_disengage = _consider_disengage_autoclamp_timer(
+                        t_delay, self._disengage_auto_clamp,
+                    )
+                    new_timer.start()
                 EventManager.default().post_event_content(BehaviorEventKind.headFixationEnabled)
         else:
             logger.debug("auto-clamp position not sent (not in tunnel)")
@@ -457,14 +460,15 @@ class SystemMachine(StateMachine):
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     def _disengage_auto_clamp(self):
+        logger.info("disengaging auto-clamp ..")
         pellet_dev = self._pellet_device
         algo = self._algorithm
         if algo.is_in_session:
-            logger.debug("sending tone to indicate auto-clamp disabled")
+            logger.debug("sending tone to indicate auto-clamp disabled (tunnel=%s)", self._tunnel_device)
             pellet_dev.play_tone(self.algorithm.auto_clamp_release_tone_freq, 0.5)
         if self._tunnel_device is not None:  # condition seems not necessary... but some test assert it
             logger.debug(
-                "changing magnet intensity to baseline in %.2f seconds", algo.auto_clamp_release_tone_delay)
+                "changing magnet to baseline intensity in %.2f seconds", algo.auto_clamp_release_tone_delay)
             timer = _auto_clamp_release_timer(
                 algo.auto_clamp_release_tone_delay,
                 partial(self._update_magnet_position, algo.baseline_intensity),
