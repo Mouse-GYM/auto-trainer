@@ -22,6 +22,7 @@ class SegmentationConfiguration:
 @dataclass
 class DetectionConfiguration:
     nonce: str
+    session_index: int
     complete: Callable[[str, bool], None]
 
 

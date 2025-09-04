@@ -1,5 +1,5 @@
 import secrets
-from typing import Callable
+from typing import Callable, Optional
 
 from transitions import Machine
 
@@ -48,8 +48,8 @@ class IntersessionMachine(StateMachine):
         self._project_info = project_info
         self._algorithm = algorithm
         self._inference = inference
-        self._segmentation_configuration = None
-        self._detection_configuration = None
+        self._segmentation_configuration: Optional[SegmentationConfiguration] = None
+        self._detection_configuration: Optional[DetectionConfiguration] = None
 
     @property
     def project(self):
@@ -72,8 +72,12 @@ class IntersessionMachine(StateMachine):
                                                       context=segment_config.nonce)
 
     def after_enter_detection(self):
+        segment_config = self._segmentation_configuration
+        if segment_config is None:
+            raise RuntimeError("after_enter_detection but segment_config is None")
         detection_config = DetectionConfiguration(
             nonce=secrets.token_hex(),
+            session_index=segment_config.session_index,
             complete=lambda nonce, success:
                 self._detection_complete(nonce, success, detection_config=detection_config)
         )
@@ -137,7 +141,9 @@ class IntersessionMachine(StateMachine):
                 logger.error("perform detection failed. det_config=%s", detection_config)
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionError)
             else:
-                EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionEnd)
+                EventManager.default().post_event_content(
+                    BehaviorEventKind.intersessionDetectionEnd,
+                    context=f"nonce={detection_config.nonce};session_index={detection_config.session_index}")
 
             self.end_analysis()
 

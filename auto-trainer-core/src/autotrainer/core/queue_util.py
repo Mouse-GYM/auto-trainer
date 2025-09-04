@@ -9,15 +9,22 @@ from autotrainer.core.logging import get_verbose_logger
 logger = get_verbose_logger(__name__)
 
 
-def clear_queue(queue: Union[Queue, FixedArrayQueue]):
+def clear_queue(queue: Union[Queue, FixedArrayQueue],
+                *, log_dumped: bool=False):
     """Empty a queue."""
     if queue is None or sys.platform == "darwin":
         return
 
     warned = False
+    flushed = 0
+    task_done = getattr(queue, "task_done", lambda: None)
     while not queue.empty() or queue.qsize() > 0:
         try:
-            queue.get_nowait()
+            obj = queue.get_nowait()
+            flushed += 1
+            task_done()
+            if log_dumped:
+                logger.debug("flushed %s: %s", type(obj), obj)
         except Empty:
             empty = queue.empty()
             qsize = queue.qsize()
@@ -28,10 +35,12 @@ def clear_queue(queue: Union[Queue, FixedArrayQueue]):
                                    queue, empty, qsize)
                 continue
             break
+    logger.debug("Flushed %s items from %s", flushed, queue)
 
 
 def trim_queue(queue: Queue, limit: int) -> bool:
     """Trim queue length to the specified limit."""
+    # unused atm
     if queue is None or sys.platform == "darwin":
         return False
 

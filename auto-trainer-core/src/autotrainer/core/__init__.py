@@ -174,5 +174,5 @@ from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMess
 from .message import MotorConfigurations, Motor
 from .perf_monitor import PerfMonitor
 from .project import ProjectInfo, ProjectInterval, video_write_ext
-from .queue_util import clear_queue, trim_queue
+from .queue_util import clear_queue
 from .notification import NotificationCenter, Notification, TriggerNotification, post_trigger_enable

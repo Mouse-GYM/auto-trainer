@@ -34,6 +34,9 @@ class SystemMessageHandler(MessageHandler):
 
     @audio_callback.setter
     def audio_callback(self, audio_callback: Callable[[List[float]], None]) -> None:
+        prev = self._audio_callback
+        if prev is not None:
+            logger.info("Replacing audio callback %s with %s", prev, audio_callback)
         self._audio_callback = audio_callback
 
     @property

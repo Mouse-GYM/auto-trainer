@@ -1,5 +1,6 @@
 import time
 import urllib.parse
+from typing import Tuple
 
 import cv2
 import numpy
@@ -31,7 +32,7 @@ class PlaybackCam(CameraBase):
         self._video_frame_count = vc.get(cv2.CAP_PROP_FRAME_COUNT)
         logger.notice("init with fps=%s W=%s H=%s", self.fps, self.width, self.height)
 
-    def capture(self) -> (numpy.ndarray, int):
+    def capture(self) -> Tuple[numpy.ndarray, int]:
         ret, frame = self._video_capture.read()
         if not ret:
             if self._frame_count == self._video_frame_count:

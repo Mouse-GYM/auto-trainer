@@ -22,7 +22,10 @@ class PelletDeliveryConfiguration:
     is_intersession_pellet_shift_enabled: bool = True
     max_pellets_per_session: int = 10
     max_pellets_per_day: int = 50
-    max_pellet_missing_seconds: float = 15.0
+    max_pellet_missing_seconds: float = 1.0  # how long to wait before load pellet when pellet missing/not seen
+    # this help ensure we don't execute a load pellet if we get an incorrect pose_result with pellet seen == False,
+    # which can happen eventually (missed inference detection basically).
+
     auto_correct_motors_drift: bool = False
     use_triangle_pellet_distance_too_far: bool = False
     triangle_pellet_expected_distance: float = 5  # mm

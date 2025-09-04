@@ -180,6 +180,7 @@ class VideoCapture(Process):
         self._image_queue: Optional[Union[Queue, FixedArrayQueue]] = attrs.image_queue
         self._image_queue_frame_delay = None if attrs.fps_image_queue is None else 1 / attrs.fps_image_queue
 
+        self._network_queue: Optional[FixedArrayMultiQueue]
         if attrs.inference is not None:
             self._network_queue = attrs.inference.queue
             self._camera_idx = attrs.inference.index
@@ -289,7 +290,7 @@ class VideoCapture(Process):
         msg_q = self._attrs.msg_queue  # message queue to main process
         net_q = self._network_queue
         record_start_frame_idx = None
-        next_t_image_q = time.time()
+        next_t_image_q = time.perf_counter()
         next_t_cmd_q = next_t_image_q
         img_q = self._image_queue
         record_q_list = self._record_queue_list
@@ -305,16 +306,16 @@ class VideoCapture(Process):
         primary_acquired_count = 0
 
         if net_q is None:
-            sync_barrier = lambda timeout=None: None
+            sync_barrier = lambda t=None: None
             primary_sema = None
             primary_acquire = lambda: True
             primary_release = lambda: None
         else:
             primary_sema = net_q.semaphore
 
-            def sync_barrier(timeout=5, *, wait_barrier=net_q.barrier.wait):
+            def sync_barrier(t=5, *, wait_barrier=net_q.barrier.wait):
                 try:
-                    wait_barrier(timeout=timeout)
+                    wait_barrier(timeout=t)
                 except BrokenBarrierError:
                     logger.critical("multiproc network queue barrier broken")
                     raise
@@ -366,15 +367,15 @@ class VideoCapture(Process):
 
         logger.notice("%s: starting capture loop ..", self)
         while self._is_running:
-            t_now = time.time()
+            t_perf_now = time.perf_counter()
             try:
-                if get_command is not None and t_now >= next_t_cmd_q:
+                if get_command is not None and t_perf_now >= next_t_cmd_q:
                     cmd = None
                     try:
                         cmd, context = get_command()
                         self._handle_command(cmd, context)
                     except queue.Empty:
-                        next_t_cmd_q = t_now + 0.02  # no need check that often
+                        next_t_cmd_q = t_perf_now + 0.01  # no need check that often
                         # we now use mp barrier to sync when needed
                     except Exception as err:
                         logger.exception("Failure executing cmd %s: %s", cmd, err)
@@ -384,7 +385,7 @@ class VideoCapture(Process):
                     time.sleep(0.001)
                     record_start_frame_idx = None
                     record_q_list = self._record_queue_list = []
-                    next_t_cmd_q = t_now  # force get on next turn
+                    next_t_cmd_q = t_perf_now  # force get on next turn
                     continue
 
                 # ensure primary capture first
@@ -406,9 +407,9 @@ class VideoCapture(Process):
 
                 if img_q is not None:
                     # image queue goes to GUI video reader frame, currently FixedArrayQueue
-                    if t_now >= next_t_image_q:
+                    if t_perf_now >= next_t_image_q:
                         if image_queue_delay is not None:
-                            next_t_image_q = t_now + image_queue_delay
+                            next_t_image_q = t_perf_now + image_queue_delay
                         if len(numpy.shape(frame)) < 3:
                             img_q.put(frame)
                         else:
@@ -473,7 +474,7 @@ class VideoCapture(Process):
                             sync_barrier()
 
                             # logger.debug("padding %s times", d)
-                            timeout = 10
+                            timeout = 5
                             for _ in range(d):
                                 t0 = time.perf_counter()
                                 net_q.put_block(empty_frame, self._camera_idx, FrameIndexCategory.PADDING,
@@ -549,8 +550,12 @@ class VideoCapture(Process):
         self._camera = VideoManager.create_camera(self._camera_url, self._name)
 
     def _handle_command(self, cmd: CaptureCommandKind, context: object):
-        logger.info(f"<{self._name}> executing {cmd}")
-        self.command_handler.get(cmd)(context)
+        logger.info(f"<%s> executing %s", self._name, cmd)
+        handler = self.command_handler.get(cmd)
+        if handler is None:
+            logger.warning("No handler for command %s", cmd)
+        else:
+            handler(context)
         logger.debug("status: capturing=%s recording=%s", self._is_capturing, self._is_record_active)
 
     def _user_terminate(self, _: object):

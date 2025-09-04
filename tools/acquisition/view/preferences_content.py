@@ -1,9 +1,10 @@
 import logging
 
 import verboselogs
+from PySide6 import QtCore
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton, \
-    QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox
+    QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QGridLayout
 
 from autotrainer.core.logging import get_console_handler, get_verbose_logger, repr_all_loggers
 from autotrainer.device import get_available_hardware
@@ -12,7 +13,7 @@ from autotrainer.pyside import Separator, HardwarePortComboBox, QSwitch
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
-
+from tools.acquisition.view.analysis_content import AVAILABLE_GRAPHS
 
 logger = get_verbose_logger(__name__)
 
@@ -37,6 +38,9 @@ class PreferencesContent(QWidget):
 
         self._behavior_tab = self._create_behavior_tab()
         self._tabs.addTab(self._behavior_tab, "Behavior")
+
+        self._analysis_tab = self._create_analysis_tab()
+        self._tabs.addTab(self._analysis_tab, "Analysis")
 
         self._advanced_tab = self._create_advanced_tab()
         self._tabs.addTab(self._advanced_tab, "Advanced")
@@ -117,43 +121,45 @@ class PreferencesContent(QWidget):
 
     def _create_behavior_tab(self):
         algo = self._model.behavior.algorithm
-
         form_layout = QFormLayout(None)
 
+        layout = QHBoxLayout()
         self._inference_model_edit = QLineEdit(None, None)
         self._inference_model_edit.setText(self._model.inference.model_location)
         self._inference_model_edit.textChanged.connect(self._inference_model_changed)
-
-        layout = QHBoxLayout()
         layout.addWidget(self._inference_model_edit)
         button = QPushButton("Select...")
         button.clicked.connect(lambda: self._browse_for_location("inference_model"))
         layout.addWidget(button)
-
         form_layout.addRow("Inference model:", layout)
-
-        self._auto_correct_motors_drift_toggle = QSwitch()
-        self._auto_correct_motors_drift_toggle.setChecked(self._model.behavior.algorithm.auto_correct_motors_drift)
+        #
+        layout = QHBoxLayout()
+        toggle = self._auto_correct_motors_drift_toggle = QSwitch()
+        toggle.setChecked(self._model.behavior.algorithm.auto_correct_motors_drift)
         def auto_correct_motors_drift_toggle_changed(value: int):
             enabled = value != 0
             logger.verbose("auto_correct_motors_drift_toggle_changed: %s", enabled)
             self._model.behavior.algorithm.auto_correct_motors_drift = enabled
-        self._auto_correct_motors_drift_toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
-        form_layout.addRow("Auto-correct motors drift:", self._auto_correct_motors_drift_toggle)
 
+        toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
+        layout.addWidget(toggle)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        form_layout.addRow("Auto-correct motors drift:", layout)
+        #
         self._use_triangle_pellet_distance = algo.use_triangle_pellet_distance_too_far
-        self._toggle_use_triangle_pellet_distance = QSwitch()
+        layout = QHBoxLayout()
+        toggle = self._toggle_use_triangle_pellet_distance = QSwitch()
         def use_triangle_pellet_distance_changed(value):
             enabled = value != 0
             prev, self._use_triangle_pellet_distance = self._use_triangle_pellet_distance, enabled
             algo.use_triangle_pellet_distance_too_far = enabled
 
-        self._toggle_use_triangle_pellet_distance.stateChanged.connect(use_triangle_pellet_distance_changed)
-        self._toggle_use_triangle_pellet_distance.setChecked(algo.use_triangle_pellet_distance_too_far)
-
-        form_layout.addRow("Use triangle-pellet distance for pellet too far detection:",
-                           self._toggle_use_triangle_pellet_distance)
-
+        toggle.stateChanged.connect(use_triangle_pellet_distance_changed)
+        toggle.setChecked(algo.use_triangle_pellet_distance_too_far)
+        layout.addWidget(toggle)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        form_layout.addRow("Use triangle-pellet distance for pellet too far detection:", layout)
+        #
         spin_box = self._triangle_pellet_expected_distance_spinbox = QDoubleSpinBox()
         spin_box.setRange(0, 100)
         spin_box.setValue(algo.triangle_pellet_expected_distance)
@@ -179,16 +185,45 @@ class PreferencesContent(QWidget):
 
         return tab
 
+    def _on_graph_combox_changed(self, idx: int):
+        graph = self._measurement_graph_combo.itemData(idx)
+        if graph is not None:
+            self._preferences.measurement_graph = graph.name
+        else:
+            logger.warning("graph None")
+
+    def _create_analysis_tab(self):
+        form_layout = QFormLayout(None)
+        combo = self._measurement_graph_combo = QComboBox()
+
+        pref_graph_name = self._preferences.measurement_graph
+        for idx, graph in enumerate(AVAILABLE_GRAPHS):
+            combo.addItem(graph.display, graph)
+            if graph.name == pref_graph_name:
+                combo.setCurrentIndex(idx)
+
+        combo.currentIndexChanged.connect(self._on_graph_combox_changed)
+
+        form_layout.addRow("Measurement graph:", combo)
+
+        tab = QWidget(None)
+        tab.setLayout(form_layout)
+
+        return tab
+
     def _create_advanced_tab(self):
-        self._log_level_combobox = QComboBox(None)
-        self._log_level_combobox.addItem("Success", verboselogs.SUCCESS)  # 0
-        self._log_level_combobox.addItem("Warning", logging.WARNING)  # 1
-        self._log_level_combobox.addItem("Notice", verboselogs.NOTICE)  # 2
-        self._log_level_combobox.addItem("Info", logging.INFO)  # 3
-        self._log_level_combobox.addItem("Verbose", verboselogs.VERBOSE)  # 4
-        self._log_level_combobox.addItem("Debug", logging.DEBUG)  # 5
-        self._log_level_combobox.addItem("Spam", verboselogs.SPAM)  # 6
-        self._log_level_combobox.currentIndexChanged.connect(self._log_level_changed)
+        combo_log_level = self._log_level_combobox = QComboBox(None)
+        for display, lvl in (
+            ("Success", verboselogs.SUCCESS),  # 0
+            ("Warning", logging.WARNING),  # 1
+            ("Notice", verboselogs.NOTICE),  # 2
+            ("Info", logging.INFO),  # 3
+            ("Verbose", verboselogs.VERBOSE),  # 4
+            ("Debug", logging.DEBUG),  # 5
+            ("Spam", verboselogs.SPAM),  # 6
+        ):
+            combo_log_level.addItem(display, lvl)
+        combo_log_level.currentIndexChanged.connect(self._log_level_changed)
 
         levels_to_idx = {
             verboselogs.SUCCESS: 0,
@@ -203,9 +238,9 @@ class PreferencesContent(QWidget):
         log_level_idx = levels_to_idx.get(self._preferences.log_level)  # default to preferences.log_level
         if log_level_idx is None:
             log_level_idx = min(levels_to_idx.items(), key=lambda i: abs(self._preferences.log_level - i[0]))[1]
-        self._log_level_combobox.blockSignals(True)
-        self._log_level_combobox.setCurrentIndex(log_level_idx)
-        self._log_level_combobox.blockSignals(False)
+        combo_log_level.blockSignals(True)
+        combo_log_level.setCurrentIndex(log_level_idx)
+        combo_log_level.blockSignals(False)
 
         self._log_location_edit = QLineEdit(None, None)
         self._log_location_edit.setText(self._preferences.log_location)

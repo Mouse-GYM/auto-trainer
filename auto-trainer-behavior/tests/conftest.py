@@ -57,8 +57,9 @@ def pose_algo():
 @pytest.fixture
 def inference(pose_algo):
     inference = InferenceModel(pose_algorithm=pose_algo)
-    inference._set_status(InferenceStatus.live)
-    return inference
+    inference._set_status(InferenceStatus.live)  # noqa
+    yield inference
+    inference.terminate()
 
 
 @pytest.fixture
@@ -66,6 +67,7 @@ def system_msg_queue():
     q = queue.Queue()
     yield q
     logging.info("system msg qsize after use: %s", q.qsize())
+    q.join()
 
 
 @pytest.fixture
@@ -154,7 +156,8 @@ class MockSystemMachine:
         }
         parts_flags = (parts_flag, parts_flag, parts_flag)
         response = PoseResponse(sequence=1, parts_flags=parts_flags, locations=[])
-        self.inference.pose_algorithm.pose_changed(response)
+        # self.inference.pose_algorithm.pose_changed(response)
+        self.inference.pose_response_ready(response)
         if self.pellet._api_status_token is not None and ack_pellet:
             self.pellet._pellet_device_ack_received(self.pellet._api_status_token)
 

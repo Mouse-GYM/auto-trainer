@@ -36,6 +36,7 @@ from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
+from tools.acquisition.view.analysis_content import AVAILABLE_GRAPHS
 
 logger = get_verbose_logger(__name__)
 
@@ -175,12 +176,15 @@ class AppModel(ObservableObject):
         # we never know the session could be just stopped,
         # so check:
         if algo.is_in_session:
+            logger.verbose("calling try_next_state ; %s", algo.pellet_recently_seen)
             #   and algo.capture_status_age >= algo.recording_age_release_pellet_threshold:
             # this is called via a timer, which are not necessarily very precise,
             # and to be safe on all side, do not check again, the actual age could even be slightly less than the
             # desired threshold (but very very near). So to not miss that case: do not "recheck"
             self._behavior.system_machine.pellet.environment_changed(
                 pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-start-recording")
+        else:
+            logger.verbose("consider_release_pellet but not in session")
 
     def _handle_proc_msg_queue(self):
         proc_msg_q = self._multiproc_msg_queue
@@ -190,7 +194,7 @@ class AppModel(ObservableObject):
             if raw is None:
                 break
             args = ()
-            kwargs = {}
+            kwargs = None
             if isinstance(raw, tuple):
                 if len(raw) < 1:
                     logger.warning("Invalid status msg: %r", raw)
@@ -204,7 +208,7 @@ class AppModel(ObservableObject):
                             logger.warning("Unhandled extra args to status msg: %r", raw[3:])
             else:
                 cmd = raw
-            logger.info("Got %s", cmd)
+            logger.info("Got %s ; %s // %s", cmd, args, kwargs)
             algo = self._behavior.algorithm
             if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
                 cam_idx, new_status = args
@@ -216,6 +220,8 @@ class AppModel(ObservableObject):
                             algo.recording_age_release_pellet_threshold, self._consider_release_pellet
                         )
                         new_timer.start()
+                        logger.debug("started timer for consider_release_pellet, delay=%s",
+                                     algo.recording_age_release_pellet_threshold)
                 else:
                     logger.verbose("not handling non-primary camera status, cam_idx=%s status=%s",
                                    cam_idx, new_status)
@@ -263,7 +269,7 @@ class AppModel(ObservableObject):
         return self._hardware
 
     @property
-    def message_handler(self) -> MessageHandler:
+    def message_handler(self) -> SystemMessageHandler:
         return self._message_handler
 
     @property
@@ -303,11 +309,8 @@ class AppModel(ObservableObject):
     def output_location(self, value: str):
         if self._output_location == value:
             return
-
         old_value = self._output_location
-
         self._output_location = value
-
         self.property_changed("output_location", value, old_value)
 
     @property
@@ -430,6 +433,7 @@ class AppModel(ObservableObject):
         return True
 
     def on_capture_stop(self):
+        logger.verbose("AppModel.on_capture_stop")
         self._inference.stop()
 
         self.hardware.disconnect()
@@ -518,6 +522,7 @@ class AppModel(ObservableObject):
         self._message_handler.start()
 
     def on_close(self):
+        logger.verbose("AppModel.on_close")
         self._preferences.save()
 
         if self._inference is not None:
@@ -595,8 +600,10 @@ class AppModel(ObservableObject):
                 left_cam.text_overlay = f"Intersession: {value}"
             else:
                 left_cam.text_overlay = None
-        elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
-            self._hardware.set_auto_correct_motor_drift(value)
+
+        # elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
+        #     self._hardware.set_auto_correct_motor_drift(value)
+        # already handled by SystemMachine
 
     def _on_hardware_property_changed(self, name: str, value, _):
         cur_selected_animal = self._selected_animal

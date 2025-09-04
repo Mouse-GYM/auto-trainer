@@ -50,11 +50,13 @@ class SystemMachine(StateMachine):
 
         {"trigger": "enter_intersession", "source": (SystemState.cage, SystemState.tunnel), "dest": SystemState.intersession,
          "before": "before_enter_intersession", "after": "after_enter_intersession"},
+
         dict(  # previous behavior
             trigger="exit_intersession",
             source=SystemState.intersession, dest=SystemState.cage,
             before="before_exit_intersession_to_cage",
         ),
+
         dict(
             trigger="exit_intersession_to_tunnel",
             source=SystemState.intersession, dest=SystemState.tunnel,
@@ -112,8 +114,7 @@ class SystemMachine(StateMachine):
 
         self._inference = inference
         if inference is not None:
-            if inference.pose_algorithm is not None:
-                inference.pose_algorithm.pose_changed += self._pose_changed
+            inference.pose_response_ready += self._pose_changed
             inference.detection_result_ready += self._handle_detection_result
             inference.property_changed += self._handle_inference_property_changed
 
@@ -162,21 +163,22 @@ class SystemMachine(StateMachine):
 
     def before_enter_tunnel(self, *, reason: str="NA"):
         EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
-
-        self.algorithm.reset_session_pellet_count()
-
-        if self._pellet_machine.state in {
-            PelletState.sending,
-            PelletState.covering,
-            PelletState.releasing,
-            PelletState.monitoring,
-            PelletState.retract,
-        }:
-            self._algorithm.start_session(reason=f"{reason}->before_enter_tunnel")
-
-        self._update_magnet_position(self.algorithm.baseline_intensity)
-
-        self._algorithm.system_state = SystemState.tunnel
+        pellet_state = self._pellet_machine.state
+        logger.debug("before_enter_tunnel: pellet_state=%s", pellet_state)
+        # if pellet_state in {
+        #     PelletState.sending,
+        #     PelletState.covering,
+        #     PelletState.prerelease,
+        #     PelletState.releasing,
+        #     PelletState.monitoring,
+        #     PelletState.retract,
+        # }:
+        if True:
+            algo = self._algorithm
+            if algo.start_session(reason=f"{reason}->before_enter_tunnel"):
+                algo.reset_session_pellet_count()
+                self._update_magnet_position(self.algorithm.baseline_intensity)
+                algo.system_state = SystemState.tunnel
 
     def after_enter_tunnel(self, *, reason: str="NA"):
         if self._analysis is not None:
@@ -262,8 +264,14 @@ class SystemMachine(StateMachine):
             # self._intersession._segmentation_configuration,
             # self._intersession._detection_configuration,
         )
-
+        #
         can_perform_analysis = algo.can_perform_intersession_analysis()
+        # first:
+        if not algo.session_mouse_seen and project is not None:
+            # assert not can_perform_analysis  # could have
+            if algo.clean_raw_data_on_inactive_session:
+                self._clean_raw_data(project)
+        #
         if can_perform_analysis and self.state in {
             SystemState.tunnel,
             SystemState.cage,
@@ -273,7 +281,7 @@ class SystemMachine(StateMachine):
             inference = self._inference
             if inference is not None:
                 if self._intersession.state != IntersessionState.idle:
-                    logger.verbose(
+                    logger.warning(
                         "intersession state not idle: %s in progress, not setting inference back to online. "
                         "segment_config=%s detection_config=%s",
                         self._intersession.state,
@@ -282,10 +290,6 @@ class SystemMachine(StateMachine):
                     )
                 else:
                     inference.set_inference_to_online()
-            # self.exit_intersession()
-        if not algo.session_mouse_seen and project is not None:
-            if algo.clean_raw_data_on_inactive_session:
-                self._clean_raw_data(project)
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
@@ -462,16 +466,18 @@ class SystemMachine(StateMachine):
                                   lambda: self._update_magnet_position(self.algorithm.baseline_intensity))
                     timer.start()
         elif name == BehaviorAlgoProps.PELLET_MOTOR_DRIFT:
-            if new_value is not None:
-                self._pellet_device.set_motors_drift(new_value)
+            if new_value is not None and self._algorithm.auto_correct_motors_drift:
+                pellet_dev.set_motors_drift(new_value)
 
         elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
             pellet_dev.set_auto_correct_motor_drift(new_value)
-            if not new_value:
-                # ensure the current deliver position is corrected (no more drift applied):
-                pellet_dev.set_motors_drift(Offset3DTuple(0, 0, 0))
-                for set_coord in (pellet_dev.set_x, pellet_dev.set_y, pellet_dev.set_z):
-                    set_coord(0, absolute=False)
+            # unnecessary:
+            # ensure the current deliver position is corrected (no more drift applied):
+            # if not new_value:
+            #     pellet_dev.set_motors_drift(Offset3DTuple(0, 0, 0))
+                # # for set_coord in (pellet_dev.set_x, pellet_dev.set_y, pellet_dev.set_z):
+                # #     set_coord(0, absolute=False)
+                # given set_motors_drift already does it.
 
     def _update_magnet_position(self, position: int):
         if self._tunnel_device is not None:
@@ -514,7 +520,10 @@ class SystemMachine(StateMachine):
         ):
             return
 
-        self.algorithm.end_session(reason=f"{reason}->consider_end_session")
+        if self.algorithm.end_session(reason=f"{reason}->consider_end_session"):
+            # force analysis to False,
+            # this will trigger a new start session if mouse still there
+            self._analysis.load_cell_monitor.is_engaged = False
 
     def _handle_detection_result(self, res: IntersessionResponse):
         algo = self._algorithm

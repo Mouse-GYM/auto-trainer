@@ -8,12 +8,11 @@ from datetime import datetime
 from enum import IntEnum
 from queue import Queue, Empty
 from threading import Thread
-from typing import Optional
+from typing import Optional, Tuple
 
 import cv2
 import numpy
 
-from autotrainer.core import trim_queue
 from autotrainer.core import ProjectInfo, ProjectInterval
 from autotrainer.core.logging import get_verbose_logger
 
@@ -32,7 +31,7 @@ class VideoRecordProperties:
     """Information to determine file names and directories."""
     name: str = "camera"
     """Name used as part of video file names and image capture directory."""
-    frame_size: (int, int) = (0, 0)
+    frame_size: Tuple[int, int] = (0, 0)
     """Expected shape of video frames.  Not required for image-only capture."""
     fps: int = 30
     """Expected FPS of video feed.  Not required for image-only capture."""

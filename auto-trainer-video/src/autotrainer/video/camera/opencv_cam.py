@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Tuple, Optional
 
 import cv2
 import numpy
@@ -13,7 +14,7 @@ class OpenCVCam(CameraBase):
     def __init__(self, device_idx: int, name: str = ""):
         super().__init__(name)
         self._device_idx = device_idx
-        self._video_capture = None
+        self._video_capture: Optional[cv2.VideoCapture] = None
 
     def init(self):
         self._video_capture = cv2.VideoCapture(self._device_idx)
@@ -68,7 +69,7 @@ class OpenCVCam(CameraBase):
 
         self._video_capture.release()
 
-    def capture(self) -> (numpy.ndarray, int):
+    def capture(self) -> Tuple[numpy.ndarray, int]:
         super().capture()
 
         ret, frame = self._video_capture.read()

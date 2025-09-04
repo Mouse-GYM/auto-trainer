@@ -22,7 +22,8 @@ from .load_cell_tare_monitor import LoadCellTareMonitor
 logger = get_verbose_logger(__name__)
 
 
-_MeasureValues = List[float]
+# small alias
+_MeasuresList = List[float]
 
 
 # TODO: Separate true analysis from data recording to file(s) for post-analysis.
@@ -113,14 +114,15 @@ class SensorAnalysis(ObservableObject):
 
     def measurements_received(
         self,
-        measurements: List[HeadFixMeasurement],
-    ) -> Tuple[_MeasureValues, _MeasureValues, _MeasureValues, _MeasureValues, _MeasureValues]:
+        measurements: List[HeadFixMeasurement]
+    ) -> Tuple[_MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList] :
+        # logger.spam("Received %s measures", len(measurements))
         assert len(measurements) > 0
-        weights = []
-        switch = []
-        pressure = []
-        temperature = []
-        humidity = []
+        weights: List[float] = []
+        switch: List[float] = []
+        pressure: List[float] = []
+        temperature: List[float] = []
+        humidity: List[float] = []
 
         if self._record_file is not None:
             file_timestamp = datetime.now()
