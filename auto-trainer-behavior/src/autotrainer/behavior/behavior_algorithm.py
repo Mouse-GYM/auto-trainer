@@ -148,6 +148,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._use_triangle_pellet_distance_too_far = False
         self._triangle_pellet_diff_too_far_threshold: float = PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold
         self._triangle_pellet_expected_distance = PelletDeliveryConfiguration.triangle_pellet_expected_distance
+        self._next_diamond_triangle_log_report = time.perf_counter()
 
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
@@ -552,13 +553,13 @@ class BehaviorAlgorithm(ObservableObject):
 
     def start_session(self, *, reason: str="NA"):
         with self._thread_lock:
-            self._start_session(reason=reason)
+            return self._start_session(reason=reason)
 
     def _start_session(self, *, reason: str):
         if self._is_in_session:
             logger.warning("%s: start_session() called but already in session",
                            reason)
-            return
+            return False
 
         logger.success("%s: starting new session recording ...", reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
@@ -583,16 +584,17 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_starting()
 
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
+        return True
 
     def end_session(self, *, reason: str="NA"):
         with self._thread_lock:
-            self._end_session(reason=reason)
+            return self._end_session(reason=reason)
 
     def _end_session(self, *, reason: str):
         if not self._is_in_session:
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)
-            return
+            return False
         logger.success("%s: stopping session recording", reason)
         self._is_in_session = False  # must be ~first, to ensure next actions/callbacks don't see it as True
         # but must be at least before self.session_ending() here after, given test_covered_load_cycle rely on that atm.
@@ -602,6 +604,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_ending()
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
+        return True
 
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0
@@ -720,6 +723,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._update_head_clamp_cfg(configuration.head_clamp)
 
     def get_diamond_triangle_drifts(self, reset: bool=False) -> Offset3DTuple:
+        """Get the mean of the last seen/saved diamond triangle calculated drifts"""
         values = self._diamond_triangle_prev_drifts
         tot = reduce(operator.add, values, Offset3DTuple(0, 0, 0))
         n_vals = len(values)
@@ -727,8 +731,10 @@ class BehaviorAlgorithm(ObservableObject):
             self._diamond_triangle_prev_drifts = []
         new_drift = Offset3DTuple(0, 0, 0) if n_vals == 0 else tot / n_vals
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("Motor mean drift: %s\nall motors drifts: %s",
-                         new_drift.humanize(n_digits=3), [v.humanize(n_digits=1) for v in values])
+            if len(values) == 0:
+                values = [Offset3DTuple(math.nan, math.nan, math.nan)]
+            logger.debug("Motor mean drift: %s\n min=%s max=%s",
+                         new_drift.humanize(n_digits=3), min(values).humanize(), max(values).humanize())
         # put here to minimize nbr of times we update it:
         prev, self._diamond_triangle_drift = self._diamond_triangle_drift, new_drift
         self._on_property_changed(BehaviorAlgoProps.PELLET_MOTOR_DRIFT, new_drift, prev)
@@ -748,9 +754,12 @@ class BehaviorAlgorithm(ObservableObject):
         drift = flips * (cfg.measured_offset - offset) - (cfg.used_position - position)
         if prev is None:
             prev = Offset3DTuple(0, 0, 0)
-        logger.spam("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
-                       drift.humanize(), prev.humanize(), position.humanize(), offset.humanize())
         if __debug__:
+            t_perf_now = time.perf_counter()
+            if t_perf_now >= self._next_diamond_triangle_log_report:
+                logger.spam("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
+                            drift.humanize(), prev.humanize(), position.humanize(), offset.humanize())
+                self._next_diamond_triangle_log_report = t_perf_now + 1
             d_drift = drift if prev is None else prev + drift
             # not sure which abs_diff to check against:
             if d_drift is not None and any(abs(d) > 2.5 for d in d_drift):

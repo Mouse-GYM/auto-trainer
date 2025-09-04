@@ -142,6 +142,7 @@ class LoadCellMonitor(ObservableObject):
         if value != self._is_engaged:
             self._is_engaged = self._generate_engaged_event(value)
             if not value:
+                self._t_start_was_active = None
                 self._last_disengaged_perf_c = time.perf_counter()
 
     @property

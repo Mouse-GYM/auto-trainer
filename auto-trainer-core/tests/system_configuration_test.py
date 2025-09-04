@@ -198,7 +198,7 @@ def test_load_version_1():
                                          'is_intersession_analysis_enabled': True,
                                          'is_intersession_pellet_shift_enabled': True,
                                          'is_pellet_cover_enabled': True,
-                                         'max_pellet_missing_seconds': 15.0,
+                                         'max_pellet_missing_seconds': 15,
                                          'max_pellets_per_day': 75,
                                          'max_pellets_per_session': 10,
                                          'auto_correct_motors_drift': False,

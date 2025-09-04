@@ -309,14 +309,6 @@ class PoseAlgorithm(ObservableObject):
         )
         return df_3d
 
-    def set_3d_offsets_pairs(self, pairs_3d_offsets: Pairs3dOffsetT = ()):
-        unique_parts = set()
-        for p1, p2 in pairs_3d_offsets:
-            unique_parts.add(p1)
-            unique_parts.add(p2)
-        self._pairs_3d_offsets = pairs_3d_offsets
-        # todo continue
-
     def process(self,
         all_frames: List[numpy.ndarray],
         *,

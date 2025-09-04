@@ -65,7 +65,11 @@ def test_enter_exit_tunnel(mock_system, machine):
 
 
 def test_no_session_without_pellet(mock_system, machine):
-    ack_received = machine.pellet._pellet_device_ack_received
+    pellet_machine = machine._pellet_machine
+    assert isinstance(pellet_machine, PelletMachine)
+
+    def pellet_ack_received():
+        pellet_machine._pellet_device_ack_received(pellet_machine._api_status_token)
 
     assert machine.algorithm.is_in_session is False
 
@@ -84,19 +88,21 @@ def test_no_session_without_pellet(mock_system, machine):
     assert mock_system.pellet_state_trans == []
     assert mock_system.machine_state_trans == [SystemState.tunnel]
     # Pellet machine not sending/releasing/monitoring - should not start.
-    assert machine.algorithm.is_in_session is False
+
+    # assert machine.algorithm.is_in_session is False
+    # NO: we now always start a session recording any time load cell is engaged, whatever is pellet status
 
     mock_system.make_load_cell_inactive()
 
+    assert machine.algorithm.is_in_session is False
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]
 
     # Cycle through pellet loading cycle so at next entrance a pellet is present.  In all of these cases recording/the
     # session should start because the send command happened out of tunnel and will not have triggered it.
 
     # Acknowledge load command -> should go to sending.
-    pellet_machine = machine._pellet_machine
-    assert isinstance(pellet_machine, PelletMachine)
-    ack_received(pellet_machine._api_status_token)
+
+    pellet_ack_received()
 
     assert mock_system.pellet_state_trans == [PelletState.sending]
 
@@ -111,7 +117,7 @@ def test_no_session_without_pellet(mock_system, machine):
 
     assert mock_system.machine_state_trans == 2 * [SystemState.tunnel, SystemState.cage]
     # Acknowledge send command -> should go to releasing.
-    ack_received(pellet_machine._api_status_token)
+    pellet_ack_received()
 
     mock_system.make_load_cell_active()
     mock_system.make_recording_aged_enough()
@@ -122,7 +128,7 @@ def test_no_session_without_pellet(mock_system, machine):
     mock_system.make_load_cell_inactive()
 
     # Acknowledge release command -> should go to monitoring.
-    ack_received(pellet_machine._api_status_token)
+    pellet_ack_received()
     assert machine.pellet.state == PelletState.covering
 
     mock_system.make_load_cell_active()
@@ -131,6 +137,8 @@ def test_no_session_without_pellet(mock_system, machine):
     assert machine.algorithm.is_in_session is True
 
     mock_system.make_load_cell_inactive()
+
+    assert machine.algorithm.is_in_session is False
 
     assert machine.state == SystemState.cage
     assert mock_system.machine_state_trans == 4 * [

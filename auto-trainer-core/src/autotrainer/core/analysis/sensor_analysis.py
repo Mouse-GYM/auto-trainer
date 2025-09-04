@@ -115,7 +115,7 @@ class SensorAnalysis(ObservableObject):
         self,
         measurements: List[HeadFixMeasurement]
     ) -> Tuple[_MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList] :
-        logger.spam("Received %s measures", len(measurements))
+        # logger.spam("Received %s measures", len(measurements))
         assert len(measurements) > 0
         weights: List[float] = []
         switch: List[float] = []

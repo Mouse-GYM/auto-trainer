@@ -56,7 +56,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         pose_algorithm: PoseAlgorithm,
         *,
         calib_dir: Optional[Path] = None,
-        msg_queue: Optional[multiprocessing.Queue] = None,  # atm unused
     ):
         super().__init__(event_names=(
             'pose_response_ready',
@@ -69,12 +68,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
         mp_ctx = get_mp_ctx()
         self._thread_lock = threading.RLock()  # for perform_detection / perform_segmentation
-        self._data_queue = mp_ctx.Queue(maxsize=128)  # inference result data queue
-        self._cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to inference process
-        if msg_queue is None:
-            msg_queue = mp_ctx.Queue(maxsize=16)
-        self._msg_queue = msg_queue
-        self._data_monitor_cmd_queue = mp_ctx.Queue(maxsize=128)
+        self._data_queue = mp_ctx.Queue(maxsize=64)  # inference result data queue
+        self._inference_cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to inference process
+        self._msg_queue = mp_ctx.Queue(maxsize=64)
+        self._data_monitor_cmd_queue = mp_ctx.Queue(maxsize=16)
 
         self._offline_queue: Optional[FixedArrayMultiQueue] = None
         self._offline_thread: Optional[Thread] = None
@@ -90,7 +87,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._data_monitor_proc: Optional[InferenceMonitorDataProc] = None
 
         self._pose_process: Optional[PoseProcess] = None
-        self._is_running = True
         self._is_predict_enabled = True
         self._status = InferenceStatus.stopped
 
@@ -104,18 +100,18 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._intersession_block: Optional[IntersessionBlock] = None
         self._intersession_detection: Optional[IntersessionDetection] = None
         self._parts_offsets: Dict[Tuple[SceneElement, SceneElement], Offset3DTuple] = {}
-        self._monitored_parts_offsets = [
-            (SceneElement.Diamond, SceneElement.Triangle),
-            (SceneElement.Star, SceneElement.Triangle),
-            (SceneElement.Triangle, SceneElement.Pellet),
-        ]
+        self._pair_offsets_2_handler = {
+            (SceneElement.Diamond, SceneElement.Triangle): self.diamond_triangle_offset_changed,
+            (SceneElement.Star, SceneElement.Triangle): self.star_triangle_offset_changed,
+            (SceneElement.Triangle, SceneElement.Pellet): self.triangle_pellet_offset_changed,
+        }
 
     @property
     def project(self) -> ProjectInfo:
         return self._project
 
     @project.setter
-    def project(self, value: ProjectInfo) -> None:
+    def project(self, value: ProjectInfo):
         self._project = value
 
     @property
@@ -205,9 +201,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         logger.info("performing segmentation on %s", configuration)
         intersession_block = self._intersession_block = IntersessionBlock(
             configuration=configuration, parts_count=self._algorithm.part_count)
-        # for _ in range(self._offline_queue.camera_count):
-        #     intersession_block.pose_data_list.append([])
-        #     intersession_block.pose_data_dict.append({})
 
         self._send_message(InferenceCommandMessageKind.ProcessOffline)
         # ProcessOffline is not anymore used.
@@ -220,8 +213,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # time.sleep(0.5)
         # Not anymore needed, see video_capture and below __feed_intersession_analysis.
         self._offline_thread = Thread(
+            target=self._feed_intersession_analysis,
             args=(intersession_block,),
-            target=self._feed_intersession_analysis, name="feed_intersession_analysis",)
+            name="feed_intersession_analysis",
+        )
         # but then, wait again a bit of more time.
         # this is to give some time to the monitor data queue thread, to get/detect the end of recording in progress,
         # and switch to offline processing request (which is coming indirectly from the pose process),
@@ -268,11 +263,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             self._msg_thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue")
             self._msg_thread.start()
 
-        # if live_queue is None:
-        #     logger.warning("pellet not started because there is no pellet image queue")
-        #     self._set_status(InferenceStatus.stopped)
-        #     return False
-
         if self._data_monitor_proc is None:
             proc = self._data_monitor_proc = InferenceMonitorDataProc(
                 project=self._project,
@@ -280,7 +270,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 msg_queue=self._msg_queue,
                 cmd_queue=self._data_monitor_cmd_queue,
                 frames_per_cam=live_queue.frames_per_camera,
-                monitored_parts_offsets=self._monitored_parts_offsets,
+                monitored_parts_offsets=list(self._pair_offsets_2_handler),
             )
             proc.start()
 
@@ -297,22 +287,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             mp_ctx=get_mp_ctx(),
         )
 
-        # if self._model_location is None or len(self._model_location) == 0:
-        #     logger.warning("pellet model not specified; using in-memory random data")
-        #     model = MemoryPoseModel(live_queue.batch_size)
-        # else:
-        #     model = DlcPoseModel(self._model_location, 1, 0, live_queue.batch_size)
-        #
-        # if not model.is_valid():
-        #     logger.warning("pellet not started because the model does not exist or is not valid"
-        #                    " at the specified location: %s", self._model_location)
-        #     return False
-
         self._pose_process = PoseProcess(
             live_queue,
             self._offline_queue,
             data_queue=self._data_queue,
-            cmd_queue=self._cmd_queue,
+            cmd_queue=self._inference_cmd_queue,
             msg_queue=self._msg_queue,
             model_location=self._model_location,
         )
@@ -353,15 +332,15 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
             clear_queue(self._data_queue)
             clear_queue(self._msg_queue)
-            clear_queue(self._cmd_queue)
+            clear_queue(self._inference_cmd_queue)
 
     def terminate(self):
         self.stop()
-        self._is_running = False
         data_proc = self._data_monitor_proc
+        data_monitor_cmd_queue = self._data_monitor_cmd_queue
         if data_proc is not None:
             logger.debug("joining data_monitor_proc")
-            self._data_monitor_cmd_queue.put(None)
+            data_monitor_cmd_queue.put(None)
             data_proc.join(3)
             if data_proc.exitcode is None:
                 os.kill(data_proc.pid, signal.SIGINT)
@@ -372,14 +351,22 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                     if data_proc.exitcode is None:
                         data_proc.kill()
                         data_proc.join(5)
-            self._data_monitor_proc = None
-            logger.info("%s joined exitcode=%s", data_proc, data_proc.exitcode)
+            logger.verbose("joined %s", data_proc)
 
         msg_thread = self._msg_thread
+        msg_queue = self._msg_queue
         if msg_thread is not None:
+            msg_queue.put(None)
             logger.debug("joining msg_thread")
             msg_thread.join()
-            self._msg_thread.join()
+            self._msg_thread = None
+
+        logger.verbose("closing mp queues")
+        for q in (data_monitor_cmd_queue, self._data_queue, self._inference_cmd_queue, msg_queue):
+            if q is not None:
+                clear_queue(q, log_dumped=True)
+                logger.debug("closing %s size=%s", q, q.qsize())
+                q.close()
 
     def load_configuration(self, configuration: InferenceConfiguration):
         self.model_location = configuration.pose_model_location
@@ -397,7 +384,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._status = self._on_property_changed(self.STATUS, status, self._status)
 
     def _send_message(self, kind: InferenceCommandMessageKind, context: typing.Any = None):
-        cmd_queue = self._cmd_queue
+        cmd_queue = self._inference_cmd_queue
         # logger.debug("sending command msg %s qsize=%s", kind, cmd_queue.qsize())
         cmd_queue.put((kind, context))
         logger.debug("sent command msg %s qsize=%s", kind, cmd_queue.qsize())
@@ -406,8 +393,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         args, kwargs = ctx
         if msg is InferenceMonitorDataProc.Msg.POSE_RESULT_READY:
             response = args[0]
-            for part1, part2 in self._monitored_parts_offsets:
-                pair_key = (part1, part2)
+            for pair_key, pair_handler in self._pair_offsets_2_handler.items():
+                part1, part2 = pair_key
                 prev = self._parts_offsets.get(pair_key, None)
                 cur = response.get_parts_3d_offset(part1, part2)
                 self._parts_offsets[pair_key] = cur
@@ -415,12 +402,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                     if prev != cur:
                         # if we wanted as "global" property event handling:
                         # self._on_property_changed(f"parts_offset_{part1}_{part2}", cur, prev)
-                        if pair_key == (SceneElement.Diamond, SceneElement.Triangle):
-                            self.diamond_triangle_offset_changed(cur)
-                        elif pair_key == (SceneElement.Star, SceneElement.Triangle):
-                            self.star_triangle_offset_changed(cur)
-                        elif pair_key == (SceneElement.Triangle, SceneElement.Pellet):
-                            self.triangle_pellet_offset_changed(cur)
+                        pair_handler(cur)
                 except Exception as err:
                     logger.exception("offset_changed event callback failed: %s", err)
             self.pose_response_ready(response)
@@ -428,21 +410,22 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         elif msg is InferenceMonitorDataProc.Msg.INTERSESSION_RESULT_READY:
             ib = self._intersession_block
             if ib is None:
-                logger.warning("Got %s but intersession_block is None", msg)
+                logger.warning("Got %s but intersession_block is None ; args=%s", msg, args)
             else:
                 session_nr, success = args
                 ib.configuration.complete(ib.configuration.nonce, success)
                 self._intersession_block = None
 
     def _monitor_msg_queue(self):
-        while self._is_running:
+        while True:
             try:
                 raw = self._msg_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
+            if raw is None:
+                break
             msg, context = raw
             try:
-                # could use a dict with as key (type(msg), msg) to not have to do if/elif/elif/elif/..
                 if isinstance(msg, InferenceMonitorDataProc.Msg):
                     self._handle_monitor_data_proc_msg(msg, context)
                     continue
@@ -724,14 +707,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         logger.error("cam %s: timeout waiting offline_queue has space", cam_index)
         return False
 
-    @staticmethod
-    def _launch_intersession_process(
-        project: ProjectInfo,
-        *,
-        calib_dir: Optional[Path],
-    ):
-        return intersession_process(project, calib_dir=calib_dir)
-
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
         project = ProjectInfo(**vars(project))
         # multiprocess does not accept to pass shared value other than inheritance,
@@ -753,7 +728,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             initargs=pool_initargs,
         ) as pool:
             try:
-                async_res = pool.apply_async(self._launch_intersession_process,
+                async_res = pool.apply_async(intersession_process,
                                              args=(project,),
                                              kwds=dict(calib_dir=self._calib_dir),
                                              )

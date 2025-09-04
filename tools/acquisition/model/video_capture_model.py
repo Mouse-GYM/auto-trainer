@@ -434,7 +434,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                     params[key] = False
 
         # undo the %-encode which happened in self.load_configuration():
-        path = urllib.parse.unquote(parsed.path)[1:]  # [:1] for strip of first leading "/"
+        path = urllib.parse.unquote(parsed.path)[1:]  # [1:] for strip of first leading "/"
 
         return CameraConfiguration(id=self._id, name=self._name, is_enabled=self._is_enabled,
                                    is_record_enabled=self._is_recording_enabled,
@@ -445,14 +445,12 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                                    params=params)
 
     def _wait_for_capture_status(self, expected: CaptureProcessStatus, timeout: int):
-        start_ns = time.perf_counter_ns()
-        elapsed = 0
-
-        while self._video_status.value != expected and elapsed < timeout:
+        perf_timeout = time.perf_counter() + timeout
+        while self._video_status.value != expected:
+            if time.perf_counter() > perf_timeout:
+                return False
             time.sleep(0.001)
-            elapsed = (time.perf_counter_ns() - start_ns) / 1e9
-
-        return elapsed <= timeout
+        return True
 
     def _on_trigger(self, notification: Notification):
         if self._video_capture is not None:
