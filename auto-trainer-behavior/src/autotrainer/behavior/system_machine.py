@@ -455,9 +455,9 @@ class SystemMachine(StateMachine):
 
     def _disengage_auto_clamp(self):
         pellet_dev = self._pellet_device
-        logger.debug("sending tone to indicate auto-clamp disabled")
         algo = self._algorithm
         if algo.is_in_session:
+            logger.debug("sending tone to indicate auto-clamp disabled")
             pellet_dev.play_tone(self.algorithm.auto_clamp_release_tone_freq, 0.5)
         if self._tunnel_device is not None:  # condition seems not necessary... but some test assert it
             logger.debug(
