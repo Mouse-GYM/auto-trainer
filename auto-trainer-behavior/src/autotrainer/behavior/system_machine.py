@@ -50,11 +50,13 @@ class SystemMachine(StateMachine):
 
         {"trigger": "enter_intersession", "source": (SystemState.cage, SystemState.tunnel), "dest": SystemState.intersession,
          "before": "before_enter_intersession", "after": "after_enter_intersession"},
+
         dict(  # previous behavior
             trigger="exit_intersession",
             source=SystemState.intersession, dest=SystemState.cage,
             before="before_exit_intersession_to_cage",
         ),
+
         dict(
             trigger="exit_intersession_to_tunnel",
             source=SystemState.intersession, dest=SystemState.tunnel,
@@ -161,21 +163,22 @@ class SystemMachine(StateMachine):
 
     def before_enter_tunnel(self, *, reason: str="NA"):
         EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
-
-        self.algorithm.reset_session_pellet_count()
-
-        if self._pellet_machine.state in {
-            PelletState.sending,
-            PelletState.covering,
-            PelletState.releasing,
-            PelletState.monitoring,
-            PelletState.retract,
-        }:
-            self._algorithm.start_session(reason=f"{reason}->before_enter_tunnel")
-
-        self._update_magnet_position(self.algorithm.baseline_intensity)
-
-        self._algorithm.system_state = SystemState.tunnel
+        pellet_state = self._pellet_machine.state
+        logger.debug("before_enter_tunnel: pellet_state=%s", pellet_state)
+        # if pellet_state in {
+        #     PelletState.sending,
+        #     PelletState.covering,
+        #     PelletState.prerelease,
+        #     PelletState.releasing,
+        #     PelletState.monitoring,
+        #     PelletState.retract,
+        # }:
+        if True:
+            algo = self._algorithm
+            if algo.start_session(reason=f"{reason}->before_enter_tunnel"):
+                algo.reset_session_pellet_count()
+                self._update_magnet_position(self.algorithm.baseline_intensity)
+                algo.system_state = SystemState.tunnel
 
     def after_enter_tunnel(self, *, reason: str="NA"):
         if self._analysis is not None:
@@ -261,8 +264,14 @@ class SystemMachine(StateMachine):
             # self._intersession._segmentation_configuration,
             # self._intersession._detection_configuration,
         )
-
+        #
         can_perform_analysis = algo.can_perform_intersession_analysis()
+        # first:
+        if not algo.session_mouse_seen and project is not None:
+            # assert not can_perform_analysis  # could have
+            if algo.clean_raw_data_on_inactive_session:
+                self._clean_raw_data(project)
+        #
         if can_perform_analysis and self.state in {
             SystemState.tunnel,
             SystemState.cage,
@@ -272,7 +281,7 @@ class SystemMachine(StateMachine):
             inference = self._inference
             if inference is not None:
                 if self._intersession.state != IntersessionState.idle:
-                    logger.verbose(
+                    logger.warning(
                         "intersession state not idle: %s in progress, not setting inference back to online. "
                         "segment_config=%s detection_config=%s",
                         self._intersession.state,
@@ -281,10 +290,6 @@ class SystemMachine(StateMachine):
                     )
                 else:
                     inference.set_inference_to_online()
-            # self.exit_intersession()
-        if not algo.session_mouse_seen and project is not None:
-            if algo.clean_raw_data_on_inactive_session:
-                self._clean_raw_data(project)
 
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
@@ -515,7 +520,10 @@ class SystemMachine(StateMachine):
         ):
             return
 
-        self.algorithm.end_session(reason=f"{reason}->consider_end_session")
+        if self.algorithm.end_session(reason=f"{reason}->consider_end_session"):
+            # force analysis to False,
+            # this will trigger a new start session if mouse still there
+            self._analysis.load_cell_monitor.is_engaged = False
 
     def _handle_detection_result(self, res: IntersessionResponse):
         algo = self._algorithm
