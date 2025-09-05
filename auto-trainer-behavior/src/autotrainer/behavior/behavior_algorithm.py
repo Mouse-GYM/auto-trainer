@@ -138,7 +138,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._session_mouse_seen = False
         self._pellet_seen = False
         self._pellet_last_seen = 0.0
-        self._pellet_hands_min_distance: float = math.nan
+        self._pellet_hands_min_distance: float = math.inf
+        self._hands_near_pellet_seen = False
         self._triangle_seen = False
         self._triangle_last_seen = 0.0
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
@@ -554,6 +555,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._set_triangle_last_seen(0.0)
         self._session_mouse_seen = False
         self._pellet_seen = False
+        self._hands_near_pellet_seen = False
 
         # this is what send the trigger the enable recording at camera level,
         # but must be done after calculate next session index !!
@@ -607,8 +609,9 @@ class BehaviorAlgorithm(ObservableObject):
                 return (
                     self._capture_status == CaptureProcessStatus.RECORDING
                     and self.capture_status_age >= self._recording_age_release_pellet_threshold
-                    and (self.pellet_hand_uncover_distance is None
-                         or self._pellet_hands_min_distance <= self.pellet_hand_uncover_distance)
+                    and self._hands_near_pellet_seen
+                        # (self.pellet_hand_uncover_distance is None
+                        #  or self._pellet_hands_min_distance <= self.pellet_hand_uncover_distance)
                 )
             return False
 
@@ -653,11 +656,17 @@ class BehaviorAlgorithm(ObservableObject):
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
 
     @property
+    def hands_near_pellet_seen(self):
+        return self._hands_near_pellet_seen
+
+    @property
     def pellet_hands_min_distance(self):
         return self._pellet_hands_min_distance
 
     @pellet_hands_min_distance.setter
-    def pellet_hands_min_distance(self, value):
+    def pellet_hands_min_distance(self, value: float):
+        if value < self.pellet_hand_uncover_distance:
+            self._hands_near_pellet_seen = True
         self._pellet_hands_min_distance = self._on_property_changed(
             "pellet_hands_min_distance", value, self._pellet_hands_min_distance)
 
