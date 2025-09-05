@@ -160,6 +160,10 @@ class MainWindow(QMainWindow):
         self.mouse_seen_action = QAction("Mouse Seen", self)
         self.mouse_seen_action.triggered.connect(self._internal_set_mouse_seen)
 
+        self.mouse_near_pellet_action = QAction("Hands near pellet", self)
+        self.mouse_near_pellet_action.setCheckable(True)
+        self.mouse_near_pellet_action.triggered.connect(self._internal_mouse_near_pellet)
+
         self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
         self.preferences_action.triggered.connect(lambda: self._show_preferences())
 
@@ -197,6 +201,7 @@ class MainWindow(QMainWindow):
             toolbar.addAction(self.force_detector_action)
             toolbar.addAction(self.pellet_seen_action)
             toolbar.addAction(self.mouse_seen_action)
+            toolbar.addAction(self.mouse_near_pellet_action)
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -261,6 +266,16 @@ class MainWindow(QMainWindow):
 
     def _internal_set_mouse_seen(self):
         self._model.behavior.algorithm.mouse_seen(True)
+
+    def _internal_mouse_near_pellet(self):
+        behavior = self._model.behavior
+        algo = behavior.algorithm
+        if self.mouse_near_pellet_action.isChecked():
+            algo.pellet_hand_uncover_distance = None
+        else:
+            cfg = self._model.loaded_configuration
+            algo.pellet_hand_uncover_distance = cfg.behavior.pellet_delivery.pellet_hand_uncover_distance
+        logger.debug("set pellet_hand_uncover_distance to %s", algo.pellet_hand_uncover_distance)
 
     def notes_changed(self, value: str):
         self._model.notes = value

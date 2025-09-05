@@ -60,6 +60,7 @@ class AppModel(ObservableObject):
         super().__init__(("on_error",))
 
         self._preferences = preferences
+        self._loaded_configuration: Optional[SystemConfiguration] = None
 
         self._app_version = app_version
 
@@ -231,6 +232,10 @@ class AppModel(ObservableObject):
     @property
     def preferences(self) -> UserPreferences:
         return self._preferences
+
+    @property
+    def loaded_configuration(self):
+        return self._loaded_configuration
 
     @property
     def project(self):
@@ -492,6 +497,8 @@ class AppModel(ObservableObject):
             logger.info("using default configuration")
         else:
             logger.info("using configuration from %r", file_path.as_posix())
+
+        self._loaded_configuration = configuration
 
         if (camera := configuration.get_camera(CameraId.Left)) is not None:
             self._left_camera.load_configuration(camera)
