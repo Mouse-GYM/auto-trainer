@@ -2,14 +2,11 @@ import logging
 
 import verboselogs
 from PySide6 import QtCore
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton, \
-    QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QGridLayout
+from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton,
+                               QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox)
 
-from autotrainer.core.logging import get_console_handler, get_verbose_logger, repr_all_loggers
-from autotrainer.device import get_available_hardware
-from autotrainer.model import EnvironmentProvider, HardwareVersion
-from autotrainer.pyside import Separator, HardwarePortComboBox, QSwitch
+from autotrainer.core.logging import get_verbose_logger
+from autotrainer.pyside import QSwitch
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
@@ -25,16 +22,10 @@ class PreferencesContent(QWidget):
         self._preferences = preferences
         self._model = model
 
-        self._tunnel_combo_box = None
-        self._pellet_combo_box = None
-
         self._tabs = QTabWidget(self)
 
         self._general_tab = self._create_general_tab()
         self._tabs.addTab(self._general_tab, "General")
-
-        self._hardware_tab = self._create_hardware_tab()
-        self._tabs.addTab(self._hardware_tab, "Hardware")
 
         self._behavior_tab = self._create_behavior_tab()
         self._tabs.addTab(self._behavior_tab, "Behavior")
@@ -47,6 +38,7 @@ class PreferencesContent(QWidget):
 
         layout = QVBoxLayout()
         layout.addWidget(self._tabs)
+
         self.setLayout(layout)
 
     def _create_general_tab(self):
@@ -87,38 +79,6 @@ class PreferencesContent(QWidget):
 
         return tab
 
-    def _create_hardware_tab(self):
-        form_layout = QFormLayout(None)
-
-        form_layout.addRow("Device:", QLabel(str(EnvironmentProvider.hardware_version())))
-
-        if EnvironmentProvider.hardware_version() == HardwareVersion.ALOGUS_V1:
-            layout = QVBoxLayout()
-            layout.addLayout(form_layout)
-
-            label = QLabel("There are no configurable options for this device.")
-            font = QFont()
-            font.setItalic(True)
-            label.setFont(font)
-            layout.addWidget(label)
-        else:
-            ports = get_available_hardware(allow_can_emulation=EnvironmentProvider.allow_can_emulation())
-
-            self._tunnel_combo_box = HardwarePortComboBox(ports, self._model.hardware.tunnel_identifier)
-            self._tunnel_combo_box.currentIndexChanged.connect(self._tunnel_identifier_selection_changed)
-            form_layout.addRow("Tunnel Identifier:", self._tunnel_combo_box)
-
-            self._pellet_combo_box = HardwarePortComboBox(ports, self._model.hardware.pellet_identifier)
-            self._pellet_combo_box.currentIndexChanged.connect(self._pellet_identifier_selection_changed)
-            form_layout.addRow("Pellet Identifier:", self._pellet_combo_box)
-
-            layout = form_layout
-
-        tab = QWidget(None)
-        tab.setLayout(layout)
-
-        return tab
-
     def _create_behavior_tab(self):
         algo = self._model.behavior.algorithm
         form_layout = QFormLayout(None)
@@ -136,6 +96,7 @@ class PreferencesContent(QWidget):
         layout = QHBoxLayout()
         toggle = self._auto_correct_motors_drift_toggle = QSwitch()
         toggle.setChecked(self._model.behavior.algorithm.auto_correct_motors_drift)
+
         def auto_correct_motors_drift_toggle_changed(value: int):
             enabled = value != 0
             logger.verbose("auto_correct_motors_drift_toggle_changed: %s", enabled)
@@ -149,6 +110,7 @@ class PreferencesContent(QWidget):
         self._use_triangle_pellet_distance = algo.use_triangle_pellet_distance_too_far
         layout = QHBoxLayout()
         toggle = self._toggle_use_triangle_pellet_distance = QSwitch()
+
         def use_triangle_pellet_distance_changed(value):
             enabled = value != 0
             prev, self._use_triangle_pellet_distance = self._use_triangle_pellet_distance, enabled
@@ -163,6 +125,7 @@ class PreferencesContent(QWidget):
         spin_box = self._triangle_pellet_expected_distance_spinbox = QDoubleSpinBox()
         spin_box.setRange(0, 100)
         spin_box.setValue(algo.triangle_pellet_expected_distance)
+
         def triangle_pellet_expected_distance_changed(value):
             algo.triangle_pellet_expected_distance = value
 
@@ -173,6 +136,7 @@ class PreferencesContent(QWidget):
         spin_box = self._triangle_pellet_diff_too_far_threshold_spinbox = QDoubleSpinBox()
         spin_box.setRange(0, 20)
         spin_box.setValue(algo.triangle_pellet_diff_too_far_threshold)
+
         def triangle_pellet_diff_too_far_threshold_changed(value):
             algo.triangle_pellet_diff_too_far_threshold = value
 
@@ -214,13 +178,13 @@ class PreferencesContent(QWidget):
     def _create_advanced_tab(self):
         combo_log_level = self._log_level_combobox = QComboBox(None)
         for display, lvl in (
-            ("Success", verboselogs.SUCCESS),  # 0
-            ("Warning", logging.WARNING),  # 1
-            ("Notice", verboselogs.NOTICE),  # 2
-            ("Info", logging.INFO),  # 3
-            ("Verbose", verboselogs.VERBOSE),  # 4
-            ("Debug", logging.DEBUG),  # 5
-            ("Spam", verboselogs.SPAM),  # 6
+                ("Success", verboselogs.SUCCESS),  # 0
+                ("Warning", logging.WARNING),  # 1
+                ("Notice", verboselogs.NOTICE),  # 2
+                ("Info", logging.INFO),  # 3
+                ("Verbose", verboselogs.VERBOSE),  # 4
+                ("Debug", logging.DEBUG),  # 5
+                ("Spam", verboselogs.SPAM),  # 6
         ):
             combo_log_level.addItem(display, lvl)
         combo_log_level.currentIndexChanged.connect(self._log_level_changed)
@@ -265,8 +229,10 @@ class PreferencesContent(QWidget):
         # form_layout.addRow(QWidget())
 
         self._checkbox_remove_raw_data_inactive_session = QCheckBox()
-        self._checkbox_remove_raw_data_inactive_session.setChecked(self._preferences.remove_raw_data_when_inactive_session)
-        self._checkbox_remove_raw_data_inactive_session.stateChanged.connect(self._remove_raw_data_when_inactive_session_changed)
+        self._checkbox_remove_raw_data_inactive_session.setChecked(
+            self._preferences.remove_raw_data_when_inactive_session)
+        self._checkbox_remove_raw_data_inactive_session.stateChanged.connect(
+            self._remove_raw_data_when_inactive_session_changed)
         form_layout.addRow("Remove saved videos when animal not seen:", self._checkbox_remove_raw_data_inactive_session)
 
         tab = QWidget(None)
@@ -279,18 +245,6 @@ class PreferencesContent(QWidget):
 
     def _data_location_changed(self, value: str):
         self._model.output_location = value
-
-    def _tunnel_identifier_selection_changed(self, _index: int):
-        if len(self._tunnel_combo_box.currentText()) > 0:
-            self._model.hardware.tunnel_identifier = self._tunnel_combo_box.currentText()
-        else:
-            self._model.hardware.tunnel_identifier = None
-
-    def _pellet_identifier_selection_changed(self, _index: int):
-        if len(self._pellet_combo_box.currentText()) > 0:
-            self._model.hardware.pellet_identifier = self._pellet_combo_box.currentText()
-        else:
-            self._model.hardware.pellet_identifier = None
 
     def _animal_location_changed(self, value: str):
         self._preferences.animal_location = value

@@ -25,9 +25,8 @@ try:
 except ModuleNotFoundError:
     HAVE_CAN_DEVICE = False
 
-
-from autotrainer.core import SystemStatusMessageKind, SystemCommandKind, \
-    AudioSpectrumData, Offset3DTuple
+from autotrainer.core import (SystemStatusMessageKind, SystemCommandKind,
+                              AudioSpectrumData, Offset3DTuple)
 
 from .motor_steps import MotorSteps
 from .device import Device
@@ -92,8 +91,7 @@ class CanDevice(Device):
             force_emulation: Whether to force using emulation mode even if hardware is available
         """
         self._interface = \
-            CanInterface() if HAVE_CAN_DEVICE and not force_emulation \
-                else EmulationInterface()
+            CanInterface() if HAVE_CAN_DEVICE and not force_emulation else EmulationInterface()
         super().__init__(self._interface, api)
 
         self._measurement_buffer_count = buffer_size
@@ -144,7 +142,7 @@ class CanDevice(Device):
                                              self._interface.set_motor_x),
 
             SystemCommandKind.SET_Y: partial(apply_system_command_with_data_args,
-                                                   self._interface.set_motor_y),
+                                             self._interface.set_motor_y),
 
             SystemCommandKind.SET_Z: partial(apply_system_command_with_data_args,
                                              self._interface.set_motor_z),
@@ -279,18 +277,18 @@ class CanDevice(Device):
 
             PelletDigitalInputs: lambda message: (
                 self._api.send_message(SystemStatusMessageKind.STIMULUS_INPUTS,
-                                      [message.stimulus_1,
-                                       message.stimulus_2,
-                                       message.stimulus_3,
-                                       message.stimulus_4])
+                                       [message.stimulus_1,
+                                        message.stimulus_2,
+                                        message.stimulus_3,
+                                        message.stimulus_4])
                 if self._api is not None else None
             ),
 
             AudioData: lambda message: (
                 self._api.send_message(SystemStatusMessageKind.AUDIO_SPECTRUM,
-                                      AudioSpectrumData(when_val=message.when,
-                                                        index_val=message.index,
-                                                        magnitudes_val=message.magnitudes))
+                                       AudioSpectrumData(when_val=message.when,
+                                                         index_val=message.index,
+                                                         magnitudes_val=message.magnitudes))
             ),
 
             StepperStatus: self._report_stepper_status,
@@ -330,17 +328,17 @@ class CanDevice(Device):
 
     def _set_move_x(self, position):
         steps = MotorSteps("set_move_x",
-            [{'x': position}, {'x': position, 'save_as_fixed': True}])
+                           [{'x': position}, {'x': position, 'save_as_fixed': True}])
         return self._start_sequence(steps)
 
     def _set_move_y(self, position):
         steps = MotorSteps("set_move_y",
-            [{'y': position}, {'y': position, 'save_as_fixed': True}])
+                           [{'y': position}, {'y': position, 'save_as_fixed': True}])
         return self._start_sequence(steps)
 
     def _set_move_z(self, position):
         steps = MotorSteps("set_move_z",
-            [{'z': position}, {'z': position, 'save_as_fixed': True}])
+                           [{'z': position}, {'z': position, 'save_as_fixed': True}])
         return self._start_sequence(steps)
 
     def _send_retract(self, data):
@@ -474,10 +472,10 @@ class CanDevice(Device):
         self._interface.set_motor_configuration(motor, config)
 
     def notify_message(
-        self,
-        kind: int,
-        data: Union[str, float, int, SupportsInt],
-        context: object = None,
+            self,
+            kind: int,
+            data: Union[str, float, int, SupportsInt],
+            context: object = None,
     ) -> None:
         """
         This method is called when a command to a target is requested. This method
@@ -615,7 +613,7 @@ class CanDevice(Device):
         if self._api is not None and kind is not None:
             self.api.send_message(kind, position)
 
-    def _perform_next_compound_step(self, uuid: Optional[int]=None):
+    def _perform_next_compound_step(self, uuid: Optional[int] = None):
         """
         Issue the next step in a multi-step motor sequence.
         """
@@ -623,7 +621,7 @@ class CanDevice(Device):
             self._homing_motors.pop(0)  # first one is/was executed by _home() function
             self._home(self._homing_motors)
         elif self._compound_movement is not None and \
-            len(self._compound_movement) > 0:
+                len(self._compound_movement) > 0:
             step = self._compound_movement.pop(0)
 
             save_as_fixed = step.get("save_as_fixed", False)

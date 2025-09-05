@@ -43,7 +43,7 @@ class MainContent(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setStretch(3, 1)
 
-        self._connection_panel = ConnectionPanel(app_view_model, "Pellet")
+        self._connection_panel = ConnectionPanel(app_view_model)
         self._connection_panel.connecting.connect(lambda: self._pellet_control.setEnabled(True))
         self._connection_panel.disconnected.connect(lambda: self._pellet_control.setEnabled(False))
         layout.addWidget(self._connection_panel)

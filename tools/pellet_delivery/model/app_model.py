@@ -1,17 +1,12 @@
-import logging
 import queue
 import uuid
 from pathlib import Path
 from typing import Optional
 
-import yaml
-
-from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind,
-                              MessageHandler, Motor,
+from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
                               EventManager)
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.device import (CanDevice, CAN_IDENTIFIER, MotorConfigurationFile, PelletDelivery,
-                                DeviceConnection, CompoundMovementFile)
+from autotrainer.device import (CanDevice, MotorConfigurationFile, DeviceConnection, CompoundMovementFile)
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
@@ -19,12 +14,6 @@ logger = get_verbose_logger(__name__)
 
 # TODO: This is just to see if the behavior is correct.  They should end up somewhere that any application or script can
 #  access.
-_anshutz_travel_limits = {
-    "x": (-10, 10),
-    "y": (-10, 10),
-    "z": (-10, 10),
-}
-
 _alogus_travel_limits = {
     "x": (0, 35),
     "y": (0, 35),
@@ -33,10 +22,8 @@ _alogus_travel_limits = {
 
 
 class AppModel(ObservableObject):
-    def __init__(self, allow_can_emulation: bool = False):
+    def __init__(self):
         super().__init__()
-
-        self._allow_can_emulation = allow_can_emulation
 
         self._user_settings = UserSettings()
 
@@ -73,15 +60,11 @@ class AppModel(ObservableObject):
         self._command_pending = False
         self._last_command = None
 
-        self._travel_limits = _anshutz_travel_limits
+        self._travel_limits = _alogus_travel_limits
 
     @property
     def user_settings(self) -> UserSettings:
         return self._user_settings
-
-    @property
-    def allow_can_emulation(self) -> bool:
-        return self._allow_can_emulation
 
     @property
     def hardware_configuration(self):
@@ -106,9 +89,10 @@ class AppModel(ObservableObject):
 
     @firmware_version.setter
     def firmware_version(self, value):
-        if self._user_settings.port == CAN_IDENTIFIER:
-            if value is None or value.find("Pellet") == -1:
-                return
+        if value is None or value.find("Pellet") == -1:
+            # Might not be pellet module response.
+            return
+
         self._firmware_version = self._on_property_changed("firmware_version", value,
                                                            self._firmware_version)
 
@@ -291,19 +275,9 @@ class AppModel(ObservableObject):
             self._device_connection.use_compound_movements(movements)
 
     def connect_to_device(self):
-        if len(self._user_settings.port) == 0:
-            return
+        self._device_connection = DeviceConnection(CanDevice(), self._message_handler.input_queue, name="pellet-can")
 
-        if self._user_settings.port == CAN_IDENTIFIER:
-            self._device_connection = DeviceConnection(CanDevice(),
-                                                       self._message_handler.input_queue,
-                                                       name="pellet-can")
-            self.travel_limits = _alogus_travel_limits
-        else:
-            self._device_connection = DeviceConnection(PelletDelivery(self._user_settings.port),
-                                                       self._message_handler.input_queue,
-                                                       name="pellet_serial")
-            self.travel_limits = _anshutz_travel_limits
+        self.travel_limits = _alogus_travel_limits
 
         self._device_connection.request_connect()
 
@@ -311,9 +285,9 @@ class AppModel(ObservableObject):
 
         if self._hardware_configuration is None:
             for attempt in (
-                MotorConfigurationFile.DEFAULT_LOCATION.expanduser(),
-                Path.home().joinpath(".alogus_config.yaml"),
-                Path.home().joinpath("alogus_config.yaml"),
+                    MotorConfigurationFile.DEFAULT_LOCATION.expanduser(),
+                    Path.home().joinpath(".alogus_config.yaml"),
+                    Path.home().joinpath("alogus_config.yaml"),
             ):
                 if attempt.exists():
                     logger.notice("Will load motor config %s", attempt)
