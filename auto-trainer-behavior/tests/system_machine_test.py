@@ -247,7 +247,7 @@ class TestAutoClamp(MockSystemMachine):
         if start_session:
             machine.algorithm.start_session()
         machine.algorithm.head_fixation_enabled = head_fixation_enabled
-        machine.algorithm.auto_clamp_release_delay = release_delay
+        machine.algorithm.auto_clamp_release_tone_delay = release_delay
 
         analysis = machine._analysis
         tun_dev = machine._tunnel_device
@@ -268,7 +268,7 @@ class TestAutoClamp(MockSystemMachine):
         #
         tun_dev.reset_mock()
         def patch_timer(delay, func):
-            assert delay == machine._algorithm.auto_clamp_release_delay, "the delay should be that"
+            assert delay == machine._algorithm.auto_clamp_release_tone_delay, "the delay should be that"
             m = mock.create_autospec(Timer)
             m.start.side_effect = func
             return m

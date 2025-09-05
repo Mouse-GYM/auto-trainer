@@ -173,9 +173,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if isinstance(value, str):
             value = float(value)
         if value != self._head_magnet_position:
-            self._head_magnet_position = value
+            logger.verbose("sending move magnet to %.3f", value)
+            # self._head_magnet_position = value  # this is set from reading the hardware status
             return self._send_with_token(self._tunnel_device, SystemCommandKind.MOVE_MAGNET_SERVO,
                                          value)
+        logger.debug("head magnet currently already at pos %.3f", value)
         return None
 
     def open_tunnel_gate(self) -> Optional[UUID]:
