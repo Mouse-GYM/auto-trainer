@@ -1,16 +1,13 @@
 import dataclasses
-import logging
-import math
+
 from typing import Tuple, Optional, Dict
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout
-from pyqtgraph.graphicsItems.ViewBox import ViewBox
+from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QVBoxLayout, QHBoxLayout
 
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core import PerfMonitor, MessageHandler, SensorAnalysis, LoadCellMonitor, Offset3DTuple, \
-    SystemMessageHandler
-from autotrainer.pyside import PGWidget, HardwarePortComboBox, CardWidget, QtIndicator
+from autotrainer.core import PerfMonitor, SensorAnalysis, LoadCellMonitor, Offset3DTuple, SystemMessageHandler
+from autotrainer.pyside import PGWidget, CardWidget, QtIndicator
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.user_preferences import UserPreferences
@@ -51,7 +48,6 @@ AVAILABLE_GRAPHS = (
     _audio_graph,
 )
 
-
 _graph_by_name = {
     graph.name: graph
     for graph in AVAILABLE_GRAPHS
@@ -83,12 +79,12 @@ class AnalysisContent(ContentWidget):
     measurement_graph_changed = Signal(str, name="measurement_graph_changed")
 
     def __init__(
-        self,
-        hardware_model: HardwareModel,
-        inference_model: InferenceModel,
-        analysis: SensorAnalysis,
-        msg_handler: SystemMessageHandler,
-        user_pref: UserPreferences,
+            self,
+            hardware_model: HardwareModel,
+            inference_model: InferenceModel,
+            analysis: SensorAnalysis,
+            msg_handler: SystemMessageHandler,
+            user_pref: UserPreferences,
     ):
         super().__init__()
 
@@ -130,6 +126,7 @@ class AnalysisContent(ContentWidget):
         weight_plot.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
 
         self._selected_graph: Optional[_GraphItem] = None
+
         def on_measurement_graph_changed(graph_name: str):
             # logger.verbose("on_measurement_graph_changed: %s", graph_name)
             graph = _graph_by_name.get(graph_name, None)

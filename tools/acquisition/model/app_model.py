@@ -1,9 +1,6 @@
 import json
-import logging
-import multiprocessing
 import pickle
 import queue
-import shutil
 import threading
 import time
 from dataclasses import asdict
@@ -13,9 +10,9 @@ from typing import Optional, List
 
 import yaml
 
-from autotrainer.behavior import IntersessionState, SystemState
+from autotrainer.behavior import IntersessionState
 from autotrainer.core.analysis import calibration_FLIR
-from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, MessageHandler, SystemConfiguration,
+from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
                               NotificationCenter, TriggerNotification, SystemStatusMessageKind)
 from autotrainer.core import FixedArrayMultiQueue
@@ -507,9 +504,6 @@ class AppModel(ObservableObject):
         if (camera := configuration.get_camera(CameraId.Web)) is not None:
             self._top_camera.load_configuration(camera)
 
-        self._hardware.tunnel_identifier = configuration.hardware.tunnel_identifier
-        self._hardware.pellet_identifier = configuration.hardware.pellet_identifier
-
         self.inference.load_configuration(configuration.inference)
         self.behavior.load_configuration(configuration.behavior)
 
@@ -650,8 +644,7 @@ class AppModel(ObservableObject):
                 Path(self._preferences.animal_location).joinpath(f"{animal.name}.json"))
 
     def _create_configuration(self) -> SystemConfiguration:
-        hardware_configuration = HardwareConfiguration(tunnel_identifier=self._hardware.tunnel_identifier,
-                                                       pellet_identifier=self._hardware.pellet_identifier)
+        hardware_configuration = HardwareConfiguration(tunnel_identifier="CAN", pellet_identifier="CAN")
 
         cameras = []
         for camera in self._cameras:

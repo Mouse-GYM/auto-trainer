@@ -1,7 +1,7 @@
 from .capture import QCaptureView
 from .capture import QGLImageView
 
-from .hardware import (ConnectionPanel, MotorConfigDialog, HardwarePortComboBox)
+from .hardware import ConnectionPanel, MotorConfigDialog
 
 from .ProgressIndicator import ProgressIndicator
 from .Separator import Separator

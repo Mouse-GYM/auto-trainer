@@ -3,7 +3,7 @@ import queue
 
 from autotrainer.core import (ObservableObject, ProjectInterval, SystemMessageHandler,
                               SystemCommandKind, SensorAnalysis, Motor, EventManager, MessageHandler)
-from autotrainer.device import DeviceConnection, CanDevice, HeadFix, CAN_IDENTIFIER, HAVE_CAN_DEVICE
+from autotrainer.device import DeviceConnection, CanDevice, HAVE_CAN_DEVICE
 
 from tools.head_fix.model.user_settings import UserSettings
 
@@ -11,10 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 class AppModel(ObservableObject):
-    def __init__(self, allow_can_emulation: bool = False):
+    def __init__(self):
         super().__init__()
-
-        self._allow_can_emulation = allow_can_emulation
 
         self._user_settings = UserSettings()
 
@@ -54,9 +52,9 @@ class AppModel(ObservableObject):
 
     @firmware_version.setter
     def firmware_version(self, value):
-        if self._user_settings.port == CAN_IDENTIFIER:
-            if value is None or value.find("Magnet") == -1:
-                return
+        if value is None or value.find("Magnet") == -1:
+            # Might not be magnet module response.
+            return
         self._firmware_version = self._on_property_changed(MessageHandler.FIRMWARE_VERSION_PROPERTY,
                                                            value,
                                                            self._firmware_version)
@@ -117,7 +115,7 @@ class AppModel(ObservableObject):
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.PLAY_TONE, (int(freq),
                                                                                int(duration *
-                                                                               1000)),
+                                                                                   1000)),
                                                  context="tone")
 
     def open_tunnel_gate(self):
@@ -158,19 +156,11 @@ class AppModel(ObservableObject):
         self._user_settings.stream_enabled = enable
 
     def connect_to_device(self):
-        if len(self._user_settings.port) == 0:
-            return
-
-        if self._user_settings.port == CAN_IDENTIFIER:
-            # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
-            # configured to generate messages as frequently as the real device.
-            buffer_size = 10 if HAVE_CAN_DEVICE else 1
-            device_connection = self._device_connection = DeviceConnection(CanDevice(buffer_size=buffer_size),
-                                                       self._message_handler.input_queue)
-        else:
-            device_connection = self._device_connection = DeviceConnection(
-                HeadFix(port=self._user_settings.port, buffer_size=10),
-                self._message_handler.input_queue)
+        # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
+        # configured to generate messages as frequently as the real device.
+        buffer_size = 10 if HAVE_CAN_DEVICE else 1
+        device_connection = self._device_connection = DeviceConnection(CanDevice(buffer_size=buffer_size),
+                                                                       self._message_handler.input_queue)
 
         device_connection.name = "head-fix"
 
