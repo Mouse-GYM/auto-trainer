@@ -18,7 +18,7 @@ from typing_extensions import Self
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import ObservableObject, EventManager, BehaviorConfiguration, post_trigger_enable, Offset3DTuple
-from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration
+from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
 
 from autotrainer.video import CaptureProcessStatus
 from autotrainer.video.detection import PresenceDetectionAttrs
@@ -125,7 +125,9 @@ class BehaviorAlgorithm(ObservableObject):
         self._presence_missing_delay: float = 20
         self._auto_clamp_intensity = 100
         self._auto_clamp_release_tone_freq = 7000
-        self._auto_clamp_release_delay = 0.1
+        self._auto_clamp_release_tone_delay = 0.1
+        self._auto_clamp_release_load_count = HeadClampConfiguration.auto_clamp_release_load_count
+        self._auto_clamp_no_activity_release_delay = HeadClampConfiguration.auto_clamp_no_activity_release_delay
 
         self._recording_age_release_pellet_threshold = 0.75
 
@@ -347,14 +349,32 @@ class BehaviorAlgorithm(ObservableObject):
         EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseToneFreqChanged, context=value)
 
     @property
-    def auto_clamp_release_delay(self):
-        return self._auto_clamp_release_delay
+    def auto_clamp_release_tone_delay(self):
+        return self._auto_clamp_release_tone_delay
 
-    @auto_clamp_release_delay.setter
-    def auto_clamp_release_delay(self, value):
-        self._auto_clamp_release_delay = self._on_property_changed("auto_clamp_release_delay", value,
-                                                                   self._auto_clamp_release_delay)
+    @auto_clamp_release_tone_delay.setter
+    def auto_clamp_release_tone_delay(self, value):
+        self._auto_clamp_release_tone_delay = self._on_property_changed("auto_clamp_release_tone_delay", value,
+                                                                        self._auto_clamp_release_tone_delay)
         EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseDelayChanged, context=value)
+
+    @property
+    def auto_clamp_release_load_count(self):
+        return self._auto_clamp_release_load_count
+
+    @auto_clamp_release_load_count.setter
+    def auto_clamp_release_load_count(self, value):
+        self._auto_clamp_release_load_count = value
+
+    @property
+    def auto_clamp_no_activity_release_delay(self):
+        return self._auto_clamp_no_activity_release_delay
+
+    @auto_clamp_no_activity_release_delay.setter
+    def auto_clamp_no_activity_release_delay(self, value):
+        self._auto_clamp_no_activity_release_delay = value
+
+    #
 
     @property
     def triangle_last_seen(self) -> float:
@@ -651,46 +671,56 @@ class BehaviorAlgorithm(ObservableObject):
             if not was_seen:
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
 
-    def load_configuration(self, configuration: BehaviorConfiguration):
-        pellet_deliver_cfg = configuration.pellet_delivery
-        self.pellet_delivery_enabled = pellet_deliver_cfg.is_enabled
-        self.pellet_cover_enabled = pellet_deliver_cfg.is_pellet_cover_enabled
-        self.pellet_missing_time = pellet_deliver_cfg.max_pellet_missing_seconds
-        self.max_pellets_per_session = pellet_deliver_cfg.max_pellets_per_session
-        self.max_pellets_per_day = pellet_deliver_cfg.max_pellets_per_day
-        self.intersession_pellet_shift_enabled = pellet_deliver_cfg.is_intersession_pellet_shift_enabled
-        self.use_triangle_pellet_distance_too_far = pellet_deliver_cfg.use_triangle_pellet_distance_too_far
-        self.triangle_pellet_diff_too_far_threshold = pellet_deliver_cfg.triangle_pellet_diff_too_far_threshold
+    def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
+        self.pellet_delivery_enabled = cfg.is_enabled
+        self.pellet_cover_enabled = cfg.is_pellet_cover_enabled
+        self.pellet_missing_time = cfg.max_pellet_missing_seconds
+        self.max_pellets_per_session = cfg.max_pellets_per_session
+        self.max_pellets_per_day = cfg.max_pellets_per_day
+        self.intersession_pellet_shift_enabled = cfg.is_intersession_pellet_shift_enabled
+        self.use_triangle_pellet_distance_too_far = cfg.use_triangle_pellet_distance_too_far
+        self.triangle_pellet_diff_too_far_threshold = cfg.triangle_pellet_diff_too_far_threshold
+        self.auto_correct_motors_drift = cfg.auto_correct_motors_drift
 
-        self.auto_correct_motors_drift = configuration.pellet_delivery.auto_correct_motors_drift
+    def _load_head_clamp_cfg(self, cfg: HeadClampConfiguration):
+        self.min_baseline_intensity = cfg.min_baseline_intensity
+        self.max_baseline_intensity = cfg.max_baseline_intensity
+        self.baseline_intensity_increment = cfg.baseline_intensity_increment
 
-        self.min_baseline_intensity = configuration.head_clamp.min_baseline_intensity
-        self.max_baseline_intensity = configuration.head_clamp.max_baseline_intensity
-        self.baseline_intensity_increment = configuration.head_clamp.baseline_intensity_increment
+        self.auto_clamp_intensity = cfg.auto_clamp_intensity
+        self.auto_clamp_release_tone_freq = cfg.auto_clamp_release_tone_freq
+        self.auto_clamp_release_tone_delay = cfg.auto_clamp_release_tone_delay
+        self.auto_clamp_release_load_count = cfg.auto_clamp_release_load_count
+        self.auto_clamp_no_activity_release_delay = cfg.auto_clamp_no_activity_release_delay
 
-        self.auto_clamp_intensity = configuration.head_clamp.auto_clamp_intensity
-        self.auto_clamp_release_tone_freq = configuration.head_clamp.auto_clamp_release_tone_freq
-        self.auto_clamp_release_delay = configuration.head_clamp.auto_clamp_release_tone_delay
+    def load_configuration(self, config: BehaviorConfiguration):
+        self._load_pellet_cfg(config.pellet_delivery)
+        self._load_head_clamp_cfg(config.head_clamp)
+
+    def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
+        cfg.is_enabled = self.pellet_delivery_enabled
+        cfg.is_pellet_cover_enabled = self.pellet_cover_enabled
+        cfg.max_pellet_missing_seconds = self.pellet_missing_time
+        cfg.max_pellets_per_session = self.max_pellets_per_session
+        cfg.max_pellets_per_day = self.max_pellets_per_day
+        cfg.auto_correct_motors_drift = self._auto_correct_motors_drift
+        cfg.use_triangle_pellet_distance_too_far = self.use_triangle_pellet_distance_too_far
+        cfg.triangle_pellet_expected_distance = self.triangle_pellet_expected_distance
+        cfg.triangle_pellet_diff_too_far_threshold = self.triangle_pellet_diff_too_far_threshold
+
+    def _update_head_clamp_cfg(self, cfg: HeadClampConfiguration):
+        cfg.min_baseline_intensity = self.min_baseline_intensity
+        cfg.max_baseline_intensity = self.max_baseline_intensity
+        cfg.baseline_intensity_increment = self.baseline_intensity_increment
+        cfg.auto_clamp_intensity = self.auto_clamp_intensity
+        cfg.auto_clamp_release_tone_freq = self.auto_clamp_release_tone_freq
+        cfg.auto_clamp_release_tone_delay = self.auto_clamp_release_tone_delay
+        cfg.auto_clamp_release_load_count = self.auto_clamp_release_load_count
+        cfg.auto_clamp_no_activity_release_delay = self.auto_clamp_no_activity_release_delay
 
     def update_configuration(self, configuration: BehaviorConfiguration):
-        pellet_cfg = configuration.pellet_delivery
-        pellet_cfg.is_enabled = self.pellet_delivery_enabled
-        pellet_cfg.is_pellet_cover_enabled = self.pellet_cover_enabled
-        pellet_cfg.max_pellet_missing_seconds = self.pellet_missing_time
-        pellet_cfg.max_pellets_per_session = self.max_pellets_per_session
-        pellet_cfg.max_pellets_per_day = self.max_pellets_per_day
-        pellet_cfg.auto_correct_motors_drift = self._auto_correct_motors_drift
-        pellet_cfg.use_triangle_pellet_distance_too_far = self.use_triangle_pellet_distance_too_far
-        pellet_cfg.triangle_pellet_expected_distance = self.triangle_pellet_expected_distance
-        pellet_cfg.triangle_pellet_diff_too_far_threshold = self.triangle_pellet_diff_too_far_threshold
-
-        configuration.head_clamp.min_baseline_intensity = self.min_baseline_intensity
-        configuration.head_clamp.max_baseline_intensity = self.max_baseline_intensity
-        configuration.head_clamp.baseline_intensity_increment = self.baseline_intensity_increment
-
-        configuration.head_clamp.auto_clamp_intensity = self.auto_clamp_intensity
-        configuration.head_clamp.auto_clamp_release_tone_freq = self.auto_clamp_release_tone_freq
-        configuration.head_clamp.auto_clamp_release_tone_delay = self.auto_clamp_release_delay
+        self._update_pellet_cfg(configuration.pellet_delivery)
+        self._update_head_clamp_cfg(configuration.head_clamp)
 
     def get_diamond_triangle_drifts(self, reset: bool=False) -> Offset3DTuple:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""

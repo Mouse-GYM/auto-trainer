@@ -36,50 +36,6 @@ class PelletMachine(StateMachine):
 
     _events_class = PelletMachineEvents
 
-    # Note that transitions have conditions, where applicable.  What may appear to be unconditional calls to cover,
-    # release, or otherwise perform pellet transitions will not succeed and perform those actions if these conditions
-    # are met.
-    transitions = [
-        {"trigger": "load_pellet", "source": [PelletState.monitoring, PelletState.covering, PelletState.retract],
-         "dest": PelletState.loading, "before": "before_load_pellet", "after": "after_load_pellet",
-         "conditions": "can_load_pellet"},
-
-        {"trigger": "send_pellet", "source": [PelletState.loading, PelletState.home, PelletState.prerelease, PelletState.retract],
-         "dest": PelletState.sending, "before": "before_send_pellet", "conditions": "can_send_pellet"},
-
-        dict(
-            trigger="prerelease_pellet",
-            source=[PelletState.loading, PelletState.home, PelletState.retract], dest=PelletState.prerelease,
-            before="before_prerelease_pellet",
-            conditions="can_prerelease_pellet",
-        ),
-
-        dict(
-            trigger="cover_pellet", source=[PelletState.monitoring, PelletState.retract], dest=PelletState.covering,
-            before="before_cover_pellet", conditions="can_cover_pellet",
-        ),
-
-        {"trigger": "release_pellet", "source": [PelletState.covering, PelletState.monitoring],
-         "dest": PelletState.releasing, "before": "before_release_pellet",
-         "conditions": "can_release_pellet"},
-        {"trigger": "monitor_pellet", "source": "*", "dest": PelletState.monitoring},
-        {"trigger": "move_home", "source": "*", "dest": PelletState.home, "before": "before_move_home",
-         "conditions": "can_move_home"},
-        dict(
-            trigger="move_retract",
-            source=(
-                PelletState.loading,  # not sure
-                PelletState.sending,  # not sure
-                PelletState.releasing,
-                PelletState.prerelease,
-                PelletState.covering,
-                PelletState.monitoring,
-            ),
-            dest=PelletState.retract,
-            after="_move_retract",
-        ),
-    ]
-
     def __init__(self, algorithm: BehaviorAlgorithm = None, msg_handler: MessageHandler = None,
                  pellet_device: PelletDeviceProtocol = None,
                  ):
@@ -534,3 +490,77 @@ class PelletMachine(StateMachine):
         pass
 
     # endregion
+
+    # Note that transitions have conditions, where applicable.  What may appear to be unconditional calls to cover,
+    # release, or otherwise perform pellet transitions will not succeed and perform those actions if these conditions
+    # are met.
+    transitions = [
+        dict(
+            trigger=load_pellet.__name__,
+            source=[PelletState.monitoring, PelletState.covering, PelletState.retract],
+            dest=PelletState.loading,
+            before=before_load_pellet.__name__,
+            after=after_load_pellet.__name__,
+            conditions=can_load_pellet.__name__,
+        ),
+
+        dict(
+            trigger=send_pellet.__name__,
+            source=[PelletState.loading, PelletState.home, PelletState.prerelease, PelletState.retract],
+            dest=PelletState.sending,
+            before=before_send_pellet.__name__,
+            conditions=can_send_pellet.__name__,
+        ),
+
+        dict(
+            trigger=prerelease_pellet.__name__,
+            source=[PelletState.loading, PelletState.home, PelletState.retract],
+            dest=PelletState.prerelease,
+            before=before_prerelease_pellet.__name__,
+            conditions=can_prerelease_pellet.__name__,
+        ),
+
+        dict(
+            trigger=cover_pellet.__name__,
+            source=[PelletState.monitoring, PelletState.retract],
+            dest=PelletState.covering,
+            before=before_cover_pellet.__name__,
+            conditions=can_cover_pellet.__name__,
+        ),
+
+        dict(
+            trigger=release_pellet.__name__,
+            source=[PelletState.covering, PelletState.monitoring],
+            dest=PelletState.releasing,
+            before=before_release_pellet.__name__,
+            conditions=can_release_pellet.__name__,
+        ),
+
+        dict(
+            trigger=monitor_pellet.__name__,
+            source="*",
+            dest=PelletState.monitoring,
+        ),
+
+        dict(
+            trigger=move_home.__name__,
+            source="*",
+            dest=PelletState.home,
+            before=before_move_home.__name__,
+            conditions=can_move_home.__name__,
+        ),
+
+        dict(
+            trigger=move_retract.__name__,
+            source=(
+                PelletState.loading,  # not sure
+                PelletState.sending,  # not sure
+                PelletState.releasing,
+                PelletState.prerelease,
+                PelletState.covering,
+                PelletState.monitoring,
+            ),
+            dest=PelletState.retract,
+            after=_move_retract.__name__,
+        ),
+    ]
