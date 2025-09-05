@@ -399,14 +399,13 @@ class SystemMachine(StateMachine):
             and self._pellet_machine.state == PelletState.monitoring
             and self._pellet_machine.can_use_pellet_command()
         ):
-            # last_set_position = self._pellet_device.last_set_position
             last_position = self._pellet_device.last_position
             if last_position is not None and offset is not None:
                 self._algorithm.handle_diamond_triangle_offset(
                     offset, last_position, flips=self._motor_axis_flips)
 
     def _handle_triangle_pellet_offset_changed(self, offset: Optional[Offset3DTuple]):
-        if offset is None:  # not sure we should let it pass to algo
+        if offset is None:  # not sure we should not let it pass to algo
             return
         self._algorithm.triangle_pellet_offset = offset
 

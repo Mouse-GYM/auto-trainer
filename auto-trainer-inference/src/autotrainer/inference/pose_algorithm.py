@@ -172,7 +172,7 @@ class PoseAlgorithm(ObservableObject):
             names=['bodyparts', 'coordinates'])
         self._hands_input_parts = list(AllHandsParts)
         self._hands_input_columns = pandas.MultiIndex.from_product(
-        [self._hands_input_parts, axis_labels], names=['bodyparts', 'coordinates']
+            [self._hands_input_parts, axis_labels], names=['bodyparts', 'coordinates']
         )
         #
         self._measure_offset_parts = [
