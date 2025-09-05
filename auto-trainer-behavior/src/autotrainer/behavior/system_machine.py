@@ -465,9 +465,9 @@ class SystemMachine(StateMachine):
         #         min_dist = math.inf
         algo.pellet_hands_min_distance = min_dist
         if __debug__:
-            prev_dist = getattr(self, "_prev_pellet_hands_dist", math.nan)
-            if f"{min_dist:.1f}" != f"{prev_dist:.1f}":
-                logger.debug("pellet_hands min distance: %.3f -> %.3f", prev_dist, min_dist)
+            prev_dist = getattr(self, "_prev_pellet_hands_dist", math.inf)
+            if f"{prev_dist:.0f}" != f"{prev_dist:.0f}":
+                logger.spam("pellet_hands min distance: %.3f -> %.3f", prev_dist, min_dist)
             self._prev_pellet_hands_dist = min_dist
 
     def _pose_changed(self, response: PoseResponse):
