@@ -161,7 +161,6 @@ class MainWindow(QMainWindow):
         self.mouse_seen_action.triggered.connect(self._internal_set_mouse_seen)
 
         self.mouse_near_pellet_action = QAction("Hands near pellet", self)
-        self.mouse_near_pellet_action.setCheckable(True)
         self.mouse_near_pellet_action.triggered.connect(self._internal_mouse_near_pellet)
 
         self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
