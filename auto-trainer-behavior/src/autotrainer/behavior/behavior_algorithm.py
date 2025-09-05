@@ -629,9 +629,10 @@ class BehaviorAlgorithm(ObservableObject):
                 return (
                     self._capture_status == CaptureProcessStatus.RECORDING
                     and self.capture_status_age >= self._recording_age_release_pellet_threshold
-                    and self._hands_near_pellet_seen
-                        # (self.pellet_hand_uncover_distance is None
+                    and (self.pellet_hand_uncover_distance is None
+                         or self._hands_near_pellet_seen
                         #  or self._pellet_hands_min_distance <= self.pellet_hand_uncover_distance)
+                    )
                 )
             return False
 
@@ -685,7 +686,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @pellet_hands_min_distance.setter
     def pellet_hands_min_distance(self, value: float):
-        if value < self.pellet_hand_uncover_distance:
+        pellet_hand_uncover_dist = self.pellet_hand_uncover_distance
+        if pellet_hand_uncover_dist is not None and value < pellet_hand_uncover_dist:
             self._hands_near_pellet_seen = True
         self._pellet_hands_min_distance = self._on_property_changed(
             "pellet_hands_min_distance", value, self._pellet_hands_min_distance)
