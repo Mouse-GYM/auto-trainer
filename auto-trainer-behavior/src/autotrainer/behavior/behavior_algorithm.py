@@ -615,6 +615,11 @@ class BehaviorAlgorithm(ObservableObject):
         return self.pellet_cover_enabled
 
     @property
+    def pellet_seen_age(self) -> float:
+        """In nbr of seconds"""
+        return time.perf_counter() - self._pellet_last_seen
+
+    @property
     def pellet_recently_seen(self):
         return time.perf_counter() - self._pellet_last_seen < self.limits.pellet_missing_time
 

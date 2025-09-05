@@ -174,7 +174,9 @@ class AppModel(ObservableObject):
         # we never know the session could be just stopped,
         # so check:
         if algo.is_in_session:
-            logger.verbose("calling try_next_state ; %s", algo.pellet_recently_seen)
+            logger.verbose("consider_release_pellet: calling try_next_state ; "
+                           "pellet_recently_seen=%s age=%.2f",
+                           algo.pellet_recently_seen, algo.pellet_seen_age)
             #   and algo.capture_status_age >= algo.recording_age_release_pellet_threshold:
             # this is called via a timer, which are not necessarily very precise,
             # and to be safe on all side, do not check again, the actual age could even be slightly less than the

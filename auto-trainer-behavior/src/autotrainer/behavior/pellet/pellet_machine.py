@@ -260,13 +260,15 @@ class PelletMachine(StateMachine):
             else:
                 func = logger.verbose
             func(
-                "try_next_state from %s (timer=%s): %s -> in_session=%s pellet_seen=%s triangle_recently_seen=%s "
+                "try_next_state from %s: %s -> in_session=%s pellet_seen=%s triangle_recently_seen=%s "
                 "session_mouse_seen=%s session_pellet_count=%s must_release=%s "
-                "pellet_state=%s algo_system_state=%s intersession_state=%s",
-                caller, is_from_timer, reason, algo.is_in_session, pellet_seen, algo.triangle_recently_seen,
+                "pellet_state=%s algo_system_state=%s intersession_state=%s "
+                "pellet_seen_age=%.1f" "sec hands_near_pellet_seen=%s"
+                , caller, reason, algo.is_in_session, pellet_seen, algo.triangle_recently_seen,
                 algo.session_mouse_seen, algo.session_pellet_count, must_release,
                 self._state, algo.system_state, algo.intersession_state,
-            stacklevel=3)
+                algo.pellet_seen_age, algo.hands_near_pellet_seen,
+            )
 
         def log_could_retry_shortly():
             # retry shortly currently disabled.
