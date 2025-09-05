@@ -12,8 +12,7 @@ from autotrainer.core.analysis.calibration import triangulate_3d_with_params
 from autotrainer.core.analysis.prepare_jetson_data import process_hand_data, reorient_and_center_step1
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.analysis.config import StereoParams
-from autotrainer.core.pose_elements import SceneElement
-
+from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 
 logger = get_verbose_logger(__name__)
 
@@ -43,7 +42,7 @@ class PoseResponse:
     ]
     """Tuple indicating part seen for left, right, and both (same frame)"""
 
-    locations: List[Dict[SceneElement, PoseLocation]]
+    locations: List[Dict[str, PoseLocation]]
     """X, Y locations for each part for each camera, if above threshold, otherwise -1, -1 (or not present)"""
 
     parts_3d_offsets: Dict[str, Dict[str, Offset3DTuple]] = dataclasses.field(default_factory=dict)
@@ -171,35 +170,23 @@ class PoseAlgorithm(ObservableObject):
         self._hands_columns = pandas.MultiIndex.from_product([
             [SceneElement.R_Hand, SceneElement.L_Hand], axis_labels],
             names=['bodyparts', 'coordinates'])
-        self._hands_input_parts = [
-            SceneElement.RH_flat, SceneElement.RH_spread, SceneElement.RH_grab,
-            SceneElement.LH_flat, SceneElement.LH_spread, SceneElement.LH_grab,
-        ]
+        self._hands_input_parts = list(AllHandsParts)
         self._hands_input_columns = pandas.MultiIndex.from_product(
-            [self._hands_input_parts, axis_labels], names=['bodyparts', 'coordinates']
+        [self._hands_input_parts, axis_labels], names=['bodyparts', 'coordinates']
         )
-        # self._all_body_parts = [
-        #     SceneElement.R_Hand,
-        #     SceneElement.L_Hand,
-        #     SceneElement.Pellet,
-        #     SceneElement.Nose,
-        #     'Mouth',
-        #     'Tongue_mid',
-        #     'Tongue_tip',
-        #     'Star',
-        #     'Triangle',
-        #     'Diamond',
-        # ]
-        # self._all_body_parts_columns = pandas.MultiIndex.from_product([self._all_body_parts, axis_labels],
-        #                                                               names=["bodyparts", "coords"])
+        #
         self._measure_offset_parts = [
             SceneElement.Star,
             SceneElement.Triangle,
             SceneElement.Diamond,
             SceneElement.Pellet,
+            # also include all hands parts:
+            *self._hands_input_parts,
         ]
-        self._measure_offset_parts_columns = pandas.MultiIndex.from_product([self._measure_offset_parts, axis_labels],
-                                                                            names=["bodyparts", "coords"])
+        self._measure_offset_parts_columns = pandas.MultiIndex.from_product(
+            [self._measure_offset_parts, axis_labels],
+            names=["bodyparts", "coords"]
+        )
 
     @property
     def stereo_params(self):
@@ -415,14 +402,10 @@ class PoseAlgorithm(ObservableObject):
             locations=[locations_1, locations_2],
             parts_3d_offsets=dict(parts_3d_offsets),
         )
-        # try:
-        #     self.pose_changed(response)
-        # except Exception as err:
-        #     logger.exception("pose_changed event callback failed: %s", err)
         return response
 
-    def _find_parts(self, frames: List[numpy.ndarray]) -> Dict[SceneElement, PoseLocation]:
-        locations: Dict[SceneElement, PoseLocation] = {}
+    def _find_parts(self, frames: List[numpy.ndarray]) -> Dict[str, PoseLocation]:
+        locations: Dict[str, PoseLocation] = {}
         for pose in frames:
             for idx, part in enumerate(self._parts_list):
                 if pose[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PLOT_THRESHOLD:

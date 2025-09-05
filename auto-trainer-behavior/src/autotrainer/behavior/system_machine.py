@@ -432,15 +432,15 @@ class SystemMachine(StateMachine):
             algo.handle_release_pellet_offset(offset)
 
     def _pose_changed(self, response: PoseResponse):
-        if response.pellet_seen:
-            self._handle_diamond_triangle_offset_changed(
-                response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
+        self._handle_diamond_triangle_offset_changed(
+            response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
 
-            self._handle_star_triangle_offset_changed(
-                response.get_parts_3d_offset(SceneElement.Star, SceneElement.Triangle))
+        self._handle_star_triangle_offset_changed(
+            response.get_parts_3d_offset(SceneElement.Star, SceneElement.Triangle))
 
-            self._handle_triangle_pellet_offset_changed(
-                response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
+        # if response.pellet_seen:  # not necessary, already handled by response.get_parts_3d_offset
+        self._handle_triangle_pellet_offset_changed(
+            response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
         #
         algo = self._algorithm
         algo.pellet_seen(response.pellet_seen)
