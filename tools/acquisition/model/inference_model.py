@@ -392,7 +392,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                         pair_handler(cur)
                 except Exception as err:
                     logger.exception("offset_changed event callback failed: %s", err)
-            self.pose_response_ready(response)
+            try:
+                self.pose_response_ready(response)
+            except Exception as err:
+                logger.exception("pose_response_ready event callback failed: %s", err)
 
         elif msg is InferenceMonitorDataProc.Msg.INTERSESSION_RESULT_READY:
             ib = self._intersession_block
