@@ -431,7 +431,7 @@ class SystemMachine(StateMachine):
         if check_release_distance:
             algo.handle_release_pellet_offset(offset)
 
-    def _handle_hands_pellet_offsets(self, response: PoseResponse):
+    def _handle_pellet_hands_offsets(self, response: PoseResponse):
         algo = self._algorithm
         min_dist = math.inf
         for part in AllHandsParts:
@@ -441,7 +441,11 @@ class SystemMachine(StateMachine):
                 if dist < min_dist:
                     min_dist = dist
         algo.pellet_hands_min_distance = min_dist
-        return min_dist
+        if __debug__:
+            prev_dist = getattr(self, "_prev_pellet_hands_dist", math.nan)
+            if f"{min_dist:.1f}" != f"{prev_dist:.1f}":
+                logger.debug("pellet_hands min distance: %.3f -> %.3f", prev_dist, min_dist)
+            self._prev_pellet_hands_dist = min_dist
 
     def _pose_changed(self, response: PoseResponse):
         self._handle_diamond_triangle_offset_changed(
@@ -461,7 +465,7 @@ class SystemMachine(StateMachine):
         if not self._algorithm.pellet_delivery_enabled:
             return
         #
-        self._handle_hands_pellet_offsets(response)
+        self._handle_pellet_hands_offsets(response)
         #
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
