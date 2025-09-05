@@ -260,11 +260,11 @@ class PelletMachine(StateMachine):
             else:
                 func = logger.verbose
             func(
-                "try_next_state from %s: %s -> in_session=%s pellet_seen=%s triangle_recently_seen=%s "
+                "try_next_state cur=%s from %s: %s -> in_session=%s pellet_seen=%s triangle_recently_seen=%s "
                 "session_mouse_seen=%s session_pellet_count=%s must_release=%s "
                 "pellet_state=%s algo_system_state=%s intersession_state=%s "
                 "pellet_seen_age=%.1f" "sec hands_near_pellet_seen=%s"
-                , caller, reason, algo.is_in_session, pellet_seen, algo.triangle_recently_seen,
+                , cur_state, caller, reason, algo.is_in_session, pellet_seen, algo.triangle_recently_seen,
                 algo.session_mouse_seen, algo.session_pellet_count, must_release,
                 self._state, algo.system_state, algo.intersession_state,
                 algo.pellet_seen_age, algo.hands_near_pellet_seen,
@@ -276,6 +276,8 @@ class PelletMachine(StateMachine):
             retrying = True
             reason = f"would have retried shortly {reason}"
             logit()
+
+        cur_state = self.state
 
         # Always arrest to the retract position during intersession.
         if algo.system_state == SystemState.intersession:
@@ -301,8 +303,6 @@ class PelletMachine(StateMachine):
                     logit()
                     self.move_retract()
             return
-
-        cur_state = self.state
 
         if cur_state in {PelletState.loading, PelletState.retract}:
             if algo.can_cover_pellet():
@@ -355,7 +355,7 @@ class PelletMachine(StateMachine):
                         log_could_retry_shortly()
             else:
                 if algo.can_release_pellet():
-                    reason = "send_pellet_when_seen_and_can_release"
+                    reason = "release_pellet_when_seen_and_can_release"
                     if self.can_use_pellet_command():
                         logit()
                         self.release_pellet()
@@ -380,6 +380,10 @@ class PelletMachine(StateMachine):
                 if must_release and pellet_seen:
                     reason = "release_when_in_session_and_must_release"
                     if self.can_use_pellet_command():
+                        # and algo.can_release_pellet():
+                        # actually no need check algo.can_release_pellet(),
+                        # it's already done by next release_pellet() as a pre-condition of the defined trigger
+                        # in the pellet machine defined transitions.
                         logit()
                         self.release_pellet()
                     else:
