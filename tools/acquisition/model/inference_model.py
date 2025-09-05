@@ -155,19 +155,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     def pose_algorithm(self) -> PoseAlgorithm:
         return self._algorithm
 
-    def get_parts_offsets(self, part1: str, part2: str) -> Optional[Offset3DTuple]:
-        """Return the offsets of part2 relative to part1 as last known"""
-        # unused
-        part1 = SceneElement(part1)
-        part2 = SceneElement(part2)
-        v_offsets = self._parts_offsets.get((part1, part2), None)
-        if v_offsets is None:
-            v_offsets = self._parts_offsets.get((part2, part1), None)
-            if v_offsets is None:
-                return None
-            v_offsets = tuple(map(operator.neg, v_offsets))
-        return Offset3DTuple(v_offsets)
-
     def _check_previous_offline_thread(self, cause: str):
         cur_off = self._offline_thread
         if cur_off is not None:
