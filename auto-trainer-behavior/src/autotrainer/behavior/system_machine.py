@@ -449,12 +449,16 @@ class SystemMachine(StateMachine):
                 dist = offset.distance
                 if dist < min_dist:
                     min_dist = dist
+        prev_hands_seen_near_pellet = algo.hands_near_pellet_seen
         algo.pellet_hands_min_distance = min_dist
         if __debug__:
             prev_dist = getattr(self, "_prev_pellet_hands_dist", math.inf)
             if f"{prev_dist:.0f}" != f"{prev_dist:.0f}":
                 logger.spam("pellet_hands min distance: %.3f -> %.3f", prev_dist, min_dist)
             self._prev_pellet_hands_dist = min_dist
+        #
+        if algo.hands_near_pellet_seen and not prev_hands_seen_near_pellet:
+            self._pellet_machine.environment_changed(caller="hands_seen_near_pellet")
 
     def _pose_changed(self, response: PoseResponse):
         self._handle_diamond_triangle_offset_changed(

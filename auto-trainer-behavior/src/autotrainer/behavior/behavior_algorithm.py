@@ -690,7 +690,7 @@ class BehaviorAlgorithm(ObservableObject):
         if pellet_hand_uncover_dist is not None and value <= pellet_hand_uncover_dist:
             if not self._hands_near_pellet_seen:
                 logger.verbose("Hand(s) near pellet seen ; distance = %.2f mm", value)
-            self._hands_near_pellet_seen = True
+                self._hands_near_pellet_seen = True
         self._pellet_hands_min_distance = self._on_property_changed(
             "pellet_hands_min_distance", value, self._pellet_hands_min_distance)
 

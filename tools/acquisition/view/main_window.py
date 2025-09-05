@@ -270,12 +270,11 @@ class MainWindow(QMainWindow):
     def _internal_mouse_near_pellet(self):
         behavior = self._model.behavior
         algo = behavior.algorithm
-        if self.mouse_near_pellet_action.isChecked():
-            algo.pellet_hand_uncover_distance = None
-        else:
-            cfg = self._model.loaded_configuration
-            algo.pellet_hand_uncover_distance = cfg.behavior.pellet_delivery.pellet_hand_uncover_distance
-        logger.debug("set pellet_hand_uncover_distance to %s", algo.pellet_hand_uncover_distance)
+        uncover_dist = algo.pellet_hand_uncover_distance
+        if uncover_dist is not None:
+            new_val = uncover_dist - 0.1
+            algo.pellet_hands_min_distance = new_val
+            logger.debug("set pellet_hands_min_distance to %s", new_val)
 
     def notes_changed(self, value: str):
         self._model.notes = value
