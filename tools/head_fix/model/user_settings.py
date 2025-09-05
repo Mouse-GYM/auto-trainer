@@ -15,17 +15,6 @@ class UserSettings:
         self._settings.sync()
 
     @property
-    def port(self) -> str:
-        return self._settings.value("port", "")
-
-    @port.setter
-    def port(self, value: str):
-        self._settings.setValue("port", value)
-
-    def set_port(self, value: str) -> None:
-        self.port = value
-
-    @property
     def stream_enabled(self) -> bool:
         return self._settings.value("stream_enabled", False, bool)
 
