@@ -142,9 +142,6 @@ class PoseAlgorithm(ObservableObject):
     MIN_CONFIDENCE_PLOT_THRESHOLD = 0.9
     MIN_CONFIDENCE_PRESENT_THRESHOLD = 0.9
 
-    # for type hinting
-    # pose_changed: Callable[[PoseResponse], None]
-
     def __init__(
         self,
         *,
@@ -154,7 +151,7 @@ class PoseAlgorithm(ObservableObject):
         square_size: Optional[int] = None,
         cam_offsets: Optional[List[float]] = None,
     ):
-        super().__init__(event_names=("pose_changed",))
+        super().__init__()
         self._parts_list: List[str] = []
         self._parts: Dict[str, int] = {}  # key is part name, value is part model index
         self._sequence = 0
