@@ -117,6 +117,9 @@ class PoseResponse:
             value = self.parts_3d_offsets.get(part2, {}).get(part1, None)
             if value is None:
                 return None
+            logger.debug("get_parts_3d_offset(%r, %r): detected reversed offsets 3d, "
+                         "you shall switch your pair key.",
+                         part1, part2)
             value = tuple(map(operator.neg, value))
         return Offset3DTuple(value)
 
