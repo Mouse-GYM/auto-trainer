@@ -28,7 +28,6 @@ from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 
-
 logger = get_verbose_logger(__name__)
 
 
@@ -138,9 +137,9 @@ class BehaviorAlgorithm(ObservableObject):
         self._session_pellet_count = 0
         self._session_mouse_seen = False
         self._pellet_seen = False
-        self._triangle_seen = False
-
         self._pellet_last_seen = 0.0
+        self._pellet_hands_min_distance: float = math.nan
+        self._triangle_seen = False
         self._triangle_last_seen = 0.0
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
         self._use_triangle_pellet_distance_too_far = False
@@ -166,6 +165,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.max_pellets_per_day: int = 50
         self.pellet_missing_time: float = 1.0
         self.triangle_missing_time: float = 1.0
+        self.pellet_hand_uncover_distance = PelletDeliveryConfiguration.pellet_hand_uncover_distance
 
         self._pellets_presented: int = 0
         self._successful_reaches: int = 0
@@ -603,13 +603,14 @@ class BehaviorAlgorithm(ObservableObject):
         # self._check_date()
 
         if self.pellet_cover_enabled:
-            if (
-                self._is_in_session
-                and self._capture_status == CaptureProcessStatus.RECORDING
-                and self.capture_status_age < self._recording_age_release_pellet_threshold
-            ):
-                return False
-            return self._is_in_session
+            if self._is_in_session:
+                return (
+                    self._capture_status == CaptureProcessStatus.RECORDING
+                    and self.capture_status_age >= self._recording_age_release_pellet_threshold
+                    and (self.pellet_hand_uncover_distance is None
+                         or self._pellet_hands_min_distance <= self.pellet_hand_uncover_distance)
+                )
+            return False
 
         return True
 
@@ -651,6 +652,15 @@ class BehaviorAlgorithm(ObservableObject):
             if not was_seen:
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
 
+    @property
+    def pellet_hands_min_distance(self):
+        return self._pellet_hands_min_distance
+
+    @pellet_hands_min_distance.setter
+    def pellet_hands_min_distance(self, value):
+        self._pellet_hands_min_distance = self._on_property_changed(
+            "pellet_hands_min_distance", value, self._pellet_hands_min_distance)
+
     def load_configuration(self, configuration: BehaviorConfiguration):
         pellet_deliver_cfg = configuration.pellet_delivery
         self.pellet_delivery_enabled = pellet_deliver_cfg.is_enabled
@@ -661,6 +671,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.intersession_pellet_shift_enabled = pellet_deliver_cfg.is_intersession_pellet_shift_enabled
         self.use_triangle_pellet_distance_too_far = pellet_deliver_cfg.use_triangle_pellet_distance_too_far
         self.triangle_pellet_diff_too_far_threshold = pellet_deliver_cfg.triangle_pellet_diff_too_far_threshold
+        self.pellet_hand_uncover_distance = pellet_deliver_cfg.pellet_hand_uncover_distance
 
         self.auto_correct_motors_drift = configuration.pellet_delivery.auto_correct_motors_drift
 

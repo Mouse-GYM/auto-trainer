@@ -1,3 +1,4 @@
+import math
 import time
 from functools import partial
 from itertools import chain
@@ -10,7 +11,7 @@ from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorA
                               HeadbarPressureMonitor, Motor)
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.pose_elements import SceneElement
+from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.core.multiproc import DaemonTimer
 
 from autotrainer.inference import PoseResponse, InferenceStatus
@@ -405,7 +406,7 @@ class SystemMachine(StateMachine):
                     offset, last_position, flips=self._motor_axis_flips)
 
     def _handle_triangle_pellet_offset_changed(self, offset: Optional[Offset3DTuple]):
-        if offset is None:
+        if offset is None:  # not sure we should let it pass to algo
             return
         self._algorithm.triangle_pellet_offset = offset
 
@@ -431,6 +432,18 @@ class SystemMachine(StateMachine):
         if check_release_distance:
             algo.handle_release_pellet_offset(offset)
 
+    def _handle_hands_pellet_offsets(self, response: PoseResponse):
+        algo = self._algorithm
+        min_dist = math.inf
+        for part in AllHandsParts:
+            offset = response.get_parts_3d_offset(SceneElement.Pellet, part)
+            if offset is not None:
+                dist = offset.distance
+                if dist < min_dist:
+                    min_dist = dist
+        algo.pellet_hands_min_distance = min_dist
+        return min_dist
+
     def _pose_changed(self, response: PoseResponse):
         self._handle_diamond_triangle_offset_changed(
             response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
@@ -448,6 +461,9 @@ class SystemMachine(StateMachine):
         algo.triangle_seen(response.triangle_seen)
         if not self._algorithm.pellet_delivery_enabled:
             return
+        #
+        self._handle_hands_pellet_offsets(response)
+        #
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     def _algorithm_property_changed(self, name: str, new_value, _):
