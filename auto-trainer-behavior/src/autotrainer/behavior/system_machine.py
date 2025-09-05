@@ -449,20 +449,6 @@ class SystemMachine(StateMachine):
                 dist = offset.distance
                 if dist < min_dist:
                     min_dist = dist
-        # use_avg = False
-        # if use_avg:
-        #     prev_min_distances = self.__dict__.setdefault("_prev_pellet_hands_min_distances", [])
-        #     t_perf = time.perf_counter()
-        #     for t_v in tuple(prev_min_distances):
-        #         t, v = t_v
-        #         if t_perf - t > 0.1:
-        #             prev_min_distances.remove(t_v)
-        #     if not math.isinf(min_dist):
-        #         prev_min_distances.append((t_perf, min_dist))
-        #     if len(prev_min_distances) > 0:
-        #         min_dist = sum(t_v[1] for t_v in prev_min_distances) / len(prev_min_distances)
-        #     else:
-        #         min_dist = math.inf
         algo.pellet_hands_min_distance = min_dist
         if __debug__:
             prev_dist = getattr(self, "_prev_pellet_hands_dist", math.inf)
