@@ -687,7 +687,7 @@ class BehaviorAlgorithm(ObservableObject):
     @pellet_hands_min_distance.setter
     def pellet_hands_min_distance(self, value: float):
         pellet_hand_uncover_dist = self.pellet_hand_uncover_distance
-        if pellet_hand_uncover_dist is not None and value < pellet_hand_uncover_dist:
+        if pellet_hand_uncover_dist is not None and value <= pellet_hand_uncover_dist:
             self._hands_near_pellet_seen = True
         self._pellet_hands_min_distance = self._on_property_changed(
             "pellet_hands_min_distance", value, self._pellet_hands_min_distance)
