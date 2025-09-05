@@ -694,6 +694,7 @@ class BehaviorAlgorithm(ObservableObject):
         pellet_cfg.use_triangle_pellet_distance_too_far = self.use_triangle_pellet_distance_too_far
         pellet_cfg.triangle_pellet_expected_distance = self.triangle_pellet_expected_distance
         pellet_cfg.triangle_pellet_diff_too_far_threshold = self.triangle_pellet_diff_too_far_threshold
+        pellet_cfg.pellet_hand_uncover_distance = self.pellet_hand_uncover_distance
 
         configuration.head_clamp.min_baseline_intensity = self.min_baseline_intensity
         configuration.head_clamp.max_baseline_intensity = self.max_baseline_intensity
