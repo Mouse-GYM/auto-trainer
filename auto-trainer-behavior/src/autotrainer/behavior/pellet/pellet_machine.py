@@ -3,7 +3,8 @@ from typing import Dict, Callable, Any, Optional
 
 from transitions import Machine
 
-from autotrainer.core import EventManager, MessageHandler, ObservableObject, Offset3DTuple, Motor
+from autotrainer.core import EventManager, MessageHandler, ObservableObject, Offset3DTuple, Motor, \
+    transitions_allow_functions
 from autotrainer.core.multiproc import DaemonTimer
 from autotrainer.core.logging import get_verbose_logger
 
@@ -63,10 +64,14 @@ class PelletMachine(StateMachine):
         self._api_status_token = None
         self._prev_pellet_seen = None
 
-        self.machine = Machine(model=[self], states=list(PelletState),
-                               transitions=PelletMachine.transitions, auto_transitions=False,
-                               initial=initial_state, model_override=True,
-                       )
+        self.machine = Machine(
+            model=[self],
+            states=list(PelletState),
+            transitions=self.transitions,
+            auto_transitions=False,
+            initial=initial_state,
+            model_override=True,
+        )
 
         self._cur_timer_try_next_state: Optional[DaemonTimer] = None
 
@@ -500,64 +505,64 @@ class PelletMachine(StateMachine):
     # Note that transitions have conditions, where applicable.  What may appear to be unconditional calls to cover,
     # release, or otherwise perform pellet transitions will not succeed and perform those actions if these conditions
     # are met.
-    transitions = [
+    transitions = transitions_allow_functions([
         dict(
-            trigger=load_pellet.__name__,
+            trigger=load_pellet,
             source=[PelletState.monitoring, PelletState.covering, PelletState.retract],
             dest=PelletState.loading,
-            before=before_load_pellet.__name__,
-            after=after_load_pellet.__name__,
-            conditions=can_load_pellet.__name__,
+            before=before_load_pellet,
+            after=after_load_pellet,
+            conditions=can_load_pellet,
         ),
 
         dict(
-            trigger=send_pellet.__name__,
+            trigger=send_pellet,
             source=[PelletState.loading, PelletState.home, PelletState.prerelease, PelletState.retract],
             dest=PelletState.sending,
-            before=before_send_pellet.__name__,
-            conditions=can_send_pellet.__name__,
+            before=before_send_pellet,
+            conditions=can_send_pellet,
         ),
 
         dict(
-            trigger=prerelease_pellet.__name__,
+            trigger=prerelease_pellet,
             source=[PelletState.loading, PelletState.home, PelletState.retract],
             dest=PelletState.prerelease,
-            before=before_prerelease_pellet.__name__,
-            conditions=can_prerelease_pellet.__name__,
+            before=before_prerelease_pellet,
+            conditions=can_prerelease_pellet,
         ),
 
         dict(
-            trigger=cover_pellet.__name__,
+            trigger=cover_pellet,
             source=[PelletState.monitoring, PelletState.retract],
             dest=PelletState.covering,
-            before=before_cover_pellet.__name__,
-            conditions=can_cover_pellet.__name__,
+            before=before_cover_pellet,
+            conditions=can_cover_pellet,
         ),
 
         dict(
-            trigger=release_pellet.__name__,
+            trigger=release_pellet,
             source=[PelletState.covering, PelletState.monitoring],
             dest=PelletState.releasing,
-            before=before_release_pellet.__name__,
-            conditions=can_release_pellet.__name__,
+            before=before_release_pellet,
+            conditions=can_release_pellet,
         ),
 
         dict(
-            trigger=monitor_pellet.__name__,
+            trigger=monitor_pellet,
             source="*",
             dest=PelletState.monitoring,
         ),
 
         dict(
-            trigger=move_home.__name__,
+            trigger=move_home,
             source="*",
             dest=PelletState.home,
-            before=before_move_home.__name__,
-            conditions=can_move_home.__name__,
+            before=before_move_home,
+            conditions=can_move_home,
         ),
 
         dict(
-            trigger=move_retract.__name__,
+            trigger=move_retract,
             source=(
                 PelletState.loading,  # not sure
                 PelletState.sending,  # not sure
@@ -567,6 +572,6 @@ class PelletMachine(StateMachine):
                 PelletState.monitoring,
             ),
             dest=PelletState.retract,
-            after=_move_retract.__name__,
+            after=_move_retract,
         ),
-    ]
+    ])

@@ -3,7 +3,7 @@ from typing import Callable, Optional
 
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager
+from autotrainer.core import ProjectInfo, EventManager, transitions_allow_functions
 from . import IntersessionState
 from ..behavior_event_kind import BehaviorEventKind
 
@@ -24,15 +24,6 @@ class IntersessionMachine(StateMachine):
     _events_class = IntersessionMachineEvents
 
     states = [e for e in IntersessionState]
-
-    transitions = [
-        {"trigger": "perform_segmentation", "source": IntersessionState.idle, "dest": IntersessionState.segmentation,
-         "after": "after_enter_segmentation", "conditions": "can_perform_segmentation"},
-        {"trigger": "perform_detection", "source": IntersessionState.segmentation, "dest": IntersessionState.detection,
-         "after": "after_enter_detection", "conditions": "can_perform_detection"},
-        {"trigger": "end_analysis", "source": [IntersessionState.segmentation, IntersessionState.detection],
-         "dest": IntersessionState.idle, "after": "after_end_analysis"},
-    ]
 
     def __init__(self, algorithm: BehaviorAlgorithm, project_info: ProjectInfo = None,
                  inference: InferenceProtocol = None):
@@ -184,3 +175,28 @@ class IntersessionMachine(StateMachine):
     def is_detection(self):
         pass
     # endregion
+
+    transitions = transitions_allow_functions([
+        dict(
+            trigger=perform_segmentation,
+            source=IntersessionState.idle,
+            dest=IntersessionState.segmentation,
+            conditions=can_perform_segmentation,
+            after=after_enter_segmentation,
+        ),
+
+        dict(
+            trigger=perform_detection,
+            source=IntersessionState.segmentation,
+            dest=IntersessionState.detection,
+            conditions=can_perform_detection,
+            after=after_enter_detection,
+        ),
+
+        dict(
+            trigger=end_analysis,
+            source=[IntersessionState.segmentation, IntersessionState.detection],
+            dest=IntersessionState.idle,
+            after=after_end_analysis,
+        ),
+    ])

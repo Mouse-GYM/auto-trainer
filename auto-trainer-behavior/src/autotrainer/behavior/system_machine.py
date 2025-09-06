@@ -8,7 +8,7 @@ from typing import Optional, List, Tuple
 from transitions import Machine
 
 from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor,
-                              HeadbarPressureMonitor, Motor)
+                              HeadbarPressureMonitor, Motor, transitions_allow_functions)
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
@@ -41,35 +41,8 @@ _consider_disengage_autoclamp_timer = DaemonTimer
 
 
 class SystemMachine(StateMachine):
+
     states = [e for e in SystemState]
-
-    transitions = [
-        {"trigger": "enter_tunnel", "source": [SystemState.cage, SystemState.tunnel], "dest": SystemState.tunnel,
-         "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
-
-        {"trigger": "exit_tunnel", "source": SystemState.tunnel, "dest": SystemState.cage,
-         "before": "before_exit_tunnel", "after": "after_exit_tunnel"},
-
-        {"trigger": "enter_intersession", "source": (SystemState.cage, SystemState.tunnel), "dest": SystemState.intersession,
-         "before": "before_enter_intersession", "after": "after_enter_intersession"},
-
-        dict(  # previous behavior
-            trigger="exit_intersession",
-            source=SystemState.intersession, dest=SystemState.cage,
-            before="before_exit_intersession_to_cage",
-        ),
-
-        dict(
-            trigger="exit_intersession_to_tunnel",
-            source=SystemState.intersession, dest=SystemState.tunnel,
-            before="before_exit_intersession_to_tunnel",
-        ),
-        dict(
-            trigger="exit_intersession_to_cage",
-            source=SystemState.intersession, dest=SystemState.cage,
-            before="before_exit_intersession_to_cage",
-        )
-    ]
 
     def __init__(self,
                  algorithm: Optional[BehaviorAlgorithm] = None,
@@ -85,8 +58,12 @@ class SystemMachine(StateMachine):
         super().__init__(initial_state=initial_state)
 
         self.machine = Machine(
-            model=[self], states=SystemMachine.states, transitions=SystemMachine.transitions,
-            auto_transitions=False, initial=initial_state, model_override=True,
+            model=[self],
+            states=self.states,
+            transitions=self.transitions,
+            auto_transitions=False,
+            initial=initial_state,
+            model_override=True,
         )
 
         self._project_info = project_info
@@ -539,8 +516,8 @@ class SystemMachine(StateMachine):
                 logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s",
                                self, prev_timer)
 
+    # nb: not used anymore
     def _pellet_sending(self):
-        # nb: not used anymore
         if self.state == SystemState.tunnel and not self._algorithm.is_in_session:
             self._algorithm.start_session(reason="pellet_sending")
 
@@ -667,3 +644,46 @@ class SystemMachine(StateMachine):
     def is_intersession(self):
         pass
     # endregion
+
+    transitions = transitions_allow_functions([
+        dict(
+            trigger=enter_tunnel,
+            source=[SystemState.cage, SystemState.tunnel],
+            dest=SystemState.tunnel,
+            before=before_enter_tunnel,
+            after=after_enter_tunnel,
+        ),
+
+        dict(
+            trigger=exit_tunnel,
+            source=SystemState.tunnel,
+            dest=SystemState.cage,
+            before=before_exit_tunnel,
+            after=after_exit_tunnel,
+        ),
+
+        dict(
+            trigger=enter_intersession,
+            source=(SystemState.cage, SystemState.tunnel),
+            dest=SystemState.intersession,
+            before=before_enter_intersession,
+            after=after_enter_intersession,
+        ),
+
+        dict(  # previous behavior
+            trigger=exit_intersession,
+            source=SystemState.intersession, dest=SystemState.cage,
+            before=before_exit_intersession_to_cage,
+        ),
+
+        dict(
+            trigger=exit_intersession_to_tunnel,
+            source=SystemState.intersession, dest=SystemState.tunnel,
+            before=before_exit_intersession_to_tunnel,
+        ),
+        dict(
+            trigger=exit_intersession_to_cage,
+            source=SystemState.intersession, dest=SystemState.cage,
+            before=before_exit_intersession_to_cage,
+        )
+    ])
