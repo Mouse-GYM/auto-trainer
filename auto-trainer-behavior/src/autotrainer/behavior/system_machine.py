@@ -44,7 +44,10 @@ _consider_disengage_autoclamp_timer = DaemonTimer
 def relay_to_system_msg_handler(func):
     @functools.wraps(func)
     def wrapped(self: "SystemMachine", *args, **kwargs):
-        self._msg_handler.put(func, (self,) + args, kwargs)
+        if self._msg_handler is None:
+            func(self, *args, **kwargs)
+        else:
+            self._msg_handler.put(func, (self,) + args, kwargs)
     return wrapped
 
 
