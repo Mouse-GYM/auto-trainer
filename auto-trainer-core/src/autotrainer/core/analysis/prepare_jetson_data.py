@@ -149,11 +149,11 @@ def process_hand_data(
     additional_names,
 ):
     len_df = len(df)
+    len_hand_cat = len(hand_base_names)
     row_index = np.arange(len_df)
     #
     for h in hand_options:
         hand_categories = [h + item for item in hand_base_names]
-        len_hand_cat = len(hand_categories)
 
         likelihood_array = np.empty((len_df, len_hand_cat), dtype=np.float64)
         y_array = np.empty((len_df, len_hand_cat), dtype=np.float64)
