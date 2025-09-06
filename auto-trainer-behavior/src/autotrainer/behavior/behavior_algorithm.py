@@ -634,10 +634,7 @@ class BehaviorAlgorithm(ObservableObject):
                 return (
                     self._capture_status == CaptureProcessStatus.RECORDING
                     and self.capture_status_age >= self._recording_age_release_pellet_threshold
-                    and (self.pellet_hand_uncover_distance is None
-                         or self._hands_near_pellet_seen
-                        #  or self._pellet_hands_min_distance <= self.pellet_hand_uncover_distance)
-                    )
+                    and (self.pellet_hand_uncover_distance is None or self._hands_near_pellet_seen)
                 )
             return False
 

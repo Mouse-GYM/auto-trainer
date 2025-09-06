@@ -467,7 +467,6 @@ class SystemMachine(StateMachine):
         self._handle_star_triangle_offset_changed(
             response.get_parts_3d_offset(SceneElement.Star, SceneElement.Triangle))
 
-        # if response.pellet_seen:  # not necessary, already handled by response.get_parts_3d_offset
         self._handle_triangle_pellet_offset_changed(
             response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
         #
