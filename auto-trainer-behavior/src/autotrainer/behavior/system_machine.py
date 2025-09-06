@@ -334,8 +334,8 @@ class SystemMachine(StateMachine):
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                                               context=self.state)
             else:
-                cur_timer_check_missing = _check_missing_timer(self._algorithm.presence_missing_delay,
-                                                               self._check_presence_missing)
+                cur_timer_check_missing = self._timer_check_missing = _check_missing_timer(
+                    self._algorithm.presence_missing_delay, self._check_presence_missing)
                 cur_timer_check_missing.start()
                 if self.state == SystemState.tunnel and self.intersession.state == IntersessionState.idle:
                     logger.info("%s False, exiting tunnel ..", LoadCellMonitor.IS_ENGAGED_PROPERTY)
