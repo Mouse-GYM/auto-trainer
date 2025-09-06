@@ -1,3 +1,4 @@
+import functools
 import logging
 from queue import Queue
 from typing import Callable, List
@@ -19,6 +20,12 @@ class SystemMessageHandler(MessageHandler):
         self._audio_callback = None
 
         self._analysis = SensorAnalysis()
+
+    def relay_to(self, func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            self.put(func, args, kwargs)
+        return wrapper
 
     @property
     def measurement_callback(self):
@@ -48,7 +55,10 @@ class SystemMessageHandler(MessageHandler):
         #  behaviors are complex and do not check for change themselves, this could become a bottleneck.  This could be
         #  updated to store previous values and only notify listeners on change, like a typical ObservableObject
         #  implementation.  Keeping things simple for the time being.
-        if msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
+        if callable(msg):
+            args, kwargs = data
+            msg(*args, **kwargs)
+        elif msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
             measures = self._analysis.measurements_received(data)
             if self._measurement_callback is not None and len(measures) > 0:
                 self._measurement_callback(measures)

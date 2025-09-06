@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from queue import Queue, Empty
 from threading import Thread
@@ -81,6 +82,17 @@ class MessageHandler(ObservableObject):
             )
             self._current_thread.start()
 
+    def put(self, func, args, kwargs):
+        if threading.current_thread() is self._current_thread:
+            logger.debug("%s: in-place execution ; already in system msg handler thread", func)
+            try:
+                func(*args, **kwargs)
+            except Exception as err:
+                logger.exception("Error while calling %s: %s", func, err)
+        else:
+            logger.debug("%s: relaying to system msg handler thread", func)
+            self._input_queue.put((func, (args, kwargs)))
+
     def run(self):
         try:
             self._run()
@@ -118,7 +130,8 @@ class MessageHandler(ObservableObject):
                 try:
                     msg_received(msg, data)
                 except Exception as err:
-                    logger.exception("Error during msg_received callback: msg=%s err=%s", msg, err)
+                    logger.exception("Error during msg_received callback: msg=%s err=%s ; data=%s",
+                                     msg, err, data)
             task_done()
         logger.debug(f"<{self._name}>: exiting message event loop")
 

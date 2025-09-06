@@ -87,10 +87,10 @@ class AppModel(ObservableObject):
             self._top_camera,
         ]
 
-        self._message_queue = queue.Queue()  # only dedicated to CAN bus messages reading/handling
+        self._system_message_queue = queue.Queue()  # only dedicated to CAN bus messages reading/handling
         # so: using a multiprocess queue instead, would allow to put the CAN connection thread into a dedicated process,
         # also giving more space/freedom for the main/UI process python GIL acquire/release.
-        self._system_message_handler = SystemMessageHandler(self._message_queue)
+        self._system_message_handler = SystemMessageHandler(self._system_message_queue)
 
         # Use the default analysis object created by the message handler.  Dereferenced here for use in the class in
         # case that changes.
