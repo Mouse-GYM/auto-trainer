@@ -1,3 +1,4 @@
+import functools
 import logging
 import threading
 import time
@@ -80,6 +81,7 @@ class MessageHandler(ObservableObject):
         else:
             get_instance = attr_or_callable
         def wrapper(func):
+            @functools.wraps(func)
             def wrapped(self, *args, **kwargs):
                 handler = get_instance(self)
                 if handler is None:
