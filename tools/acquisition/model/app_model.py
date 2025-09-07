@@ -1,3 +1,4 @@
+import functools
 import json
 import pickle
 import queue
@@ -44,6 +45,9 @@ _recording_age_enough_timer = DaemonTimer
 
 def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
+
+
+relay_to_system_msg_handler = SystemMessageHandler.relay_func("_system_message_handler")
 
 
 class AppModel(ObservableObject):
@@ -169,6 +173,7 @@ class AppModel(ObservableObject):
 
         self._load_animals()
 
+    @relay_to_system_msg_handler
     def _consider_release_pellet(self):
         algo = self._behavior.algorithm
         # we never know the session could be just stopped,

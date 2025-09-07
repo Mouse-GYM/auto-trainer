@@ -73,6 +73,19 @@ class MessageHandler(ObservableObject):
     def input_queue(self) -> Queue:
         return self._input_queue
 
+    @classmethod
+    def relay_func(cls, attr: str):
+        def wrapper(func):
+            def wrapped(self, *args, **kwargs):
+                handler = getattr(self, attr)
+                if handler is None:
+                    func(self, *args, **kwargs)
+                else:
+                    handler: MessageHandler
+                    handler.put(func, (self,) + args, kwargs)
+            return wrapped
+        return wrapper
+
     def start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
             logger.verbose("Starting system message handler thread")
@@ -84,13 +97,13 @@ class MessageHandler(ObservableObject):
 
     def put(self, func, args, kwargs):
         if threading.current_thread() is self._current_thread:
-            logger.debug("%s: in-place execution ; already in system msg handler thread", func)
+            # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
             try:
                 func(*args, **kwargs)
             except Exception as err:
                 logger.exception("Error while calling %s: %s", func, err)
         else:
-            logger.debug("%s: relaying to system msg handler thread", func)
+            # logger.debug("%s: relaying to system msg handler thread", func)
             self._input_queue.put((func, (args, kwargs)))
 
     def run(self):

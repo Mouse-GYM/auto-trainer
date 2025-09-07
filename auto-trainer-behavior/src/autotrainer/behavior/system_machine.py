@@ -547,7 +547,6 @@ class SystemMachine(StateMachine):
                 logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s",
                                self, prev_timer)
 
-
     # nb: not used anymore
     @relay_to_system_msg_handler
     def _pellet_sending(self):

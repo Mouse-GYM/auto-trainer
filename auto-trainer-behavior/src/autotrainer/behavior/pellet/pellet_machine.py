@@ -4,7 +4,7 @@ from typing import Dict, Callable, Any, Optional
 from transitions import Machine
 
 from autotrainer.core import EventManager, MessageHandler, ObservableObject, Offset3DTuple, Motor, \
-    transitions_allow_functions
+    transitions_allow_functions, SystemMessageHandler
 from autotrainer.core.multiproc import DaemonTimer
 from autotrainer.core.logging import get_verbose_logger
 
@@ -33,14 +33,20 @@ class PelletMachineEvents(StateMachineEvents):
     pellet_sending: Callable[[], None]
 
 
+
+relay_to_system_message_handler = SystemMessageHandler.relay_func("_message_handler")
+
+
 class PelletMachine(StateMachine):
 
     _events_class = PelletMachineEvents
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None, msg_handler: MessageHandler = None,
-                 pellet_device: PelletDeviceProtocol = None,
-                 ):
-
+    def __init__(
+        self,
+        algorithm: BehaviorAlgorithm = None,
+        msg_handler: SystemMessageHandler = None,
+        pellet_device: PelletDeviceProtocol = None,
+    ):
         initial_state = PelletState.monitoring
 
         super().__init__(
@@ -167,6 +173,7 @@ class PelletMachine(StateMachine):
         self._try_next_state(seen, caller="pellet_seen")
 
     # region Callbacks
+    @relay_to_system_message_handler
     def _session_starting(self):
         pass
         # Strictly speaking, the pellet should not be covered here when covering is disabled.  Under that condition,
@@ -178,6 +185,7 @@ class PelletMachine(StateMachine):
         # but is now controlled via receiving camera capture status == RECORDING
         # and not releasing before the desired threshold/delay.
 
+    @relay_to_system_message_handler
     def _session_ending(self):
         algo = self._algorithm
         logger.verbose("%s: _session_ending() called", self)
@@ -225,6 +233,7 @@ class PelletMachine(StateMachine):
 
     # endregion
 
+    @relay_to_system_message_handler
     def _try_next_state(
         self,
         pellet_seen: bool = True,
