@@ -47,7 +47,11 @@ def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
 
 
-relay_to_system_msg_handler = SystemMessageHandler.relay_func("_system_message_handler")
+def _get_app_model_msg_handler(self: "AppModel"):
+    return self._system_message_handler
+
+
+relay_to_system_msg_handler = SystemMessageHandler.relay_func(_get_app_model_msg_handler)
 
 
 class AppModel(ObservableObject):

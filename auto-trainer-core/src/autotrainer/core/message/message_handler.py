@@ -3,7 +3,7 @@ import threading
 import time
 from queue import Queue, Empty
 from threading import Thread
-from typing import Callable
+from typing import Callable, Union, Any, Optional
 
 from autotrainer.core.logging import get_verbose_logger
 from ..observable_object import ObservableObject
@@ -74,15 +74,18 @@ class MessageHandler(ObservableObject):
         return self._input_queue
 
     @classmethod
-    def relay_func(cls, attr: str):
+    def relay_func(cls, attr_or_callable: Union[str, Callable[[Any], Optional["MessageHandler"]]]):
+        if isinstance(attr_or_callable, str):
+            get_instance = lambda s: getattr(s, attr_or_callable)
+        else:
+            get_instance = attr_or_callable
         def wrapper(func):
             def wrapped(self, *args, **kwargs):
-                handler = getattr(self, attr)
+                handler = get_instance(self)
                 if handler is None:
                     func(self, *args, **kwargs)
                 else:
-                    handler: MessageHandler
-                    handler.put(func, (self,) + args, kwargs)
+                    handler.put_func_call(func, (self,) + args, kwargs)
             return wrapped
         return wrapper
 
@@ -95,7 +98,7 @@ class MessageHandler(ObservableObject):
             )
             self._current_thread.start()
 
-    def put(self, func, args, kwargs):
+    def put_func_call(self, func, args, kwargs):
         if threading.current_thread() is self._current_thread:
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
             try:

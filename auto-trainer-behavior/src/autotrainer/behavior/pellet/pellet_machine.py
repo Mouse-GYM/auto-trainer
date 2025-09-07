@@ -33,8 +33,11 @@ class PelletMachineEvents(StateMachineEvents):
     pellet_sending: Callable[[], None]
 
 
+def _get_pellet_machine_msg_handler(self: "PelletMachine"):
+    return self._message_handler
 
-relay_to_system_message_handler = SystemMessageHandler.relay_func("_message_handler")
+
+relay_to_system_message_handler = SystemMessageHandler.relay_func(_get_pellet_machine_msg_handler)
 
 
 class PelletMachine(StateMachine):

@@ -24,7 +24,7 @@ class SystemMessageHandler(MessageHandler):
     def relay_to(self, func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            self.put(func, args, kwargs)
+            self.put_func_call(func, args, kwargs)
         return wrapper
 
     @property
