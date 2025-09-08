@@ -1,5 +1,6 @@
 import functools
 import json
+import logging
 import pickle
 import queue
 import threading
@@ -217,7 +218,8 @@ class AppModel(ObservableObject):
                             logger.warning("Unhandled extra args to status msg: %r", raw[3:])
             else:
                 cmd = raw
-            logger.info("Got %s ; %s // %s", cmd, args, kwargs)
+            extra_info = (args, kwargs) if logger.isEnabledFor(logging.DEBUG) else "NA"
+            logger.info("Handling %s ; data=%s", cmd, extra_info)
             algo = self._behavior.algorithm
             if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
                 cam_idx, new_status = args

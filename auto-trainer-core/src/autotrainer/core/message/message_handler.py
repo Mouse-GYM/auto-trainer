@@ -103,10 +103,7 @@ class MessageHandler(ObservableObject):
     def put_func_call(self, func, args, kwargs):
         if threading.current_thread() is self._current_thread:
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
-            try:
-                func(*args, **kwargs)
-            except Exception as err:
-                logger.exception("Error while calling %s: %s", func, err)
+            func(*args, **kwargs)
         else:
             # logger.debug("%s: relaying to system msg handler thread", func)
             self._input_queue.put((func, (args, kwargs)))
