@@ -81,7 +81,7 @@ class IntersessionMachine(StateMachine):
         if res is not None:
             self._detection_configuration = detection_config
             EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionBegin,
-                                                      context=self._segmentation_configuration.nonce)
+                                                      context=segment_config.nonce)
 
     def after_end_analysis(self):
         self.events.on_analysis_ended()
