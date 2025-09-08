@@ -179,7 +179,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._presence_missing = False
 
         self._diamond_triangle_offest_config_path = diamond_triangle_offset_config_path
-        self._load_diamond_config()
+        self._diamond_triangle_offset_config = self._load_diamond_config()
 
         self._diamond_triangle_drift: Optional[Offset3DTuple] = None
         self._diamond_triangle_prev_drifts: List[Offset3DTuple] = []
@@ -540,7 +540,7 @@ class BehaviorAlgorithm(ObservableObject):
         prev, self._auto_correct_motors_drift = self._auto_correct_motors_drift, value
         self._on_property_changed(BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT, value, prev)
 
-    def _load_diamond_config(self):
+    def _load_diamond_config(self) -> Optional[DiamondTriangleOffsetConfig]:
         cfg_path = self._diamond_triangle_offest_config_path
         if cfg_path is None:
             logger.notice("No diamond-triangle offset config path provided")
@@ -548,9 +548,8 @@ class BehaviorAlgorithm(ObservableObject):
             if not cfg_path.expanduser().is_file():
                 logger.warning("Diamond triangle config %r not a file", cfg_path.as_posix())
             else:
-                self._diamond_triangle_offset_config = DiamondTriangleOffsetConfig.from_file(
-                    cfg_path
-                )
+                return DiamondTriangleOffsetConfig.from_file(cfg_path)
+        return None
 
     def start_session(self, *, reason: str="NA"):
         with self._thread_lock:
