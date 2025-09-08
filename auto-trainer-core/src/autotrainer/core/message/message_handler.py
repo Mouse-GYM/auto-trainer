@@ -87,13 +87,12 @@ class MessageHandler(ObservableObject):
     def relay_transitions(self, machine_transitions: Any):
         """Relay all transitions trigger ***bound methods*** of the given machine_transitions instance to us"""
         for trans in machine_transitions.transitions:
-            trigger_func_or_name = trans['trigger']
-            for which in trigger_func_or_name,:
-                if which is not None:
-                    if callable(which):
-                        which = which.__name__
-                    meth = getattr(machine_transitions, which)
-                    setattr(machine_transitions, which, self.relay_meth(meth))
+            trig = trans['trigger']
+            if trig is not None:
+                if callable(trig):
+                    trig = trig.__name__
+                meth = getattr(machine_transitions, trig)
+                setattr(machine_transitions, trig, self.relay_meth(meth))
 
     @classmethod
     def relay_func(cls, attr_or_callable: Union[str, "MessageHandler", Callable[[Any], Optional["MessageHandler"]]]):
