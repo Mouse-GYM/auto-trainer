@@ -67,6 +67,7 @@ class PelletMachine(StateMachine):
         self._message_handler = msg_handler
         if msg_handler is not None:
             msg_handler.ack_received += self._pellet_device_ack_received
+            msg_handler.relay_transitions(self)
 
         self._pellet_device = pellet_device
 

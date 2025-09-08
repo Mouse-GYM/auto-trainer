@@ -94,6 +94,8 @@ class SystemMachine(StateMachine):
 
         self._tunnel_device = tunnel_device
         self._msg_handler = msg_handler
+        if msg_handler is not None:
+            msg_handler.relay_transitions(self)
 
         self._analysis = analysis
         if analysis is not None:
@@ -151,7 +153,6 @@ class SystemMachine(StateMachine):
         self._algorithm.project = self._project_info
         self._intersession.project = self._project_info
 
-    @relay_to_system_msg_handler
     def before_enter_tunnel(self, *, reason: str="NA"):
         EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
         pellet_state = self._pellet_machine.state
@@ -171,36 +172,29 @@ class SystemMachine(StateMachine):
                 self._update_magnet_position(self.algorithm.baseline_intensity)
                 algo.system_state = SystemState.tunnel
 
-    @relay_to_system_msg_handler
     def after_enter_tunnel(self, *, reason: str="NA"):
         if self._analysis is not None:
             self._evaluate_auto_clamp(self._analysis.headbar_pressure_monitor.is_engaged)
 
-    @relay_to_system_msg_handler
     def before_exit_tunnel(self, *, reason: str="NA"):
         self._algorithm.system_state = SystemState.cage
 
-    @relay_to_system_msg_handler
     def after_exit_tunnel(self, *, reason: str="NA"):
         self._update_magnet_position(self.algorithm.baseline_intensity)
         EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
         self.algorithm.end_session(reason=f"{reason}->after_exit_tunnel")
 
-    @relay_to_system_msg_handler
     def before_enter_intersession(self):
         # current system_state should be tunnel here
         self._algorithm.system_state = SystemState.intersession
 
-    @relay_to_system_msg_handler
     def after_enter_intersession(self):
         self._intersession.perform_segmentation()
 
-    @relay_to_system_msg_handler
     def before_exit_intersession_to_cage(self):
         self._algorithm.system_state = SystemState.cage
         self._pellet_machine.environment_changed(caller="before_exit_intersession_to_cage")
 
-    @relay_to_system_msg_handler
     def before_exit_intersession_to_tunnel(self):
         self.state = SystemState.tunnel
         # set/force tunnel state required now, otherwise enter_tunnel is refused here after,
