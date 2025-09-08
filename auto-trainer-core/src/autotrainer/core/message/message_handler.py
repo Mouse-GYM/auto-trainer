@@ -95,7 +95,6 @@ class MessageHandler(ObservableObject):
                     meth = getattr(machine_transitions, which)
                     setattr(machine_transitions, which, self.relay_meth(meth))
 
-
     @classmethod
     def relay_func(cls, attr_or_callable: Union[str, "MessageHandler", Callable[[Any], Optional["MessageHandler"]]]):
         """Make a decorator usable on class ***functions*** ; not on a class instance bound method"""
@@ -108,8 +107,8 @@ class MessageHandler(ObservableObject):
             get_instance = attr_or_callable
         def wrapper(func):
             orig_func = func
-            # while isinstance(func, partial):
-            #     func = func.func
+            while isinstance(func, partial):
+                func = func.func
             @functools.wraps(func)
             def wrapped(self, *args, **kwargs):
                 handler = get_instance(self) if msg_instance is None else msg_instance
