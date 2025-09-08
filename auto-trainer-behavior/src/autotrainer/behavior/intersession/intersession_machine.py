@@ -66,8 +66,8 @@ class IntersessionMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationBegin,
                                                       context=segment_config.nonce)
 
-    def after_enter_detection(self):
-        segment_config = self._segmentation_configuration
+    def after_enter_detection(self, segment_config):
+        # segment_config = self._segmentation_configuration
         if segment_config is None:
             raise RuntimeError("after_enter_detection but segment_config is None")
         detection_config = DetectionConfiguration(
@@ -86,6 +86,8 @@ class IntersessionMachine(StateMachine):
 
     def after_end_analysis(self):
         self.events.on_analysis_ended()
+        self._segmentation_configuration = None
+        self._detection_configuration = None
 
     def can_perform_segmentation(self):
         p = self._project_info is not None
@@ -118,7 +120,7 @@ class IntersessionMachine(StateMachine):
         else:
             if success:
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationEnd)
-                self.perform_detection()
+                self.perform_detection(segment_config)
             else:
                 logger.error("perform segmentation failed. config=%s", segment_config)
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError)
@@ -144,7 +146,6 @@ class IntersessionMachine(StateMachine):
 
             self.end_analysis()
 
-        self._detection_configuration = None
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
@@ -160,7 +161,7 @@ class IntersessionMachine(StateMachine):
     def may_perform_segmentation(self):
         pass
 
-    def perform_detection(self):
+    def perform_detection(self, segment_config):
         pass
 
     def may_perform_detection(self):
