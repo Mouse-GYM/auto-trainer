@@ -76,8 +76,9 @@ class MessageHandler(ObservableObject):
 
     def relay_transitions(self, machine_transitions: Any):
         for trans in machine_transitions.transitions:
-            before, after = trans.get("before"), trans.get("after")
-            for which in before, after:
+            # before, after = trans.get("before"), trans.get("after")
+            trigger = trans['trigger']
+            for which in trigger,:
                 if which is not None:
                     meth = getattr(machine_transitions, which)
                     setattr(machine_transitions, which, self.relay_func(lambda _: self)(meth))
