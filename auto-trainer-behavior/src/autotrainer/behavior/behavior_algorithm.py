@@ -118,6 +118,7 @@ class BehaviorAlgorithm(ObservableObject):
     _thread_locals.event = None
     _handler_queue: ClassVar[Optional[queue.Queue]] = None
     _handler_thread: ClassVar[Optional[threading.Thread]] = None
+    _no_handler_thread: ClassVar[Optional[bool]] = False
 
     def __init__(
             self,
@@ -227,6 +228,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @classmethod
     def _check_start_thread(cls):
+        if cls._no_handler_thread:
+            return
         handler_queue = cls._handler_queue
         if handler_queue is None:
             logger.info("Creating algo handler thread ..")
