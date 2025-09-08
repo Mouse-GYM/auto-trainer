@@ -65,6 +65,8 @@ class MessageHandler(ObservableObject):
         self._input_queue = input_queue
         self._name = name
         self._current_thread = None
+        self._thread_locals = threading.local()
+        self._thread_locals.event = None
 
     def __del__(self):
         thread = self._current_thread
@@ -135,10 +137,17 @@ class MessageHandler(ObservableObject):
         else:
             # logger.debug("%s: relaying to system msg handler thread", func)
             if wait:
-                wait = threading.Event()
-            self._input_queue.put((func, (args, kwargs, wait)))
+                prev = getattr(self._thread_locals, "event", None)
+                if prev is None:
+                    ev = self._thread_locals.event = threading.Event()
+                else:
+                    ev = prev
+            else:
+                ev = None
+            self._input_queue.put((func, (args, kwargs, ev)))
             if wait:
-                wait.wait()
+                ev.wait()
+                ev.clear()  # need always clear after used
 
     def run(self):
         try:
