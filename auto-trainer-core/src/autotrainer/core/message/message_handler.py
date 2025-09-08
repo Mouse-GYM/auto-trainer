@@ -74,6 +74,14 @@ class MessageHandler(ObservableObject):
     def input_queue(self) -> Queue:
         return self._input_queue
 
+    def relay_transitions(self, machine_transitions: Any):
+        for trans in machine_transitions.transitions:
+            before, after = trans.get("before"), trans.get("after")
+            for which in before, after:
+                if which is not None:
+                    meth = getattr(machine_transitions, which)
+                    setattr(machine_transitions, which, self.relay_func(lambda _: self)(meth))
+
     @classmethod
     def relay_func(cls, attr_or_callable: Union[str, Callable[[Any], Optional["MessageHandler"]]]):
         if isinstance(attr_or_callable, str):
