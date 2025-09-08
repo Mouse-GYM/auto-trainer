@@ -1,5 +1,6 @@
 import functools
 import logging
+import threading
 from queue import Queue
 from typing import Callable, List
 
@@ -50,8 +51,10 @@ class SystemMessageHandler(MessageHandler):
         #  updated to store previous values and only notify listeners on change, like a typical ObservableObject
         #  implementation.  Keeping things simple for the time being.
         if callable(msg):
-            args, kwargs = data
+            args, kwargs, event = data
             msg(*args, **kwargs)
+            if isinstance(event, threading.Event):
+                event.set()
         elif msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
             measures = self._analysis.measurements_received(data)
             if self._measurement_callback is not None and len(measures) > 0:

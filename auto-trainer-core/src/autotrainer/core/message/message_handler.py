@@ -127,13 +127,18 @@ class MessageHandler(ObservableObject):
             )
             self._current_thread.start()
 
-    def put_func_call(self, func, args, kwargs):
+    def put_func_call(self, func, args, kwargs, *, wait: bool=True):
+        # wait: bool=True could be quite safer, and we would only set it False where we see it's safe.
         if threading.current_thread() is self._current_thread:
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
             func(*args, **kwargs)
         else:
             # logger.debug("%s: relaying to system msg handler thread", func)
-            self._input_queue.put((func, (args, kwargs)))
+            if wait:
+                wait = threading.Event()
+            self._input_queue.put((func, (args, kwargs, wait)))
+            if wait:
+                wait.wait()
 
     def run(self):
         try:
