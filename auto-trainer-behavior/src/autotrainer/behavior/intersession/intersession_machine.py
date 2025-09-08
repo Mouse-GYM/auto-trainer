@@ -55,9 +55,13 @@ class IntersessionMachine(StateMachine):
                                                    session_index=self._project_info.session.value,
                                                    complete=lambda nonce, success:
                                                         self._segmentation_complete(nonce, success, segment_config=segment_config))
+        self._segmentation_configuration = segment_config
         res = self._inference.perform_segmentation(segment_config)
-        if res is not None:
-            self._segmentation_configuration = segment_config
+        if res is None:
+            logger.error("perform segmentation didn't started")
+            self._segmentation_configuration = None
+            self.end_analysis()
+        else:
             self.events.on_analysis_started()  # should maybe conditioned by lower level lock too
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationBegin,
                                                       context=segment_config.nonce)
@@ -69,9 +73,11 @@ class IntersessionMachine(StateMachine):
         detection_config = DetectionConfiguration(
             nonce=secrets.token_hex(),
             session_index=segment_config.session_index,
-            complete=lambda nonce, success:
-                self._detection_complete(nonce, success, detection_config=detection_config)
+            complete=lambda _, __: None,
         )
+        def complete(nonce, success):
+            return self._detection_complete(nonce, success, detection_config=detection_config)
+        detection_config.complete = complete
         res = self._inference.perform_detection(detection_config)
         if res is not None:
             self._detection_configuration = detection_config
