@@ -67,16 +67,11 @@ class IntersessionMachine(StateMachine):
                                                       context=segment_config.nonce)
 
     def after_enter_detection(self, segment_config: SegmentationConfiguration):
-        # if segment_config is None:
-        #     raise RuntimeError("after_enter_detection but segment_config is None")
         detection_config = DetectionConfiguration(
             nonce=secrets.token_hex(),
             session_index=segment_config.session_index,
-            complete=lambda _, __: None,
+            complete=lambda nonce, success: self._detection_complete(nonce, success, detection_config=detection_config),
         )
-        def complete(nonce, success):
-            return self._detection_complete(nonce, success, detection_config=detection_config)
-        detection_config.complete = complete
         res = self._inference.perform_detection(detection_config)
         if res is not None:
             self._detection_configuration = detection_config
@@ -99,19 +94,20 @@ class IntersessionMachine(StateMachine):
         return res
 
     def can_perform_detection(self, segment_config: Optional[SegmentationConfiguration] = None):
-        del segment_config  # unused ; but we could check it's not None actually...
         p = self._project_info is not None
         i = self._inference is not None
         d = self._detection_configuration is None
+        s = segment_config is not None
         EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionCan,
-                                                  context=f"{p}:{i}:{d}")
-        can_do_detection = p and i and d
-        logger.debug("can_perform_detection=%s ; prj=%s inference=%s detection_config=%s",
-                    can_do_detection, p, i, d)
+                                                  context=f"{p}:{i}:{d}:{s}")
+        can_do_detection = p and i and d and s
+        logger.debug("can_perform_detection=%s ; prj=%s inference=%s detection_config=%s segment_config=%s",
+                    can_do_detection, p, i, d, s)
         return can_do_detection
 
     def _segmentation_complete(self, nonce: str, success: bool, *, segment_config: SegmentationConfiguration):
         if segment_config.nonce != nonce:
+            # NB: should not happen anymore
             logger.error("mismatched segmentation nonce: passed=%s cur_seg_config=%s success=%s",
                          nonce, segment_config, success)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationNonceMismatch,
@@ -130,6 +126,7 @@ class IntersessionMachine(StateMachine):
 
     def _detection_complete(self, nonce: str, success: bool, *, detection_config: DetectionConfiguration):
         if detection_config.nonce != nonce:
+            # NB: should never happen anymore
             logger.error("mismatched detection nonce: passed=%s cur_config=%s success=%s",
                          nonce, detection_config, success)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionNonceMismatch,
