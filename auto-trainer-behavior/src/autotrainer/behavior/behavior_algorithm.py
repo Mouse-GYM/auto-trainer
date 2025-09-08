@@ -93,6 +93,18 @@ class BehaviorAlgoProps(str, Enum):
     HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'
 
 
+def _relay_func(func, *, wait: bool=True):
+    orig_func = func
+    while isinstance(func, partial):
+        func = func.func
+
+    @functools.wraps(func)
+    def wrapped(self, *args, **kwargs):
+        BehaviorAlgorithm.put_func_call(orig_func, (self,) + args, kwargs, wait=wait)
+
+    return wrapped
+
+
 class BehaviorAlgorithm(ObservableObject):
     # dynamic events type hints,
     # helps IDE search/completion/type-verification:
@@ -102,10 +114,10 @@ class BehaviorAlgorithm(ObservableObject):
     pellet_motor_drift_changed: Callable[[Offset3DTuple], None]
     cover_servo_status_changed: Callable[[CoverServoStatus], None]
 
-    _handler_thread: ClassVar[Optional[threading.Thread]] = None
-    _handler_queue: ClassVar[Optional[queue.Queue]] = None
     _thread_locals = threading.local()
     _thread_locals.event = None
+    _handler_queue: ClassVar[Optional[queue.Queue]] = None
+    _handler_thread: ClassVar[Optional[threading.Thread]] = None
 
     def __init__(
             self,
@@ -211,11 +223,16 @@ class BehaviorAlgorithm(ObservableObject):
             cover_servo_status=CoverServoStatus.RELEASE_POSITION_ERROR,
         )
         #
-        handler_queue = self._handler_queue
+        self._check_start_thread()
+
+    @classmethod
+    def _check_start_thread(cls):
+        handler_queue = cls._handler_queue
         if handler_queue is None:
+            logger.info("Creating algo handler thread ..")
             handler_queue = BehaviorAlgorithm._handler_queue = queue.Queue(maxsize=64)
             handler_thread = BehaviorAlgorithm._handler_thread = threading.Thread(
-                target=self._handler_thread_run, args=(handler_queue,),
+                target=cls._handler_thread_run, args=(handler_queue,),
                 daemon=True,
                 name="AlgoHandler",
             )
@@ -259,13 +276,7 @@ class BehaviorAlgorithm(ObservableObject):
     @classmethod
     def relay_func(cls, func, *, wait: bool=True):
         """Make a decorator usable on class ***functions*** ; not on a class instance bound method"""
-        orig_func = func
-        while isinstance(func, partial):
-            func = func.func
-        @functools.wraps(func)
-        def wrapped(self, *args, **kwargs):
-            cls.put_func_call(orig_func, (self,) + args, kwargs, wait=wait)
-        return wrapped
+        return _relay_func(func, wait=wait)
 
     @classmethod
     def put_func_call(cls, func, args, kwargs, *, wait: bool=True):
@@ -642,6 +653,7 @@ class BehaviorAlgorithm(ObservableObject):
                 return DiamondTriangleOffsetConfig.from_file(cfg_path)
         return None
 
+    @_relay_func
     def start_session(self, *, reason: str="NA"):
         with self._thread_lock:
             return self._start_session(reason=reason)
@@ -678,6 +690,7 @@ class BehaviorAlgorithm(ObservableObject):
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
         return True
 
+    @_relay_func
     def end_session(self, *, reason: str="NA"):
         with self._thread_lock:
             return self._end_session(reason=reason)
@@ -944,3 +957,6 @@ class BehaviorAlgorithm(ObservableObject):
             EventManager.default().post_event_content(BehaviorEventKind.dayStarted)
             self._today = today
             self._start_day()
+
+
+# BehaviorAlgorithm._check_start_thread()
