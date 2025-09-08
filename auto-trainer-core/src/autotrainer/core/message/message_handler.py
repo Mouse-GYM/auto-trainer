@@ -77,16 +77,18 @@ class MessageHandler(ObservableObject):
     def relay_transitions(self, machine_transitions: Any):
         for trans in machine_transitions.transitions:
             # before, after = trans.get("before"), trans.get("after")
-            trigger = trans['trigger']
-            for which in trigger,:
+            trigger_func_or_name = trans['trigger']
+            for which in trigger_func_or_name,:
                 if which is not None:
-                    meth = getattr(machine_transitions, which)
-                    setattr(machine_transitions, which, self.relay_func(lambda _: self)(meth))
+                    if callable(which):
+                        which = which.__name__
+                    # meth = getattr(machine_transitions, which)
+                    setattr(machine_transitions, which, self.relay_func(lambda _: self)(which))
 
     @classmethod
     def relay_func(cls, attr_or_callable: Union[str, Callable[[Any], Optional["MessageHandler"]]]):
         if isinstance(attr_or_callable, str):
-            get_instance = lambda s: getattr(s, attr_or_callable)
+            get_instance = lambda self: getattr(self, attr_or_callable)
         else:
             get_instance = attr_or_callable
         def wrapper(func):
