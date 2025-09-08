@@ -100,6 +100,7 @@ class AppModel(ObservableObject):
         # so: using a multiprocess queue instead, would allow to put the CAN connection thread into a dedicated process,
         # also giving more space/freedom for the main/UI process python GIL acquire/release.
         self._system_message_handler = SystemMessageHandler(self._system_message_queue)
+        self._system_message_handler.start()
 
         # Use the default analysis object created by the message handler.  Dereferenced here for use in the class in
         # case that changes.
@@ -533,7 +534,7 @@ class AppModel(ObservableObject):
         return conf.save_default(self._preferences.configuration_location)
 
     def on_activated(self):
-        self._system_message_handler.start()
+        pass
 
     def on_close(self):
         logger.verbose("AppModel.on_close")
