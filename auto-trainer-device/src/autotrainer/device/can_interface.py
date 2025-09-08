@@ -925,7 +925,7 @@ class CanInterface(DeviceInterface):
              config_type: Either a ServoConfig or StepperConfig class reference
              timeout: Duration before failure
          """
-        t_end = time.time() + timeout
+        t_perf_end = time.perf_counter() + timeout
         while True:
             if self.request_motor_config(motor):
                 config = self.get_response(config_type, target_of_motor(motor),
@@ -938,8 +938,8 @@ class CanInterface(DeviceInterface):
             else:
                 logger.error("Failed to request motor configuration for %s", motor)
                 time.sleep(0.01)
-            if time.time() > t_end:
-                raise RuntimeError("Could not get config for motor %s in time", motor)
+            if time.perf_counter() > t_perf_end:
+                raise RuntimeError(f"Could not get config for motor {motor} in time")
 
     def _query_configuration(self):
         """
