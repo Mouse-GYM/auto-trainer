@@ -122,7 +122,8 @@ class SystemMachine(StateMachine):
         intersession_machine = self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._intersession_ended
         intersession_machine.events.state_changed += self._intersession_state_changed
-        self._msg_handler.relay_transitions(intersession_machine)
+        if msg_handler is not None:
+            self._msg_handler.relay_transitions(intersession_machine)
 
         # need to set it directly, when we start all state are "OFF/0": no presence detected, etc..
         # so if that's stay as is then there need to be the timer already setup:
