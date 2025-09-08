@@ -53,7 +53,8 @@ class SystemMessageHandler(MessageHandler):
         if callable(msg):
             args, kwargs, event = data
             msg(*args, **kwargs)
-            if isinstance(event, threading.Event):
+            if event is not None:
+                # assert isinstance(event, threading.Event)
                 event.set()
         elif msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
             measures = self._analysis.measurements_received(data)

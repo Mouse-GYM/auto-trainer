@@ -145,7 +145,7 @@ class MessageHandler(ObservableObject):
             else:
                 ev = None
             self._input_queue.put((func, (args, kwargs, ev)))
-            if wait:
+            if ev is not None:
                 ev.wait()
                 ev.clear()  # need always clear after used
 
