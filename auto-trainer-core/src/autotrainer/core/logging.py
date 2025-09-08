@@ -129,7 +129,7 @@ class LogQueueListenerProc(Process):
         super().__init__(daemon=True)
         self._queue = log_queue
         self._command_queue = multiprocessing.Queue()
-        self._config = log_config
+        self._log_config = log_config
         self._console_handler = None
         self._listener = None
 
@@ -184,7 +184,7 @@ class LogQueueListenerProc(Process):
 
     def run(self):
         # print(f"{logging.root.handlers}")
-        cfg = self._config
+        cfg = self._log_config
         #
         console_handler = self._console_handler = make_console_handler(cfg)
 
@@ -192,7 +192,7 @@ class LogQueueListenerProc(Process):
         base_logger.addHandler(console_handler)
 
         base_logger.setLevel(logging.INFO)
-        base_logger.info("Starting log queue listener. config=%s", self._config)
+        base_logger.info("Starting log queue listener. config=%s", self._log_config)
         base_logger.setLevel(cfg.root_level)
 
         listener = self._listener = WithThreadIdQueueListener(
