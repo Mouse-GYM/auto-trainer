@@ -66,10 +66,9 @@ class IntersessionMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationBegin,
                                                       context=segment_config.nonce)
 
-    def after_enter_detection(self, segment_config):
-        # segment_config = self._segmentation_configuration
-        if segment_config is None:
-            raise RuntimeError("after_enter_detection but segment_config is None")
+    def after_enter_detection(self, segment_config: SegmentationConfiguration):
+        # if segment_config is None:
+        #     raise RuntimeError("after_enter_detection but segment_config is None")
         detection_config = DetectionConfiguration(
             nonce=secrets.token_hex(),
             session_index=segment_config.session_index,
@@ -99,7 +98,8 @@ class IntersessionMachine(StateMachine):
         logger.debug("can_perform_segmentation=%s: prj=%s inference=%s segment=%s", res, p, i, s)
         return res
 
-    def can_perform_detection(self):
+    def can_perform_detection(self, segment_config: Optional[SegmentationConfiguration] = None):
+        del segment_config  # unused ; but we could check it's not None actually...
         p = self._project_info is not None
         i = self._inference is not None
         d = self._detection_configuration is None
