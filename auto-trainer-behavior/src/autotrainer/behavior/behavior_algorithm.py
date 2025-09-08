@@ -71,6 +71,7 @@ class BehaviorAlgoProps(str, Enum):
     PELLET_DELIVERY_ENABLED = 'pellet_delivery_enabled'
     PELLET_COVER_ENABLED = 'pellet_cover_enabled'
     SESSION_PELLET_COUNT = 'session_pellet_count'
+    SESSION_MOUSE_SEEN = 'session_mouse_seen'
 
     AUTO_CORRECT_MOTOR_DRIFT = 'auto_correct_motor_drift'
     PELLET_MOTOR_DRIFT = 'pellet_motor_drift'
@@ -85,6 +86,8 @@ class BehaviorAlgoProps(str, Enum):
     TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"
 
     PRESENCE_MISSING = 'presence_missing'
+    PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'
+    HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'
 
 
 class BehaviorAlgorithm(ObservableObject):
@@ -673,7 +676,8 @@ class BehaviorAlgorithm(ObservableObject):
     def mouse_seen(self, seen: bool = True):
         if self._is_in_session and seen:
             was_seen = self._session_mouse_seen
-            self._session_mouse_seen = self._on_property_changed("session_mouse_seen", seen, self._session_mouse_seen)
+            self._session_mouse_seen = self._on_property_changed(
+                BehaviorAlgoProps.SESSION_MOUSE_SEEN, seen, self._session_mouse_seen)
             if not was_seen:
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
 
@@ -691,9 +695,11 @@ class BehaviorAlgorithm(ObservableObject):
         if pellet_hand_uncover_dist is not None and value <= pellet_hand_uncover_dist:
             if not self._hands_near_pellet_seen:
                 logger.verbose("Hand(s) near pellet seen ; distance = %.2f mm", value)
-                self._hands_near_pellet_seen = True
+                self._hands_near_pellet_seen = True  # must be set BEFORE doing the on_property_changed
+                self._on_property_changed(
+                    BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN, True, False)
         self._pellet_hands_min_distance = self._on_property_changed(
-            "pellet_hands_min_distance", value, self._pellet_hands_min_distance)
+            BehaviorAlgoProps.PELLET_HANDS_DISTANCE, value, self._pellet_hands_min_distance)
 
     def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         self.pellet_delivery_enabled = cfg.is_enabled

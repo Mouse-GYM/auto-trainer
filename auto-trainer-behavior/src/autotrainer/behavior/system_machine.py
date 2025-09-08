@@ -499,10 +499,12 @@ class SystemMachine(StateMachine):
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.
         pellet_dev = self._pellet_device
+        #
         if name == BehaviorAlgoProps.HEAD_FIXATION_ENABLED:
             if not new_value:
                 logger.debug("auto-clamp disabled (backing off to baseline intensity)")
                 self._disengage_auto_clamp()
+
         elif name == BehaviorAlgoProps.PELLET_MOTOR_DRIFT:
             if new_value is not None and self._algorithm.auto_correct_motors_drift:
                 pellet_dev.set_motors_drift(new_value)
@@ -516,6 +518,9 @@ class SystemMachine(StateMachine):
                 # # for set_coord in (pellet_dev.set_x, pellet_dev.set_y, pellet_dev.set_z):
                 # #     set_coord(0, absolute=False)
                 # given set_motors_drift already does it.
+
+        elif name == BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN:
+            self._pellet_machine.environment_changed(must_release=new_value)
 
     def _update_magnet_position(self, position: int):
         if self._tunnel_device is not None:
