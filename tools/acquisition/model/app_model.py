@@ -12,7 +12,7 @@ from typing import Optional, List
 
 import yaml
 
-from autotrainer.behavior import IntersessionState
+from autotrainer.behavior import IntersessionState, BehaviorAlgorithm
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
@@ -48,11 +48,7 @@ def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
 
 
-def _get_app_model_msg_handler(self: "AppModel"):
-    return self._system_message_handler
-
-
-relay_to_system_msg_handler = SystemMessageHandler.relay_func(_get_app_model_msg_handler)
+relay_to_behavior_handler = BehaviorAlgorithm.relay_func
 
 
 class AppModel(ObservableObject):
@@ -179,7 +175,7 @@ class AppModel(ObservableObject):
 
         self._load_animals()
 
-    @relay_to_system_msg_handler
+    @relay_to_behavior_handler
     def _consider_release_pellet(self):
         algo = self._behavior.algorithm
         # we never know the session could be just stopped,

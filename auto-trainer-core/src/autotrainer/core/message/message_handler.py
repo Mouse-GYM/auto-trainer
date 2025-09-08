@@ -65,8 +65,6 @@ class MessageHandler(ObservableObject):
         self._input_queue = input_queue
         self._name = name
         self._current_thread = None
-        self._thread_locals = threading.local()
-        self._thread_locals.event = None
 
     def __del__(self):
         thread = self._current_thread
@@ -77,49 +75,6 @@ class MessageHandler(ObservableObject):
     def input_queue(self) -> Queue:
         return self._input_queue
 
-    def relay_meth(self, meth):
-        func = meth
-        while isinstance(func, partial):
-            func = func.func
-        @functools.wraps(func.__func__)
-        def wrapped(*args, **kwargs):
-            self.put_func_call(meth, args, kwargs)
-        return wrapped
-
-    def relay_transitions(self, machine_transitions: Any):
-        """Relay all transitions trigger ***bound methods*** of the given machine_transitions instance to us"""
-        for trans in machine_transitions.transitions:
-            trig = trans['trigger']
-            if trig is not None:
-                if callable(trig):
-                    trig = trig.__name__
-                meth = getattr(machine_transitions, trig)
-                setattr(machine_transitions, trig, self.relay_meth(meth))
-
-    @classmethod
-    def relay_func(cls, attr_or_callable: Union[str, "MessageHandler", Callable[[Any], Optional["MessageHandler"]]]):
-        """Make a decorator usable on class ***functions*** ; not on a class instance bound method"""
-        msg_instance = None
-        if isinstance(attr_or_callable, str):
-            get_instance = lambda self: getattr(self, attr_or_callable)
-        elif isinstance(attr_or_callable, cls):
-            msg_instance = attr_or_callable
-        else:
-            get_instance = attr_or_callable
-        def wrapper(func):
-            orig_func = func
-            while isinstance(func, partial):
-                func = func.func
-            @functools.wraps(func)
-            def wrapped(self, *args, **kwargs):
-                handler = get_instance(self) if msg_instance is None else msg_instance
-                if handler is None:
-                    orig_func(self, *args, **kwargs)
-                else:
-                    handler.put_func_call(orig_func, (self,) + args, kwargs)
-            return wrapped
-        return wrapper
-
     def start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
             logger.verbose("Starting system message handler thread")
@@ -128,26 +83,6 @@ class MessageHandler(ObservableObject):
                 daemon=True,  # in case main thread exits: also have the current handler thread to exit
             )
             self._current_thread.start()
-
-    def put_func_call(self, func, args, kwargs, *, wait: bool=True):
-        # wait: bool=True could be quite safer, and we would only set it False where we see it's safe.
-        if threading.current_thread() is self._current_thread:
-            # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
-            func(*args, **kwargs)
-        else:
-            # logger.debug("%s: relaying to system msg handler thread", func)
-            if wait:
-                prev = getattr(self._thread_locals, "event", None)
-                if prev is None:
-                    ev = self._thread_locals.event = threading.Event()
-                else:
-                    ev = prev
-            else:
-                ev = None
-            self._input_queue.put((func, (args, kwargs, ev)))
-            if ev is not None:
-                ev.wait()
-                ev.clear()  # need always clear after used
 
     def run(self):
         try:

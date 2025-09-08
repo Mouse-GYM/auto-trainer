@@ -50,16 +50,7 @@ class SystemMessageHandler(MessageHandler):
         #  behaviors are complex and do not check for change themselves, this could become a bottleneck.  This could be
         #  updated to store previous values and only notify listeners on change, like a typical ObservableObject
         #  implementation.  Keeping things simple for the time being.
-        if callable(msg):
-            args, kwargs, event = data
-            try:
-                msg(*args, **kwargs)
-            except Exception as err:
-                logger.exception("Executing %s failed: %s", msg, err)
-            if event is not None:
-                # assert isinstance(event, threading.Event)
-                event.set()
-        elif msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
+        if msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
             measures = self._analysis.measurements_received(data)
             if self._measurement_callback is not None and len(measures) > 0:
                 self._measurement_callback(measures)

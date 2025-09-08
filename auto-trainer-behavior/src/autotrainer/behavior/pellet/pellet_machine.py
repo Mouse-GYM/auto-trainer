@@ -33,11 +33,7 @@ class PelletMachineEvents(StateMachineEvents):
     pellet_sending: Callable[[], None]
 
 
-def _get_pellet_machine_msg_handler(self: "PelletMachine"):
-    return self._message_handler
-
-
-relay_to_system_message_handler = SystemMessageHandler.relay_func(_get_pellet_machine_msg_handler)
+relay_to_behavior_handler = BehaviorAlgorithm.relay_func
 
 
 class PelletMachine(StateMachine):
@@ -59,15 +55,16 @@ class PelletMachine(StateMachine):
 
         # This is primarily for unit testing.  In general, algorithm should always be passed in from the parent
         # SystemMachine.
-        self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
-
-        self._algorithm.session_starting += self._session_starting
-        self._algorithm.session_ending += self._session_ending
+        if algorithm is None:
+            algorithm = BehaviorAlgorithm()
+        self._algorithm = algorithm
+        algorithm.session_starting += self._session_starting
+        algorithm.session_ending += self._session_ending
+        algorithm.relay_transitions(self)
 
         self._message_handler = msg_handler
         if msg_handler is not None:
             msg_handler.ack_received += self._pellet_device_ack_received
-            msg_handler.relay_transitions(self)
 
         self._pellet_device = pellet_device
 
@@ -177,7 +174,7 @@ class PelletMachine(StateMachine):
         self._try_next_state(seen, caller="pellet_seen")
 
     # region Callbacks
-    @relay_to_system_message_handler
+    @relay_to_behavior_handler
     def _session_starting(self):
         pass
         # Strictly speaking, the pellet should not be covered here when covering is disabled.  Under that condition,
@@ -189,7 +186,7 @@ class PelletMachine(StateMachine):
         # but is now controlled via receiving camera capture status == RECORDING
         # and not releasing before the desired threshold/delay.
 
-    @relay_to_system_message_handler
+    @relay_to_behavior_handler
     def _session_ending(self):
         algo = self._algorithm
         logger.verbose("%s: _session_ending() called", self)
@@ -237,7 +234,7 @@ class PelletMachine(StateMachine):
 
     # endregion
 
-    @relay_to_system_message_handler
+    @relay_to_behavior_handler
     def _try_next_state(
         self,
         pellet_seen: bool = True,

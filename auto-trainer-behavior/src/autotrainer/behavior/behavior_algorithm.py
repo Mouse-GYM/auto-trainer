@@ -1,15 +1,18 @@
 import dataclasses
+import functools
 import logging
 import math
 import operator
+import queue
 import statistics
 import threading
 import time
 from datetime import datetime
+from functools import partial
 from enum import Enum
 from functools import reduce
 from pathlib import Path
-from typing import Callable, Optional, Tuple, List
+from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union
 
 from typing import Callable
 
@@ -98,6 +101,11 @@ class BehaviorAlgorithm(ObservableObject):
 
     pellet_motor_drift_changed: Callable[[Offset3DTuple], None]
     cover_servo_status_changed: Callable[[CoverServoStatus], None]
+
+    _handler_thread: ClassVar[Optional[threading.Thread]] = None
+    _handler_queue: ClassVar[Optional[queue.Queue]] = None
+    _thread_locals = threading.local()
+    _thread_locals.event = None
 
     def __init__(
             self,
@@ -202,6 +210,86 @@ class BehaviorAlgorithm(ObservableObject):
             error_way=CheckThresholdWay.TRIGGER_IF_GREATER,
             cover_servo_status=CoverServoStatus.RELEASE_POSITION_ERROR,
         )
+        #
+        handler_queue = self._handler_queue
+        if handler_queue is None:
+            handler_queue = BehaviorAlgorithm._handler_queue = queue.Queue(maxsize=64)
+            handler_thread = BehaviorAlgorithm._handler_thread = threading.Thread(
+                target=self._handler_thread_run, args=(handler_queue,),
+                daemon=True,
+                name="AlgoHandler",
+            )
+            handler_thread.start()
+
+    @staticmethod
+    def _handler_thread_run(input_queue: queue.Queue):
+        while True:
+            raw = input_queue.get()
+            if raw is None:
+                input_queue.task_done()
+                break
+            func, args, kwargs, event = raw
+            try:
+                func(*args, **kwargs)
+            except Exception as err:
+                logger.exception("Failed executing %s: %s", func, err)
+            if event is not None:
+                event.set()
+            input_queue.task_done()
+
+    def relay_meth(self, meth, *, wait: bool=True):
+        func = meth
+        while isinstance(func, partial):
+            func = func.func
+        @functools.wraps(func.__func__)
+        def wrapped(*args, **kwargs):
+            self.put_func_call(meth, args, kwargs, wait=wait)
+        return wrapped
+
+    def relay_transitions(self, machine_transitions: Any):
+        """Relay all transitions trigger ***bound methods*** of the given machine_transitions instance to us"""
+        for trans in machine_transitions.transitions:
+            trig = trans['trigger']
+            if trig is not None:
+                if callable(trig):
+                    trig = trig.__name__
+                meth = getattr(machine_transitions, trig)
+                setattr(machine_transitions, trig, self.relay_meth(meth))
+
+    @classmethod
+    def relay_func(cls, func, *, wait: bool=True):
+        """Make a decorator usable on class ***functions*** ; not on a class instance bound method"""
+        orig_func = func
+        while isinstance(func, partial):
+            func = func.func
+        @functools.wraps(func)
+        def wrapped(self, *args, **kwargs):
+            cls.put_func_call(orig_func, (self,) + args, kwargs, wait=wait)
+        return wrapped
+
+    @classmethod
+    def put_func_call(cls, func, args, kwargs, *, wait: bool=True):
+        # wait: bool=True could be quite safer, and we would only set it False where we see it's safe.
+        handler_queue = BehaviorAlgorithm._handler_queue
+        if threading.current_thread() is cls._handler_thread or handler_queue is None:
+            # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
+            func(*args, **kwargs)
+        else:
+            # logger.debug("%s: relaying to system msg handler thread", func)
+            if wait:
+                prev = getattr(BehaviorAlgorithm._thread_locals, "event", None)
+                if prev is None:
+                    logger.debug("%s: creating event for sync handling of put_func_call",
+                                 threading.current_thread())
+                    event = BehaviorAlgorithm._thread_locals.event = threading.Event()
+                else:
+                    event = prev
+            else:
+                event = None
+            BehaviorAlgorithm._handler_queue.put((func, args, kwargs, event))
+            if event is not None:
+                event.wait()
+                event.clear()  # need always clear after used
 
     @property
     def thread_lock(self):
