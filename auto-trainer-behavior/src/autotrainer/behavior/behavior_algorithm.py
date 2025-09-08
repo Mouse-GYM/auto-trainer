@@ -93,7 +93,7 @@ class BehaviorAlgoProps(str, Enum):
     HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'
 
 
-def _relay_func(func, *, wait: bool=True):
+def _relay_func(func, *, wait: bool=False):
     orig_func = func
     while isinstance(func, partial):
         func = func.func
@@ -277,12 +277,12 @@ class BehaviorAlgorithm(ObservableObject):
                 setattr(machine_transitions, trig, self.relay_meth(meth))
 
     @classmethod
-    def relay_func(cls, func, *, wait: bool=True):
+    def relay_func(cls, func, *, wait: bool=False):
         """Make a decorator usable on class ***functions*** ; not on a class instance bound method"""
         return _relay_func(func, wait=wait)
 
     @classmethod
-    def put_func_call(cls, func, args, kwargs, *, wait: bool=True):
+    def put_func_call(cls, func, args, kwargs, *, wait: bool=False):
         # wait: bool=True could be quite safer, and we would only set it False where we see it's safe.
         handler_queue = BehaviorAlgorithm._handler_queue
         if threading.current_thread() is cls._handler_thread or handler_queue is None:
