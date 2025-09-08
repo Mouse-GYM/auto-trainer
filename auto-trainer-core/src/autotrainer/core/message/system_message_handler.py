@@ -52,7 +52,10 @@ class SystemMessageHandler(MessageHandler):
         #  implementation.  Keeping things simple for the time being.
         if callable(msg):
             args, kwargs, event = data
-            msg(*args, **kwargs)
+            try:
+                msg(*args, **kwargs)
+            except Exception as err:
+                logger.exception("Executing %s failed: %s", msg, err)
             if event is not None:
                 # assert isinstance(event, threading.Event)
                 event.set()
