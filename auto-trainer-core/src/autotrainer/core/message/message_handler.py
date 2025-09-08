@@ -2,6 +2,7 @@ import functools
 import logging
 import threading
 import time
+from functools import partial
 from queue import Queue, Empty
 from threading import Thread
 from typing import Callable, Union, Any, Optional
@@ -74,31 +75,48 @@ class MessageHandler(ObservableObject):
     def input_queue(self) -> Queue:
         return self._input_queue
 
+    def relay_meth(self, meth):
+        func = meth
+        while isinstance(func, partial):
+            func = func.func
+        @functools.wraps(func.__func__)
+        def wrapped(*args, **kwargs):
+            self.put_func_call(meth, args, kwargs)
+        return wrapped
+
     def relay_transitions(self, machine_transitions: Any):
+        """Relay all transitions trigger ***bound methods*** of the given machine_transitions instance to us"""
         for trans in machine_transitions.transitions:
-            # before, after = trans.get("before"), trans.get("after")
             trigger_func_or_name = trans['trigger']
             for which in trigger_func_or_name,:
                 if which is not None:
                     if callable(which):
                         which = which.__name__
-                    # meth = getattr(machine_transitions, which)
-                    setattr(machine_transitions, which, self.relay_func(lambda _: self)(which))
+                    meth = getattr(machine_transitions, which)
+                    setattr(machine_transitions, which, self.relay_meth(meth))
+
 
     @classmethod
-    def relay_func(cls, attr_or_callable: Union[str, Callable[[Any], Optional["MessageHandler"]]]):
+    def relay_func(cls, attr_or_callable: Union[str, "MessageHandler", Callable[[Any], Optional["MessageHandler"]]]):
+        """Make a decorator usable on class ***functions*** ; not on a class instance bound method"""
+        msg_instance = None
         if isinstance(attr_or_callable, str):
             get_instance = lambda self: getattr(self, attr_or_callable)
+        elif isinstance(attr_or_callable, cls):
+            msg_instance = attr_or_callable
         else:
             get_instance = attr_or_callable
         def wrapper(func):
+            orig_func = func
+            # while isinstance(func, partial):
+            #     func = func.func
             @functools.wraps(func)
             def wrapped(self, *args, **kwargs):
-                handler = get_instance(self)
+                handler = get_instance(self) if msg_instance is None else msg_instance
                 if handler is None:
-                    func(self, *args, **kwargs)
+                    orig_func(self, *args, **kwargs)
                 else:
-                    handler.put_func_call(func, (self,) + args, kwargs)
+                    handler.put_func_call(orig_func, (self,) + args, kwargs)
             return wrapped
         return wrapper
 

@@ -21,12 +21,6 @@ class SystemMessageHandler(MessageHandler):
 
         self._analysis = SensorAnalysis()
 
-    def relay_to(self, func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            self.put_func_call(func, args, kwargs)
-        return wrapper
-
     @property
     def measurement_callback(self):
         return self._measurement_callback
