@@ -1,6 +1,7 @@
 import contextlib
 import dataclasses
 import functools
+import inspect
 import logging
 import math
 import operator
@@ -96,12 +97,14 @@ class BehaviorAlgoProps(str, Enum):
 
 def _relay_func(func, *, wait: bool=False):
     orig_func = func
+    # skip any partial(s):
     while isinstance(func, partial):
         func = func.func
 
-    @functools.wraps(func)
-    def wrapped(self, *args, **kwargs):
-        BehaviorAlgorithm.put_func_call(orig_func, (self,) + args, kwargs, wait=wait)
+    # handle bound method vs normal function:
+    @functools.wraps(func.__func__ if inspect.ismethod(func) else func)
+    def wrapped(*args, **kwargs):
+        BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
 
     return wrapped
 
@@ -280,17 +283,18 @@ class BehaviorAlgorithm(ObservableObject):
             if event is not None:
                 event.set()
             input_queue.task_done()
+    #
+    # def relay_meth(self, meth, *, wait: bool=True):
+    #     func = meth
+    #     while isinstance(func, partial):
+    #         func = func.func
+    #     @functools.wraps(func.__func__)
+    #     def wrapped(*args, **kwargs):
+    #         self.put_func_call(meth, args, kwargs, wait=wait)
+    #     return wrapped
 
-    def relay_meth(self, meth, *, wait: bool=True):
-        func = meth
-        while isinstance(func, partial):
-            func = func.func
-        @functools.wraps(func.__func__)
-        def wrapped(*args, **kwargs):
-            self.put_func_call(meth, args, kwargs, wait=wait)
-        return wrapped
-
-    def relay_transitions(self, machine_transitions: Any):
+    @staticmethod
+    def relay_transitions(machine_transitions: Any):
         """Relay all transitions trigger ***bound methods*** of the given machine_transitions instance to us"""
         for trans in machine_transitions.transitions:
             trig = trans['trigger']
@@ -298,10 +302,10 @@ class BehaviorAlgorithm(ObservableObject):
                 if callable(trig):
                     trig = trig.__name__
                 meth = getattr(machine_transitions, trig)
-                setattr(machine_transitions, trig, self.relay_meth(meth))
+                setattr(machine_transitions, trig, _relay_func(meth))
 
-    @classmethod
-    def relay_func(cls, func=None, *, wait: bool=True):
+    @staticmethod
+    def relay_func(func=None, *, wait: bool=True):
         """Make a decorator usable on class ***functions*** ; not on a class instance bound method"""
         if func is None:
             return partial(_relay_func, wait=wait)
