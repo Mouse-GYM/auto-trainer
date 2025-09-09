@@ -1,6 +1,6 @@
 import dataclasses
 from dataclasses import dataclass, field
-from typing import Type
+from typing import Type, Optional
 from typing_extensions import Self
 
 import yaml
@@ -25,6 +25,7 @@ class PelletDeliveryConfiguration:
     max_pellet_missing_seconds: float = 1.0  # how long to wait before load pellet when pellet missing/not seen
     # this help ensure we don't execute a load pellet if we get an incorrect pose_result with pellet seen == False,
     # which can happen eventually (missed inference detection basically).
+    pellet_hand_uncover_distance: Optional[float] = 5  # mm ; None means disabled.
 
     auto_correct_motors_drift: bool = False
     use_triangle_pellet_distance_too_far: bool = False

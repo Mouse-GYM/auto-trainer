@@ -85,7 +85,6 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         configuration.pellet_delivery.is_intersession_analysis_enabled = self._is_intersession_enabled
         configuration.pellet_delivery.is_intersession_pellet_shift_enabled = (
             self._machine.algorithm.intersession_pellet_shift_enabled)
-
         self._machine.algorithm.update_configuration(configuration)
 
         configuration.load_cell = self._analysis.load_cell_monitor.save_configuration()

@@ -59,3 +59,9 @@ class SceneElement(_BaseSceneElement):
     Star: "SceneElement" = 'Star'
     Diamond: "SceneElement" = 'Diamond'
     Triangle: "SceneElement" = 'Triangle'
+
+
+AllHandsParts = (
+    SceneElement.RH_flat, SceneElement.RH_spread, SceneElement.RH_grab,
+    SceneElement.LH_flat, SceneElement.LH_spread, SceneElement.LH_grab,
+)

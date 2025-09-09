@@ -28,7 +28,7 @@ from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.project.project_info import SessionRawInt
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     DlcPoseModel, MemoryPoseModel, InferenceMode, InferenceStatus
-from autotrainer.core.pose_elements import SceneElement
+from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
@@ -104,6 +104,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             (SceneElement.Diamond, SceneElement.Triangle): self.diamond_triangle_offset_changed,
             (SceneElement.Star, SceneElement.Triangle): self.star_triangle_offset_changed,
             (SceneElement.Triangle, SceneElement.Pellet): self.triangle_pellet_offset_changed,
+            **{
+                (SceneElement.Pellet, hand_part): lambda _: None  # this will be sub-handled in behavior algo
+                for hand_part in AllHandsParts
+            },
         }
 
     @property
@@ -154,19 +158,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     @property
     def pose_algorithm(self) -> PoseAlgorithm:
         return self._algorithm
-
-    def get_parts_offsets(self, part1: str, part2: str) -> Optional[Offset3DTuple]:
-        """Return the offsets of part2 relative to part1 as last known"""
-        # unused
-        part1 = SceneElement(part1)
-        part2 = SceneElement(part2)
-        v_offsets = self._parts_offsets.get((part1, part2), None)
-        if v_offsets is None:
-            v_offsets = self._parts_offsets.get((part2, part1), None)
-            if v_offsets is None:
-                return None
-            v_offsets = tuple(map(operator.neg, v_offsets))
-        return Offset3DTuple(v_offsets)
 
     def _check_previous_offline_thread(self, cause: str):
         cur_off = self._offline_thread
@@ -405,7 +396,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                         pair_handler(cur)
                 except Exception as err:
                     logger.exception("offset_changed event callback failed: %s", err)
-            self.pose_response_ready(response)
+            try:
+                self.pose_response_ready(response)
+            except Exception as err:
+                logger.exception("pose_response_ready event callback failed: %s", err)
 
         elif msg is InferenceMonitorDataProc.Msg.INTERSESSION_RESULT_READY:
             ib = self._intersession_block
@@ -434,6 +428,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                     self._set_status(InferenceStatus.waiting)
                     pose_algo = self._algorithm
                     pose_algo.initialize(context)
+                    # NB: we create a copy of the pose_algo,
+                    # because with registered events callback to other objects,
+                    # the current one cannot be pickled/serialized with them.
+                    # could/should be TODO: implement serialize in PoseAlgo which only include the config/params
                     new_pose_algo = PoseAlgorithm(
                         stereo_params=pose_algo.stereo_params,
                         calib_metadata=pose_algo.calib_metadata,

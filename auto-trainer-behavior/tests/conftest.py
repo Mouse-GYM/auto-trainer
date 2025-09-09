@@ -90,6 +90,7 @@ def machine(tunnel_device, pellet_device, inference, project_info):
         project_info=project_info,
     )
     machine.algorithm.capture_status = CaptureProcessStatus.RUNNING
+    machine.algorithm.pellet_hand_uncover_distance = None  # disabled
     return machine
 
 

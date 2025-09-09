@@ -57,6 +57,7 @@ class AppModel(ObservableObject):
         super().__init__(("on_error",))
 
         self._preferences = preferences
+        self._loaded_configuration: Optional[SystemConfiguration] = None
 
         self._app_version = app_version
 
@@ -89,13 +90,13 @@ class AppModel(ObservableObject):
         self._message_queue = queue.Queue()  # only dedicated to CAN bus messages reading/handling
         # so: using a multiprocess queue instead, would allow to put the CAN connection thread into a dedicated process,
         # also giving more space/freedom for the main/UI process python GIL acquire/release.
-        self._message_handler = SystemMessageHandler(self._message_queue)
+        self._system_message_handler = SystemMessageHandler(self._message_queue)
 
         # Use the default analysis object created by the message handler.  Dereferenced here for use in the class in
         # case that changes.
-        self._analysis = self._message_handler.analysis
+        self._analysis = self._system_message_handler.analysis
 
-        self._hardware = HardwareModel(self._message_handler)
+        self._hardware = HardwareModel(self._system_message_handler)
 
         self._inference_queue = None
 
@@ -134,7 +135,7 @@ class AppModel(ObservableObject):
 
         self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir)
 
-        self._behavior = BehaviorModel(self._message_handler, self._analysis, self._hardware, self._inference)
+        self._behavior = BehaviorModel(self._system_message_handler, self._analysis, self._hardware, self._inference)
 
         self._output_location = ""
 
@@ -173,7 +174,9 @@ class AppModel(ObservableObject):
         # we never know the session could be just stopped,
         # so check:
         if algo.is_in_session:
-            logger.verbose("calling try_next_state ; %s", algo.pellet_recently_seen)
+            logger.verbose("consider_release_pellet: calling try_next_state ; "
+                           "pellet_recently_seen=%s age=%.2f",
+                           algo.pellet_recently_seen, algo.pellet_seen_age)
             #   and algo.capture_status_age >= algo.recording_age_release_pellet_threshold:
             # this is called via a timer, which are not necessarily very precise,
             # and to be safe on all side, do not check again, the actual age could even be slightly less than the
@@ -230,6 +233,10 @@ class AppModel(ObservableObject):
         return self._preferences
 
     @property
+    def loaded_configuration(self):
+        return self._loaded_configuration
+
+    @property
     def project(self):
         return self._project_info
 
@@ -267,7 +274,7 @@ class AppModel(ObservableObject):
 
     @property
     def message_handler(self) -> SystemMessageHandler:
-        return self._message_handler
+        return self._system_message_handler
 
     @property
     def output_location(self) -> str:
@@ -423,7 +430,7 @@ class AppModel(ObservableObject):
                 camera.on_capture_start()
 
         logger.debug("connecting hardware ...")
-        self._hardware.connect(self._message_handler.input_queue, self._selected_animal)
+        self._hardware.connect(self._system_message_handler.input_queue, self._selected_animal)
         self._hardware.set_auto_correct_motor_drift(self._behavior.algorithm.auto_correct_motors_drift)
         logger.info("finished connecting hardware")
 
@@ -490,6 +497,8 @@ class AppModel(ObservableObject):
         else:
             logger.info("using configuration from %r", file_path.as_posix())
 
+        self._loaded_configuration = configuration
+
         if (camera := configuration.get_camera(CameraId.Left)) is not None:
             self._left_camera.load_configuration(camera)
         if (camera := configuration.get_camera(CameraId.Right)) is not None:
@@ -513,7 +522,7 @@ class AppModel(ObservableObject):
         return conf.save_default(self._preferences.configuration_location)
 
     def on_activated(self):
-        self._message_handler.start()
+        self._system_message_handler.start()
 
     def on_close(self):
         logger.verbose("AppModel.on_close")
@@ -528,9 +537,9 @@ class AppModel(ObservableObject):
         EventManager.default().close()
 
         self.hardware.disconnect()
-        self._message_handler.request_terminate()
+        self._system_message_handler.request_terminate()
         # should we self._message_handler.wait_terminated() ?
-        self._message_handler.wait_terminated()
+        self._system_message_handler.wait_terminated()
 
         self._multiproc_msg_queue.put(None)
         self._handle_proc_msg_thread.join()

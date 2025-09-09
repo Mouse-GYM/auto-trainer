@@ -3,7 +3,8 @@ from typing import Dict, Callable, Any, Optional
 
 from transitions import Machine
 
-from autotrainer.core import EventManager, MessageHandler, ObservableObject, Offset3DTuple, Motor
+from autotrainer.core import EventManager, MessageHandler, ObservableObject, Offset3DTuple, Motor, \
+    transitions_allow_functions
 from autotrainer.core.multiproc import DaemonTimer
 from autotrainer.core.logging import get_verbose_logger
 
@@ -63,10 +64,14 @@ class PelletMachine(StateMachine):
         self._api_status_token = None
         self._prev_pellet_seen = None
 
-        self.machine = Machine(model=[self], states=list(PelletState),
-                               transitions=PelletMachine.transitions, auto_transitions=False,
-                               initial=initial_state, model_override=True,
-                       )
+        self.machine = Machine(
+            model=[self],
+            states=list(PelletState),
+            transitions=self.transitions,
+            auto_transitions=False,
+            initial=initial_state,
+            model_override=True,
+        )
 
         self._cur_timer_try_next_state: Optional[DaemonTimer] = None
 
@@ -260,13 +265,15 @@ class PelletMachine(StateMachine):
             else:
                 func = logger.verbose
             func(
-                "try_next_state from %s (timer=%s): %s -> in_session=%s pellet_seen=%s triangle_recently_seen=%s "
+                "try_next_state cur=%s from %s: %s -> in_session=%s pellet_seen=%s triangle_recently_seen=%s "
                 "session_mouse_seen=%s session_pellet_count=%s must_release=%s "
-                "pellet_state=%s algo_system_state=%s intersession_state=%s",
-                caller, is_from_timer, reason, algo.is_in_session, pellet_seen, algo.triangle_recently_seen,
+                "pellet_state=%s algo_system_state=%s intersession_state=%s "
+                "pellet_seen_age=%.1f" "sec hands_near_pellet_seen=%s"
+                , cur_state, caller, reason, algo.is_in_session, pellet_seen, algo.triangle_recently_seen,
                 algo.session_mouse_seen, algo.session_pellet_count, must_release,
                 self._state, algo.system_state, algo.intersession_state,
-            stacklevel=3)
+                algo.pellet_seen_age, algo.hands_near_pellet_seen,
+            )
 
         def log_could_retry_shortly():
             # retry shortly currently disabled.
@@ -274,6 +281,8 @@ class PelletMachine(StateMachine):
             retrying = True
             reason = f"would have retried shortly {reason}"
             logit()
+
+        cur_state = self.state
 
         # Always arrest to the retract position during intersession.
         if algo.system_state == SystemState.intersession:
@@ -299,8 +308,6 @@ class PelletMachine(StateMachine):
                     logit()
                     self.move_retract()
             return
-
-        cur_state = self.state
 
         if cur_state in {PelletState.loading, PelletState.retract}:
             if algo.can_cover_pellet():
@@ -353,7 +360,7 @@ class PelletMachine(StateMachine):
                         log_could_retry_shortly()
             else:
                 if algo.can_release_pellet():
-                    reason = "send_pellet_when_seen_and_can_release"
+                    reason = "release_pellet_when_seen_and_can_release"
                     if self.can_use_pellet_command():
                         logit()
                         self.release_pellet()
@@ -378,6 +385,10 @@ class PelletMachine(StateMachine):
                 if must_release and pellet_seen:
                     reason = "release_when_in_session_and_must_release"
                     if self.can_use_pellet_command():
+                        # and algo.can_release_pellet():
+                        # actually no need check algo.can_release_pellet(),
+                        # it's already done by next release_pellet() as a pre-condition of the defined trigger
+                        # in the pellet machine defined transitions.
                         logit()
                         self.release_pellet()
                     else:
@@ -494,64 +505,64 @@ class PelletMachine(StateMachine):
     # Note that transitions have conditions, where applicable.  What may appear to be unconditional calls to cover,
     # release, or otherwise perform pellet transitions will not succeed and perform those actions if these conditions
     # are met.
-    transitions = [
+    transitions = transitions_allow_functions([
         dict(
-            trigger=load_pellet.__name__,
+            trigger=load_pellet,
             source=[PelletState.monitoring, PelletState.covering, PelletState.retract],
             dest=PelletState.loading,
-            before=before_load_pellet.__name__,
-            after=after_load_pellet.__name__,
-            conditions=can_load_pellet.__name__,
+            before=before_load_pellet,
+            after=after_load_pellet,
+            conditions=can_load_pellet,
         ),
 
         dict(
-            trigger=send_pellet.__name__,
+            trigger=send_pellet,
             source=[PelletState.loading, PelletState.home, PelletState.prerelease, PelletState.retract],
             dest=PelletState.sending,
-            before=before_send_pellet.__name__,
-            conditions=can_send_pellet.__name__,
+            before=before_send_pellet,
+            conditions=can_send_pellet,
         ),
 
         dict(
-            trigger=prerelease_pellet.__name__,
+            trigger=prerelease_pellet,
             source=[PelletState.loading, PelletState.home, PelletState.retract],
             dest=PelletState.prerelease,
-            before=before_prerelease_pellet.__name__,
-            conditions=can_prerelease_pellet.__name__,
+            before=before_prerelease_pellet,
+            conditions=can_prerelease_pellet,
         ),
 
         dict(
-            trigger=cover_pellet.__name__,
+            trigger=cover_pellet,
             source=[PelletState.monitoring, PelletState.retract],
             dest=PelletState.covering,
-            before=before_cover_pellet.__name__,
-            conditions=can_cover_pellet.__name__,
+            before=before_cover_pellet,
+            conditions=can_cover_pellet,
         ),
 
         dict(
-            trigger=release_pellet.__name__,
+            trigger=release_pellet,
             source=[PelletState.covering, PelletState.monitoring],
             dest=PelletState.releasing,
-            before=before_release_pellet.__name__,
-            conditions=can_release_pellet.__name__,
+            before=before_release_pellet,
+            conditions=can_release_pellet,
         ),
 
         dict(
-            trigger=monitor_pellet.__name__,
+            trigger=monitor_pellet,
             source="*",
             dest=PelletState.monitoring,
         ),
 
         dict(
-            trigger=move_home.__name__,
+            trigger=move_home,
             source="*",
             dest=PelletState.home,
-            before=before_move_home.__name__,
-            conditions=can_move_home.__name__,
+            before=before_move_home,
+            conditions=can_move_home,
         ),
 
         dict(
-            trigger=move_retract.__name__,
+            trigger=move_retract,
             source=(
                 PelletState.loading,  # not sure
                 PelletState.sending,  # not sure
@@ -561,6 +572,6 @@ class PelletMachine(StateMachine):
                 PelletState.monitoring,
             ),
             dest=PelletState.retract,
-            after=_move_retract.__name__,
+            after=_move_retract,
         ),
-    ]
+    ])

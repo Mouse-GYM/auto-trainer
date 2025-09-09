@@ -71,6 +71,7 @@ class BehaviorAlgoProps(str, Enum):
     PELLET_DELIVERY_ENABLED = 'pellet_delivery_enabled'
     PELLET_COVER_ENABLED = 'pellet_cover_enabled'
     SESSION_PELLET_COUNT = 'session_pellet_count'
+    SESSION_MOUSE_SEEN = 'session_mouse_seen'
 
     AUTO_CORRECT_MOTOR_DRIFT = 'auto_correct_motor_drift'
     PELLET_MOTOR_DRIFT = 'pellet_motor_drift'
@@ -85,6 +86,8 @@ class BehaviorAlgoProps(str, Enum):
     TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"
 
     PRESENCE_MISSING = 'presence_missing'
+    PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'
+    HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'
 
 
 class BehaviorAlgorithm(ObservableObject):
@@ -142,9 +145,10 @@ class BehaviorAlgorithm(ObservableObject):
         self._session_pellet_count = 0
         self._session_mouse_seen = False
         self._pellet_seen = False
-        self._triangle_seen = False
-
         self._pellet_last_seen = 0.0
+        self._pellet_hands_min_distance: float = math.inf
+        self._hands_near_pellet_seen = False
+        self._triangle_seen = False
         self._triangle_last_seen = 0.0
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
         self._use_triangle_pellet_distance_too_far = False
@@ -171,6 +175,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.max_pellets_per_day: int = 50
         self.pellet_missing_time: float = 1.0
         self.triangle_missing_time: float = 1.0
+        self.pellet_hand_uncover_distance = PelletDeliveryConfiguration.pellet_hand_uncover_distance
 
         self._pellets_presented: int = 0
         self._successful_reaches: int = 0
@@ -595,6 +600,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._set_triangle_last_seen(0.0)
         self._session_mouse_seen = False
         self._pellet_seen = False
+        self._hands_near_pellet_seen = False
 
         # this is what send the trigger the enable recording at camera level,
         # but must be done after calculate next session index !!
@@ -634,6 +640,11 @@ class BehaviorAlgorithm(ObservableObject):
         return self.pellet_cover_enabled
 
     @property
+    def pellet_seen_age(self) -> float:
+        """In nbr of seconds"""
+        return time.perf_counter() - self._pellet_last_seen
+
+    @property
     def pellet_recently_seen(self):
         return time.perf_counter() - self._pellet_last_seen < self.limits.pellet_missing_time
 
@@ -644,13 +655,13 @@ class BehaviorAlgorithm(ObservableObject):
         # self._check_date()
 
         if self.pellet_cover_enabled:
-            if (
-                    self._is_in_session
-                    and self._capture_status == CaptureProcessStatus.RECORDING
-                    and self.capture_status_age < self._recording_age_release_pellet_threshold
-            ):
-                return False
-            return self._is_in_session
+            if self._is_in_session:
+                return (
+                    self._capture_status == CaptureProcessStatus.RECORDING
+                    and self.capture_status_age >= self._recording_age_release_pellet_threshold
+                    and (self.pellet_hand_uncover_distance is None or self._hands_near_pellet_seen)
+                )
+            return False
 
         return True
 
@@ -688,9 +699,30 @@ class BehaviorAlgorithm(ObservableObject):
     def mouse_seen(self, seen: bool = True):
         if self._is_in_session and seen:
             was_seen = self._session_mouse_seen
-            self._session_mouse_seen = self._on_property_changed("session_mouse_seen", seen, self._session_mouse_seen)
+            self._session_mouse_seen = self._on_property_changed(
+                BehaviorAlgoProps.SESSION_MOUSE_SEEN, seen, self._session_mouse_seen)
             if not was_seen:
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
+
+    @property
+    def hands_near_pellet_seen(self):
+        return self._hands_near_pellet_seen
+
+    @property
+    def pellet_hands_min_distance(self):
+        return self._pellet_hands_min_distance
+
+    @pellet_hands_min_distance.setter
+    def pellet_hands_min_distance(self, value: float):
+        pellet_hand_uncover_dist = self.pellet_hand_uncover_distance
+        if pellet_hand_uncover_dist is not None and value <= pellet_hand_uncover_dist:
+            if not self._hands_near_pellet_seen:
+                logger.verbose("Hand(s) near pellet seen ; distance = %.2f mm", value)
+                self._hands_near_pellet_seen = True  # must be set BEFORE doing the on_property_changed
+                self._on_property_changed(
+                    BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN, True, False)
+        self._pellet_hands_min_distance = self._on_property_changed(
+            BehaviorAlgoProps.PELLET_HANDS_DISTANCE, value, self._pellet_hands_min_distance)
 
     def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         self.pellet_delivery_enabled = cfg.is_enabled
@@ -702,6 +734,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.use_triangle_pellet_distance_too_far = cfg.use_triangle_pellet_distance_too_far
         self.triangle_pellet_diff_too_far_threshold = cfg.triangle_pellet_diff_too_far_threshold
         self.auto_correct_motors_drift = cfg.auto_correct_motors_drift
+        self.pellet_hand_uncover_distance = cfg.pellet_hand_uncover_distance
 
     def _load_head_clamp_cfg(self, cfg: HeadClampConfiguration):
         self.min_baseline_intensity = cfg.min_baseline_intensity
@@ -728,6 +761,7 @@ class BehaviorAlgorithm(ObservableObject):
         cfg.use_triangle_pellet_distance_too_far = self.use_triangle_pellet_distance_too_far
         cfg.triangle_pellet_expected_distance = self.triangle_pellet_expected_distance
         cfg.triangle_pellet_diff_too_far_threshold = self.triangle_pellet_diff_too_far_threshold
+        cfg.pellet_hand_uncover_distance = self.pellet_hand_uncover_distance
 
     def _update_head_clamp_cfg(self, cfg: HeadClampConfiguration):
         cfg.min_baseline_intensity = self.min_baseline_intensity

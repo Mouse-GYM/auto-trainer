@@ -1,3 +1,4 @@
+import math
 import time
 from functools import partial
 from itertools import chain
@@ -7,10 +8,10 @@ from typing import Optional, List, Tuple
 from transitions import Machine
 
 from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor,
-                              HeadbarPressureMonitor, Motor)
+                              HeadbarPressureMonitor, Motor, transitions_allow_functions)
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.pose_elements import SceneElement
+from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.core.multiproc import DaemonTimer
 
 from autotrainer.inference import PoseResponse, InferenceStatus
@@ -40,36 +41,8 @@ _consider_disengage_autoclamp_timer = DaemonTimer
 
 
 class SystemMachine(StateMachine):
+
     states = [e for e in SystemState]
-
-    transitions = [
-        {"trigger": "enter_tunnel", "source": [SystemState.cage, SystemState.tunnel], "dest": SystemState.tunnel,
-         "before": "before_enter_tunnel", "after": "after_enter_tunnel"},
-
-        {"trigger": "exit_tunnel", "source": SystemState.tunnel, "dest": SystemState.cage,
-         "before": "before_exit_tunnel", "after": "after_exit_tunnel"},
-
-        {"trigger": "enter_intersession", "source": (SystemState.cage, SystemState.tunnel),
-         "dest": SystemState.intersession,
-         "before": "before_enter_intersession", "after": "after_enter_intersession"},
-
-        dict(  # previous behavior
-            trigger="exit_intersession",
-            source=SystemState.intersession, dest=SystemState.cage,
-            before="before_exit_intersession_to_cage",
-        ),
-
-        dict(
-            trigger="exit_intersession_to_tunnel",
-            source=SystemState.intersession, dest=SystemState.tunnel,
-            before="before_exit_intersession_to_tunnel",
-        ),
-        dict(
-            trigger="exit_intersession_to_cage",
-            source=SystemState.intersession, dest=SystemState.cage,
-            before="before_exit_intersession_to_cage",
-        )
-    ]
 
     def __init__(self,
                  algorithm: Optional[BehaviorAlgorithm] = None,
@@ -85,8 +58,12 @@ class SystemMachine(StateMachine):
         super().__init__(initial_state=initial_state)
 
         self.machine = Machine(
-            model=[self], states=SystemMachine.states, transitions=SystemMachine.transitions,
-            auto_transitions=False, initial=initial_state, model_override=True,
+            model=[self],
+            states=self.states,
+            transitions=self.transitions,
+            auto_transitions=False,
+            initial=initial_state,
+            model_override=True,
         )
 
         self._project_info = project_info
@@ -358,8 +335,8 @@ class SystemMachine(StateMachine):
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                                               context=self.state)
             else:
-                cur_timer_check_missing = _check_missing_timer(self._algorithm.presence_missing_delay,
-                                                               self._check_presence_missing)
+                cur_timer_check_missing = self._timer_check_missing = _check_missing_timer(
+                    self._algorithm.presence_missing_delay, self._check_presence_missing)
                 cur_timer_check_missing.start()
                 if self.state == SystemState.tunnel and self.intersession.state == IntersessionState.idle:
                     logger.info("%s False, exiting tunnel ..", LoadCellMonitor.IS_ENGAGED_PROPERTY)
@@ -409,14 +386,13 @@ class SystemMachine(StateMachine):
                 and self._pellet_machine.state == PelletState.monitoring
                 and self._pellet_machine.can_use_pellet_command()
         ):
-            # last_set_position = self._pellet_device.last_set_position
             last_position = self._pellet_device.last_position
             if last_position is not None and offset is not None:
                 self._algorithm.handle_diamond_triangle_offset(
                     offset, last_position, flips=self._motor_axis_flips)
 
     def _handle_triangle_pellet_offset_changed(self, offset: Optional[Offset3DTuple]):
-        if offset is None:
+        if offset is None:  # not sure we should not let it pass to algo
             return
         self._algorithm.triangle_pellet_offset = offset
 
@@ -442,16 +418,35 @@ class SystemMachine(StateMachine):
         if check_release_distance:
             algo.handle_release_pellet_offset(offset)
 
+    def _handle_pellet_hands_offsets(self, response: PoseResponse):
+        algo = self._algorithm
+        min_dist = math.inf
+        for part in AllHandsParts:
+            offset = response.get_parts_3d_offset(SceneElement.Pellet, part)
+            if offset is not None:
+                dist = offset.distance
+                if dist < min_dist:
+                    min_dist = dist
+        prev_hands_seen_near_pellet = algo.hands_near_pellet_seen
+        algo.pellet_hands_min_distance = min_dist
+        if __debug__:
+            prev_dist = getattr(self, "_prev_pellet_hands_dist", math.inf)
+            if f"{prev_dist:.0f}" != f"{prev_dist:.0f}":
+                logger.spam("pellet_hands min distance: %.3f -> %.3f", prev_dist, min_dist)
+            self._prev_pellet_hands_dist = min_dist
+        #
+        if algo.hands_near_pellet_seen and not prev_hands_seen_near_pellet:
+            self._pellet_machine.environment_changed(caller="hands_seen_near_pellet")
+
     def _pose_changed(self, response: PoseResponse):
-        if response.pellet_seen:
-            self._handle_diamond_triangle_offset_changed(
-                response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
+        self._handle_diamond_triangle_offset_changed(
+            response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
 
-            self._handle_star_triangle_offset_changed(
-                response.get_parts_3d_offset(SceneElement.Star, SceneElement.Triangle))
+        self._handle_star_triangle_offset_changed(
+            response.get_parts_3d_offset(SceneElement.Star, SceneElement.Triangle))
 
-            self._handle_triangle_pellet_offset_changed(
-                response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
+        self._handle_triangle_pellet_offset_changed(
+            response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
         #
         algo = self._algorithm
         algo.pellet_seen(response.pellet_seen)
@@ -459,6 +454,9 @@ class SystemMachine(StateMachine):
         algo.triangle_seen(response.triangle_seen)
         if not algo.pellet_delivery_enabled:
             return
+        #
+        self._handle_pellet_hands_offsets(response)
+        #
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     def _disengage_auto_clamp(self):
@@ -480,10 +478,12 @@ class SystemMachine(StateMachine):
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.
         pellet_dev = self._pellet_device
+        #
         if name == BehaviorAlgoProps.HEAD_FIXATION_ENABLED:
             if not new_value:
                 logger.debug("auto-clamp disabled (backing off to baseline intensity)")
                 self._disengage_auto_clamp()
+
         elif name == BehaviorAlgoProps.PELLET_MOTOR_DRIFT:
             if new_value is not None and self._algorithm.auto_correct_motors_drift:
                 pellet_dev.set_motors_drift(new_value)
@@ -497,6 +497,9 @@ class SystemMachine(StateMachine):
             # # for set_coord in (pellet_dev.set_x, pellet_dev.set_y, pellet_dev.set_z):
             # #     set_coord(0, absolute=False)
             # given set_motors_drift already does it.
+
+        elif name == BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN:
+            self._pellet_machine.environment_changed(must_release=new_value)
 
     def _update_magnet_position(self, position: int):
         if self._tunnel_device is not None:
@@ -519,8 +522,8 @@ class SystemMachine(StateMachine):
                 logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s",
                                self, prev_timer)
 
+    # nb: not used anymore
     def _pellet_sending(self):
-        # nb: not used anymore
         if self.state == SystemState.tunnel and not self._algorithm.is_in_session:
             self._algorithm.start_session(reason="pellet_sending")
 
@@ -646,3 +649,46 @@ class SystemMachine(StateMachine):
     def is_intersession(self):
         pass
     # endregion
+
+    transitions = transitions_allow_functions([
+        dict(
+            trigger=enter_tunnel,
+            source=[SystemState.cage, SystemState.tunnel],
+            dest=SystemState.tunnel,
+            before=before_enter_tunnel,
+            after=after_enter_tunnel,
+        ),
+
+        dict(
+            trigger=exit_tunnel,
+            source=SystemState.tunnel,
+            dest=SystemState.cage,
+            before=before_exit_tunnel,
+            after=after_exit_tunnel,
+        ),
+
+        dict(
+            trigger=enter_intersession,
+            source=(SystemState.cage, SystemState.tunnel),
+            dest=SystemState.intersession,
+            before=before_enter_intersession,
+            after=after_enter_intersession,
+        ),
+
+        dict(  # previous behavior
+            trigger=exit_intersession,
+            source=SystemState.intersession, dest=SystemState.cage,
+            before=before_exit_intersession_to_cage,
+        ),
+
+        dict(
+            trigger=exit_intersession_to_tunnel,
+            source=SystemState.intersession, dest=SystemState.tunnel,
+            before=before_exit_intersession_to_tunnel,
+        ),
+        dict(
+            trigger=exit_intersession_to_cage,
+            source=SystemState.intersession, dest=SystemState.cage,
+            before=before_exit_intersession_to_cage,
+        )
+    ])

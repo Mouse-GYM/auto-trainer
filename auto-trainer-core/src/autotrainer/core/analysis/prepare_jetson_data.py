@@ -140,14 +140,24 @@ def extend_and_interpolate_tracking_data(tracking_data, dropped_frame_vector):
 
 
 # Helper function to process hand data
-def process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf,
-                      additional_names):
+def process_hand_data(
+    df,
+    hand_base_names,
+    hand_options,
+    dlc_seg,
+    newdf,
+    additional_names,
+):
+    len_df = len(df)
+    len_hand_cat = len(hand_base_names)
+    row_index = np.arange(len_df)
+    #
     for h in hand_options:
         hand_categories = [h + item for item in hand_base_names]
 
-        likelihood_array = np.empty((len(df), len(hand_categories)), dtype=np.float64)
-        y_array = np.empty((len(df), len(hand_categories)), dtype=np.float64)
-        x_array = np.empty((len(df), len(hand_categories)), dtype=np.float64)
+        likelihood_array = np.empty((len_df, len_hand_cat), dtype=np.float64)
+        y_array = np.empty((len_df, len_hand_cat), dtype=np.float64)
+        x_array = np.empty((len_df, len_hand_cat), dtype=np.float64)
 
         for cndx, cat in enumerate(hand_categories):
             # Adjusting to use .loc to access MultiIndex properly
@@ -161,7 +171,6 @@ def process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf,
                 y_array[:, cndx] = df.loc[:, (dlc_seg, cat, 'y')].values
 
         col_index = np.argmax(likelihood_array, axis=1)
-        row_index = np.arange(len(df))
 
         # Extract the most likely hand position
         p2keep = likelihood_array[row_index, col_index]
@@ -169,20 +178,21 @@ def process_hand_data(df, hand_base_names, hand_options, dlc_seg, newdf,
         y2keep = y_array[row_index, col_index]
 
         # Store values in newdf
-        newdf.loc[np.arange(len(df)), (h + '_Hand', 'x')] = x2keep
-        newdf.loc[np.arange(len(df)), (h + '_Hand', 'y')] = y2keep
-        newdf.loc[np.arange(len(df)), (h + '_Hand', 'likelihood')] = p2keep
+        h_hand = h + '_Hand'
+        newdf.loc[row_index, (h_hand, 'x')] = x2keep
+        newdf.loc[row_index, (h_hand, 'y')] = y2keep
+        newdf.loc[row_index, (h_hand, 'likelihood')] = p2keep
 
     # Process additional bodyparts
     for an in additional_names:
         if dlc_seg == '_raw2D':
-            newdf.loc[np.arange(len(df)), (an, 'x')] = df[(an, 'x')].values
-            newdf.loc[np.arange(len(df)), (an, 'y')] = df[(an, 'y')].values
-            newdf.loc[np.arange(len(df)), (an, 'likelihood')] = df[(an, 'likelihood')].values
+            newdf.loc[row_index, (an, 'x')] = df[(an, 'x')].values
+            newdf.loc[row_index, (an, 'y')] = df[(an, 'y')].values
+            newdf.loc[row_index, (an, 'likelihood')] = df[(an, 'likelihood')].values
         else:
-            newdf.loc[np.arange(len(df)), (an, 'x')] = df[(dlc_seg, an, 'x')].values
-            newdf.loc[np.arange(len(df)), (an, 'y')] = df[(dlc_seg, an, 'y')].values
-            newdf.loc[np.arange(len(df)), (an, 'likelihood')] = df[(dlc_seg, an, 'likelihood')].values
+            newdf.loc[row_index, (an, 'x')] = df[(dlc_seg, an, 'x')].values
+            newdf.loc[row_index, (an, 'y')] = df[(dlc_seg, an, 'y')].values
+            newdf.loc[row_index, (an, 'likelihood')] = df[(dlc_seg, an, 'likelihood')].values
 
     return newdf
 
