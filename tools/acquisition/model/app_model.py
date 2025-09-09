@@ -48,9 +48,6 @@ def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
 
 
-relay_to_behavior_handler = BehaviorAlgorithm.relay_func
-
-
 class AppModel(ObservableObject):
     def __init__(
         self,
@@ -175,7 +172,7 @@ class AppModel(ObservableObject):
 
         self._load_animals()
 
-    @relay_to_behavior_handler
+    @BehaviorAlgorithm.relay_func
     def _consider_release_pellet(self):
         algo = self._behavior.algorithm
         # we never know the session could be just stopped,

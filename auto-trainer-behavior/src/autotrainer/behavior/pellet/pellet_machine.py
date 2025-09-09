@@ -33,9 +33,6 @@ class PelletMachineEvents(StateMachineEvents):
     pellet_sending: Callable[[], None]
 
 
-relay_to_behavior_handler = BehaviorAlgorithm.relay_func
-
-
 class PelletMachine(StateMachine):
 
     _events_class = PelletMachineEvents
@@ -174,7 +171,7 @@ class PelletMachine(StateMachine):
         self._try_next_state(seen, caller="pellet_seen")
 
     # region Callbacks
-    @relay_to_behavior_handler
+    @BehaviorAlgorithm.relay_func
     def _session_starting(self):
         pass
         # Strictly speaking, the pellet should not be covered here when covering is disabled.  Under that condition,
@@ -186,7 +183,7 @@ class PelletMachine(StateMachine):
         # but is now controlled via receiving camera capture status == RECORDING
         # and not releasing before the desired threshold/delay.
 
-    @relay_to_behavior_handler
+    @BehaviorAlgorithm.relay_func
     def _session_ending(self):
         algo = self._algorithm
         logger.verbose("%s: _session_ending() called", self)
@@ -234,7 +231,7 @@ class PelletMachine(StateMachine):
 
     # endregion
 
-    @relay_to_behavior_handler
+    @BehaviorAlgorithm.relay_func
     def _try_next_state(
         self,
         pellet_seen: bool = True,
