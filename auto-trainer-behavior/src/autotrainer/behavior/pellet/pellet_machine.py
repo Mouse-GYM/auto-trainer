@@ -3,8 +3,7 @@ from typing import Dict, Callable, Any, Optional
 
 from transitions import Machine
 
-from autotrainer.core import EventManager, MessageHandler, ObservableObject, Offset3DTuple, Motor, \
-    transitions_allow_functions, SystemMessageHandler
+from autotrainer.core import EventManager, transitions_allow_functions, SystemMessageHandler
 from autotrainer.core.multiproc import DaemonTimer
 from autotrainer.core.logging import get_verbose_logger
 
