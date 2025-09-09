@@ -246,6 +246,24 @@ class BehaviorAlgorithm(ObservableObject):
             handler_thread.start()
 
     @staticmethod
+    def set_put_func_call_mode(sync: bool):
+        """Allow to set the "sync" call mode for other threads putting func calls to our dedicated algo thread
+        with algo.set_put_func_call_mode(False):
+            # some code going via algo.put_func_call will use the given mode (async here)
+            # but then:
+            with algo.set_put_func_call_mode(True):
+                # some code going via algo.put_func_call will use the given mode (sync here)
+            # and here:
+            # some code going via algo.put_func_call will use the given mode (async here)
+        # some code going via algo.put_func_call will use the default mode (sync here)
+        """
+        t_locals = BehaviorAlgorithm._thread_locals
+        prev = getattr(t_locals, "sync_call_mode", None)
+        t_locals.sync_call_mode = sync
+        yield
+        t_locals.sync_call_mode = prev
+
+    @staticmethod
     def _handler_thread_run(input_queue: queue.Queue):
         while True:
             raw = input_queue.get()
@@ -281,13 +299,18 @@ class BehaviorAlgorithm(ObservableObject):
                 setattr(machine_transitions, trig, self.relay_meth(meth))
 
     @classmethod
-    def relay_func(cls, func, *, wait: bool=False):
+    def relay_func(cls, func=None, *, wait: bool=True):
         """Make a decorator usable on class ***functions*** ; not on a class instance bound method"""
+        if func is None:
+            return partial(_relay_func, wait=wait)
         return _relay_func(func, wait=wait)
 
     @classmethod
-    def put_func_call(cls, func, args, kwargs, *, wait: bool=False):
+    def put_func_call(cls, func, args, kwargs, *, wait: bool=True):
         # wait: bool=True could be quite safer, and we would only set it False where we see it's safe.
+        t_local_sync = getattr(cls._thread_locals, "sync_call_mode", None)
+        if t_local_sync is not None:
+            wait = t_local_sync
         handler_queue = BehaviorAlgorithm._handler_queue
         if threading.current_thread() is cls._handler_thread or handler_queue is None:
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
@@ -297,8 +320,8 @@ class BehaviorAlgorithm(ObservableObject):
             if wait:
                 prev = getattr(BehaviorAlgorithm._thread_locals, "event", None)
                 if prev is None:
-                    logger.debug("%s: creating event for sync handling of put_func_call",
-                                 threading.current_thread())
+                    logger.debug("%s: creating event for sync handling of put_func_call %s",
+                                 threading.current_thread(), func)
                     event = BehaviorAlgorithm._thread_locals.event = threading.Event()
                 else:
                     event = prev

@@ -289,7 +289,7 @@ class SystemMachine(StateMachine):
             else:
                 self.exit_intersession_to_cage()
 
-    @BehaviorAlgorithm.relay_func
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _handle_inference_property_changed(self, name: str, new_value, prev_value):
         if name == InferenceProtocol.STATUS:
             logger.verbose("Inference status change: %s -> %s ; system_state=%s",
@@ -310,7 +310,7 @@ class SystemMachine(StateMachine):
                 # self._inference.property_changed -= self._handle_inference_property_changed
                 # NO: in case of stop->start acquisition of/inside main app we still need it.
 
-    @BehaviorAlgorithm.relay_func
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
             # TODO new need event kind
@@ -449,7 +449,7 @@ class SystemMachine(StateMachine):
         if algo.hands_near_pellet_seen and not prev_hands_seen_near_pellet:
             self._pellet_machine.environment_changed(caller="hands_seen_near_pellet")
 
-    @BehaviorAlgorithm.relay_func
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _pose_changed(self, response: PoseResponse):
         self._handle_diamond_triangle_offset_changed(
             response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
@@ -488,7 +488,7 @@ class SystemMachine(StateMachine):
             )
             timer.start()
 
-    @BehaviorAlgorithm.relay_func
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.
         pellet_dev = self._pellet_device
@@ -569,7 +569,7 @@ class SystemMachine(StateMachine):
             # this will trigger a new start session if mouse still there
             self._analysis.load_cell_monitor.is_engaged = False
 
-    @BehaviorAlgorithm.relay_func
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _handle_detection_result(self, res: IntersessionResponse):
         algo = self._algorithm
         if res.food_consumed > 0:

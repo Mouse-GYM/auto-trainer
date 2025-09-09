@@ -172,7 +172,7 @@ class AppModel(ObservableObject):
 
         self._load_animals()
 
-    @BehaviorAlgorithm.relay_func
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_release_pellet(self):
         algo = self._behavior.algorithm
         # we never know the session could be just stopped,
