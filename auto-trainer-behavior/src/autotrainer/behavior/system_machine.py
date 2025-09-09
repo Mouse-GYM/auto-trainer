@@ -321,7 +321,7 @@ class SystemMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
             self._evaluate_auto_clamp(value)
 
-    @BehaviorAlgorithm.relay_func
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _load_cell_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
@@ -390,6 +390,8 @@ class SystemMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.headfixAutoTare)
         return False
 
+    # @BehaviorAlgorithm.relay_func(wait=False)
+    # not needed, already called by _pose_changed which has already it.
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if (
                 offset is not None
@@ -537,19 +539,14 @@ class SystemMachine(StateMachine):
                 logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s",
                                self, prev_timer)
 
-    # nb: not used anymore
-    @BehaviorAlgorithm.relay_func
-    def _pellet_sending(self):
-        if self.state == SystemState.tunnel and not self._algorithm.is_in_session:
-            self._algorithm.start_session(reason="pellet_sending")
-
     def _pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
 
     def _intersession_state_changed(self, old_value, new_value):
         self._algorithm.intersession_state = new_value
 
-    @BehaviorAlgorithm.relay_func
+    @BehaviorAlgorithm.relay_func(wait=False)
+    # called by a timer, so can use wait=False (to not always recreate event for the wait sync)
     def _consider_end_session(self, *, reason: str = "NA"):
         # Do not end if the mouse is still in the tunnel and a pellet is seen or the pellet deliver is in the sending
         # or releasing states. Otherwise, there will be no trigger to start a new session and recording (tunnel entry
