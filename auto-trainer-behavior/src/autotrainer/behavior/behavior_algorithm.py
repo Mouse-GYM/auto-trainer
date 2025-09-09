@@ -133,6 +133,9 @@ class BehaviorAlgorithm(ObservableObject):
             "session_ending",
             "cover_servo_status_changed",
             "pellet_motor_drift_changed",
+            "pellets_presented_evt",  # Some unfortunate names for now given existing property names
+            "pellets_consumed_evt",
+            "successful_reaches_evt"
         ))
         self._thread_lock = threading.RLock()
         self._project_info = None
@@ -170,7 +173,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._triangle_last_seen = 0.0
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
         self._use_triangle_pellet_distance_too_far = False
-        self._triangle_pellet_diff_too_far_threshold: float = PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold
+        self._triangle_pellet_diff_too_far_threshold: float = (
+            PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold)
         self._triangle_pellet_expected_distance = PelletDeliveryConfiguration.triangle_pellet_expected_distance
         self._next_diamond_triangle_log_report = time.perf_counter()
 
@@ -339,7 +343,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @intersession_state.setter
     def intersession_state(self, value: IntersessionState):
-        self._intersession_state = self._on_property_changed(BehaviorAlgoProps.INTERSESSION_STATE, value, self._intersession_state)
+        self._intersession_state = self._on_property_changed(BehaviorAlgoProps.INTERSESSION_STATE, value,
+                                                             self._intersession_state)
 
     @property
     def capture_status(self) -> CaptureProcessStatus:
@@ -518,7 +523,8 @@ class BehaviorAlgorithm(ObservableObject):
     @triangle_pellet_offset.setter
     def triangle_pellet_offset(self, value):
         prev, self._triangle_pellet_last_offset = self._triangle_pellet_last_offset, value
-        self._on_property_changed(BehaviorAlgoProps.TRIANGLE_PELLET_DISTANCE, self.triangle_pellet_distance, prev.distance)
+        self._on_property_changed(BehaviorAlgoProps.TRIANGLE_PELLET_DISTANCE, self.triangle_pellet_distance,
+                                  prev.distance)
 
     @property
     def triangle_pellet_distance(self) -> float:
@@ -552,8 +558,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     def is_triangle_pellet_distance_too_far(self) -> bool:
         return (
-            abs(self.triangle_pellet_distance - self._triangle_pellet_expected_distance)
-            >= self._triangle_pellet_diff_too_far_threshold
+                abs(self.triangle_pellet_distance - self._triangle_pellet_expected_distance)
+                >= self._triangle_pellet_diff_too_far_threshold
         ) if self._use_triangle_pellet_distance_too_far else False
 
     def _set_triangle_last_seen(self, value: float):
@@ -595,6 +601,12 @@ class BehaviorAlgorithm(ObservableObject):
         # if self._session_pellet_count > self.limits.max_pellets_per_session:
         #    self.end_session()
 
+    def increase_pellets_consumed(self, quantity: int = 1):
+        self.day_pellet_count += quantity
+        self.session_pellet_count += quantity
+        if quantity:
+            self.pellets_consumed_evt(quantity)
+
     @property
     def session_mouse_seen(self):
         return self._session_mouse_seen
@@ -610,6 +622,11 @@ class BehaviorAlgorithm(ObservableObject):
         if prev != value:
             EventManager.default().post_event_content(BehaviorEventKind.pelletPresented, context=value)
 
+    def increase_pellets_presented(self, quantity: int = 1):
+        self.pellets_presented += quantity
+        if quantity:
+            self.pellets_presented_evt(quantity)
+
     @property
     def successful_reaches(self):
         return self._successful_reaches
@@ -620,6 +637,11 @@ class BehaviorAlgorithm(ObservableObject):
         self._successful_reaches = self._on_property_changed("successful_reaches", value, prev)
         if prev != value:
             EventManager.default().post_event_content(BehaviorEventKind.pelletSuccessfulReach, context=value)
+
+    def increase_successful_reaches(self, quantity: int = 1):
+        self.successful_reaches += quantity
+        if quantity:
+            self.successful_reaches_evt(quantity)
 
     @property
     def cover_servo_status(self) -> CoverServoStatus:
@@ -656,7 +678,7 @@ class BehaviorAlgorithm(ObservableObject):
                 return DiamondTriangleOffsetConfig.from_file(cfg_path)
         return None
 
-    def start_session(self, *, reason: str="NA"):
+    def start_session(self, *, reason: str = "NA"):
         with self._thread_lock:
             return self._start_session(reason=reason)
 
@@ -695,7 +717,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
 
-    def end_session(self, *, reason: str="NA"):
+    def end_session(self, *, reason: str = "NA"):
         with self._thread_lock:
             return self._end_session(reason=reason)
 
@@ -863,7 +885,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._update_pellet_cfg(configuration.pellet_delivery)
         self._update_head_clamp_cfg(configuration.head_clamp)
 
-    def get_diamond_triangle_drifts(self, reset: bool=False) -> Offset3DTuple:
+    def get_diamond_triangle_drifts(self, reset: bool = False) -> Offset3DTuple:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""
         values = self._diamond_triangle_prev_drifts
         tot = reduce(operator.add, values, Offset3DTuple(0, 0, 0))
@@ -882,11 +904,11 @@ class BehaviorAlgorithm(ObservableObject):
         return new_drift
 
     def handle_diamond_triangle_offset(
-        self,
-        offset: Offset3DTuple,
-        position: Offset3DTuple,
-        *,
-        flips: Offset3DTuple = Offset3DTuple(1, 1, 1),
+            self,
+            offset: Offset3DTuple,
+            position: Offset3DTuple,
+            *,
+            flips: Offset3DTuple = Offset3DTuple(1, 1, 1),
     ):
         cfg = self._diamond_triangle_offset_config
         if cfg is None:
