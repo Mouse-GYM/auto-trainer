@@ -587,7 +587,9 @@ class SystemMachine(StateMachine):
                     meth(val, absolute=False)
                     EventManager.default().post_event_content(kind, context=val)
 
-    @BehaviorAlgorithm.relay_func
+    # _check_presence_missing is called via a timer,
+    # so prefer using wait=False ; which won't create a new thread event on each timer call.
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _check_presence_missing(self):
         self._timer_check_missing.cancel()  # in case of
         algo = self._algorithm
