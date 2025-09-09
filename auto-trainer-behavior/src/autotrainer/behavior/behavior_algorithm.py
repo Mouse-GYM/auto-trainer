@@ -1,3 +1,4 @@
+import contextlib
 import dataclasses
 import functools
 import logging
@@ -12,7 +13,7 @@ from functools import partial
 from enum import Enum
 from functools import reduce
 from pathlib import Path
-from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union
+from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union, Dict
 
 from typing import Callable
 
@@ -246,6 +247,7 @@ class BehaviorAlgorithm(ObservableObject):
             handler_thread.start()
 
     @staticmethod
+    @contextlib.contextmanager
     def set_put_func_call_mode(sync: bool):
         """Allow to set the "sync" call mode for other threads putting func calls to our dedicated algo thread
         with algo.set_put_func_call_mode(False):
@@ -306,7 +308,7 @@ class BehaviorAlgorithm(ObservableObject):
         return _relay_func(func, wait=wait)
 
     @classmethod
-    def put_func_call(cls, func, args, kwargs, *, wait: bool=True):
+    def put_func_call(cls, func, args: Tuple[Any]=(), kwargs: Optional[Dict]=None, *, wait: bool=True):
         # wait: bool=True could be quite safer, and we would only set it False where we see it's safe.
         t_local_sync = getattr(cls._thread_locals, "sync_call_mode", None)
         if t_local_sync is not None:
@@ -314,7 +316,7 @@ class BehaviorAlgorithm(ObservableObject):
         handler_queue = BehaviorAlgorithm._handler_queue
         if threading.current_thread() is cls._handler_thread or handler_queue is None:
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
-            func(*args, **kwargs)
+            func(*args, **({} if kwargs is None else kwargs))
         else:
             # logger.debug("%s: relaying to system msg handler thread", func)
             if wait:
