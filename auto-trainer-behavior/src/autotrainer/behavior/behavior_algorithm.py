@@ -117,7 +117,7 @@ class BehaviorAlgorithm(ObservableObject):
     _thread_locals = threading.local()
     _thread_locals.event = None
     _handler_queue: ClassVar[Optional[queue.Queue]] = None
-    _handler_thread: ClassVar[Optional[threading.Thread]] = None
+    _handler_thread: ClassVar[Optional[threading.Thread]] = threading.current_thread()
     _no_handler_thread: ClassVar[Optional[bool]] = False
 
     def __init__(
@@ -300,7 +300,7 @@ class BehaviorAlgorithm(ObservableObject):
                     event = prev
             else:
                 event = None
-            BehaviorAlgorithm._handler_queue.put((func, args, kwargs, event))
+            handler_queue.put((func, args, kwargs, event))
             if event is not None:
                 event.wait()
                 event.clear()  # need always clear after used
@@ -656,7 +656,6 @@ class BehaviorAlgorithm(ObservableObject):
                 return DiamondTriangleOffsetConfig.from_file(cfg_path)
         return None
 
-    @_relay_func
     def start_session(self, *, reason: str="NA"):
         with self._thread_lock:
             return self._start_session(reason=reason)
@@ -666,7 +665,11 @@ class BehaviorAlgorithm(ObservableObject):
             logger.warning("%s: start_session() called but already in session",
                            reason)
             return False
+        self.__start_session(reason=reason)
+        return True
 
+    @_relay_func
+    def __start_session(self, *, reason: str):
         logger.success("%s: starting new session recording ...", reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
         self._is_in_session = True
@@ -691,9 +694,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_starting()
 
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
-        return True
 
-    @_relay_func
     def end_session(self, *, reason: str="NA"):
         with self._thread_lock:
             return self._end_session(reason=reason)
@@ -703,6 +704,11 @@ class BehaviorAlgorithm(ObservableObject):
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)
             return False
+        self.__end_session(reason=reason)
+        return True
+
+    @_relay_func
+    def __end_session(self, *, reason: str):
         logger.success("%s: stopping session recording", reason)
         self._is_in_session = False  # must be ~first, to ensure next actions/callbacks don't see it as True
         # but must be at least before self.session_ending() here after, given test_covered_load_cycle rely on that atm.
@@ -712,7 +718,6 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_ending()
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
-        return True
 
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0
