@@ -120,8 +120,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     _thread_locals = threading.local()
     _thread_locals.event = None
-    _handler_queue: ClassVar[Optional[queue.Queue]] = None
-    _handler_thread: ClassVar[Optional[threading.Thread]] = threading.current_thread()
+    _handler_thread_queue: ClassVar[Tuple[threading.Thread, Optional[queue.Queue]]] = (threading.current_thread(), None)
     _no_handler_thread: ClassVar[Optional[bool]] = False
 
     def __init__(
@@ -238,15 +237,16 @@ class BehaviorAlgorithm(ObservableObject):
     def _check_start_thread(cls):
         if cls._no_handler_thread:
             return
-        handler_queue = cls._handler_queue
+        _, handler_queue = cls._handler_thread_queue
         if handler_queue is None:
             logger.info("Creating algo handler thread ..")
-            handler_queue = BehaviorAlgorithm._handler_queue = queue.Queue(maxsize=64)
-            handler_thread = BehaviorAlgorithm._handler_thread = threading.Thread(
+            handler_queue = queue.Queue(maxsize=64)
+            handler_thread = threading.Thread(
                 target=cls._handler_thread_run, args=(handler_queue,),
                 daemon=True,
                 name="AlgoHandler",
             )
+            BehaviorAlgorithm._handler_thread_queue = (handler_thread, handler_queue)
             handler_thread.start()
 
     @staticmethod
@@ -283,15 +283,6 @@ class BehaviorAlgorithm(ObservableObject):
             if event is not None:
                 event.set()
             input_queue.task_done()
-    #
-    # def relay_meth(self, meth, *, wait: bool=True):
-    #     func = meth
-    #     while isinstance(func, partial):
-    #         func = func.func
-    #     @functools.wraps(func.__func__)
-    #     def wrapped(*args, **kwargs):
-    #         self.put_func_call(meth, args, kwargs, wait=wait)
-    #     return wrapped
 
     @staticmethod
     def relay_transitions(machine_transitions: Any):
@@ -314,14 +305,14 @@ class BehaviorAlgorithm(ObservableObject):
     @classmethod
     def put_func_call(cls, func, args: Tuple[Any]=(), kwargs: Optional[Dict]=None, *, wait: bool=True):
         # wait: bool=True could be quite safer, and we would only set it False where we see it's safe.
-        t_local_sync = getattr(cls._thread_locals, "sync_call_mode", None)
-        if t_local_sync is not None:
-            wait = t_local_sync
-        handler_queue = BehaviorAlgorithm._handler_queue
-        if threading.current_thread() is cls._handler_thread or handler_queue is None:
+        handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue
+        if threading.current_thread() is handler_thread or handler_queue is None or cls._no_handler_thread:
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
             func(*args, **({} if kwargs is None else kwargs))
         else:
+            t_local_sync = getattr(cls._thread_locals, "sync_call_mode", None)
+            if t_local_sync is not None:
+                wait = t_local_sync
             # logger.debug("%s: relaying to system msg handler thread", func)
             if wait:
                 prev = getattr(BehaviorAlgorithm._thread_locals, "event", None)
