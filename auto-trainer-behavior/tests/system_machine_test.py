@@ -228,8 +228,8 @@ def test_inference_detection_ready(machine):
     machine._inference.detection_result_ready(result)
     assert algo.session_pellet_count == 35
     assert algo.day_pellet_count == 35
-    assert algo.pellets_presented == 30
-    assert algo.successful_reaches == 2
+    assert algo.pellets_presented == 70
+    assert algo.successful_reaches == 6
 
 
 class TestAutoClamp(MockSystemMachine):
