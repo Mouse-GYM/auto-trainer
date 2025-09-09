@@ -1,6 +1,6 @@
 import dataclasses
 
-from typing import Tuple, Optional, Dict
+from typing import Tuple, Optional, Dict, List
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QVBoxLayout, QHBoxLayout
@@ -33,18 +33,34 @@ class _GraphItem:
     display: str
     unit: str
     y_range: Tuple[int, int]
+    x_range: Optional[Tuple[int, int]] = None
+    ticks: Optional[List[Tuple[int, str]]] = None
 
 
-_weight_graph = _GraphItem(0, "weight", "Weight", "gr", (-1, 101))
-_audio_graph = _GraphItem(-1, "audio", "Audio", "dB", (-1, 125))
+_weight_graph = _GraphItem(
+    measure_idx=0,
+    name="weight",
+    display="Weight",
+    unit="gr",
+    y_range=(-1, 101),
+)
+_audio_graph = _GraphItem(
+    measure_idx=-1,
+    name="audio",
+    display="Audio",
+    unit="dB",
+    y_range=(0, 200), x_range=(0, 64),
+    ticks=[(i, str(i * 1500)) for i in range(0, 64, 10)],
+)
 
 # NB: same order than SensorAnalysis.measurements_received method
 AVAILABLE_GRAPHS = (
     _weight_graph,
-    _GraphItem(1, "switch", "Switch", "1/0", (-1, 2)),
-    _GraphItem(2, "pressure", "Pressure", "Cnts", (-1, 4099)),
-    _GraphItem(3, "temperature", "Temperature", "\u00b0C", (-1, 40)),
-    _GraphItem(4, "humidity", "Humidity", "%", (-1, 101)),
+    _GraphItem(
+        measure_idx=1, name="switch", display="Switch", unit="1/0", y_range=(-1, 2)),
+    _GraphItem(measure_idx=2, name="pressure", display="Pressure", unit="Cnts", y_range=(-1, 4099)),
+    _GraphItem(measure_idx=3, name="temperature", display="Temperature", unit="\u00b0C", y_range=(-1, 40)),
+    _GraphItem(measure_idx=4, name="humidity", display="Humidity", unit="%", y_range=(-1, 101)),
     _audio_graph,
 )
 
@@ -61,11 +77,15 @@ def _make_graph_plot(graph: _GraphItem):
     plot.setBackground("w")
     plot.setMinimumHeight(140)
     plot.scale_x = 100.0
-    ticks = [0, 10, 25, 40, 50]
-    plot.getAxis("left").setTicks([[(tick, str(tick)) for tick in ticks]])
-    plot.getAxis("bottom").setLabel("Time (s)")
+    if graph.ticks is None:
+        plot.getAxis("bottom").setLabel("Time (s)")
+    else:
+        plot.getAxis('bottom').setTicks([graph.ticks])
     plot.getAxis("left").setLabel(f"{graph.display} ({graph.unit})")
-    plot.getViewBox().setRange(yRange=graph.y_range)
+    view_box = plot.getViewBox()
+    if graph.x_range is not None:
+        view_box.setRange(xRange=graph.x_range)
+    view_box.setRange(yRange=graph.y_range)
     layout.addWidget(plot)
     widget.setLayout(layout)
     plot.widget = widget
@@ -209,7 +229,7 @@ class AnalysisContent(ContentWidget):
         selected = self._selected_graph
         if selected is not None and selected.name == _audio_graph.name:
             audio_plot = self._measurement_plots[_audio_graph.name]
-            audio_plot.cache_data(spectrum)
+            audio_plot.replace_cache(spectrum)
 
     def _update_trigger(self):
         try:
