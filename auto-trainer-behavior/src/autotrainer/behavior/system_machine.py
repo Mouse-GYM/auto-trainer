@@ -29,13 +29,13 @@ from .tunnel_device_protocol import TunnelDeviceProtocol
 
 logger = get_verbose_logger(__name__)
 
-
 # NB: this is to ensure we can patch the exact desired one (and only that one) from tests:
 _clean_raw_data_timer = DaemonTimer
 _auto_clamp_release_timer = DaemonTimer
 _consider_end_session_timer = DaemonTimer
 _check_missing_timer = DaemonTimer
 _consider_disengage_autoclamp_timer = DaemonTimer
+
 
 #
 
@@ -143,7 +143,7 @@ class SystemMachine(StateMachine):
         self._algorithm.project = self._project_info
         self._intersession.project = self._project_info
 
-    def before_enter_tunnel(self, *, reason: str="NA"):
+    def before_enter_tunnel(self, *, reason: str = "NA"):
         EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
         pellet_state = self._pellet_machine.state
         logger.debug("before_enter_tunnel: pellet_state=%s", pellet_state)
@@ -162,14 +162,14 @@ class SystemMachine(StateMachine):
                 self._update_magnet_position(self.algorithm.baseline_intensity)
                 algo.system_state = SystemState.tunnel
 
-    def after_enter_tunnel(self, *, reason: str="NA"):
+    def after_enter_tunnel(self, *, reason: str = "NA"):
         if self._analysis is not None:
             self._evaluate_auto_clamp(self._analysis.headbar_pressure_monitor.is_engaged)
 
-    def before_exit_tunnel(self, *, reason: str="NA"):
+    def before_exit_tunnel(self, *, reason: str = "NA"):
         self._algorithm.system_state = SystemState.cage
 
-    def after_exit_tunnel(self, *, reason: str="NA"):
+    def after_exit_tunnel(self, *, reason: str = "NA"):
         self._update_magnet_position(self.algorithm.baseline_intensity)
         EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
         self.algorithm.end_session(reason=f"{reason}->after_exit_tunnel")
@@ -215,6 +215,7 @@ class SystemMachine(StateMachine):
                     if path.exists():
                         logger.debug("removing %s", path)
                         path.unlink(missing_ok=True)
+
         # using timer given when called the monitor data queue might still be writing to disk/still be in live session,
         # making the deletes to not work here
         t = _clean_raw_data_timer(15, do_clean)
@@ -293,8 +294,8 @@ class SystemMachine(StateMachine):
                 self._timer_check_missing.cancel()
                 self._timer_consider_end_session.cancel()
             if (
-                new_value == InferenceStatus.live
-                and self.state == SystemState.cage
+                    new_value == InferenceStatus.live
+                    and self.state == SystemState.cage
             ):
                 if self._analysis.load_cell_monitor.is_engaged:
                     self.enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
@@ -380,10 +381,10 @@ class SystemMachine(StateMachine):
 
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if (
-            offset is not None
-            and self._state == SystemState.tunnel
-            and self._pellet_machine.state == PelletState.monitoring
-            and self._pellet_machine.can_use_pellet_command()
+                offset is not None
+                and self._state == SystemState.tunnel
+                and self._pellet_machine.state == PelletState.monitoring
+                and self._pellet_machine.can_use_pellet_command()
         ):
             last_position = self._pellet_device.last_position
             if last_position is not None and offset is not None:
@@ -404,8 +405,8 @@ class SystemMachine(StateMachine):
             return
         algo = self._algorithm
         check_cover_distance = not algo.is_in_session and (
-            (pellet_machine.state == PelletState.monitoring and algo.pellet_cover_enabled)
-            or (pellet_machine.state == PelletState.covering)
+                (pellet_machine.state == PelletState.monitoring and algo.pellet_cover_enabled)
+                or (pellet_machine.state == PelletState.covering)
         )
         if check_cover_distance:
             algo.handle_cover_pellet_offset(offset)
@@ -493,9 +494,9 @@ class SystemMachine(StateMachine):
             # ensure the current deliver position is corrected (no more drift applied):
             # if not new_value:
             #     pellet_dev.set_motors_drift(Offset3DTuple(0, 0, 0))
-                # # for set_coord in (pellet_dev.set_x, pellet_dev.set_y, pellet_dev.set_z):
-                # #     set_coord(0, absolute=False)
-                # given set_motors_drift already does it.
+            # # for set_coord in (pellet_dev.set_x, pellet_dev.set_y, pellet_dev.set_z):
+            # #     set_coord(0, absolute=False)
+            # given set_motors_drift already does it.
 
         elif name == BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN:
             self._pellet_machine.environment_changed(must_release=new_value)
@@ -532,17 +533,17 @@ class SystemMachine(StateMachine):
     def _intersession_state_changed(self, old_value, new_value):
         self._algorithm.intersession_state = new_value
 
-    def _consider_end_session(self, *, reason: str="NA"):
+    def _consider_end_session(self, *, reason: str = "NA"):
         # Do not end if the mouse is still in the tunnel and a pellet is seen or the pellet deliver is in the sending
         # or releasing states. Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
         if (not self._algorithm.is_in_session
-            or (self.state == SystemState.tunnel
-                and self._pellet_machine.state in {
-                    PelletState.sending, PelletState.releasing, PelletState.monitoring,
-                    # PelletState.loading,
-                }
-            )
+                or (self.state == SystemState.tunnel
+                    and self._pellet_machine.state in {
+                        PelletState.sending, PelletState.releasing, PelletState.monitoring,
+                        # PelletState.loading,
+                    }
+                )
         ):
             return
 
@@ -554,12 +555,11 @@ class SystemMachine(StateMachine):
     def _handle_detection_result(self, res: IntersessionResponse):
         algo = self._algorithm
         if res.food_consumed > 0:
-            algo.day_pellet_count += res.food_consumed
-            algo.session_pellet_count += res.food_consumed
+            algo.increase_pellets_consumed(res.food_consumed)
         if res.successful_reaches > 0:
-            algo.successful_reaches = res.successful_reaches
+            algo.increase_successful_reaches(res.successful_reaches)
         if res.pellets_presented > 0:
-            algo.pellets_presented = res.pellets_presented
+            algo.increase_pellets_presented(res.pellets_presented)
         dev = self._pellet_device
         if dev is not None and self.algorithm.intersession_pellet_shift_enabled:
             for val, meth, kind in ((res.pellet_x, dev.set_x, BehaviorEventKind.intersessionShiftX),
@@ -604,13 +604,13 @@ class SystemMachine(StateMachine):
     def may_trigger(self):
         pass
 
-    def enter_tunnel(self, *, reason: str="NA"):
+    def enter_tunnel(self, *, reason: str = "NA"):
         pass
 
     def may_enter_tunnel(self):
         pass
 
-    def exit_tunnel(self, *, reason: str="NA"):
+    def exit_tunnel(self, *, reason: str = "NA"):
         pass
 
     def may_exit_tunnel(self):
