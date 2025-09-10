@@ -131,6 +131,10 @@ class MainContent(ContentWidget):
         self._timer.timeout.connect(self.update_image)
         self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
 
+    def close(self):
+         self._diagnostics_content.close()  # to ensure the textbox handler is remove from root logger handlers
+         super().close()
+
     @Slot()
     def update_image(self):
         model = self._model

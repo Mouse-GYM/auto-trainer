@@ -60,6 +60,11 @@ class MainWindow(QMainWindow):
 
         self._reload_animals(self._model.animals)
 
+    def close(self):
+        # explicitly close main content, reason is TextBoxHandler added to root logger handlers.
+        self.main_content.close()
+        super().close()
+
     def on_capture_start_stop(self, is_toggled):
         if is_toggled:
             self.main_content.set_is_capture_active(True)

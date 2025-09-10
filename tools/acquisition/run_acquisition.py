@@ -136,4 +136,6 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     window.on_activated()
 
+    app.aboutToQuit.connect(window.close)
+
     return app.exec()
