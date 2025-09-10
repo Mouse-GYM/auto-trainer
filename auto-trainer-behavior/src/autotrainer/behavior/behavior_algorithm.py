@@ -95,7 +95,7 @@ class BehaviorAlgoProps(str, Enum):
     HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'
 
 
-def _relay_func(func, *, wait: bool=False):
+def _relay_func(func, *, wait: bool=True):
     orig_func = func
     # skip any partial(s):
     while isinstance(func, partial):
@@ -120,7 +120,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     _thread_locals = threading.local()
     _thread_locals.event = None
-    _handler_thread_queue: ClassVar[Tuple[threading.Thread, Optional[queue.Queue]]] = (threading.current_thread(), None)
+    _handler_thread_queue: ClassVar[
+        Tuple[Optional[threading.Thread], Optional[queue.Queue]]] = (threading.current_thread(), None)
     _no_handler_thread: ClassVar[Optional[bool]] = False
 
     def __init__(
@@ -251,7 +252,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @staticmethod
     @contextlib.contextmanager
-    def set_put_func_call_mode(sync: bool):
+    def set_put_func_call_mode(wait: bool):
         """Allow to set the "sync" call mode for other threads putting func calls to our dedicated algo thread
         with algo.set_put_func_call_mode(False):
             # some code going via algo.put_func_call will use the given mode (async here)
@@ -264,12 +265,20 @@ class BehaviorAlgorithm(ObservableObject):
         """
         t_locals = BehaviorAlgorithm._thread_locals
         prev = getattr(t_locals, "sync_call_mode", None)
-        t_locals.sync_call_mode = sync
+        t_locals.sync_call_mode = wait
         yield
         t_locals.sync_call_mode = prev
 
     @staticmethod
+    def relay_func(func=None, *, wait: bool=True):
+        """Decorator for marking a function/method as having to be relayed to our algo dedicated thread"""
+        if func is None:
+            return partial(_relay_func, wait=wait)
+        return _relay_func(func, wait=wait)
+
+    @staticmethod
     def _handler_thread_run(input_queue: queue.Queue):
+        logger.verbose("Running for handling/executing all algo decision/transition ..")
         while True:
             raw = input_queue.get()
             if raw is None:
@@ -283,27 +292,24 @@ class BehaviorAlgorithm(ObservableObject):
             if event is not None:
                 event.set()
             input_queue.task_done()
+        logger.debug("Exiting")
 
-    @staticmethod
-    def relay_transitions(machine_transitions: Any):
-        """Relay all transitions trigger ***bound methods*** of the given machine_transitions instance to us"""
+    @classmethod
+    def relay_transitions(cls, machine_transitions: Any):
+        """Relay all transition triggers of the given machine_transitions instance to the algo dedicated thread"""
         for trans in machine_transitions.transitions:
             trig = trans['trigger']
             if trig is not None:
                 if callable(trig):
                     trig = trig.__name__
                 meth = getattr(machine_transitions, trig)
-                setattr(machine_transitions, trig, _relay_func(meth))
-
-    @staticmethod
-    def relay_func(func=None, *, wait: bool=True):
-        """Make a decorator usable on class ***functions*** ; not on a class instance bound method"""
-        if func is None:
-            return partial(_relay_func, wait=wait)
-        return _relay_func(func, wait=wait)
+                setattr(machine_transitions, trig, cls.relay_func(meth))
 
     @classmethod
     def put_func_call(cls, func, args: Tuple[Any]=(), kwargs: Optional[Dict]=None, *, wait: bool=True):
+        """Put a function call to the algo dedicated thread, and eventually/if wait is True: wait on its completion
+        See also `BehaviorAlgorithm.set_put_func_call_mode`(wait: bool)
+        """
         # wait: bool=True could be quite safer, and we would only set it False where we see it's safe.
         handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue
         if threading.current_thread() is handler_thread or handler_queue is None or cls._no_handler_thread:
@@ -1008,5 +1014,15 @@ class BehaviorAlgorithm(ObservableObject):
             self._today = today
             self._start_day()
 
+#
 
-# BehaviorAlgorithm._check_start_thread()
+def _close_algo_handler():
+    handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue  # noqa
+    if handler_queue is not None:
+        BehaviorAlgorithm._handler_thread_queue = (None, None)
+        handler_queue.put(None)
+        handler_thread.join()
+
+
+import atexit
+atexit.register(_close_algo_handler)
