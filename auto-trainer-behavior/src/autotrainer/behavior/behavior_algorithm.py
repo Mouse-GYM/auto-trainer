@@ -289,6 +289,10 @@ class BehaviorAlgorithm(ObservableObject):
                 func(*args, **kwargs)
             except Exception as err:
                 logger.exception("Failed executing %s: %s", func, err)
+                # NB: what to do else ?
+                # this is a pretty critical situation given the related function might be itself critical.
+                # TODO: maybe relay a flag/msg/error to the main thread for display purpose ?
+                # actually this should even trigger a restart of the application.
             if event is not None:
                 event.set()
             input_queue.task_done()
