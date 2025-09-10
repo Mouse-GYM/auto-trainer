@@ -360,10 +360,9 @@ class ProjectInfo:
 
     def calculate_next_session_index(self, when: Optional[datetime] = None):
         """Calculate the next session index & date and store it locally"""
-        res = self._calculate_next_session_index(when)
+        self._calculate_next_session_index(when)
         logger.success("Calculated next session index=%s when=%s",
                        self.session, self.when)
-        return res
 
     def _calculate_next_session_index(self, when: Optional[datetime] = None):
         """Calculate the next session index & date and store it locally"""
