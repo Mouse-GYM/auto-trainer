@@ -202,17 +202,17 @@ class SystemMachine(StateMachine):
             self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
 
     @staticmethod
-    def _clean_raw_data(project):
-        # NB: get/read the current session index value immediately,
-        # this ensures that if it's changed by main process/thread then we are cleaning the good/correct one !!
-        session_value = project.session
+    def _clean_raw_data(project: ProjectInfo, *, wait_before_clean: float = 10):
+        # NB: convert to local value immediately,
+        # so that if the shared values are modified in between the timer triggers,
+        # then the good values are still used
+        project = project.to_local_value()
 
         def do_clean():
             for cam_name in (project.camera_1, project.camera_2):
                 paths = map(Path, chain(
-                    project.get_video_path(cam_name, session=session_value, allow_overwrite=True),
-                    [project.get_intersession_pose_path(cam_name, session=session_value, allow_overwrite=True,
-                                                        suffix="_live")],
+                    project.get_video_path(cam_name, allow_overwrite=True),
+                    [project.get_intersession_pose_path(cam_name, allow_overwrite=True, suffix="_live")],
                 ))
                 for path in paths:
                     if path.exists():
@@ -221,7 +221,7 @@ class SystemMachine(StateMachine):
 
         # using timer given when called the monitor data queue might still be writing to disk/still be in live session,
         # making the deletes to not work here
-        t = _clean_raw_data_timer(15, do_clean)
+        t = _clean_raw_data_timer(wait_before_clean, do_clean)
         # changed timer to 15s: seen some cases where close of file handles in monitor data queue was bit slower,
         # and made some of the data files not be removed (given written to after).
         # if that still happens (like with overloaded system), then some files will be left on disk still.
