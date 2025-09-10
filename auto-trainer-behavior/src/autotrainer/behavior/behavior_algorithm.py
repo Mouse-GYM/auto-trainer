@@ -94,8 +94,19 @@ class BehaviorAlgoProps(str, Enum):
     PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'
     HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'
 
+#
 
-def _relay_func(func, *, wait: bool=True):
+# this define the default behavior for handling  relay of function call to the dedicated algo thread handler,
+# True: "wait" that the function is executed on the algo handler thread before proceeding,
+# False: do not wait that the function is executed, submit it, and then continue immediately.
+#
+_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE = True
+# True: safer for all
+# False: faster for caller/putter
+
+
+def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
+    """See BehaviorAlgorithm.relay_func()"""
     orig_func = func
     # skip any partial(s):
     while isinstance(func, partial):
@@ -108,6 +119,8 @@ def _relay_func(func, *, wait: bool=True):
 
     return wrapped
 
+
+#
 
 class BehaviorAlgorithm(ObservableObject):
     # dynamic events type hints,
@@ -270,7 +283,7 @@ class BehaviorAlgorithm(ObservableObject):
         t_locals.sync_call_mode = prev
 
     @staticmethod
-    def relay_func(func=None, *, wait: bool=True):
+    def relay_func(func=None, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
         """Decorator for marking a function/method as having to be relayed to our algo dedicated thread"""
         if func is None:
             return partial(_relay_func, wait=wait)
@@ -310,11 +323,11 @@ class BehaviorAlgorithm(ObservableObject):
                 setattr(machine_transitions, trig, cls.relay_func(meth))
 
     @classmethod
-    def put_func_call(cls, func, args: Tuple[Any]=(), kwargs: Optional[Dict]=None, *, wait: bool=True):
-        """Put a function call to the algo dedicated thread, and eventually/if wait is True: wait on its completion
-        See also `BehaviorAlgorithm.set_put_func_call_mode`(wait: bool)
+    def put_func_call(cls, func, args: Tuple[Any]=(), kwargs: Optional[Dict]=None,
+                      *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
+        """Put a function call request to the algo dedicated thread, and eventually wait on its completion.
+        See also `BehaviorAlgorithm.set_put_func_call_mode`.
         """
-        # wait: bool=True could be quite safer, and we would only set it False where we see it's safe.
         handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue
         if threading.current_thread() is handler_thread or handler_queue is None or cls._no_handler_thread:
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
