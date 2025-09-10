@@ -507,13 +507,17 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # self._intersession_block = None
         # it is/must be done by monitor data thread
 
-    def __feed_intersession_analysis(self, intersession_block):
+    def __feed_intersession_analysis(self, intersession_block: IntersessionBlock):
         offline_q = self._offline_queue
         cams = (self._project.camera_1, self._project.camera_2)
         n_cams = len(cams)
-        cur_session_nbr = self._project.session
+        project = self._project.to_local_value()  # get local ref, so to be sure shared values are not modified after
+        detection_cfg = intersession_block.configuration
+        # and use detections_cfg index & when :
+        project.session = detection_cfg.session_index
+        project.when = detection_cfg.session_when
         cams_paths = [
-            tuple(map(Path, self._project.get_video_path(name=cam, session=cur_session_nbr, allow_overwrite=True)))
+            tuple(map(Path, project.get_video_path(name=cam, allow_overwrite=True)))
             for cam in cams
         ]
         tot_skipped_frames = 0
@@ -573,8 +577,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 [
                     l[2][0]  # the third row contains the associated frame index in h5 file ([0] to extract it from array)
                     for l in h5py.File(
-                        self.project.get_intersession_pose_path(cam, session=cur_session_nbr, allow_overwrite=True,
-                                                                suffix="_live"))["df_with_missing"]["table"]
+                        project.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live")
+                    )["df_with_missing"]["table"]
                 ]
                 for cdx, cam in enumerate(cams)
             ]
