@@ -21,6 +21,7 @@ _LogLevelT = Union[str, int]
 
 
 _already_setup = False
+_base_logger: logging.Logger = logging.root
 _multiprocess_log_queue: Optional[multiprocessing.Queue] = None
 _queue_listener: Optional[logging.handlers.QueueListener] = None
 _queue_handler: Optional[logging.Handler] = None
@@ -288,19 +289,31 @@ class ColoredPreciseTimeFormatter(PreciseTimeFormatter, coloredlogs.ColoredForma
 
 
 def stop_multiproc_logging():
-    global _multiprocess_log_queue, _queue_listener, _queue_handler, _console_handler
-    if _queue_listener is not None:
+    global _multiprocess_log_queue, _queue_listener, _queue_handler, _console_handler, _already_setup
+
+    mp_log_queue = _multiprocess_log_queue
+    q_listener = _queue_listener
+    q_handler = _queue_handler
+
+    if _already_setup and q_listener is not None:
+        _already_setup = False
+        # Must remove the handler before closing it:
+        for handler in _base_logger.handlers:
+            if isinstance(handler, WithThreadIdQueueHandler):
+                _base_logger.removeHandler(handler)
+
+    if q_listener is not None:
         # must be before following log queue close()
-        _queue_listener.stop()
+        q_listener.stop()
         _queue_listener = None
 
-    if _multiprocess_log_queue is not None:
-        _multiprocess_log_queue.close()
-        _multiprocess_log_queue.join_thread()
+    if mp_log_queue is not None:
+        mp_log_queue.close()
+        mp_log_queue.join_thread()
         _multiprocess_log_queue = None
 
-    if _queue_handler is not None:
-        _queue_handler.close()
+    if q_handler is not None:
+        q_handler.close()
         _queue_handler = None
 
 
