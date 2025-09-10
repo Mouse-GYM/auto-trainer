@@ -2,8 +2,12 @@ import logging
 
 from PySide6.QtWidgets import QLabel, QWidget, QHBoxLayout, QVBoxLayout, QPlainTextEdit
 
+from autotrainer.core import get_verbose_logger
 from autotrainer.pyside import CardWidget, TextBoxHandler
 from tools.acquisition.model.app_model import AppModel
+
+
+logger = get_verbose_logger(__name__)
 
 
 class DiagnosticsContent(QWidget):
@@ -17,7 +21,7 @@ class DiagnosticsContent(QWidget):
         log_output = QPlainTextEdit()
         log_output.setReadOnly(True)
         log_output.setStyleSheet("border: 0px solid; border-color: #b9b9b9;")
-        handler = TextBoxHandler(log_output)
+        handler = self._textbox_handler = TextBoxHandler(log_output)
         handler.setFormatter(logging.Formatter(fmt="%(asctime)s: %(levelname)s: %(name)s: %(message)s"))
         logging.getLogger().addHandler(handler)
 
@@ -42,3 +46,9 @@ class DiagnosticsContent(QWidget):
         layout = QVBoxLayout()
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
+
+    def close(self):
+        handler = self._textbox_handler
+        logger.debug("removing log handler %s", handler)
+        logging.getLogger().removeHandler(handler)
+        super().close()

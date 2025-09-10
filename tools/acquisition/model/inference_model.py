@@ -18,7 +18,7 @@ import numpy
 import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
-    InferenceConfiguration, Offset3DTuple
+    InferenceConfiguration, Offset3DTuple, SystemMessageHandler
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.logging import get_verbose_logger, setup_logging, get_multiprocess_log_queue, make_log_dict_config
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \

@@ -10,7 +10,8 @@ from unittest import mock
 
 import pytest
 
-from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, PelletState
+from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, PelletState, \
+    BehaviorAlgorithm
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler
 from autotrainer.core import ProjectInfo
 from autotrainer.device import DeviceConnectionProtocol
@@ -18,7 +19,6 @@ from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 from autotrainer.video import CaptureProcessStatus
 
 from tools.acquisition.model.inference_model import InferenceModel
-
 
 
 def property_value_save_transitions(old_value, new_value, *, transitions: List[Any]):
@@ -82,6 +82,9 @@ def system_msg_handler(system_msg_queue):
 
 @pytest.fixture
 def machine(tunnel_device, pellet_device, inference, project_info):
+    # prevents some test to fail due to handling function in dedicated thread
+    BehaviorAlgorithm._no_handler_thread = True
+    #
     machine = SystemMachine(
         tunnel_device=tunnel_device,
         pellet_device=pellet_device,

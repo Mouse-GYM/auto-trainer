@@ -1,3 +1,4 @@
+import functools
 import math
 import time
 from functools import partial
@@ -8,7 +9,7 @@ from typing import Optional, List, Tuple
 from transitions import Machine
 
 from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor,
-                              HeadbarPressureMonitor, Motor, transitions_allow_functions)
+                              HeadbarPressureMonitor, Motor, transitions_allow_functions, SystemMessageHandler)
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
@@ -47,7 +48,7 @@ class SystemMachine(StateMachine):
     def __init__(self,
                  algorithm: Optional[BehaviorAlgorithm] = None,
                  project_info: Optional[ProjectInfo] = None,
-                 msg_handler: MessageHandler = None,
+                 msg_handler: SystemMessageHandler = None,
                  analysis: SensorAnalysis = None,
                  tunnel_device: TunnelDeviceProtocol = None,
                  pellet_device: PelletDeviceProtocol = None,
@@ -84,6 +85,7 @@ class SystemMachine(StateMachine):
         algorithm.session_starting += self._session_starting
         algorithm.session_ending += self._session_ended
         algorithm.property_changed += self._algorithm_property_changed
+        algorithm.relay_transitions(self)
 
         self._tunnel_device = tunnel_device
         self._msg_handler = msg_handler
@@ -113,6 +115,7 @@ class SystemMachine(StateMachine):
         intersession_machine = self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._intersession_ended
         intersession_machine.events.state_changed += self._intersession_state_changed
+        algorithm.relay_transitions(intersession_machine)
 
         # need to set it directly, when we start all state are "OFF/0": no presence detected, etc..
         # so if that's stay as is then there need to be the timer already setup:
@@ -224,12 +227,14 @@ class SystemMachine(StateMachine):
         # if that still happens (like with overloaded system), then some files will be left on disk still.
         t.start()
 
+    @BehaviorAlgorithm.relay_func
     def _session_starting(self):
         pellet_dev = self._pellet_device
         if pellet_dev is not None:
             self._motor_axis_flips = pellet_dev.get_motor_flips()
             logger.debug("read motor axis flips: %s", self._motor_axis_flips)
 
+    @BehaviorAlgorithm.relay_func
     def _session_ended(self):
         # 5/16/25 should not remove auto-clamp at session end for current testing.
         # TODO: make this configurable.
@@ -274,6 +279,7 @@ class SystemMachine(StateMachine):
                 else:
                     inference.set_inference_to_online()
 
+    @BehaviorAlgorithm.relay_func
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
             logger.debug("_intersession_ended: load_cell.engaged=%s",
@@ -283,6 +289,7 @@ class SystemMachine(StateMachine):
             else:
                 self.exit_intersession_to_cage()
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _handle_inference_property_changed(self, name: str, new_value, prev_value):
         if name == InferenceProtocol.STATUS:
             logger.verbose("Inference status change: %s -> %s ; system_state=%s",
@@ -303,6 +310,7 @@ class SystemMachine(StateMachine):
                 # self._inference.property_changed -= self._handle_inference_property_changed
                 # NO: in case of stop->start acquisition of/inside main app we still need it.
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
             # TODO new need event kind
@@ -313,6 +321,7 @@ class SystemMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
             self._evaluate_auto_clamp(value)
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _load_cell_monitor_property_changed(self, name: str, value, _):
         if self.state == SystemState.intersession:
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
@@ -345,6 +354,7 @@ class SystemMachine(StateMachine):
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                                               context=self.state)
 
+    @BehaviorAlgorithm.relay_func
     def _evaluate_auto_clamp(self, is_headbar_pressure_engaged: bool):
         algo = self._algorithm
         if not algo.head_fixation_enabled:
@@ -373,12 +383,15 @@ class SystemMachine(StateMachine):
         else:
             logger.debug("auto-clamp position not sent (not in tunnel)")
 
+    @BehaviorAlgorithm.relay_func
     def _load_cell_tare_requested(self):
         if self.state != SystemState.tunnel:
             self._tunnel_device.tare_load_cell()
             EventManager.default().post_event_content(BehaviorEventKind.headfixAutoTare)
         return False
 
+    # @BehaviorAlgorithm.relay_func(wait=False)
+    # not needed, already called by _pose_changed which has already it.
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if (
                 offset is not None
@@ -438,6 +451,7 @@ class SystemMachine(StateMachine):
         if algo.hands_near_pellet_seen and not prev_hands_seen_near_pellet:
             self._pellet_machine.environment_changed(caller="hands_seen_near_pellet")
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _pose_changed(self, response: PoseResponse):
         self._handle_diamond_triangle_offset_changed(
             response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
@@ -459,6 +473,7 @@ class SystemMachine(StateMachine):
         #
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
+    @BehaviorAlgorithm.relay_func
     def _disengage_auto_clamp(self):
         logger.info("disengaging auto-clamp ..")
         pellet_dev = self._pellet_device
@@ -475,6 +490,7 @@ class SystemMachine(StateMachine):
             )
             timer.start()
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.
         pellet_dev = self._pellet_device
@@ -505,6 +521,7 @@ class SystemMachine(StateMachine):
         if self._tunnel_device is not None:
             self._tunnel_device.update_head_magnet_intensity(position)
 
+    @BehaviorAlgorithm.relay_func
     def _pellet_loading(self):
         self._timer_auto_clamp_disengage.cancel()
         self._disengage_auto_clamp_load_count += 1
@@ -522,17 +539,14 @@ class SystemMachine(StateMachine):
                 logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s",
                                self, prev_timer)
 
-    # nb: not used anymore
-    def _pellet_sending(self):
-        if self.state == SystemState.tunnel and not self._algorithm.is_in_session:
-            self._algorithm.start_session(reason="pellet_sending")
-
     def _pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
 
     def _intersession_state_changed(self, old_value, new_value):
         self._algorithm.intersession_state = new_value
 
+    @BehaviorAlgorithm.relay_func(wait=False)
+    # called by a timer, so can use wait=False (to not always recreate event for the wait sync)
     def _consider_end_session(self, *, reason: str = "NA"):
         # Do not end if the mouse is still in the tunnel and a pellet is seen or the pellet deliver is in the sending
         # or releasing states. Otherwise, there will be no trigger to start a new session and recording (tunnel entry
@@ -552,6 +566,7 @@ class SystemMachine(StateMachine):
             # this will trigger a new start session if mouse still there
             self._analysis.load_cell_monitor.is_engaged = False
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _handle_detection_result(self, res: IntersessionResponse):
         algo = self._algorithm
         if res.food_consumed > 0:
@@ -569,6 +584,9 @@ class SystemMachine(StateMachine):
                     meth(val, absolute=False)
                     EventManager.default().post_event_content(kind, context=val)
 
+    # _check_presence_missing is called via a timer,
+    # so prefer using wait=False ; which won't create a new thread event on each timer call.
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _check_presence_missing(self):
         self._timer_check_missing.cancel()  # in case of
         algo = self._algorithm

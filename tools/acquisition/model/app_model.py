@@ -1,4 +1,6 @@
+import functools
 import json
+import logging
 import pickle
 import queue
 import threading
@@ -10,7 +12,7 @@ from typing import Optional, List
 
 import yaml
 
-from autotrainer.behavior import IntersessionState
+from autotrainer.behavior import IntersessionState, BehaviorAlgorithm
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
@@ -87,10 +89,11 @@ class AppModel(ObservableObject):
             self._top_camera,
         ]
 
-        self._message_queue = queue.Queue()  # only dedicated to CAN bus messages reading/handling
+        self._system_message_queue = queue.Queue()  # only dedicated to CAN bus messages reading/handling
         # so: using a multiprocess queue instead, would allow to put the CAN connection thread into a dedicated process,
         # also giving more space/freedom for the main/UI process python GIL acquire/release.
-        self._system_message_handler = SystemMessageHandler(self._message_queue)
+        self._system_message_handler = SystemMessageHandler(self._system_message_queue)
+        self._system_message_handler.start()
 
         # Use the default analysis object created by the message handler.  Dereferenced here for use in the class in
         # case that changes.
@@ -169,6 +172,7 @@ class AppModel(ObservableObject):
 
         self._load_animals()
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_release_pellet(self):
         algo = self._behavior.algorithm
         # we never know the session could be just stopped,
@@ -208,7 +212,8 @@ class AppModel(ObservableObject):
                             logger.warning("Unhandled extra args to status msg: %r", raw[3:])
             else:
                 cmd = raw
-            logger.info("Got %s ; %s // %s", cmd, args, kwargs)
+            extra_info = (args, kwargs) if logger.isEnabledFor(logging.DEBUG) else "NA"
+            logger.info("Handling %s ; data=%s", cmd, extra_info)
             algo = self._behavior.algorithm
             if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
                 cam_idx, new_status = args
@@ -522,7 +527,7 @@ class AppModel(ObservableObject):
         return conf.save_default(self._preferences.configuration_location)
 
     def on_activated(self):
-        self._system_message_handler.start()
+        pass
 
     def on_close(self):
         logger.verbose("AppModel.on_close")

@@ -1,8 +1,11 @@
+import functools
 import logging
+import threading
 import time
+from functools import partial
 from queue import Queue, Empty
 from threading import Thread
-from typing import Callable
+from typing import Callable, Union, Any, Optional
 
 from autotrainer.core.logging import get_verbose_logger
 from ..observable_object import ObservableObject
@@ -118,7 +121,8 @@ class MessageHandler(ObservableObject):
                 try:
                     msg_received(msg, data)
                 except Exception as err:
-                    logger.exception("Error during msg_received callback: msg=%s err=%s", msg, err)
+                    logger.exception("Error during msg_received callback: msg=%s err=%s ; data=%s",
+                                     msg, err, data)
             task_done()
         logger.debug(f"<{self._name}>: exiting message event loop")
 

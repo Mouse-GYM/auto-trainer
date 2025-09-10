@@ -3,12 +3,13 @@ from unittest import mock
 
 import pytest
 
-from autotrainer.behavior import PelletState, SystemState, PelletMachine, PelletDeviceProtocol
+from autotrainer.behavior import PelletState, SystemState, PelletMachine, PelletDeviceProtocol, BehaviorAlgorithm
 
 
 @pytest.fixture()
 def pellet_machine():
     m_pellet_device = mock.create_autospec(PelletDeviceProtocol)
+    BehaviorAlgorithm._no_handler_thread = True
     pellet_machine = PelletMachine(pellet_device=m_pellet_device)
     return pellet_machine
 

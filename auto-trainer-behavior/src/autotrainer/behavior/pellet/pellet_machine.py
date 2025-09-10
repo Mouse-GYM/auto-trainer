@@ -3,8 +3,7 @@ from typing import Dict, Callable, Any, Optional
 
 from transitions import Machine
 
-from autotrainer.core import EventManager, MessageHandler, ObservableObject, Offset3DTuple, Motor, \
-    transitions_allow_functions
+from autotrainer.core import EventManager, transitions_allow_functions, SystemMessageHandler
 from autotrainer.core.multiproc import DaemonTimer
 from autotrainer.core.logging import get_verbose_logger
 
@@ -37,10 +36,12 @@ class PelletMachine(StateMachine):
 
     _events_class = PelletMachineEvents
 
-    def __init__(self, algorithm: BehaviorAlgorithm = None, msg_handler: MessageHandler = None,
-                 pellet_device: PelletDeviceProtocol = None,
-                 ):
-
+    def __init__(
+        self,
+        algorithm: BehaviorAlgorithm = None,
+        msg_handler: SystemMessageHandler = None,
+        pellet_device: PelletDeviceProtocol = None,
+    ):
         initial_state = PelletState.monitoring
 
         super().__init__(
@@ -50,10 +51,12 @@ class PelletMachine(StateMachine):
 
         # This is primarily for unit testing.  In general, algorithm should always be passed in from the parent
         # SystemMachine.
-        self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
-
-        self._algorithm.session_starting += self._session_starting
-        self._algorithm.session_ending += self._session_ending
+        if algorithm is None:
+            algorithm = BehaviorAlgorithm()
+        self._algorithm = algorithm
+        algorithm.session_starting += self._session_starting
+        algorithm.session_ending += self._session_ending
+        algorithm.relay_transitions(self)
 
         self._message_handler = msg_handler
         if msg_handler is not None:
@@ -167,6 +170,7 @@ class PelletMachine(StateMachine):
         self._try_next_state(seen, caller="pellet_seen")
 
     # region Callbacks
+    @BehaviorAlgorithm.relay_func
     def _session_starting(self):
         pass
         # Strictly speaking, the pellet should not be covered here when covering is disabled.  Under that condition,
@@ -178,6 +182,7 @@ class PelletMachine(StateMachine):
         # but is now controlled via receiving camera capture status == RECORDING
         # and not releasing before the desired threshold/delay.
 
+    @BehaviorAlgorithm.relay_func
     def _session_ending(self):
         algo = self._algorithm
         logger.verbose("%s: _session_ending() called", self)
@@ -225,6 +230,7 @@ class PelletMachine(StateMachine):
 
     # endregion
 
+    @BehaviorAlgorithm.relay_func
     def _try_next_state(
         self,
         pellet_seen: bool = True,

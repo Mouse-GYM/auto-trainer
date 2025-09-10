@@ -4,7 +4,8 @@ from typing import Optional
 from autotrainer.behavior import SystemMachine, InferenceProtocol
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior.state_machine import StateMachine
-from autotrainer.core import ObservableObject, ProjectInfo, MessageHandler, SensorAnalysis, BehaviorConfiguration
+from autotrainer.core import ObservableObject, ProjectInfo, MessageHandler, SensorAnalysis, BehaviorConfiguration, \
+    SystemMessageHandler
 from autotrainer.video.detection import PresenceDetectionAttrs
 from tools.acquisition.model.hardware_model import HardwareModel
 
@@ -14,7 +15,7 @@ from tools.acquisition.model.project_dependent_protocol import ProjectDependentP
 class BehaviorModel(ObservableObject, ProjectDependentProtol):
     def __init__(
         self,
-        msg_handler: MessageHandler,
+        msg_handler: SystemMessageHandler,
         analysis: SensorAnalysis,
         hardware_model: HardwareModel,
         inference: InferenceProtocol,
@@ -26,7 +27,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         self._proc_msg_queue = proc_msg_queue  # actually unused, see unsure in AppModel..
         self._analysis = analysis
 
-        self._machine = SystemMachine(
+        self._system_machine = SystemMachine(
             algorithm=None,
             project_info=None,
             msg_handler=msg_handler,
@@ -38,11 +39,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
 
         self._project: Optional[ProjectInfo] = None
 
-        self._machine.algorithm.property_changed += self._on_algorithm_property_changed
-        self._machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
+        self._system_machine.algorithm.property_changed += self._on_algorithm_property_changed
+        self._system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
 
-        self._is_intersession_enabled = self._machine.algorithm.intersession_enabled
+        self._is_intersession_enabled = self._system_machine.algorithm.intersession_enabled
         self._hardware_model = hardware_model
 
     @property
@@ -60,11 +61,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
 
     @property
     def system_machine(self) -> SystemMachine:
-        return self._machine
+        return self._system_machine
 
     @property
     def algorithm(self):
-        return self._machine.algorithm
+        return self._system_machine.algorithm
 
     @property
     def is_intersession_enabled(self) -> bool:
@@ -74,18 +75,18 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     def is_intersession_enabled(self, value: bool) -> None:
         self._is_intersession_enabled = self._on_property_changed("is_intersession_enabled", value,
                                                                   self._is_intersession_enabled)
-        self._machine.algorithm.intersession_enabled = self._is_intersession_enabled
+        self._system_machine.algorithm.intersession_enabled = self._is_intersession_enabled
 
     def load_configuration(self, configuration: BehaviorConfiguration):
         self.is_intersession_enabled = configuration.pellet_delivery.is_intersession_analysis_enabled
-        self._machine.algorithm.load_configuration(configuration)
+        self._system_machine.algorithm.load_configuration(configuration)
 
     def save_configuration(self) -> BehaviorConfiguration:
         configuration = BehaviorConfiguration()
         configuration.pellet_delivery.is_intersession_analysis_enabled = self._is_intersession_enabled
         configuration.pellet_delivery.is_intersession_pellet_shift_enabled = (
-            self._machine.algorithm.intersession_pellet_shift_enabled)
-        self._machine.algorithm.update_configuration(configuration)
+            self._system_machine.algorithm.intersession_pellet_shift_enabled)
+        self._system_machine.algorithm.update_configuration(configuration)
 
         configuration.load_cell = self._analysis.load_cell_monitor.save_configuration()
         configuration.auto_tare = self._analysis.load_cell_tare_monitor.save_configuration()
@@ -94,7 +95,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         return configuration
 
     def on_prepare_capture(self):
-        self._machine.project = self._project
+        self._system_machine.project = self._project
 
     def use_current_head_magnet_position_as_baseline(self):
         if self._hardware_model.head_magnet_intensity is not None:
@@ -116,6 +117,6 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         :return:
         """
         if value:
-            self._machine.enter_tunnel(reason="simulate_enter_tunnel")
+            self._system_machine.enter_tunnel(reason="simulate_enter_tunnel")
         else:
-            self._machine.exit_tunnel(reason="simulate_exit_tunnel")
+            self._system_machine.exit_tunnel(reason="simulate_exit_tunnel")

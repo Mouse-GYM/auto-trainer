@@ -1,15 +1,20 @@
+import contextlib
 import dataclasses
+import functools
+import inspect
 import logging
 import math
 import operator
+import queue
 import statistics
 import threading
 import time
 from datetime import datetime
+from functools import partial
 from enum import Enum
 from functools import reduce
 from pathlib import Path
-from typing import Callable, Optional, Tuple, List
+from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union, Dict
 
 from typing import Callable
 
@@ -89,6 +94,33 @@ class BehaviorAlgoProps(str, Enum):
     PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'
     HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'
 
+#
+
+# this define the default behavior for handling  relay of function call to the dedicated algo thread handler,
+# True: "wait" that the function is executed on the algo handler thread before proceeding,
+# False: do not wait that the function is executed, submit it, and then continue immediately.
+#
+_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE = True
+# True: safer for all
+# False: faster for caller/putter
+
+
+def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
+    """See BehaviorAlgorithm.relay_func()"""
+    orig_func = func
+    # skip any partial(s):
+    while isinstance(func, partial):
+        func = func.func
+
+    # handle bound method vs normal function:
+    @functools.wraps(func.__func__ if inspect.ismethod(func) else func)
+    def wrapped(*args, **kwargs):
+        BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
+
+    return wrapped
+
+
+#
 
 class BehaviorAlgorithm(ObservableObject):
     # dynamic events type hints,
@@ -98,6 +130,12 @@ class BehaviorAlgorithm(ObservableObject):
 
     pellet_motor_drift_changed: Callable[[Offset3DTuple], None]
     cover_servo_status_changed: Callable[[CoverServoStatus], None]
+
+    _thread_locals = threading.local()
+    _thread_locals.event = None
+    _handler_thread_queue: ClassVar[
+        Tuple[Optional[threading.Thread], Optional[queue.Queue]]] = (threading.current_thread(), None)
+    _no_handler_thread: ClassVar[Optional[bool]] = False
 
     def __init__(
             self,
@@ -186,7 +224,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._presence_missing = False
 
         self._diamond_triangle_offest_config_path = diamond_triangle_offset_config_path
-        self._load_diamond_config()
+        self._diamond_triangle_offset_config = self._load_diamond_config()
 
         self._diamond_triangle_drift: Optional[Offset3DTuple] = None
         self._diamond_triangle_prev_drifts: List[Offset3DTuple] = []
@@ -206,6 +244,113 @@ class BehaviorAlgorithm(ObservableObject):
             error_way=CheckThresholdWay.TRIGGER_IF_GREATER,
             cover_servo_status=CoverServoStatus.RELEASE_POSITION_ERROR,
         )
+        #
+        self._check_start_thread()
+
+    @classmethod
+    def _check_start_thread(cls):
+        if cls._no_handler_thread:
+            return
+        _, handler_queue = cls._handler_thread_queue
+        if handler_queue is None:
+            logger.info("Creating algo handler thread ..")
+            handler_queue = queue.Queue(maxsize=64)
+            handler_thread = threading.Thread(
+                target=cls._handler_thread_run, args=(handler_queue,),
+                daemon=True,
+                name="AlgoHandler",
+            )
+            BehaviorAlgorithm._handler_thread_queue = (handler_thread, handler_queue)
+            handler_thread.start()
+
+    @staticmethod
+    @contextlib.contextmanager
+    def set_put_func_call_mode(wait: bool):
+        """Allow to set the "sync" call mode for other threads putting func calls to our dedicated algo thread
+        with algo.set_put_func_call_mode(False):
+            # some code going via algo.put_func_call will use the given mode (async here)
+            # but then:
+            with algo.set_put_func_call_mode(True):
+                # some code going via algo.put_func_call will use the given mode (sync here)
+            # and here:
+            # some code going via algo.put_func_call will use the given mode (async here)
+        # some code going via algo.put_func_call will use the default mode (sync here)
+        """
+        t_locals = BehaviorAlgorithm._thread_locals
+        prev = getattr(t_locals, "sync_call_mode", None)
+        t_locals.sync_call_mode = wait
+        yield
+        t_locals.sync_call_mode = prev
+
+    @staticmethod
+    def relay_func(func=None, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
+        """Decorator for marking a function/method as having to be relayed to our algo dedicated thread"""
+        if func is None:
+            return partial(_relay_func, wait=wait)
+        return _relay_func(func, wait=wait)
+
+    @staticmethod
+    def _handler_thread_run(input_queue: queue.Queue):
+        logger.verbose("Running for handling/executing all algo decision/transition ..")
+        while True:
+            raw = input_queue.get()
+            if raw is None:
+                input_queue.task_done()
+                break
+            func, args, kwargs, event = raw
+            try:
+                func(*args, **kwargs)
+            except Exception as err:
+                logger.exception("Failed executing %s: %s", func, err)
+                # NB: what to do else ?
+                # this is a pretty critical situation given the related function might be itself critical.
+                # TODO: maybe relay a flag/msg/error to the main thread for display purpose ?
+                # actually this should even trigger a restart of the application.
+            if event is not None:
+                event.set()
+            input_queue.task_done()
+        logger.debug("Exiting")
+
+    @classmethod
+    def relay_transitions(cls, machine_transitions: Any):
+        """Relay all transition triggers of the given machine_transitions instance to the algo dedicated thread"""
+        for trans in machine_transitions.transitions:
+            trig = trans['trigger']
+            if trig is not None:
+                if callable(trig):
+                    trig = trig.__name__
+                meth = getattr(machine_transitions, trig)
+                setattr(machine_transitions, trig, cls.relay_func(meth))
+
+    @classmethod
+    def put_func_call(cls, func, args: Tuple[Any]=(), kwargs: Optional[Dict]=None,
+                      *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
+        """Put a function call request to the algo dedicated thread, and eventually wait on its completion.
+        See also `BehaviorAlgorithm.set_put_func_call_mode`.
+        """
+        handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue
+        if threading.current_thread() is handler_thread or handler_queue is None or cls._no_handler_thread:
+            # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
+            func(*args, **({} if kwargs is None else kwargs))
+        else:
+            t_local_sync = getattr(cls._thread_locals, "sync_call_mode", None)
+            if t_local_sync is not None:
+                wait = t_local_sync
+            # logger.debug("%s: relaying to system msg handler thread", func)
+            if wait:
+                prev = getattr(BehaviorAlgorithm._thread_locals, "event", None)
+                if prev is None:
+                    logger.debug("%s: creating event for sync handling of put_func_call %s",
+                                 threading.current_thread(), func)
+                    event = BehaviorAlgorithm._thread_locals.event = threading.Event()
+                else:
+                    event = prev
+            else:
+                event = None
+            handler_queue.put((func, args, kwargs, event))
+            if event is not None:
+                event.wait()
+                event.clear()  # need always clear after used
 
     @property
     def thread_lock(self):
@@ -565,7 +710,7 @@ class BehaviorAlgorithm(ObservableObject):
         prev, self._auto_correct_motors_drift = self._auto_correct_motors_drift, value
         self._on_property_changed(BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT, value, prev)
 
-    def _load_diamond_config(self):
+    def _load_diamond_config(self) -> Optional[DiamondTriangleOffsetConfig]:
         cfg_path = self._diamond_triangle_offest_config_path
         if cfg_path is None:
             logger.notice("No diamond-triangle offset config path provided")
@@ -573,9 +718,8 @@ class BehaviorAlgorithm(ObservableObject):
             if not cfg_path.expanduser().is_file():
                 logger.warning("Diamond triangle config %r not a file", cfg_path.as_posix())
             else:
-                self._diamond_triangle_offset_config = DiamondTriangleOffsetConfig.from_file(
-                    cfg_path
-                )
+                return DiamondTriangleOffsetConfig.from_file(cfg_path)
+        return None
 
     def start_session(self, *, reason: str = "NA"):
         with self._thread_lock:
@@ -586,7 +730,11 @@ class BehaviorAlgorithm(ObservableObject):
             logger.warning("%s: start_session() called but already in session",
                            reason)
             return False
+        self.__start_session(reason=reason)
+        return True
 
+    @_relay_func
+    def __start_session(self, *, reason: str):
         logger.success("%s: starting new session recording ...", reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
         self._is_in_session = True
@@ -611,7 +759,6 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_starting()
 
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
-        return True
 
     def end_session(self, *, reason: str = "NA"):
         with self._thread_lock:
@@ -622,6 +769,11 @@ class BehaviorAlgorithm(ObservableObject):
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)
             return False
+        self.__end_session(reason=reason)
+        return True
+
+    @_relay_func
+    def __end_session(self, *, reason: str):
         logger.success("%s: stopping session recording", reason)
         self._is_in_session = False  # must be ~first, to ensure next actions/callbacks don't see it as True
         # but must be at least before self.session_ending() here after, given test_covered_load_cycle rely on that atm.
@@ -631,7 +783,6 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_ending()
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
-        return True
 
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0
@@ -879,3 +1030,16 @@ class BehaviorAlgorithm(ObservableObject):
             EventManager.default().post_event_content(BehaviorEventKind.dayStarted)
             self._today = today
             self._start_day()
+
+#
+
+def _close_algo_handler():
+    handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue  # noqa
+    if handler_queue is not None:
+        BehaviorAlgorithm._handler_thread_queue = (None, None)
+        handler_queue.put(None)
+        handler_thread.join()
+
+
+import atexit
+atexit.register(_close_algo_handler)
