@@ -26,12 +26,13 @@ class ValueHolderDescriptor:
 
     def __set_name__(self, owner, name):
         self.name = name
+        self._priv_name = f"_{name}"
 
     def __get__(self, instance, owner):
-        return getattr(instance, f"_{self.name}").value
+        return getattr(instance, self._priv_name).value
 
     def __set__(self, instance, value):
-        getattr(instance, f"_{self.name}").value = value
+        getattr(instance, self._priv_name).value = value
 
 #
 
