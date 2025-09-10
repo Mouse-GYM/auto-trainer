@@ -13,8 +13,11 @@ from typing import Tuple, NamedTuple, Union, Optional
 
 from typing_extensions import Self
 
-from autotrainer.core import ValueHolderDescriptor, RawValueHolder
+from autotrainer.core import ValueHolderDescriptor, RawValueHolder, get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx
+
+logger = get_verbose_logger(__name__)
+
 
 DATE_FORMAT = "%Y%m%d"
 
@@ -25,8 +28,6 @@ MINUTE_INTERVAL_FORMAT = "h%Hm%M"
 HOUR_INTERVAL_FORMAT = "h%H"
 
 IMAGE_CAPTURE_SUFFIX = "_images"
-
-logger = logging.getLogger(__name__)
 
 
 class ProjectInterval(IntEnum):
@@ -157,6 +158,15 @@ class ProjectInfo:
         if hasattr(self._session, "acquire"):
             self._session.release()
 
+    def _get_when_or_now(self, when: Optional[datetime] = None):
+        return (
+            (
+                _get_datetime_now() if self.when is None
+                else self.when
+            ) if when is None
+            else when
+        )
+
     @property
     def when(self) -> datetime:
         unix_ts = self._when.value
@@ -173,9 +183,7 @@ class ProjectInfo:
         """Get the location and related datetime for given arguments.
         If when is None then self.when is used, which can eventually be None, in which case now() is used.
         """
-        if when is None:
-            when = _get_datetime_now() if self.when is None else self.when
-
+        when = self._get_when_or_now(when)
         today = when.strftime(DATE_FORMAT)
         location = os.path.join(self.root, today)
         if self.device_id:
@@ -187,10 +195,10 @@ class ProjectInfo:
 
         return location, today
 
-    def get_interval(self, interval: ProjectInterval = ProjectInterval.NONE) -> int:
+    def get_interval(self, interval: ProjectInterval = ProjectInterval.NONE, when: Optional[datetime] = None) -> int:
         if interval == ProjectInterval.NONE:
             return -1
-        when = self.when if self.when is not None else _get_datetime_now()
+        when = self._get_when_or_now(when)
         return when.hour if interval == ProjectInterval.HOUR else when.minute
 
     def get_interval_path(
@@ -200,7 +208,7 @@ class ProjectInfo:
         skip_ensure: bool = False,
         when: Optional[datetime] = None,
     ) -> Optional[IntervalSource]:
-        when = (self.when if self.when is not None else _get_datetime_now()) if when is None else when
+        when = self._get_when_or_now(when)
         time_format = HOUR_INTERVAL_FORMAT if interval == ProjectInterval.HOUR else MINUTE_INTERVAL_FORMAT
         when_str = f"_{when.strftime(time_format)}"
         location, today = self.get_day_path(skip_ensure=skip_ensure, when=when)
@@ -249,7 +257,7 @@ class ProjectInfo:
                                                      os.path.join(path.location, path.prefix))
 
     def get_metadata_file(self, session: int = -1, when: Optional[datetime] = None) -> str:
-        when = (self.when if self.when is not None else _get_datetime_now()) if when is None else  when
+        when = self._get_when_or_now(when)
         timestamp = when.strftime(TIME_FORMAT)
 
         if session is None:
@@ -355,11 +363,19 @@ class ProjectInfo:
                 file_name = os.path.join(source.location, f"{source.prefix}_{index}.h5")
         return file_name
 
-    def calculate_next_session_index(self):
+    def calculate_next_session_index(self, when: Optional[datetime] = None):
         """Calculate the next session index & date and store it locally"""
-        when = _get_datetime_now()
+        res = self._calculate_next_session_index(when)
+        logger.success("Calculated next session index=%s when=%s",
+                       self.session, self.when)
+        return res
+
+    def _calculate_next_session_index(self, when: Optional[datetime] = None):
+        """Calculate the next session index & date and store it locally"""
+        if when is None:
+            when = _get_datetime_now()
         location, _ = self.get_day_path(when=when)
-        logger.debug(f"calculating next session index in {location}")
+        logger.debug(f"calculating next session index in %s", location)
         path = Path(location)
         if not path.exists() or not path.is_dir():
             with self:
@@ -376,18 +392,18 @@ class ProjectInfo:
                 return None
 
         session_vals = [int(x) for x in session_dirs if int_map_fcn(x) is not None]
-
         if len(session_vals) == 0:
-            logger.debug(f"no existing sessions found")
+            logger.debug("no existing sessions found")
             with self:
                 self.session = 1
                 self.when = when
         else:
-            logger.debug(f"found {len(session_vals)} existing session directories")
+            logger.debug("found %s existing session directories", len(session_vals))
             session_vals.sort(reverse=True)
-            logger.debug(f"last session index for day: {session_vals[0]}")
+            greater_val = session_vals[0]
+            logger.info("last session index for day: %s", greater_val)
             with self:
-                self.session = session_vals[0] + 1
+                self.session = greater_val + 1
                 self.when = when
 
     def to_local_value(self) -> Self:

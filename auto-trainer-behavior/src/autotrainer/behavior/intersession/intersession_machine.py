@@ -51,8 +51,10 @@ class IntersessionMachine(StateMachine):
         self._project_info = project
 
     def after_enter_segmentation(self):
+        prj = self._project_info
         segment_config = SegmentationConfiguration(nonce=secrets.token_hex(),
-                                                   session_index=self._project_info.session,
+                                                   session_index=prj.session,
+                                                   session_when=prj.when,
                                                    complete=lambda nonce, success:
                                                         self._segmentation_complete(nonce, success, segment_config=segment_config))
         self._segmentation_configuration = segment_config
@@ -70,6 +72,7 @@ class IntersessionMachine(StateMachine):
         detection_config = DetectionConfiguration(
             nonce=secrets.token_hex(),
             session_index=segment_config.session_index,
+            session_when=segment_config.session_when,
             complete=lambda nonce, success: self._detection_complete(nonce, success, detection_config=detection_config),
         )
         res = self._inference.perform_detection(detection_config)

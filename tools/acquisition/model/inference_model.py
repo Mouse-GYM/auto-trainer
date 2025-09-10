@@ -403,7 +403,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         elif msg is InferenceMonitorDataProc.Msg.INTERSESSION_RESULT_READY:
             ib = self._intersession_block
             if ib is None:
-                logger.warning("Got %s but intersession_block is None ; args=%s", msg, args)
+                logger.critical("Got %s but intersession_block is None ; args=%s", msg, args)
             else:
                 session_nr, success = args
                 ib.configuration.complete(ib.configuration.nonce, success)
@@ -467,7 +467,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             except Exception as err:
                 logger.exception("Error processing msg %s: %s", msg, err)
 
-    def _feed_intersession_analysis(self, intersession_block):
+    def _feed_intersession_analysis(self, intersession_block: IntersessionBlock):
         # NB: feed intersession analysis (thread) has currently no way of being "interrupted/stopped",
         # if pose process goes away (when exit) then this will hang up to timeout: currently 15s,
         # see _put_intersession_frame().
@@ -705,20 +705,21 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         return False
 
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
-        project = project.to_local_value()  # ProjectInfo(**vars(project))
-        # multiprocess does not accept to pass shared value other than inheritance,
-        # so get the value and assign it as SessionRawInt (which discard the shared value reference)
-        # project.set_session_value_holder(RawValueHolder(project.session))
+        project = project.to_local_value()  # get local ref to current project infos,
+        detection_config = intersession_detection.configuration
+        # *** but *** force update with intersession_detection when & session, to be totally sure:
+        project.session = detection_config.session_index
+        project.when = detection_config.session_when
 
-        log_q = get_multiprocess_log_queue()
-        if log_q is not None:
-            log_dict_config = make_log_dict_config(root_log_level=logging.root.level, log_queue=log_q)
+        log_dict_config = make_log_dict_config()
+        if log_dict_config is not None:
             pool_initfunc = logging.config.dictConfig
             pool_initargs = (log_dict_config,)
         else:
             pool_initfunc = setup_logging
             pool_initargs = ()
 
+        # TODO: spawn once a pool, and make reuses of it, with same children (but with max nbr of calls)
         with multiprocessing.Pool(
             processes=1,
             initializer=pool_initfunc,
