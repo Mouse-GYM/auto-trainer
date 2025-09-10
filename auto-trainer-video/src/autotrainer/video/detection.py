@@ -62,9 +62,9 @@ class PresenceDetectionAttrs:
     def __post_init__(self):
         ctx = get_mp_ctx()
         if self._last_absence_start_perf_c is None:
-            self._last_absence_start_perf_c = ctx.Value(ctypes.c_float, -math.inf)
+            self._last_absence_start_perf_c = ctx.Value(ctypes.c_double, -math.inf)
         if self._last_presence_start_perf_c is None:
-            self._last_presence_start_perf_c = ctx.Value(ctypes.c_float, -math.inf)
+            self._last_presence_start_perf_c = ctx.Value(ctypes.c_double, -math.inf)
         if self._presence_detected is None:
             self._presence_detected = ctx.Value(ctypes.c_bool)
         if self._movement_detected is None:
