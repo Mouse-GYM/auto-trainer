@@ -13,7 +13,6 @@ device_id = "A1357"
 
 @pytest.fixture
 def root(tmp_path) -> str:
-    # ensure to get a different and temporary root for each test case
     return tmp_path.joinpath("output").as_posix()
 
 
@@ -90,3 +89,22 @@ def test_get_path_at_different_day_does_not_change_result(root):
         loc3, d3 = info.get_day_path()
         assert loc3 != loc2 and d3 != d2, "must be different *AFTER* calculate_next_session_index"
         assert d3 == "20250102"
+
+
+def test_attached_and_detached_can_be_compared(root):
+    prj = ProjectInfo(root=root)
+    detached = prj.to_local_value()
+    assert prj == detached
+    detached.session += 1
+    assert prj != detached
+    prj.session = detached.session
+    assert prj == detached
+
+
+def test_can_use_with_with_statement(root):
+    prj = ProjectInfo(root=root)
+    before = prj.to_local_value()
+    with prj:
+        pass
+    after = prj.to_local_value()
+    assert after == before

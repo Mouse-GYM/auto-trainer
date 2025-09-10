@@ -52,7 +52,7 @@ class IntersessionMachine(StateMachine):
 
     def after_enter_segmentation(self):
         segment_config = SegmentationConfiguration(nonce=secrets.token_hex(),
-                                                   session_index=self._project_info.session.value,
+                                                   session_index=self._project_info.session,
                                                    complete=lambda nonce, success:
                                                         self._segmentation_complete(nonce, success, segment_config=segment_config))
         self._segmentation_configuration = segment_config

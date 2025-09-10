@@ -18,14 +18,13 @@ import numpy
 import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
-    InferenceConfiguration, Offset3DTuple, SystemMessageHandler
+    InferenceConfiguration, Offset3DTuple, SystemMessageHandler, RawValueHolder
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.logging import get_verbose_logger, setup_logging, get_multiprocess_log_queue, make_log_dict_config
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
     intersession_process, BehaviorEventKind, InferenceProtocol, IntersessionBlock, IntersessionDetection
 from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
-from autotrainer.core.project.project_info import SessionRawInt
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     DlcPoseModel, MemoryPoseModel, InferenceMode, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
@@ -512,7 +511,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         offline_q = self._offline_queue
         cams = (self._project.camera_1, self._project.camera_2)
         n_cams = len(cams)
-        cur_session_nbr = self._project.session.value
+        cur_session_nbr = self._project.session
         cams_paths = [
             tuple(map(Path, self._project.get_video_path(name=cam, session=cur_session_nbr, allow_overwrite=True)))
             for cam in cams
@@ -706,10 +705,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         return False
 
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
-        project = ProjectInfo(**vars(project))
+        project = project.to_local_value()  # ProjectInfo(**vars(project))
         # multiprocess does not accept to pass shared value other than inheritance,
         # so get the value and assign it as SessionRawInt (which discard the shared value reference)
-        project.session = SessionRawInt(project.session.value)
+        # project.set_session_value_holder(RawValueHolder(project.session))
 
         log_q = get_multiprocess_log_queue()
         if log_q is not None:

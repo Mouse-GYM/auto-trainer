@@ -150,7 +150,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
     def _intersession_post_process(
         self,
-        session_nr: int,
+        project_info: ProjectInfo,
         t_start_offline,
         pose_algo,
         range_cams, ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss,
@@ -187,7 +187,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             # current analyse code also require exact same frame number in all cameras,
             # let's trim what's necessary:
             for cam in self._cams:
-                paths = list(map(Path, self._project.get_video_path(cam, allow_overwrite=True)))
+                paths = list(map(Path, project_info.get_video_path(cam, allow_overwrite=True)))
                 ts_file = paths[1]
                 lines = [v for v in ts_file.read_text().split('\n') if v.strip()]
                 # not the best way to do this,
@@ -216,15 +216,15 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                           min_nbr_pd, 2 * min_nbr_pd / (time.time() - t_start_offline), final_pose_data.shape[0])
 
             intersession_inference(final_pose_data, self._pose_algo.part_names,
-                                   self._project)
+                                   project_info)
             success = True
             logger.success("fully processed session-%s inference with %s total pose responses",
-                           session_nr, final_pose_data.shape[0])
+                           project_info.session, final_pose_data.shape[0])
         except Exception as err:
             logger.exception("Error during intersession_inference: %s", err)
             success = False
 
-        self._send_msg(self.Msg.INTERSESSION_RESULT_READY, session_nr, success)
+        self._send_msg(self.Msg.INTERSESSION_RESULT_READY, project_info.session, success)
 
     def _monitor_data_queue(self, project: ProjectInfo):
         pose_data: Optional[List[numpy.ndarray]]
@@ -239,7 +239,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         cams_read_h5_idx: List[int] = []
         recording_in_progress = False
         next_prev_mode = None
-        prev_session = None
+        cur_local_prj = None
         tot_written_to_live = None
         cnt_data_received = 0
         skip_update = False
@@ -390,7 +390,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     self._stop_recorded.set()  # this is for the feeder thread to know when it can open the data files
 
             cnt_data_received += 1
-            prj = self._project
+            # new_local_prj = self._project.to_local_value()
 
             try:
                 if (
@@ -399,22 +399,23 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     and mode == InferenceMode.Live
                     and frames_indices is not None
                     and (frames_indices[:, 0] >= 0).any()
-                    and prj.session.value != prev_session  # REQUIRED
+                    # and new_local_prj != cur_local_prj  # REQUIRED
                 ):
                     tot_written_to_live = 0
                     recording_in_progress = True
-                    prev_session = prj.session.value
+                    new_local_prj = self._project.to_local_value()
+                    cur_local_prj = new_local_prj
                     logger.notice("Detected new record in progress ; session=%s ; mode=%s frames indices: %s",
-                                   prev_session, mode, frames_indices)
+                                   cur_local_prj.session, mode, frames_indices)
                     self._stop_recorded.clear()
                     cams_frame_idx_fhs = []
                     pose_paths = []
                     ib_pose_data_list = []
                     ib_pose_data_dict = []
                     for cam in cams:
-                        _, _, p_indices = prj.get_video_path(cam, allow_overwrite=True)
+                        _, _, p_indices = cur_local_prj.get_video_path(cam, allow_overwrite=True)
                         cams_frame_idx_fhs.append(Path(p_indices).open("w"))
-                        pose_path = Path(prj.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live"))
+                        pose_path = Path(cur_local_prj.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live"))
                         pose_paths.append(pose_path)
                         ib_pose_data_list.append([])
                         ib_pose_data_dict.append({})
@@ -531,7 +532,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             name="OfflinePostProcess",
                             target=self._intersession_post_process,
                             args=(
-                                prev_session,
+                                cur_local_prj,
                                 t_start_offline,
                                 pose_algo,
                                 range_cams,

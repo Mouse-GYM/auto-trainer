@@ -7,11 +7,31 @@ import humps
 import yaml
 from typing_extensions import Self
 
+# NB: import order is very important, put the less specific/most general first, then go in order of dependency.
+
 from .logging import get_verbose_logger
 
 #
 
 logger = get_verbose_logger(__name__)
+
+#
+
+@dataclasses.dataclass
+class RawValueHolder:
+    value: Any
+
+
+class ValueHolderDescriptor:
+
+    def __set_name__(self, owner, name):
+        self.name = name
+
+    def __get__(self, instance, owner):
+        return getattr(instance, f"_{self.name}").value
+
+    def __set__(self, instance, value):
+        getattr(instance, f"_{self.name}").value = value
 
 #
 

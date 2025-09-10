@@ -205,7 +205,7 @@ class SystemMachine(StateMachine):
     def _clean_raw_data(project):
         # NB: get/read the current session index value immediately,
         # this ensures that if it's changed by main process/thread then we are cleaning the good/correct one !!
-        session_value = project.session.value
+        session_value = project.session
 
         def do_clean():
             for cam_name in (project.camera_1, project.camera_2):
