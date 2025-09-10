@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import logging
-import multiprocessing
+import multiprocessing as mp
 import os
 import sys
 from dataclasses import dataclass
@@ -62,7 +62,7 @@ def _safe_ensure_location(location: str) -> bool:
         path = Path(location)
         path.mkdir(parents=True, exist_ok=True)
     except Exception as err:
-        logger.warning("Could not create dir %r: %s", location, err)
+        logger.error("Could not create dir %r: %s", location, err)
         return False
     return True
 
@@ -71,9 +71,9 @@ def _safe_ensure_location(location: str) -> bool:
 video_write_ext = "mp4" if sys.platform.startswith("linux") else "mkv"
 
 
-@dataclass
-class SessionRawInt:
-    value: int
+# NB: so that we can easily patch from test
+def _get_datetime_now() -> datetime:
+    return datetime.now()
 
 
 @dataclass
@@ -111,15 +111,13 @@ class ProjectInfo:
     def get_interval(self, interval: ProjectInterval = ProjectInterval.NONE) -> int:
         if interval == ProjectInterval.NONE:
             return -1
-
-        when = self.when if self.when is not None else datetime.now()
-
+        when = self.when if self.when is not None else _get_datetime_now()
         return when.hour if interval == ProjectInterval.HOUR else when.minute
 
     def get_interval_path(self, name: str = "", interval: ProjectInterval = ProjectInterval.HOUR,
                           skip_ensure: bool = False) -> Optional[IntervalSource]:
-        when = self.when if self.when is not None else datetime.now()
 
+        when = self.when if self.when is not None else _get_datetime_now()
         time_format = HOUR_INTERVAL_FORMAT if interval == ProjectInterval.HOUR else MINUTE_INTERVAL_FORMAT
         when_str = f"_{when.strftime(time_format)}"
 
@@ -170,7 +168,8 @@ class ProjectInfo:
                                                      os.path.join(path.location, path.prefix))
 
     def get_metadata_file(self, session: int = None) -> str:
-        timestamp = (self.when if self.when is not None else datetime.now()).strftime(TIME_FORMAT)
+        self.when if self.when is not None else _get_datetime_now()
+        timestamp = when.strftime(TIME_FORMAT)
 
         if session is None:
             location, prefix = self.get_day_path()

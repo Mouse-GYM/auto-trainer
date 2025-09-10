@@ -1,84 +1,92 @@
+import importlib
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
+from unittest import mock
+
+import pytest
 
 from autotrainer.core.project import ProjectInfo
 
-base = "D:" if sys.platform == "win32" else "/home"
-root = os.path.join(base, "auto-trainer", "output")
 device_id = "A1357"
 
 
-def test_today():
+@pytest.fixture
+def root(tmp_path) -> str:
+    # ensure to get a different and temporary root for each test case
+    return tmp_path.joinpath("output").as_posix()
+
+
+def test_today(root):
     when = datetime(2023, 6, 8)
-
     info = ProjectInfo(root=root, device_id=device_id, when=when)
-
     (location, today) = info.get_day_path()
-
     assert today == "20230608"
-
     assert location == os.path.join(root, "20230608", "A1357")
 
 
-def test_hourly():
+def test_hourly(root):
     when = datetime(2023, 6, 8, 8, 45, 23)
-
     info = ProjectInfo(root=root, device_id=device_id, when=when)
-
     hourly_source = info.get_interval_path("camera-1")
-
     assert hourly_source.location == os.path.join(root, "20230608", "A1357")
-
     assert hourly_source.prefix == f"20230608_A1357_h08_camera-1"
-
     assert hourly_source.interval == 8
 
 
-def test_implicit_session():
+def test_implicit_session(root):
     when = datetime(2024, 6, 8, 8, 45, 23)
-
     info = ProjectInfo(root=root, device_id=device_id, when=when)
-
     session_source = info.get_session_path("camera-1")
-
     assert session_source.location == os.path.join(root, "20240608", "A1357", "session001")
-
     assert session_source.prefix == f"20240608_A1357_session001_camera-1"
-
     assert session_source.session_index == 1
-
     # Would normally happen through calculate_next_session_index, but this uses the filesystem
-    info.session.value = 9
-
+    info.session = 9
     session_source = info.get_session_path("camera-1")
-
     assert session_source.location == os.path.join(root, "20240608", "A1357", "session009")
-
     assert session_source.prefix == f"20240608_A1357_session009_camera-1"
-
     assert session_source.session_index == 9
 
 
-def test_explicit_session():
+def test_explicit_session(root):
     when = datetime(2023, 6, 8, 8, 45, 23)
-
     info = ProjectInfo(root=root, device_id=device_id, when=when)
-
     session_source = info.get_session_path("camera-1", session=12)
-
     assert session_source.location == os.path.join(root, "20230608", "A1357", "session012")
-
     assert session_source.prefix == f"20230608_A1357_session012_camera-1"
-
     assert session_source.session_index == 12
 
 
-if __name__ == '__main__':
-    test_today()
+def test_without_session_and_when_are_shared(root):
+    info = ProjectInfo(root=root, device_id=device_id)
+    assert info.session == 1
+    unix_start_as_local = datetime(1970, 1, 1, tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
+    assert info.when == unix_start_as_local
+    info.calculate_next_session_index()
+    assert info.when != unix_start_as_local
+    assert info.session == 1
+    assert hasattr(info._when, "acquire")  # noqa
+    assert hasattr(info._session, "acquire")  # noqa
 
-    test_hourly()
 
-    test_implicit_session()
-
-    test_explicit_session()
+def test_get_path_at_different_day_does_not_change_result(root):
+    info = ProjectInfo(root=root, device_id=device_id)
+    some_day = datetime(2025, 1, 1)
+    other_day = datetime(2025, 1, 2)
+    module = importlib.import_module(ProjectInfo.__module__)
+    with mock.patch.object(module, "_get_datetime_now") as m_datetime_now:
+        m_datetime_now.return_value = some_day
+        info.calculate_next_session_index()
+        loc1, d1 = info.get_day_path()
+        assert d1 == "20250101"
+        # now change the day:
+        m_datetime_now.return_value = other_day
+        # and get path again:
+        loc2, d2 = info.get_day_path()
+        assert loc1 == loc2 and d1 == d2, "must be same still"
+        # but with a new calculate_next_session_index:
+        info.calculate_next_session_index()
+        loc3, d3 = info.get_day_path()
+        assert loc3 != loc2 and d3 != d2, "must be different *AFTER* calculate_next_session_index"
+        assert d3 == "20250102"
