@@ -93,6 +93,10 @@ class ProjectInfo:
     root: str = ""
     device_id: str = ""
     _when: Union[mp.Value, RawValueHolder] = None
+    when = ValueHolderDescriptor(
+        convert_from=datetime.fromtimestamp,
+        convert_to=lambda v: v.timestamp(),
+    )
     ensure_exists: bool = False
     camera_1: str = ""
     camera_2: str = ""
@@ -166,15 +170,6 @@ class ProjectInfo:
             ) if when is None
             else when
         )
-
-    @property
-    def when(self) -> datetime:
-        unix_ts = self._when.value
-        return datetime.fromtimestamp(unix_ts)
-
-    @when.setter
-    def when(self, value: datetime):
-        self._when.value = value.timestamp()
 
     def is_valid(self):
         return self.root is not None and len(self.root) > 0

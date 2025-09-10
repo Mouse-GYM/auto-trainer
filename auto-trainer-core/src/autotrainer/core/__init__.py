@@ -1,7 +1,7 @@
 import dataclasses
 import math
 from collections import namedtuple
-from typing import Union, List, Tuple, Dict, Any, Iterable, TypeVar, Type, Optional
+from typing import Union, List, Tuple, Dict, Any, Iterable, TypeVar, Type, Optional, Callable
 
 import humps
 import yaml
@@ -22,17 +22,28 @@ class RawValueHolder:
     value: Any
 
 
+_no_convert = lambda v: v
+
+
 class ValueHolderDescriptor:
+
+    def __init__(
+        self,
+        convert_to: Callable[[Any], Any] = _no_convert,
+        convert_from: Callable[[Any], Any] = _no_convert,
+    ):
+        self._convert_to = convert_to
+        self._convert_from = convert_from
 
     def __set_name__(self, owner, name):
         self.name = name
         self._priv_name = f"_{name}"
 
     def __get__(self, instance, owner):
-        return getattr(instance, self._priv_name).value
+        return self._convert_from(getattr(instance, self._priv_name).value)
 
     def __set__(self, instance, value):
-        getattr(instance, self._priv_name).value = value
+        getattr(instance, self._priv_name).value = self._convert_to(value)
 
 #
 
