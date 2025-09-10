@@ -484,7 +484,7 @@ class SystemMachine(StateMachine):
         if self._tunnel_device is not None:  # condition seems not necessary... but some test assert it
             logger.debug(
                 "changing magnet to baseline intensity in %.2f seconds", algo.auto_clamp_release_tone_delay)
-            timer = _auto_clamp_release_timer(
+            timer = self._timer_auto_clamp_disengage = _auto_clamp_release_timer(
                 algo.auto_clamp_release_tone_delay,
                 partial(self._update_magnet_position, algo.baseline_intensity),
             )
