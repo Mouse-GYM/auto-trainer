@@ -11,8 +11,10 @@ def _offset_equal(o1, o2):
     assert isinstance(o1, Offset3DTuple)
     assert isinstance(o2, Offset3DTuple)
     for v1, v2 in zip(o1, o2):
-        if ((math.isnan(v1) and math.isnan(v2)
-        or (math.isinf(v1) and math.isinf(v2)))):
+        if (
+            (math.isnan(v1) and math.isnan(v2))
+            or (math.isinf(v1) and math.isinf(v2) and ((v1 > 0 and v2 > 0) or (v1 < 0 and v2 < 0)))
+        ):
             continue
         if v1 != v2:
             return False
@@ -23,6 +25,9 @@ def _offset_equal(o1, o2):
     (1, 2, 3),
     (0, 0, 0),
     (-1, -1, math.nan),
+    (math.inf, -math.inf, math.nan),
+    (-math.inf, -math.inf, math.nan),
+    (math.nan, -math.inf, math.nan),
 ])
 @pytest.mark.parametrize("args_cls", [list, tuple, numpy.asarray])
 def test_offset_3d_constructor_variants(values, args_cls):
@@ -30,8 +35,12 @@ def test_offset_3d_constructor_variants(values, args_cls):
     o_2 = Offset3DTuple(args_cls(values))
     assert len(o_1) == 3
     assert _offset_equal(o_1, o_2)
+    prev_o1 = o_1
     o_1 = Offset3DTuple(o_1.x + 10, o_1.y, o_1.z)
-    assert o_1 != o_2
+    if math.isinf(prev_o1.x) or math.isnan(prev_o1.x):
+        assert _offset_equal(o_1, o_2)
+    else:
+        assert not _offset_equal(o_1, o_2)
 
 
 def test_with_generator():
@@ -55,7 +64,7 @@ def test_accessors():
     (numpy.asarray, Offset3DTuple),
     (tuple, Offset3DTuple),
 ])
-def test_addition(base_cls1, base_cls2):
+def test_addition_different_types(base_cls1, base_cls2):
     if base_cls1 != Offset3DTuple and base_cls2 != Offset3DTuple:
         pytest.skip("need one")
     o1 = base_cls1((1, 2, 3))
@@ -63,6 +72,15 @@ def test_addition(base_cls1, base_cls2):
     res = o1 + o2
     res_as_offset = Offset3DTuple(res)
     assert res_as_offset == (0, 5, 9)
+
+
+@pytest.mark.parametrize("offset, other, expected", [
+    [Offset3DTuple(1, 4, 16), 5, (6, 9, 21)],
+    [Offset3DTuple(1, 2, 3), -3, (-2, -1, 0)],
+])
+def test_addition(offset, other, expected):
+    assert offset + other == expected
+    assert other + offset == expected
 
 
 @pytest.mark.parametrize("base_cls1,base_cls2", [
@@ -153,3 +171,13 @@ def test_divide(offset, other, result):
 ])
 def test_humanize(offset, digits, expected):
     assert offset.humanize(n_digits=digits) == expected
+
+
+@pytest.mark.parametrize("offset, power, expected", [
+    [Offset3DTuple(1, 4, 16), 0.5, (1, 2, 4)],
+    [Offset3DTuple(1, 2, 3), 3, (1, 8, 27)],
+    [Offset3DTuple(1, 4, 16), -0.5, (1, 0.5, 0.25)],
+])
+def test_power(offset, power, expected):
+    assert offset ** power == expected
+    assert pow(offset, power) == expected

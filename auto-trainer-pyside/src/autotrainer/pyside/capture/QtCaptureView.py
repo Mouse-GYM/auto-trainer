@@ -42,7 +42,7 @@ class QCaptureView(QWidget):
         self._next_frame_data: Optional[ImageData] = None
         self._is_frame_dirty = False
 
-        self._next_frame_points: Dict[SceneElement, PoseLocation] = {}
+        self._next_frame_points: Dict[str, PoseLocation] = {}
         self._are_points_dirty = False
         self._display_dots_detection = True
 
@@ -206,7 +206,7 @@ class QCaptureView(QWidget):
         self._are_points_dirty = False
 
     @Slot(list)
-    def refresh_pose(self, points: Dict[SceneElement, PoseLocation]):
+    def refresh_pose(self, points: Dict[str, PoseLocation]):
         self._next_frame_points = points
         self._are_points_dirty = True
 

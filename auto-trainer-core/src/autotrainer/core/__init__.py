@@ -68,22 +68,29 @@ class Offset3DTuple(_Offset3DTuple):
         x, y, z = self
         return f"({x:.0{n_digits}f}, {y:.0{n_digits}f}, {z:.0{n_digits}f})"
 
+    def __pow__(self, other, modulo=None):
+        if modulo is None:
+            return self.__class__(*(v ** other for v in self))
+        return self.__class__(
+            *(pow(v, other, modulo) for v in self)
+        )
+
     def __add__(self, other):
         if hasattr(other, "__len__") and len(other) == 3:
             return self.__class__(*(v1 + v2 for v1, v2 in zip(self, other)))
-        return super().__add__(other)
+        return self.__class__(*(v + other for v in self))
 
     __radd__ = __add__
 
     def __sub__(self, other):
         if hasattr(other, "__len__") and len(other) == 3:
             return self.__class__(*(v1 - v2 for v1, v2 in zip(self, other)))
-        raise TypeError(f"Cannot sub object of type {type(other)}")
+        return self.__class__(*(v - other for v in self))
 
     def __rsub__(self, other):
         if hasattr(other, "__len__") and len(other) == 3:
             return self.__class__(*(v2 - v1 for v1, v2 in zip(self, other)))
-        raise TypeError(f"Cannot sub object of type {type(other)}")
+        return self.__class__(*(other - v for v in self))
 
     def __neg__(self):
         return self.__class__(-self.x, -self.y, -self.z)

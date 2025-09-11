@@ -104,7 +104,7 @@ class QGLImageView(QWidget):
         else:
             self._pixmap.setPixmap(pixmap)
 
-    def set_points(self, points: Dict[SceneElement, PoseLocation]):
+    def set_points(self, points: Dict[str, PoseLocation]):
         width_f = self._raw_img_scale_w / self._width_factor
         height_f = self._raw_img_scale_h / self._height_factor
         # values are in coordinates (self._data_width, self._data_height)

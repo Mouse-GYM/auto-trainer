@@ -74,7 +74,7 @@ class CameraContent(ContentWidget):
         self._capture_view.update_image()
         self._capture_view.update_pose()
 
-    def refresh_pose(self, points: Dict[SceneElement, PoseLocation]):
+    def refresh_pose(self, points: Dict[str, PoseLocation]):
         self._capture_view.refresh_pose(points)
 
     def _camera_source_changed(self, camera):
