@@ -2,6 +2,7 @@ import logging
 import threading
 import time
 from itertools import chain
+from pathlib import Path
 from typing import List
 
 from PySide6.QtCore import Qt, QCoreApplication
@@ -198,6 +199,7 @@ class MainWindow(QMainWindow):
             )
             if not file_path:
                 return
+            save_path = Path(file_path)
         new_cfg = DiamondTriangleOffsetConfig(
             used_position=list(avg_pos),
             measured_offset=list(avg_offset),
