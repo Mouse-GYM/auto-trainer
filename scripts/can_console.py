@@ -12,8 +12,7 @@ from autotrainer.core.logging import setup_logging
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import CanDevice, DeviceConnection, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
-    CompoundMovementFile, MotorConfigurationFile
-
+    CompoundMovementFile, MotorConfigurationFile, StepperStatus
 
 msg_queue_active = True
 output_file = None
@@ -52,12 +51,25 @@ def monitor_message_queue(msg_queue):
 
     next_heartbeat = 500
 
+    next_perf_log = time.perf_counter() + 600
+    kinds = set()
+
     while msg_queue_active:
+
+        if __debug__:
+            perf_now = time.perf_counter()
+            if perf_now > next_perf_log:
+                logger.debug("kinds=%s", sorted(kinds))
+                kinds = set()
+                next_perf_log += 600
+
         try:
             kind, data = msg_queue.get_nowait()
         except queue.Empty:
             time.sleep(0.001)
             continue
+
+        kinds.add(kind)
 
         if kind == SystemStatusMessageKind.ACKNOWLEDGE:
             get_input = True
@@ -145,19 +157,19 @@ def monitor_message_queue(msg_queue):
             )
             print_motor_status = Motor.NONE
             get_input = True
-        elif ((kind == SystemStatusMessageKind.PELLET_X and
-               print_motor_status is Motor.PELLET_X_MOTOR) or
-              (kind == SystemStatusMessageKind.PELLET_Y and
-               print_motor_status is Motor.PELLET_Y_MOTOR) or
-              (kind == SystemStatusMessageKind.PELLET_Z and
-               print_motor_status is Motor.PELLET_Z_MOTOR)):
-            # assert isinstance(data, StepperStatus)
+
+        elif ((kind == SystemStatusMessageKind.PELLET_MOTOR_X and print_motor_status == Motor.PELLET_X_MOTOR)
+           or (kind == SystemStatusMessageKind.PELLET_MOTOR_Y and print_motor_status == Motor.PELLET_Y_MOTOR)
+           or (kind == SystemStatusMessageKind.PELLET_MOTOR_Z and print_motor_status == Motor.PELLET_Z_MOTOR)
+        ):
+            assert isinstance(data, StepperStatus)
             print(
                 f"STEPPER:\n"
                 # f"target={target_to_str(data.target)}\n"
                 f"- motor={motor_to_str(print_motor_status)}\n"
-                f"- position (mm) ={data:.2f}\n"
-                # f"- limit={data.is_at_limit}\n"
+                f"- position (mm)={data.position:.3f}\n"
+                f"- send_pos (mm)={data.send_position:.3f}\n"
+                f"- limit={data.is_at_limit}\n"
             )
             print_motor_status = Motor.NONE
             get_input = True
@@ -525,7 +537,7 @@ def handle_motor_command(motor: Motor, params, device_connection):
     # query stepper status
     if len(params) == 0:
         print_motor_status = motor
-
+        logger.debug("print_motor_status=%s", print_motor_status)
     # set position
     elif params[0] == 'move':
         relative = params[1].startswith(tuple("-+"))
