@@ -525,5 +525,4 @@ class MainWindow(QMainWindow):
     def _inference_property_changed(self, name: str, new_value, old_value):
         inference = self._app_model.inference
         if name == inference.STATUS:
-            if new_value == InferenceStatus.live:
-                self.calib_diamond_triangle_action.setEnabled(True)
+            self.calib_diamond_triangle_action.setEnabled(new_value == InferenceStatus.live)
