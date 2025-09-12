@@ -3,7 +3,7 @@ import threading
 import time
 from itertools import chain
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QAction, QIcon, QKeySequence, QPixmap, QColor
@@ -192,13 +192,21 @@ class MainWindow(QMainWindow):
         algo = app_model.behavior.algorithm
         save_path = algo.diamond_triangle_offset_config_path.expanduser()
         if save_path.exists():
-            file_path, _ = QFileDialog.getSaveFileName(
-                self,
-                "Please select desired file path to save",
-                save_path.parent.as_posix(),  # Default directory (empty string means current working directory)
-                f"{save_path.name};;*.yaml",
-            )
-            if not file_path:
+            file_path: Optional[str] = None
+            def retain_selected(path):
+                nonlocal file_path
+                file_path = path
+            rsp = QMessageBox.question(
+                self, "Confirmation",
+                f"The configuration file ({save_path.as_posix()}) already exists, are you sure you want to proceed ?",
+                QMessageBox.Yes | QMessageBox.No)
+            if rsp != QMessageBox.Yes:
+                return
+            dialog = QFileDialog(self, "Save to configuration file", save_path.parent.as_posix(), "All yaml files (*.yaml *.yml)")
+            dialog.selectFile(save_path.name)
+            dialog.fileSelected.connect(retain_selected)
+            dialog.exec()
+            if file_path is None:
                 return
             save_path = Path(file_path)
         new_cfg = DiamondTriangleOffsetConfig(
