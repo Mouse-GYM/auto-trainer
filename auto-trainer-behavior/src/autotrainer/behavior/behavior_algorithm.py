@@ -949,11 +949,11 @@ class BehaviorAlgorithm(ObservableObject):
         return new_drift
 
     def handle_diamond_triangle_offset(
-            self,
-            offset: Offset3DTuple,
-            position: Offset3DTuple,
-            *,
-            flips: Offset3DTuple = Offset3DTuple(1, 1, 1),
+        self,
+        offset: Offset3DTuple,
+        position: Offset3DTuple,
+        *,
+        flips: Offset3DTuple = Offset3DTuple(1, 1, 1),
     ):
         cfg = self._diamond_triangle_offset_config
         if cfg is None:
