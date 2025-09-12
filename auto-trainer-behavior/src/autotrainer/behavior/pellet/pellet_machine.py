@@ -185,7 +185,8 @@ class PelletMachine(StateMachine):
     @BehaviorAlgorithm.relay_func
     def _session_ending(self):
         algo = self._algorithm
-        logger.verbose("%s: _session_ending() called", self)
+        logger.debug("_session_ending() called ; session_mouse_seen=%s",
+                     algo.session_mouse_seen)
         dev = self._pellet_device
         # optional apply of measured motor drifts,
         drifts = algo.get_diamond_triangle_drifts(reset=True)  # always, to reset the recorded values list too.
