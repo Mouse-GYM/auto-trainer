@@ -754,7 +754,7 @@ class BehaviorAlgorithm(ObservableObject):
         # but must be done after calculate next session index !!
         post_trigger_enable(self, True)
 
-        self._load_diamond_config()
+        self._diamond_triangle_offset_config = self._load_diamond_config()
 
         self.session_starting()
 
