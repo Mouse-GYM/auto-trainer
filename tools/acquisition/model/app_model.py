@@ -442,7 +442,7 @@ class AppModel(ObservableObject):
         return True
 
     def on_capture_stop(self):
-        logger.verbose("AppModel.on_capture_stop")
+        # logger.verbose("AppModel.on_capture_stop")
         self._inference.stop()
 
         self.hardware.disconnect()
@@ -530,7 +530,7 @@ class AppModel(ObservableObject):
         pass
 
     def on_close(self):
-        logger.verbose("AppModel.on_close")
+        # logger.verbose("AppModel.on_close")
         self._preferences.save()
 
         if self._inference is not None:
@@ -583,7 +583,10 @@ class AppModel(ObservableObject):
         self._is_recording_trigger = notification.context
 
         if notification.context and self._project_info is not None:
-            self._save_metadata(self._project_info.get_metadata_file(-1), self._project_info.session.value)
+            now = datetime.now()
+            self._save_metadata(now,
+                                self._project_info.get_metadata_file(-1, when=now),
+                                self._project_info.session)
 
     def _on_behavior_model_property_changed(self, name: str, new_value, old_value):
         logger.debug("behavior property changed: %s: %s -> %s", name, old_value, new_value)
@@ -666,16 +669,16 @@ class AppModel(ObservableObject):
         return configuration
 
     def _save_project_metadata(self, project_info: ProjectInfo):
+        when = project_info.when if project_info.when is not None else datetime.now()
         file_name = project_info.get_metadata_file()
-        self._save_metadata(file_name, -1)
+        self._save_metadata(when, file_name, -1)
 
-    def _save_metadata(self, file_name: str, session: int = None):
-        now = datetime.now()
-
+    def _save_metadata(self, when: datetime, file_name: str, session: int = None):
+        when_as_utc = when.astimezone(timezone.utc)
         info = {
-            "date": now.strftime("%Y%m%d_%H%M%S"),
-            "created": now.timestamp(),
-            "createdUtc": datetime.now(timezone.utc).timestamp(),
+            "date": when.strftime("%Y%m%d_%H%M%S"),
+            "created": when.timestamp(),
+            "createdUtc": when_as_utc.timestamp(),  # same than created
             "serialNumber": self._preferences.serial_number or "",
             "appVersion": self._app_version,
             "animalName": self.animal_name,

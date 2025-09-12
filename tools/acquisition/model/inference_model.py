@@ -18,14 +18,13 @@ import numpy
 import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
-    InferenceConfiguration, Offset3DTuple, SystemMessageHandler
+    InferenceConfiguration, Offset3DTuple, SystemMessageHandler, RawValueHolder
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.logging import get_verbose_logger, setup_logging, get_multiprocess_log_queue, make_log_dict_config
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
     intersession_process, BehaviorEventKind, InferenceProtocol, IntersessionBlock, IntersessionDetection
 from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
-from autotrainer.core.project.project_info import SessionRawInt
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     DlcPoseModel, MemoryPoseModel, InferenceMode, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
@@ -404,7 +403,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         elif msg is InferenceMonitorDataProc.Msg.INTERSESSION_RESULT_READY:
             ib = self._intersession_block
             if ib is None:
-                logger.warning("Got %s but intersession_block is None ; args=%s", msg, args)
+                logger.critical("Got %s but intersession_block is None ; args=%s", msg, args)
             else:
                 session_nr, success = args
                 ib.configuration.complete(ib.configuration.nonce, success)
@@ -468,7 +467,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             except Exception as err:
                 logger.exception("Error processing msg %s: %s", msg, err)
 
-    def _feed_intersession_analysis(self, intersession_block):
+    def _feed_intersession_analysis(self, intersession_block: IntersessionBlock):
         # NB: feed intersession analysis (thread) has currently no way of being "interrupted/stopped",
         # if pose process goes away (when exit) then this will hang up to timeout: currently 15s,
         # see _put_intersession_frame().
@@ -508,13 +507,17 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # self._intersession_block = None
         # it is/must be done by monitor data thread
 
-    def __feed_intersession_analysis(self, intersession_block):
+    def __feed_intersession_analysis(self, intersession_block: IntersessionBlock):
         offline_q = self._offline_queue
         cams = (self._project.camera_1, self._project.camera_2)
         n_cams = len(cams)
-        cur_session_nbr = self._project.session.value
+        project = self._project.to_local_value()  # get local ref, so to be sure shared values are not modified after
+        detection_cfg = intersession_block.configuration
+        # and use detections_cfg index & when :
+        project.session = detection_cfg.session_index
+        project.when = detection_cfg.session_when
         cams_paths = [
-            tuple(map(Path, self._project.get_video_path(name=cam, session=cur_session_nbr, allow_overwrite=True)))
+            tuple(map(Path, project.get_video_path(name=cam, allow_overwrite=True)))
             for cam in cams
         ]
         tot_skipped_frames = 0
@@ -574,8 +577,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 [
                     l[2][0]  # the third row contains the associated frame index in h5 file ([0] to extract it from array)
                     for l in h5py.File(
-                        self.project.get_intersession_pose_path(cam, session=cur_session_nbr, allow_overwrite=True,
-                                                                suffix="_live"))["df_with_missing"]["table"]
+                        project.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live")
+                    )["df_with_missing"]["table"]
                 ]
                 for cdx, cam in enumerate(cams)
             ]
@@ -706,20 +709,21 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         return False
 
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
-        project = ProjectInfo(**vars(project))
-        # multiprocess does not accept to pass shared value other than inheritance,
-        # so get the value and assign it as SessionRawInt (which discard the shared value reference)
-        project.session = SessionRawInt(project.session.value)
+        project = project.to_local_value()  # get local ref to current project infos,
+        detection_config = intersession_detection.configuration
+        # *** but *** force update with intersession_detection when & session, to be totally sure:
+        project.session = detection_config.session_index
+        project.when = detection_config.session_when
 
-        log_q = get_multiprocess_log_queue()
-        if log_q is not None:
-            log_dict_config = make_log_dict_config(root_log_level=logging.root.level, log_queue=log_q)
+        log_dict_config = make_log_dict_config()
+        if log_dict_config is not None:
             pool_initfunc = logging.config.dictConfig
             pool_initargs = (log_dict_config,)
         else:
             pool_initfunc = setup_logging
             pool_initargs = ()
 
+        # TODO: spawn once a pool, and make reuses of it, with same children (but with max nbr of calls)
         with multiprocessing.Pool(
             processes=1,
             initializer=pool_initfunc,
