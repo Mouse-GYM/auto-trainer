@@ -125,11 +125,11 @@ class SensorAnalysis(ObservableObject):
         humidity: List[float] = []
 
         if self._record_file is not None:
-            file_timestamp = datetime.now()
+            now = datetime.now()
 
-            needs_update = file_timestamp.hour != self._current_record_interval \
+            needs_update = now.hour != self._current_record_interval \
                 if self._interval == ProjectInterval.HOUR \
-                else file_timestamp.minute != self._current_record_interval
+                else now.minute != self._current_record_interval
 
             if needs_update:
                 self._update_record_file()
@@ -211,7 +211,7 @@ class SensorAnalysis(ObservableObject):
             self._record_file = None
 
         if self._project_info is not None:
-            interval_file_info = self._project_info.get_monitor_file(interval=self._interval)
+            interval_file_info = self._project_info.get_monitor_file(interval=self._interval, when=datetime.now())
 
             if interval_file_info is None:
                 logger.error("<sensor-analysis>: unable to write to expected monitor file location")
@@ -244,7 +244,8 @@ class SensorAnalysis(ObservableObject):
             self._audio_record_file = None
 
         if self._project_info is not None:
-            interval_file_info = self._project_info.get_audio_spectrum_file(interval=self._interval)
+            interval_file_info = self._project_info.get_audio_spectrum_file(
+                interval=self._interval, when=datetime.now())
 
             if interval_file_info is None:
                 logger.error("<sensor-analysis>: unable to write to expected audio file location")

@@ -61,7 +61,8 @@ class FileEventPlugin(EventManagerPlugin):
             return
 
         if self._project_info is not None:
-            event_file_info = self._project_info.get_monitor_file(name="events", interval=ProjectInterval.HOUR)
+            event_file_info = self._project_info.get_monitor_file(name="events", interval=ProjectInterval.HOUR,
+                                                                  when=datetime.now())
 
             if event_file_info is None:
                 logger.error(f"unable to write to expected event file location")

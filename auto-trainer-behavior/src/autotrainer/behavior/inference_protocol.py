@@ -1,3 +1,4 @@
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Protocol, Callable, Tuple, Optional
 
@@ -16,6 +17,7 @@ from autotrainer.inference import PoseAlgorithm
 class SegmentationConfiguration:
     nonce: str
     session_index: int
+    session_when: datetime
     complete: Callable[[str, bool], None]
 
 
@@ -23,6 +25,7 @@ class SegmentationConfiguration:
 class DetectionConfiguration:
     nonce: str
     session_index: int
+    session_when: datetime
     complete: Callable[[str, bool], None]
 
 

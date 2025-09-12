@@ -15,7 +15,7 @@ import pytest
 @pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")
 def test_fp_and_xp_not_same(project_info, caplog):
 
-    project_info.session.value = 2
+    project_info.session = 2
     project_info.root = this_dir.joinpath("fp-and-xp-not-same").as_posix()
     project_info.device_id = "agx001"
     project_info.when = datetime(2025, 6, 23)

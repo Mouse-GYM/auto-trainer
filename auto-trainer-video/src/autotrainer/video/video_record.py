@@ -202,7 +202,8 @@ class VideoRecord(Thread):
         self._close_image_writer()
         if self._image_interval > 0:
             self._image_location, self._image_name = (
-                self._project_info.get_image_capture_path(self._name, interval=self._interval_mode))
+                self._project_info.get_image_capture_path(self._name, interval=self._interval_mode,
+                                                          when=datetime.now()))
             logger.debug(f"<{self.name}>: image capture to {self._image_location}")
 
     def _close_image_writer(self):
