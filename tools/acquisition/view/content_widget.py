@@ -7,7 +7,7 @@ from PySide6.QtGui import QGuiApplication
 
 
 class InvokeMethod(QObject):
-    def __init__(self, method: Callable):
+    def __init__(self, method: Callable, *args, **kwargs):
         """
         Invokes a method on the main thread. Taking care of garbage collection "bugs".
         """
@@ -17,6 +17,8 @@ class InvokeMethod(QObject):
         self.moveToThread(main_thread)
         self.setParent(QGuiApplication.instance())
         self.method = method
+        self.args = args
+        self.kwargs = kwargs
         self.called.connect(self.execute)
         self.called.emit()
 
@@ -24,7 +26,7 @@ class InvokeMethod(QObject):
 
     @Slot()
     def execute(self):
-        self.method()
+        self.method(*self.args, **self.kwargs)
         # trigger garbage collector
         self.setParent(None)
 
