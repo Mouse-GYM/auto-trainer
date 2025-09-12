@@ -394,10 +394,15 @@ class SystemMachine(StateMachine):
     # not needed, already called by _pose_changed which has already it.
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if (
-                offset is not None
-                and self._state == SystemState.tunnel
-                and self._pellet_machine.state == PelletState.monitoring
-                and self._pellet_machine.can_use_pellet_command()
+            offset is not None
+            and self._state == SystemState.tunnel
+            and self._pellet_machine.state == PelletState.monitoring
+            # TODO: monitoring only happens when mouse hands near pellet seen, which uncover the pellet,
+            #  we might want to also handle/capture it when state is send and covering ?
+            #  It might be that it's not enough though.. we want be sure the last command is/was send_pellet,
+            #   even if there was some manual move after that.
+            #  And we could also decide to check in SystemState.cage as well (as far as last command is send_pellet) ?
+            and self._pellet_machine.can_use_pellet_command()
         ):
             last_position = self._pellet_device.last_position
             if last_position is not None and offset is not None:
@@ -500,19 +505,8 @@ class SystemMachine(StateMachine):
                 logger.debug("auto-clamp disabled (backing off to baseline intensity)")
                 self._disengage_auto_clamp()
 
-        elif name == BehaviorAlgoProps.PELLET_MOTOR_DRIFT:
-            if new_value is not None and self._algorithm.auto_correct_motors_drift:
-                pellet_dev.set_motors_drift(new_value)
-
         elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
             pellet_dev.set_auto_correct_motor_drift(new_value)
-            # unnecessary:
-            # ensure the current deliver position is corrected (no more drift applied):
-            # if not new_value:
-            #     pellet_dev.set_motors_drift(Offset3DTuple(0, 0, 0))
-            # # for set_coord in (pellet_dev.set_x, pellet_dev.set_y, pellet_dev.set_z):
-            # #     set_coord(0, absolute=False)
-            # given set_motors_drift already does it.
 
         elif name == BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN:
             self._pellet_machine.environment_changed(must_release=new_value)

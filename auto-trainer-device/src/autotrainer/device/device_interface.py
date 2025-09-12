@@ -460,7 +460,7 @@ class DeviceInterface:
         prev_drifts = self._motors_drift
         self._motors_drift = drifts
         logger.debug("Received new motors drift: %s ; prev=%s",
-                     drifts.humanize(), prev_drifts.humanize())
+                     drifts.humanize(n_digits=3), prev_drifts.humanize(n_digits=3))
         for motor_axis_idx, motor in enumerate((Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR)):
             axis_drift = drifts[motor_axis_idx]
             if abs(axis_drift) > self._max_motor_drift_error_threshold:

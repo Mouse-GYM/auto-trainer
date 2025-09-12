@@ -442,7 +442,7 @@ class AppModel(ObservableObject):
         return True
 
     def on_capture_stop(self):
-        logger.verbose("AppModel.on_capture_stop")
+        # logger.verbose("AppModel.on_capture_stop")
         self._inference.stop()
 
         self.hardware.disconnect()
@@ -530,7 +530,7 @@ class AppModel(ObservableObject):
         pass
 
     def on_close(self):
-        logger.verbose("AppModel.on_close")
+        # logger.verbose("AppModel.on_close")
         self._preferences.save()
 
         if self._inference is not None:

@@ -928,7 +928,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._update_pellet_cfg(configuration.pellet_delivery)
         self._update_head_clamp_cfg(configuration.head_clamp)
 
-    def get_diamond_triangle_drifts(self, reset: bool = False) -> Offset3DTuple:
+    def get_diamond_triangle_drifts(self, reset: bool = False) -> Optional[Offset3DTuple]:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""
         values = self._diamond_triangle_prev_drifts
         tot = reduce(operator.add, values, Offset3DTuple(0, 0, 0))
@@ -942,16 +942,18 @@ class BehaviorAlgorithm(ObservableObject):
             logger.debug("Motor mean drift: %s\n min=%s max=%s",
                          new_drift.humanize(n_digits=3), min(values).humanize(), max(values).humanize())
         # put here to minimize nbr of times we update it:
+        if n_vals == 0:
+            new_drift = None
         prev, self._diamond_triangle_drift = self._diamond_triangle_drift, new_drift
         self._on_property_changed(BehaviorAlgoProps.PELLET_MOTOR_DRIFT, new_drift, prev)
         return new_drift
 
     def handle_diamond_triangle_offset(
-            self,
-            offset: Offset3DTuple,
-            position: Offset3DTuple,
-            *,
-            flips: Offset3DTuple = Offset3DTuple(1, 1, 1),
+        self,
+        offset: Offset3DTuple,
+        position: Offset3DTuple,
+        *,
+        flips: Offset3DTuple = Offset3DTuple(1, 1, 1),
     ):
         cfg = self._diamond_triangle_offset_config
         if cfg is None:
