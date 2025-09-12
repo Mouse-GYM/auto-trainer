@@ -144,7 +144,7 @@ class MainWindow(QMainWindow):
                 "Could not get enough or data at all,\n"
                 "please send pellet to make triangle visible in both cameras,\n"
                 "then you can retry after.")
-            box.setIcon(QMessageBox.Information)
+            box.setIcon(QMessageBox.Critical)
             self._open_dialogs.append(box)
             def remove():
                 self.calib_diamond_triangle_action.setEnabled(True)
@@ -180,7 +180,7 @@ class MainWindow(QMainWindow):
             if val >= DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE:
                 noisy = True
         if noisy:
-            rsp = QMessageBox.question(
+            rsp = QMessageBox.warning(
                 self, "Confirmation", f"The data is noisy, do you want retry longer ?",
                 QMessageBox.Yes | QMessageBox.No
             )
@@ -190,7 +190,7 @@ class MainWindow(QMainWindow):
             return
         app_model = self._app_model
         algo = app_model.behavior.algorithm
-        save_path = algo.diamond_triangle_offset_config_path.expanduser()
+        current_save_path = save_path = algo.diamond_triangle_offset_config_path.expanduser()
         if save_path.exists():
             file_path: Optional[str] = None
             def retain_selected(path):
@@ -209,12 +209,23 @@ class MainWindow(QMainWindow):
             if file_path is None:
                 return
             save_path = Path(file_path)
+
+        else:
+            QMessageBox.information(self, "Information",
+                f"Successfully computed values for diamond-triangle position & offset.\n"
+                f"\nSaving to {save_path.as_posix()}\n\n"
+                f"If feature is enabled in configuration then values will be used and applied on next sessions.",
+                QMessageBox.Ok,
+            )
         new_cfg = DiamondTriangleOffsetConfig(
             used_position=list(avg_pos),
             measured_offset=list(avg_offset),
         )
         logger.success("Saving new config to %s", save_path.as_posix())
         new_cfg.to_file(save_path)
+        # if save_path == current_save_path:
+        #    set to current algo _diamond_triangle_offset_config
+        # is not needed, given it's read on each session start
 
     def _make_calib_run(self, calib_duration: float=DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
         logger.notice("Starting diamond-triangle calibration .. duration=%.1f second(s)", calib_duration)
