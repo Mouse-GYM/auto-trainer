@@ -189,7 +189,8 @@ class VideoRecord(Thread):
 
     def _prepare_writers(self):
         logger.debug("%s: preparing writers...", self)
-        self._interval_reference = self._project_info.get_interval(self._interval_mode)
+        now = datetime.now()
+        self._interval_reference = self._project_info.get_interval(self._interval_mode, when=now)
         self._prepare_video_writer()
         self._prepare_image_capture()
 
