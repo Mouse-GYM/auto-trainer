@@ -323,6 +323,9 @@ class CanDevice(Device):
             target=self._command_handler, name="CanCommandHandler", daemon=True)
         self._commands_handler_thread.start()
 
+    def get_motor_flips(self):
+        return self._interface.get_motor_flips()
+
     def get_motor_config(self, motor: Motor):
         return self._interface.get_motor_configuration(motor)
 

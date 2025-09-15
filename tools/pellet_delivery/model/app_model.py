@@ -1,10 +1,12 @@
+import math
 import queue
 import uuid
 from pathlib import Path
 from typing import Optional
 
+from autotrainer.behavior import DiamondTriangleOffsetConfig
 from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
-                              EventManager)
+                              EventManager, Offset3DTuple)
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.device import (CanDevice, MotorConfigurationFile, DeviceConnection, CompoundMovementFile)
 
@@ -32,6 +34,8 @@ class AppModel(ObservableObject):
         self._device_connection: Optional[DeviceConnection] = None
 
         self._message_handler = SystemMessageHandler(queue.Queue())
+        self._message_handler.start()
+        #
         self._message_handler.property_changed += self._message_handler_property_changed
         self._message_handler.ack_received += self.reader_ack_received
 
@@ -62,6 +66,10 @@ class AppModel(ObservableObject):
 
         self._travel_limits = _alogus_travel_limits
 
+        self._motor_flips = Offset3DTuple(math.nan, math.nan, math.nan)
+        self._diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(
+            DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH)
+
     @property
     def user_settings(self) -> UserSettings:
         return self._user_settings
@@ -74,6 +82,14 @@ class AppModel(ObservableObject):
     def hardware_configuration(self, value):
         self._hardware_configuration = self._on_property_changed("hardware_configuration", value,
                                                                  self._hardware_configuration)
+
+    @property
+    def diamond_triangle_config(self):
+        return self._diamond_triangle_config
+
+    @property
+    def motor_flips(self):
+        return self._motor_flips
 
     @property
     def is_connected(self):
@@ -95,6 +111,11 @@ class AppModel(ObservableObject):
 
         self._firmware_version = self._on_property_changed("firmware_version", value,
                                                            self._firmware_version)
+
+    @property
+    def xyz(self) -> Offset3DTuple:
+        x, y, z = map(lambda v: math.nan if v is None else v, (self._x, self._y, self._z))
+        return Offset3DTuple(x, y, z)
 
     @property
     def x(self):
@@ -119,6 +140,13 @@ class AppModel(ObservableObject):
     @z.setter
     def z(self, value):
         self._z = self._on_property_changed("z", value, self._z)
+
+    #
+
+    @property
+    def send_xyz(self) -> Offset3DTuple:
+        x, y, z = map(lambda v: math.nan if v is None else v, (self._send_x, self._send_y, self._send_z))
+        return Offset3DTuple(x, y, z)
 
     @property
     def send_x(self):
@@ -310,6 +338,10 @@ class AppModel(ObservableObject):
                 self._device_connection.use_motor_configurations(motors_cfg)
 
         self._device_connection.load_default_move_config()
+        #
+        self._motor_flips = self._device_connection.device.get_motor_flips()
+        self._diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(
+            DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH)
 
         self.is_connected = True
 
@@ -325,7 +357,7 @@ class AppModel(ObservableObject):
         self.firmware_version = ""
 
     def on_activated(self):
-        self._message_handler.start()
+        pass
 
     def on_close(self):
         self.disconnect_from_device()

@@ -481,3 +481,10 @@ class DeviceInterface:
     def move_motor(self, motor: Motor, position, *, save_as_fixed: bool = False, relative: bool = False):
         # only for steppers, XYZ
         raise NotImplementedError
+
+    def get_motor_flips(self):
+        return Offset3DTuple([
+            -1 if self.get_motor_configuration(motor).flip_limit_orientation
+            else 1
+            for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR)
+        ])

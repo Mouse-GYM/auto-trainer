@@ -238,4 +238,4 @@ class DeviceConnection(DeviceConnectionProtocol):
         return False
 
     def get_motor_config(self, motor: Motor):
-        return self._device.device_interface.get_motor_config(motor)
+        return self._device.device_interface.get_motor_configuration(motor)

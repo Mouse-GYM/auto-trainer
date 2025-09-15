@@ -410,3 +410,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def get_motor_config(self, motor: Motor) -> Union[StepperConfig, ServoConfig]:
         return self._device.device.device_interface.get_motor_configuration(motor)
+
+    def get_motor_flips(self):
+        return self._device.device.get_motor_flips()

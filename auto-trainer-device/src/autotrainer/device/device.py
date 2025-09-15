@@ -61,3 +61,6 @@ class Device:
     @device_interface.setter
     def device_interface(self, value: DeviceInterface):
         self._interface = value
+
+    def get_motor_flips(self):
+        return self.device_interface.get_motor_flips()

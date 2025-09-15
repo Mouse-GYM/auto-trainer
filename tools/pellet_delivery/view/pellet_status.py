@@ -1,6 +1,10 @@
+import math
+
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QFormLayout
 
+from autotrainer.core import Offset3DTuple
 from autotrainer.pyside import CardWidget
+from autotrainer.pyside.xyz_label import XYZQLabel
 from tools.pellet_delivery.model.app_model import AppModel
 
 _NO_UPDATES = "(no updates)"
@@ -9,36 +13,33 @@ _NO_UPDATES = "(no updates)"
 def create_position_panel():
     layout = QFormLayout()
     layout.setHorizontalSpacing(8)
-    x = QLabel(_NO_UPDATES)
-    y = QLabel(_NO_UPDATES)
-    z = QLabel(_NO_UPDATES)
-
-    layout.addRow("X (mm):", x)
-    layout.addRow("Y (mm):", y)
-    layout.addRow("Z (mm):", z)
+    x_y_z_device = XYZQLabel()
+    layout.addRow("Pellet[motor] X/Y/Z (mm):", x_y_z_device)
+    # ◈
+    x_y_z_diamond = XYZQLabel()
+    layout.addRow("Pellet[diamo] X/Y/Z (mm):", x_y_z_diamond)
 
     layout.setContentsMargins(8, 8, 8, 8)
 
     panel = CardWidget(title="Motor Location", content_layout=layout)
 
-    return x, y, z, panel
+    return x_y_z_device, x_y_z_diamond, panel
 
 def create_send_position_panel():
     layout = QFormLayout()
     layout.setHorizontalSpacing(8)
-    x = QLabel(_NO_UPDATES)
-    y = QLabel(_NO_UPDATES)
-    z = QLabel(_NO_UPDATES)
 
-    layout.addRow("X (mm):", x)
-    layout.addRow("Y (mm):", y)
-    layout.addRow("Z (mm):", z)
+    x_y_z_device = XYZQLabel()
+    layout.addRow("Send[motor] X/Y/Z (mm):", x_y_z_device)
+
+    x_y_z_diamond = XYZQLabel()
+    layout.addRow("Send[diamo] X/Y/Z (mm):", x_y_z_diamond)
 
     layout.setContentsMargins(8, 8, 8, 8)
 
     panel = CardWidget(title="Send Location", content_layout=layout)
 
-    return x, y, z, panel
+    return x_y_z_device, x_y_z_diamond, panel
 
 
 def create_servo_panel():
@@ -69,10 +70,10 @@ class PelletStatus(QWidget):
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._x_device, self._y_device, self._z_device, panel = create_position_panel()
+        self._xyz_device, self._xyz_diamond, panel = create_position_panel()
         layout.addWidget(panel)
 
-        self._send_x_device, self._send_y_device, self._send_z_device, panel = create_send_position_panel()
+        self._send_xyz_device, self._send_xyz_diamond, panel = create_send_position_panel()
         layout.addWidget(panel)
 
         self._load_arm, self._cover_arm, panel = create_servo_panel()
@@ -80,27 +81,29 @@ class PelletStatus(QWidget):
 
         self.setLayout(layout)
 
+    def _apply_diamond_triangle_compute(self, xyz: Offset3DTuple):
+        diam_triangle_cfg = self._app_model.diamond_triangle_config
+        if diam_triangle_cfg is None:
+            return Offset3DTuple(math.nan, math.nan, math.nan)
+        return (
+            self._app_model.motor_flips * (xyz - diam_triangle_cfg.used_position) + diam_triangle_cfg.measured_offset
+        )
+
     def _model_property_changed(self, name: str, value, _old_value):
-        if name == "x":
-            self._x_device.setText(f"{round(value, 2)}")
-        elif name == "y":
-            self._y_device.setText(f"{round(value, 2)}")
-        elif name == "z":
-            self._z_device.setText(f"{round(value, 2)}")
-        elif name == "send_x":
-            self._send_x_device.setText(f"{round(value, 2)}")
-        elif name == "send_y":
-            self._send_y_device.setText(f"{round(value, 2)}")
-        elif name == "send_z":
-            self._send_z_device.setText(f"{round(value, 2)}")
+        if name in {'x', 'y', 'z'}:
+            self._xyz_device.update_coordinate(**{name: value})
+            self._xyz_diamond.update_coordinate(self._apply_diamond_triangle_compute(self._app_model.xyz))
+        elif name in {'send_x', 'send_y', 'send_z'}:
+            self._send_xyz_device.update_coordinate(**{name[-1]: value})
+            self._send_xyz_diamond.update_coordinate(self._apply_diamond_triangle_compute(self._app_model.send_xyz))
         elif name == "load_arm":
             self._load_arm.setText(f"{round(value, 1)}")
         elif name == "cover_arm":
             self._cover_arm.setText(f"{round(value, 1)}")
         elif name == "is_connected":
             if not value:
-                self._x_device.setText(_NO_UPDATES)
-                self._y_device.setText(_NO_UPDATES)
-                self._z_device.setText(_NO_UPDATES)
+                d = Offset3DTuple(math.nan, math.nan, math.nan)
+                for xyz in self._xyz_device, self._xyz_diamond, self._send_xyz_device, self._send_xyz_diamond:
+                    xyz.update_coordinate(d)
                 self._load_arm.setText(_NO_UPDATES)
                 self._cover_arm.setText(_NO_UPDATES)
