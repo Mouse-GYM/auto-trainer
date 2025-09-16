@@ -321,6 +321,9 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
+    def get_motor_configuration(self, motor: Motor):
+        return self._configs[motor]
+
     def request_motor_config(self, motor: Motor) -> bool:
         if self._is_open:
             logger.info(f"request motor config {motor_to_str(motor)}")
