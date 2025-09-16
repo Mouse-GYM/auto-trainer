@@ -33,11 +33,11 @@ class AppModel(ObservableObject):
 
         self._device_connection: Optional[DeviceConnection] = None
 
-        self._message_handler = SystemMessageHandler(queue.Queue())
-        self._message_handler.start()
+        msg_handler = self._message_handler = SystemMessageHandler(queue.Queue())
+        msg_handler.start()
         #
-        self._message_handler.property_changed += self._message_handler_property_changed
-        self._message_handler.ack_received += self.reader_ack_received
+        msg_handler.property_changed += self._message_handler_property_changed
+        msg_handler.ack_received += self.reader_ack_received
 
         self._is_connected = False
 
