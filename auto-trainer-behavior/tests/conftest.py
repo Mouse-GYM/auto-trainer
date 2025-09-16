@@ -11,14 +11,12 @@ from unittest import mock
 import pytest
 
 from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, PelletState, \
-    BehaviorAlgorithm
+    BehaviorAlgorithm, InferenceProtocol
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler
 from autotrainer.core import ProjectInfo
 from autotrainer.device import DeviceConnectionProtocol
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 from autotrainer.video import CaptureProcessStatus
-
-from tools.acquisition.model.inference_model import InferenceModel
 
 
 def property_value_save_transitions(old_value, new_value, *, transitions: List[Any]):
@@ -56,10 +54,12 @@ def pose_algo():
 
 @pytest.fixture
 def inference(pose_algo):
-    inference = InferenceModel(pose_algorithm=pose_algo)
-    inference._set_status(InferenceStatus.live)  # noqa
+    # inference = InferenceModel(pose_algorithm=pose_algo)
+    inference = InferenceProtocol()
+    inference.status = InferenceStatus.live
+    # inference._set_status(InferenceStatus.live)  # noqa
     yield inference
-    inference.terminate()
+    # inference.terminate()
 
 
 @pytest.fixture
@@ -127,7 +127,7 @@ class MockSystemMachine:
         return self._machine
 
     @property
-    def inference(self) -> InferenceModel:
+    def inference(self) -> InferenceProtocol:
         return self._machine._inference
 
     @property

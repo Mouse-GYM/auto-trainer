@@ -61,6 +61,16 @@ class InferenceProtocol(ObservableObject, _InferenceProtocol):
 
     STATUS = "status"
 
+    def __init__(self):
+        super().__init__(event_names=(
+            'pose_response_ready',
+            'detection_result_ready',
+            'diamond_triangle_offset_changed',
+            'star_triangle_offset_changed',
+            'triangle_pellet_offset_changed',
+            'algo_initialised',
+        ))
+
 
 if __debug__ and False:
     import autotrainer.inference
