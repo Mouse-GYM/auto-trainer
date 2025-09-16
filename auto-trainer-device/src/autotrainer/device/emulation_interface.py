@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 import typing
 from copy import deepcopy
@@ -20,6 +21,24 @@ _AUDIO_MESSAGE_INTERVAL = 0.5
 _DATA_MESSAGE_INTERVAL = 0.1
 
 
+class _SharedList:
+    # just to make life easier for making thread safe previous code below using this.
+
+    def __init__(self, lock):
+        self._lock = lock
+        self._value = []
+
+    def append(self, item):
+        with self._lock:
+            self._value.append(item)
+
+    def get_and_reset(self):
+        with self._lock:
+            cur = self._value
+            self._value = []
+        return cur
+
+
 class EmulationInterface(DeviceInterface):
     _uuid: int = 1
 
@@ -37,6 +56,7 @@ class EmulationInterface(DeviceInterface):
     def __init__(self):
         super().__init__()
 
+        self._thread_lock = threading.Lock()
         self._is_open = False
 
         self._last_status_message = 0.0
@@ -63,7 +83,7 @@ class EmulationInterface(DeviceInterface):
             Motor.PELLET_Z_MOTOR: StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR),
         }
 
-        self._messages = []
+        self._messages = _SharedList(lock=self._thread_lock)
 
     def _set_pellet_address(self, addr):
         pass
@@ -87,8 +107,8 @@ class EmulationInterface(DeviceInterface):
 
     def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
         # TODO: handle collect_ms
-        messages = deepcopy(self._messages)
-        self._messages = []
+
+        messages = self._messages.get_and_reset()
 
         perf_now = time.perf_counter()
 
