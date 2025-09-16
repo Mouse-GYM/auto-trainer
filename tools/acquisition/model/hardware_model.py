@@ -345,7 +345,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             age_second = perf_now - pending_t_perf
             if age_second > 30:
                 logger.warning("Giving up on pending cmd %s for too long ; token=%s age=%s seconds",
-                               cmd, self.pending_command, age_second)
+                               pending_cmd, pending_token, age_second)
                 expired_tokens.add(pending_token)
         for expired in expired_tokens:
             self._pending_tokens.pop(expired, None)
