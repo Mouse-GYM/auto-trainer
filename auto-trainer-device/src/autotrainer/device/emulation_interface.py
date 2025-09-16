@@ -72,6 +72,11 @@ class EmulationInterface(DeviceInterface):
             Motor.TUNNEL_GATE_SERVO: 0.0,
             Motor.PELLET_COVER_SERVO: 0.0,
         }
+        self._send_pos = {
+            Motor.PELLET_X_MOTOR: 0.0,
+            Motor.PELLET_Y_MOTOR: 0.0,
+            Motor.PELLET_Z_MOTOR: 0.0,
+        }
 
         self._configs = {
             Motor.PELLET_LOAD_SERVO: ServoConfig(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO),
@@ -115,23 +120,12 @@ class EmulationInterface(DeviceInterface):
         # Just to do one type, even if all should be updated.  Do not want this to be taking up much time.
         if perf_now - self._last_status_message > _STATUS_MESSAGE_INTERVAL:
             self._last_status_message = perf_now
-            messages.append(
-                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR,
-                              self._positions[Motor.PELLET_X_MOTOR],
-                              0.0,
-                              self._positions[Motor.PELLET_X_MOTOR] == 0))
-
-            messages.append(
-                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Y_MOTOR,
-                              self._positions[Motor.PELLET_Y_MOTOR],
-                              0.0,
-                              self._positions[Motor.PELLET_Y_MOTOR] == 0))
-
-            messages.append(
-                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR,
-                              self._positions[Motor.PELLET_Z_MOTOR],
-                              0.0,
-                              self._positions[Motor.PELLET_Z_MOTOR] == 0))
+            for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR):
+                messages.append(
+                    StepperStatus(Target.PELLET_DEVICE, motor,
+                                  self._positions[motor],
+                                  self._send_pos[motor],
+                                  self._positions[motor] == 0))
 
             messages.append(
                 ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_COVER_SERVO, self._positions[
@@ -242,43 +236,57 @@ class EmulationInterface(DeviceInterface):
     def set_motor_x(self, position) -> bool:
         return self.move_motor_x(position, True)
 
-    def move_motor_x(self, position: float, _save: bool = False) -> bool:
+    def move_motor_x(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute x {position}")
-            self._positions[Motor.PELLET_X_MOTOR] = position + 0.00001
+            if save_as_fixed:
+                self._send_pos[Motor.PELLET_X_MOTOR] = position
+            else:
+                self._positions[Motor.PELLET_X_MOTOR] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_motor_y(self, position) -> bool:
-        return self.move_motor_y(position, True)
+    def set_motor_y(self, position, *, relative: bool = False) -> bool:
+        return self.move_motor_y(position, True, relative=relative)
 
-    def move_motor_y(self, position: float, _save: bool = False) -> bool:
+    def move_motor_y(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute y {position}")
-            self._positions[Motor.PELLET_Y_MOTOR] = position + 0.00001
+            if save_as_fixed:
+                self._send_pos[Motor.PELLET_Y_MOTOR] = position
+            else:
+                self._positions[Motor.PELLET_Y_MOTOR] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
     def set_motor_z(self, position) -> bool:
         return self.move_motor_z(position, True)
 
-    def move_motor_z(self, position: float, _save: bool = False) -> bool:
+    def move_motor_z(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
             logger.info(f"set pellet absolute z {position}")
-            self._positions[Motor.PELLET_Z_MOTOR] = position + 0.00001
+            if save_as_fixed:
+                self._send_pos[Motor.PELLET_Z_MOTOR] = position
+            else:
+                self._positions[Motor.PELLET_Z_MOTOR] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
     def move_load_servo(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set load arm {position}")
+            if isinstance(position, float) or isinstance(position, int):
+                velocity = 100  # config.maximum_velocity
+            elif isinstance(position, tuple):
+                velocity = float(position[1]) / 100.0 * 100  # config.maximum_velocity
+                position = float(position[0])
             self._positions[Motor.PELLET_LOAD_SERVO] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
     def retrieve_pellet(self) -> bool:
         if self._is_open:
-            logger.info("retreive pellet")
+            logger.info("retrieve pellet")
         return self.move_load_servo(self._configs[Motor.PELLET_LOAD_SERVO].maximum_position)
 
     def scoop_pellet(self) -> bool:
