@@ -168,9 +168,13 @@ class MainContent(ContentWidget):
                 for part, loc_3d in response.locations_3d.items():
                     if response.is_part_seen(part):
                         s = loc_3d.humanize(n_digits=0)
-                        if s != self._prev_parts_3d_loc.get(part):
+                        prev = self._prev_parts_3d_loc.get(part)
+                        if prev is None or any(
+                            abs(prev[i] - loc_3d[i]) >= 0.15
+                            for i in range(3)
+                        ):
                             logger.debug("%s: loc3d: %s", part, loc_3d.humanize())
-                            self._prev_parts_3d_loc[part] = s
+                            self._prev_parts_3d_loc[part] = loc_3d
 
     @property
     def is_diagnostics_visible(self) -> bool:
