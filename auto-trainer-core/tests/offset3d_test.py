@@ -153,3 +153,15 @@ def test_divide(offset, other, result):
 ])
 def test_humanize(offset, digits, expected):
     assert offset.humanize(n_digits=digits) == expected
+
+
+@pytest.mark.parametrize("offset, expected", [
+    [(1, -1, -3), (1, 1, 3)],
+    [(-5, -1, 0), (5, 1, 0)],
+])
+def test_abs(offset, expected):
+    offset = Offset3DTuple(offset)
+    expected = Offset3DTuple(expected)
+    abs_o = abs(offset)
+    assert abs_o == expected
+    assert type(abs_o) is Offset3DTuple

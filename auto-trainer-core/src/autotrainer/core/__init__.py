@@ -130,6 +130,9 @@ class Offset3DTuple(_Offset3DTuple):
             return self.__class__(*(v1 / v2 for v1, v2 in zip(self, other)))
         return self.__class__(*(v / other for v in self))
 
+    def __abs__(self):
+        return self.__class__(*(abs(v) for v in self))
+
     @property
     def distance(self) -> float:
         return math.sqrt(sum(c**2 for c in self))
