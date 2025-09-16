@@ -63,13 +63,6 @@ class BehaviorContent(ContentWidget):
             "Enables adjustment of the pellet delivery position based on post-session reach analysis.")
         content_layout.addWidget(self._allow_intersession_shift_toggle, 1, 3)
 
-        content_layout.addWidget(QLabel("Pause Algo:"), 2, 2)
-        self._pause_algo_toggle = QSwitch()
-        def pause_algo_toggled(x: int):
-            self._behavior_model.algorithm.algo_paused = x != 0
-        self._pause_algo_toggle.stateChanged.connect(pause_algo_toggled)
-        content_layout.addWidget(self._pause_algo_toggle, 2, 3)
-
         content_layout.addWidget(QLabel("Auto-Clamp:"), 0, 4)
         self._head_fixation_toggle = QSwitch()
         self._head_fixation_toggle.stateChanged.connect(self._head_fixation_toggle_state_changed)
