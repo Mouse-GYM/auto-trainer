@@ -1,3 +1,4 @@
+import time
 import typing
 from typing import Tuple
 
@@ -132,6 +133,7 @@ class MainContent(ContentWidget):
         self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
         #
         self._prev_parts_3d_loc = {}
+        self._next_parts_3d_loc_report = time.perf_counter()
 
     def close(self):
          self._diagnostics_content.close()  # to ensure the textbox handler is remove from root logger handlers
@@ -159,11 +161,16 @@ class MainContent(ContentWidget):
             self._left_camera_content.refresh_pose(response.locations[0])
         if self._model.right_camera.is_enabled:
             self._right_camera_content.refresh_pose(response.locations[1])
-        # for part, loc_3d in response.locations_3d.items():
-        #     s = loc_3d.humanize(n_digits=1)
-        #     if s != self._prev_parts_3d_loc.get(part):
-        #         logger.debug("%s: loc3d=%s", part, s)
-        #         self._prev_parts_3d_loc[part] = s
+        if __debug__:
+            perf_now = time.perf_counter()
+            if perf_now >= self._next_parts_3d_loc_report:
+                self._next_parts_3d_loc_report = perf_now + 0.5
+                for part, loc_3d in response.locations_3d.items():
+                    if response.is_part_seen(part):
+                        s = loc_3d.humanize(n_digits=0)
+                        if s != self._prev_parts_3d_loc.get(part):
+                            logger.debug("%s: loc3d: %s", part, loc_3d.humanize())
+                            self._prev_parts_3d_loc[part] = s
 
     @property
     def is_diagnostics_visible(self) -> bool:
