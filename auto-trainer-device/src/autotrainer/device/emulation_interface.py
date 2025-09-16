@@ -90,11 +90,11 @@ class EmulationInterface(DeviceInterface):
         messages = deepcopy(self._messages)
         self._messages = []
 
-        now = time.perf_counter()
+        perf_now = time.perf_counter()
 
         # Just to do one type, even if all should be updated.  Do not want this to be taking up much time.
-        if now - self._last_status_message > _STATUS_MESSAGE_INTERVAL:
-            self._last_status_message = now
+        if perf_now - self._last_status_message > _STATUS_MESSAGE_INTERVAL:
+            self._last_status_message = perf_now
             messages.append(
                 StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR,
                               self._positions[Motor.PELLET_X_MOTOR],
@@ -135,8 +135,8 @@ class EmulationInterface(DeviceInterface):
             messages.append(SensorStatus(temperature_c=28.0 + uniform(-2, 2),
                                          humidity_percent=50.0 + uniform(-2, 2)))
 
-        elif now - self._last_audio_message > _AUDIO_MESSAGE_INTERVAL:
-            self._last_audio_message = now
+        elif perf_now - self._last_audio_message > _AUDIO_MESSAGE_INTERVAL:
+            self._last_audio_message = perf_now
             audio = AudioData(target=Target.MAGNET_DEVICE, packet_id=1, when=time.time(),
                               index=time.perf_counter_ns())
             spectrum = []
@@ -144,8 +144,9 @@ class EmulationInterface(DeviceInterface):
                 spectrum.append(uniform(0, 20))
             audio.magnitudes = spectrum
             messages.append(audio)
-        elif now - self._last_data_message > _DATA_MESSAGE_INTERVAL:
-            self._last_data_message = now
+
+        elif perf_now - self._last_data_message > _DATA_MESSAGE_INTERVAL:
+            self._last_data_message = perf_now
             messages.append(PressureReading(pressure=512 + uniform(-10, 10), ))
             messages.append(LoadCellReading(load=uniform(0, 20)))
 
