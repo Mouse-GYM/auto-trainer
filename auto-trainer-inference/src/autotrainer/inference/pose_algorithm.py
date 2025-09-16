@@ -358,8 +358,9 @@ class PoseAlgorithm(ObservableObject):
         cams_last_frame = [cam_frames[-1] for cam_frames in per_cam_frames]
         parts_3d_offsets = defaultdict(dict)
 
+        locations_3d = {}
+        gpi = self.get_part_index
         if self._has_hands_part_names:
-            gpi = self.get_part_index
             df = pandas.DataFrame(
                 numpy.asarray(
                     [[cam_last_frame[gpi(p)] for p in self._hands_input_parts]
@@ -385,16 +386,15 @@ class PoseAlgorithm(ObservableObject):
                 if v['likelihood'][1] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     locations_2[elem] = PoseLocation(elem, -1, v['x'][1], v['y'][1])
 
-            if len(pairs_3d_offsets) > 0:
-                df_3d = self._handle_offsets_pose_data(
-                    *(numpy.asarray([frame[gpi(p)] for p in self._measure_offset_parts]) for frame in cams_last_frame)
-                )
-                for part1, part2 in pairs_3d_offsets:
-                    parts_3d_offsets[part1][part2] = tuple(
-                        df_3d[part1].iloc[-1, 0:3]  # last frame, 3 first columns (x, y, z)
-                        - df_3d[part2].iloc[-1, 0:3]
-                    )
-                    # check of parts confidence level is handled in PoseResponse.get_parts_3d_offset()
+        if len(pairs_3d_offsets) > 0:
+            df_3d = self._handle_offsets_pose_data(
+                *(numpy.asarray([frame[gpi(p)] for p in self._measure_offset_parts]) for frame in cams_last_frame)
+            )
+            for part1, part2 in pairs_3d_offsets:
+                loc1 = locations_3d[part1] = Offset3DTuple(df_3d[part1].iloc[-1, 0:3])  # last frame, 3 first columns (x, y, z)
+                loc2 = locations_3d[part2] = Offset3DTuple(df_3d[part2].iloc[-1, 0:3])
+                parts_3d_offsets[part1][part2] = tuple(loc1 - loc2)
+                # check of parts confidence level is handled in PoseResponse.get_parts_3d_offset()
 
         response = PoseResponse(
             sequence=self._sequence,
