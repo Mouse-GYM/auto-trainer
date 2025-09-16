@@ -48,6 +48,9 @@ class PoseResponse:
     parts_3d_offsets: Dict[str, Dict[str, Offset3DTuple]] = dataclasses.field(default_factory=dict)
     """3D offsets of the pairs of parts requested during the response creation"""
 
+    locations_3d: Dict[str, Offset3DTuple] = dataclasses.field(default_factory=dict)
+    """3D locations of the monitored parts/elements"""
+
     @property
     def pellet_seen(self) -> bool:
         """Default logic/conditions for pellet seen"""
@@ -401,6 +404,7 @@ class PoseAlgorithm(ObservableObject):
             parts_flags=(parts_flag_1, parts_flag_2, parts_flag_3),
             locations=[locations_1, locations_2],
             parts_3d_offsets=dict(parts_3d_offsets),
+            # locations_3d=locations_3d
         )
         return response
 
