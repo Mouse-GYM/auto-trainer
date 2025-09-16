@@ -14,10 +14,10 @@ def create_position_panel():
     layout = QFormLayout()
     layout.setHorizontalSpacing(8)
     x_y_z_device = XYZQLabel()
-    layout.addRow("Pellet[motor] X/Y/Z (mm):", x_y_z_device)
+    layout.addRow("Triangle[motor] X/Y/Z (mm):", x_y_z_device)
     # ◈
     x_y_z_diamond = XYZQLabel()
-    layout.addRow("Pellet[diamo] X/Y/Z (mm):", x_y_z_diamond)
+    layout.addRow("Triangle[diamo] X/Y/Z (mm):", x_y_z_diamond)
 
     layout.setContentsMargins(8, 8, 8, 8)
 
