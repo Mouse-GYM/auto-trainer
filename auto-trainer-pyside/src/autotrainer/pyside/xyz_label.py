@@ -16,11 +16,12 @@ class XYZQLabel(QLabel):
         super().__init__(self.xyz_to_str(self._xyz_values))
 
     def update_coordinate(
-            self, xyz: Optional[Offset3DTuple] = None,
-            *,
-            x: Optional[float]=None,
-            y: Optional[float]=None,
-            z: Optional[float]=None,
+        self,
+        xyz: Optional[Offset3DTuple] = None,
+        *,
+        x: Optional[float]=None,
+        y: Optional[float]=None,
+        z: Optional[float]=None,
     ):
         if xyz is not None and (x is not None or y is not None or z is not None):
             raise TypeError("Only accept xyz or x/y/z separated. not both")
