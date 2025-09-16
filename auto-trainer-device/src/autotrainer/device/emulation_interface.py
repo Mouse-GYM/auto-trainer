@@ -35,6 +35,7 @@ class EmulationInterface(DeviceInterface):
         return cls._uuid
 
     def __init__(self):
+        super().__init__()
 
         self._is_open = False
 
