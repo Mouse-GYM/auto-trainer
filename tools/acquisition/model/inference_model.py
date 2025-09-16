@@ -57,14 +57,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         *,
         calib_dir: Optional[Path] = None,
     ):
-        super().__init__(event_names=(
-            'pose_response_ready',
-            'detection_result_ready',
-            'diamond_triangle_offset_changed',
-            'star_triangle_offset_changed',
-            'triangle_pellet_offset_changed',
-            'algo_initialised',
-        ))
+        super().__init__()
 
         mp_ctx = get_mp_ctx()
         self._thread_lock = threading.RLock()  # for perform_detection / perform_segmentation
