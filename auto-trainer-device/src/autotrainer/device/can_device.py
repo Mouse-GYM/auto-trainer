@@ -385,8 +385,8 @@ class CanDevice(Device):
             if pending_uuid is not None and kind != "uuid":
                 if time.perf_counter() < t_perf_last_command + 5:  # although could be set bit lower
                     continue
-                logger.warning("timeout waiting ack previous command: %s ; context=%s",
-                               self._pending_kind, self._pending_context)
+                logger.warning("timeout waiting ack previous command: %s ; context=%s ; pending_uuid=%s",
+                               self._pending_kind, self._pending_context, pending_uuid)
                 pending_uuid = None
             if len(cur_commands) == 0:
                 continue
