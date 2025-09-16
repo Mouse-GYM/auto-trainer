@@ -90,12 +90,17 @@ class PelletStatus(QWidget):
         )
 
     def _model_property_changed(self, name: str, value, _old_value):
+        app_model = self._app_model
         if name in {'x', 'y', 'z'}:
-            self._xyz_device.update_coordinate(**{name: value})
-            self._xyz_diamond.update_coordinate(self._apply_diamond_triangle_compute(self._app_model.xyz))
+            d = {name: value}
+            self._xyz_device.update_coordinate(**d)
+            cur_xyz = app_model.xyz.replace(**d)
+            self._xyz_diamond.update_coordinate(self._apply_diamond_triangle_compute(cur_xyz))
         elif name in {'send_x', 'send_y', 'send_z'}:
-            self._send_xyz_device.update_coordinate(**{name[-1]: value})
-            self._send_xyz_diamond.update_coordinate(self._apply_diamond_triangle_compute(self._app_model.send_xyz))
+            d = {name[-1]: value}
+            self._send_xyz_device.update_coordinate(**d)
+            cur_send_xyz = app_model.send_xyz.replace(**d)
+            self._send_xyz_diamond.update_coordinate(self._apply_diamond_triangle_compute(cur_send_xyz))
         elif name == "load_arm":
             self._load_arm.setText(f"{round(value, 1)}")
         elif name == "cover_arm":
