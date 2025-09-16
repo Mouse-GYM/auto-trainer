@@ -3,6 +3,7 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
+from autotrainer.model import EnvironmentProvider
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.pellet_delivery.view.main_window import MainWindow
 
@@ -54,6 +55,8 @@ def run_pellet_delivery_ui(allow_can_emulation: bool = False) -> int:
     verify_log_location()
 
     app = QApplication(sys.argv)
+
+    EnvironmentProvider.enable_can_emulation(allow_can_emulation)
 
     model = AppModel()
 
