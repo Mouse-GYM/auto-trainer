@@ -85,8 +85,10 @@ class PelletStatus(QWidget):
         diam_triangle_cfg = self._app_model.diamond_triangle_config
         if diam_triangle_cfg is None:
             return Offset3DTuple(math.nan, math.nan, math.nan)
-        return (
-            self._app_model.motor_flips * (xyz - diam_triangle_cfg.used_position) + diam_triangle_cfg.measured_offset
+        flips = Offset3DTuple([1 if v >= 0 else -1 for v in diam_triangle_cfg.measured_offset])
+        flips *= self._app_model.motor_flips  # not sure
+        return flips * (
+            (xyz - diam_triangle_cfg.used_position) + diam_triangle_cfg.measured_offset
         )
 
     def _model_property_changed(self, name: str, value, _old_value):
