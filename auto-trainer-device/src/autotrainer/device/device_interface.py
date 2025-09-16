@@ -443,6 +443,7 @@ class DeviceInterface:
 
     def get_motor_configuration(self, motor: Motor) -> Union[ServoConfig, StepperConfig]:
         """Return current motor config"""
+        raise NotImplementedError
 
     def set_auto_correct_motor_drift(self, value):
         """Set the auto correct motor drift"""
