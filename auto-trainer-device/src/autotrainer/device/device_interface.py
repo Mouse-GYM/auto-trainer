@@ -483,8 +483,12 @@ class DeviceInterface:
         raise NotImplementedError
 
     def get_motor_flips(self):
-        return Offset3DTuple([
-            -1 if self.get_motor_configuration(motor).flip_limit_orientation
-            else 1
-            for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR)
-        ])
+        res = []
+        for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR):
+            motor_cfg = self.get_motor_configuration(motor)
+            if motor_cfg is None:
+                res.append(1)
+                logger.warning("%s: no motor config ; defaulting motor flip to 1", motor)
+            else:
+                res.append(-1 if motor_cfg.flip_limit_orientation else 1)
+        return Offset3DTuple(*res)
