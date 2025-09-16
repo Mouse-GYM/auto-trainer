@@ -32,6 +32,10 @@ class DiamondTriangleOffsetConfig:
             dct = yaml.safe_load(fh)
         return cls(**dict((k, Offset3DTuple(dct[k])) for k in dct))
 
+    def to_file(self, path: Path):
+        with path.expanduser().open("w") as fh:
+            yaml.safe_dump(dataclasses.asdict(self), fh)
+
 
 # Protocol first (less strict)
 from .inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration

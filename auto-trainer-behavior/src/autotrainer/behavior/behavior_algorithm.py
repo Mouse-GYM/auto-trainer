@@ -223,7 +223,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._top_camera_presence_detection = PresenceDetectionAttrs()
         self._presence_missing = False
 
-        self._diamond_triangle_offest_config_path = diamond_triangle_offset_config_path
+        self._diamond_triangle_offset_config_path = diamond_triangle_offset_config_path
         self._diamond_triangle_offset_config = self._load_diamond_config()
 
         self._diamond_triangle_drift: Optional[Offset3DTuple] = None
@@ -702,6 +702,10 @@ class BehaviorAlgorithm(ObservableObject):
         return self._diamond_triangle_drift
 
     @property
+    def diamond_triangle_offset_config_path(self) -> Path:
+        return self._diamond_triangle_offset_config_path
+
+    @property
     def auto_correct_motors_drift(self) -> bool:
         return self._auto_correct_motors_drift
 
@@ -711,7 +715,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._on_property_changed(BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT, value, prev)
 
     def _load_diamond_config(self) -> Optional[DiamondTriangleOffsetConfig]:
-        cfg_path = self._diamond_triangle_offest_config_path
+        cfg_path = self._diamond_triangle_offset_config_path
         if cfg_path is None:
             logger.notice("No diamond-triangle offset config path provided")
         else:

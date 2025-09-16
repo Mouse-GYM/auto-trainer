@@ -1,3 +1,4 @@
+import enum
 import logging.config
 import multiprocessing
 import operator
