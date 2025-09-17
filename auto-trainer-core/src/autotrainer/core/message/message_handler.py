@@ -147,7 +147,7 @@ class MessageHandler(ObservableObject):
                     obj = queue.get_nowait()
                 except Empty:
                     break
-                logger.warning("drop unhandled %s", type(obj))
+                logger.warning("drop unhandled %s ; %s", type(obj), obj)
                 queue.task_done()
             queue.join()
 
