@@ -1,6 +1,7 @@
 import math
 import queue
 import uuid
+from functools import partial, partialmethod
 from pathlib import Path
 from typing import Optional
 
@@ -90,6 +91,48 @@ class AppModel(ObservableObject):
     @property
     def motor_flips(self):
         return self._motor_flips
+
+    def to_diamond_coordinates(self, xyz: Offset3DTuple) -> Offset3DTuple:
+        diam_triangle_cfg = self._diamond_triangle_config
+        if diam_triangle_cfg is None:
+            return Offset3DTuple(math.nan, math.nan, math.nan)
+        assert isinstance(diam_triangle_cfg, DiamondTriangleOffsetConfig)
+        # motor_flips = self._motor_flips
+        # but some unit have different motor flips/flip_limit_orientation ..
+        # and this:
+        motor_flips = Offset3DTuple(1, 1, -1)
+        # is what has to be used to make correct, with below formula
+        flips = Offset3DTuple([1 if v >= 0 else -1 for v in diam_triangle_cfg.measured_offset])
+        # with current triangulate_3d (and diamond pos), we get atm : [1, -1, -1]
+        # BUT:
+        # flips = Offset3DTuple(1, -1, 1)  # this is what has to be used to make correct
+        # So:
+        flips *= motor_flips  # wit exact above motor_flips
+        # print(f"motor_flips={motor_flips}")
+        # print(f"flips={flips}")
+        return (
+            flips * diam_triangle_cfg.measured_offset
+            - motor_flips * (xyz - diam_triangle_cfg.used_position)
+        )
+        # # glob_flips = [1, -1, -1]
+        # return Offset3DTuple(-1, -1, 1) * (
+        #     (xyz - diam_triangle_cfg.used_position)
+        #     - diam_triangle_cfg.measured_offset
+        # )
+
+    def to_motor_coordinates(self, xyz: Offset3DTuple) -> Offset3DTuple:
+        diam_triangle_cfg = self._diamond_triangle_config
+        if diam_triangle_cfg is None:
+            return Offset3DTuple(math.nan, math.nan, math.nan)
+        assert isinstance(diam_triangle_cfg, DiamondTriangleOffsetConfig)
+        motor_flips = Offset3DTuple(1, 1, -1)
+        # flips = Offset3DTuple([1 if v >= 0 else -1 for v in diam_triangle_cfg.measured_offset])
+        # flips *= motor_flips
+        flips = Offset3DTuple(1, -1, 1)
+        return (
+            motor_flips * ((flips * diam_triangle_cfg.measured_offset) - xyz)
+            + diam_triangle_cfg.used_position
+        )
 
     @property
     def is_connected(self):
@@ -273,23 +316,45 @@ class AppModel(ObservableObject):
     def cover_pellet(self):
         self._send_command(SystemCommandKind.COVER_PELLET, context=uuid.uuid4())
 
-    def set_x(self, value: float):
-        self._send_command(SystemCommandKind.SET_X, value, context=uuid.uuid4())
+    def _exec_xyz(self, value, *, system_cmd, axis_idx, xyz_getter):
+        xyz = xyz_getter(self).replace(**{"xyz"[axis_idx]: value})
+        xyz = self.to_motor_coordinates(xyz)
+        return self._send_command(system_cmd, xyz[axis_idx], context=uuid.uuid4())
 
-    def set_y(self, value: float):
-        self._send_command(SystemCommandKind.SET_Y, value, context=uuid.uuid4())
+    def _get_send_xyz(self):
+        return self.send_xyz
 
-    def set_z(self, value: float):
-        self._send_command(SystemCommandKind.SET_Z, value, context=uuid.uuid4())
+    set_x = partialmethod(_exec_xyz,
+                          system_cmd=SystemCommandKind.SET_X, axis_idx=0, xyz_getter=_get_send_xyz)
+    set_y = partialmethod(_exec_xyz,
+                          system_cmd=SystemCommandKind.SET_Y, axis_idx=1, xyz_getter=_get_send_xyz)
+    set_z = partialmethod(_exec_xyz,
+                          system_cmd=SystemCommandKind.SET_Z, axis_idx=2, xyz_getter=_get_send_xyz)
 
-    def move_x(self, value: int):
-        self._send_command(SystemCommandKind.MOVE_X, value, context=uuid.uuid4())
+    # def set_y(self, value: float):
+    #     self._send_command(SystemCommandKind.SET_Y, value, context=uuid.uuid4())
+    #
+    # def set_z(self, value: float):
+    #     self._send_command(SystemCommandKind.SET_Z, value, context=uuid.uuid4())
 
-    def move_y(self, value: int):
-        self._send_command(SystemCommandKind.MOVE_Y, value, context=uuid.uuid4())
+    def _get_xyz(self):
+        return self.xyz
 
-    def move_z(self, value: int):
-        self._send_command(SystemCommandKind.MOVE_Z, value, context=uuid.uuid4())
+    move_x = partialmethod(_exec_xyz,
+                           system_cmd=SystemCommandKind.MOVE_X, axis_idx=0, xyz_getter=_get_xyz)
+    move_y = partialmethod(_exec_xyz,
+                           system_cmd=SystemCommandKind.MOVE_Y, axis_idx=1, xyz_getter=_get_xyz)
+    move_z = partialmethod(_exec_xyz,
+                           system_cmd=SystemCommandKind.MOVE_Z, axis_idx=2, xyz_getter=_get_xyz)
+
+    # def move_x(self, value: int):
+    #     self._send_command(SystemCommandKind.MOVE_X, value, context=uuid.uuid4())
+
+    # def move_y(self, value: int):
+    #     self._send_command(SystemCommandKind.MOVE_Y, value, context=uuid.uuid4())
+    #
+    # def move_z(self, value: int):
+    #     self._send_command(SystemCommandKind.MOVE_Z, value, context=uuid.uuid4())
 
     def set_config(self, config):
         self._send_command(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
@@ -339,6 +404,7 @@ class AppModel(ObservableObject):
 
         self._device_connection.load_default_move_config()
         #
+        # todo: clarify if we need or not motor flips:
         self._motor_flips = self._device_connection.device.get_motor_flips()
         self._diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(
             DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH)

@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSpinBo
 
 import qtawesome as qta
 
+from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.message import Motor
 from autotrainer.device import is_servo
@@ -126,13 +127,13 @@ class PelletControl(QWidget):
         s_layout.setContentsMargins(2, 2, 2, 2)
 
         is_legacy = EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ
+        # is_legacy = False  # temporary
 
-        p_layout, self._x_pos, moveButton, setButton = add_position("X (mm):", -10, 10)
+        p_layout, self._x_pos, moveButton, setButton = add_position("X[diamo] (mm):", -10, 10)
         moveButton.clicked.connect(lambda: self._move_x())
         setButton.clicked.connect(lambda: self._set_x())
         s_layout.addLayout(p_layout)
 
-        
         if is_legacy:
             moveButton.setVisible(False)
 
@@ -145,7 +146,7 @@ class PelletControl(QWidget):
 
         s_layout.addStretch(1)
 
-        p_layout, self._y_pos, moveButton, setButton = add_position("Y (mm):", -10, 10)
+        p_layout, self._y_pos, moveButton, setButton = add_position("Y[diamo] (mm):", -10, 10)
         moveButton.clicked.connect(lambda: self._move_y())
         setButton.clicked.connect(lambda: self._set_y())
         s_layout.addLayout(p_layout)
@@ -163,7 +164,7 @@ class PelletControl(QWidget):
 
         s_layout.addStretch(1)
 
-        p_layout, self._z_pos, moveButton, setButton = add_position("Z (mm):", -10, 10)
+        p_layout, self._z_pos, moveButton, setButton = add_position("Z[diamo] (mm):", -10, 10)
         moveButton.clicked.connect(lambda: self._move_z())
         setButton.clicked.connect(lambda: self._set_z())
         s_layout.addLayout(p_layout)
@@ -195,12 +196,15 @@ class PelletControl(QWidget):
     def _model_property_changed(self, name: str, value, _old_value):
         if name == "travel_limits":
             logger.debug("got & applying travel_limits: %s", value)
-            self._x_pos.setMinimum(value["x"][0])
-            self._x_pos.setMaximum(value["x"][1])
-            self._y_pos.setMinimum(value["y"][0])
-            self._y_pos.setMaximum(value["y"][1])
-            self._z_pos.setMinimum(value["z"][0])
-            self._z_pos.setMaximum(value["z"][1])
+            min_xyz = Offset3DTuple(*(value[c][0] for c in 'xyz'))
+            max_xyz = Offset3DTuple(*(value[c][1] for c in 'xyz'))
+            min_xyz = self._app_model.to_diamond_coordinates(min_xyz)
+            max_xyz = self._app_model.to_diamond_coordinates(max_xyz)
+            for idx, pos in enumerate((self._x_pos, self._y_pos, self._z_pos)):
+                v1, v2 = min_xyz[idx], max_xyz[idx]
+                r = min(v1, v2), max(v1, v2)
+                pos.setRange(*r)
+                logger.debug("setting %s -> %s", pos, r)
         elif name == "config":
             if self._config_dialog is not None:
                 if is_servo(value.motor):
