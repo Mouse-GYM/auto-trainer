@@ -34,4 +34,6 @@ class XYZQLabel(QLabel):
 
     @staticmethod
     def xyz_to_str(xyz: Offset3DTuple, *, digit_precision: int = 2):
-        return " / ".join("na" if (math.isnan(v) or v is None) else f"{v:.0{digit_precision}f}" for v in xyz)
+        return " / ".join("na" if (math.isnan(v) or v is None)
+                          else f"{v:.0{digit_precision}f}"
+                          for v in xyz)
