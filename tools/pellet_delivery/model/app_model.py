@@ -26,7 +26,11 @@ _alogus_travel_limits = {
 
 
 class AppModel(ObservableObject):
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        diamond_triangle_config_path: Path = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH,
+    ):
         super().__init__()
 
         self._user_settings = UserSettings()
@@ -70,7 +74,7 @@ class AppModel(ObservableObject):
 
         self._motor_flips = Offset3DTuple(math.nan, math.nan, math.nan)
         self._diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(
-            DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH)
+            diamond_triangle_config_path)
 
     @property
     def user_settings(self) -> UserSettings:
@@ -98,17 +102,6 @@ class AppModel(ObservableObject):
         if diam_triangle_cfg is None:
             return Offset3DTuple(math.nan, math.nan, math.nan)
         assert isinstance(diam_triangle_cfg, DiamondTriangleOffsetConfig)
-        # motor_flips = self._motor_flips
-        # but some unit have different motor flips/flip_limit_orientation ..
-        # and this:
-        # motor_flips = Offset3DTuple(1, 1, -1)
-        # motor_flips = Offset3DTuple(1, 1, 1)
-        # motor_flips = self._motor_flips
-        # is what has to be used to make correct, with below formula
-        # flips = Offset3DTuple([1 if v >= 0 else -1 for v in diam_triangle_cfg.measured_offset])
-        # with current triangulate_3d (and diamond pos), we get atm : [1, -1, -1]
-        # BUT:
-        # flips = Offset3DTuple(1, -1, 1)  # this is what has to be used to make correct
         flips = Offset3DTuple(1, -1, -1)
         return (
             flips * diam_triangle_cfg.measured_offset
@@ -120,14 +113,11 @@ class AppModel(ObservableObject):
         if diam_triangle_cfg is None:
             return Offset3DTuple(math.nan, math.nan, math.nan)
         assert isinstance(diam_triangle_cfg, DiamondTriangleOffsetConfig)
-        # motor_flips = Offset3DTuple(1, 1, 1)
         motor_flips = self._motor_flips
-        # flips = Offset3DTuple([1 if v >= 0 else -1 for v in diam_triangle_cfg.measured_offset])
-        # flips *= motor_flips
-        # flips = Offset3DTuple(1, -1, 1)
         flips = Offset3DTuple(1, -1, -1)
         return (
-            ((flips * diam_triangle_cfg.measured_offset) - (self._motor_flips * xyz))
+            flips * diam_triangle_cfg.measured_offset
+            - (xyz * motor_flips)
             + diam_triangle_cfg.used_position
         )
 

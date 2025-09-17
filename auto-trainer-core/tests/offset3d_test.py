@@ -143,26 +143,29 @@ def test_distance(offset, exp_distance):
     assert offset.distance == exp_distance
 
 
-@pytest.mark.parametrize("offset, other, result", [
+@pytest.mark.parametrize("o1, o2, result", [
     [(1, -0.5, 0), (1, 2, 3), (1, -1, 0)],
     [(0, 1, 0), (1, 5, 1), (0, 5, 0)],
     [(0, 0, -1), (1, 2, 3), (0, 0, -3)],
     [(1, 2, 3), 3, (3, 6, 9)],
 ])
-def test_multiply(offset, other, result):
-    offset = Offset3DTuple(offset)
+def test_multiply(o1, o2, result):
+    o1 = Offset3DTuple(o1) if isinstance(o1, tuple) else o1
+    o2 = Offset3DTuple(o2) if isinstance(o2, tuple) else o2
     # result = Offset3DTuple(result)
-    assert offset * other == result
+    assert o1 * o2 == result
+    assert o2 * o1 == result
 
 
-@pytest.mark.parametrize("offset, other, result", [
+@pytest.mark.parametrize("o1, o2, result", [
     [(6, -3, 9), 3,          (2, -1, 3)],
     [(6, -3, 9), (2, -1, 3), (3, 3, 3)],
 ])
-def test_divide(offset, other, result):
-    offset = Offset3DTuple(offset)
+def test_divide(o1, o2, result):
+    o1 = Offset3DTuple(o1) if isinstance(o1, tuple) else o1
+    o2 = Offset3DTuple(o2) if isinstance(o2, tuple) else o2
     result = Offset3DTuple(result)
-    assert offset / other == result
+    assert o1 / o2 == result
 
 
 @pytest.mark.parametrize("offset, digits, expected", [

@@ -49,7 +49,11 @@ class DiamondTriangleOffsetConfig:
 
     def to_file(self, path: Path):
         with path.expanduser().open("w") as fh:
-            yaml.safe_dump(dataclasses.asdict(self), fh)
+            d = dataclasses.asdict(self)
+            for k, v in d.items():
+                d[k] = list(v)  # getting yaml type error with Offset3D
+            yaml.safe_dump(d, fh)
+
 
 
 # Protocol first (less strict)
