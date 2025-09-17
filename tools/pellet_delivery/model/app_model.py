@@ -102,7 +102,7 @@ class AppModel(ObservableObject):
         if diam_triangle_cfg is None:
             return Offset3DTuple(math.nan, math.nan, math.nan)
         assert isinstance(diam_triangle_cfg, DiamondTriangleOffsetConfig)
-        flips = -1 * Offset3DTuple(-1, 1, 1)
+        flips = Offset3DTuple(1, -1, -1)
         motor_flips = self._motor_flips
         return (
             flips * diam_triangle_cfg.measured_offset
@@ -114,7 +114,7 @@ class AppModel(ObservableObject):
         if diam_triangle_cfg is None:
             return Offset3DTuple(math.nan, math.nan, math.nan)
         assert isinstance(diam_triangle_cfg, DiamondTriangleOffsetConfig)
-        flips = -1 * Offset3DTuple(-1, 1, 1)
+        flips = Offset3DTuple(1, -1, -1)
         motor_flips = self._motor_flips
         return (
             flips * diam_triangle_cfg.measured_offset
