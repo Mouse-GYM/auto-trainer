@@ -168,7 +168,6 @@ class MainContent(ContentWidget):
                 self._next_parts_3d_loc_report = perf_now + 0.5
                 for part, loc_3d in response.locations_3d.items():
                     if response.is_part_seen(part):
-                        s = loc_3d.humanize(n_digits=0)
                         prev = self._prev_parts_3d_loc.get(part)
                         if prev is None or any(
                             abs(prev[i] - loc_3d[i]) >= 0.15
