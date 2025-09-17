@@ -408,7 +408,7 @@ class AppModel(ObservableObject):
     def _send_command(self, message, data=None, *, context=None):
         if self._last_command is not None:
             logger.verbose("ignoring command %s while existing command is in process with context=%s",
-                           self._last_command)
+                           message, self._last_command)
             return
 
         if context is not None:
