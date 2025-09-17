@@ -312,7 +312,10 @@ class EmulationInterface(DeviceInterface):
         return self.move_cover_servo(self._configs[Motor.PELLET_COVER_SERVO].maximum_position)
 
     def fixed_position(self) -> bool:
+        for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR):
+            self._positions[motor] = self._send_pos[motor]
         self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
+
         return self._is_open
 
     def emit_tone(self, frequency, duration_ms) -> bool:
