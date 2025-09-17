@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
-    QLayout, QVBoxLayout, QFileDialog, QFrame
+    QLayout, QVBoxLayout, QFileDialog, QFrame, QDoubleSpinBox
 
 import qtawesome as qta
 
@@ -28,10 +28,13 @@ def add_position(label: str, s_min: int, s_max: int) -> (QLayout, QSpinBox):
 
     position_layout.addWidget(QLabel(label), 0)
 
-    pos = QSpinBox()
+    pos = QDoubleSpinBox()
     pos.setMinimumWidth(40)
-    pos.setMinimum(s_min)
-    pos.setMaximum(s_max)
+    # pos.setMinimum(s_min)
+    # pos.setMaximum(s_max)
+    pos.setRange(s_min, s_max)
+    pos.setDecimals(2)
+    pos.setSingleStep(0.15)
     pos.setWrapping(False)
     position_layout.addWidget(pos, 0)
 
@@ -127,7 +130,7 @@ class PelletControl(QWidget):
         s_layout.setContentsMargins(2, 2, 2, 2)
 
         is_legacy = EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ
-        # is_legacy = False  # temporary
+        is_legacy = False  # temporary
 
         p_layout, self._x_pos, moveButton, setButton = add_position("X[diamo] (mm):", -10, 10)
         moveButton.clicked.connect(lambda: self._move_x())
