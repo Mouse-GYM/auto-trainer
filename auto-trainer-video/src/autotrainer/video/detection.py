@@ -2,6 +2,7 @@ import collections
 import csv
 import ctypes
 import dataclasses
+import math
 import multiprocessing
 import os
 import threading
@@ -53,6 +54,7 @@ class PresenceDetectionAttrs:
     #  not only the very next one, that would/could allow detect slower movement/presence
 
     _last_absence_start_perf_c: multiprocessing.Value = None  # noqa
+    _last_presence_start_perf_c: multiprocessing.Value = None  # noqa
     _presence_detected: multiprocessing.Value = None  # noqa
     _movement_detected: multiprocessing.Value = None  # noqa
     _pc_sum: multiprocessing.Value = None  # noqa
@@ -60,7 +62,9 @@ class PresenceDetectionAttrs:
     def __post_init__(self):
         ctx = get_mp_ctx()
         if self._last_absence_start_perf_c is None:
-            self._last_absence_start_perf_c = ctx.Value(ctypes.c_float)
+            self._last_absence_start_perf_c = ctx.Value(ctypes.c_double, -math.inf)
+        if self._last_presence_start_perf_c is None:
+            self._last_presence_start_perf_c = ctx.Value(ctypes.c_double, -math.inf)
         if self._presence_detected is None:
             self._presence_detected = ctx.Value(ctypes.c_bool)
         if self._movement_detected is None:
@@ -68,7 +72,9 @@ class PresenceDetectionAttrs:
         if self._pc_sum is None:
             self._pc_sum = ctx.Value(ctypes.c_float)
 
+    # todo: use a class descriptor (allow to not repeat/have to specify the attribute name on the rhs)
     last_absence_start_perf_c = _make_prop_value("last_absence_start_perf_c")
+    last_presence_start_perf_c = _make_prop_value("last_presence_start_perf_c")
     presence_detected = _make_prop_value("presence_detected")
     movement_detected = _make_prop_value("movement_detected")
     pc_sum = _make_prop_value("pc_sum")
@@ -188,8 +194,11 @@ class VideoDetection(threading.Thread):
                 logger.verbose("presence detected: %.2f", pc_tot_sum)
                 prev_detected = is_detected
                 attrs.presence_detected = is_detected
-                if not is_detected:
-                    attrs.last_absence_start_perf_c = time.perf_counter()
+                perf_now = time.perf_counter()
+                if is_detected:
+                    attrs.last_presence_start_perf_c = perf_now
+                else:
+                    attrs.last_absence_start_perf_c = perf_now
                 prev_frame = None  # this will make us to get the following 2 next frames for next check
             self._check_path()
             csv_writer = self._csv_writer

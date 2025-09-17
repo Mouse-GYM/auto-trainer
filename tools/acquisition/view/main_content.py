@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QGridLayout, QHBoxLayout
 
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.inference import PoseResponse, PoseAlgorithm
+from autotrainer.inference import PoseResponse, PoseAlgorithm, InferenceStatus
 from autotrainer.pyside import Separator
 
 from tools.acquisition.model.app_model import AppModel
@@ -25,10 +25,10 @@ logger = get_verbose_logger(__name__)
 
 
 class MainContent(ContentWidget):
-    def __init__(self, model: AppModel):
+    def __init__(self, app_model: AppModel):
         super().__init__()
 
-        self._model = model
+        self._app_model = app_model
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("MainContent")
@@ -48,21 +48,21 @@ class MainContent(ContentWidget):
 
         # First rows - cameras
 
-        self._left_camera_content = CameraContent(self._model.left_camera)
+        self._left_camera_content = CameraContent(self._app_model.left_camera)
         self._left_camera_content.camera_view.setTitle("Left Camera")
         # self._left_camera_content.camera_view.setSize(450, 300)
 
         self._layout.addWidget(self._left_camera_content, 0, 0, 1, 2)
         self._content_widgets.append(self._left_camera_content)
 
-        self._right_camera_content = CameraContent(self._model.right_camera)
+        self._right_camera_content = CameraContent(self._app_model.right_camera)
         self._right_camera_content.camera_view.setTitle("Right Camera")
         # self._right_camera_content.camera_view.setSize(450, 300)
 
         self._layout.addWidget(self._right_camera_content, 0, 2, 1, 2)
         self._content_widgets.append(self._right_camera_content)
 
-        self._top_camera_content = CameraContent(self._model.top_camera)
+        self._top_camera_content = CameraContent(self._app_model.top_camera)
         self._top_camera_content.camera_view.setTitle("Top Camera")
         self._top_camera_content.camera_view.setSize(450, 300)
 
@@ -71,40 +71,40 @@ class MainContent(ContentWidget):
 
         # Second row - behavior and analysis
 
-        behavior_content = BehaviorContent(self._model.behavior, self._model.inference)
+        behavior_content = BehaviorContent(self._app_model.behavior, self._app_model.inference)
         self._layout.addWidget(behavior_content, 1, 0, 1, 3)
         self._content_widgets.append(behavior_content)
 
         self._analysis_content = AnalysisContent(
-            model.hardware,
-            model.inference,
-            model.analysis,
-            model.message_handler,
-            model.preferences,
+            app_model.hardware,
+            app_model.inference,
+            app_model.analysis,
+            app_model.message_handler,
+            app_model.preferences,
         )
         self._layout.addWidget(self._analysis_content, 1, 3, 1, 3)
         self._content_widgets.append(self._analysis_content)
 
         # Third row - hardware & alarms
 
-        self._hardware_control_content = HardwareControlContent(self._model.hardware)
+        self._hardware_control_content = HardwareControlContent(self._app_model.hardware)
         self._layout.addWidget(self._hardware_control_content, 2, 0, 1, 3)
         self._content_widgets.append(self._hardware_control_content)
 
         sub_layout = QHBoxLayout()
 
-        hardware_status_content = HardwareStatusContent(self._model.message_handler)
+        hardware_status_content = HardwareStatusContent(self._app_model.message_handler)
         sub_layout.addWidget(hardware_status_content, 1)
         self._content_widgets.append(hardware_status_content)
 
-        alarm_content = self._alarm_content = AlarmContent(self._model, self._model.hardware)
+        alarm_content = self._alarm_content = AlarmContent(self._app_model, self._app_model.hardware)
         sub_layout.addWidget(alarm_content, 0)
 
         self._layout.addLayout(sub_layout, 2, 3, 1, 3)
 
         # Optional fourth row - diagnostics
 
-        self._diagnostics_content = DiagnosticsContent(self._model)
+        self._diagnostics_content = DiagnosticsContent(self._app_model)
         self._layout.addWidget(self._diagnostics_content, 4, 0, 1, 6)
 
         self._layout.setRowStretch(1, 1)
@@ -119,21 +119,22 @@ class MainContent(ContentWidget):
 
         self._start = 0
 
-        # register handlers to events:
-        self._model.property_changed += self._model_property_changed
-        inference = self._model.inference
-        inference.pose_response_ready += self.refresh_pose
-
         self.set_diagnostics_visible(False)
 
         self._prev_top_cam_detect = None
 
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self.update_image)
-        self._timer.start(int(1000 / self._model.preferences.live_feed_refresh_rate))
-        #
         self._prev_parts_3d_loc = {}
         self._next_parts_3d_loc_report = time.perf_counter()
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self.update_image)
+        self._timer.start(int(1000 / self._app_model.preferences.live_feed_refresh_rate))
+
+        # finally, register handlers to events:
+        app_model.property_changed += self._model_property_changed
+        #
+        inference = app_model.inference
+        inference.pose_response_ready += self.refresh_pose
 
     def close(self):
          self._diagnostics_content.close()  # to ensure the textbox handler is remove from root logger handlers
@@ -141,7 +142,7 @@ class MainContent(ContentWidget):
 
     @Slot()
     def update_image(self):
-        model = self._model
+        model = self._app_model
         top_cam_pres = model.top_camera_presence_detection
         cur_val = top_cam_pres.presence_detected
         if cur_val != self._prev_top_cam_detect:
@@ -157,9 +158,9 @@ class MainContent(ContentWidget):
         self._analysis_content.use_cache()
 
     def refresh_pose(self, response: PoseResponse):
-        if self._model.left_camera.is_enabled:
+        if self._app_model.left_camera.is_enabled:
             self._left_camera_content.refresh_pose(response.locations[0])
-        if self._model.right_camera.is_enabled:
+        if self._app_model.right_camera.is_enabled:
             self._right_camera_content.refresh_pose(response.locations[1])
         if __debug__:
             perf_now = time.perf_counter()
@@ -189,11 +190,11 @@ class MainContent(ContentWidget):
             widget.set_is_capture_active(is_active)
 
     def on_activated(self):
-        self._model.on_activated()
+        self._app_model.on_activated()
 
-        self._model.left_camera.set_display_fcn(self._left_camera_content.refresh_image)
-        self._model.right_camera.set_display_fcn(self._right_camera_content.refresh_image)
-        self._model.top_camera.set_display_fcn(self._top_camera_content.refresh_image)
+        self._app_model.left_camera.set_display_fcn(self._left_camera_content.refresh_image)
+        self._app_model.right_camera.set_display_fcn(self._right_camera_content.refresh_image)
+        self._app_model.top_camera.set_display_fcn(self._top_camera_content.refresh_image)
 
         for widget in self._content_widgets:
             widget.on_activated()

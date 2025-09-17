@@ -93,14 +93,19 @@ class IntersessionMachine(StateMachine):
         EventManager.default().post_event_content(
             BehaviorEventKind.intersessionSegmentationCan, context=f"{p}:{i}:{not s}")
         res = p and i and not s
-        logger.debug("can_perform_segmentation=%s: prj=%s inference=%s segment=%s", res, p, i, s)
+        logger.debug("can_perform_segmentation=%s: prj=%s inference=%s segment=%s",
+                     res, p, i, s)
         return res
 
     def can_perform_detection(self, segment_config: Optional[SegmentationConfiguration] = None):
-        p = self._project_info is not None
+        prj = self._project_info
+        p = prj is not None
         i = self._inference is not None
         d = self._detection_configuration is None
         s = segment_config is not None
+        # we could add this condition too:
+        #   assert prj.session.value == segment_config.session_index
+        # in the others conditions applied/checked here.
         EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionCan,
                                                   context=f"{p}:{i}:{d}:{s}")
         can_do_detection = p and i and d and s
@@ -119,7 +124,10 @@ class IntersessionMachine(StateMachine):
         else:
             if success:
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationEnd)
-                self.perform_detection(segment_config)
+                if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
+                    self.perform_detection(segment_config)
+                else:
+                    self.end_analysis()
             else:
                 logger.error("perform segmentation failed. config=%s", segment_config)
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError)

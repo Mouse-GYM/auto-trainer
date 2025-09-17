@@ -91,7 +91,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @property
     def send_x(self):
-        return self._send_coordinates[0]
+        return self._send_coordinates.x
 
     @send_x.setter
     def send_x(self, value):
@@ -100,7 +100,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @property
     def send_y(self):
-        return self._send_y
+        return self._send_coordinates.y
 
     @send_y.setter
     def send_y(self, value):
@@ -109,7 +109,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @property
     def send_z(self):
-        return self._send_z
+        return self._send_coordinates.z
 
     @send_z.setter
     def send_z(self, value):
@@ -345,7 +345,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             age_second = perf_now - pending_t_perf
             if age_second > 30:
                 logger.warning("Giving up on pending cmd %s for too long ; token=%s age=%s seconds",
-                               cmd, self.pending_command, age_second)
+                               pending_cmd, pending_token, age_second)
                 expired_tokens.add(pending_token)
         for expired in expired_tokens:
             self._pending_tokens.pop(expired, None)

@@ -144,7 +144,7 @@ class PelletMachine(StateMachine):
         return can
 
     def can_send_pellet(self):
-        can = self.can_use_pellet_command()
+        can = self.can_use_pellet_command() and self._algorithm.can_send_pellet()
         EventManager.default().post_event_content(BehaviorEventKind.pelletSendCan, context=can)
         return can
 
@@ -288,6 +288,9 @@ class PelletMachine(StateMachine):
             retrying = True
             reason = f"would have retried shortly {reason}"
             logit()
+
+        if algo.algo_paused:
+            return
 
         cur_state = self.state
 

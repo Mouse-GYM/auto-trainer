@@ -67,6 +67,9 @@ class CheckElementDistanceContext:
 
 
 class BehaviorAlgoProps(str, Enum):
+
+    ALGO_PAUSED = 'algo_paused'
+
     AUTO_CLAMP_INTENSITY = 'auto_clamp_intensity'
     BASELINE_INTENSITY = 'baseline_intensity'
     DAY_PELLET_COUNT = 'day_pellet_count'
@@ -176,6 +179,8 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._day_pellet_count = 0
 
+        self._algo_paused = False
+        self._algo_paused_perf_t = 0
         self._is_in_session = False
         self._start_session_reason = "NA"
         self._stop_session_reason = "NA"
@@ -369,6 +374,21 @@ class BehaviorAlgorithm(ObservableObject):
     @project.setter
     def project(self, project):
         self._project_info = project
+
+    @property
+    def algo_paused(self):
+        return self._algo_paused
+
+    @algo_paused.setter
+    def algo_paused(self, value):
+        prev, self._algo_paused = self._algo_paused, value
+        if value:
+            self._algo_paused_perf_t = time.perf_counter()
+        self._on_property_changed(BehaviorAlgoProps.ALGO_PAUSED, value, prev)
+
+    @property
+    def algo_paused_age(self):
+        return time.perf_counter() - self._algo_paused_perf_t
 
     @property
     def top_camera_presence_detection(self) -> PresenceDetectionAttrs:
@@ -704,6 +724,10 @@ class BehaviorAlgorithm(ObservableObject):
         return self._diamond_triangle_drift
 
     @property
+    def diamond_triangle_offset_config_path(self) -> Path:
+        return self._diamond_triangle_offset_config_path
+
+    @property
     def auto_correct_motors_drift(self) -> bool:
         return self._auto_correct_motors_drift
 
@@ -791,6 +815,9 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def pellet_recently_seen(self):
         return time.perf_counter() - self._pellet_last_seen < self.limits.pellet_missing_time
+
+    def can_send_pellet(self):
+        return not self._algo_paused
 
     def can_load_pellet(self):
         return self.pellet_delivery_enabled and not self.pellet_recently_seen

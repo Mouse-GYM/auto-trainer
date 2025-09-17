@@ -91,6 +91,7 @@ def test_get_path_at_different_day_does_not_change_result(root):
         assert d3 == "20250102"
 
 
+@pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")
 def test_attached_and_detached_can_be_compared(root):
     prj = ProjectInfo(root=root)
     detached = prj.to_local_value()
@@ -101,6 +102,7 @@ def test_attached_and_detached_can_be_compared(root):
     assert prj == detached
 
 
+@pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")
 def test_can_use_with_with_statement(root):
     prj = ProjectInfo(root=root)
     before = prj.to_local_value()

@@ -78,6 +78,8 @@ class SystemMachine(StateMachine):
         self._timer_auto_clamp_disengage = no_op_timer
         self._disengage_auto_clamp_load_count = 0
 
+        self._last_close_tunnel_gate_perf_t = -math.inf
+
         self._motor_axis_flips = Offset3DTuple(1, 1, 1)
 
         algorithm = self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
@@ -119,8 +121,10 @@ class SystemMachine(StateMachine):
 
         # need to set it directly, when we start all state are "OFF/0": no presence detected, etc..
         # so if that's stay as is then there need to be the timer already setup:
-        self._timer_check_missing = _check_missing_timer(self._algorithm.presence_missing_delay,
-                                                         self._check_presence_missing)
+        self._timer_check_missing = _check_missing_timer(
+            self._algorithm.presence_missing_delay,
+            self._check_presence_missing,
+        )
         self._timer_check_missing.start()
 
     @property
@@ -175,7 +179,8 @@ class SystemMachine(StateMachine):
     def after_exit_tunnel(self, *, reason: str = "NA"):
         self._update_magnet_position(self.algorithm.baseline_intensity)
         EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
-        self.algorithm.end_session(reason=f"{reason}->after_exit_tunnel")
+        if self._algorithm.is_in_session:
+            self._algorithm.end_session(reason=f"{reason}->after_exit_tunnel")
 
     def before_enter_intersession(self):
         # current system_state should be tunnel here
@@ -253,7 +258,10 @@ class SystemMachine(StateMachine):
             # self._intersession._detection_configuration,
         )
         #
-        can_perform_analysis = algo.can_perform_intersession_analysis()
+        can_perform_analysis = (
+            algo.can_perform_intersession_analysis()
+            and self._intersession.can_perform_segmentation()
+        )
         # first:
         if not algo.session_mouse_seen and project is not None:
             # assert not can_perform_analysis  # could have
@@ -284,7 +292,7 @@ class SystemMachine(StateMachine):
         if self.state == SystemState.intersession:
             logger.debug("_intersession_ended: load_cell.engaged=%s",
                          self._analysis.load_cell_monitor.is_engaged)
-            if self._analysis.load_cell_monitor.is_engaged:
+            if self._analysis.load_cell_monitor.is_engaged and not self._algorithm.algo_paused:
                 self.exit_intersession_to_tunnel()
             else:
                 self.exit_intersession_to_cage()
@@ -295,16 +303,17 @@ class SystemMachine(StateMachine):
             logger.verbose("Inference status change: %s -> %s ; system_state=%s",
                            prev_value, new_value, self.state)
             if new_value in {InferenceStatus.live, InferenceStatus.intersession}:
+                self._timer_check_missing.cancel()
                 self._timer_check_missing = _check_missing_timer(0.5, self._check_presence_missing)
                 self._timer_check_missing.start()
             else:
                 self._timer_check_missing.cancel()
                 self._timer_consider_end_session.cancel()
             if (
-                    new_value == InferenceStatus.live
-                    and self.state == SystemState.cage
+                new_value == InferenceStatus.live
+                and self.state == SystemState.cage
             ):
-                if self._analysis.load_cell_monitor.is_engaged:
+                if self._analysis.load_cell_monitor.is_engaged and not self._algorithm.algo_paused:
                     self.enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
                 # this is only used at app starts, so unregister:
                 # self._inference.property_changed -= self._handle_inference_property_changed
@@ -329,15 +338,16 @@ class SystemMachine(StateMachine):
             return
 
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
+            algo = self._algorithm
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
             cur_timer_check_missing = self._timer_check_missing
             cur_timer_check_missing.cancel()
             if value:
-                self._algorithm.presence_missing = False
+                algo.presence_missing = False
                 if self.state == SystemState.cage:
                     # when app start inference is slow and takes several 10s to become live,
                     # so we have to check it:
-                    if self._inference.status == InferenceStatus.live:
+                    if self._inference.status == InferenceStatus.live and not algo.algo_paused:
                         self.enter_tunnel(reason="load_cell_engaged_when_in_cage")
                     # see _handle_inference_property_changed
                 else:
@@ -345,7 +355,9 @@ class SystemMachine(StateMachine):
                                                               context=self.state)
             else:
                 cur_timer_check_missing = self._timer_check_missing = _check_missing_timer(
-                    self._algorithm.presence_missing_delay, self._check_presence_missing)
+                    self._algorithm.presence_missing_delay if not algo.algo_paused else 0.1,
+                    self._check_presence_missing,
+                )
                 cur_timer_check_missing.start()
                 if self.state == SystemState.tunnel and self.intersession.state == IntersessionState.idle:
                     logger.info("%s False, exiting tunnel ..", LoadCellMonitor.IS_ENGAGED_PROPERTY)
@@ -511,6 +523,36 @@ class SystemMachine(StateMachine):
         elif name == BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN:
             self._pellet_machine.environment_changed(must_release=new_value)
 
+        elif name == BehaviorAlgoProps.ALGO_PAUSED:
+            algo = self._algorithm
+            tunnel_dev = self._tunnel_device
+            self._timer_consider_end_session.cancel()
+            self._timer_auto_clamp_disengage.cancel()
+            if new_value:
+                if algo.is_in_session:
+                    if algo.intersession_state == IntersessionState.idle:
+                        algo.end_session(reason="algo_paused")
+                tunnel_dev.open_tunnel_gate()
+                tunnel_dev.update_head_magnet_intensity(0)
+                if self._pellet_machine.state != PelletState.retract:
+                    pellet_dev.send_pellet()  # better done.. so to be on correct position
+                    #  for following send_retract (which is a relative move):
+                    pellet_dev.send_retract()
+                if algo.pellet_cover_enabled:
+                    pellet_dev.cover_pellet()
+                self._timer_check_missing.cancel()
+                new_timer = self._timer_check_missing = _check_missing_timer(0.1, self._check_presence_missing)
+                new_timer.start()
+            else:
+                self._timer_check_missing.cancel()
+                tunnel_dev.open_tunnel_gate()
+                tunnel_dev.update_head_magnet_intensity(algo.baseline_intensity)
+                pellet_dev.send_pellet()
+                # trigger load cell property changed check, so that new session will be started if mouse still in tunnel
+                self._load_cell_monitor_property_changed(
+                    LoadCellMonitor.IS_ENGAGED_PROPERTY, self._analysis.load_cell_monitor.is_engaged, None
+                )
+
     def _update_magnet_position(self, position: int):
         if self._tunnel_device is not None:
             self._tunnel_device.update_head_magnet_intensity(position)
@@ -584,27 +626,39 @@ class SystemMachine(StateMachine):
     def _check_presence_missing(self):
         self._timer_check_missing.cancel()  # in case of
         algo = self._algorithm
+        algo_is_paused = algo.algo_paused
+        t_perf_now = time.perf_counter()
+        top_cam_pres_age = t_perf_now - algo.top_camera_presence_detection.last_presence_start_perf_c
+        algo_paused_age = algo.algo_paused_age
+        if (
+            algo_is_paused
+            and not self._analysis.load_cell_monitor.is_engaged
+            and top_cam_pres_age <= algo_paused_age
+            and top_cam_pres_age <= self._analysis.load_cell_monitor.disengaged_age
+        ):
+            # ensure we only do it first time
+            if (t_perf_now - self._last_close_tunnel_gate_perf_t) >= algo_paused_age:
+                self._tunnel_device.close_tunnel_gate()
+                self._last_close_tunnel_gate_perf_t = t_perf_now
+        #
         if self._inference.status not in {InferenceStatus.live, InferenceStatus.intersession}:
             algo.presence_missing = False
-            return
-        if self._analysis.load_cell_monitor.is_engaged:
+            new_delay = 0.5
+        elif self._analysis.load_cell_monitor.is_engaged:
             algo.presence_missing = False
-            return
-        # NB: for now the camera presence is not generating any message(s) but only sets multiprocess shared values,
-        # so we have to use timer:
-        if algo.top_camera_presence_detection.presence_detected:
-            algo.presence_missing = False
-            new_delay = 0.5  # we can only retry ~soon
+            new_delay = 0.2
         else:
-            top_cam_pres_age = time.perf_counter() - algo.top_camera_presence_detection.last_absence_start_perf_c
             top_cam_miss = algo.presence_missing_delay - top_cam_pres_age
             load_cell_miss = algo.presence_missing_delay - self._analysis.load_cell_monitor.disengaged_age
+            new_delay = 0.1  # if algo_is_paused else 0.25
+            # if camera presence detections goes ON/triggered (shared value only)
             if top_cam_miss <= 0 and load_cell_miss <= 0:
                 algo.presence_missing = True
-                new_delay = 0.5  # if camera presence detections goes ON/triggered (shared value only)
             else:
                 algo.presence_missing = False
-                new_delay = max(top_cam_miss, load_cell_miss)
+                if not algo_is_paused:
+                    new_delay = max(top_cam_miss, load_cell_miss)
+        #
         new_timer = self._timer_check_missing = _check_missing_timer(new_delay, self._check_presence_missing)
         new_timer.start()
 
