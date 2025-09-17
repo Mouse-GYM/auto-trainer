@@ -413,6 +413,12 @@ class AppModel(ObservableObject):
 
             self.is_connected = False
 
+        # to have new events emitted on next connect, we better set these to None,
+        # so that event listener(s) will get an on_property_changed callback triggered
+        self.config = None
+        self._x = self._y = self._z = None
+        self._send_x = self._send_y = self._send_z = None
+        self.travel_limits = None
         self.firmware_version = ""
 
     def on_activated(self):

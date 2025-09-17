@@ -200,15 +200,16 @@ class PelletControl(QWidget):
     def _model_property_changed(self, name: str, value, _old_value):
         if name == "travel_limits":
             logger.debug("got & applying travel_limits: %s", value)
-            min_xyz = Offset3DTuple(*(value[c][0] for c in 'xyz'))
-            max_xyz = Offset3DTuple(*(value[c][1] for c in 'xyz'))
-            min_xyz = self._app_model.to_diamond_coordinates(min_xyz)
-            max_xyz = self._app_model.to_diamond_coordinates(max_xyz)
-            for idx, pos in enumerate((self._x_pos, self._y_pos, self._z_pos)):
-                v1, v2 = min_xyz[idx], max_xyz[idx]
-                r = min(v1, v2), max(v1, v2)
-                pos.setRange(*r)
-                logger.debug("setting %s -> %s", pos, r)
+            if value is not None:
+                min_xyz = Offset3DTuple(*(value[c][0] for c in 'xyz'))
+                max_xyz = Offset3DTuple(*(value[c][1] for c in 'xyz'))
+                min_xyz = self._app_model.to_diamond_coordinates(min_xyz)
+                max_xyz = self._app_model.to_diamond_coordinates(max_xyz)
+                for idx, pos in enumerate((self._x_pos, self._y_pos, self._z_pos)):
+                    v1, v2 = min_xyz[idx], max_xyz[idx]
+                    r = min(v1, v2), max(v1, v2)
+                    pos.setRange(*r)
+                    logger.debug("setting %s -> %s", pos, r)
         elif name == "config":
             if self._config_dialog is not None:
                 if is_servo(value.motor):
