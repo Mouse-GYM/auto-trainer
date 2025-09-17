@@ -1,5 +1,6 @@
 import math
 import queue
+import time
 import uuid
 from functools import partial, partialmethod
 from pathlib import Path
@@ -7,7 +8,7 @@ from typing import Optional
 
 from autotrainer.behavior import DiamondTriangleOffsetConfig
 from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
-                              EventManager, Offset3DTuple)
+                              EventManager, Offset3DTuple, MotorConfigurations)
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.device import (CanDevice, MotorConfigurationFile, DeviceConnection, CompoundMovementFile)
 
@@ -65,7 +66,7 @@ class AppModel(ObservableObject):
         self._command_pending = False
         self._last_command = None
 
-        self._travel_limits = _alogus_travel_limits
+        self._travel_limits = None  # _alogus_travel_limits
 
         self._motor_flips = Offset3DTuple(math.nan, math.nan, math.nan)
         self._diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(
@@ -100,37 +101,33 @@ class AppModel(ObservableObject):
         # motor_flips = self._motor_flips
         # but some unit have different motor flips/flip_limit_orientation ..
         # and this:
-        motor_flips = Offset3DTuple(1, 1, -1)
+        # motor_flips = Offset3DTuple(1, 1, -1)
+        # motor_flips = Offset3DTuple(1, 1, 1)
+        # motor_flips = self._motor_flips
         # is what has to be used to make correct, with below formula
-        flips = Offset3DTuple([1 if v >= 0 else -1 for v in diam_triangle_cfg.measured_offset])
+        # flips = Offset3DTuple([1 if v >= 0 else -1 for v in diam_triangle_cfg.measured_offset])
         # with current triangulate_3d (and diamond pos), we get atm : [1, -1, -1]
         # BUT:
         # flips = Offset3DTuple(1, -1, 1)  # this is what has to be used to make correct
-        # So:
-        flips *= motor_flips  # wit exact above motor_flips
-        # print(f"motor_flips={motor_flips}")
-        # print(f"flips={flips}")
+        flips = Offset3DTuple(1, -1, -1)
         return (
             flips * diam_triangle_cfg.measured_offset
-            - motor_flips * (xyz - diam_triangle_cfg.used_position)
-        )
-        # # glob_flips = [1, -1, -1]
-        # return Offset3DTuple(-1, -1, 1) * (
-        #     (xyz - diam_triangle_cfg.used_position)
-        #     - diam_triangle_cfg.measured_offset
-        # )
+            - (xyz - diam_triangle_cfg.used_position)
+        ) * self._motor_flips  # Offset3DTuple(1, 1, -1)
 
     def to_motor_coordinates(self, xyz: Offset3DTuple) -> Offset3DTuple:
         diam_triangle_cfg = self._diamond_triangle_config
         if diam_triangle_cfg is None:
             return Offset3DTuple(math.nan, math.nan, math.nan)
         assert isinstance(diam_triangle_cfg, DiamondTriangleOffsetConfig)
-        motor_flips = Offset3DTuple(1, 1, -1)
+        # motor_flips = Offset3DTuple(1, 1, 1)
+        motor_flips = self._motor_flips
         # flips = Offset3DTuple([1 if v >= 0 else -1 for v in diam_triangle_cfg.measured_offset])
         # flips *= motor_flips
-        flips = Offset3DTuple(1, -1, 1)
+        # flips = Offset3DTuple(1, -1, 1)
+        flips = Offset3DTuple(1, -1, -1)
         return (
-            motor_flips * ((flips * diam_triangle_cfg.measured_offset) - xyz)
+            ((flips * diam_triangle_cfg.measured_offset) - (self._motor_flips * xyz))
             + diam_triangle_cfg.used_position
         )
 
@@ -369,13 +366,9 @@ class AppModel(ObservableObject):
 
     def connect_to_device(self):
         self._device_connection = DeviceConnection(CanDevice(), self._message_handler.input_queue, name="pellet-can")
-
-        self.travel_limits = _alogus_travel_limits
-
         self._device_connection.request_connect()
-
         self._send_command(SystemCommandKind.REQUEST_VERSION)
-
+        #
         if self._hardware_configuration is None:
             for attempt in (
                     MotorConfigurationFile.DEFAULT_LOCATION.expanduser(),
@@ -389,7 +382,9 @@ class AppModel(ObservableObject):
             else:
                 logger.warning("No motor config file found, motors are possibly unconfigured ; this might be critical")
 
-        if self._hardware_configuration is not None:
+        if self._hardware_configuration is None:
+            motors_cfg = MotorConfigurationFile()
+        else:
             logger.info("Reading motor config file %s", self._hardware_configuration)
             try:
                 motors_cfg = MotorConfigurationFile.from_file(self._hardware_configuration)
@@ -399,15 +394,22 @@ class AppModel(ObservableObject):
                     err)
                 self.hardware_configuration = None
                 raise  # do not take any risk
-            else:
-                self._device_connection.use_motor_configurations(motors_cfg)
 
-        self._device_connection.load_default_move_config()
-        #
         # todo: clarify if we need or not motor flips:
-        self._motor_flips = self._device_connection.device.get_motor_flips()
+        self._motor_flips = Offset3DTuple(*(-1 if cfg.flip_limit_orientation else 1
+                                            for _, cfg in (motors_cfg.x_config, motors_cfg.y_config, motors_cfg.z_config)))
+        # self._motor_flips = Offset3DTuple(1, 1, 1)
+        logger.debug("motor_flips: %s", self._motor_flips)
+        #
         self._diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(
             DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH)
+
+        time.sleep(0.5)
+        # only set it after having loaded motor config
+        self.travel_limits = _alogus_travel_limits
+
+        self._device_connection.use_motor_configurations(motors_cfg)
+        self._device_connection.load_default_move_config()
 
         self.is_connected = True
 

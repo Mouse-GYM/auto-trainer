@@ -70,8 +70,9 @@ class PelletControl(QWidget):
 
         self.setLayout(layout)
         self.setEnabled(False)
-        
-        self._model_property_changed("travel_limits", app_model.travel_limits, None)
+
+        if False:
+            self._model_property_changed("travel_limits", app_model.travel_limits, None)
 
     def _create_button_layout(self):
         b_layout = QHBoxLayout()
