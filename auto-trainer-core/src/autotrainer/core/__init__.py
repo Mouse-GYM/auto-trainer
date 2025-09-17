@@ -220,7 +220,7 @@ from .animal import AnimalSubject
 from .configuration import SystemConfiguration, BehaviorConfiguration, CameraConfiguration, CameraId, \
     SystemConfigurationLoader
 from .configuration import HardwareConfiguration, InferenceConfiguration, PersistenceConfiguration
-from .event import EventManager, EventInfo, EventManagerPlugin
+from .event import ApiEventKind, EventManager, EventInfo, EventManagerPlugin
 from .fixed_array_multiqueue import FixedArrayMultiQueue
 from .fixed_array_queue import FixedArrayQueue
 from .message import MessageHandler, SystemMessageHandler
@@ -230,3 +230,4 @@ from .perf_monitor import PerfMonitor
 from .project import ProjectInfo, ProjectInterval, video_write_ext
 from .queue_util import clear_queue
 from .notification import NotificationCenter, Notification, TriggerNotification, post_trigger_enable
+

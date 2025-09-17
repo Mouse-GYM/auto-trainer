@@ -1,10 +1,9 @@
 import typing
 
-from autotrainer.core import EventManager, SystemStatusMessageKind
+from autotrainer.core import EventManager, SystemStatusMessageKind, ApiEventKind
 
 from .device_interface import DeviceInterface
 from .device_api import DeviceApi
-from .device_event_kind import GymDeviceEventKind
 
 
 class Device:
@@ -42,7 +41,7 @@ class Device:
         pass
 
     def _acknowledge_command(self, token: object):
-        EventManager.default().post_event_content(GymDeviceEventKind.deviceCommandAcknowledge, context=token)
+        EventManager.default().post_event_content(ApiEventKind.deviceCommandAcknowledge, context=token)
         if self._api is not None:
             self._api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, token)
 

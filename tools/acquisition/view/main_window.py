@@ -457,9 +457,10 @@ class MainWindow(QMainWindow):
         button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
 
         def emergency_stop_triggered(is_toggled: bool):
-            self._app_model.behavior.algorithm.algo_paused = is_toggled
-            self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED" if is_toggled else self._title)
+            behavior = self._app_model.behavior
+            behavior.emergency_stop("user-button") if is_toggled else behavior.emergency_resume("user-button")
             button.setText("Resume" if is_toggled else "Emergency Stop")
+            self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED" if is_toggled else self._title)
 
         button.toggled.connect(emergency_stop_triggered)
 

@@ -24,12 +24,12 @@ from typing_extensions import Self
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import ObservableObject, EventManager, BehaviorConfiguration, post_trigger_enable, Offset3DTuple
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
+from autotrainer.core import ApiEventKind as BehaviorEventKind
 
 from autotrainer.video import CaptureProcessStatus
 from autotrainer.video.detection import PresenceDetectionAttrs
 
 from . import DiamondTriangleOffsetConfig
-from .behavior_event_kind import BehaviorEventKind
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 
