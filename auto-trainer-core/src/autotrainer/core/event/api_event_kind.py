@@ -12,6 +12,7 @@ class ApiEventKind(IntEnum, Enum):
     2000-2999   Device
     3000-3999   Inference
     4000-4999   Analysis
+    5000-5999   Training
     9000-9999   Application
     """
 
@@ -104,3 +105,11 @@ class ApiEventKind(IntEnum, Enum):
     # Analysis
     loadCellEngagedChanged = 4001
     headbarPressureEngagedChanged = 4011
+
+    # Training
+    trainingPlanLoad = 5001,
+
+    trainingPhaseEnter = 5101,
+    trainingPhaseExit = 5102,
+
+    trainingProgressUpdate = 5201
