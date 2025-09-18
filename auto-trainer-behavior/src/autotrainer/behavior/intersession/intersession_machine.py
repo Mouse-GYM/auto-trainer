@@ -3,9 +3,11 @@ from typing import Callable, Optional
 
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager, transitions_allow_functions
+from autotrainer.core import ProjectInfo, EventManager,  transitions_allow_functions
+from autotrainer.core import ApiEventKind as BehaviorEventKind
+
 from . import IntersessionState
-from ..behavior_event_kind import BehaviorEventKind
+
 
 from ..inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
 from ..behavior_algorithm import BehaviorAlgorithm

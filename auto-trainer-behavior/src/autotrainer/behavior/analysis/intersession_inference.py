@@ -5,8 +5,7 @@ import pandas
 from numpy import ndarray
 
 from autotrainer.core import ProjectInfo, EventManager
-
-from ..behavior_event_kind import BehaviorEventKind
+from autotrainer.core import ApiEventKind as BehaviorEventKind
 
 logger = logging.getLogger(__name__)
 

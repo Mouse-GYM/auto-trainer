@@ -1,16 +1,15 @@
-import functools
 import math
 import time
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional
 
 from transitions import Machine
 
-from autotrainer.core import (ProjectInfo, EventManager, MessageHandler, SensorAnalysis, LoadCellMonitor,
-                              HeadbarPressureMonitor, Motor, transitions_allow_functions, SystemMessageHandler)
-from autotrainer.core import Offset3DTuple
+from autotrainer.core import (ProjectInfo, EventManager, SensorAnalysis, LoadCellMonitor, Offset3DTuple,
+                              HeadbarPressureMonitor, transitions_allow_functions, SystemMessageHandler)
+from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.core.multiproc import DaemonTimer
@@ -19,7 +18,6 @@ from autotrainer.inference import PoseResponse, InferenceStatus
 
 from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
-from .behavior_event_kind import BehaviorEventKind
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine, IntersessionState
 from .pellet import PelletMachine, PelletState
