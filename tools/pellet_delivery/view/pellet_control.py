@@ -21,7 +21,7 @@ _NO_UPDATES = "(no updates)"
 _MIN_CONTROL_BUTTON_WIDTH = 120
 
 
-def add_position(label: str, s_min: int, s_max: int) -> (QLayout, QSpinBox):
+def add_position(label: str, s_min: float, s_max: float) -> Tuple[QLayout, QSpinBox]:
     position_layout = QHBoxLayout()
     position_layout.setContentsMargins(8, 8, 8, 8)
     position_layout.setSpacing(8)
@@ -30,8 +30,6 @@ def add_position(label: str, s_min: int, s_max: int) -> (QLayout, QSpinBox):
 
     pos = QDoubleSpinBox()
     pos.setMinimumWidth(40)
-    # pos.setMinimum(s_min)
-    # pos.setMaximum(s_max)
     pos.setRange(s_min, s_max)
     pos.setDecimals(2)
     pos.setSingleStep(0.15)
@@ -70,9 +68,6 @@ class PelletControl(QWidget):
 
         self.setLayout(layout)
         self.setEnabled(False)
-
-        if False:
-            self._model_property_changed("travel_limits", app_model.travel_limits, None)
 
     def _create_button_layout(self):
         b_layout = QHBoxLayout()

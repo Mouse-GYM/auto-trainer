@@ -319,12 +319,6 @@ class AppModel(ObservableObject):
     set_z = partialmethod(_exec_xyz,
                           system_cmd=SystemCommandKind.SET_Z, axis_idx=2, xyz_getter=_get_send_xyz)
 
-    # def set_y(self, value: float):
-    #     self._send_command(SystemCommandKind.SET_Y, value, context=uuid.uuid4())
-    #
-    # def set_z(self, value: float):
-    #     self._send_command(SystemCommandKind.SET_Z, value, context=uuid.uuid4())
-
     def _get_xyz(self):
         return self.xyz
 
@@ -334,15 +328,6 @@ class AppModel(ObservableObject):
                            system_cmd=SystemCommandKind.MOVE_Y, axis_idx=1, xyz_getter=_get_xyz)
     move_z = partialmethod(_exec_xyz,
                            system_cmd=SystemCommandKind.MOVE_Z, axis_idx=2, xyz_getter=_get_xyz)
-
-    # def move_x(self, value: int):
-    #     self._send_command(SystemCommandKind.MOVE_X, value, context=uuid.uuid4())
-
-    # def move_y(self, value: int):
-    #     self._send_command(SystemCommandKind.MOVE_Y, value, context=uuid.uuid4())
-    #
-    # def move_z(self, value: int):
-    #     self._send_command(SystemCommandKind.MOVE_Z, value, context=uuid.uuid4())
 
     def set_config(self, config):
         self._send_command(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
@@ -386,16 +371,13 @@ class AppModel(ObservableObject):
                 self.hardware_configuration = None
                 raise  # do not take any risk
 
-        # todo: clarify if we need or not motor flips:
         self._motor_flips = Offset3DTuple(*(-1 if cfg.flip_limit_orientation else 1
                                             for _, cfg in (motors_cfg.x_config, motors_cfg.y_config, motors_cfg.z_config)))
-        # self._motor_flips = Offset3DTuple(1, 1, 1)
         logger.debug("motor_flips: %s", self._motor_flips)
         #
         self._diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(
             DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH)
 
-        time.sleep(0.5)
         # only set it after having loaded motor config
         self.travel_limits = _alogus_travel_limits
 
