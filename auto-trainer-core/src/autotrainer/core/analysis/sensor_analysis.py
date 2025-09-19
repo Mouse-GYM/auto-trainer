@@ -91,15 +91,15 @@ class SensorAnalysis(ObservableObject):
         return self._load_cell_monitor
 
     @property
-    def headbar_pressure_monitor(self):
+    def headbar_pressure_monitor(self) -> HeadbarPressureMonitor:
         return self._headbar_pressure_monitor
 
     @property
-    def load_cell_tare_monitor(self):
+    def load_cell_tare_monitor(self) -> LoadCellTareMonitor:
         return self._tare_detector
 
     @property
-    def audio_thrashing_monitor(self):
+    def audio_thrashing_monitor(self) -> AudioSpectrumThrashMonitor:
         return self._audio_thrashing_monitor
 
     @property

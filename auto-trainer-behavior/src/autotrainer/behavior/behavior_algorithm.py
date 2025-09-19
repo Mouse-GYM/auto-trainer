@@ -476,9 +476,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @head_fixation_enabled.setter
     def head_fixation_enabled(self, value: bool):
-        old_value = self._head_fixation_enabled
-        self._head_fixation_enabled = self._on_property_changed(BehaviorAlgoProps.HEAD_FIXATION_ENABLED,
-                                                                value, self._head_fixation_enabled)
+        old_value, self._head_fixation_enabled = self._head_fixation_enabled, value
+        self._on_property_changed(BehaviorAlgoProps.HEAD_FIXATION_ENABLED, value, old_value)
         if old_value != self._head_fixation_enabled:
             logger.info(f"auto-clamp enabled changed to: {self._head_fixation_enabled}")
 

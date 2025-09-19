@@ -5,7 +5,7 @@ from transitions import Machine
 
 from autotrainer.core import EventManager, transitions_allow_functions, SystemMessageHandler
 from autotrainer.core import ApiEventKind as BehaviorEventKind
-from autotrainer.core.multiproc import DaemonTimer
+from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.logging import get_verbose_logger
 
 from ..behavior_algorithm import BehaviorAlgorithm
@@ -76,7 +76,7 @@ class PelletMachine(StateMachine):
             model_override=True,
         )
 
-        self._cur_timer_try_next_state: Optional[DaemonTimer] = None
+        self._cur_timer_try_next_state = no_op_timer
 
     @property
     def algorithm(self):

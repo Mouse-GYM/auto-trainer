@@ -3,6 +3,7 @@ import logging
 import queue
 import sys
 import time
+import threading
 from functools import partial
 from pathlib import Path
 from typing import List, Any
@@ -14,6 +15,7 @@ from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDevi
     BehaviorAlgorithm, InferenceProtocol
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler
 from autotrainer.core import ProjectInfo
+from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
 from autotrainer.device import DeviceConnectionProtocol
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 from autotrainer.video import CaptureProcessStatus
@@ -27,6 +29,16 @@ def property_value_save_transitions(old_value, new_value, *, transitions: List[A
         assert transitions[-1] == old_value
         assert new_value != old_value
     transitions.append(new_value)
+
+
+@pytest.fixture(scope='session', autouse=True)
+def _disable_timers():
+    def disabled_daemon_timer(delay, func):
+        # raise RuntimeError(f"Disabled daemon timer {delay} -> {func}")
+        logging.warning("DaemonTimer disabled for delay=%s @ %s", delay, func)
+        return mock.create_autospec(DaemonTimer)
+    with mock.patch(f"{DaemonTimer.__module__}.{DaemonTimer.__name__}", new=disabled_daemon_timer):
+        yield
 
 
 @pytest.fixture
@@ -54,10 +66,8 @@ def pose_algo():
 
 @pytest.fixture
 def inference(pose_algo):
-    # inference = InferenceModel(pose_algorithm=pose_algo)
     inference = InferenceProtocol()
     inference.status = InferenceStatus.live
-    # inference._set_status(InferenceStatus.live)  # noqa
     yield inference
     # inference.terminate()
 
@@ -85,16 +95,20 @@ def machine(tunnel_device, pellet_device, inference, project_info):
     # prevents some test to fail due to handling function in dedicated thread
     BehaviorAlgorithm._no_handler_thread = True
     #
-    machine = SystemMachine(
-        tunnel_device=tunnel_device,
-        pellet_device=pellet_device,
-        analysis=SensorAnalysis(),
-        inference=inference,
-        project_info=project_info,
-    )
-    machine.algorithm.capture_status = CaptureProcessStatus.RUNNING
-    machine.algorithm.pellet_hand_uncover_distance = None  # disabled
-    return machine
+    def check_pres_missing(delay, func):
+        m = mock.create_autospec(threading.Timer)
+        return m
+    with mock.patch(f"{SystemMachine.__module__}._check_missing_timer", new=check_pres_missing):
+        machine = SystemMachine(
+            tunnel_device=tunnel_device,
+            pellet_device=pellet_device,
+            analysis=SensorAnalysis(),
+            inference=inference,
+            project_info=project_info,
+        )
+        machine.algorithm.capture_status = CaptureProcessStatus.RUNNING
+        machine.algorithm.pellet_hand_uncover_distance = None  # disabled
+        yield machine
 
 
 class MockSystemMachine:

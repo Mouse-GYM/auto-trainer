@@ -12,7 +12,7 @@ from autotrainer.core import (ProjectInfo, EventManager, SensorAnalysis, LoadCel
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
-from autotrainer.core.multiproc import DaemonTimer
+from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 
 from autotrainer.inference import PoseResponse, InferenceStatus
 
@@ -29,11 +29,11 @@ from .tunnel_device_protocol import TunnelDeviceProtocol
 logger = get_verbose_logger(__name__)
 
 # NB: this is to ensure we can patch the exact desired one (and only that one) from tests:
-_clean_raw_data_timer = DaemonTimer
-_auto_clamp_release_timer = DaemonTimer
-_consider_end_session_timer = DaemonTimer
-_check_missing_timer = DaemonTimer
-_consider_disengage_autoclamp_timer = DaemonTimer
+_clean_raw_data_timer = make_daemon_timer
+_auto_clamp_release_timer = make_daemon_timer
+_consider_end_session_timer = make_daemon_timer
+_check_missing_timer = make_daemon_timer
+_consider_disengage_autoclamp_timer = make_daemon_timer
 
 
 #
@@ -66,9 +66,6 @@ class SystemMachine(StateMachine):
         )
 
         self._project_info = project_info
-
-        no_op_timer = DaemonTimer(0, lambda: None)
-        no_op_timer.start()
 
         self._timer_consider_end_session = no_op_timer
         self._delay_timer_consider_end_session: Optional[float] = 2.0
@@ -376,20 +373,19 @@ class SystemMachine(StateMachine):
             return
         logger.debug("system state: %s", self.state)
         if self.state == SystemState.tunnel:
-            if True or self._tunnel_device is not None:  # condition seems not necessary
-                algo = self._algorithm
-                logger.info("auto-clamp setting position to %s", algo.auto_clamp_intensity)
-                self._update_magnet_position(algo.auto_clamp_intensity)
-                self._disengage_auto_clamp_load_count = 0
-                self._timer_auto_clamp_disengage.cancel()
-                t_delay = algo.auto_clamp_no_activity_release_delay
-                if t_delay >= 0:
-                    logger.debug("starting new timer for disengage_auto_clamp in %.2f seconds", t_delay)
-                    new_timer = self._timer_auto_clamp_disengage = _consider_disengage_autoclamp_timer(
-                        t_delay, self._disengage_auto_clamp,
-                    )
-                    new_timer.start()
-                EventManager.default().post_event_content(BehaviorEventKind.headFixationEnabled)
+            algo = self._algorithm
+            logger.info("auto-clamp setting position to %s", algo.auto_clamp_intensity)
+            self._update_magnet_position(algo.auto_clamp_intensity)
+            self._disengage_auto_clamp_load_count = 0
+            self._timer_auto_clamp_disengage.cancel()
+            t_delay = algo.auto_clamp_no_activity_release_delay
+            if t_delay >= 0:
+                logger.debug("starting new timer for disengage_auto_clamp in %.2f seconds", t_delay)
+                new_timer = self._timer_auto_clamp_disengage = _consider_disengage_autoclamp_timer(
+                    t_delay, self._disengage_auto_clamp,
+                )
+                new_timer.start()
+            EventManager.default().post_event_content(BehaviorEventKind.headFixationEnabled)
         else:
             logger.debug("auto-clamp position not sent (not in tunnel)")
 
