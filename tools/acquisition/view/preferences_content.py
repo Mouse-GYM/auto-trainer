@@ -3,7 +3,7 @@ import logging
 import verboselogs
 from PySide6 import QtCore
 from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton,
-                               QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox)
+                               QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QSpinBox)
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.pyside import QSwitch
@@ -16,11 +16,11 @@ logger = get_verbose_logger(__name__)
 
 
 class PreferencesContent(QWidget):
-    def __init__(self, preferences: UserPreferences, model: AppModel):
+    def __init__(self, preferences: UserPreferences, app_model: AppModel):
         super(PreferencesContent, self).__init__(None)
 
         self._preferences = preferences
-        self._model = model
+        self._app_model = app_model
 
         self._tabs = QTabWidget(self)
 
@@ -47,7 +47,7 @@ class PreferencesContent(QWidget):
         self._device_id_edit.textChanged.connect(self._device_id_changed)
 
         self._data_location_edit = QLineEdit(None, None)
-        self._data_location_edit.setText(self._model.output_location)
+        self._data_location_edit.setText(self._app_model.output_location)
         self._data_location_edit.textChanged.connect(self._data_location_changed)
 
         self._animal_location_edit = QLineEdit(None, None)
@@ -80,27 +80,103 @@ class PreferencesContent(QWidget):
         return tab
 
     def _create_behavior_tab(self):
-        algo = self._model.behavior.algorithm
+        app_model = self._app_model
+        behavior = app_model.behavior
+        analysis = behavior.analysis
+        algo = behavior.algorithm
         form_layout = QFormLayout(None)
 
         layout = QHBoxLayout()
+        toggle = self._inference_enabled_toggle = QSwitch()
+        def inference_enabled_state_changed(x: int):
+            new_enabled = x != 0
+            app_model.inference.is_enabled = new_enabled
+            self._pellet_delivery_toggle.setEnabled(new_enabled)
+            self._pellet_delivery_toggle.setEnabled(new_enabled)
+            self._pellet_cover_toggle.setEnabled(new_enabled and algo.pellet_delivery_enabled)
+            # self._intersession_toggle.setEnabled(new_enabled)
+            self._allow_intersession_shift_toggle.setEnabled(new_enabled and behavior.is_intersession_enabled)
+        toggle.setToolTip("Enables real-time pose inference during live sessions (mouse in tunnel).")
+        toggle.setChecked(app_model.inference.is_enabled)
+        toggle.stateChanged.connect(inference_enabled_state_changed)  # after setChecked
+        layout.addWidget(toggle)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        form_layout.addRow("Live Analysis:", layout)
+        #
+        layout = QHBoxLayout()
         self._inference_model_edit = QLineEdit(None, None)
-        self._inference_model_edit.setText(self._model.inference.model_location)
+        self._inference_model_edit.setText(self._app_model.inference.model_location)
         self._inference_model_edit.textChanged.connect(self._inference_model_changed)
         layout.addWidget(self._inference_model_edit)
         button = QPushButton("Select...")
         button.clicked.connect(lambda: self._browse_for_location("inference_model"))
         layout.addWidget(button)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
         form_layout.addRow("Inference model:", layout)
         #
         layout = QHBoxLayout()
+        toggle = self._pellet_delivery_toggle = QSwitch()
+        def pellet_delivery_state_changed(x: int):
+            algo.pellet_delivery_enabled = x != 0
+        toggle.stateChanged.connect(pellet_delivery_state_changed)
+        toggle.setToolTip(
+            "Enables pellet load-send-release cycles based on pellet detection and related factors.")
+        toggle.setChecked(algo.pellet_delivery_enabled)
+        layout.addWidget(toggle)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        form_layout.addRow("Deliver Pellets:", layout)
+        #
+        layout = QHBoxLayout()
+        toggle = self._pellet_cover_toggle = QSwitch()
+        def pellet_cover_toggle_state_changed(x: int):
+            algo.pellet_cover_enabled = x != 0
+        toggle.stateChanged.connect(pellet_cover_toggle_state_changed)
+        toggle.setChecked(algo.pellet_cover_enabled)
+        toggle.setToolTip(
+            "Covers the pellet when the mouse is not in the tunnel.  Release then generates a tone when the tunnel is "
+            "entered.")
+        layout.addWidget(toggle)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        form_layout.addRow("Cover Pellets:", layout)
+        #
+        layout = QHBoxLayout()
+        spinbox = self._auto_clamp_threshold_spinbox = QSpinBox(None)
+        spinbox.setValue(analysis.headbar_pressure_monitor.load_cell_engaged_threshold)
+        spinbox.setMinimum(0)
+        spinbox.setMaximum(1023)
+        spinbox.setWrapping(False)
+        def update_headbar_pressure_threshold(value):
+            analysis.headbar_pressure_monitor.load_cell_engaged_threshold = value
+        spinbox.valueChanged.connect(update_headbar_pressure_threshold)
+        spinbox.setEnabled(algo.head_fixation_enabled)
+        spinbox.setToolTip("A value that adjusts the sensitivity of the headbar detector for it to be considered engaged.")
+        layout.addWidget(spinbox)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        form_layout.addRow("Auto-Clamp Threshold:", layout)
+        #
+        layout = QHBoxLayout()
+        toggle = self._allow_intersession_shift_toggle = QSwitch()
+        toggle.setToolTip("Enables adjustment of the pellet delivery position based on post-session reach analysis.")
+        toggle.setEnabled(app_model.inference.is_enabled)
+        toggle.setChecked(algo.intersession_pellet_shift_enabled)
+        def allow_intersession_shift_toggle_state_changed(x: int):
+            enabled = x != 0
+            if enabled:
+                behavior.is_intersession_enabled = True
+            algo.intersession_pellet_shift_enabled = enabled
+        toggle.stateChanged.connect(allow_intersession_shift_toggle_state_changed)
+        layout.addWidget(toggle)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        form_layout.addRow("Intersession Pellet Shift:", layout)
+        #
+        layout = QHBoxLayout()
         toggle = self._auto_correct_motors_drift_toggle = QSwitch()
-        toggle.setChecked(self._model.behavior.algorithm.auto_correct_motors_drift)
+        toggle.setChecked(self._app_model.behavior.algorithm.auto_correct_motors_drift)
 
         def auto_correct_motors_drift_toggle_changed(value: int):
             enabled = value != 0
             logger.verbose("auto_correct_motors_drift_toggle_changed: %s", enabled)
-            self._model.behavior.algorithm.auto_correct_motors_drift = enabled
+            self._app_model.behavior.algorithm.auto_correct_motors_drift = enabled
 
         toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
         layout.addWidget(toggle)
@@ -244,13 +320,13 @@ class PreferencesContent(QWidget):
         self._preferences.serial_number = value
 
     def _data_location_changed(self, value: str):
-        self._model.output_location = value
+        self._app_model.output_location = value
 
     def _animal_location_changed(self, value: str):
         self._preferences.animal_location = value
 
     def _inference_model_changed(self, value: str):
-        self._model.inference.model_location = value
+        self._app_model.inference.model_location = value
 
     def _log_level_changed(self, value):
         # logging.root.debug("_log_level_changed: %s", value)
