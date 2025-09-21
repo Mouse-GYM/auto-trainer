@@ -105,9 +105,6 @@ class CanDevice(Device):
         self._current_humidity = 0
         self._current_audio = []
 
-        self._pellet_dst: Optional[int] = None
-        self._magnet_dst: Optional[int] = None
-
         self._pending_context = None
         self._pending_kind = None
 
