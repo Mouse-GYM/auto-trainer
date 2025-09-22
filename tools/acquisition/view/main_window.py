@@ -14,7 +14,7 @@ import qtawesome as qta
 from autotrainer.behavior import DiamondTriangleOffsetConfig
 from autotrainer.core import EventManager, Offset3DTuple
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
-from autotrainer.core.multiproc import DaemonTimer
+from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.inference import InferenceStatus, PoseResponse
 
@@ -26,7 +26,7 @@ from tools.acquisition.view.preferences_dialog import PreferencesDialog
 
 logger = get_verbose_logger(__name__)
 
-_calibrate_timer = DaemonTimer
+_calibrate_timer = make_daemon_timer
 
 DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION = 3  # duration of calibration data acquisition
 DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT = 30  # maximum time before automated stop of calibration
@@ -351,7 +351,7 @@ class MainWindow(QMainWindow):
         self.run_action.triggered.connect(self.on_capture_start_stop)
 
         self._calib_run = None
-        self._timer_calibrate = DaemonTimer(0, lambda: None)
+        self._timer_calibrate = no_op_timer
         self.calib_diamond_triangle_action = QAction(QIcon(qta.icon("fa5s.crosshairs")), "Calibrate", self)
         self.calib_diamond_triangle_action.setToolTip("Calibrate diamond-triangle")
         self.calib_diamond_triangle_action.setCheckable(True)

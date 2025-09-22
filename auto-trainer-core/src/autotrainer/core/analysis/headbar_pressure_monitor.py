@@ -91,6 +91,11 @@ class HeadbarPressureMonitor(ObservableObject):
     def is_engaged(self) -> bool:
         return self._is_engaged
 
+    @is_engaged.setter
+    def is_engaged(self, value):
+        old_value, self._is_engaged = self._is_engaged, value
+        self._on_property_changed(self.IS_ENGAGED_PROPERTY, value, old_value)
+
     def load_configuration(self, configuration: HeadbarPressureConfiguration):
         self.load_cell_engaged_threshold = configuration.threshold
         self.duration = configuration.duration

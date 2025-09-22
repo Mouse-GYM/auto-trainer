@@ -12,16 +12,14 @@ import numpy
 
 from autotrainer.core.logging import get_verbose_logger
 from .. import build_kwargs_apply_mapping, make_camelize_representer
-from ..multiproc import DaemonTimer
+from ..multiproc import make_daemon_timer, no_op_timer
 from ..observable_object import ObservableObject
 from ..event import EventManager, ApiEventKind
 
 logger = get_verbose_logger(__name__)
 
-_NO_OP_TIMER = DaemonTimer(1.0, lambda: None)
-
 # to allow to be patched from tests:
-_timer_load_cell_engaged = DaemonTimer
+_timer_load_cell_engaged = make_daemon_timer
 
 
 @dataclass
@@ -91,8 +89,8 @@ class LoadCellMonitor(ObservableObject):
         self._t_inactive_start: Optional[float] = None
         self._cur_ptp_count = 0
         self._t_last_ptp_check = 0
-        self._active_debounce: DaemonTimer = _NO_OP_TIMER
-        self._inactive_debounce: DaemonTimer = _NO_OP_TIMER
+        self._active_debounce = no_op_timer
+        self._inactive_debounce = no_op_timer
         self._when = 0  # used to pass with event when engaged is changed
         self._index = 0  # used to pass with event when engaged is changed
         self._is_engaged: bool = False
