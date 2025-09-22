@@ -6,7 +6,7 @@ import time
 from enum import IntEnum
 from multiprocessing import RawArray, Value
 from multiprocessing.context import BaseContext
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import numpy
 
@@ -21,7 +21,7 @@ class BufferResult(IntEnum):
 
 
 class FixedArrayQueue:
-    def __init__(self, depth: int, shape: (int, int), name: str="noname", *,
+    def __init__(self, depth: int, shape: Tuple[int, int], name: str="noname", *,
                  mp_ctx: Optional[BaseContext] = None,
     ):
         if mp_ctx is None:
@@ -58,10 +58,6 @@ class FixedArrayQueue:
     @property
     def buffer_index(self) -> int:
         return self._buffer_index
-
-    # unused
-    def reset(self):
-        self._buffer_index = self._read_index = 0
 
     def put(self, content: numpy.ndarray):
         return self._put(content)

@@ -800,7 +800,7 @@ class BehaviorAlgorithm(ObservableObject):
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
         self._is_in_session = True
         self._start_session_reason = reason
-        self._pellet_count_session = 0
+        self.reset_session_pellet_count()
 
         if self._project_info is not None:
             self._project_info.calculate_next_session_index()
@@ -818,6 +818,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._diamond_triangle_offset_config = self._load_diamond_config()
         self.session_starting()
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
+        self.system_state = SystemState.tunnel
         return True
 
     def end_session(self, *, reason: str = "NA"):

@@ -149,20 +149,9 @@ class SystemMachine(StateMachine):
         EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
         pellet_state = self._pellet_machine.state
         logger.debug("before_enter_tunnel: pellet_state=%s", pellet_state)
-        # if pellet_state in {
-        #     PelletState.sending,
-        #     PelletState.covering,
-        #     PelletState.prerelease,
-        #     PelletState.releasing,
-        #     PelletState.monitoring,
-        #     PelletState.retract,
-        # }:
-        if True:
-            algo = self._algorithm
-            if algo.start_session(reason=f"{reason}->before_enter_tunnel"):
-                algo.reset_session_pellet_count()
-                self._update_magnet_position(self.algorithm.baseline_intensity)
-                algo.system_state = SystemState.tunnel
+        algo = self._algorithm
+        if algo.start_session(reason=f"{reason}->before_enter_tunnel"):
+            self._update_magnet_position(algo.baseline_intensity)
 
     def after_enter_tunnel(self, *, reason: str = "NA"):
         if self._analysis is not None:
