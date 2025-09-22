@@ -71,7 +71,7 @@ class MainContent(ContentWidget):
         # Second row - behavior and analysis
 
         behavior_content = BehaviorContent(
-            # app_model.
+            app_model,
             app_model.behavior,
             app_model.inference,
         )

@@ -1,3 +1,4 @@
+import enum
 import functools
 import json
 import logging
@@ -49,6 +50,10 @@ def _failed_camera_template(name: str, error: str):
 
 
 class AppModel(ObservableObject):
+
+    class Props(str, enum.Enum):
+        SELECTED_ANIMAL = "selected_animal"
+
     def __init__(
         self,
         preferences: UserPreferences,
@@ -301,7 +306,7 @@ class AppModel(ObservableObject):
     def selected_animal(self, selected_animal: Optional[AnimalSubject]):
         algo = self._behavior.algorithm
         prev, self._selected_animal = self._selected_animal, selected_animal
-        self._on_property_changed("selected_animal", selected_animal, prev)
+        self._on_property_changed(self.Props.SELECTED_ANIMAL, selected_animal, prev)
         self._preferences.selected_animal = "" if selected_animal is None else selected_animal.name
         if selected_animal is not None and prev != selected_animal:
             hardware = self.hardware
