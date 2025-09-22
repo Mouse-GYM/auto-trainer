@@ -233,8 +233,8 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_motor_x(self, position) -> bool:
-        return self.move_motor_x(position, True)
+    def set_motor_x(self, position, *, relative: bool=False) -> bool:
+        return self.move_motor_x(position, True, relative=relative)
 
     def move_motor_x(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
@@ -259,8 +259,8 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_motor_z(self, position) -> bool:
-        return self.move_motor_z(position, True)
+    def set_motor_z(self, position, *, relative: bool=False) -> bool:
+        return self.move_motor_z(position, True, relative=relative)
 
     def move_motor_z(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
