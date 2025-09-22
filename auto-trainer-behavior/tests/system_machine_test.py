@@ -215,13 +215,13 @@ def test_inference_detection_ready(machine):
     )
     assert algo.session_pellet_count == 0
     assert algo.day_pellet_count == 0
-    assert algo.successful_reaches == 0
-    assert algo.pellets_presented == 0
+    assert algo.successful_reaches_total == 0
+    assert algo.pellets_presented_total == 0
     machine._inference.detection_result_ready(result)
     assert algo.session_pellet_count == 20
     assert algo.day_pellet_count == 20
-    assert algo.successful_reaches == 4
-    assert algo.pellets_presented == 40
+    assert algo.successful_reaches_total == 4
+    assert algo.pellets_presented_total == 40
     #
     result.food_consumed = 15
     result.successful_reaches = 2
@@ -229,8 +229,8 @@ def test_inference_detection_ready(machine):
     machine._inference.detection_result_ready(result)
     assert algo.session_pellet_count == 35
     assert algo.day_pellet_count == 35
-    assert algo.pellets_presented == 70
-    assert algo.successful_reaches == 6
+    assert algo.pellets_presented_total == 70
+    assert algo.successful_reaches_total == 6
 
 
 class TestAutoClamp(MockSystemMachine):
