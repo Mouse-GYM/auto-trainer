@@ -2,6 +2,7 @@ import logging
 import time
 import typing
 from copy import deepcopy
+from pathlib import Path
 from random import uniform, random
 
 from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
@@ -35,6 +36,8 @@ class EmulationInterface(DeviceInterface):
         return cls._uuid
 
     def __init__(self):
+        
+        super().__init__()
 
         self._is_open = False
 
@@ -63,6 +66,46 @@ class EmulationInterface(DeviceInterface):
         }
 
         self._messages = []
+        #
+        self._prev_audio_data = self._cur_audio_data = None
+        self._audio_replay_fh = None
+
+    def _check_audio_replay(self):
+        p = Path("./audio_spectrum_replay.csv")
+        if p.exists():
+            logger.info("opening %s for replay", p)
+            fh = p.open()
+            fh.readline()  # skip header
+            self._prev_audio_data = None
+            cur = self._cur_audio_data = self._read_audio_row(fh)
+            if cur is None:
+                raise RuntimeError("empty audio replay csv file")
+            self._audio_replay_fh = fh
+            self._audio_replay_when_start = cur.when
+            self._audio_when_diff_start = time.time() - cur.when
+        else:
+            self._cur_audio_data = self._prev_audio_data = None
+            self._audio_replay_fh = None
+            self._audio_when_diff_start = None
+
+    @staticmethod
+    def _read_audio_row(fh):
+        # could/should use csv.DictReader, but previous csv files contains some extra space that below .strip() calls
+        # correctly handle easily.
+        data = fh.readline()
+        if not data:
+            return None
+        when, index, *data = data.split(",")
+        a = AudioData(
+            target=Target.MAGNET_DEVICE,
+            packet_id=1,
+            when=float(when.strip()),
+            index=int(index.strip()),
+            magnitudes=list(map(lambda v: float(v.strip()), data))
+        )
+        # logger.debug("read: %s", a)
+        return a
+
 
     def _set_pellet_address(self, addr):
         pass
@@ -76,6 +119,7 @@ class EmulationInterface(DeviceInterface):
 
     def open(self) -> bool:
         self._is_open = True
+        self._check_audio_replay()
         return self._is_open
 
     def close(self):
@@ -134,6 +178,18 @@ class EmulationInterface(DeviceInterface):
             messages.append(SensorStatus(temperature_c=28.0 + uniform(-2, 2),
                                          humidity_percent=50.0 + uniform(-2, 2)))
 
+        fh_audio_replay = self._audio_replay_fh
+        if fh_audio_replay is not None:
+            prev, cur = self._prev_audio_data, self._cur_audio_data
+            now = time.time()
+            if prev is None or now - cur.when - self._audio_when_diff_start > 0:
+                self._last_audio_message = now
+                cur.when = now
+                self._prev_audio_data = cur
+                messages.append(cur)
+                cur = self._cur_audio_data = self._read_audio_row(fh_audio_replay)
+                if cur is None:
+                    self._check_audio_replay()  # loopback
         elif now - self._last_audio_message > _AUDIO_MESSAGE_INTERVAL:
             self._last_audio_message = now
             audio = AudioData(target=Target.MAGNET_DEVICE, packet_id=1, when=time.time(),
@@ -143,7 +199,8 @@ class EmulationInterface(DeviceInterface):
                 spectrum.append(uniform(80, 130))
             audio.magnitudes = spectrum
             messages.append(audio)
-        elif now - self._last_data_message > _DATA_MESSAGE_INTERVAL:
+
+        if now - self._last_data_message > _DATA_MESSAGE_INTERVAL:
             self._last_data_message = now
             messages.append(PressureReading(pressure=512 + uniform(-10, 10), ))
             messages.append(LoadCellReading(load=uniform(0, 20)))
