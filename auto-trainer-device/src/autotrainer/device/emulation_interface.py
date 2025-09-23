@@ -140,7 +140,7 @@ class EmulationInterface(DeviceInterface):
                               index=time.perf_counter_ns())
             spectrum = []
             for _ in range(64):
-                spectrum.append(uniform(0, 20))
+                spectrum.append(uniform(95, 130))
             audio.magnitudes = spectrum
             messages.append(audio)
         elif now - self._last_data_message > _DATA_MESSAGE_INTERVAL:

@@ -88,7 +88,7 @@ class AppModel(ObservableObject):
                                                  self._config)
 
     @property
-    def message_handler(self):
+    def message_handler(self) -> SystemMessageHandler:
         return self._message_handler
 
     @property
