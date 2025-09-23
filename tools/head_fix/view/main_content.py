@@ -45,8 +45,8 @@ class MainContent(QWidget):
         layout.addWidget(self._head_control)
 
         self._tone_control = self._create_tone_panel()
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            layout.addWidget(self._tone_control)
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        layout.addWidget(self._tone_control)
 
         layout.addWidget(self._create_sensor_panel())
 
@@ -135,8 +135,8 @@ class MainContent(QWidget):
 
         self._curr_gate_position = QLabel("(-)")
 
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(self._curr_gate_position)
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        position_layout.addWidget(self._curr_gate_position)
 
         self._gate_position = QSpinBox()
         self._gate_position.setMaximum(120)
@@ -158,8 +158,8 @@ class MainContent(QWidget):
         self._open_gate.setEnabled(False)
         self._open_gate.clicked.connect(self._model.open_tunnel_gate)
 
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(self._open_gate, 0)
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        position_layout.addWidget(self._open_gate, 0)
 
         self._close_gate = QPushButton("Close Gate")
         self._close_gate.setEnabled(False)
