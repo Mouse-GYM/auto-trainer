@@ -241,8 +241,9 @@ class SensorAnalysis(ObservableObject):
         return None
 
     def _update_audio_file(self) -> None:
-        fh, writer = self._audio_record_file_writer
-        if fh is not None:
+        cur = self._audio_record_file_writer
+        if cur is not None:
+            fh, writer = cur
             try:
                 fh.flush()
                 fh.close()
