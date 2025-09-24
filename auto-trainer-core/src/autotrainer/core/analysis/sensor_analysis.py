@@ -196,7 +196,7 @@ class SensorAnalysis(ObservableObject):
             _, writer = cur
             try:
                 r = dict(
-                    When=spectrum.when,
+                    Time=spectrum.when,
                     Index=spectrum.index,
                     **{f"Bin {i}": val for i, val in enumerate(spectrum.magnitudes)},
                 )
