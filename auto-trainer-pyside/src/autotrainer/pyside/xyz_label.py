@@ -11,9 +11,9 @@ from autotrainer.core import Offset3DTuple
 class XYZQLabel(QLabel):
     """An XYZ offset/position label"""
 
-    def __init__(self):
+    def __init__(self, start_value: str):
         self._xyz_values = Offset3DTuple(math.nan, math.nan, math.nan)
-        super().__init__(self.xyz_to_str(self._xyz_values))
+        super().__init__(start_value)
 
     def update_coordinate(
         self,

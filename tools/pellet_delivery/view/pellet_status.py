@@ -13,11 +13,11 @@ _NO_UPDATES = "(no updates)"
 def create_position_panel():
     layout = QFormLayout()
     layout.setHorizontalSpacing(8)
-    x_y_z_device = XYZQLabel()
-    layout.addRow("Triangle[motor] X/Y/Z (mm):", x_y_z_device)
+    x_y_z_device = XYZQLabel(_NO_UPDATES)
+    layout.addRow("Stepper[motor] X/Y/Z (mm):", x_y_z_device)
     # ◈
-    x_y_z_diamond = XYZQLabel()
-    layout.addRow("Triangle[diamo] X/Y/Z (mm):", x_y_z_diamond)
+    x_y_z_diamond = XYZQLabel(_NO_UPDATES)
+    layout.addRow("Stepper[diamo] X/Y/Z (mm):", x_y_z_diamond)
 
     layout.setContentsMargins(8, 8, 8, 8)
 
@@ -29,10 +29,10 @@ def create_send_position_panel():
     layout = QFormLayout()
     layout.setHorizontalSpacing(8)
 
-    x_y_z_device = XYZQLabel()
+    x_y_z_device = XYZQLabel(_NO_UPDATES)
     layout.addRow("Send[motor] X/Y/Z (mm):", x_y_z_device)
 
-    x_y_z_diamond = XYZQLabel()
+    x_y_z_diamond = XYZQLabel(_NO_UPDATES)
     layout.addRow("Send[diamo] X/Y/Z (mm):", x_y_z_diamond)
 
     layout.setContentsMargins(8, 8, 8, 8)
@@ -63,9 +63,8 @@ class PelletStatus(QWidget):
     def __init__(self, app_model: AppModel):
         super().__init__()
 
-        self._app_model: AppModel = app_model
-
-        self._app_model.property_changed += self._model_property_changed
+        self._app_model = app_model
+        app_model.property_changed += self._model_property_changed
 
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -83,7 +82,13 @@ class PelletStatus(QWidget):
 
     def _model_property_changed(self, name: str, value, _old_value):
         app_model = self._app_model
-        if name in {'x', 'y', 'z'}:
+        if name == "xyz":
+            self._xyz_device.update_coordinate(value)
+            self._xyz_diamond.update_coordinate(app_model.to_diamond_coordinates(value))
+        elif name == "send_xyz":
+            self._send_xyz_device.update_coordinate(value)
+            self._send_xyz_diamond.update_coordinate(app_model.to_diamond_coordinates(value))
+        elif name in {'x', 'y', 'z'}:
             d = {name: value}
             self._xyz_device.update_coordinate(**d)
             cur_xyz = app_model.xyz.replace(**d)
@@ -98,9 +103,14 @@ class PelletStatus(QWidget):
         elif name == "cover_arm":
             self._cover_arm.setText(f"{round(value, 1)}")
         elif name == "is_connected":
-            if not value:
-                d = Offset3DTuple(math.nan, math.nan, math.nan)
-                for xyz in self._xyz_device, self._xyz_diamond, self._send_xyz_device, self._send_xyz_diamond:
-                    xyz.update_coordinate(d)
+            if value:
+                reset_prop = self._model_property_changed
+                reset_prop("xyz", app_model.xyz, None)
+                reset_prop("send_xyz", app_model.send_xyz, None)
+                reset_prop("load_arm", app_model.load_arm, None)
+                reset_prop("cover_arm", app_model.load_arm, None)
+            else:
+                for xyz_label in self._xyz_device, self._xyz_diamond, self._send_xyz_device, self._send_xyz_diamond:
+                    xyz_label.setText(_NO_UPDATES)
                 self._load_arm.setText(_NO_UPDATES)
                 self._cover_arm.setText(_NO_UPDATES)
