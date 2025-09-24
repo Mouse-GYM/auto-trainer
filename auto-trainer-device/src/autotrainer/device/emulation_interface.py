@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Slower than the real hardware to be more forgiving in emulation.
 _STATUS_MESSAGE_INTERVAL = 2.0
 _AUDIO_MESSAGE_INTERVAL = 0.5
-_DATA_MESSAGE_INTERVAL = 0.1
+_DATA_MESSAGE_INTERVAL = 0.2
 
 
 class _SharedList:

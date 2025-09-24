@@ -492,7 +492,9 @@ class MainWindow(QMainWindow):
 
     def _internal_simulate_trigger(self):
         is_checked = self.capture_trigger_action.isChecked()
-        self._app_model.analysis.load_cell_monitor.force_engaged(is_checked)
+        load_cell_monitor = self._app_model.analysis.load_cell_monitor
+        load_cell_monitor.force_engaged(is_checked)
+        load_cell_monitor.is_engaged = is_checked
 
     def _internal_set_force_detector_seen(self):
         new_value = self.force_detector_action.isChecked()
