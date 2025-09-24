@@ -19,6 +19,7 @@ class PGWidget(PlotWidget):
         self._replace = False
 
         pen = pg.mkPen(color=(0, 0, 255), width=1)
+        self._pen = pen
         self._data_line = self.plot(self.x, self.y, pen=pen)
 
         self._cache = list()

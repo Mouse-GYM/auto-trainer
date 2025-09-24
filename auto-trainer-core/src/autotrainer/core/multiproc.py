@@ -13,3 +13,10 @@ class DaemonTimer(threading.Timer):
     def __init__(self, delay, func, args=None, kwargs=None):
         super().__init__(delay, func, args=args, kwargs=kwargs)
         self.daemon = True
+
+
+def make_daemon_timer(delay, func, *args, **kwargs):
+    return DaemonTimer(delay, func, *args, **kwargs)
+
+
+no_op_timer = make_daemon_timer(0, lambda: None)

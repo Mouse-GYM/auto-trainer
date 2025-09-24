@@ -19,9 +19,9 @@ logger = get_verbose_logger(__name__)
 @dataclasses.dataclass
 class AudioSpectrumThrashMonitorConfig:
 
-    time_window: float = 2.0
-    threshold_percent: float = 50
-    threshold_db: float = 130
+    time_window: float = 0.5
+    threshold_percent: float = 40
+    threshold_db: float = 120
     # NB: the values we read from CAN bus are supposedly (or we consider them as is) in dB unit.
     # but the current value range we get/read is ~80-85 up to ~140-145, generally around ~100 for non-noisy.
     bins_list: List[int] = dataclasses.field(default_factory=lambda : [3, 4, 5, 6])
@@ -85,18 +85,11 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         if cur_value_avg >= cfg.threshold_db or cur_above_pc >= cfg.threshold_percent:
             if t_start is None:
                 self._when_start_detecting = when
-                self._when_next_check = when + cfg.time_window
+                self._when_next_check = when + cfg.time_window / 2
                 return
-        else:
-            if self.is_thrashing_detected:
-                logger.verbose("Thrashing ended detected: current avg=%.1f above_pc=%.1f%%",
-                               cur_value_avg, cur_above_pc)
-            self.is_thrashing_detected = False
-            self._when_start_detecting = None
-            return
         if when < self._when_next_check:
             return
-        self._when_next_check = when + cfg.time_window
+        self._when_next_check = when + cfg.time_window / 2
         values_history = self._values_history
         avg_value = (
             sum(itertools.chain(*(v[0] for v in values_history)))
@@ -110,3 +103,8 @@ class AudioSpectrumThrashMonitor(ObservableObject):
             logger.verbose("Thrashing change detected: %s avg=%.1f above_pc=%.1f",
                            detected, avg_value, percent)
             self.is_thrashing_detected = detected
+            if detected:
+                while len(values_history) > 1:
+                    values_history.popleft()
+            else:
+                self._when_start_detecting = None

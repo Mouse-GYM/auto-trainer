@@ -4,25 +4,35 @@ from typing import Optional
 from autotrainer.behavior import SystemMachine, InferenceProtocol
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior.state_machine import StateMachine
-from autotrainer.core import ObservableObject, ProjectInfo, MessageHandler, SensorAnalysis, BehaviorConfiguration, \
-    SystemMessageHandler
-from autotrainer.video.detection import PresenceDetectionAttrs
+from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
+                              SystemMessageHandler, EventManager, ApiEventKind)
 from tools.acquisition.model.hardware_model import HardwareModel
 
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
 
 class BehaviorModel(ObservableObject, ProjectDependentProtol):
+    """
+    Encapsulation of the Behavior Module (autotrainer-behavior) for the application layer.  This model class manages
+    aspects of the behavior system that are specific to the application.  General behavior functionality should be
+    located in the module.
+
+
+
+    Emergency stopped and resumed are defined as dedicated events due to their application-wide interest and possible
+    subscription.  Anything that triggers an emergency stop/resume should pass through the `emergency_stop` and
+    `emergency_resume` methods to ensure
+    """
     def __init__(
-        self,
-        msg_handler: SystemMessageHandler,
-        analysis: SensorAnalysis,
-        hardware_model: HardwareModel,
-        inference: InferenceProtocol,
-        *,
-        proc_msg_queue: Optional[multiprocessing.Queue] = None,
+            self,
+            msg_handler: SystemMessageHandler,
+            analysis: SensorAnalysis,
+            hardware_model: HardwareModel,
+            inference: InferenceProtocol,
+            *,
+            proc_msg_queue: Optional[multiprocessing.Queue] = None,
     ):
-        super().__init__()
+        super().__init__(("emergency_stopped", "emergency_resumed"))
 
         self._proc_msg_queue = proc_msg_queue  # actually unused, see unsure in AppModel..
         self._analysis = analysis
@@ -100,6 +110,16 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     def use_current_head_magnet_position_as_baseline(self):
         if self._hardware_model.head_magnet_intensity is not None:
             self.algorithm.baseline_intensity = self._hardware_model.head_magnet_intensity
+
+    def emergency_stop(self, source: str):
+        self.algorithm.algo_paused = True
+        EventManager.default().post_event_content(ApiEventKind.emergencyStop, source)
+        self.emergency_stopped(source)
+
+    def emergency_resume(self, source: str):
+        self.algorithm.algo_paused = False
+        EventManager.default().post_event_content(ApiEventKind.emergencyResume, source)
+        self.emergency_resumed(source)
 
     def _on_algorithm_property_changed(self, property_name: str, value, _):
         if property_name == BehaviorAlgoProps.INTERSESSION_ENABLED:

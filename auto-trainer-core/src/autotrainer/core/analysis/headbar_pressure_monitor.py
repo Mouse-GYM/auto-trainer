@@ -4,14 +4,11 @@ from math import floor
 from datetime import datetime
 from typing_extensions import Self
 
-import yaml
 import numpy
 
 from .. import make_camelize_representer
 from ..observable_object import ObservableObject
-from ..event import EventManager
-
-from .analysis_measurement_event_kind import AnalysisMeasurementEventKind
+from ..event import EventManager, ApiEventKind
 
 
 @dataclass
@@ -78,7 +75,8 @@ class HeadbarPressureMonitor(ObservableObject):
 
     @load_cell_engaged_threshold.setter
     def load_cell_engaged_threshold(self, value: float) -> None:
-        self._load_cell_engaged_threshold = self._on_property_changed("threshold", value, self._load_cell_engaged_threshold)
+        self._load_cell_engaged_threshold = self._on_property_changed("threshold", value,
+                                                                      self._load_cell_engaged_threshold)
 
     @property
     def duration(self) -> float:
@@ -92,6 +90,11 @@ class HeadbarPressureMonitor(ObservableObject):
     @property
     def is_engaged(self) -> bool:
         return self._is_engaged
+
+    @is_engaged.setter
+    def is_engaged(self, value):
+        old_value, self._is_engaged = self._is_engaged, value
+        self._on_property_changed(self.IS_ENGAGED_PROPERTY, value, old_value)
 
     def load_configuration(self, configuration: HeadbarPressureConfiguration):
         self.load_cell_engaged_threshold = configuration.threshold
@@ -120,14 +123,15 @@ class HeadbarPressureMonitor(ObservableObject):
             old_start = idx
             old_end = idx + self._first_third
 
-            if numpy.all(self._values[old_start:old_end] <= (self._values[new_start:new_end] - self._load_cell_engaged_threshold)):
+            if numpy.all(self._values[old_start:old_end] <= (
+                    self._values[new_start:new_end] - self._load_cell_engaged_threshold)):
                 is_engaged = True
                 break
 
         if is_engaged != self._is_engaged:
             self._is_engaged = is_engaged
             self.property_changed(HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, self._is_engaged, not self._is_engaged)
-            EventManager.default().post_event_content(AnalysisMeasurementEventKind.headbarPressureEngagedChanged,
+            EventManager.default().post_event_content(ApiEventKind.headbarPressureEngagedChanged,
                                                       context=self._is_engaged,
                                                       when=datetime.fromtimestamp(when), index=index)
         self._is_engaged = is_engaged
@@ -153,6 +157,7 @@ class HeadbarPressureMonitor(ObservableObject):
         if engaged != self._is_engaged:
             self._is_engaged = engaged
             self.property_changed(HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, self._is_engaged, not self._is_engaged)
-            EventManager.default().post_event_content(AnalysisMeasurementEventKind.headbarPressureEngagedChanged,
-                                                      context=self._is_engaged, when=datetime.fromtimestamp(time.time()),
+            EventManager.default().post_event_content(ApiEventKind.headbarPressureEngagedChanged,
+                                                      context=self._is_engaged,
+                                                      when=datetime.fromtimestamp(time.time()),
                                                       index=time.perf_counter_ns())

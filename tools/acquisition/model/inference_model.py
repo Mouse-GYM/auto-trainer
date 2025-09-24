@@ -1,7 +1,5 @@
-import enum
 import logging.config
 import multiprocessing
-import operator
 import os
 import queue
 import signal
@@ -19,15 +17,15 @@ import numpy
 import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
-    InferenceConfiguration, Offset3DTuple, SystemMessageHandler, RawValueHolder
+    InferenceConfiguration, Offset3DTuple, ApiEventKind
 from autotrainer.core.fixed_array_queue import BufferResult
-from autotrainer.core.logging import get_verbose_logger, setup_logging, get_multiprocess_log_queue, make_log_dict_config
-from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, intersession_inference, \
-    intersession_process, BehaviorEventKind, InferenceProtocol, IntersessionBlock, IntersessionDetection
+from autotrainer.core.logging import get_verbose_logger, setup_logging, make_log_dict_config
+from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
+    intersession_process, InferenceProtocol, IntersessionBlock, IntersessionDetection
 from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
-    DlcPoseModel, MemoryPoseModel, InferenceMode, InferenceStatus
+    InferenceMode, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
@@ -469,7 +467,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             self.__feed_intersession_analysis(intersession_block)
         except Exception as err:
             logger.exception("_feed_intersession_analysis: error: %s", err)
-            EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError, context=str(err))
+            EventManager.default().post_event_content(ApiEventKind.intersessionSegmentationError, context=str(err))
             got_error = err
             # do not use anymore InferenceCommandMessageKind.ProcessLive
             # self._send_message(InferenceCommandMessageKind.ProcessLive)
@@ -547,7 +545,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             if len(captures_d) >= n_cams:
                 break
             if time.perf_counter() > perf_timeout:
-                EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationInputError)
+                EventManager.default().post_event_content(ApiEventKind.intersessionSegmentationInputError)
                 raise RuntimeError(f"timeout waiting for intersession video files {video_paths}, trying continue anyway")
 
             time.sleep(0.1)  # overkill to immediately retry

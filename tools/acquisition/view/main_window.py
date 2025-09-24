@@ -7,14 +7,14 @@ from typing import List, Optional
 
 from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QAction, QIcon, QKeySequence, QPixmap, QColor
-from PySide6.QtWidgets import QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication, \
-    QSizePolicy, QWidget, QComboBox, QLineEdit, QDialog, QFileDialog
+from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
+                               QSizePolicy, QWidget, QComboBox, QLineEdit, QDialog, QFileDialog, QPushButton)
 import qtawesome as qta
 
 from autotrainer.behavior import DiamondTriangleOffsetConfig
 from autotrainer.core import EventManager, Offset3DTuple
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
-from autotrainer.core.multiproc import DaemonTimer
+from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.inference import InferenceStatus, PoseResponse
 
@@ -26,13 +26,13 @@ from tools.acquisition.view.preferences_dialog import PreferencesDialog
 
 logger = get_verbose_logger(__name__)
 
+_calibrate_timer = make_daemon_timer
 
-_calibrate_timer = DaemonTimer
-
-DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION = 3    # duration of calibration data acquisition
-DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT = 30    # maximum time before automated stop of calibration
+DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION = 3  # duration of calibration data acquisition
+DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT = 30  # maximum time before automated stop of calibration
 # if not enough data is captured after that time the calib is automatically finished/stopped (and ask for retry)
 DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is considered noisy, and a retry proposed
+
 
 #
 
@@ -51,7 +51,9 @@ class MainWindow(QMainWindow):
 
         app_model = self._app_model = AppModel(self._preferences, app_version)
 
-        self.setWindowTitle(f"Auto Trainer - Acquisition v{app_version}")
+        self._title = f"Auto Trainer - Acquisition v{app_version}"
+
+        self.setWindowTitle(self._title)
 
         self.main_content = MainContent(app_model)
 
@@ -146,6 +148,7 @@ class MainWindow(QMainWindow):
                 "then you can retry after.")
             box.setIcon(QMessageBox.Critical)
             self._open_dialogs.append(box)
+
             def remove():
                 self.calib_diamond_triangle_action.setEnabled(True)
                 # logger.debug("removing dialog from self.open_dialogs")
@@ -161,9 +164,11 @@ class MainWindow(QMainWindow):
             box.addButton("Cancel", QMessageBox.RejectRole).clicked.connect(remove)
             box.setWindowModality(Qt.NonModal)
             box.setModal(False)
+
             def close_event(event):
                 remove()
                 event.accept()
+
             box.closeEvent = close_event
             box.show()
             return
@@ -193,16 +198,19 @@ class MainWindow(QMainWindow):
         current_save_path = save_path = algo.diamond_triangle_offset_config_path.expanduser()
         if save_path.exists():
             file_path: Optional[str] = None
+
             def retain_selected(path):
                 nonlocal file_path
                 file_path = path
+
             rsp = QMessageBox.question(
                 self, "Confirmation",
                 f"The configuration file ({save_path.as_posix()}) already exists, are you sure you want to proceed ?",
                 QMessageBox.Yes | QMessageBox.No)
             if rsp != QMessageBox.Yes:
                 return
-            dialog = QFileDialog(self, "Save to configuration file", save_path.parent.as_posix(), "All yaml files (*.yaml *.yml)")
+            dialog = QFileDialog(self, "Save to configuration file", save_path.parent.as_posix(),
+                                 "All yaml files (*.yaml *.yml)")
             dialog.selectFile(save_path.name)
             dialog.fileSelected.connect(retain_selected)
             dialog.exec()
@@ -212,11 +220,12 @@ class MainWindow(QMainWindow):
 
         else:
             QMessageBox.information(self, "Information",
-                f"Successfully computed values for diamond-triangle position & offset.\n"
-                f"\nSaving to {save_path.as_posix()}\n\n"
-                f"If feature is enabled in configuration then values will be used and applied on next sessions.",
-                QMessageBox.Ok,
-            )
+                                    f"Successfully computed values for diamond-triangle position & offset.\n"
+                                    f"\nSaving to {save_path.as_posix()}\n\n"
+                                    f"If feature is enabled in configuration then values will be used and applied on "
+                                    f"next sessions.",
+                                    QMessageBox.Ok,
+                                    )
         new_cfg = DiamondTriangleOffsetConfig(
             used_position=list(avg_pos),
             measured_offset=list(avg_offset),
@@ -227,7 +236,7 @@ class MainWindow(QMainWindow):
         #    set to current algo _diamond_triangle_offset_config
         # is not needed, given it's read on each session start
 
-    def _make_calib_run(self, calib_duration: float=DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
+    def _make_calib_run(self, calib_duration: float = DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
         logger.notice("Starting diamond-triangle calibration .. duration=%.1f second(s)", calib_duration)
 
         app_model = self._app_model
@@ -342,7 +351,7 @@ class MainWindow(QMainWindow):
         self.run_action.triggered.connect(self.on_capture_start_stop)
 
         self._calib_run = None
-        self._timer_calibrate = DaemonTimer(0, lambda: None)
+        self._timer_calibrate = no_op_timer
         self.calib_diamond_triangle_action = QAction(QIcon(qta.icon("fa5s.crosshairs")), "Calibrate", self)
         self.calib_diamond_triangle_action.setToolTip("Calibrate diamond-triangle")
         self.calib_diamond_triangle_action.setCheckable(True)
@@ -355,11 +364,11 @@ class MainWindow(QMainWindow):
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.triggered.connect(lambda: self._toggle_diagnostics_view())
 
-        self.capture_trigger_action = QAction("Trigger Load Cell", self)
+        self.capture_trigger_action = QAction("Load Cell", self)
         self.capture_trigger_action.setCheckable(True)
         self.capture_trigger_action.triggered.connect(self._internal_simulate_trigger)
 
-        self.force_detector_action = QAction("Trigger Force Detector", self)
+        self.force_detector_action = QAction("Force Detector", self)
         self.force_detector_action.setCheckable(True)
         self.force_detector_action.triggered.connect(self._internal_set_force_detector_seen)
 
@@ -374,6 +383,9 @@ class MainWindow(QMainWindow):
 
         self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
         self.preferences_action.triggered.connect(lambda: self._show_preferences())
+
+        self.emergency_stop_action = QAction("Emergency Stop", self)
+        self.emergency_stop_action.setCheckable(True)
 
         self.quit_action = QAction("Quit")
         self.quit_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_Q))
@@ -436,6 +448,23 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
 
         toolbar.addAction(self.preferences_action)
+
+        toolbar.addSeparator()
+
+        button = QPushButton("Emergency Stop")
+        button.setCheckable(True)
+        button.setObjectName("EmergencyButton")
+        button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
+
+        def emergency_stop_triggered(is_toggled: bool):
+            behavior = self._app_model.behavior
+            behavior.emergency_stop("user-button") if is_toggled else behavior.emergency_resume("user-button")
+            button.setText("Resume" if is_toggled else "Emergency Stop")
+            self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED" if is_toggled else self._title)
+
+        button.toggled.connect(emergency_stop_triggered)
+
+        toolbar.addWidget(button)
 
     def _configure_statusbar(self):
         self._status_label = QLabel("")

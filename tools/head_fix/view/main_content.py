@@ -15,6 +15,7 @@ from autotrainer.pyside import PGWidget, CardWidget, TextBoxHandler
 
 from autotrainer.pyside import ConnectionPanel
 from autotrainer.pyside import MotorConfigDialog
+from tools.head_fix.model.app_model import AppModel
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class MainContent(QWidget):
     connecting = Signal()
     disconnected = Signal()
 
-    def __init__(self, model):
+    def __init__(self, model: AppModel):
         super().__init__()
 
         self._model = model
@@ -31,7 +32,7 @@ class MainContent(QWidget):
         self._config_dialog = None
         self._is_diagnostics_visible = True
 
-        self._plots = []
+        self._plots_by_name = {}
 
         layout = QVBoxLayout()
 
@@ -44,8 +45,8 @@ class MainContent(QWidget):
         layout.addWidget(self._head_control)
 
         self._tone_control = self._create_tone_panel()
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            layout.addWidget(self._tone_control)
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        layout.addWidget(self._tone_control)
 
         layout.addWidget(self._create_sensor_panel())
 
@@ -73,8 +74,11 @@ class MainContent(QWidget):
 
     @Slot()
     def refresh_data(self):
-        for plot in self._plots:
-            plot.use_cache()
+        for name, plot in self._plots_by_name.items():
+            try:
+                plot.use_cache()
+            except Exception as err:
+                logger.exception("%s failed: %s", name, err)
 
     @property
     def is_diagnostics_visible(self) -> bool:
@@ -126,13 +130,13 @@ class MainContent(QWidget):
 
         position_layout.addStretch(1)
 
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(QLabel("Gate"))
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        position_layout.addWidget(QLabel("Gate"))
 
         self._curr_gate_position = QLabel("(-)")
 
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(self._curr_gate_position)
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        position_layout.addWidget(self._curr_gate_position)
 
         self._gate_position = QSpinBox()
         self._gate_position.setMaximum(120)
@@ -140,29 +144,29 @@ class MainContent(QWidget):
         self._gate_position.setWrapping(False)
         self._gate_position.setEnabled(False)
 
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(self._gate_position, 0, Qt.AlignLeft)
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        position_layout.addWidget(self._gate_position, 0, Qt.AlignLeft)
 
         self._update_gate_button = QPushButton("Update")
         self._update_gate_button.setEnabled(False)
         self._update_gate_button.clicked.connect(self._set_gate_position)
 
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(self._update_gate_button, 0)
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        position_layout.addWidget(self._update_gate_button, 0)
 
         self._open_gate = QPushButton("Open Gate")
         self._open_gate.setEnabled(False)
         self._open_gate.clicked.connect(self._model.open_tunnel_gate)
 
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(self._open_gate, 0)
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        position_layout.addWidget(self._open_gate, 0)
 
         self._close_gate = QPushButton("Close Gate")
         self._close_gate.setEnabled(False)
         self._close_gate.clicked.connect(self._model.close_tunnel_gate)
 
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(self._close_gate, 0)
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        position_layout.addWidget(self._close_gate, 0)
 
         position_layout.addStretch(1)
 
@@ -175,8 +179,8 @@ class MainContent(QWidget):
         gear_icon = qta.icon('fa5s.cog')  # Font Awesome 5 Solid cog icon
         self._config_button.setIcon(gear_icon)
         self._config_button.clicked.connect(lambda: self._update_config())
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            position_layout.addWidget(self._config_button)
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        position_layout.addWidget(self._config_button)
 
         row_layout.addLayout(position_layout)
 
@@ -292,8 +296,10 @@ class MainContent(QWidget):
         ax = self._audio_spectrum_plot.getAxis('bottom')
         ax.setTicks([ticks])
 
-        if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
-            plot_layout.addWidget(widget, 2, 1)
+        # if EnvironmentProvider.hardware_version() != HardwareVersion.ANSHUTZ:
+        plot_layout.addWidget(widget, 2, 1)
+
+        #
 
         self._temperature_plot, widget = self._create_plot_widget("Temperature (\u00b0C)")
         self._temperature_plot.setYRange(0, 50)
@@ -320,7 +326,7 @@ class MainContent(QWidget):
         plot.setMaximumHeight(150)
         plot.setTitle(title)
 
-        self._plots.append(plot)
+        self._plots_by_name[title] = plot
 
         # pyqtgraph is not always well-behaved with layouts.  Rather than fight it, use a QWidget for normal behavior.
         widget = QWidget()
@@ -433,11 +439,8 @@ class MainContent(QWidget):
             self._model.analysis.project_info = None
 
         self.enable_widgets(True)
-        self._load_cell_plot.reset()
-        self._head_contact_plot.reset()
-        self._headbar_pressure_plot.reset()
-        self._temperature_plot.reset()
-        self._humidity_plot.reset()
+        for plot in self._plots_by_name.values():
+            plot.reset()
 
     def _disconnected(self):
         self.enable_widgets(False)
@@ -455,11 +458,8 @@ class MainContent(QWidget):
         self._close_gate.setEnabled(enable)
         self._update_magnet_button.setEnabled(enable)
         self._update_gate_button.setEnabled(enable)
-        self._load_cell_plot.setEnabled(enable)
-        self._head_contact_plot.setEnabled(enable)
-        self._headbar_pressure_plot.setEnabled(enable)
-        self._temperature_plot.setEnabled(enable)
-        self._humidity_plot.setEnabled(enable)
+        for name, plot in self._plots_by_name.items():
+            plot.setEnabled(enable)
         self._record.setEnabled(not enable)
         self._record_location.setEnabled(not enable)
         self._browse_button.setEnabled(not enable)

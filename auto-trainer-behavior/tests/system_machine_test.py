@@ -1,5 +1,6 @@
-
+import contextlib
 import logging
+import threading
 from functools import partial
 from itertools import chain
 from pathlib import Path
@@ -214,13 +215,13 @@ def test_inference_detection_ready(machine):
     )
     assert algo.session_pellet_count == 0
     assert algo.day_pellet_count == 0
-    assert algo.successful_reaches == 0
-    assert algo.pellets_presented == 0
+    assert algo.successful_reaches_total == 0
+    assert algo.pellets_presented_total == 0
     machine._inference.detection_result_ready(result)
     assert algo.session_pellet_count == 20
     assert algo.day_pellet_count == 20
-    assert algo.successful_reaches == 4
-    assert algo.pellets_presented == 40
+    assert algo.successful_reaches_total == 4
+    assert algo.pellets_presented_total == 40
     #
     result.food_consumed = 15
     result.successful_reaches = 2
@@ -228,8 +229,8 @@ def test_inference_detection_ready(machine):
     machine._inference.detection_result_ready(result)
     assert algo.session_pellet_count == 35
     assert algo.day_pellet_count == 35
-    assert algo.pellets_presented == 70
-    assert algo.successful_reaches == 6
+    assert algo.pellets_presented_total == 70
+    assert algo.successful_reaches_total == 6
 
 
 class TestAutoClamp(MockSystemMachine):
@@ -241,24 +242,37 @@ class TestAutoClamp(MockSystemMachine):
     @pytest.mark.parametrize("release_delay", [0.5, 0.1])
     @pytest.mark.parametrize("start_session", [False, True])
     def test_with_analysis_pressure_prop_changed(self, state, intensities, hbp_engaged, head_fixation_enabled,
-                                                 release_delay, start_session):
+                                                 release_delay, start_session, mocker):
         machine = self.machine
         machine.state = state
+        algo = machine.algorithm
+
         if start_session:
-            machine.algorithm.start_session()
-        machine.algorithm.head_fixation_enabled = head_fixation_enabled
-        machine.algorithm.auto_clamp_release_tone_delay = release_delay
+            algo.start_session()
+        assert algo.is_in_session is start_session
+
+        algo.head_fixation_enabled = head_fixation_enabled
+        algo.auto_clamp_release_tone_delay = release_delay
+
+        def patch_timer0(delay, func):
+            assert delay == algo.auto_clamp_no_activity_release_delay, "the delay should be that"
+            m = mock.create_autospec(Timer)
+            return m
 
         analysis = machine._analysis
         tun_dev = machine._tunnel_device
         for idx, intensity in enumerate(intensities):
             if intensity == "base":
-                intensity = machine.algorithm.baseline_intensity
+                intensity = algo.baseline_intensity
                 intensities[idx] = intensity
-            machine.algorithm.auto_clamp_intensity = intensity
-            analysis.headbar_pressure_monitor.property_changed(
-                HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, hbp_engaged, None,
-            )
+            algo.auto_clamp_intensity = intensity
+            with mock.patch("autotrainer.behavior.system_machine._consider_disengage_autoclamp_timer", new=patch_timer0):
+                # if hbp_engaged == analysis.headbar_pressure_monitor.is_engaged:
+                #     analysis.headbar_pressure_monitor.is_engaged = not hbp_engaged
+                # analysis.headbar_pressure_monitor.is_engaged = hbp_engaged
+                analysis.headbar_pressure_monitor.property_changed(
+                    HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, hbp_engaged, None,
+                )
         if state == SystemState.tunnel and hbp_engaged and head_fixation_enabled:
             assert tun_dev.update_head_magnet_intensity.call_args_list == [
                 mock.call(i) for i in intensities
@@ -268,11 +282,15 @@ class TestAutoClamp(MockSystemMachine):
         #
         tun_dev.reset_mock()
         def patch_timer(delay, func):
-            assert delay == machine._algorithm.auto_clamp_release_tone_delay, "the delay should be that"
+            assert delay == algo.auto_clamp_release_tone_delay, "the delay should be that"
             m = mock.create_autospec(Timer)
             m.start.side_effect = func
             return m
-        with mock.patch("autotrainer.behavior.system_machine._auto_clamp_release_timer", new=patch_timer):
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch("autotrainer.behavior.system_machine._auto_clamp_release_timer", new=patch_timer))
+            stack.enter_context(mock.patch("autotrainer.behavior.system_machine._consider_disengage_autoclamp_timer", new=patch_timer))
+            stack.enter_context(mock.patch("autotrainer.behavior.system_machine._consider_end_session_timer", new=patch_timer))
             machine.algorithm.head_fixation_enabled = False  # Disable auto-clamp
         # This above mock patch allow to not have to :
         #   time.sleep(machine.algorithm.auto_clamp_release_delay + 0.0005)

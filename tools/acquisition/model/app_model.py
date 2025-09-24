@@ -1,3 +1,4 @@
+import enum
 import functools
 import json
 import logging
@@ -22,7 +23,7 @@ from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
 from autotrainer.core.configuration import SystemConfigurationDumper
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.multiproc import get_mp_ctx, DaemonTimer
+from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer
 from autotrainer.core.analysis.config import load_calib_stereo_params
 from autotrainer.inference import PoseAlgorithm, InferenceStatus
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
@@ -41,7 +42,7 @@ logger = get_verbose_logger(__name__)
 
 
 # allow be patched from tests
-_recording_age_enough_timer = DaemonTimer
+_recording_age_enough_timer = make_daemon_timer
 
 
 def _failed_camera_template(name: str, error: str):
@@ -49,6 +50,10 @@ def _failed_camera_template(name: str, error: str):
 
 
 class AppModel(ObservableObject):
+
+    class Props(str, enum.Enum):
+        SELECTED_ANIMAL = "selected_animal"
+
     def __init__(
         self,
         preferences: UserPreferences,
@@ -299,13 +304,15 @@ class AppModel(ObservableObject):
 
     @selected_animal.setter
     def selected_animal(self, selected_animal: Optional[AnimalSubject]):
+        algo = self._behavior.algorithm
         prev, self._selected_animal = self._selected_animal, selected_animal
-        self._on_property_changed("selected_animal", selected_animal, prev)
+        self._on_property_changed(self.Props.SELECTED_ANIMAL, selected_animal, prev)
         self._preferences.selected_animal = "" if selected_animal is None else selected_animal.name
         if selected_animal is not None and prev != selected_animal:
             hardware = self.hardware
             self.property_changed("animal_name", selected_animal.name, self.animal_name)
-            self.behavior.algorithm.baseline_intensity = selected_animal.baseline_magnet_intensity
+            algo.baseline_intensity = selected_animal.baseline_magnet_intensity
+            algo.reset_selected_animal(selected_animal)
             hardware.update_head_magnet_intensity(selected_animal.baseline_magnet_intensity)
             hardware.set_x(self._selected_animal.pellet_x)
             hardware.set_y(self._selected_animal.pellet_y)

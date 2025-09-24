@@ -67,13 +67,17 @@ def test_detect_thrashing():
         lower_audio_db[b] = cfg.threshold_db + 1
         if 100 * idx / len(cfg.bins_list) >= cfg.threshold_percent:
             break
-    t_now += 0.1
+
+    t_now += cfg.time_window
 
     update_monitor(lower_audio_db, t_now)
     assert monitor.is_thrashing_detected  # still
 
     very_low_audio = [cfg.threshold_db - 1] * 64  # lower than threshold
 
+    update_monitor(very_low_audio, t_now)
+
+    t_now += cfg.time_window / 2
     update_monitor(very_low_audio, t_now)
 
     assert not monitor.is_thrashing_detected

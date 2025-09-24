@@ -1,10 +1,13 @@
 import logging
+import math
 
 import verboselogs
 from PySide6 import QtCore
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton,
-                               QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox)
+                               QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QSpinBox, QGridLayout)
 
+from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.pyside import QSwitch
 
@@ -16,11 +19,11 @@ logger = get_verbose_logger(__name__)
 
 
 class PreferencesContent(QWidget):
-    def __init__(self, preferences: UserPreferences, model: AppModel):
+    def __init__(self, preferences: UserPreferences, app_model: AppModel):
         super(PreferencesContent, self).__init__(None)
 
         self._preferences = preferences
-        self._model = model
+        self._app_model = app_model
 
         self._tabs = QTabWidget(self)
 
@@ -47,7 +50,7 @@ class PreferencesContent(QWidget):
         self._device_id_edit.textChanged.connect(self._device_id_changed)
 
         self._data_location_edit = QLineEdit(None, None)
-        self._data_location_edit.setText(self._model.output_location)
+        self._data_location_edit.setText(self._app_model.output_location)
         self._data_location_edit.textChanged.connect(self._data_location_changed)
 
         self._animal_location_edit = QLineEdit(None, None)
@@ -80,72 +83,238 @@ class PreferencesContent(QWidget):
         return tab
 
     def _create_behavior_tab(self):
-        algo = self._model.behavior.algorithm
-        form_layout = QFormLayout(None)
+        app_model = self._app_model
+        behavior = app_model.behavior
+        analysis = behavior.analysis
+        algo = behavior.algorithm
 
-        layout = QHBoxLayout()
-        self._inference_model_edit = QLineEdit(None, None)
-        self._inference_model_edit.setText(self._model.inference.model_location)
-        self._inference_model_edit.textChanged.connect(self._inference_model_changed)
-        layout.addWidget(self._inference_model_edit)
-        button = QPushButton("Select...")
-        button.clicked.connect(lambda: self._browse_for_location("inference_model"))
-        layout.addWidget(button)
-        form_layout.addRow("Inference model:", layout)
+        main_layout = QVBoxLayout()
+        main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+
+        top_layout = QVBoxLayout()
+        top_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+
+        analysis_layout = QHBoxLayout()
+        analysis_layout.addWidget(QLabel("Live Analysis:"))
+        toggle = self._inference_enabled_toggle = QSwitch()
+        edit = self._inference_model_edit = QLineEdit(None, None)
+        button = self._button_select_model = QPushButton("Select...")
+        def inference_enabled_state_changed(x: int):
+            enabled = x != 0
+            app_model.inference.is_enabled = enabled
+            self._pellet_delivery_toggle.setEnabled(enabled)
+            self._pellet_cover_toggle.setEnabled(enabled and algo.pellet_delivery_enabled)
+            # self._intersession_toggle.setEnabled(new_enabled)
+            self._allow_intersession_shift_toggle.setEnabled(enabled and behavior.is_intersession_enabled)
+            self._inference_model_edit.setEnabled(enabled)
+            self._button_select_model.setEnabled(enabled)
+        toggle.setToolTip("Enables real-time pose inference during live sessions (mouse in tunnel).")
+        toggle.setChecked(app_model.inference.is_enabled)
+        toggle.stateChanged.connect(inference_enabled_state_changed)  # after setChecked
+        analysis_layout.addWidget(toggle)
+        analysis_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        top_layout.addLayout(analysis_layout)
         #
-        layout = QHBoxLayout()
-        toggle = self._auto_correct_motors_drift_toggle = QSwitch()
-        toggle.setChecked(self._model.behavior.algorithm.auto_correct_motors_drift)
+        inference_model_layout = QHBoxLayout()
+        inference_model_layout.addWidget(QLabel("Inference model:"))
+        edit.setText(self._app_model.inference.model_location)
+        edit.textChanged.connect(self._inference_model_changed)
+        inference_model_layout.addWidget(self._inference_model_edit)
 
+        button.clicked.connect(lambda: self._browse_for_location("inference_model"))
+        inference_model_layout.addWidget(button)
+        inference_model_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        #
+        top_layout.addLayout(inference_model_layout)
+        main_layout.addLayout(top_layout)
+        #
+        cur_row = 0
+        grid_layout = QGridLayout()
+        grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        grid_layout.setSpacing(4)
+        grid_layout.setHorizontalSpacing(10)
+        main_layout.addLayout(grid_layout)
+
+        toggle = self._pellet_delivery_toggle = QSwitch()
+        def pellet_delivery_state_changed(x: int):
+            algo.pellet_delivery_enabled = x != 0
+        toggle.stateChanged.connect(pellet_delivery_state_changed)
+        toggle.setToolTip(
+            "Enables pellet load-send-release cycles based on pellet detection and related factors.")
+        toggle.setChecked(algo.pellet_delivery_enabled)
+        grid_layout.addWidget(QLabel("Deliver Pellets:"), cur_row, 0)
+        grid_layout.addWidget(toggle, cur_row, 1)
+        cur_row += 1
+        #
+        toggle = self._pellet_cover_toggle = QSwitch()
+        def pellet_cover_toggle_state_changed(x: int):
+            algo.pellet_cover_enabled = x != 0
+        toggle.stateChanged.connect(pellet_cover_toggle_state_changed)
+        toggle.setChecked(algo.pellet_cover_enabled)
+        toggle.setToolTip(
+            "Covers the pellet when the mouse is not in the tunnel.  Release then generates a tone when the tunnel is "
+            "entered.")
+        grid_layout.addWidget(QLabel("Cover Pellets:"), cur_row, 0)
+        grid_layout.addWidget(toggle, cur_row, 1)
+        cur_row += 1
+        #
+        spin_box = self._auto_clamp_threshold_spinbox = QSpinBox(None)
+        spin_box.setValue(analysis.headbar_pressure_monitor.load_cell_engaged_threshold)
+        spin_box.setMinimum(0)
+        spin_box.setMaximum(1023)
+        spin_box.setWrapping(False)
+        def update_headbar_pressure_threshold(value):
+            analysis.headbar_pressure_monitor.load_cell_engaged_threshold = value
+        spin_box.valueChanged.connect(update_headbar_pressure_threshold)
+        spin_box.setEnabled(algo.head_fixation_enabled)
+        spin_box.setToolTip("A value that adjusts the sensitivity of the headbar detector for it to be considered engaged.")
+        grid_layout.addWidget(QLabel("Auto-Clamp Threshold:"), cur_row, 0)
+        grid_layout.addWidget(spin_box, cur_row, 1)
+        cur_row += 1
+        #
+        toggle = self._allow_intersession_shift_toggle = QSwitch()
+        toggle.setToolTip("Enables adjustment of the pellet delivery position based on post-session reach analysis.")
+        toggle.setEnabled(app_model.inference.is_enabled)
+        toggle.setChecked(algo.intersession_pellet_shift_enabled)
+        def allow_intersession_shift_toggle_state_changed(x: int):
+            enabled = x != 0
+            if enabled:
+                behavior.is_intersession_enabled = True
+            algo.intersession_pellet_shift_enabled = enabled
+        toggle.stateChanged.connect(allow_intersession_shift_toggle_state_changed)
+        grid_layout.addWidget(QLabel("Intersession Pellet Shift:"), cur_row, 0)
+        grid_layout.addWidget(toggle, cur_row, 1)
+        cur_row += 1
+        #
+        toggle = self._auto_correct_motors_drift_toggle = QSwitch()
+        toggle.setChecked(self._app_model.behavior.algorithm.auto_correct_motors_drift)
         def auto_correct_motors_drift_toggle_changed(value: int):
             enabled = value != 0
             logger.verbose("auto_correct_motors_drift_toggle_changed: %s", enabled)
-            self._model.behavior.algorithm.auto_correct_motors_drift = enabled
+            self._app_model.behavior.algorithm.auto_correct_motors_drift = enabled
 
         toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
-        layout.addWidget(toggle)
-        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
-        form_layout.addRow("Auto-correct motors drift:", layout)
+        grid_layout.addWidget(QLabel("Auto-correct motors drift:"), cur_row, 0)
+        grid_layout.addWidget(toggle, cur_row, 1)
+        cur_row += 1
+
         #
         self._use_triangle_pellet_distance = algo.use_triangle_pellet_distance_too_far
-        layout = QHBoxLayout()
         toggle = self._toggle_use_triangle_pellet_distance = QSwitch()
-
         def use_triangle_pellet_distance_changed(value):
             enabled = value != 0
             prev, self._use_triangle_pellet_distance = self._use_triangle_pellet_distance, enabled
             algo.use_triangle_pellet_distance_too_far = enabled
-
         toggle.stateChanged.connect(use_triangle_pellet_distance_changed)
         toggle.setChecked(algo.use_triangle_pellet_distance_too_far)
-        layout.addWidget(toggle)
-        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
-        form_layout.addRow("Use triangle-pellet distance for pellet too far detection:", layout)
+        grid_layout.addWidget(QLabel("Use triangle-pellet distance for pellet too far detection:"), cur_row, 0)
+        grid_layout.addWidget(toggle, cur_row, 1)
+        cur_row += 1
         #
         spin_box = self._triangle_pellet_expected_distance_spinbox = QDoubleSpinBox()
         spin_box.setRange(0, 100)
         spin_box.setValue(algo.triangle_pellet_expected_distance)
-
         def triangle_pellet_expected_distance_changed(value):
             algo.triangle_pellet_expected_distance = value
-
         spin_box.valueChanged.connect(triangle_pellet_expected_distance_changed)
-
-        form_layout.addRow("Triangle-Pellet expected distance:", spin_box)
-
+        grid_layout.addWidget(QLabel("Triangle-Pellet expected distance:"), cur_row, 0)
+        grid_layout.addWidget(spin_box, cur_row, 1)
+        cur_row += 1
+        #
         spin_box = self._triangle_pellet_diff_too_far_threshold_spinbox = QDoubleSpinBox()
         spin_box.setRange(0, 20)
         spin_box.setValue(algo.triangle_pellet_diff_too_far_threshold)
-
         def triangle_pellet_diff_too_far_threshold_changed(value):
             algo.triangle_pellet_diff_too_far_threshold = value
-
         spin_box.valueChanged.connect(triangle_pellet_diff_too_far_threshold_changed)
+        grid_layout.addWidget(QLabel("Triangle-Pellet diff too far threshold:"), cur_row, 0)
+        grid_layout.addWidget(spin_box, cur_row, 1)
+        #
+        cur_row = 0
+        # pelletDelivery:maxPelletMissingSeconds
+        spin_box = self._max_pellet_missing_seconds = QDoubleSpinBox()
+        def max_pellet_missing_seconds_changed(value):
+            algo.pellet_missing_time = value
+        spin_box.setValue(algo.pellet_missing_time)
+        spin_box.valueChanged.connect(max_pellet_missing_seconds_changed)
+        grid_layout.addWidget(QLabel("Pellet missing seconds:"), cur_row, 2)
+        grid_layout.addWidget(spin_box, cur_row, 3)
+        cur_row += 1
 
-        form_layout.addRow("Triangle-Pellet diff too far threshold:", spin_box)
+        # pelletDelivery:pelletHandUncoverDistance [1]
+        toggle = self._toggle_pellet_hand_uncover_distance = QSwitch()
+        grid_layout.addWidget(QLabel("Require pellet-hand minimum distance"), cur_row, 2)
+        toggle.setChecked(algo.pellet_hand_uncover_distance is not None)
+        spin_box = self._pellet_hand_uncover_distance = QDoubleSpinBox()
 
+        def toggle_pellet_hand_uncover_distance_changed(value: int):
+            enabled = value != 0
+            if not enabled:
+                algo.pellet_hand_uncover_distance = None
+            self._pellet_hand_uncover_distance.setEnabled(enabled)
+
+        toggle.stateChanged.connect(toggle_pellet_hand_uncover_distance_changed)
+        grid_layout.addWidget(toggle, cur_row, 3)
+        cur_row += 1
+
+        def pellet_hand_uncover_distance_changed(value):
+            algo.pellet_hand_uncover_distance = value
+        if algo.pellet_hand_uncover_distance is not None:
+            spin_box.setValue(algo.pellet_hand_uncover_distance)
+        spin_box.setMinimum(0)
+        spin_box.setMaximum(100)
+        spin_box.valueChanged.connect(pellet_hand_uncover_distance_changed)
+        grid_layout.addWidget(QLabel("Pellet hand uncover distance (mm) :"), cur_row, 2)
+        grid_layout.addWidget(spin_box, cur_row, 3)
+        cur_row += 1
+
+        # headClamp: autoClampReleaseToneFreq
+        spin_box = self._auto_clamp_release_tone_freq = QSpinBox()
+        def auto_clamp_release_tone_freq_changed(value):
+            algo.auto_clamp_release_tone_freq = value
+        spin_box.setMinimum(0)
+        spin_box.setMaximum(100_000)
+        spin_box.setValue(algo.auto_clamp_release_tone_freq)
+        spin_box.valueChanged.connect(auto_clamp_release_tone_freq_changed)
+        grid_layout.addWidget(QLabel("Auto-clamp release tone freq (Hz) :"), cur_row, 2)
+        grid_layout.addWidget(spin_box, cur_row, 3)
+        cur_row += 1
+
+        # headClamp:autoClampReleaseToneDelay
+        spin_box = self._auto_clamp_release_tone_delay = QDoubleSpinBox()
+        def auto_clamp_release_tone_delay_changed(value):
+            algo.auto_clamp_release_tone_delay = value
+        spin_box.setValue(algo.auto_clamp_release_tone_delay)
+        spin_box.valueChanged.connect(auto_clamp_release_tone_delay_changed)
+        grid_layout.addWidget(QLabel("Auto-clamp release tone delay (second) :"), cur_row, 2)
+        grid_layout.addWidget(spin_box, cur_row, 3)
+        cur_row += 1
+
+        # headClamp:autoClampNoActivityReleaseDelay
+        spin_box = self._auto_clamp_no_activity_release_delay = QDoubleSpinBox()
+        def auto_clamp_no_activity_release_delay_changed(value):
+            algo.auto_clamp_no_activity_release_delay = value
+        spin_box.setValue(algo.auto_clamp_no_activity_release_delay)
+        spin_box.valueChanged.connect(auto_clamp_no_activity_release_delay_changed)
+        grid_layout.addWidget(QLabel("Auto-clamp no-activity release delay (second) :"), cur_row, 2)
+        grid_layout.addWidget(spin_box, cur_row, 3)
+        cur_row += 1
+
+        # headClamp:autoClampReleaseLoadCount
+        spin_box = self._auto_clamp_release_load_count = QSpinBox()
+        spin_box.setMinimum(0)
+        spin_box.setMaximum(1_000_000)
+        def auto_clamp_release_load_count_changed(value):
+            algo.auto_clamp_release_load_count = value
+        spin_box.setValue(algo.auto_clamp_release_load_count)
+        spin_box.valueChanged.connect(auto_clamp_release_load_count_changed)
+        grid_layout.addWidget(QLabel("Auto-clamp release load count:"), cur_row, 2)
+        grid_layout.addWidget(spin_box, cur_row, 3)
+        cur_row += 1
+
+        #
         tab = QWidget(None)
-        tab.setLayout(form_layout)
+        tab.setLayout(main_layout)
 
         return tab
 
@@ -244,13 +413,13 @@ class PreferencesContent(QWidget):
         self._preferences.serial_number = value
 
     def _data_location_changed(self, value: str):
-        self._model.output_location = value
+        self._app_model.output_location = value
 
     def _animal_location_changed(self, value: str):
         self._preferences.animal_location = value
 
     def _inference_model_changed(self, value: str):
-        self._model.inference.model_location = value
+        self._app_model.inference.model_location = value
 
     def _log_level_changed(self, value):
         # logging.root.debug("_log_level_changed: %s", value)

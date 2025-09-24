@@ -138,7 +138,7 @@ class ProjectInfo:
             session_shared_obj = self._session = ctx.Value(ctypes.c_uint32, 1)
             # use the same lock for both session and when mp shared values:
             self._when = ctx.Value(ctypes.c_double,  # double required, not float !!
-                                   0,  # 1970-01-01
+                                   _get_datetime_now().timestamp(),
                                    lock=session_shared_obj.get_lock())
 
     def __eq__(self, other):

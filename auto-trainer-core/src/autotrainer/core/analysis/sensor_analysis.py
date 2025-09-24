@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import csv
 import os
 import time
 from datetime import datetime
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, IO
 
 import numpy
 
@@ -42,7 +43,7 @@ class SensorAnalysis(ObservableObject):
         self._had_write_error = False
 
         # The audio spectrum file.
-        self._audio_record_file = None
+        self._audio_record_file_writer: Optional[Tuple[IO[str], csv.DictWriter]] = None
         self._current_audio_record_interval = -1
         self._audio_had_write_error = False
 
@@ -91,15 +92,15 @@ class SensorAnalysis(ObservableObject):
         return self._load_cell_monitor
 
     @property
-    def headbar_pressure_monitor(self):
+    def headbar_pressure_monitor(self) -> HeadbarPressureMonitor:
         return self._headbar_pressure_monitor
 
     @property
-    def load_cell_tare_monitor(self):
+    def load_cell_tare_monitor(self) -> LoadCellTareMonitor:
         return self._tare_detector
 
     @property
-    def audio_thrashing_monitor(self):
+    def audio_thrashing_monitor(self) -> AudioSpectrumThrashMonitor:
         return self._audio_thrashing_monitor
 
     @property
@@ -180,25 +181,30 @@ class SensorAnalysis(ObservableObject):
 
         self._audio_thrashing_monitor.update(spectrum.magnitudes, spectrum.when, spectrum.index)
 
-        if self._audio_record_file is not None:
+        cur = self._audio_record_file_writer
+        if cur is not None:
             file_timestamp = datetime.now()
-
             needs_update = file_timestamp.hour != self._current_audio_record_interval \
                 if self._interval == ProjectInterval.HOUR \
                 else file_timestamp.minute != self._current_audio_record_interval
-
             if needs_update:
                 self._update_audio_file()
 
         # May or may not exist after the above.
-        if self._audio_record_file is not None:
+        cur = self._audio_record_file_writer
+        if cur is not None:
+            _, writer = cur
             try:
-                self._audio_record_file.write(f"{spectrum.when}, {spectrum.index}," +
-                                              f"{','.join([str(s) for s in spectrum.magnitudes])}\n")
-            except Exception as e:
+                r = dict(
+                    When=spectrum.when,
+                    Index=spectrum.index,
+                    **{f"Bin {i}": val for i, val in enumerate(spectrum.magnitudes)},
+                )
+                writer.writerow(r)
+            except Exception as err:
                 # This could be too much if something major is wrong.  Just output once per file rotation.
                 if not self._audio_had_write_error:
-                    logger.error(f"<sensor-analysis>: unable to write: {e}")
+                    logger.exception("<sensor-analysis>: unable to write: %s", err)
                     self._audio_had_write_error = True
 
     def _update_record_file(self) -> None:
@@ -235,13 +241,15 @@ class SensorAnalysis(ObservableObject):
         return None
 
     def _update_audio_file(self) -> None:
-        if self._audio_record_file is not None:
+        cur = self._audio_record_file_writer
+        if cur is not None:
+            fh, writer = cur
             try:
-                self._audio_record_file.close()
+                fh.flush()
+                fh.close()
             except Exception as err:
                 logger.warning("audio record file close failed: %s", err)
-
-            self._audio_record_file = None
+            self._audio_record_file_writer = None
 
         if self._project_info is not None:
             interval_file_info = self._project_info.get_audio_spectrum_file(
@@ -254,13 +262,17 @@ class SensorAnalysis(ObservableObject):
             try:
                 file_existed = os.path.exists(interval_file_info.file)
 
-                location = open(interval_file_info.file, "a")
+                fh = open(interval_file_info.file, "a")
+                writer = csv.DictWriter(
+                    fh,
+                    fieldnames=('Time', 'Index', *(f'Bin {i}' for i in range(64))),
+                )
 
                 if not file_existed:
-                    location.write(f"Time, Index, {','.join(['Bin ' + str(s) for s in range(32)])}\n")
+                    writer.writeheader()
 
                 self._current_audio_record_interval = interval_file_info.current_interval
-                self._audio_record_file = location
+                self._audio_record_file_writer = (fh, writer)
                 logger.info(f"<sensor-analysis>: saving audio spectrum to {interval_file_info.file}")
                 self._audio_had_write_error = False
             except Exception as err:

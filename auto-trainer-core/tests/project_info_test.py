@@ -58,9 +58,12 @@ def test_explicit_session(root):
 
 
 def test_without_session_and_when_are_shared(root):
-    info = ProjectInfo(root=root, device_id=device_id)
+    module = importlib.import_module(ProjectInfo.__module__)
+    unix_start_as_local = datetime(2001, 1, 1, tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
+    with mock.patch.object(module, "_get_datetime_now") as m_get_datetime:
+        m_get_datetime.return_value = unix_start_as_local
+        info = ProjectInfo(root=root, device_id=device_id)
     assert info.session == 1
-    unix_start_as_local = datetime(1970, 1, 1, tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
     assert info.when == unix_start_as_local
     info.calculate_next_session_index()
     assert info.when != unix_start_as_local
