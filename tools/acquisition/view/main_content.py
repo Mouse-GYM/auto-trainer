@@ -177,7 +177,7 @@ class MainContent(ContentWidget):
                             abs(prev[i] - loc_3d[i]) >= 0.15
                             for i in range(3)
                         ):
-                            logger.debug("%s: loc3d: %s", part, loc_3d.humanize())
+                            logger.spam("%s: loc3d: %s", part, loc_3d.humanize())
                             self._prev_parts_3d_loc[part] = loc_3d if prev is None else (prev + loc_3d) / 2
 
     @property
