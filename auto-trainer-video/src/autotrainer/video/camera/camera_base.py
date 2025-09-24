@@ -116,6 +116,8 @@ class CameraBase:
             self.fps = int(value)
         elif name == "name":
             self.name = value
+        elif name == "primary":
+            self._is_primary = True
         else:
             logger.warning(f"<{self._name}> unknown property {name}")
             return False
