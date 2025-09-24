@@ -1,3 +1,6 @@
+
+from typing import Tuple
+
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
     QLayout, QVBoxLayout, QFileDialog, QFrame, QDoubleSpinBox
 
@@ -21,7 +24,7 @@ _NO_UPDATES = "(no updates)"
 _MIN_CONTROL_BUTTON_WIDTH = 120
 
 
-def add_position(label: str, s_min: float, s_max: float) -> Tuple[QLayout, QSpinBox]:
+def add_position(label: str, s_min: float, s_max: float) -> Tuple[QHBoxLayout, QDoubleSpinBox, QPushButton, QPushButton]:
     position_layout = QHBoxLayout()
     position_layout.setContentsMargins(8, 8, 8, 8)
     position_layout.setSpacing(8)
