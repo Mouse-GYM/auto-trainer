@@ -70,7 +70,11 @@ class MainContent(ContentWidget):
 
         # Second row - behavior and analysis
 
-        behavior_content = BehaviorContent(self._app_model.behavior, self._app_model.inference)
+        behavior_content = BehaviorContent(
+            app_model,
+            app_model.behavior,
+            app_model.inference,
+        )
         self._layout.addWidget(behavior_content, 1, 0, 1, 3)
         self._content_widgets.append(behavior_content)
 

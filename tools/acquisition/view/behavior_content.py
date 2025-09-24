@@ -1,22 +1,64 @@
+import math
+from typing import Optional
 
 from PySide6 import QtCore
+from PySide6.QtCore import Qt
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QLabel, QFileDialog, QWidget, QVBoxLayout,
                                QHBoxLayout, QStackedLayout, QGridLayout, QSpinBox, QPushButton)
 
+from autotrainer.behavior.analysis import IntersessionResponse
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.core import AnimalSubject
 from autotrainer.pyside import CardWidget, QSwitch
+from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.view.content_widget import ContentWidget
+
+_unprovided = object()  # sentinel
+
+
+class XYZLabel(QLabel):
+
+    def update_value(self, x, y, z):
+        x, y, z = map(lambda v: "na" if v is None else f"{v:.1f}", (x, y, z))
+        self.setText(f"{x} / {y} / {z}")
+
+
+class DailyAndTotalCountsLabel(QLabel):
+
+    def __init__(self, parent=None, *, day: Optional[int] = None, total: Optional[int] = None):
+        super().__init__(parent)
+        self._day_count = day
+        self._total_count = total
+        self.update_values()
+
+    def update_values(self, day=_unprovided, total=_unprovided):
+        if day is not _unprovided:
+            self._day_count = day
+        if total is not _unprovided:
+            self._total_count = total
+        day = self._day_count
+        total = self._total_count
+        self.setText(f"{'na' if day is None else day} / {'na' if total is None else total}")
 
 
 class BehaviorContent(ContentWidget):
     status_changed = Signal(str, name="status_changed")
 
-    def __init__(self, behavior_model: BehaviorModel, inference_model: InferenceModel):
+    def __init__(self,
+                 app_model: AppModel,
+                 behavior_model: BehaviorModel,
+                 inference_model: InferenceModel):
         super().__init__()
 
+        system_machine = behavior_model.system_machine
+        algo = system_machine.algorithm
+        pellet_machine = system_machine.pellet
+        intersession_machine = system_machine.intersession
+
+        self._app_model = app_model
         self._behavior_model = behavior_model
         self._inference_model = inference_model
         self._analysis = behavior_model.analysis
@@ -25,36 +67,104 @@ class BehaviorContent(ContentWidget):
         self._card_widget = CardWidget(title="Behavior", header_right_layout=self._inference_status)
 
         content = QWidget(None)
-        content_layout = QGridLayout(None)
-        content_layout.setRowStretch(3, 1)
-        content_layout.setColumnStretch(4, 1)
 
-        content_layout.addWidget(QLabel("Intersession Analysis:"), 0, 0)
+        hbox_main_layout = QHBoxLayout()
+        # hbox_main_layout.setStretch(0, 1)
+        # hbox_main_layout.setStretch(1, 1)
+
+        left_layout = self._left_layout = QGridLayout(None)
+        left_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        right_layout = self._right_layout = QGridLayout(None)
+        right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+
+        left_cur_row = 0
+
+        label = QLabel("States")
+        label.setStyleSheet("font-weight: bold;")
+        left_layout.addWidget(label, left_cur_row, 0)
+        left_cur_row += 1
+
+        left_layout.addWidget(QLabel("System:"), left_cur_row, 0)
+        label = self._system_machine_state_label = QLabel(self._behavior_model.system_machine.state)
+        left_layout.addWidget(label, left_cur_row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        left_cur_row += 1
+
+        left_layout.addWidget(QLabel("Pellet:"), left_cur_row, 0)
+        label = self._pellet_machine_state_label = QLabel(self._behavior_model.system_machine.pellet.state)
+        left_layout.addWidget(label, left_cur_row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        left_cur_row += 1
+
+        left_layout.addWidget(QLabel("Intersession:"), left_cur_row, 0)
+        label = self._intersession_state_label = QLabel(self._behavior_model.system_machine.intersession.state)
+        left_layout.addWidget(label, left_cur_row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        left_cur_row += 1
+
+        # left_layout.addWidget(QLabel(""), left_cur_row, 0)
+        # left_cur_row += 1
+
+        left_layout.addWidget(QLabel("Intersession Analysis:"), left_cur_row, 0)
         toggle = self._intersession_toggle = QSwitch()
         toggle.stateChanged.connect(self._intersession_toggle_state_changed)
         toggle.setToolTip(
             "Enables reach detection and segmentation after each session where the mouse is seen.  This may modify "
             "pellet counts and adjust the pellet delivery position.")
-        content_layout.addWidget(toggle, 0, 1)
+        left_layout.addWidget(toggle, left_cur_row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        left_cur_row += 1
 
-        content_layout.addWidget(QLabel("Auto-Clamp:"), 1, 0)
-        self._head_fixation_toggle = QSwitch()
-        self._head_fixation_toggle.stateChanged.connect(self._head_fixation_toggle_state_changed)
-        self._head_fixation_toggle.setToolTip(
-            "Enables automatic magnet adjustment to 100% when the headbar detector is triggered.")
-        content_layout.addWidget(self._head_fixation_toggle, 1, 1)
+        left_layout.addWidget(QLabel("Auto-Clamp:"), left_cur_row, 0)
+        toggle = self._head_fixation_toggle = QSwitch()
+        toggle.stateChanged.connect(self._head_fixation_toggle_state_changed)
+        toggle.setToolTip("Enables automatic magnet adjustment to 100% when the headbar detector is triggered.")
+        left_layout.addWidget(toggle, left_cur_row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        left_cur_row += 1
 
-        baseline_layout = QHBoxLayout()
-        baseline_layout.addWidget(QLabel("Head Magnet Baseline: "))
-        self._baseline = QLabel(f"{self._behavior_model.algorithm.baseline_intensity}%")
-        baseline_layout.addWidget(self._baseline)
-        self._make_baseline_button = QPushButton("Make Current Position Baseline")
-        self._make_baseline_button.clicked.connect(self._make_position_baseline)
-        baseline_layout.addWidget(self._make_baseline_button)
-        baseline_layout.addStretch(1)
-        content_layout.addLayout(baseline_layout, 3, 0, 1, 6)
+        left_layout.addWidget(QLabel("Head Magnet Baseline:"), left_cur_row, 0)
+        self._baseline_label = QLabel(f"{self._behavior_model.algorithm.baseline_intensity}%")
+        hbox_layout = QHBoxLayout()
+        hbox_layout.addWidget(self._baseline_label)
+        button = self._make_baseline_button = QPushButton("Make Current Position Baseline")
+        button.clicked.connect(self._make_position_baseline)
+        hbox_layout.addWidget(self._make_baseline_button)
+        left_layout.addLayout(hbox_layout, left_cur_row, 1)
+        #
 
-        content.setLayout(content_layout)
+        right_cur_row = 0
+        label = QLabel("Count")
+        label.setStyleSheet("font-weight: bold;")
+        right_layout.addWidget(label, right_cur_row, 0)
+        label = QLabel("day / total")
+        label.setStyleSheet("font-weight: bold;")
+        right_layout.addWidget(label, right_cur_row, 1)
+        right_cur_row += 1
+
+        right_layout.addWidget(QLabel("Pellets consumed:"), right_cur_row, 0)
+        self._pellets_consumed_label = DailyAndTotalCountsLabel(day=algo.day_pellet_count, total=algo.total_pellet_count)
+        right_layout.addWidget(self._pellets_consumed_label, right_cur_row, 1)
+
+        right_cur_row += 1
+        right_layout.addWidget(QLabel("Pellets presented:"), right_cur_row, 0)
+        self._pellets_presented_label = DailyAndTotalCountsLabel(day=algo.pellets_presented_day, total=algo.pellets_presented_day)
+        right_layout.addWidget(self._pellets_presented_label, right_cur_row, 1)
+
+        right_cur_row += 1
+        right_layout.addWidget(QLabel("Successful Reaches:"), right_cur_row, 0)
+        label = self._successful_reaches_label = DailyAndTotalCountsLabel(day=algo.successful_reaches_day, total=algo.successful_reaches_total)
+        right_layout.addWidget(label, right_cur_row, 1)
+
+        right_cur_row += 1
+        right_layout.addWidget(QLabel("Prev. pellet shift XYZ (mm) :"), right_cur_row, 0)
+        label = self._prev_pellet_shift_label = XYZLabel()
+        label.update_value(x=None, y=None, z=None)
+        right_layout.addWidget(label, right_cur_row, 1)
+
+        #
+
+        hbox_main_layout.addLayout(left_layout)
+        hbox_main_layout.addLayout(right_layout)
+
+        #
+
+        content.setLayout(hbox_main_layout)
         self._card_widget.setContentWidget(content)
 
         # Footer
@@ -82,19 +192,25 @@ class BehaviorContent(ContentWidget):
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
 
-        self._inference_model_property_changed("model_location", self._inference_model.model_location, None)
-        self._inference_model.property_changed += self._inference_model_property_changed
+        self._inference_status.setText(f"Inference: {inference_model.status}")
+        self._intersession_toggle.setChecked(behavior_model.is_intersession_enabled)
 
-        self._inference_status.setText(f"Inference: {self._inference_model.status}")
+        self._inference_model_property_changed("model_location", inference_model.model_location, None)
+        #
 
-        self._intersession_toggle.setChecked(self._behavior_model.is_intersession_enabled)
+        app_model.property_changed += self._app_model_property_changed
 
-        self._behavior_model.algorithm.property_changed += self._algorithm_property_changed
+        inference_model.property_changed += self._inference_model_property_changed
+        inference_model.detection_result_ready += self._inference_detection_result_ready
+
+        system_machine.events.state_changed += lambda old, new: self._system_machine_state_label.setText(new)
+        pellet_machine.events.state_changed += lambda old, new: self._pellet_machine_state_label.setText(new)
+        intersession_machine.events.state_changed += lambda old, new: self._intersession_state_label.setText(new)
+
+        behavior_model.algorithm.property_changed += self._algorithm_property_changed
         # self._analysis.headbar_pressure_monitor.property_changed += self._force_detector_property_changed
-        self._behavior_model.property_changed += self._behavior_model_property_changed
-
+        behavior_model.property_changed += self._behavior_model_property_changed
         self.status_changed.connect(lambda x: self._inference_status.setText(x))
-
         self.set_is_editable(False)
 
     def set_is_editable(self, is_editable: bool):
@@ -114,11 +230,28 @@ class BehaviorContent(ContentWidget):
 
     def _algorithm_property_changed(self, name, value, _):
         if name == BehaviorAlgoProps.BASELINE_INTENSITY:
-            self._baseline.setText(f"{value}%")
+            self._baseline_label.setText(f"{value}%")
+        elif name == BehaviorAlgoProps.DAY_PELLET_COUNT:
+            self._pellets_consumed_label.update_values(day=value)
+        elif name == BehaviorAlgoProps.TOTAL_PELLET_COUNT:
+            self._pellets_consumed_label.update_values(total=value)
+        elif name == BehaviorAlgoProps.DAY_PELLET_PRESENTED:
+            self._pellets_presented_label.update_values(day=value)
+        elif name == BehaviorAlgoProps.TOTAL_PELLET_PRESENTED:
+            self._pellets_presented_label.update_values(total=value)
+        elif name == BehaviorAlgoProps.DAY_SUCCESSFUL_REACHES:
+            self._successful_reaches_label.update_values(day=value)
+        elif name == BehaviorAlgoProps.TOTAL_SUCCESSFUL_REACHES:
+            self._successful_reaches_label.update_values(total=value)
 
     def _behavior_model_property_changed(self, name, value, _):
         if name == "is_intersession_enabled":
             self._intersession_toggle.setChecked(value)
+
+    def _app_model_property_changed(self, name, value, _):
+        if name == AppModel.Props.SELECTED_ANIMAL:
+            x, y, z = (None, None, None) if value is None else (value.pellet_x, value.pellet_y, value.pellet_z)
+            self._prev_pellet_shift_label.update_value(x, y, z)
 
     def _inference_model_property_changed(self, name, value, _):
         if name == "is_enabled":
@@ -130,3 +263,6 @@ class BehaviorContent(ContentWidget):
                 self._location_label.setText(value)
             else:
                 self._location_label.setText("Inference model not specified")
+
+    def _inference_detection_result_ready(self, result: IntersessionResponse):
+        self._prev_pellet_shift_label.update_value(x=result.pellet_x, y=result.pellet_y, z=result.pellet_z)

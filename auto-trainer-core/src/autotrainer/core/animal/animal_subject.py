@@ -19,6 +19,9 @@ class AnimalSubject:
     pellet_y: int = 0
     pellet_z: int = 0
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(name={self.name})"
+
     @classmethod
     def from_file(cls, file_path: str) -> Optional[Self]:
         animal = AnimalSubject()

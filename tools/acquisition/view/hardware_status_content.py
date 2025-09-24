@@ -35,6 +35,7 @@ class HardwareStatusContent(ContentWidget):
         label.setStyleSheet("font-weight: bold")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label, 0, 0)
+
         label = QLabel("Pellet")
         label.setStyleSheet("font-weight: bold")
         label.setAlignment(Qt.AlignCenter)
