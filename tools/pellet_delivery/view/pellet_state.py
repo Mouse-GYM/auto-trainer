@@ -82,5 +82,7 @@ class PelletState(QWidget):
         elif name == MessageHandler.EXT_BUTTON_PROPERTY:
             self._ext_button.setStatus(bool(value))
         elif name == MessageHandler.STIMULI_PROPERTY:
+            if value is None:
+                value = [False] * len(self._stimulus)
             for v, box in zip(value, self._stimulus):
                 box.setStatus(bool(v))
