@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QFormLayout
 
@@ -8,6 +9,12 @@ from autotrainer.pyside.xyz_label import XYZQLabel
 from tools.pellet_delivery.model.app_model import AppModel
 
 _NO_UPDATES = "(no updates)"
+
+
+def opt_float_to_txt(value: Optional[float], *, n_digits: int = 1):
+    if value is None:
+        return _NO_UPDATES
+    return f"{value:.0{n_digits}f}"
 
 
 def create_position_panel():
@@ -99,9 +106,9 @@ class PelletStatus(QWidget):
             cur_send_xyz = app_model.send_xyz.replace(**d)
             self._send_xyz_diamond.update_coordinate(app_model.to_diamond_coordinates(cur_send_xyz))
         elif name == "load_arm":
-            self._load_arm.setText(f"{round(value, 1)}")
+            self._load_arm.setText(opt_float_to_txt(value))
         elif name == "cover_arm":
-            self._cover_arm.setText(f"{round(value, 1)}")
+            self._cover_arm.setText(opt_float_to_txt(value))
         elif name == "is_connected":
             if value:
                 reset_prop = self._model_property_changed
