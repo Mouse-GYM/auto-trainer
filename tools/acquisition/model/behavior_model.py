@@ -29,12 +29,9 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             analysis: SensorAnalysis,
             hardware_model: HardwareModel,
             inference: InferenceProtocol,
-            *,
-            proc_msg_queue: Optional[multiprocessing.Queue] = None,
     ):
         super().__init__(("emergency_stopped", "emergency_resumed"))
 
-        self._proc_msg_queue = proc_msg_queue  # actually unused, see unsure in AppModel..
         self._analysis = analysis
 
         self._system_machine = SystemMachine(

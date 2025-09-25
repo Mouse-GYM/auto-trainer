@@ -217,8 +217,6 @@ class VideoRecord(Thread):
             logger.warning("_prepare_video_writer but _is_video_enabled False")
             return
 
-        self._record_start = time.time()  # currently unused
-
         video_file, timestamp_file, _ = self._project_info.get_video_path(
             self._name, interval=self._interval_mode, allow_overwrite=True)
 

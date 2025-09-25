@@ -291,10 +291,14 @@ class EmulationInterface(DeviceInterface):
 
     def move_motor_x(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
-            logger.info(f"set pellet absolute x {position}")
+            logger.info("set pellet %s x %s", ("absolute", "relative")[relative], position)
             if save_as_fixed:
+                if relative:
+                    position += self._send_pos[Motor.PELLET_X_MOTOR]
                 self._send_pos[Motor.PELLET_X_MOTOR] = position
             else:
+                if relative:
+                    position += self._positions[Motor.PELLET_X_MOTOR]
                 self._positions[Motor.PELLET_X_MOTOR] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
@@ -304,10 +308,14 @@ class EmulationInterface(DeviceInterface):
 
     def move_motor_y(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
-            logger.info(f"set pellet absolute y {position}")
+            logger.info("set pellet %s y %s", ("absolute", "relative")[relative], position)
             if save_as_fixed:
+                if relative:
+                    position += self._send_pos[Motor.PELLET_Y_MOTOR]
                 self._send_pos[Motor.PELLET_Y_MOTOR] = position
             else:
+                if relative:
+                    position += self._positions[Motor.PELLET_Y_MOTOR]
                 self._positions[Motor.PELLET_Y_MOTOR] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
@@ -317,10 +325,14 @@ class EmulationInterface(DeviceInterface):
 
     def move_motor_z(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
-            logger.info(f"set pellet absolute z {position}")
+            logger.info("set pellet %s z %s", ("absolute", "relative")[relative], position)
             if save_as_fixed:
+                if relative:
+                    position += self._send_pos[Motor.PELLET_Z_MOTOR]
                 self._send_pos[Motor.PELLET_Z_MOTOR] = position
             else:
+                if relative:
+                    position += self._positions[Motor.PELLET_Z_MOTOR]
                 self._positions[Motor.PELLET_Z_MOTOR] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open

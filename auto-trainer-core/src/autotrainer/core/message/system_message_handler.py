@@ -2,7 +2,7 @@ import functools
 import logging
 import threading
 from queue import Queue
-from typing import Callable, List
+from typing import Callable, List, Tuple
 
 
 from ..analysis.sensor_analysis import SensorAnalysis
@@ -27,7 +27,7 @@ class SystemMessageHandler(MessageHandler):
         return self._measurement_callback
 
     @measurement_callback.setter
-    def measurement_callback(self, measurement_callback: Callable[[tuple], None]) -> None:
+    def measurement_callback(self, measurement_callback: Callable[[Tuple], None]) -> None:
         self._measurement_callback = measurement_callback
 
     @property

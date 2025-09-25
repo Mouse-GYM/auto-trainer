@@ -64,11 +64,6 @@ from .inference_protocol import InferenceProtocol, SegmentationConfiguration, De
 class IntersessionBlock:
     configuration: SegmentationConfiguration
     frame_count: int = 0
-    parts_count: int = 10
-    pose_data: numpy.ndarray = dataclasses.field(repr=False, default=None)
-
-    def __post_init__(self):
-        self.pose_data = numpy.empty((0, self.parts_count * 3), dtype=numpy.float32)
 
 
 @dataclass
