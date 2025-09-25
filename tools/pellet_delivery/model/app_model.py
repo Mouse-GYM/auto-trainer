@@ -393,8 +393,6 @@ class AppModel(ObservableObject):
                 self._device_connection.request_disconnect()
                 self._device_connection = None
 
-            self.is_connected = False
-
         # to have new events emitted on next connect, we better set these to None,
         # so that event listener(s) will get an on_property_changed callback triggered
         self.config = None
@@ -402,6 +400,7 @@ class AppModel(ObservableObject):
         self._send_x = self._send_y = self._send_z = None
         self.travel_limits = None
         self.firmware_version = ""
+        self.is_connected = False  # last
 
     def on_activated(self):
         pass
