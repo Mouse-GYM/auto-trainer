@@ -128,7 +128,8 @@ class AppModel(ObservableObject):
 
     @is_connected.setter
     def is_connected(self, value):
-        self._is_connected = self._on_property_changed("is_connected", value, self._is_connected)
+        prev, self._is_connected = self._is_connected, value  # is important to set before sending the event:
+        self._on_property_changed("is_connected", value, prev)
 
     @property
     def firmware_version(self) -> str:
