@@ -181,8 +181,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._check_previous_offline_thread("perform_segmentation")
         self._data_monitor_proc.stop_recorded.clear()
         logger.info("performing segmentation on %s", configuration)
-        intersession_block = self._intersession_block = IntersessionBlock(
-            configuration=configuration, parts_count=self._algorithm.part_count)
+        intersession_block = self._intersession_block = IntersessionBlock(configuration=configuration)
 
         self._send_message(InferenceCommandMessageKind.ProcessOffline)
         # ProcessOffline is not anymore used.
