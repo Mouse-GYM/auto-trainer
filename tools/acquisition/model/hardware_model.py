@@ -381,10 +381,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def set_auto_correct_motor_drift(self, enabled: bool):
         dev = self._device
         if dev is not None:
-            # self._device.device.device_interface.set_auto_correct_motor_drift(enabled)
             dev.send_message(SystemCommandKind.SET_AUTO_CORRECT_DRIFT, enabled)
             if not enabled:
-                # ensure we disable the previous drift:
+                logger.verbose("Doing SET_X/Y/Z relative=0 to clear possible motors drift")
                 for cmd_kind in (SystemCommandKind.SET_X, SystemCommandKind.SET_Y, SystemCommandKind.SET_Z):
                     dev.send_message(cmd_kind, SystemDataArgsKwargs(0, relative=True))
 
