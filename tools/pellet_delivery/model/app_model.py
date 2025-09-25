@@ -408,10 +408,6 @@ class AppModel(ObservableObject):
 
     def on_close(self):
         self.disconnect_from_device()
-
-        # End all threads so application exits cleanly.
-        if self._device_connection is not None:
-            self._device_connection.request_disconnect()
         if self._message_handler is not None:
             self._message_handler.request_terminate()
             self._message_handler.wait_terminated()
