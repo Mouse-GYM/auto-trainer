@@ -3,10 +3,13 @@ from typing import Optional
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QFormLayout
 
-from autotrainer.core import Offset3DTuple
+from autotrainer.core import Offset3DTuple, get_verbose_logger
 from autotrainer.pyside import CardWidget
 from autotrainer.pyside.xyz_label import XYZQLabel
 from tools.pellet_delivery.model.app_model import AppModel
+
+
+logger = get_verbose_logger(__name__)
 
 _NO_UPDATES = "(no updates)"
 
@@ -89,27 +92,7 @@ class PelletStatus(QWidget):
 
     def _model_property_changed(self, name: str, value, _old_value):
         app_model = self._app_model
-        if name == "xyz":
-            self._xyz_device.update_coordinate(value)
-            self._xyz_diamond.update_coordinate(app_model.to_diamond_coordinates(value))
-        elif name == "send_xyz":
-            self._send_xyz_device.update_coordinate(value)
-            self._send_xyz_diamond.update_coordinate(app_model.to_diamond_coordinates(value))
-        elif name in {'x', 'y', 'z'}:
-            d = {name: value}
-            self._xyz_device.update_coordinate(**d)
-            cur_xyz = app_model.xyz.replace(**d)
-            self._xyz_diamond.update_coordinate(app_model.to_diamond_coordinates(cur_xyz))
-        elif name in {'send_x', 'send_y', 'send_z'}:
-            d = {name[-1]: value}
-            self._send_xyz_device.update_coordinate(**d)
-            cur_send_xyz = app_model.send_xyz.replace(**d)
-            self._send_xyz_diamond.update_coordinate(app_model.to_diamond_coordinates(cur_send_xyz))
-        elif name == "load_arm":
-            self._load_arm.setText(opt_float_to_txt(value))
-        elif name == "cover_arm":
-            self._cover_arm.setText(opt_float_to_txt(value))
-        elif name == "is_connected":
+        if name == "is_connected":
             if value:
                 reset_prop = self._model_property_changed
                 reset_prop("xyz", app_model.xyz, None)
@@ -121,3 +104,31 @@ class PelletStatus(QWidget):
                     xyz_label.setText(_NO_UPDATES)
                 self._load_arm.setText(_NO_UPDATES)
                 self._cover_arm.setText(_NO_UPDATES)
+            return
+
+        if app_model.is_connected:
+            if name == "xyz":
+                self._xyz_device.update_coordinate(value)
+                self._xyz_diamond.update_coordinate(app_model.to_diamond_coordinates(value))
+
+            elif name == "send_xyz":
+                self._send_xyz_device.update_coordinate(value)
+                self._send_xyz_diamond.update_coordinate(app_model.to_diamond_coordinates(value))
+
+            elif name in {'x', 'y', 'z'}:
+                d = {name: value}
+                self._xyz_device.update_coordinate(**d)
+                cur_xyz = app_model.xyz.replace(**d)
+                self._xyz_diamond.update_coordinate(app_model.to_diamond_coordinates(cur_xyz))
+
+            elif name in {'send_x', 'send_y', 'send_z'}:
+                d = {name[-1]: value}
+                self._send_xyz_device.update_coordinate(**d)
+                cur_send_xyz = app_model.send_xyz.replace(**d)
+                self._send_xyz_diamond.update_coordinate(app_model.to_diamond_coordinates(cur_send_xyz))
+
+            elif name == "load_arm":
+                self._load_arm.setText(opt_float_to_txt(value))
+
+            elif name == "cover_arm":
+                self._cover_arm.setText(opt_float_to_txt(value))
