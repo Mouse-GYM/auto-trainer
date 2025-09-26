@@ -1,8 +1,11 @@
+from functools import partial
+
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import QVBoxLayout, QLabel, QHBoxLayout, QWidget, QGridLayout, QFormLayout
 
 from autotrainer.core import MessageHandler
 from autotrainer.pyside import CardWidget
+from autotrainer.pyside.xyz_label import XYZQLabel
 
 from tools.acquisition.view.content_widget import ContentWidget
 
@@ -54,18 +57,11 @@ class HardwareStatusContent(ContentWidget):
         form_layout.setHorizontalSpacing(8)
         form_layout.setVerticalSpacing(4)
 
-        self._pellet_x = QLabel("(no updates)")
-        form_layout.addRow("X (mm):", self._pellet_x)
-        self._pellet_y = QLabel("(no updates)")
-        form_layout.addRow("Y (mm):", self._pellet_y)
-        self._pellet_z = QLabel("(no updates)")
-        form_layout.addRow("Z (mm):", self._pellet_z)
-        self._send_x = QLabel("(no updates)")
-        form_layout.addRow("Send X (mm):", self._send_x)
-        self._send_y = QLabel("(no updates)")
-        form_layout.addRow("Send Y (mm):", self._send_y)
-        self._send_z = QLabel("(no updates)")
-        form_layout.addRow("Send Z (mm):", self._send_z)
+        self._pellet_xyz = XYZQLabel()
+        form_layout.addRow("XYZ (mm) :", self._pellet_xyz)
+        self._send_pellet_xyz = XYZQLabel()
+        form_layout.addRow("Send XYZ (mm) :", self._send_pellet_xyz)
+        #
         self._load_arm = QLabel("(no updates)")
         form_layout.addRow("Load Arm (\u00b0):", self._load_arm)
         self._cover_arm = QLabel("(no updates)")
@@ -84,13 +80,16 @@ class HardwareStatusContent(ContentWidget):
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
 
+        def xyz_update(xyz_label: XYZQLabel, coord, value):
+            xyz_label.update_coordinate(**{coord: value})
+
         self.head_magnet_changed.connect(lambda x: self._head_magnet.setText(str(round(x, 1))))
-        self.pellet_x_changed.connect(lambda x: self._pellet_x.setText(str(round(x, 1))))
-        self.pellet_y_changed.connect(lambda x: self._pellet_y.setText(str(round(x, 1))))
-        self.pellet_z_changed.connect(lambda x: self._pellet_z.setText(str(round(x, 1))))
-        self.send_x_changed.connect(lambda x: self._send_x.setText(str(round(x, 1))))
-        self.send_y_changed.connect(lambda x: self._send_y.setText(str(round(x, 1))))
-        self.send_z_changed.connect(lambda x: self._send_z.setText(str(round(x, 1))))
+        self.pellet_x_changed.connect(partial(xyz_update, self._pellet_xyz, "x"))
+        self.pellet_y_changed.connect(partial(xyz_update, self._pellet_xyz, "y"))
+        self.pellet_z_changed.connect(partial(xyz_update, self._pellet_xyz, "z"))
+        self.send_x_changed.connect(partial(xyz_update, self._send_pellet_xyz, "x"))
+        self.send_y_changed.connect(partial(xyz_update, self._send_pellet_xyz, "y"))
+        self.send_z_changed.connect(partial(xyz_update, self._send_pellet_xyz, "z"))
         self.load_arm_changed.connect(lambda x: self._load_arm.setText(str(round(x, 1))))
         self.cover_arm_changed.connect(lambda x: self._cover_arm.setText(str(round(x, 1))))
 
