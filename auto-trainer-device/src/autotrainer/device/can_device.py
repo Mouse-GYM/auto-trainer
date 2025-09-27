@@ -605,8 +605,9 @@ class CanDevice(Device):
         """
         prev_limit_switch = self._last_limit_switch.get(message.motor, None)
         if message.is_at_limit != prev_limit_switch:
-            logger.notice("%s: limit_switch: %s -> %s ; pos=%s",
-                          message.motor, prev_limit_switch, message.is_at_limit, message.position)
+            logger.notice("%s: limit_switch: %s -> %s ; pos=%.02f send_pos=%.02f",
+                          message.motor, prev_limit_switch, message.is_at_limit,
+                          message.position, message.send_position)
             self._last_limit_switch[message.motor] = message.is_at_limit
 
         kind = CanDevice._motor_to_status_kind.get(message.motor, None)
