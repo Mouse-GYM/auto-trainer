@@ -236,9 +236,9 @@ class BehaviorAlgorithm(ObservableObject):
         self._top_camera_presence_detection = PresenceDetectionAttrs()
         self._presence_missing = False
 
-        self._diamond_triangle_offest_config_path = diamond_triangle_offset_config_path
+        self._diamond_triangle_offset_config_path = diamond_triangle_offset_config_path
         self._diamond_triangle_offset_config = DiamondTriangleOffsetConfig.load_config(
-            self._diamond_triangle_offest_config_path
+            self._diamond_triangle_offset_config_path
         )
 
         self._diamond_triangle_drift: Optional[Offset3DTuple] = None
@@ -807,7 +807,7 @@ class BehaviorAlgorithm(ObservableObject):
         post_trigger_enable(self, True)
 
         self._diamond_triangle_offset_config = DiamondTriangleOffsetConfig.load_config(
-            self._diamond_triangle_offest_config_path
+            self._diamond_triangle_offset_config_path
         )
 
         self.session_starting()
