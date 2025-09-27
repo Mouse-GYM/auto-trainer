@@ -118,6 +118,12 @@ class CanDevice(Device):
         self._close_tunnel_gate = default_close_gate()
         self._compound_movement = None  # Current compound movement
 
+        self._last_limit_switch = {
+            Motor.PELLET_X_MOTOR: False,
+            Motor.PELLET_Y_MOTOR: False,
+            Motor.PELLET_Z_MOTOR: False,
+        }
+
         no_op_handler = lambda _: None
 
         # Initialize command handlers lookup table
@@ -248,6 +254,8 @@ class CanDevice(Device):
             SystemCommandKind.STREAM_START: no_op_handler,
             SystemCommandKind.STREAM_STOP: no_op_handler,
         }
+
+        #
 
         def set_current_pressure(m):
             self._current_pressure = m.pressure
@@ -585,13 +593,15 @@ class CanDevice(Device):
         Report stepper status to the API.
 
         Args:
-            motor: The motor that has reported its status
-            position: The current position of the motor
-            _at_limit: Whether the motor is at its limit switch
+            message: StepperStatus
         """
+        prev_limit_switch = self._last_limit_switch.get(message.motor, None)
+        if message.is_at_limit != prev_limit_switch:
+            logger.notice("%s: limit_switch: %s -> %s ; pos=%s",
+                          message.motor, prev_limit_switch, message.is_at_limit, message.position)
+            self._last_limit_switch[message.motor] = message.is_at_limit
 
         kind = CanDevice._motor_to_status_kind.get(message.motor, None)
-
         if self._api is not None and kind is not None:
             self.api.send_message(kind, message)
 
