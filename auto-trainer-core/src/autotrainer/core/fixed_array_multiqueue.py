@@ -285,8 +285,9 @@ class FixedArrayMultiQueue:
         return True
 
     def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 10):
-        for cdx in range(self._cam_count):
-            for _ in range(self._frames_per_camera):
+        for _ in range(self._frames_per_camera):
+            for cdx in range(self._cam_count):
                 t0 = time.perf_counter()
+                # put_block() will take care to raise if timeout occurs
                 self.put_block(frame, cdx, frame_idx, timeout=timeout)
                 timeout -= time.perf_counter() - t0
