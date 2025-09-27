@@ -274,7 +274,7 @@ class StepperStatus(Source, StepperStatusMessage):
     _motor: Motor = Motor.NONE
     _position: float = 0  # (mm)
     _send_position: float = 0 # (mm)
-    _limit_switch: bool = False
+    _limit_switch: int = 0
     position_error: bool = False
 
     def __init__(
@@ -283,7 +283,7 @@ class StepperStatus(Source, StepperStatusMessage):
         motor: Motor,
         position: float,
         send_position: float,
-        limit_switch: bool,
+        limit_switch: int,
         *,
         position_error: bool = False,
     ):
@@ -310,7 +310,7 @@ class StepperStatus(Source, StepperStatusMessage):
         return self._send_position
 
     @property
-    def is_at_limit(self) -> bool:
+    def is_at_limit(self) -> int:
         return self._limit_switch
 
 

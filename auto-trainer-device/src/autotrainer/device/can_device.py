@@ -119,9 +119,9 @@ class CanDevice(Device):
         self._compound_movement = None  # Current compound movement
 
         self._last_limit_switch = {
-            Motor.PELLET_X_MOTOR: False,
-            Motor.PELLET_Y_MOTOR: False,
-            Motor.PELLET_Z_MOTOR: False,
+            Motor.PELLET_X_MOTOR: -1,
+            Motor.PELLET_Y_MOTOR: -1,
+            Motor.PELLET_Z_MOTOR: -1,
         }
 
         no_op_handler = lambda _: None
@@ -369,6 +369,7 @@ class CanDevice(Device):
                 has_read_from_queue = True
             if r is None:
                 q.task_done()
+                logger.verbose("received exit sentinel, exiting main loop ..")
                 break
             kind, data, ctx = r
             prev_commands_count = len(cur_commands)
@@ -448,6 +449,13 @@ class CanDevice(Device):
             value: The DeviceApi instance to use
         """
         self._api = value
+
+    def connect(self):
+        pass
+
+    def disconnect(self):
+        self._commands_queue.put(None)
+        self._commands_handler_thread.join(3)
 
     def _start_sequence(self, movements: MotorSteps):
         """
