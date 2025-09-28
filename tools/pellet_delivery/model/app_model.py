@@ -226,7 +226,8 @@ class AppModel(ObservableObject):
 
     @travel_limits.setter
     def travel_limits(self, value):
-        self._travel_limits = self._on_property_changed("travel_limits", value, self._travel_limits)
+        prev, self._travel_limits = self._travel_limits, value
+        self._on_property_changed("travel_limits", value, prev)
 
     @property
     def command_pending(self):
@@ -307,7 +308,6 @@ class AppModel(ObservableObject):
 
     def _exec_xyz(self, value, *, system_cmd, axis_idx, xyz_getter):
         xyz = xyz_getter(self).replace(**{"xyz"[axis_idx]: value})
-        xyz = self.to_motor_coordinates(xyz)
         return self._send_command(system_cmd, xyz[axis_idx], context=uuid.uuid4())
 
     def _get_send_xyz(self):
