@@ -185,9 +185,9 @@ class PelletControl(QWidget):
             combo.addItem(coord_system.value, coord_system)
         def select_coordinate(_: int):
             self._coordinate_system_changed(limits=self._app_model.travel_limits)
+        combo.setCurrentIndex(0)
         combo.currentIndexChanged.connect(select_coordinate)
-        combo.setCurrentIndex(len(COORDINATE_SYSTEMS) - 1)  # last one
-        # the _coordinate_system_changed() will also be called, given set after the signal connect above
+        select_coordinate(0)  # ensure we set as when switched to
         combo_l = QHBoxLayout()
         combo_l.setContentsMargins(8, 0, 0, 0)
         combo_l.setSpacing(5)
