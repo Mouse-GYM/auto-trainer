@@ -310,7 +310,7 @@ class StepperStatus(Source, StepperStatusMessage):
         return self._send_position
 
     @property
-    def is_at_limit(self) -> int:
+    def is_at_limit(self) -> bool:
         return self._limit_switch
 
 
