@@ -202,7 +202,7 @@ class PelletControl(QWidget):
     def _to_motor(self, xyz: Offset3DTuple) -> Offset3DTuple:
         return (
             self._app_model.to_motor_coordinates(xyz)
-                if self._combo_coordinate_system.currentText() == CoordinateSystem.Diamond
+                if self._combo_coordinate_system.currentData() == CoordinateSystem.Diamond
             else xyz
         )
 
