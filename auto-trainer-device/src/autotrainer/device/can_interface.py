@@ -1862,7 +1862,7 @@ class CanInterface(DeviceInterface):
             motor=motor,
             position=turns_to_mm(message.stepper_status.position),
             send_position=motor_send_pos,
-            limit_switch=message.stepper_status.limit_switch,
+            limit_switch=message.stepper_status.limit_switch == 1,
             position_error=self._motors_drift_error[motor_axis_idx],
         )
         return status
