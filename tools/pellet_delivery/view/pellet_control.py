@@ -1,8 +1,7 @@
-
 from typing import Tuple
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
-    QLayout, QVBoxLayout, QFileDialog, QFrame, QDoubleSpinBox, QComboBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QVBoxLayout, QFileDialog, QFrame, QDoubleSpinBox, QComboBox
 
 import qtawesome as qta
 
@@ -10,8 +9,9 @@ from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.message import Motor
 from autotrainer.device import is_servo
+from autotrainer.device.coordinate_system import CoordinateSystem, COORDINATE_SYSTEMS
 from autotrainer.model import HardwareVersion, EnvironmentProvider
-from autotrainer.pyside import Separator, CardWidget, QSwitch
+from autotrainer.pyside import Separator, CardWidget
 
 from tools.pellet_delivery.model.app_model import AppModel
 from autotrainer.pyside import MotorConfigDialog
@@ -134,9 +134,10 @@ class PelletControl(QWidget):
         is_legacy = EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ
         is_legacy = False  # temporary
 
-        p_layout, self._x_pos, moveButton, setButton, self._x_label = add_position("X[diamo] (mm):", -10, 10)
-        moveButton.clicked.connect(lambda: self._move_x())
-        setButton.clicked.connect(lambda: self._set_x())
+        # NB: following X/Y/Z pos labels text are anyway reset after/below when we set the coordinate system
+        p_layout, self._x_pos, moveButton, setButton, self._x_label = add_position("X", -10, 10)
+        moveButton.clicked.connect(self._move_x)
+        setButton.clicked.connect(self._set_x)
         s_layout.addLayout(p_layout)
 
         if is_legacy:
@@ -151,9 +152,9 @@ class PelletControl(QWidget):
 
         s_layout.addStretch(1)
 
-        p_layout, self._y_pos, moveButton, setButton, self._y_label = add_position("Y[diamo] (mm):", -10, 10)
-        moveButton.clicked.connect(lambda: self._move_y())
-        setButton.clicked.connect(lambda: self._set_y())
+        p_layout, self._y_pos, moveButton, setButton, self._y_label = add_position("Y", -10, 10)
+        moveButton.clicked.connect(self._move_y)
+        setButton.clicked.connect(self._set_y)
         s_layout.addLayout(p_layout)
 
         if is_legacy:
@@ -168,33 +169,42 @@ class PelletControl(QWidget):
 
         s_layout.addStretch(1)
 
-        p_layout, self._z_pos, moveButton, setButton, self._z_label = add_position("Z[diamo] (mm):", -10, 10)
-        moveButton.clicked.connect(lambda: self._move_z())
-        setButton.clicked.connect(lambda: self._set_z())
+        p_layout, self._z_pos, moveButton, setButton, self._z_label = add_position("Z", -10, 10)
+        moveButton.clicked.connect(self._move_z)
+        setButton.clicked.connect(self._set_z)
         s_layout.addLayout(p_layout)
 
         if is_legacy:
             moveButton.setVisible(False)
 
         v_layout = QVBoxLayout()
+        v_layout.setContentsMargins(0, 5, 0, 0)
 
         combo = self._combo_coordinate_system = QComboBox()
-        combo.addItems(["Motor", "Diamond"])
-        combo.setCurrentIndex(1)
-        def select_coordinate(idx: int):
-            print(idx, combo.currentText())
-            self._coordinate_system_changed(self._app_model.travel_limits)
+        for coord_system in COORDINATE_SYSTEMS:
+            combo.addItem(coord_system.value, coord_system)
+        def select_coordinate(_: int):
+            self._coordinate_system_changed(limits=self._app_model.travel_limits)
         combo.currentIndexChanged.connect(select_coordinate)
-        v_layout.addWidget(QLabel("Coordinate system:"))
-        v_layout.addWidget(combo)
+        combo.setCurrentIndex(len(COORDINATE_SYSTEMS) - 1)  # last one
+        # the _coordinate_system_changed() will also be called, given set after the signal connect above
+        combo_l = QHBoxLayout()
+        combo_l.setContentsMargins(8, 0, 0, 0)
+        combo_l.setSpacing(5)
+        combo_l.addWidget(QLabel("Coordinate system:"))
+        combo_l.addWidget(combo)
+        combo_l.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        v_layout.addLayout(combo_l)
         v_layout.addLayout(s_layout)
 
         return v_layout
 
-    def _to_motor(self, xyz):
-        if self._combo_coordinate_system.currentText() == "Diamond":
-            xyz = self._app_model.to_motor_coordinates(xyz)
-        return xyz
+    def _to_motor(self, xyz: Offset3DTuple) -> Offset3DTuple:
+        return (
+            self._app_model.to_motor_coordinates(xyz)
+                if self._combo_coordinate_system.currentText() == CoordinateSystem.Diamond
+            else xyz
+        )
 
     def _set_x(self):
         self._app_model.set_x(self._to_motor(Offset3DTuple(self._x_pos.value(), 0, 0)).x)
@@ -214,25 +224,32 @@ class PelletControl(QWidget):
     def _move_z(self):
         self._app_model.move_z(self._to_motor(Offset3DTuple(0, 0, self._z_pos.value())).z)
 
-    def _coordinate_system_changed(self, limits):
-        cur_coordinate_system = self._combo_coordinate_system.currentText()
+    def _coordinate_system_changed(self, *, limits):
+        cur_coordinate_system = self._combo_coordinate_system.currentData()
         app_model = self._app_model
-        min_xyz = Offset3DTuple(*(limits[c][0] for c in 'xyz'))
-        max_xyz = Offset3DTuple(*(limits[c][1] for c in 'xyz'))
-        if cur_coordinate_system == "Motor":
+        if limits is None:
+            min_xyz = max_xyz = None
+        else:
+            min_xyz = Offset3DTuple(*(limits[c][0] for c in 'xyz'))
+            max_xyz = Offset3DTuple(*(limits[c][1] for c in 'xyz'))
+        if cur_coordinate_system == CoordinateSystem.Motor:
             value = app_model.xyz
-        elif cur_coordinate_system == "Diamond":
-            cur_coordinate_system = "Diamo"
-            min_xyz = app_model.to_diamond_coordinates(min_xyz)
-            max_xyz = app_model.to_diamond_coordinates(max_xyz)
+        elif cur_coordinate_system == CoordinateSystem.Diamond:
+            cur_coordinate_system = "Diamo"  # for the x/y/z labels
+            if limits is not None:
+                min_xyz = app_model.to_diamond_coordinates(min_xyz)
+                max_xyz = app_model.to_diamond_coordinates(max_xyz)
             value = app_model.to_diamond_coordinates(app_model.xyz)
         else:
             raise RuntimeError(f"Unhandled {cur_coordinate_system}")
         #
         for idx, pos in enumerate((self._x_pos, self._y_pos, self._z_pos)):
-            v1, v2 = min_xyz[idx], max_xyz[idx]
-            r = min(v1, v2), max(v1, v2)
-            pos.setRange(*r)
+            if limits is not None:
+                v1, v2 = min_xyz[idx], max_xyz[idx]
+                r = min(v1, v2), max(v1, v2)
+                pos.setRange(*r)
+            else:
+                r = None
             pos.blockSignals(True)
             pos.setValue(value[idx])
             pos.blockSignals(False)
@@ -240,13 +257,13 @@ class PelletControl(QWidget):
 
         for idx, label in enumerate((self._x_label, self._y_label, self._z_label)):
             c = "XYZ"[idx]
-            label.setText(f"{c}[{cur_coordinate_system}] (mm):")
+            label.setText(f"<b>{c}</b>-{cur_coordinate_system} (mm):")
 
     def _model_property_changed(self, name: str, value, _old_value):
         if name == "travel_limits":
             logger.debug("got & applying travel_limits: %s", value)
             if value is not None:
-                self._coordinate_system_changed(value)
+                self._coordinate_system_changed(limits=value)
         elif name == "config":
             if self._config_dialog is not None:
                 if is_servo(value.motor):
