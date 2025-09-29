@@ -1127,32 +1127,28 @@ class CanInterface(DeviceInterface):
         logger.debug("%s: res=%s uuid=%s", motor, res, uuid)
         return res == 0
 
-    def move_magnet_servo(self, position, _unused: bool = False) -> bool:
+    def move_magnet_servo(self, position) -> bool:
         """
         Move the magnet motor
 
         Args:
             position: Either a position (float) or a (position, rate (%)) pair
-            _unused
 
         Returns:
             bool: True if successful else False
         """
         return self._move_servo_motor(Motor.TUNNEL_MAGNET_SERVO, position, self.magnet_config)
 
-    def move_gate_servo(self, position, _save: bool = False, *, relative: bool=False) -> bool:
+    def move_gate_servo(self, position) -> bool:
         """
         Move the gate motor
 
         Args:
             position: Either a position (float) or a (position, rate (%)) pair
-            _unused
 
         Returns:
             bool: True if successful else False
         """
-        if relative:
-            raise RuntimeError("TODO")
         return self._move_servo_motor(Motor.TUNNEL_GATE_SERVO, position, self.gate_config)
 
     def set_motor_x(self, position: float, *, relative: bool = False) -> bool:
