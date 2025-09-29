@@ -102,7 +102,7 @@ class StepperStatusMessage(Protocol):
 
     @property
     def is_at_limit(self) -> bool:
-        """1 if the limit switch has been hit, otherwise 0."""
+        """True if the limit switch has been hit, otherwise False."""
         pass
 
 
