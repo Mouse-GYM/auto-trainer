@@ -408,7 +408,10 @@ class CanDevice(Device):
                     logger.warning("unhandled command queue message: %s", kind)
                     continue
                 logger.debug("executing cmd %s with ctx %s", kind, ctx)
-                handler(data)
+                if isinstance(data, SystemDataArgsKwargs):
+                    handler(*data.args, **data.kwargs)
+                else:
+                    handler(data)
             after_uuid = self._interface.uuid()
             t_perf_last_command = time.perf_counter()
             if after_uuid != before_uuid:
