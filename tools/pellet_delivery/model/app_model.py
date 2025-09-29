@@ -1,10 +1,14 @@
+import math
 import queue
+import time
 import uuid
+from functools import partial, partialmethod
 from pathlib import Path
 from typing import Optional
 
+from autotrainer.behavior import DiamondTriangleOffsetConfig
 from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
-                              EventManager)
+                              EventManager, Offset3DTuple, MotorConfigurations)
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.device import (CanDevice, MotorConfigurationFile, DeviceConnection, CompoundMovementFile)
 
@@ -22,7 +26,11 @@ _alogus_travel_limits = {
 
 
 class AppModel(ObservableObject):
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        diamond_triangle_config_path: Path = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH,
+    ):
         super().__init__()
 
         self._user_settings = UserSettings()
@@ -31,9 +39,11 @@ class AppModel(ObservableObject):
 
         self._device_connection: Optional[DeviceConnection] = None
 
-        self._message_handler = SystemMessageHandler(queue.Queue())
-        self._message_handler.property_changed += self._message_handler_property_changed
-        self._message_handler.ack_received += self.reader_ack_received
+        msg_handler = self._message_handler = SystemMessageHandler(queue.Queue())
+        msg_handler.start()
+        #
+        msg_handler.property_changed += self._message_handler_property_changed
+        msg_handler.ack_received += self.reader_ack_received
 
         self._is_connected = False
 
@@ -60,7 +70,11 @@ class AppModel(ObservableObject):
         self._command_pending = False
         self._last_command = None
 
-        self._travel_limits = _alogus_travel_limits
+        self._travel_limits = None  # _alogus_travel_limits
+
+        self._motor_flips = Offset3DTuple(math.nan, math.nan, math.nan)
+        self._diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(
+            diamond_triangle_config_path)
 
     @property
     def user_settings(self) -> UserSettings:
@@ -76,12 +90,46 @@ class AppModel(ObservableObject):
                                                                  self._hardware_configuration)
 
     @property
+    def diamond_triangle_config(self):
+        return self._diamond_triangle_config
+
+    @property
+    def motor_flips(self):
+        return self._motor_flips
+
+    def to_diamond_coordinates(self, xyz: Offset3DTuple) -> Offset3DTuple:
+        diam_triangle_cfg = self._diamond_triangle_config
+        if diam_triangle_cfg is None:
+            return Offset3DTuple(math.nan, math.nan, math.nan)
+        assert isinstance(diam_triangle_cfg, DiamondTriangleOffsetConfig)
+        flips = Offset3DTuple(1, -1, -1)
+        motor_flips = self._motor_flips
+        return (
+            flips * diam_triangle_cfg.measured_offset
+            - (xyz - diam_triangle_cfg.used_position)
+        ) * motor_flips
+
+    def to_motor_coordinates(self, xyz: Offset3DTuple) -> Offset3DTuple:
+        diam_triangle_cfg = self._diamond_triangle_config
+        if diam_triangle_cfg is None:
+            return Offset3DTuple(math.nan, math.nan, math.nan)
+        assert isinstance(diam_triangle_cfg, DiamondTriangleOffsetConfig)
+        flips = Offset3DTuple(1, -1, -1)
+        motor_flips = self._motor_flips
+        return (
+            flips * diam_triangle_cfg.measured_offset
+            - (xyz * motor_flips)
+            + diam_triangle_cfg.used_position
+        )
+
+    @property
     def is_connected(self):
         return self._is_connected
 
     @is_connected.setter
     def is_connected(self, value):
-        self._is_connected = self._on_property_changed("is_connected", value, self._is_connected)
+        prev, self._is_connected = self._is_connected, value  # is important to set before sending the event:
+        self._on_property_changed("is_connected", value, prev)
 
     @property
     def firmware_version(self) -> str:
@@ -95,6 +143,11 @@ class AppModel(ObservableObject):
 
         self._firmware_version = self._on_property_changed("firmware_version", value,
                                                            self._firmware_version)
+
+    @property
+    def xyz(self) -> Offset3DTuple:
+        x, y, z = map(lambda v: math.nan if v is None else v, (self._x, self._y, self._z))
+        return Offset3DTuple(x, y, z)
 
     @property
     def x(self):
@@ -119,6 +172,13 @@ class AppModel(ObservableObject):
     @z.setter
     def z(self, value):
         self._z = self._on_property_changed("z", value, self._z)
+
+    #
+
+    @property
+    def send_xyz(self) -> Offset3DTuple:
+        x, y, z = map(lambda v: math.nan if v is None else v, (self._send_x, self._send_y, self._send_z))
+        return Offset3DTuple(x, y, z)
 
     @property
     def send_x(self):
@@ -166,7 +226,8 @@ class AppModel(ObservableObject):
 
     @travel_limits.setter
     def travel_limits(self, value):
-        self._travel_limits = self._on_property_changed("travel_limits", value, self._travel_limits)
+        prev, self._travel_limits = self._travel_limits, value
+        self._on_property_changed("travel_limits", value, prev)
 
     @property
     def command_pending(self):
@@ -245,23 +306,29 @@ class AppModel(ObservableObject):
     def cover_pellet(self):
         self._send_command(SystemCommandKind.COVER_PELLET, context=uuid.uuid4())
 
-    def set_x(self, value: float):
-        self._send_command(SystemCommandKind.SET_X, value, context=uuid.uuid4())
+    def _exec_xyz(self, value, *, system_cmd, axis_idx, xyz_getter):
+        xyz = xyz_getter(self).replace(**{"xyz"[axis_idx]: value})
+        return self._send_command(system_cmd, xyz[axis_idx], context=uuid.uuid4())
 
-    def set_y(self, value: float):
-        self._send_command(SystemCommandKind.SET_Y, value, context=uuid.uuid4())
+    def _get_send_xyz(self):
+        return self.send_xyz
 
-    def set_z(self, value: float):
-        self._send_command(SystemCommandKind.SET_Z, value, context=uuid.uuid4())
+    set_x = partialmethod(_exec_xyz,
+                          system_cmd=SystemCommandKind.SET_X, axis_idx=0, xyz_getter=_get_send_xyz)
+    set_y = partialmethod(_exec_xyz,
+                          system_cmd=SystemCommandKind.SET_Y, axis_idx=1, xyz_getter=_get_send_xyz)
+    set_z = partialmethod(_exec_xyz,
+                          system_cmd=SystemCommandKind.SET_Z, axis_idx=2, xyz_getter=_get_send_xyz)
 
-    def move_x(self, value: int):
-        self._send_command(SystemCommandKind.MOVE_X, value, context=uuid.uuid4())
+    def _get_xyz(self):
+        return self.xyz
 
-    def move_y(self, value: int):
-        self._send_command(SystemCommandKind.MOVE_Y, value, context=uuid.uuid4())
-
-    def move_z(self, value: int):
-        self._send_command(SystemCommandKind.MOVE_Z, value, context=uuid.uuid4())
+    move_x = partialmethod(_exec_xyz,
+                           system_cmd=SystemCommandKind.MOVE_X, axis_idx=0, xyz_getter=_get_xyz)
+    move_y = partialmethod(_exec_xyz,
+                           system_cmd=SystemCommandKind.MOVE_Y, axis_idx=1, xyz_getter=_get_xyz)
+    move_z = partialmethod(_exec_xyz,
+                           system_cmd=SystemCommandKind.MOVE_Z, axis_idx=2, xyz_getter=_get_xyz)
 
     def set_config(self, config):
         self._send_command(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
@@ -276,13 +343,9 @@ class AppModel(ObservableObject):
 
     def connect_to_device(self):
         self._device_connection = DeviceConnection(CanDevice(), self._message_handler.input_queue, name="pellet-can")
-
-        self.travel_limits = _alogus_travel_limits
-
         self._device_connection.request_connect()
-
         self._send_command(SystemCommandKind.REQUEST_VERSION)
-
+        #
         if self._hardware_configuration is None:
             for attempt in (
                     MotorConfigurationFile.DEFAULT_LOCATION.expanduser(),
@@ -296,7 +359,9 @@ class AppModel(ObservableObject):
             else:
                 logger.warning("No motor config file found, motors are possibly unconfigured ; this might be critical")
 
-        if self._hardware_configuration is not None:
+        if self._hardware_configuration is None:
+            motors_cfg = MotorConfigurationFile()
+        else:
             logger.info("Reading motor config file %s", self._hardware_configuration)
             try:
                 motors_cfg = MotorConfigurationFile.from_file(self._hardware_configuration)
@@ -306,9 +371,18 @@ class AppModel(ObservableObject):
                     err)
                 self.hardware_configuration = None
                 raise  # do not take any risk
-            else:
-                self._device_connection.use_motor_configurations(motors_cfg)
 
+        self._motor_flips = Offset3DTuple(*(-1 if cfg.flip_limit_orientation else 1
+                                            for _, cfg in (motors_cfg.x_config, motors_cfg.y_config, motors_cfg.z_config)))
+        logger.debug("motor_flips: %s", self._motor_flips)
+        #
+        self._diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(
+            DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH)
+
+        # only set it after having loaded motor config
+        self.travel_limits = _alogus_travel_limits
+
+        self._device_connection.use_motor_configurations(motors_cfg)
         self._device_connection.load_default_move_config()
 
         self.is_connected = True
@@ -320,21 +394,23 @@ class AppModel(ObservableObject):
                 self._device_connection.request_disconnect()
                 self._device_connection = None
 
-            self.is_connected = False
-
+        # to have new events emitted on next connect, we better set these to None,
+        # so that event listener(s) will get an on_property_changed callback triggered
+        self.config = None
+        self._x = self._y = self._z = None
+        self._send_x = self._send_y = self._send_z = None
+        self.travel_limits = None
         self.firmware_version = ""
+        self.is_connected = False  # last
 
     def on_activated(self):
-        self._message_handler.start()
+        pass
 
     def on_close(self):
         self.disconnect_from_device()
-
-        # End all threads so application exits cleanly.
-        if self._device_connection is not None:
-            self._device_connection.request_disconnect()
         if self._message_handler is not None:
             self._message_handler.request_terminate()
+            self._message_handler.wait_terminated()
 
         EventManager.try_close_default()
 
@@ -376,7 +452,7 @@ class AppModel(ObservableObject):
     def _send_command(self, message, data=None, *, context=None):
         if self._last_command is not None:
             logger.verbose("ignoring command %s while existing command is in process with context=%s",
-                           self._last_command)
+                           message, self._last_command)
             return
 
         if context is not None:

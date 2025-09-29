@@ -1,12 +1,16 @@
 import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, List, Dict
+from typing import ClassVar, List, Dict, Optional
+from typing_extensions import Self
 
 import numpy
 import yaml
 
-from autotrainer.core import Offset3DTuple
+from autotrainer.core import Offset3DTuple, get_verbose_logger
+
+
+logger = get_verbose_logger()
 
 
 # keeping top level atm, given not quite sure where to put
@@ -22,6 +26,17 @@ class DiamondTriangleOffsetConfig:
         self.used_position = used_position
         self.measured_offset = measured_offset
 
+    @classmethod
+    def load_config(cls, cfg_path: Optional[Path]) -> Optional[Self]:
+        if cfg_path is None:
+            logger.notice("No diamond-triangle offset config path provided")
+        else:
+            if not cfg_path.expanduser().is_file():
+                logger.warning("Diamond triangle config %r not a file", cfg_path.as_posix())
+            else:
+                return DiamondTriangleOffsetConfig.from_file(cfg_path)
+        return None
+
     @property
     def reference_corrected_offset(self):
         return self.measured_offset - self.used_position  # subtract used_position, to have common 0
@@ -34,7 +49,11 @@ class DiamondTriangleOffsetConfig:
 
     def to_file(self, path: Path):
         with path.expanduser().open("w") as fh:
-            yaml.safe_dump(dataclasses.asdict(self), fh)
+            d = dataclasses.asdict(self)
+            for k, v in d.items():
+                d[k] = list(v)  # getting yaml type error with Offset3D
+            yaml.safe_dump(d, fh)
+
 
 
 # Protocol first (less strict)

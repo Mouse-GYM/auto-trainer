@@ -1,47 +1,17 @@
-import math
-from typing import Optional
-
-from PySide6 import QtCore
 from PySide6.QtCore import Qt
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (QLabel, QFileDialog, QWidget, QVBoxLayout,
-                               QHBoxLayout, QStackedLayout, QGridLayout, QSpinBox, QPushButton)
+from PySide6.QtWidgets import (QLabel, QWidget, QVBoxLayout,
+                               QHBoxLayout, QStackedLayout, QGridLayout, QPushButton)
 
 from autotrainer.behavior.analysis import IntersessionResponse
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
-from autotrainer.core import AnimalSubject
 from autotrainer.pyside import CardWidget, QSwitch
+from autotrainer.pyside.xyz_label import XYZQLabel
+from autotrainer.pyside.DayTotalCount import DailyAndTotalCountsLabel
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.view.content_widget import ContentWidget
-
-_unprovided = object()  # sentinel
-
-
-class XYZLabel(QLabel):
-
-    def update_value(self, x, y, z):
-        x, y, z = map(lambda v: "na" if v is None else f"{v:.1f}", (x, y, z))
-        self.setText(f"{x} / {y} / {z}")
-
-
-class DailyAndTotalCountsLabel(QLabel):
-
-    def __init__(self, parent=None, *, day: Optional[int] = None, total: Optional[int] = None):
-        super().__init__(parent)
-        self._day_count = day
-        self._total_count = total
-        self.update_values()
-
-    def update_values(self, day=_unprovided, total=_unprovided):
-        if day is not _unprovided:
-            self._day_count = day
-        if total is not _unprovided:
-            self._total_count = total
-        day = self._day_count
-        total = self._total_count
-        self.setText(f"{'na' if day is None else day} / {'na' if total is None else total}")
 
 
 class BehaviorContent(ContentWidget):
@@ -153,8 +123,7 @@ class BehaviorContent(ContentWidget):
 
         right_cur_row += 1
         right_layout.addWidget(QLabel("Prev. pellet shift XYZ (mm) :"), right_cur_row, 0)
-        label = self._prev_pellet_shift_label = XYZLabel()
-        label.update_value(x=None, y=None, z=None)
+        label = self._prev_pellet_shift_label = XYZQLabel()
         right_layout.addWidget(label, right_cur_row, 1)
 
         #
@@ -264,4 +233,4 @@ class BehaviorContent(ContentWidget):
                 self._location_label.setText("Inference model not specified")
 
     def _inference_detection_result_ready(self, result: IntersessionResponse):
-        self._prev_pellet_shift_label.update_value(x=result.pellet_x, y=result.pellet_y, z=result.pellet_z)
+        self._prev_pellet_shift_label.update_coordinate(x=result.pellet_x, y=result.pellet_y, z=result.pellet_z)

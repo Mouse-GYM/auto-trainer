@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 import typing
 from copy import deepcopy
@@ -18,7 +19,25 @@ logger = logging.getLogger(__name__)
 # Slower than the real hardware to be more forgiving in emulation.
 _STATUS_MESSAGE_INTERVAL = 2.0
 _AUDIO_MESSAGE_INTERVAL = 0.5
-_DATA_MESSAGE_INTERVAL = 0.1
+_DATA_MESSAGE_INTERVAL = 0.2
+
+
+class _SharedList:
+    # just to make life easier for making thread safe previous code below using this.
+
+    def __init__(self, lock):
+        self._lock = lock
+        self._value = []
+
+    def append(self, item):
+        with self._lock:
+            self._value.append(item)
+
+    def get_and_reset(self):
+        with self._lock:
+            cur = self._value
+            self._value = []
+        return cur
 
 
 class EmulationInterface(DeviceInterface):
@@ -36,9 +55,9 @@ class EmulationInterface(DeviceInterface):
         return cls._uuid
 
     def __init__(self):
-        
         super().__init__()
 
+        self._thread_lock = threading.Lock()
         self._is_open = False
 
         self._last_status_message = 0.0
@@ -54,6 +73,11 @@ class EmulationInterface(DeviceInterface):
             Motor.TUNNEL_GATE_SERVO: 0.0,
             Motor.PELLET_COVER_SERVO: 0.0,
         }
+        self._send_pos = {
+            Motor.PELLET_X_MOTOR: 0.0,
+            Motor.PELLET_Y_MOTOR: 0.0,
+            Motor.PELLET_Z_MOTOR: 0.0,
+        }
 
         self._configs = {
             Motor.PELLET_LOAD_SERVO: ServoConfig(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO),
@@ -65,7 +89,7 @@ class EmulationInterface(DeviceInterface):
             Motor.PELLET_Z_MOTOR: StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR),
         }
 
-        self._messages = []
+        self._messages = _SharedList(lock=self._thread_lock)
         #
         self._prev_audio_data = self._cur_audio_data = None
         self._audio_replay_fh = None
@@ -106,7 +130,6 @@ class EmulationInterface(DeviceInterface):
         # logger.debug("read: %s", a)
         return a
 
-
     def _set_pellet_address(self, addr):
         pass
 
@@ -130,31 +153,20 @@ class EmulationInterface(DeviceInterface):
 
     def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
         # TODO: handle collect_ms
-        messages = deepcopy(self._messages)
-        self._messages = []
 
-        now = time.perf_counter()
+        messages = self._messages.get_and_reset()
+
+        perf_now = time.perf_counter()
 
         # Just to do one type, even if all should be updated.  Do not want this to be taking up much time.
-        if now - self._last_status_message > _STATUS_MESSAGE_INTERVAL:
-            self._last_status_message = now
-            messages.append(
-                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR,
-                              self._positions[Motor.PELLET_X_MOTOR],
-                              0.0,
-                              self._positions[Motor.PELLET_X_MOTOR] == 0))
-
-            messages.append(
-                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Y_MOTOR,
-                              self._positions[Motor.PELLET_Y_MOTOR],
-                              0.0,
-                              self._positions[Motor.PELLET_Y_MOTOR] == 0))
-
-            messages.append(
-                StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR,
-                              self._positions[Motor.PELLET_Z_MOTOR],
-                              0.0,
-                              self._positions[Motor.PELLET_Z_MOTOR] == 0))
+        if perf_now - self._last_status_message > _STATUS_MESSAGE_INTERVAL:
+            self._last_status_message = perf_now
+            for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR):
+                messages.append(
+                    StepperStatus(Target.PELLET_DEVICE, motor,
+                                  self._positions[motor],
+                                  self._send_pos[motor],
+                                  self._positions[motor] == 0))
 
             messages.append(
                 ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_COVER_SERVO, self._positions[
@@ -190,8 +202,8 @@ class EmulationInterface(DeviceInterface):
                 cur = self._cur_audio_data = self._read_audio_row(fh_audio_replay)
                 if cur is None:
                     self._check_audio_replay()  # loopback
-        elif now - self._last_audio_message > _AUDIO_MESSAGE_INTERVAL:
-            self._last_audio_message = now
+        elif perf_now - self._last_audio_message > _AUDIO_MESSAGE_INTERVAL:
+            self._last_audio_message = perf_now
             audio = AudioData(target=Target.MAGNET_DEVICE, packet_id=1, when=time.time(),
                               index=time.perf_counter_ns())
             spectrum = []
@@ -200,8 +212,8 @@ class EmulationInterface(DeviceInterface):
             audio.magnitudes = spectrum
             messages.append(audio)
 
-        if now - self._last_data_message > _DATA_MESSAGE_INTERVAL:
-            self._last_data_message = now
+        if perf_now - self._last_data_message > _DATA_MESSAGE_INTERVAL:
+            self._last_data_message = perf_now
             messages.append(PressureReading(pressure=512 + uniform(-10, 10), ))
             messages.append(LoadCellReading(load=uniform(0, 20)))
 
@@ -274,10 +286,10 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_motor_x(self, position) -> bool:
-        return self.move_motor_x(position, True)
+    def set_motor_x(self, position, *, relative: bool=False) -> bool:
+        return self.move_motor_x(position, True, relative=relative)
 
-    def move_motor_x(self, position: float, _save: bool = False) -> bool:
+    def move_motor_x(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
             logger.info("set pellet %s x %s", ("absolute", "relative")[relative], position)
             if save_as_fixed:
@@ -291,10 +303,10 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_motor_y(self, position) -> bool:
-        return self.move_motor_y(position, True)
+    def set_motor_y(self, position, *, relative: bool = False) -> bool:
+        return self.move_motor_y(position, True, relative=relative)
 
-    def move_motor_y(self, position: float, _save: bool = False) -> bool:
+    def move_motor_y(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
             logger.info("set pellet %s y %s", ("absolute", "relative")[relative], position)
             if save_as_fixed:
@@ -308,10 +320,10 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_motor_z(self, position) -> bool:
-        return self.move_motor_z(position, True)
+    def set_motor_z(self, position, *, relative: bool=False) -> bool:
+        return self.move_motor_z(position, True, relative=relative)
 
-    def move_motor_z(self, position: float, _save: bool = False) -> bool:
+    def move_motor_z(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
             logger.info("set pellet %s z %s", ("absolute", "relative")[relative], position)
             if save_as_fixed:
@@ -328,13 +340,18 @@ class EmulationInterface(DeviceInterface):
     def move_load_servo(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set load arm {position}")
+            if isinstance(position, float) or isinstance(position, int):
+                velocity = 100  # config.maximum_velocity
+            elif isinstance(position, tuple):
+                velocity = float(position[1]) / 100.0 * 100  # config.maximum_velocity
+                position = float(position[0])
             self._positions[Motor.PELLET_LOAD_SERVO] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
     def retrieve_pellet(self) -> bool:
         if self._is_open:
-            logger.info("retreive pellet")
+            logger.info("retrieve pellet")
         return self.move_load_servo(self._configs[Motor.PELLET_LOAD_SERVO].maximum_position)
 
     def scoop_pellet(self) -> bool:
@@ -360,7 +377,10 @@ class EmulationInterface(DeviceInterface):
         return self.move_cover_servo(self._configs[Motor.PELLET_COVER_SERVO].maximum_position)
 
     def fixed_position(self) -> bool:
+        for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR):
+            self._positions[motor] = self._send_pos[motor]
         self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
+
         return self._is_open
 
     def emit_tone(self, frequency, duration_ms) -> bool:
@@ -368,6 +388,9 @@ class EmulationInterface(DeviceInterface):
             logger.info(f"play tone f={frequency} d={duration_ms}")
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
+
+    def get_motor_configuration(self, motor: Motor):
+        return self._configs[motor]
 
     def request_motor_config(self, motor: Motor) -> bool:
         if self._is_open:

@@ -48,6 +48,9 @@ class PoseResponse:
     parts_3d_offsets: Dict[str, Dict[str, Offset3DTuple]] = dataclasses.field(default_factory=dict)
     """3D offsets of the pairs of parts requested during the response creation"""
 
+    locations_3d: Dict[str, Offset3DTuple] = dataclasses.field(default_factory=dict)
+    """3D locations of the monitored parts/elements"""
+
     @property
     def pellet_seen(self) -> bool:
         """Default logic/conditions for pellet seen"""
@@ -83,33 +86,22 @@ class PoseResponse:
     def is_part_seen(self, part: str, *, cams_idx: Tuple[int, ...] = ()):
         """Check whether `part` is seen or not in cams_idx, if cams_idx empty: check all"""
         if len(cams_idx) == 0:
-            # - 1 given last part flags is conjunction of all previous cams
-            cams_idx = tuple(range(len(self.parts_flags) - 1))
-        part = SceneElement(part)
-        for idx in cams_idx:
-            value = self.parts_flags[idx].get(part, None)
-            if value is not None:
-                if value:
-                    return True
-        return False
+            # last part flags is conjunction of all previous cams
+            cams_idx = [-1]
+        return all(
+            self.parts_flags[idx].get(part, None)
+            for idx in cams_idx
+        )
 
     def get_parts_3d_offset(
         self,
         part1: str,
         part2: str,
-        *,
-        require_present_all_cams: bool = True,
     ) -> Optional[Offset3DTuple]:
         """Return the 3d offsets between part1 and part2,
         if none exist/is available return None instead
         """
-        part1 = SceneElement(part1)
-        part2 = SceneElement(part2)
-        # -1 means all cams in is_part_seen(), while no idx means any cam:
-        cams_idx = (-1,) if require_present_all_cams else ()
-        part1_seen = self.is_part_seen(part1, cams_idx=cams_idx)
-        part2_seen = self.is_part_seen(part2, cams_idx=cams_idx)
-        if not part1_seen or not part2_seen:
+        if not (self.is_part_seen(part1) and self.is_part_seen(part2)):
             return None
         value = self.parts_3d_offsets.get(part1, {}).get(part2, None)
         if value is None:
@@ -358,8 +350,9 @@ class PoseAlgorithm(ObservableObject):
         cams_last_frame = [cam_frames[-1] for cam_frames in per_cam_frames]
         parts_3d_offsets = defaultdict(dict)
 
+        locations_3d = {}
+        gpi = self.get_part_index
         if self._has_hands_part_names:
-            gpi = self.get_part_index
             df = pandas.DataFrame(
                 numpy.asarray(
                     [[cam_last_frame[gpi(p)] for p in self._hands_input_parts]
@@ -385,22 +378,22 @@ class PoseAlgorithm(ObservableObject):
                 if v['likelihood'][1] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     locations_2[elem] = PoseLocation(elem, -1, v['x'][1], v['y'][1])
 
-            if len(pairs_3d_offsets) > 0:
-                df_3d = self._handle_offsets_pose_data(
-                    *(numpy.asarray([frame[gpi(p)] for p in self._measure_offset_parts]) for frame in cams_last_frame)
-                )
-                for part1, part2 in pairs_3d_offsets:
-                    parts_3d_offsets[part1][part2] = tuple(
-                        df_3d[part1].iloc[-1, 0:3]  # last frame, 3 first columns (x, y, z)
-                        - df_3d[part2].iloc[-1, 0:3]
-                    )
-                    # check of parts confidence level is handled in PoseResponse.get_parts_3d_offset()
+        if len(pairs_3d_offsets) > 0:
+            df_3d = self._handle_offsets_pose_data(
+                *(numpy.asarray([frame[gpi(p)] for p in self._measure_offset_parts]) for frame in cams_last_frame)
+            )
+            for part1, part2 in pairs_3d_offsets:
+                loc1 = locations_3d[part1] = Offset3DTuple(df_3d[part1].iloc[-1, 0:3])  # last frame, 3 first columns (x, y, z)
+                loc2 = locations_3d[part2] = Offset3DTuple(df_3d[part2].iloc[-1, 0:3])
+                parts_3d_offsets[part1][part2] = tuple(loc1 - loc2)
+                # check of parts confidence level is handled in PoseResponse.get_parts_3d_offset()
 
         response = PoseResponse(
             sequence=self._sequence,
             parts_flags=(parts_flag_1, parts_flag_2, parts_flag_3),
             locations=[locations_1, locations_2],
             parts_3d_offsets=dict(parts_3d_offsets),
+            locations_3d=locations_3d
         )
         return response
 

@@ -680,24 +680,15 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                        frame_idx, intersession_block.frame_count,
                        tot_skipped_frames, cams_frame_idx, cams_sent_frame_count)
 
-    def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int, *, timeout: float = 20) -> bool:
+    def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int, *, timeout: float = 15) -> bool:
         ret, frame = capture.read()
         if not ret:
-            logger.debug(f"end of video at index {cam_index}")
+            logger.verbose("end of video at index %s", cam_index)
             return False
-        perf_timeout = time.perf_counter() + timeout
         if len(numpy.shape(frame)) >= 3:
             frame = frame[:, :, 0]
-        put = self._offline_queue.put
-        while time.perf_counter() < perf_timeout:
-            if put(frame, cam_index, frame_idx, allow_overflow=False) == BufferResult.Ok:
-                return True
-            # given the current array-multi-queue has no "event" handling we have to retry, at some later point,
-            # a good value would be half the duration of the previous, or a recent, inference batch duration,
-            # divided by the nbr of frame(s) it contained/had processed.
-            time.sleep(0.01)
-        logger.error("cam %s: timeout waiting offline_queue has space", cam_index)
-        return False
+        self._offline_queue.put_block(frame, cam_index, frame_idx, timeout=timeout)
+        return True
 
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
         project = project.to_local_value()  # get local ref to current project infos,

@@ -2,6 +2,7 @@ import dataclasses
 import math
 from collections import namedtuple
 from typing import Union, List, Tuple, Dict, Any, Iterable, TypeVar, Type, Optional, Callable
+from typing_extensions import Self
 
 import humps
 import yaml
@@ -100,42 +101,55 @@ class Offset3DTuple(_Offset3DTuple):
         x, y, z = self
         return f"({x:.0{n_digits}f}, {y:.0{n_digits}f}, {z:.0{n_digits}f})"
 
-    def __pow__(self, other, modulo=None):
+    def __pow__(self, other, modulo=None) -> Self:
         if modulo is None:
             return self.__class__(*(v ** other for v in self))
         return self.__class__(
             *(pow(v, other, modulo) for v in self)
         )
 
-    def __add__(self, other):
+    def __rpow__(self, other, modulo=None):
+        if modulo is None:
+            return self.__class__(*(other ** v for v in self))
+        return self.__class__(
+            *(pow(other, v, modulo) for v in self)
+        )
+
+
+    def __add__(self, other) -> Self:
         if hasattr(other, "__len__") and len(other) == 3:
             return self.__class__(*(v1 + v2 for v1, v2 in zip(self, other)))
         return self.__class__(*(v + other for v in self))
 
     __radd__ = __add__
 
-    def __sub__(self, other):
+    def __sub__(self, other) -> Self:
         if hasattr(other, "__len__") and len(other) == 3:
             return self.__class__(*(v1 - v2 for v1, v2 in zip(self, other)))
         return self.__class__(*(v - other for v in self))
 
-    def __rsub__(self, other):
+    def __rsub__(self, other) -> Self:
         if hasattr(other, "__len__") and len(other) == 3:
             return self.__class__(*(v2 - v1 for v1, v2 in zip(self, other)))
         return self.__class__(*(other - v for v in self))
 
-    def __neg__(self):
+    def __neg__(self) -> Self:
         return self.__class__(-self.x, -self.y, -self.z)
 
-    def __mul__(self, other):
+    def __mul__(self, other) -> Self:
         if hasattr(other, "__len__") and len(other) == 3:
             return self.__class__(*(v1 * v2 for v1, v2 in zip(self, other)))
         return self.__class__(*(v * other for v in self))
 
-    def __truediv__(self, other):
+    __rmul__ = __mul__
+
+    def __truediv__(self, other) -> Self:
         if hasattr(other, "__len__") and len(other) == 3:
             return self.__class__(*(v1 / v2 for v1, v2 in zip(self, other)))
         return self.__class__(*(v / other for v in self))
+
+    def __abs__(self) -> Self:
+        return self.__class__(*(abs(v) for v in self))
 
     @property
     def distance(self) -> float:

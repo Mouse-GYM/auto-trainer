@@ -1,3 +1,4 @@
+import time
 import typing
 from typing import Tuple
 
@@ -126,6 +127,9 @@ class MainContent(ContentWidget):
 
         self._prev_top_cam_detect = None
 
+        self._prev_parts_3d_loc = {}
+        self._next_parts_3d_loc_report = time.perf_counter()
+
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.update_image)
         self._timer.start(int(1000 / self._app_model.preferences.live_feed_refresh_rate))
@@ -162,6 +166,19 @@ class MainContent(ContentWidget):
             self._left_camera_content.refresh_pose(response.locations[0])
         if self._app_model.right_camera.is_enabled:
             self._right_camera_content.refresh_pose(response.locations[1])
+        if __debug__:
+            perf_now = time.perf_counter()
+            if perf_now >= self._next_parts_3d_loc_report:
+                self._next_parts_3d_loc_report = perf_now + 0.5
+                for part, loc_3d in response.locations_3d.items():
+                    if response.is_part_seen(part):
+                        prev = self._prev_parts_3d_loc.get(part)
+                        if prev is None or any(
+                            abs(prev[i] - loc_3d[i]) >= 0.15
+                            for i in range(3)
+                        ):
+                            logger.spam("%s: loc3d: %s", part, loc_3d.humanize())
+                            self._prev_parts_3d_loc[part] = loc_3d if prev is None else (prev + loc_3d) / 2
 
     @property
     def is_diagnostics_visible(self) -> bool:

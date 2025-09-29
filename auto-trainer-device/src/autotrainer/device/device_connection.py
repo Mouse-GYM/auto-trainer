@@ -1,6 +1,7 @@
 import logging
 import math
 import time
+import uuid
 from queue import Queue, Empty
 from threading import Thread
 from typing import Callable, Union
@@ -237,4 +238,4 @@ class DeviceConnection(DeviceConnectionProtocol):
         return False
 
     def get_motor_config(self, motor: Motor):
-        return self._device.device_interface.get_motor_config(motor)
+        return self._device.device_interface.get_motor_configuration(motor)

@@ -124,8 +124,4 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
         raise NotImplementedError
 
     def get_motor_flips(self):
-        return Offset3DTuple([
-            -1 if self.get_motor_config(motor).flip_limit_orientation
-            else 1
-            for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR)
-        ])
+        raise NotImplementedError

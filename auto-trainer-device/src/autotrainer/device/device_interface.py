@@ -443,6 +443,7 @@ class DeviceInterface:
 
     def get_motor_configuration(self, motor: Motor) -> Union[ServoConfig, StepperConfig]:
         """Return current motor config"""
+        raise NotImplementedError
 
     def set_auto_correct_motor_drift(self, value):
         """Set the auto correct motor drift"""
@@ -481,3 +482,14 @@ class DeviceInterface:
     def move_motor(self, motor: Motor, position, *, save_as_fixed: bool = False, relative: bool = False):
         # only for steppers, XYZ
         raise NotImplementedError
+
+    def get_motor_flips(self):
+        res = []
+        for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR):
+            motor_cfg = self.get_motor_configuration(motor)
+            if motor_cfg is None:
+                res.append(1)
+                logger.warning("%s: no motor config ; defaulting motor flip to 1", motor)
+            else:
+                res.append(-1 if motor_cfg.flip_limit_orientation else 1)
+        return Offset3DTuple(*res)
