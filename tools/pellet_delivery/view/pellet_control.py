@@ -1,7 +1,9 @@
+
 from typing import Tuple
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QVBoxLayout, QFileDialog, QFrame, QDoubleSpinBox, QComboBox
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
+    QLayout, QVBoxLayout, QFileDialog, QFrame, QDoubleSpinBox, QComboBox
 
 import qtawesome as qta
 

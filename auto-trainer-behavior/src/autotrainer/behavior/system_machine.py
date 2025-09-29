@@ -581,7 +581,7 @@ class SystemMachine(StateMachine):
             )
         ):
             logger.debug("_consider_end_session[%s]: not ending: is_in_session=%s state=%s pellet=%s",
-                         self._algorithm.is_in_session, self.state, self._pellet_machine.state)
+                         reason, self._algorithm.is_in_session, self.state, self._pellet_machine.state)
             return
 
         if self.algorithm.end_session(reason=f"{reason}->consider_end_session"):
