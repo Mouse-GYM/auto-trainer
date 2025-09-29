@@ -825,7 +825,8 @@ class BehaviorAlgorithm(ObservableObject):
                            reason, self._stop_session_reason)
             return False
 
-        logger.success("%s: stopping session recording", reason)
+        logger.success("%s: stopping session recording ; system_state=%s capture=%s intersession_state=%s",
+                       reason, self._system_state, self._capture_status, self._intersession_state)
         self._is_in_session = False  # must be ~first, to ensure next actions/callbacks don't see it as True
         # but must be at least before self.session_ending() here after, given test_covered_load_cycle rely on that atm.
         self._stop_session_reason = reason
