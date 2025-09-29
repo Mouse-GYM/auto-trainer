@@ -118,6 +118,12 @@ class CanDevice(Device):
         self._close_tunnel_gate = default_close_gate()
         self._compound_movement = None  # Current compound movement
 
+        self._last_limit_switch = {
+            Motor.PELLET_X_MOTOR: -1,
+            Motor.PELLET_Y_MOTOR: -1,
+            Motor.PELLET_Z_MOTOR: -1,
+        }
+
         no_op_handler = lambda _: None
 
         # Initialize command handlers lookup table
@@ -249,6 +255,8 @@ class CanDevice(Device):
             SystemCommandKind.STREAM_STOP: no_op_handler,
         }
 
+        #
+
         def set_current_pressure(m):
             self._current_pressure = m.pressure
 
@@ -364,6 +372,7 @@ class CanDevice(Device):
                 has_read_from_queue = True
             if r is None:
                 q.task_done()
+                logger.verbose("received exit sentinel, exiting main loop ..")
                 break
             kind, data, ctx = r
             prev_commands_count = len(cur_commands)
@@ -443,6 +452,13 @@ class CanDevice(Device):
             value: The DeviceApi instance to use
         """
         self._api = value
+
+    def connect(self):
+        pass
+
+    def disconnect(self):
+        self._commands_queue.put(None)
+        self._commands_handler_thread.join(3)
 
     def _start_sequence(self, movements: MotorSteps):
         """
@@ -588,13 +604,16 @@ class CanDevice(Device):
         Report stepper status to the API.
 
         Args:
-            motor: The motor that has reported its status
-            position: The current position of the motor
-            _at_limit: Whether the motor is at its limit switch
+            message: StepperStatus
         """
+        prev_limit_switch = self._last_limit_switch.get(message.motor, None)
+        if message.is_at_limit != prev_limit_switch:
+            logger.notice("%s: limit_switch: %s -> %s ; pos=%.02f send_pos=%.02f",
+                          message.motor, prev_limit_switch, message.is_at_limit,
+                          message.position, message.send_position)
+            self._last_limit_switch[message.motor] = message.is_at_limit
 
         kind = CanDevice._motor_to_status_kind.get(message.motor, None)
-
         if self._api is not None and kind is not None:
             self.api.send_message(kind, message)
 

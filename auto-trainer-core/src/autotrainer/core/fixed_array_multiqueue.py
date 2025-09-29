@@ -284,25 +284,10 @@ class FixedArrayMultiQueue:
         self._read_index = (read_idx_value + 1) % self._depth
         return True
 
-    def get_cam_buffer_index(self, cam_idx: int):
-        return self._buffer_index[cam_idx]
-
-    def get_cam_current_frame_indices(self, cam_idx: int):
-        buff_idx = self._buffer_index[cam_idx]
-        b = numpy.frombuffer(
-            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
-        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
-        return b[cam_idx][buff_idx]
-
-    def get_current_frame_indices(self):
-        b = numpy.frombuffer(
-            memoryview(self._frame_indices).cast("B"), "int64", len(self._frame_indices)
-        ).reshape((self._cam_count, self._depth, self._frames_per_camera))
-        return b
-
     def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 10):
-        for cdx in range(self._cam_count):
-            for _ in range(self._frames_per_camera):
+        for _ in range(self._frames_per_camera):
+            for cdx in range(self._cam_count):
                 t0 = time.perf_counter()
+                # put_block() will take care to raise if timeout occurs
                 self.put_block(frame, cdx, frame_idx, timeout=timeout)
                 timeout -= time.perf_counter() - t0

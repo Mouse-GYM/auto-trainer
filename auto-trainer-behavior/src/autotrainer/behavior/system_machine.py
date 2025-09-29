@@ -68,7 +68,10 @@ class SystemMachine(StateMachine):
         self._project_info = project_info
 
         self._timer_consider_end_session = no_op_timer
+
         self._delay_timer_consider_end_session: Optional[float] = 2.0
+        # delay to wait, when/once a pellet load is executed (on start),
+        # and that a session is active, to trigger an eventual end_session()
 
         self._timer_auto_clamp_disengage = no_op_timer
         self._disengage_auto_clamp_load_count = 0
@@ -549,14 +552,13 @@ class SystemMachine(StateMachine):
             self._disengage_auto_clamp()
         if algo.is_in_session:
             prev_timer = self._timer_consider_end_session
-            if prev_timer.finished.is_set():
-                self._timer_consider_end_session = _consider_end_session_timer(
-                    self._delay_timer_consider_end_session,
-                    partial(self._consider_end_session, reason="pellet_loading"))
-                self._timer_consider_end_session.start()
-            else:
-                logger.verbose("%s: prev timer not finished for pellet loading ; prev_timer=%s",
-                               self, prev_timer)
+            if not prev_timer.finished.is_set():
+                logger.debug("cancelling unfinished previous timer: %s", prev_timer)
+            prev_timer.cancel()
+            self._timer_consider_end_session = _consider_end_session_timer(
+                self._delay_timer_consider_end_session,
+                partial(self._consider_end_session, reason="pellet_loading"))
+            self._timer_consider_end_session.start()
 
     def _pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
@@ -571,13 +573,15 @@ class SystemMachine(StateMachine):
         # or releasing states. Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
         if (not self._algorithm.is_in_session
-                or (self.state == SystemState.tunnel
-                    and self._pellet_machine.state in {
-                        PelletState.sending, PelletState.releasing, PelletState.monitoring,
-                        # PelletState.loading,
-                    }
-                )
+            or (self.state == SystemState.tunnel
+                and self._pellet_machine.state in {
+                    PelletState.sending, PelletState.releasing, PelletState.monitoring,
+                    # PelletState.loading,
+                }
+            )
         ):
+            logger.debug("_consider_end_session[%s]: not ending: is_in_session=%s state=%s pellet=%s",
+                         self._algorithm.is_in_session, self.state, self._pellet_machine.state)
             return
 
         if self.algorithm.end_session(reason=f"{reason}->consider_end_session"):

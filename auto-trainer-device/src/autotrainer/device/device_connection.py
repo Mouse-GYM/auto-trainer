@@ -229,7 +229,6 @@ class DeviceConnection(DeviceConnectionProtocol):
 
         if self._interface.is_open:
             self._device.disconnect()
-
             self._interface.close()
 
             logger.debug(f"<{self._name}> interface closed")

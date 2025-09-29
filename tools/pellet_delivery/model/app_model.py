@@ -226,7 +226,8 @@ class AppModel(ObservableObject):
 
     @travel_limits.setter
     def travel_limits(self, value):
-        self._travel_limits = self._on_property_changed("travel_limits", value, self._travel_limits)
+        prev, self._travel_limits = self._travel_limits, value
+        self._on_property_changed("travel_limits", value, prev)
 
     @property
     def command_pending(self):
@@ -305,30 +306,22 @@ class AppModel(ObservableObject):
     def cover_pellet(self):
         self._send_command(SystemCommandKind.COVER_PELLET, context=uuid.uuid4())
 
-    def _exec_xyz(self, value, *, system_cmd, axis_idx, xyz_getter):
-        xyz = xyz_getter(self).replace(**{"xyz"[axis_idx]: value})
-        xyz = self.to_motor_coordinates(xyz)
-        return self._send_command(system_cmd, xyz[axis_idx], context=uuid.uuid4())
+    def _exec_xyz(self, value, *, system_cmd):
+        return self._send_command(system_cmd, value, context=uuid.uuid4())
 
     def _get_send_xyz(self):
         return self.send_xyz
 
-    set_x = partialmethod(_exec_xyz,
-                          system_cmd=SystemCommandKind.SET_X, axis_idx=0, xyz_getter=_get_send_xyz)
-    set_y = partialmethod(_exec_xyz,
-                          system_cmd=SystemCommandKind.SET_Y, axis_idx=1, xyz_getter=_get_send_xyz)
-    set_z = partialmethod(_exec_xyz,
-                          system_cmd=SystemCommandKind.SET_Z, axis_idx=2, xyz_getter=_get_send_xyz)
+    set_x = partialmethod(_exec_xyz, system_cmd=SystemCommandKind.SET_X)
+    set_y = partialmethod(_exec_xyz, system_cmd=SystemCommandKind.SET_Y)
+    set_z = partialmethod(_exec_xyz, system_cmd=SystemCommandKind.SET_Z)
 
     def _get_xyz(self):
         return self.xyz
 
-    move_x = partialmethod(_exec_xyz,
-                           system_cmd=SystemCommandKind.MOVE_X, axis_idx=0, xyz_getter=_get_xyz)
-    move_y = partialmethod(_exec_xyz,
-                           system_cmd=SystemCommandKind.MOVE_Y, axis_idx=1, xyz_getter=_get_xyz)
-    move_z = partialmethod(_exec_xyz,
-                           system_cmd=SystemCommandKind.MOVE_Z, axis_idx=2, xyz_getter=_get_xyz)
+    move_x = partialmethod(_exec_xyz, system_cmd=SystemCommandKind.MOVE_X)
+    move_y = partialmethod(_exec_xyz, system_cmd=SystemCommandKind.MOVE_Y)
+    move_z = partialmethod(_exec_xyz, system_cmd=SystemCommandKind.MOVE_Z)
 
     def set_config(self, config):
         self._send_command(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)
