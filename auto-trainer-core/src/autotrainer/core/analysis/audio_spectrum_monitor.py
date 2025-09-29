@@ -20,8 +20,8 @@ logger = get_verbose_logger(__name__)
 class AudioSpectrumThrashMonitorConfig:
 
     time_window: float = 0.5
-    threshold_percent: float = 40
-    threshold_db: float = 120
+    threshold_percent: float = 50
+    threshold_db: float = 130
     # NB: the values we read from CAN bus are supposedly (or we consider them as is) in dB unit.
     # but the current value range we get/read is ~80-85 up to ~140-145, generally around ~100 for non-noisy.
     bins_list: List[int] = dataclasses.field(default_factory=lambda : [3, 4, 5, 6])
@@ -100,8 +100,8 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         percent = 100 * sum(map(int, above_threshold)) / len(above_threshold)
         detected = percent >= cfg.threshold_percent or avg_value >= cfg.threshold_db
         if detected != self.is_thrashing_detected:
-            logger.verbose("Thrashing change detected: %s avg=%.1f above_pc=%.1f",
-                           detected, avg_value, percent)
+            logger.verbose("Thrashing change detected: %s avg=%.1f above_pc=%.1f ; %s",
+                           detected, avg_value, percent, values_history)
             self.is_thrashing_detected = detected
             if detected:
                 while len(values_history) > 1:
