@@ -437,7 +437,7 @@ class SystemMachine(StateMachine):
     def _handle_pellet_hands_offsets(self, response: PoseResponse):
         algo = self._algorithm
         min_dist = math.inf
-        for part in AllHandsParts:
+        for part in (SceneElement.L_Hand, SceneElement.R_Hand):
             offset = response.get_parts_3d_offset(SceneElement.Pellet, part)
             if offset is not None:
                 dist = offset.distance

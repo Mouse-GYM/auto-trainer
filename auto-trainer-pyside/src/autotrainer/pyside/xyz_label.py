@@ -7,12 +7,15 @@ from PySide6.QtWidgets import QLabel
 from autotrainer.core import Offset3DTuple
 
 
+NO_UPDATES = "(no updates)"
+
 
 class XYZQLabel(QLabel):
     """An XYZ offset/position label"""
 
-    def __init__(self, start_value: str):
+    def __init__(self, start_value: str = NO_UPDATES, *, n_digits: int = 1):
         self._xyz_values = Offset3DTuple(math.nan, math.nan, math.nan)
+        self._n_digits = n_digits
         super().__init__(start_value)
 
     def update_coordinate(
@@ -30,10 +33,10 @@ class XYZQLabel(QLabel):
                 xyz = math.nan, math.nan, math.nan
             x, y, z = xyz
         self._xyz_values = self._xyz_values.replace(x=x, y=y, z=z)
-        self.setText(self.xyz_to_str(self._xyz_values))
+        self.setText(self.xyz_to_str(self._xyz_values, n_digits=self._n_digits))
 
     @staticmethod
-    def xyz_to_str(xyz: Offset3DTuple, *, digit_precision: int = 2):
+    def xyz_to_str(xyz: Offset3DTuple, *, n_digits: int = 1):
         return " / ".join("na" if (math.isnan(v) or v is None)
-                          else f"{v:.0{digit_precision}f}"
+                          else f"{v:.0{n_digits}f}"
                           for v in xyz)
