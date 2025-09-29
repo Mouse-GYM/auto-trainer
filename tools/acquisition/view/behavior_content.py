@@ -250,8 +250,7 @@ class BehaviorContent(ContentWidget):
 
     def _app_model_property_changed(self, name, value, _):
         if name == AppModel.Props.SELECTED_ANIMAL:
-            x, y, z = (None, None, None) if value is None else (value.pellet_x, value.pellet_y, value.pellet_z)
-            self._prev_pellet_shift_label.update_value(x, y, z)
+            self._prev_pellet_shift_label.update_value(None, None, None)
 
     def _inference_model_property_changed(self, name, value, _):
         if name == "is_enabled":
