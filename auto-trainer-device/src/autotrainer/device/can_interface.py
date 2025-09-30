@@ -1018,8 +1018,8 @@ class CanInterface(DeviceInterface):
                                                        acceleration,
                                                        AbsOrRel.ABSOLUTE,
                                                        uuid)
-        logger.debug("%s: servo move %.3f mm with v=%.3f mm/s**2 ; res=%s uuid=%s",
-                     motor, position, velocity, res, uuid)
+        logger.debug("%s: servo move %.3f mm with v=%.3f mm/s**2 ; res=%s uuid=%s ; config=%s",
+                     motor, position, velocity, res, uuid, config)
         return res == 0
 
     def _move_stepper_motor(
@@ -1127,26 +1127,24 @@ class CanInterface(DeviceInterface):
         logger.debug("%s: res=%s uuid=%s", motor, res, uuid)
         return res == 0
 
-    def move_magnet_servo(self, position, _unused: bool = False) -> bool:
+    def move_magnet_servo(self, position) -> bool:
         """
         Move the magnet motor
 
         Args:
             position: Either a position (float) or a (position, rate (%)) pair
-            _unused
 
         Returns:
             bool: True if successful else False
         """
         return self._move_servo_motor(Motor.TUNNEL_MAGNET_SERVO, position, self.magnet_config)
 
-    def move_gate_servo(self, position, _unused: bool = False) -> bool:
+    def move_gate_servo(self, position) -> bool:
         """
         Move the gate motor
 
         Args:
             position: Either a position (float) or a (position, rate (%)) pair
-            _unused
 
         Returns:
             bool: True if successful else False

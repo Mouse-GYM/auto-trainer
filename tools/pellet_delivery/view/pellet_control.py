@@ -21,8 +21,6 @@ from autotrainer.pyside import MotorConfigDialog
 
 logger = get_verbose_logger(__name__)
 
-_NO_UPDATES = "(no updates)"
-
 _MIN_CONTROL_BUTTON_WIDTH = 120
 
 
@@ -39,8 +37,8 @@ def add_position(label: str, s_min: float, s_max: float) -> Tuple[
     pos = QDoubleSpinBox()
     pos.setMinimumWidth(40)
     pos.setRange(s_min, s_max)
-    pos.setDecimals(2)
-    pos.setSingleStep(0.15)
+    pos.setDecimals(1)
+    pos.setSingleStep(0.2)
     pos.setWrapping(False)
     position_layout.addWidget(pos, 0)
 
@@ -186,7 +184,7 @@ class PelletControl(QWidget):
         for coord_system in COORDINATE_SYSTEMS:
             combo.addItem(coord_system.value, coord_system)
         def select_coordinate(_: int):
-            self._coordinate_system_changed(limits=self._app_model.travel_limits)
+            self._refresh_pellet_xyz_control()
         combo.setCurrentIndex(0)
         combo.currentIndexChanged.connect(select_coordinate)
         select_coordinate(0)  # ensure we set as when switched to
@@ -226,9 +224,10 @@ class PelletControl(QWidget):
     def _move_z(self):
         self._app_model.move_z(self._to_motor(Offset3DTuple(0, 0, self._z_pos.value())).z)
 
-    def _coordinate_system_changed(self, *, limits):
+    def _refresh_pellet_xyz_control(self):
         cur_coordinate_system = self._combo_coordinate_system.currentData()
         app_model = self._app_model
+        limits = app_model.travel_limits
         if limits is None:
             min_xyz = max_xyz = None
         else:
@@ -265,13 +264,18 @@ class PelletControl(QWidget):
         if name == "travel_limits":
             logger.debug("got & applying travel_limits: %s", value)
             if value is not None:
-                self._coordinate_system_changed(limits=value)
+                self._refresh_pellet_xyz_control()
         elif name == "config":
             if self._config_dialog is not None:
                 if is_servo(value.motor):
                     self._config_dialog.update_servo_config(value)
                 else:
                     self._config_dialog.update_stepper_config(value)
+        elif name in {'x', 'y', 'z'}:
+            self._refresh_pellet_xyz_control()
+        elif name == "is_connected":
+            if value:
+                self._refresh_pellet_xyz_control()
 
     def _update_config(self):
         self._config_dialog = MotorConfigDialog(self)

@@ -21,19 +21,14 @@ def diamond_triangle_config_path(tmp_path):
     yield p
 
 
-@pytest.mark.parametrize("offset", [
+@pytest.mark.parametrize("motor_xyz", [
     (0, 0, 0),
     (1, 2, 3),
     (4, 5, 6),
+    (15, 8, 12),
 ])
-@pytest.mark.parametrize("flips", [
-    (1, 1, 1),
-    (-1, 1, -1),
-    (1, -1, -1),
-])
-def test_transform_coordinates(offset, flips, diamond_triangle_config_path):
+def test_transform_coordinates(motor_xyz, diamond_triangle_config_path):
     app_model = AppModel(diamond_triangle_config_path=diamond_triangle_config_path)
-    o = Offset3DTuple(offset)
-    app_model._motor_flips = Offset3DTuple(flips)
-    o_d = app_model.to_diamond_coordinates(o)
-    assert np.isclose(app_model.to_motor_coordinates(o_d), o).all()
+    motor_xyz = Offset3DTuple(motor_xyz)
+    diamond_xyz = app_model.to_diamond_coordinates(motor_xyz)
+    assert np.isclose(app_model.to_motor_coordinates(diamond_xyz), motor_xyz).all()

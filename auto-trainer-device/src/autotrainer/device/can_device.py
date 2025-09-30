@@ -141,23 +141,17 @@ class CanDevice(Device):
 
             SystemCommandKind.MOVE_GATE_SERVO: self._interface.move_gate_servo,
 
-            SystemCommandKind.SET_X: partial(apply_system_command_with_data_args,
-                                             self._interface.set_motor_x),
+            SystemCommandKind.SET_X: self._interface.set_motor_x,
 
-            SystemCommandKind.SET_Y: partial(apply_system_command_with_data_args,
-                                             self._interface.set_motor_y),
+            SystemCommandKind.SET_Y: self._interface.set_motor_y,
 
-            SystemCommandKind.SET_Z: partial(apply_system_command_with_data_args,
-                                             self._interface.set_motor_z),
+            SystemCommandKind.SET_Z: self._interface.set_motor_z,
 
-            SystemCommandKind.MOVE_X: partial(apply_system_command_with_data_args,
-                                              self._interface.move_motor_x),
+            SystemCommandKind.MOVE_X: self._interface.move_motor_x,
 
-            SystemCommandKind.MOVE_Y: partial(apply_system_command_with_data_args,
-                                              self._interface.move_motor_y),
+            SystemCommandKind.MOVE_Y: self._interface.move_motor_y,
 
-            SystemCommandKind.MOVE_Z: partial(apply_system_command_with_data_args,
-                                              self._interface.move_motor_z),
+            SystemCommandKind.MOVE_Z: self._interface.move_motor_z,
 
             SystemCommandKind.SEND_RETRACT: self._send_retract,
 
@@ -408,7 +402,10 @@ class CanDevice(Device):
                     logger.warning("unhandled command queue message: %s", kind)
                     continue
                 logger.debug("executing cmd %s with ctx %s", kind, ctx)
-                handler(data)
+                if isinstance(data, SystemDataArgsKwargs):
+                    handler(*data.args, **data.kwargs)
+                else:
+                    handler(data)
             after_uuid = self._interface.uuid()
             t_perf_last_command = time.perf_counter()
             if after_uuid != before_uuid:
