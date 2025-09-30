@@ -155,7 +155,8 @@ class AppModel(ObservableObject):
 
     @x.setter
     def x(self, value):
-        self._x = self._on_property_changed("x", value, self._x)
+        prev, self._x = self._x, value
+        self._on_property_changed("x", value, prev)
 
     @property
     def y(self):
@@ -163,7 +164,8 @@ class AppModel(ObservableObject):
 
     @y.setter
     def y(self, value):
-        self._y = self._on_property_changed("y", value, self._y)
+        prev, self._y = self._y, value
+        self._on_property_changed("y", value, prev)
 
     @property
     def z(self):
@@ -171,7 +173,8 @@ class AppModel(ObservableObject):
 
     @z.setter
     def z(self, value):
-        self._z = self._on_property_changed("z", value, self._z)
+        prev, self._z = self._z, value
+        self._on_property_changed("z", value, prev)
 
     #
 
@@ -186,7 +189,8 @@ class AppModel(ObservableObject):
 
     @send_x.setter
     def send_x(self, value):
-        self._send_x = self._on_property_changed("send_x", value, self._send_x)
+        prev, self._send_x = self._send_x, value
+        self._on_property_changed("send_x", value, prev)
 
     @property
     def send_y(self):
@@ -194,7 +198,8 @@ class AppModel(ObservableObject):
 
     @send_y.setter
     def send_y(self, value):
-        self._send_y = self._on_property_changed("send_y", value, self._send_y)
+        prev, self._send_y = self._send_y, value
+        self._on_property_changed("send_y", value, prev)
 
     @property
     def send_z(self):
@@ -202,7 +207,8 @@ class AppModel(ObservableObject):
 
     @send_z.setter
     def send_z(self, value):
-        self._send_z = self._on_property_changed("send_z", value, self._send_z)
+        prev, self._send_z = self._send_z, value
+        self._on_property_changed("send_z", value, value)
 
     @property
     def load_arm(self):
