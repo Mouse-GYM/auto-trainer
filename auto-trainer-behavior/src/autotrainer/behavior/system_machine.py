@@ -77,8 +77,8 @@ class SystemMachine(StateMachine):
         self._disengage_auto_clamp_load_count = 0
 
         self._last_close_tunnel_gate_perf_t = -math.inf
-
         self._motor_axis_flips = Offset3DTuple(1, 1, 1)
+        self._is_handling_diamond_triangle = False
 
         algorithm = self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
         algorithm.project = project_info
@@ -402,10 +402,19 @@ class SystemMachine(StateMachine):
             #  And we could also decide to check in SystemState.cage as well (as far as last command is send_pellet) ?
             and self._pellet_machine.can_use_pellet_command()
         ):
-            last_position = self._pellet_device.last_position
-            if last_position is not None and offset is not None:
-                self._algorithm.handle_diamond_triangle_offset(
-                    offset, last_position, flips=self._motor_axis_flips)
+            last_pos = self._pellet_device.last_position
+            if last_pos is not None and offset is not None:
+                if not self._is_handling_diamond_triangle:
+                    self._is_handling_diamond_triangle = True
+                    logger.info("Starting handling diamond-triangle offset ; offset=%s pos=%s",
+                                offset.humanize(), last_pos.humanize())
+                self._algorithm.handle_diamond_triangle_offset(offset, last_pos)
+        else:
+            if self._is_handling_diamond_triangle:
+                self._is_handling_diamond_triangle = False
+                measured_drift = self._algorithm.diamond_triangle_drift
+                logger.info("Stopped handling diamond-triangle offset ; measured drift = %s",
+                            None if measured_drift is None else measured_drift.humanize())
 
     def _handle_triangle_pellet_offset_changed(self, offset: Optional[Offset3DTuple]):
         if offset is None:  # not sure we should not let it pass to algo

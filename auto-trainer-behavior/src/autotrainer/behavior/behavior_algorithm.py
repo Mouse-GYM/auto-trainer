@@ -996,11 +996,11 @@ class BehaviorAlgorithm(ObservableObject):
         if reset:
             self._diamond_triangle_prev_drifts = []
         new_drift = Offset3DTuple(0, 0, 0) if n_vals == 0 else tot / n_vals
-        if logger.isEnabledFor(logging.DEBUG):
-            if len(values) == 0:
-                values = [Offset3DTuple(math.nan, math.nan, math.nan)]
-            logger.debug("Motor mean drift: %s\n min=%s max=%s",
-                         new_drift.humanize(n_digits=3), min(values).humanize(), max(values).humanize())
+        if len(values) == 0:
+            values = [Offset3DTuple(math.nan, math.nan, math.nan)]
+        logger.verbose("Motor mean drift: %s ; min=%s max=%s",
+                     new_drift.humanize(n_digits=3),
+                       min(values).humanize(n_digits=1), max(values).humanize(n_digits=1))
         # put here to minimize nbr of times we update it:
         if n_vals == 0:
             new_drift = None
@@ -1012,14 +1012,20 @@ class BehaviorAlgorithm(ObservableObject):
         self,
         offset: Offset3DTuple,
         position: Offset3DTuple,
-        *,
-        flips: Offset3DTuple = Offset3DTuple(1, 1, 1),
     ):
         cfg = self._diamond_triangle_offset_config
         if cfg is None:
             return
         prev = self._diamond_triangle_drift
-        drift = flips * (cfg.measured_offset - offset) - (cfg.used_position - position)
+        # NB: same than in pellet delivery UI atm,
+        flips_offset_diamond = Offset3DTuple(1, -1, -1)
+        flips_motor_diamond = Offset3DTuple(1, 1, -1)
+        # but will be moved shortly
+        flips_offset_to_motor = flips_offset_diamond * flips_motor_diamond
+        drift = (
+            flips_offset_to_motor * (cfg.measured_offset - offset)
+            - (cfg.used_position - position)
+        )
         if prev is None:
             prev = Offset3DTuple(0, 0, 0)
         if __debug__:

@@ -100,16 +100,16 @@ class AppModel(ObservableObject):
     # TODO: following should/will be moved to smth as autotrainer.device ;
     #  so that it can be reused from different places
 
-    flips_offset_to_diamond = (1, -1, -1)
-    flips_motor_to_diamond = (1, 1, -1)
+    flips_offset_diamond = (1, -1, -1)
+    flips_motor_diamond = (1, 1, -1)
 
     def to_diamond_coordinates(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
         diam_triangle_cfg = self._diamond_triangle_config
         if diam_triangle_cfg is None:
             return Offset3DTuple(math.nan, math.nan, math.nan)
         return (
-            self.flips_offset_to_diamond * diam_triangle_cfg.measured_offset
-            - self.flips_motor_to_diamond * (motor_xyz - diam_triangle_cfg.used_position)
+                self.flips_offset_diamond * diam_triangle_cfg.measured_offset
+                - self.flips_motor_diamond * (motor_xyz - diam_triangle_cfg.used_position)
         )
 
     def to_motor_coordinates(self, diamond_xyz: Offset3DTuple) -> Offset3DTuple:
@@ -117,8 +117,8 @@ class AppModel(ObservableObject):
         if diam_triangle_cfg is None:
             return Offset3DTuple(math.nan, math.nan, math.nan)
         return (
-           self.flips_offset_to_diamond * diam_triangle_cfg.measured_offset - diamond_xyz
-        ) * self.flips_motor_to_diamond + diam_triangle_cfg.used_position
+                self.flips_offset_diamond * diam_triangle_cfg.measured_offset - diamond_xyz
+        ) * self.flips_motor_diamond + diam_triangle_cfg.used_position
 
     # end todo.
 

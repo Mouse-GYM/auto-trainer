@@ -193,9 +193,6 @@ class PelletMachine(StateMachine):
         if dev is not None:
             correct_drift = algo.auto_correct_motors_drift
             if drifts is not None and correct_drift:
-                # not sure for:
-                # flips = dev.get_motor_flips()
-                # drifts *= flips
                 dev.set_motors_drift(drifts)
             if not (algo.session_mouse_seen and algo.intersession_enabled):
                 # force also a send_pellet, only if not gonna go to intersession
