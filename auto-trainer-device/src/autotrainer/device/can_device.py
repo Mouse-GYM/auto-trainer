@@ -7,12 +7,14 @@ class relies on the CanInterface class to send and receive data.
 """
 
 import logging
+import math
 import queue
 import threading
 import time
 from functools import partial
-from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast
+from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict
 
+from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.message import SystemDataArgsKwargs
 
@@ -118,11 +120,12 @@ class CanDevice(Device):
         self._close_tunnel_gate = default_close_gate()
         self._compound_movement = None  # Current compound movement
 
-        self._last_limit_switch = {
-            Motor.PELLET_X_MOTOR: -1,
-            Motor.PELLET_Y_MOTOR: -1,
-            Motor.PELLET_Z_MOTOR: -1,
+        self._last_limit_switch: Dict[Motor, Optional[bool]] = {
+            Motor.PELLET_X_MOTOR: None,
+            Motor.PELLET_Y_MOTOR: None,
+            Motor.PELLET_Z_MOTOR: None,
         }
+        self._last_pos = Offset3DTuple(math.nan, math.nan, math.nan)
 
         no_op_handler = lambda _: None
 
@@ -599,6 +602,17 @@ class CanDevice(Device):
         Motor.TUNNEL_GATE_SERVO: SystemStatusMessageKind.TUNNEL_GATE_SERVO,
     }
 
+    _motor_to_coordinate_char = {
+        Motor.PELLET_X_MOTOR: "x",
+        Motor.PELLET_Y_MOTOR: "y",
+        Motor.PELLET_Z_MOTOR: "z",
+    }
+    _motor_to_coordinate_idx = {
+        Motor.PELLET_X_MOTOR: 0,
+        Motor.PELLET_Y_MOTOR: 1,
+        Motor.PELLET_Z_MOTOR: 2,
+    }
+
     def _report_stepper_status(self, message: StepperStatus):
         """
         Report stepper status to the API.
@@ -606,13 +620,17 @@ class CanDevice(Device):
         Args:
             message: StepperStatus
         """
-        prev_limit_switch = self._last_limit_switch.get(message.motor, None)
-        if message.is_at_limit != prev_limit_switch:
-            logger.notice("%s: limit_switch: %s -> %s ; pos=%.02f send_pos=%.02f",
-                          message.motor, prev_limit_switch, message.is_at_limit,
-                          message.position, message.send_position)
-            self._last_limit_switch[message.motor] = message.is_at_limit
-
+        if message.motor in self._motor_to_coordinate_idx:
+            prev_limit_switch = self._last_limit_switch[message.motor]
+            last_pos = self._last_pos[self._motor_to_coordinate_idx[message.motor]]
+            if message.is_at_limit != prev_limit_switch:
+                logger.notice("%s: limit_switch: %s -> %s ; pos=%.02f (last=%.02f) send_pos=%.02f",
+                              message.motor, prev_limit_switch, message.is_at_limit,
+                              message.position, last_pos, message.send_position)
+                self._last_limit_switch[message.motor] = message.is_at_limit
+        coord_char = self._motor_to_coordinate_char.get(message.motor, None)
+        if coord_char is not None:
+            self._last_pos = self._last_pos.replace(**{coord_char: message.position})
         kind = CanDevice._motor_to_status_kind.get(message.motor, None)
         if self._api is not None and kind is not None:
             self.api.send_message(kind, message)
