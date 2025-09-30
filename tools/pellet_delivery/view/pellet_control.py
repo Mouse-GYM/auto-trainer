@@ -39,7 +39,7 @@ def add_position(label: str, s_min: float, s_max: float) -> Tuple[
     pos = QDoubleSpinBox()
     pos.setMinimumWidth(40)
     pos.setRange(s_min, s_max)
-    pos.setDecimals(2)
+    pos.setDecimals(1)
     pos.setSingleStep(0.15)
     pos.setWrapping(False)
     position_layout.addWidget(pos, 0)
