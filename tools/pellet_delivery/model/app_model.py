@@ -97,30 +97,30 @@ class AppModel(ObservableObject):
     def motor_flips(self):
         return self._motor_flips
 
-    def to_diamond_coordinates(self, xyz: Offset3DTuple) -> Offset3DTuple:
-        diam_triangle_cfg = self._diamond_triangle_config
-        if diam_triangle_cfg is None:
-            return Offset3DTuple(math.nan, math.nan, math.nan)
-        assert isinstance(diam_triangle_cfg, DiamondTriangleOffsetConfig)
-        flips = Offset3DTuple(1, -1, -1)
-        motor_flips = self._motor_flips
-        return (
-            flips * diam_triangle_cfg.measured_offset
-            - (xyz - diam_triangle_cfg.used_position)
-        ) * motor_flips
+    # TODO: following should/will be moved to smth as autotrainer.device ;
+    #  so that it can be reused from different places
 
-    def to_motor_coordinates(self, xyz: Offset3DTuple) -> Offset3DTuple:
+    flips_offset_to_diamond = (1, -1, -1)
+    flips_motor_to_diamond = (1, 1, -1)
+
+    def to_diamond_coordinates(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
         diam_triangle_cfg = self._diamond_triangle_config
         if diam_triangle_cfg is None:
             return Offset3DTuple(math.nan, math.nan, math.nan)
-        assert isinstance(diam_triangle_cfg, DiamondTriangleOffsetConfig)
-        flips = Offset3DTuple(1, -1, -1)
-        motor_flips = self._motor_flips
         return (
-            flips * diam_triangle_cfg.measured_offset
-            - (xyz * motor_flips)
-            + diam_triangle_cfg.used_position
+            self.flips_offset_to_diamond * diam_triangle_cfg.measured_offset
+            - self.flips_motor_to_diamond * (motor_xyz - diam_triangle_cfg.used_position)
         )
+
+    def to_motor_coordinates(self, diamond_xyz: Offset3DTuple) -> Offset3DTuple:
+        diam_triangle_cfg = self._diamond_triangle_config
+        if diam_triangle_cfg is None:
+            return Offset3DTuple(math.nan, math.nan, math.nan)
+        return (
+           self.flips_offset_to_diamond * diam_triangle_cfg.measured_offset - diamond_xyz
+        ) * self.flips_motor_to_diamond + diam_triangle_cfg.used_position
+
+    # end todo.
 
     @property
     def is_connected(self):
