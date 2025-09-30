@@ -1106,6 +1106,7 @@ class CanInterface(DeviceInterface):
                 # so that multiple consecutive relative movement (without having received a stepper status in between),
                 # won't make the checks to be missed.
         else:
+            # absolute move
             if turns_position < 0:
                 turns_position = 0
                 logger.debug("limited turns_position to 0")
