@@ -186,7 +186,7 @@ class PelletControl(QWidget):
         for coord_system in COORDINATE_SYSTEMS:
             combo.addItem(coord_system.value, coord_system)
         def select_coordinate(_: int):
-            self._coordinate_system_changed(limits=self._app_model.travel_limits)
+            self._refresh_pellet_xyz_control(limits=self._app_model.travel_limits)
         combo.setCurrentIndex(0)
         combo.currentIndexChanged.connect(select_coordinate)
         select_coordinate(0)  # ensure we set as when switched to
@@ -226,7 +226,7 @@ class PelletControl(QWidget):
     def _move_z(self):
         self._app_model.move_z(self._to_motor(Offset3DTuple(0, 0, self._z_pos.value())).z)
 
-    def _coordinate_system_changed(self, *, limits):
+    def _refresh_pellet_xyz_control(self, *, limits):
         cur_coordinate_system = self._combo_coordinate_system.currentData()
         app_model = self._app_model
         if limits is None:
@@ -265,13 +265,15 @@ class PelletControl(QWidget):
         if name == "travel_limits":
             logger.debug("got & applying travel_limits: %s", value)
             if value is not None:
-                self._coordinate_system_changed(limits=value)
+                self._refresh_pellet_xyz_control(limits=value)
         elif name == "config":
             if self._config_dialog is not None:
                 if is_servo(value.motor):
                     self._config_dialog.update_servo_config(value)
                 else:
                     self._config_dialog.update_stepper_config(value)
+        elif name in {'x', 'y', 'z'}:
+            self._refresh_pellet_xyz_control(limits=self._app_model.travel_limits)
 
     def _update_config(self):
         self._config_dialog = MotorConfigDialog(self)
