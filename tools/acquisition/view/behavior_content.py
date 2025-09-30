@@ -1,3 +1,5 @@
+import math
+
 from PySide6.QtCore import Qt
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QLabel, QWidget, QVBoxLayout,
@@ -219,7 +221,7 @@ class BehaviorContent(ContentWidget):
 
     def _app_model_property_changed(self, name, value, _):
         if name == AppModel.Props.SELECTED_ANIMAL:
-            self._prev_pellet_shift_label.update_value(None, None, None)
+            self._prev_pellet_shift_label.update_coordinate(x=math.nan, y=math.nan, z=math.nan)
 
     def _inference_model_property_changed(self, name, value, _):
         if name == "is_enabled":
