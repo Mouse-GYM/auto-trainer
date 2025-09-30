@@ -208,7 +208,7 @@ class AppModel(ObservableObject):
     @send_z.setter
     def send_z(self, value):
         prev, self._send_z = self._send_z, value
-        self._on_property_changed("send_z", value, value)
+        self._on_property_changed("send_z", value, prev)
 
     @property
     def load_arm(self):
