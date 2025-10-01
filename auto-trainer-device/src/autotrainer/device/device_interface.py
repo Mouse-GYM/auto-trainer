@@ -459,7 +459,6 @@ class DeviceInterface:
 
     def set_motors_drift(self, drifts: Offset3DTuple):
         prev_drifts = self._motors_drift
-        self._motors_drift = drifts
         logger.debug("Received new motors drift: %s ; prev=%s",
                      drifts.humanize(n_digits=3), prev_drifts.humanize(n_digits=3))
         for motor_axis_idx, motor in enumerate((Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR)):
@@ -467,7 +466,11 @@ class DeviceInterface:
             if abs(axis_drift) > self._max_motor_drift_error_threshold:
                 logger.critical("%s drift over error threshold: %.3f", motor, axis_drift)
                 self._motors_drift_error[motor_axis_idx] = True
-                axis_drift = self._max_motor_drift_error_threshold
+                # hopefully keep same drift direction:
+                if axis_drift < 0:
+                    axis_drift = -self._max_motor_drift_error_threshold
+                else:
+                    axis_drift = self._max_motor_drift_error_threshold
                 drifts = drifts.replace(**{"xyz"[motor_axis_idx]: axis_drift})
             else:
                 if self._motors_drift_error[motor_axis_idx]:
@@ -478,6 +481,9 @@ class DeviceInterface:
             # save-as-fixed with 0 relative,
             # this will make the current saved-as-fixed to be auto-corrected:
             # self.move_motor(motor, 0, relative=True, save_as_fixed=True)
+        # end motors loop
+        # previous loop could have modified drifts, so assign after the loop:
+        self._motors_drift = drifts
 
     def move_motor(self, motor: Motor, position, *, save_as_fixed: bool = False, relative: bool = False):
         # only for steppers, XYZ
