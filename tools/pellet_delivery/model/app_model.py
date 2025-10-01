@@ -72,7 +72,6 @@ class AppModel(ObservableObject):
 
         self._travel_limits = None  # _alogus_travel_limits
 
-        self._motor_flips = Offset3DTuple(math.nan, math.nan, math.nan)
         self._diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(
             diamond_triangle_config_path)
 
@@ -89,38 +88,17 @@ class AppModel(ObservableObject):
         self._hardware_configuration = self._on_property_changed("hardware_configuration", value,
                                                                  self._hardware_configuration)
 
-    @property
-    def diamond_triangle_config(self):
-        return self._diamond_triangle_config
-
-    @property
-    def motor_flips(self):
-        return self._motor_flips
-
-    # TODO: following should/will be moved to smth as autotrainer.device ;
-    #  so that it can be reused from different places
-
-    flips_offset_diamond = (1, -1, -1)
-    flips_motor_diamond = (1, 1, -1)
-
     def to_diamond_coordinates(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
         diam_triangle_cfg = self._diamond_triangle_config
         if diam_triangle_cfg is None:
             return Offset3DTuple(math.nan, math.nan, math.nan)
-        return (
-                self.flips_offset_diamond * diam_triangle_cfg.measured_offset
-                - self.flips_motor_diamond * (motor_xyz - diam_triangle_cfg.used_position)
-        )
+        return diam_triangle_cfg.motor_to_diamond(motor_xyz)
 
     def to_motor_coordinates(self, diamond_xyz: Offset3DTuple) -> Offset3DTuple:
         diam_triangle_cfg = self._diamond_triangle_config
         if diam_triangle_cfg is None:
             return Offset3DTuple(math.nan, math.nan, math.nan)
-        return (
-                self.flips_offset_diamond * diam_triangle_cfg.measured_offset - diamond_xyz
-        ) * self.flips_motor_diamond + diam_triangle_cfg.used_position
-
-    # end todo.
+        return diam_triangle_cfg.diamond_to_motor(diamond_xyz)
 
     @property
     def is_connected(self):
@@ -371,9 +349,6 @@ class AppModel(ObservableObject):
                 self.hardware_configuration = None
                 raise  # do not take any risk
 
-        self._motor_flips = Offset3DTuple(*(-1 if cfg.flip_limit_orientation else 1
-                                            for _, cfg in (motors_cfg.x_config, motors_cfg.y_config, motors_cfg.z_config)))
-        logger.debug("motor_flips: %s", self._motor_flips)
         #
         self._diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(
             DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH)

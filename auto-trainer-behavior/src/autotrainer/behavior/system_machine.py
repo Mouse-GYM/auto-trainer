@@ -77,7 +77,6 @@ class SystemMachine(StateMachine):
         self._disengage_auto_clamp_load_count = 0
 
         self._last_close_tunnel_gate_perf_t = -math.inf
-        self._motor_axis_flips = Offset3DTuple(1, 1, 1)
         self._is_handling_diamond_triangle = False
 
         algorithm = self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
@@ -221,10 +220,7 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func
     def _session_starting(self):
-        pellet_dev = self._pellet_device
-        if pellet_dev is not None:
-            self._motor_axis_flips = pellet_dev.get_motor_flips()
-            logger.debug("read motor axis flips: %s", self._motor_axis_flips)
+        pass
 
     @BehaviorAlgorithm.relay_func
     def _session_ended(self):
@@ -406,7 +402,7 @@ class SystemMachine(StateMachine):
             if last_pos is not None and offset is not None:
                 if not self._is_handling_diamond_triangle:
                     self._is_handling_diamond_triangle = True
-                    logger.info("Starting handling diamond-triangle offset ; offset=%s pos=%s",
+                    logger.info("Starting handling diamond-triangle offset ; current offset=%s pos=%s",
                                 offset.humanize(), last_pos.humanize())
                 self._algorithm.handle_diamond_triangle_offset(offset, last_pos)
         else:

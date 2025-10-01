@@ -172,7 +172,8 @@ class PelletMachine(StateMachine):
     # region Callbacks
     @BehaviorAlgorithm.relay_func
     def _session_starting(self):
-        pass
+        # ensure we reset the diamond triangle drifts measures
+        self._algorithm.get_diamond_triangle_drifts(reset=True)
         # Strictly speaking, the pellet should not be covered here when covering is disabled.  Under that condition,
         # must release could be set to False.  However, given how critical it is that the pellet is not covered when
         # disabled, go ahead and request a release under all conditions, even though it should be a no-op in that
@@ -184,6 +185,7 @@ class PelletMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func
     def _session_ending(self):
+        # todo: this entire func/block should be moved to system machine or behavior algo imho
         algo = self._algorithm
         logger.debug("_session_ending() called ; session_mouse_seen=%s",
                      algo.session_mouse_seen)

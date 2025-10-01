@@ -1,4 +1,5 @@
 import dataclasses
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, List, Dict, Optional
@@ -11,6 +12,12 @@ from autotrainer.core import Offset3DTuple, get_verbose_logger
 
 
 logger = get_verbose_logger()
+
+# 3 coordinate systems,
+# but each has some axis direction difference (when one increases, the other decreases)
+flips_inference_diamond = Offset3DTuple(1, -1, -1)
+flips_motor_diamond = Offset3DTuple(1, 1, -1)
+flips_inference_motor = flips_inference_diamond * flips_motor_diamond
 
 
 # keeping top level atm, given not quite sure where to put
@@ -54,6 +61,29 @@ class DiamondTriangleOffsetConfig:
                 d[k] = list(v)  # getting yaml type error with Offset3D
             yaml.safe_dump(d, fh)
 
+    def inference_to_motor(self, inference_xyz: Offset3DTuple) -> Offset3DTuple:
+        """Transform an inference "offset" coordinate (which is """
+        return (
+            flips_inference_motor * (self.measured_offset - inference_xyz)
+            + self.used_position
+        )
+
+    def motor_to_inference(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
+        return (
+            self.measured_offset
+            - flips_inference_motor * (motor_xyz - self.used_position)
+        )
+
+    def motor_to_diamond(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
+        return (
+            flips_inference_diamond * self.measured_offset
+            - flips_motor_diamond * (motor_xyz - self.used_position)
+        )
+
+    def diamond_to_motor(self, diamond_xyz: Offset3DTuple) -> Offset3DTuple:
+        return (
+            flips_inference_diamond * self.measured_offset - diamond_xyz
+        ) * flips_motor_diamond + self.used_position
 
 
 # Protocol first (less strict)
