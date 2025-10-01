@@ -462,7 +462,7 @@ def run_monitor():
                     device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE, context="tare")
 
                 elif cmd == 'v' or cmd == 'version':
-                    device_connection.send_message(SystemCommandKind.REQUEST_VERSION, context="version")
+                    device_connection.send_message(SystemCommandKind.REQUEST_VERSION)
 
                 elif cmd == "logger":
                     get_input = True
