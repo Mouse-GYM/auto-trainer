@@ -540,11 +540,15 @@ def handle_motor_command(motor: Motor, params, device_connection):
         logger.debug("print_motor_status=%s", print_motor_status)
     # set position
     elif params[0] == 'move':
-        relative = params[1].startswith(tuple("-+"))
         float_params = move_parameter(params[1:])
+        args_kwargs = SystemDataArgsKwargs(float_params)
+        if motor in motor_to_set_command:
+            # only consider relative move for stepper X/Y/Z ; not for servo motors
+            relative = params[1].startswith(('+', '-'))
+            args_kwargs.kwargs["relative"] = relative
         device_connection.send_message(
             motor_to_move_command[motor],
-            data=SystemDataArgsKwargs(float_params, relative=relative),
+            data=args_kwargs,
             context="motor move",
         )
 
