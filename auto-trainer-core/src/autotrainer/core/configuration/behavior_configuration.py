@@ -9,6 +9,8 @@ from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decam
 from ..analysis import LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer
 from ..analysis import HeadbarPressureConfiguration, headbar_pressure_configuration_representer
 from ..analysis import LoadCellConfiguration, load_cell_configuration_representer
+from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
+from .presence_configuration import MousePresenceConfig
 
 
 @dataclass
@@ -71,6 +73,8 @@ class BehaviorConfiguration:
     load_cell: LoadCellConfiguration = field(default_factory=LoadCellConfiguration)
     headbar_pressure: HeadbarPressureConfiguration = field(default_factory=HeadbarPressureConfiguration)
     auto_tare: LoadCellAutoTareConfiguration = field(default_factory=LoadCellAutoTareConfiguration)
+    audio: AudioSpectrumThrashMonitorConfig = field(default_factory=AudioSpectrumThrashMonitorConfig)
+    mouse_presence: MousePresenceConfig = field(default_factory=MousePresenceConfig)
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
@@ -107,6 +111,8 @@ class BehaviorConfiguration:
 pellet_delivery_configuration_representer = make_camelize_representer("!PelletDeliveryConfiguration")
 head_clamp_configuration_representer = make_camelize_representer("!HeadClampConfiguration")
 behavior_configuration_representer = make_camelize_representer("!BehaviorConfiguration")
+audio_monitor_representer = make_camelize_representer("!AudioMonitorConfiguration")
+mouse_presence_monitor_representer = make_camelize_representer("!MousePresenceConfiguration")
 
 
 def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
@@ -116,6 +122,8 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     dumper.add_representer(HeadbarPressureConfiguration, headbar_pressure_configuration_representer)
     dumper.add_representer(LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer)
     dumper.add_representer(BehaviorConfiguration, behavior_configuration_representer)
+    dumper.add_representer(AudioSpectrumThrashMonitorConfig, audio_monitor_representer)
+    dumper.add_representer(MousePresenceConfig, mouse_presence_monitor_representer)
 
 
 pellet_delivery_configuration_constructor = make_decamelize_constructor(PelletDeliveryConfiguration)
@@ -124,6 +132,8 @@ headbar_pressure_configuration_constructor = make_decamelize_constructor(Headbar
 head_clamp_configuration_constructor = make_decamelize_constructor(HeadClampConfiguration)
 load_cell_auto_tare_configuration_constructor = make_decamelize_constructor(LoadCellAutoTareConfiguration)
 behavior_configuration_constructor = make_decamelize_constructor(BehaviorConfiguration)
+mouse_presence_configuration_constructor = make_decamelize_constructor(MousePresenceConfig)
+audio_monitor_configuration_constructor = make_decamelize_constructor(AudioSpectrumThrashMonitorConfig)
 
 
 def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
@@ -133,3 +143,5 @@ def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
     safe_loader.add_constructor("!HeadbarPressureConfiguration", headbar_pressure_configuration_constructor)
     safe_loader.add_constructor("!HeadClampConfiguration", head_clamp_configuration_constructor)
     safe_loader.add_constructor("!LoadCellAutoTareConfiguration", load_cell_auto_tare_configuration_constructor)
+    safe_loader.add_constructor("!AudioMonitorConfiguration", audio_monitor_configuration_constructor)
+    safe_loader.add_constructor("!MousePresenceConfiguration", mouse_presence_configuration_constructor)

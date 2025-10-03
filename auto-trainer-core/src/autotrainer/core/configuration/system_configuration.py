@@ -40,7 +40,7 @@ class SystemConfiguration:
 
     DEFAULT_NAME: ClassVar[str] = "system_configuration"
 
-    version: int = 2
+    version: int = 3
     cameras: List[CameraConfiguration] = field(default_factory=list)
     hardware: HardwareConfiguration = field(default_factory=HardwareConfiguration)
     inference: InferenceConfiguration = field(default_factory=InferenceConfiguration)
@@ -68,8 +68,7 @@ class SystemConfiguration:
             elif version == 1:
                 configuration._deserialize_version_one(content)
             else:
-                # although we could try use SystemConfigurationSafeLoader, as below else: case.
-                raise ValueError(f"Cannot handle deserialize version {version}")
+                configuration = yaml.load(data, SystemConfigurationSafeLoader)
         else:
             assert version > SystemConfiguration.version
             logger.warning("Loading configuration version %s while SystemConfiguration.version == %s, "
@@ -82,7 +81,7 @@ class SystemConfiguration:
             now_str = now.strftime(f"{DATE_FORMAT}_{TIME_FORMAT}")
             new_p = file_path.parent.joinpath(
                 f"{file_path.stem}_v{version}_{now_str}{file_path.suffix}")
-            logger.notice("Detected config version change/missmatch, saving old config to %s,"
+            logger.notice("Detected config version change/mismatch, saving old config to %s,"
                           " and replacing with new after.", new_p)
             shutil.copy2(file_path, new_p)
             # and save new one over previous:
