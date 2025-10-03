@@ -361,6 +361,7 @@ class PreferencesContent(QWidget):
         return tab
 
     def _create_advanced_tab(self):
+        model = self._app_model
         combo_log_level = self._log_level_combobox = QComboBox(None)
         for display, lvl in (
                 ("Success", verboselogs.SUCCESS),  # 0
@@ -419,6 +420,27 @@ class PreferencesContent(QWidget):
         self._checkbox_remove_raw_data_inactive_session.stateChanged.connect(
             self._remove_raw_data_when_inactive_session_changed)
         form_layout.addRow("Remove saved videos when animal not seen:", self._checkbox_remove_raw_data_inactive_session)
+
+        spinbox = self._presence_sum_percent_threshold_spinbox = QDoubleSpinBox()
+        spinbox.setRange(0, 100)
+        spinbox.setSingleStep(0.1)
+        spinbox.setValue(model.top_camera_presence_detection.pc_threshold)
+        def value_changed(value: float):
+            logger.verbose("updating pc_threshold to %s", value)
+            model.top_camera_presence_detection.pc_threshold = value
+        spinbox.valueChanged.connect(value_changed)
+        form_layout.addRow("pc_threshold:", spinbox)
+
+        spinbox = self._presence_sum_percent_exclude_threshold_spinbox = QDoubleSpinBox()
+        spinbox.setRange(0, 100)
+        spinbox.setSingleStep(0.1)
+        spinbox.setDecimals(3)
+        spinbox.setValue(model.top_camera_presence_detection.pc_high_exclude_threshold)
+        def value_changed(value: float):
+            logger.verbose("updating pc_high_exclude_threshold to %s", value)
+            model.top_camera_presence_detection.pc_high_exclude_threshold = value
+        spinbox.valueChanged.connect(value_changed)
+        form_layout.addRow("pc_high_exclude_threshold:", spinbox)
 
         tab = QWidget(None)
         tab.setLayout(form_layout)

@@ -144,7 +144,9 @@ class AppModel(ObservableObject):
 
         self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir)
 
-        self._behavior = BehaviorModel(self._system_message_handler, self._analysis, self._hardware, self._inference)
+        behavior = self._behavior = BehaviorModel(
+            self._system_message_handler, self._analysis, self._hardware, self._inference)
+        behavior.algorithm.top_camera_presence_detection = self._top_camera_presence_detection
 
         self._output_location = ""
 
