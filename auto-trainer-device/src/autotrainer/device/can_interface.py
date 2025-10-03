@@ -19,7 +19,7 @@ import time
 import warnings
 from enum import Enum, IntEnum
 from operator import attrgetter
-from typing import Type, Optional, Dict, Union, Any
+from typing import Type, Optional, Dict, Union, Any, Tuple
 
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
@@ -1025,7 +1025,7 @@ class CanInterface(DeviceInterface):
     def _move_stepper_motor(
         self,
         motor: Motor,
-        position,
+        position: Union[float, Tuple[float, float]],
         config: StepperConfig,
         save_as_fixed: bool,
         relative: bool = False,
@@ -1051,8 +1051,8 @@ class CanInterface(DeviceInterface):
         if isinstance(position, (float, int)):
             velocity = config.maximum_velocity
         elif isinstance(position, tuple) and len(position) == 2:
-            position = float(position[0])
             velocity = float(position[1]) / 100.0 * config.maximum_velocity
+            position = float(position[0])
         else:
             logger.error("Unhandled position type: %s ; value=%r", type(position), position)
             return False
@@ -1108,11 +1108,12 @@ class CanInterface(DeviceInterface):
         else:
             # absolute move
             if turns_position < 0:
+                logger.debug("limited turns_position to 0 ; was %.1f", turns_position)
                 turns_position = 0
-                logger.debug("limited turns_position to 0")
             elif turns_position > _STEPPER_MAX_TURNS:
+                logger.debug("limited turns_position to max ; was %.1f", turns_position)
                 turns_position = _STEPPER_MAX_TURNS
-                logger.debug("limited turns_position to max")
+
 
         uuid = CanInterface.next_uuid()
         res = self._jc.StepperMove(
@@ -1165,7 +1166,7 @@ class CanInterface(DeviceInterface):
 
     def move_motor_x(
         self,
-        position,
+        position: Union[float, Tuple[float, float]],
         save_as_fixed: bool = False,
         *,
         relative: bool = False,
