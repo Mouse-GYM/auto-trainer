@@ -124,4 +124,5 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
         raise NotImplementedError
 
     def get_motor_flips(self):
+        # NB: unused, could be removed
         raise NotImplementedError

@@ -448,14 +448,14 @@ class DeviceInterface:
     def set_auto_correct_motor_drift(self, value):
         """Set the auto correct motor drift"""
         prev = self._auto_correct_motor_drift
-        # must be done by caller via independent system command kind
+        no_drift = Offset3DTuple(0, 0, 0)
         # if not value and prev:
-        #     self.set_motors_drift(Offset3DTuple(0, 0, 0))
+        #     self.set_motors_drift(no_drift)
         if value != prev:
             logger.verbose("auto_correct_motor_drift: %s -> %s", prev, value)
             self._auto_correct_motor_drift = value
             if not value:
-                self._motors_drift = Offset3DTuple(0, 0, 0)
+                self._motors_drift = no_drift
 
     def set_motors_drift(self, drifts: Offset3DTuple):
         prev_drifts = self._motors_drift

@@ -430,6 +430,7 @@ class PreferencesContent(QWidget):
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setRange(0, 100)
         spinbox.setSingleStep(0.1)
+        spinbox.setDecimals(1)
         spinbox.setValue(model.top_camera_presence_detection.pc_threshold)
         def value_changed(value: float):
             model.top_camera_presence_detection.pc_threshold = value
@@ -440,13 +441,23 @@ class PreferencesContent(QWidget):
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setRange(0, 100)
         spinbox.setSingleStep(0.1)
-        spinbox.setDecimals(3)
+        spinbox.setDecimals(1)
         spinbox.setValue(model.top_camera_presence_detection.pc_high_exclude_threshold)
         def value_changed(value: float):
-            logger.verbose("updating pc_high_exclude_threshold to %s", value)
+            logger.debug("updating pc_high_exclude_threshold to %s", value)
             model.top_camera_presence_detection.pc_high_exclude_threshold = value
         spinbox.valueChanged.connect(value_changed)
         form_layout.addRow("TopCam Presence high-% exclude threshold:", spinbox)
+
+        spinbox = QSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setRange(0, 255)
+        spinbox.setSingleStep(1)
+        spinbox.setValue(model.top_camera_presence_detection.mask_lower_zero)
+        def value_changed(value: float):
+            model.top_camera_presence_detection.mask_lower_zero = value
+        spinbox.valueChanged.connect(value_changed)
+        form_layout.addRow("TopCam Mask Lower Zero:", spinbox)
 
         tab = QWidget(None)
         tab.setLayout(form_layout)

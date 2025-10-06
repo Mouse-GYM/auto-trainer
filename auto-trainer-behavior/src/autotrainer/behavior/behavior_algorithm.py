@@ -999,13 +999,17 @@ class BehaviorAlgorithm(ObservableObject):
         if reset:
             self._diamond_triangle_prev_drifts = []
         new_drift = Offset3DTuple(0, 0, 0) if n_vals == 0 else tot / n_vals
-        if logger.isEnabledFor(logging.DEBUG):
-            if len(values) == 0:
-                values = [Offset3DTuple(math.nan, math.nan, math.nan)]
-            logger.debug("Motor mean drift: %s\n min=%s max=%s",
-                         new_drift.humanize(n_digits=3), min(values).humanize(), max(values).humanize())
-        # put here to minimize nbr of times we update it:
-        if n_vals == 0:
+        if len(values) > 0:
+            logger.info(
+                "Motor mean drift: %s ; min=%s max=%s n_vals=%s",
+                new_drift.humanize(n_digits=3),
+                min(values, key=lambda v: v.distance).humanize(n_digits=1),
+                max(values, key=lambda v: v.distance).humanize(n_digits=1),
+                len(values),
+            )
+        else:
+            logger.verbose("No motor drift measure available")
+            # put here to minimize nbr of times we update it:
             new_drift = None
         prev, self._diamond_triangle_drift = self._diamond_triangle_drift, new_drift
         self._on_property_changed(BehaviorAlgoProps.PELLET_MOTOR_DRIFT, new_drift, prev)
@@ -1014,32 +1018,27 @@ class BehaviorAlgorithm(ObservableObject):
     def handle_diamond_triangle_offset(
         self,
         offset: Offset3DTuple,
-        position: Offset3DTuple,
-        *,
-        flips: Offset3DTuple = Offset3DTuple(1, 1, 1),
+        motor_position: Offset3DTuple,
     ):
         cfg = self._diamond_triangle_offset_config
         if cfg is None:
             return
         prev = self._diamond_triangle_drift
-        drift = flips * (cfg.measured_offset - offset) - (cfg.used_position - position)
+        drift = cfg.inference_to_motor(offset) - motor_position
         if prev is None:
             prev = Offset3DTuple(0, 0, 0)
         if __debug__:
             t_perf_now = time.perf_counter()
             if t_perf_now >= self._next_diamond_triangle_log_report:
                 logger.spam("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
-                            drift.humanize(), prev.humanize(), position.humanize(), offset.humanize())
+                            drift.humanize(), prev.humanize(), motor_position.humanize(), offset.humanize())
                 self._next_diamond_triangle_log_report = t_perf_now + 1
-            d_drift = drift if prev is None else prev + drift
-            # not sure which abs_diff to check against:
-            if d_drift is not None and any(abs(d) > 2.5 for d in d_drift):
+            if any(abs(d) >= 2 for d in drift):
                 perf_now = time.perf_counter()
                 if perf_now > self._diamond_triangle_last_drift_report + 1:  # max 1 / s
                     logger.debug("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
-                                 drift.humanize(), prev.humanize(), position.humanize(), offset.humanize())
+                                 drift.humanize(), prev.humanize(), motor_position.humanize(), offset.humanize())
                     self._diamond_triangle_last_drift_report = perf_now
-        self._diamond_triangle_drift = drift
         self._diamond_triangle_prev_drifts.append(drift)
         if prev != drift:
             self.pellet_motor_drift_changed(drift)

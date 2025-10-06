@@ -373,19 +373,19 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if dev is None:
             return
         dev.send_message(SystemCommandKind.SET_MOTOR_DRIFT, drift)
-        # self._device.device.device_interface.set_motors_drift(drift)
         # this ensure the next send_to_fixed_pos command will get the corrected position:
         for cmd_kind in (SystemCommandKind.SET_X, SystemCommandKind.SET_Y, SystemCommandKind.SET_Z):
             dev.send_message(cmd_kind, SystemDataArgsKwargs(0, relative=True))
 
     def set_auto_correct_motor_drift(self, enabled: bool):
         dev = self._device
-        if dev is not None:
-            dev.send_message(SystemCommandKind.SET_AUTO_CORRECT_DRIFT, enabled)
-            if not enabled:
-                logger.verbose("Doing SET_X/Y/Z relative=0 to clear possible motors drift")
-                for cmd_kind in (SystemCommandKind.SET_X, SystemCommandKind.SET_Y, SystemCommandKind.SET_Z):
-                    dev.send_message(cmd_kind, SystemDataArgsKwargs(0, relative=True))
+        if dev is None:
+            return
+        dev.send_message(SystemCommandKind.SET_AUTO_CORRECT_DRIFT, enabled)
+        if not enabled:
+            logger.verbose("Doing SET_X/Y/Z relative=0 to clear possible motors drift")
+            for cmd_kind in (SystemCommandKind.SET_X, SystemCommandKind.SET_Y, SystemCommandKind.SET_Z):
+                dev.send_message(cmd_kind, SystemDataArgsKwargs(0, relative=True))
 
     def _ack_received(self, token: UUID):
         if token is not None and token not in self._pending_tokens:
