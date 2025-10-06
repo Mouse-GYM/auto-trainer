@@ -1239,13 +1239,12 @@ class CanInterface(DeviceInterface):
         logger.debug("fixed_position ; res=%s uuid=%s", res, uuid)
         return res == 0
 
-    def move_load_servo(self, position, _unused: bool = False):
+    def move_load_servo(self, position):
         """
         Move the load arm
 
         Args:
             position: Either a position (float) or a (position, rate (%)) pair
-            _unused
 
         Returns:
             bool: True if successful else False
@@ -1270,13 +1269,12 @@ class CanInterface(DeviceInterface):
         """
         return self.move_load_servo(self.load_config.maximum_position)
 
-    def move_cover_servo(self, position, _unused: bool = False):
+    def move_cover_servo(self, position):
         """
         Move the cover servo
 
         Args:
             position: Either a position (float) or a (position, rate (%)) pair
-            _unused
 
         Returns:
             bool: True if successful else False
