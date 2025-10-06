@@ -7,7 +7,7 @@ from PySide6 import QtCore
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton,
                                QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QSpinBox, QGridLayout,
-                               QLayout, QSizePolicy)
+                               QLayout, QSizePolicy, QMessageBox)
 
 from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration, PelletDeliveryConfiguration
 from autotrainer.core.logging import get_verbose_logger
@@ -538,10 +538,17 @@ class PreferencesContent(QWidget):
         line_edit = QLineEdit()
         line_edit.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         line_edit.setText(str(behavior_cfg.audio.bins_list))
-        def value_changed(value):
-            value = ast.literal_eval(value)
-            behavior_cfg.audio.bins_list = value
-        line_edit.textChanged.connect(value_changed)
+        def value_changed(line_edit=line_edit):
+            value = line_edit.text()
+            try:
+                value = ast.literal_eval(value)
+                if not isinstance(value, (list, tuple)) or not all(isinstance(v, int) for v in value):
+                    raise ValueError(f"not a list or not integers")
+            except Exception as err:
+                QMessageBox.critical(self, "Invalid", f"Invalid value for bins list: {err}")
+            else:
+                behavior_cfg.audio.bins_list = list(value)
+        line_edit.editingFinished.connect(value_changed)
         grid_layout.addWidget(QLabel("Bins list:"), cur_row, 0)
         grid_layout.addWidget(line_edit, cur_row, 1)
         cur_row += 1
