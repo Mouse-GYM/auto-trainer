@@ -163,10 +163,10 @@ class AnalysisContent(ContentWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         layout.addWidget(QLabel("Load Cell Threshold (g):"))
-        self._load_cell = QLineEdit(None, None)
-        self._load_cell.editingFinished.connect(self._update_trigger)
-        self._load_cell.setText(str(self._analysis.load_cell_monitor.load_cell_engaged_threshold))
-        layout.addWidget(self._load_cell)
+        self._load_cell_engaged_threshold_line_edit = QLineEdit(None, None)
+        self._load_cell_engaged_threshold_line_edit.editingFinished.connect(self._update_trigger)
+        self._load_cell_engaged_threshold_line_edit.setText(str(self._analysis.load_cell_monitor.load_cell_engaged_threshold))
+        layout.addWidget(self._load_cell_engaged_threshold_line_edit)
 
         layout.addStretch(1)
 
@@ -233,7 +233,7 @@ class AnalysisContent(ContentWidget):
 
     def _update_trigger(self):
         try:
-            self._model.load_trigger = float(self._load_cell.text())
+            self._model.load_trigger = float(self._load_cell_engaged_threshold_line_edit.text())
         except Exception as ex:
             logger.warning(ex)
 
@@ -244,13 +244,13 @@ class AnalysisContent(ContentWidget):
             else:
                 self._plot_weight.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
         elif name == LoadCellMonitor.LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY:
-            self._load_cell.setText(str(value))
+            self._load_cell_engaged_threshold_line_edit.setText(str(value))
 
     def _model_property_changed(self, name, value, _):
         # If any of the values may be coming from a different thread (e.g., the device), a signal is generally needed
         # rather than direct set/update.
         if name == "load_trigger":  # not anymore used
-            self._load_cell.setText(str(value))
+            self._load_cell_engaged_threshold_line_edit.setText(str(value))
 
     def _diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         self.diamond_triangle_offset_changed.emit(_render_offset_3d_value(offset))

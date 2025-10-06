@@ -1,3 +1,4 @@
+import ast
 import logging
 import math
 
@@ -6,7 +7,7 @@ from PySide6 import QtCore
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton,
                                QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QSpinBox, QGridLayout,
-                               QSizePolicy)
+                               QLayout, QSizePolicy, QMessageBox)
 
 from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration, PelletDeliveryConfiguration
 from autotrainer.core.logging import get_verbose_logger
@@ -36,6 +37,9 @@ class PreferencesContent(QWidget):
 
         self._analysis_tab = self._create_analysis_tab()
         self._tabs.addTab(self._analysis_tab, "Analysis")
+
+        self._alarms_tab = self._create_alarms_tab()
+        self._tabs.addTab(self._alarms_tab, "Alarms")
 
         self._advanced_tab = self._create_advanced_tab()
         self._tabs.addTab(self._advanced_tab, "Advanced")
@@ -459,6 +463,130 @@ class PreferencesContent(QWidget):
         tab.setLayout(form_layout)
 
         return tab
+
+    def _create_alarms_tab(self):
+        model = self._app_model
+        analysis = model.analysis
+        config = model.loaded_configuration
+        behavior_cfg = config.behavior
+
+        main_layout = QVBoxLayout()
+        main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+
+        # top_layout = QVBoxLayout()
+        # top_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        # sub_layout = QHBoxLayout()
+        # sub_layout.addWidget(QLabel("                                           "))
+        # sub_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        # top_layout.addLayout(sub_layout)
+        # main_layout.addLayout(top_layout)
+
+        # not sure why but inner spinboxes are taking their max size while in behavior tab they don't
+        # but we use similar layout scheme.
+        # Found: behavior tab uses our QSwitch() which has a size hint
+        grid_layout = QGridLayout()
+        grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        grid_layout.setSpacing(4)
+        grid_layout.setHorizontalSpacing(10)
+        main_layout.addLayout(grid_layout)
+
+        cur_row = 0
+        load_cell_monitor = analysis.load_cell_monitor
+
+        grid_layout.addWidget(QLabel("<b>Load Cell Monitor</b>"), cur_row, 0)
+        cur_row += 1
+
+        spinbox = QSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setRange(0, 100)
+        spinbox.setValue(load_cell_monitor.config.thrashing_min_ptp_change_count)
+        def value_changed(value):
+            load_cell_monitor.config.thrashing_min_ptp_change_count = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(QLabel("Thrashing PTP change count:"), cur_row, 0)
+        grid_layout.addWidget(spinbox, cur_row, 1)
+        cur_row += 1
+
+        spinbox = QDoubleSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setDecimals(1)
+        spinbox.setRange(0, 100)
+        spinbox.setValue(load_cell_monitor.config.thrashing_var_weight_threshold_min)
+        def value_changed(value):
+            load_cell_monitor.config.thrashing_var_weight_threshold_min = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(QLabel("Thrashing min threshold:"), cur_row, 0)
+        grid_layout.addWidget(spinbox, cur_row, 1)
+        cur_row += 1
+
+        spinbox = QDoubleSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setDecimals(1)
+        spinbox.setRange(0, 100)
+        spinbox.setValue(load_cell_monitor.config.thrashing_var_weight_threshold_max)
+        def value_changed(value):
+            load_cell_monitor.config.thrashing_var_weight_threshold_max = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(QLabel("Thrashing max threshold:"), cur_row, 0)
+        grid_layout.addWidget(spinbox, cur_row, 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("<b>Audio Monitor</b>"), cur_row, 0)
+        cur_row += 1
+
+        spinbox = QDoubleSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setDecimals(1)
+        spinbox.setRange(0, 200)
+        spinbox.setValue(behavior_cfg.audio.threshold_db)
+        def value_changed(value):
+            behavior_cfg.audio.threshold_db = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(QLabel("Threshold db:"), cur_row, 0)
+        grid_layout.addWidget(spinbox, cur_row, 1)
+        cur_row += 1
+
+        line_edit = QLineEdit()
+        line_edit.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        line_edit.setText(str(behavior_cfg.audio.bins_list))
+        def value_changed(line_edit=line_edit):
+            value = line_edit.text()
+            try:
+                value = ast.literal_eval(value)
+                if not isinstance(value, (list, tuple)) or not all(isinstance(v, int) for v in value):
+                    raise ValueError(f"not a list or not integers")
+            except Exception as err:
+                QMessageBox.critical(self, "Invalid", f"Invalid value for bins list: {err}")
+            else:
+                behavior_cfg.audio.bins_list = list(value)
+        line_edit.editingFinished.connect(value_changed)
+        grid_layout.addWidget(QLabel("Bins list:"), cur_row, 0)
+        grid_layout.addWidget(line_edit, cur_row, 1)
+        cur_row += 1
+
+        cur_row = 0
+        grid_layout.addWidget(QLabel("<b>Mouse presence missing</b>"), cur_row, 2)
+        cur_row += 1
+
+        spinbox = QSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setRange(0, 100)
+        spinbox.setValue(behavior_cfg.mouse_presence.presence_missing_delay)
+        def value_changed(value):
+            behavior_cfg.mouse_presence.presence_missing_delay = value
+            model.behavior.algorithm.presence_missing_delay = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(QLabel("Missing delay:"), cur_row, 2)
+        grid_layout.addWidget(spinbox, cur_row, 3)
+        cur_row += 1
+
+        tab = QWidget(None)
+        tab.setLayout(main_layout)
+        tab.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        return tab
+
+    #
 
     def _device_id_changed(self, value: str):
         self._preferences.serial_number = value

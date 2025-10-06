@@ -9,7 +9,9 @@ import yaml
 from autotrainer.core import SystemConfiguration, CameraId, HardwareConfiguration, InferenceConfiguration, \
     PersistenceConfiguration
 from autotrainer.core.analysis import LoadCellConfiguration, HeadbarPressureConfiguration, LoadCellAutoTareConfiguration
+from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
+from autotrainer.core.configuration.presence_configuration import MousePresenceConfig
 
 fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
@@ -17,6 +19,8 @@ v0_config_path = fixtures_path.joinpath("v0_config.yaml")
 v1_config_path = fixtures_path.joinpath("v1_config.yaml")
 
 #
+
+audio_cfg = AudioSpectrumThrashMonitorConfig()
 
 current_default_config = {
         # apart the version and persistence.output_location, these are all the defaults values
@@ -50,6 +54,7 @@ current_default_config = {
            'auto_clamp_no_activity_release_delay': HeadClampConfiguration.auto_clamp_no_activity_release_delay,
            'auto_clamp_release_load_count': HeadClampConfiguration.auto_clamp_release_load_count,
           },
+
           'load_cell': {'weight_active_threshold': LoadCellConfiguration.weight_active_threshold,
            'weight_inactive_threshold': LoadCellConfiguration.weight_inactive_threshold,
            'threshold_duration': LoadCellConfiguration.threshold_duration,
@@ -63,11 +68,18 @@ current_default_config = {
           'headbar_pressure': {'threshold': HeadbarPressureConfiguration.threshold, 'duration': HeadbarPressureConfiguration.duration},
           'auto_tare': {'threshold': LoadCellAutoTareConfiguration.threshold,
                         'range_threshold': LoadCellAutoTareConfiguration.range_threshold,
-                        'duration': LoadCellAutoTareConfiguration.duration}},
-         'persistence': {'output_location': PersistenceConfiguration.output_location}}
+                        'duration': LoadCellAutoTareConfiguration.duration},
+         'audio': {'bins_list': audio_cfg.bins_list,
+                        'threshold_db': audio_cfg.threshold_db,
+                        'threshold_percent': audio_cfg.threshold_percent,
+                        'time_window': audio_cfg.time_window},
+         'mouse_presence': {'presence_missing_delay': MousePresenceConfig.presence_missing_delay}
+         },
+         'persistence': {'output_location': PersistenceConfiguration.output_location},
+}
 
 
-v0_expected_result_config = {'version': 2,
+v0_expected_result_config = {'version': SystemConfiguration.version,
  'cameras': [{'id': CameraId.Left,
    'name': 'left',
    'is_enabled': True,
@@ -141,7 +153,10 @@ v0_expected_result_config = {'version': 2,
    'thrashing_var_max_delay': 0.2,
    'thrashing_min_ptp_change_count': 3},
   'headbar_pressure': {'threshold': 10, 'duration': 1.5},
-  'auto_tare': {'threshold': 1.1, 'range_threshold': 1.75, 'duration': 1.0}},
+  'auto_tare': {'threshold': 1.1, 'range_threshold': 1.75, 'duration': 1.0},
+  'audio': current_default_config['behavior']['audio'],
+  'mouse_presence': current_default_config['behavior']['mouse_presence'],
+  },
  'persistence': {'output_location': '/home/autotrainer/output'}}
 
 
@@ -172,20 +187,16 @@ def test_load_version_1():
     path = fixtures_path.joinpath("v1_config.yaml")
     with path.open() as fh:
         config = SystemConfiguration.load_yaml(fh)
+    behavior_dct = current_default_config['behavior']
     assert dataclasses.asdict(config) == {
-        'behavior': {'auto_tare': {'duration': 2.0,
+        'behavior': {
+            'audio': current_default_config['behavior']['audio'],
+            'mouse_presence': current_default_config['behavior']['mouse_presence'],
+            'auto_tare': {'duration': 2.0,
                                    'range_threshold': 0.75,
                                    'threshold': 0.1},
-                     'head_clamp': {'auto_clamp_intensity': 100,
-                                    'auto_clamp_release_tone_delay': 0.1,
-                                    'auto_clamp_release_tone_freq': 7000,
-                                    'baseline_intensity_increment': 10.0,
-                                    'max_baseline_intensity': 90.0,
-                                    'min_baseline_intensity': 0.0,
-                                    'auto_clamp_no_activity_release_delay': HeadClampConfiguration.auto_clamp_no_activity_release_delay,
-                                    'auto_clamp_release_load_count': HeadClampConfiguration.auto_clamp_release_load_count,
-                                    },
-                     'headbar_pressure': {'duration': 0.5, 'threshold': 20},
+            'head_clamp': current_default_config['behavior']['head_clamp'],
+            'headbar_pressure': {'duration': 0.5, 'threshold': 20},
                      'load_cell': {'min_event_duration': 3.0,
                                    'min_post_event_hold_duration': 6.0,
                                    'thrashing_min_ptp_change_count': 3,
@@ -251,7 +262,7 @@ def test_load_version_1():
                       'is_enabled': True,
                       'pose_model_location': '/pose_model_path'},
         'persistence': {'output_location': '/output_location_path'},
-        'version': 2}
+        'version': SystemConfiguration.version}
 
 
 def test_same_version_unknown_attribute_raise():
@@ -277,6 +288,6 @@ persistence: !PersistenceConfiguration
     assert isinstance(cfg, SystemConfiguration)
     expected_result = copy.deepcopy(current_default_config)
     # apart the version and persistence.output_location, these are all the defaults values
-    expected_result["version"] = 3
+    expected_result["version"] = SystemConfiguration.version + 1
     expected_result["persistence"]["output_location"] = "/output_location_path"
     assert dataclasses.asdict(cfg) == expected_result

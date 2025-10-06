@@ -229,20 +229,23 @@ def make_decamelize_constructor(cls: Type[ConfigItemCls]):
 # MUST come first (but after above definitions):
 from .observable_object import ObservableObject, ObservableObjectProtocol
 
+from .event import ApiEventKind, EventManager, EventInfo, EventManagerPlugin
+from .fixed_array_multiqueue import FixedArrayMultiQueue
+from .fixed_array_queue import FixedArrayQueue
+
+from .perf_monitor import PerfMonitor
+from .queue_util import clear_queue
+from .notification import NotificationCenter, Notification, TriggerNotification, post_trigger_enable
+
+from .message import MotorConfigurations, Motor
+from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessageProtocol, AudioSpectrumMessage
+from .project import ProjectInfo, ProjectInterval, video_write_ext
+
 from .analysis import SensorAnalysis, MeasurementData, AudioSpectrumData
 from .analysis import LoadCellMonitor, HeadbarPressureMonitor
 from .animal import AnimalSubject
 from .configuration import SystemConfiguration, BehaviorConfiguration, CameraConfiguration, CameraId, \
     SystemConfigurationLoader
 from .configuration import HardwareConfiguration, InferenceConfiguration, PersistenceConfiguration
-from .event import ApiEventKind, EventManager, EventInfo, EventManagerPlugin
-from .fixed_array_multiqueue import FixedArrayMultiQueue
-from .fixed_array_queue import FixedArrayQueue
 from .message import MessageHandler, SystemMessageHandler
-from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessageProtocol, AudioSpectrumMessage
-from .message import MotorConfigurations, Motor
-from .perf_monitor import PerfMonitor
-from .project import ProjectInfo, ProjectInterval, video_write_ext
-from .queue_util import clear_queue
-from .notification import NotificationCenter, Notification, TriggerNotification, post_trigger_enable
 

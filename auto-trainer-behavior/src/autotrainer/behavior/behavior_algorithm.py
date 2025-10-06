@@ -18,13 +18,12 @@ from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union, Dict
 
 from typing import Callable
 
-import yaml
 from typing_extensions import Self
 
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core import ObservableObject, EventManager, BehaviorConfiguration, post_trigger_enable, Offset3DTuple, \
+from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
     AnimalSubject
-from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
+from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, BehaviorConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 
 from autotrainer.video import CaptureProcessStatus
