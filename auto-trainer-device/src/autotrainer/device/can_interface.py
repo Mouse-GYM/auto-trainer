@@ -1000,10 +1000,13 @@ class CanInterface(DeviceInterface):
             logger.warning("unhandled pos: %s", position)
             return False
 
+        prev_pos = position
         if position < 0:
             position = 0
-        elif position > 120:
-            position = 120
+        elif position > 180:
+            position = 180
+        if prev_pos != position:
+            logger.verbose("Limiting servo %s move from %.1f to %.1f", motor, prev_pos, position)
 
         acceleration = config.maximum_acceleration
 
