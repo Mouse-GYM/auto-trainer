@@ -24,10 +24,10 @@ logger = get_verbose_logger(__name__)
 
 @dataclasses.dataclass
 class PresenceDetectionConfig:
-    pc_threshold: float = 26.5  # percent
-    pc_high_exclude_threshold: float = 30  # percent
-    mask_lower_zero: float = 0.1  # gray value
-    max_delay_skip_threshold: float = 0.450  # seconds
+    pc_threshold: float = 16.8  # percent
+    pc_high_exclude_threshold: float = 65  # percent
+    mask_lower_zero: int = 8 # gray value
+    max_delay_skip_threshold: float = 1.5  # seconds
 
 
 @dataclasses.dataclass
@@ -41,7 +41,8 @@ class PresenceDetectionAttrs:
     # but if above this exclude threshold then don't trigger.
     _pc_high_exclude_threshold: Synchronized = None
 
-    mask_lower_zero: float = PresenceDetectionConfig.mask_lower_zero
+    mask_lower_zero = ValueHolderDescriptor()
+    _mask_lower_zero: Synchronized = None
     # zero all values in the frame below this value
 
     max_delay_skip_threshold: float = PresenceDetectionConfig.max_delay_skip_threshold
@@ -72,6 +73,8 @@ class PresenceDetectionAttrs:
             self._pc_threshold = ctx.Value(ctypes.c_double, PresenceDetectionConfig.pc_threshold)
         if self._pc_high_exclude_threshold is None:
             self._pc_high_exclude_threshold = ctx.Value(ctypes.c_double, PresenceDetectionConfig.pc_high_exclude_threshold)
+        if self._mask_lower_zero is None:
+            self._mask_lower_zero = ctx.Value(ctypes.c_double, PresenceDetectionConfig.mask_lower_zero)
         if self._last_absence_start_perf_c is None:
             self._last_absence_start_perf_c = ctx.Value(ctypes.c_double, -math.inf)
         if self._last_presence_start_perf_c is None:
@@ -189,43 +192,36 @@ class VideoDetection(threading.Thread):
             # work on frame
             cur_pc_threshold = attrs.pc_threshold
             if cur_pc_threshold != prev_pc_threshold:
-                logger.notice("Using new cur_pc_threshold: %s", cur_pc_threshold)
+                logger.info("Using new pc_threshold: %s", cur_pc_threshold)
                 prev_pc_threshold = cur_pc_threshold
             processed_count += 1
             fg_mask = cv2.absdiff(save_prev_frame, gray_frame)
             fg_mask[fg_mask < attrs.mask_lower_zero] = 0
-            tot_sum = numpy.sum(fg_mask)
+            tot_sum_unnormalized = numpy.sum(fg_mask)
             fg_mask[fg_mask >= attrs.mask_lower_zero] = 1
-            tot_sum2 = numpy.sum(fg_mask)
-            # pc_tot_sum = round(
-            #     100 * tot_sum / (fg_mask.size * (255 ** fg_mask.itemsize)),
-            #     1, # use round with 1 decimal place,
-            #     # this allows to limit/lower the nbr of updates we do to the shared value
-            # )
-            pc_tot_sum = (100 * tot_sum) / (fg_mask.size * 8)
-            pc_tot_sum = round(pc_tot_sum, 0)
-            pc_tot_sum2 = (100 * tot_sum2) / (fg_mask.size * 8)
-            pc_tot_sum2 = round(pc_tot_sum2, 0)
-            if pc_tot_sum != prev_pc_sum:
+            tot_sum_normalized = numpy.sum(fg_mask)
+            pc_normalized = 100 * tot_sum_normalized / fg_mask.size
+            pc_normalized = round(pc_normalized, 1)
+            pc_unnormalized = (100 * tot_sum_unnormalized) / (fg_mask.size * 8 ** fg_mask.itemsize)
+            pc_unnormalized = round(pc_unnormalized, 1)
+            if pc_normalized != prev_pc_sum:
                 # NB: we have:
                 # fg_mask.size == 2073600 and fg_mask.itemsize == 1
-                logger.spam("tot_sum=%.2f tot_sum2=%.2f",
-                               pc_tot_sum, pc_tot_sum2)
-                attrs.pc_sum = pc_tot_sum
-                prev_pc_sum = pc_tot_sum
-                prev_pc_values.append(pc_tot_sum)
-            hist_values.append(pc_tot_sum)
+                logger.spam("pc_norm=%.2f pc_unnorm=%.2f",
+                               pc_normalized, pc_unnormalized)
+                attrs.pc_sum = pc_normalized
+                prev_pc_sum = pc_normalized
+                prev_pc_values.append((pc_normalized, pc_unnormalized))
+            hist_values.append((pc_normalized, pc_unnormalized))
             # todo: try use hist_values
             cur_exclude_threshold = attrs.pc_high_exclude_threshold
             is_detected = (
-                pc_tot_sum >= cur_pc_threshold
-                # or pc_tot_sum2 >= cur_pc_threshold
+                pc_normalized >= cur_pc_threshold
             ) and not (
-                pc_tot_sum >= cur_exclude_threshold
-                # or pc_tot_sum2 >= cur_exclude_threshold
+                pc_normalized >= cur_exclude_threshold
             )
             if is_detected != prev_detected:
-                logger.verbose("presence detected: %.1f - %.1f", pc_tot_sum, pc_tot_sum2)
+                logger.verbose("presence detected: %.1f - %.1f", pc_normalized, pc_unnormalized)
                 prev_detected = is_detected
                 attrs.presence_detected = is_detected
                 perf_now = time.perf_counter()
@@ -240,7 +236,7 @@ class VideoDetection(threading.Thread):
                 row_dict.update(
                     Time=when,
                     Index=when_nanos,
-                    PercentSum=pc_tot_sum,
+                    PercentSum=pc_normalized,
                     Presence=int(is_detected),
                     Motion=0,  # TODO
                 )
