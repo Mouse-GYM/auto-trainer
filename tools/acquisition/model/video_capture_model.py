@@ -67,6 +67,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         *,
         mp_ctx: Optional[BaseContext] = None,
         msg_queue: Optional[multiprocessing.Queue] = None,
+        presence_detection: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__()
 
@@ -80,6 +81,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._name = name
         self._preferences = preferences
         self._inference_index = inference_index
+        self._presence_detection = presence_detection
 
         self._camera_source: Optional[CaptureCameraAttrs] = None
         self._camera_properties = {}
@@ -225,6 +227,10 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         return self._last_error
 
     @property
+    def presence_detection(self) -> PresenceDetectionAttrs:
+        return self._presence_detection
+
+    @property
     def display_dots_detection(self):
         return self._display_dots_detection
 
@@ -267,8 +273,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
     def on_prepare_capture(
         self,
         network_queue: Optional[FixedArrayMultiQueue] = None,
-        *,
-        presence_detection_attrs: Optional[PresenceDetectionAttrs] = None,
     ) -> bool:
         self._last_error = None
         if not self._is_enabled:
@@ -299,7 +303,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 camera=camera,
                 inference=inference,
                 errors=self._errors,
-                presence_detection_attrs=presence_detection_attrs,
+                presence_detection_attrs=self._presence_detection,
                 is_primary=self._is_primary,
                 msg_queue=self._msg_queue,
             )

@@ -17,27 +17,27 @@ from tools.acquisition.view.content_widget import ContentWidget
 
 
 class CameraContent(ContentWidget):
-    def __init__(self, model: VideoCaptureModel):
+    def __init__(self, capture_model: VideoCaptureModel):
         super().__init__()
 
-        self._model = model
+        self._model = capture_model
 
         layout = QGridLayout()
 
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._capture_view = QCaptureView()
-        self._settings = self._capture_view.settings
-        self._settings.setIsVideoCaptureEnabled(self._model.is_enabled)
-        self._settings.setIsVideoRecordEnabled(self._model.is_recording_enabled)
-        self._settings.setRecordMode(self._model.record_mode)
-        self._settings.setStillImageCaptureEnabled(self._model.is_still_capture_enabled)
-        self._settings.setStillImageCaptureInterval(self._model.still_image_capture_interval)
+        capture_view = self._capture_view = QCaptureView()
+        self._settings = capture_view.settings
+        self._settings.setIsVideoCaptureEnabled(capture_model.is_enabled)
+        self._settings.setIsVideoRecordEnabled(capture_model.is_recording_enabled)
+        self._settings.setRecordMode(capture_model.record_mode)
+        self._settings.setStillImageCaptureEnabled(capture_model.is_still_capture_enabled)
+        self._settings.setStillImageCaptureInterval(capture_model.still_image_capture_interval)
 
-        self._capture_view.setCameras(self._model.camera_list)
-        self._capture_view.setCamera(self._model.camera_source)
+        capture_view.setCameras(capture_model.camera_list)
+        capture_view.setCamera(capture_model.camera_source)
+        capture_view.camera_changed.connect(self._camera_source_changed)
 
-        self._capture_view.camera_changed.connect(self._camera_source_changed)
         self._settings.capture_enabled_changed.connect(self._camera_enabled_changed)
         self._settings.record_enabled_changed.connect(self._recording_enabled_changed)
         self._settings.record_mode_changed.connect(self._recording_enabled_changed)
@@ -53,7 +53,8 @@ class CameraContent(ContentWidget):
         self._model.property_changed += self._model_property_changed
 
         # Swap because model shape is row x col == height x width
-        self._capture_view.setShape(self._model.shape[1], self._model.shape[0])
+        capture_view.setShape(self._model.shape[1], self._model.shape[0])
+        capture_view.set_presence_detection(capture_model.presence_detection)
 
     @property
     def camera_view(self) -> QCaptureView:

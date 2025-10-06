@@ -233,7 +233,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._cover_servo_status = CoverServoStatus.OK
 
-        self._top_camera_presence_detection = PresenceDetectionAttrs()
+        self._top_camera_presence_detection: Optional[PresenceDetectionAttrs] = None
         self._presence_missing = False
 
         self._diamond_triangle_offset_config_path = diamond_triangle_offset_config_path
@@ -403,6 +403,10 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def top_camera_presence_detection(self) -> PresenceDetectionAttrs:
         return self._top_camera_presence_detection
+
+    @top_camera_presence_detection.setter
+    def top_camera_presence_detection(self, value):
+        self._top_camera_presence_detection = value
 
     @property
     def system_state(self) -> SystemState:

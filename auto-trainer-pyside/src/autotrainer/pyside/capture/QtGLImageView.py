@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QSurfaceFormat, QBrush, QPixmap, QPen, QPainter, QFont
@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QHBoxLayou
 
 from autotrainer.inference import PoseTuple, PoseAlgorithm, PoseLocation
 from autotrainer.core.pose_elements import SceneElement
+from autotrainer.video.detection import PresenceDetectionAttrs
 
 
 class QGLImageView(QWidget):
@@ -23,6 +24,8 @@ class QGLImageView(QWidget):
         self._raw_img_scale_w = self._raw_img_scale_h = 1
         self._raw_img_w = self._width
         self._raw_img_h = self._height
+        self._data_width = None
+        self._data_height = None
 
         self._scene = QGraphicsScene(0, 0, width, height)
 
@@ -72,7 +75,7 @@ class QGLImageView(QWidget):
 
         self._count = 0
 
-    def set_data_size(self, width, height):
+    def set_data_size(self, width: int, height: int):
         # data size is the output model resolution
         self._pixmap = None
         self._data_width = width
@@ -80,12 +83,12 @@ class QGLImageView(QWidget):
         self._width_factor = self._data_width / self._width
         self._height_factor = self._data_height / self._height
 
-    def set_scale_aspect_ratio(self, scale_w, scale_h):
+    def set_scale_aspect_ratio(self, scale_w: float, scale_h: float):
         # used when source image is not same aspect ratio than the one used by self
         self._raw_img_scale_w = scale_w
         self._raw_img_scale_h = scale_h
 
-    def set_data(self, image: QImage, text_overlay: str=""):
+    def set_data(self, image: QImage, text_overlay: str="", *, presence_detection: Optional[PresenceDetectionAttrs]):
         # retain a ref the used image to keep it alive after calling function also return
         self._cur_image = image
         pixmap = QPixmap.fromImage(image)
@@ -96,6 +99,15 @@ class QGLImageView(QWidget):
             painter.setPen(Qt.GlobalColor.yellow)
             with painter:
                 painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter, text_overlay)
+
+        if presence_detection is not None:
+            painter = QPainter(pixmap)
+            color = Qt.green if presence_detection.presence_detected else Qt.red
+            brush = QBrush(color)
+            painter.setBrush(brush)
+            with painter:
+                painter.drawEllipse(5, 5, 15, 15)  # radius, radius, x, y (center)
+
         if self._pixmap is None:
             self._pixmap = QGraphicsPixmapItem(pixmap)
             self._pixmap.setZValue(0)

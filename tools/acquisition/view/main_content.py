@@ -151,7 +151,7 @@ class MainContent(ContentWidget):
         cur_val = top_cam_pres.presence_detected
         if cur_val != self._prev_top_cam_detect:
             cur_sum = top_cam_pres.pc_sum
-            logger.notice("top_camera presence detected: %s sum=%s", cur_val, cur_sum)
+            logger.notice("top_camera presence detected: %s sum=%.1f", cur_val, cur_sum)
             self._prev_top_cam_detect = cur_val
         if model.left_camera.is_enabled:
             self._left_camera_content.update_image()

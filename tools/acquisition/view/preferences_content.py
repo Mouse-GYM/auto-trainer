@@ -5,7 +5,8 @@ import verboselogs
 from PySide6 import QtCore
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabel, QHBoxLayout, QPushButton,
-                               QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QSpinBox, QGridLayout)
+                               QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QSpinBox, QGridLayout,
+                               QSizePolicy)
 
 from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration, PelletDeliveryConfiguration
 from autotrainer.core.logging import get_verbose_logger
@@ -361,7 +362,9 @@ class PreferencesContent(QWidget):
         return tab
 
     def _create_advanced_tab(self):
+        model = self._app_model
         combo_log_level = self._log_level_combobox = QComboBox(None)
+        combo_log_level.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         for display, lvl in (
                 ("Success", verboselogs.SUCCESS),  # 0
                 ("Warning", logging.WARNING),  # 1
@@ -372,7 +375,6 @@ class PreferencesContent(QWidget):
                 ("Spam", verboselogs.SPAM),  # 6
         ):
             combo_log_level.addItem(display, lvl)
-        combo_log_level.currentIndexChanged.connect(self._log_level_changed)
 
         levels_to_idx = {
             verboselogs.SUCCESS: 0,
@@ -387,15 +389,15 @@ class PreferencesContent(QWidget):
         log_level_idx = levels_to_idx.get(self._preferences.log_level)  # default to preferences.log_level
         if log_level_idx is None:
             log_level_idx = min(levels_to_idx.items(), key=lambda i: abs(self._preferences.log_level - i[0]))[1]
-        combo_log_level.blockSignals(True)
         combo_log_level.setCurrentIndex(log_level_idx)
-        combo_log_level.blockSignals(False)
+        combo_log_level.currentIndexChanged.connect(self._log_level_changed)
 
         self._log_location_edit = QLineEdit(None, None)
         self._log_location_edit.setText(self._preferences.log_location)
         self._log_location_edit.textChanged.connect(self._log_location_changed)
 
         form_layout = QFormLayout(None)
+        form_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
         layout = QHBoxLayout()
         layout.addWidget(self._log_location_edit)
@@ -419,6 +421,28 @@ class PreferencesContent(QWidget):
         self._checkbox_remove_raw_data_inactive_session.stateChanged.connect(
             self._remove_raw_data_when_inactive_session_changed)
         form_layout.addRow("Remove saved videos when animal not seen:", self._checkbox_remove_raw_data_inactive_session)
+
+        spinbox = self._presence_sum_percent_threshold_spinbox = QDoubleSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setRange(0, 100)
+        spinbox.setSingleStep(0.1)
+        spinbox.setValue(model.top_camera_presence_detection.pc_threshold)
+        def value_changed(value: float):
+            model.top_camera_presence_detection.pc_threshold = value
+        spinbox.valueChanged.connect(value_changed)
+        form_layout.addRow("TopCam Presence % threshold:", spinbox)
+
+        spinbox = self._presence_sum_percent_exclude_threshold_spinbox = QDoubleSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setRange(0, 100)
+        spinbox.setSingleStep(0.1)
+        spinbox.setDecimals(3)
+        spinbox.setValue(model.top_camera_presence_detection.pc_high_exclude_threshold)
+        def value_changed(value: float):
+            logger.verbose("updating pc_high_exclude_threshold to %s", value)
+            model.top_camera_presence_detection.pc_high_exclude_threshold = value
+        spinbox.valueChanged.connect(value_changed)
+        form_layout.addRow("TopCam Presence high-% exclude threshold:", spinbox)
 
         tab = QWidget(None)
         tab.setLayout(form_layout)

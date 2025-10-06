@@ -15,6 +15,7 @@ from .QtCaptureSettings import QCaptureSettings
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement
+from autotrainer.video.detection import PresenceDetectionAttrs
 
 logger = get_verbose_logger(__name__)
 
@@ -45,6 +46,7 @@ class QCaptureView(QWidget):
         self._next_frame_points: Dict[str, PoseLocation] = {}
         self._are_points_dirty = False
         self._display_dots_detection = True
+        self._presence_detection: Optional[PresenceDetectionAttrs] = None
 
         # Header
         self._camera = QComboBox()
@@ -106,6 +108,9 @@ class QCaptureView(QWidget):
         self.set_is_editable(False)
 
         self.recording_indicator_changed.connect(lambda b: self._setRecordingEnabledIndicator(b))
+
+    def set_presence_detection(self, detection: Optional[PresenceDetectionAttrs]):
+        self._presence_detection = detection
 
     def set_text_overlay(self, value):
         self._text_overlay = value
@@ -184,7 +189,8 @@ class QCaptureView(QWidget):
                 painter.drawImage(0, 0, image)
             image = padded
 
-        self._image.set_data(image, self._text_overlay)
+        self._image.set_data(image, self._text_overlay,
+                             presence_detection=self._presence_detection)
         self._is_frame_dirty = False
 
         # self._fps_label.setText(f"{self._fps:.1f}")

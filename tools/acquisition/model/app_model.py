@@ -84,9 +84,10 @@ class AppModel(ObservableObject):
         self._right_camera = VideoCaptureModel("right", self._preferences, 1,
                                                msg_queue=proc_msg_queue)
 
-        self._top_camera = VideoCaptureModel("web", self._preferences, -1,
-                                             msg_queue=None)  # not interested to webcam status for now.
         self._top_camera_presence_detection = PresenceDetectionAttrs()
+        self._top_camera = VideoCaptureModel("web", self._preferences, -1,
+                                             presence_detection=self._top_camera_presence_detection,
+                                             msg_queue=None)  # not interested to webcam status for now.
 
         self._cameras = [  # must respect camera_idx/inference_index order
             self._left_camera,
@@ -143,7 +144,9 @@ class AppModel(ObservableObject):
 
         self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir)
 
-        self._behavior = BehaviorModel(self._system_message_handler, self._analysis, self._hardware, self._inference)
+        behavior = self._behavior = BehaviorModel(
+            self._system_message_handler, self._analysis, self._hardware, self._inference)
+        behavior.algorithm.top_camera_presence_detection = self._top_camera_presence_detection
 
         self._output_location = ""
 
@@ -413,9 +416,7 @@ class AppModel(ObservableObject):
                               _failed_camera_template(self.right_camera.name, self.right_camera.last_error))
 
         if did_start:
-            did_start = did_start and self.top_camera.on_prepare_capture(
-                presence_detection_attrs=self._behavior.algorithm.top_camera_presence_detection,
-            )
+            did_start = did_start and self.top_camera.on_prepare_capture()
             if not did_start:
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(self.top_camera.name, self.top_camera.last_error))

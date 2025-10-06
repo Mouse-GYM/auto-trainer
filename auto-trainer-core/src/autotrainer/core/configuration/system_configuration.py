@@ -72,8 +72,8 @@ class SystemConfiguration:
                 raise ValueError(f"Cannot handle deserialize version {version}")
         else:
             assert version > SystemConfiguration.version
-            logger.warning("Loading configuration version %s while SystemConfiguration.version=%s, "
-                           " only considering known config attributes/properties.",
+            logger.warning("Loading configuration version %s while SystemConfiguration.version == %s, "
+                           "only considering known config attributes/properties.",
                            version, SystemConfiguration.version)
             configuration = yaml.load(data, SystemConfigurationSafeLoader)
 
