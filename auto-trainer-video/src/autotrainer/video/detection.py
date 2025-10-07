@@ -3,6 +3,7 @@ import csv
 import ctypes
 import dataclasses
 import math
+import statistics
 import multiprocessing
 import os
 import threading
@@ -98,7 +99,7 @@ class VideoDetection(threading.Thread):
         self._stop_requested = False
         # using a dequeue with 8 entries,
         # NB: is thread-safe for append/popleft. see (c)python doc.
-        self._next_frames: Deque[Tuple[float, numpy.ndarray]] = collections.deque(maxlen=8)
+        self._next_frames: Deque[Tuple[float, numpy.ndarray]] = collections.deque(maxlen=10)
         # not sure using a simple thread queue.Queue is not as good, possibly better (can wait on it)
         self._prev_frame = None
         self._prev_when = None
@@ -151,9 +152,9 @@ class VideoDetection(threading.Thread):
         row_dict = dict.fromkeys(self._csv_header)
         next_log_report = time.perf_counter() + 5
         processed_count = 0
-        timeout_count = 0
         expired_count = 0
         delay_report = int(os.getenv("PRES_DET_DELAY_REPORT", "180"))
+        processed_times: List[float] = []
         prev_pc_values = []
         hist_values: List[Tuple[float, np.ndarray, float, float]] = []
         #                       when, gray_frame, pc_norm, pc_unnorm
@@ -166,21 +167,27 @@ class VideoDetection(threading.Thread):
                     break
                 idx -= 1
             hist_values.append((w, new_frame, pc_norm, pc_unnorm))
+        #
+        last_log_report = time.perf_counter()
         while not self._stop_requested:
-            hist_values = hist_values[-8:]  # ~250 ms at 30 FPS
             perf_now = time.perf_counter()
+            loop_start_perf_now = perf_now
             if perf_now >= next_log_report or len(prev_pc_values) > 30:
-                logger.debug("video presence detection: %s ; processed=%.1f/s timeout=%.1f/s expired_count=%.1f/s ; values=%s",
-                             [w for w, _ in self._next_frames], processed_count / delay_report, timeout_count / delay_report,
-                             expired_count / delay_report, prev_pc_values)
+                actual_delay = perf_now - last_log_report
+                logger.debug("video presence detection: %s, frame/s=%.1f mean_proc_time=%.3f ; expired_count=%.1f/s ; values=%s",
+                             prev_pc_values[-1][0] if len(prev_pc_values) > 0 else math.nan,
+                             processed_count / actual_delay,
+                             statistics.mean(processed_times) if processed_times else math.nan,
+                             expired_count / actual_delay, prev_pc_values)
+                last_log_report = perf_now
                 next_log_report = perf_now + delay_report
-                processed_count = timeout_count = expired_count = 0
+                processed_count = expired_count = 0
                 prev_pc_values.clear()
+                processed_times.clear()
             try:
                 when_nanos, frame = self._next_frames.popleft()
             except IndexError:
-                time.sleep(0.03)  # current producer is 30 fps.
-                timeout_count += 1
+                time.sleep(0.003)  # current producer is 30 fps. let's use very smallish sleep
                 continue
             #
             when = when_nanos / 1e9  # convert to second timestamp
@@ -256,10 +263,10 @@ class VideoDetection(threading.Thread):
                                pc_normalized, pc_unnormalized, [(d1, d2, d3) for d1, _, d2, d3 in hist_values])
                 prev_detected = is_detected
                 attrs.presence_detected = is_detected
-                perf_now = time.perf_counter()
                 if is_detected:
                     attrs.last_presence_start_perf_c = perf_now
                 else:
                     attrs.last_absence_start_perf_c = perf_now
                 prev_gray_frame = None  # this will make us to get the following necessary next frames for next check
+            processed_times.append(time.perf_counter() - loop_start_perf_now)
         # end while not self._stop_requested
