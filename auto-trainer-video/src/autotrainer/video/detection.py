@@ -246,8 +246,8 @@ class VideoDetection(threading.Thread):
                     Time=when,
                     Index=when_nanos,
                     PercentSum=pc_normalized,
-                    Presence=0,    # TODO
-                    Motion=int(is_detected),
+                    Presence=int(is_detected),
+                    Motion=0,  # TODO
                 )
                 csv_writer.writerow(row_dict)
             # now use everything available in hist_values:
