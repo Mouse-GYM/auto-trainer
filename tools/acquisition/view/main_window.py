@@ -458,7 +458,7 @@ class MainWindow(QMainWindow):
 
         def emergency_stop_triggered(is_toggled: bool):
             behavior = self._app_model.behavior
-            behavior.emergency_stop("user-button") if is_toggled else behavior.emergency_resume("user-button")
+            (behavior.emergency_stop if is_toggled else behavior.emergency_resume)("user-button")
             button.setText("Resume" if is_toggled else "Emergency Stop")
             self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED" if is_toggled else self._title)
 

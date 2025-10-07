@@ -1,5 +1,5 @@
 import multiprocessing
-from typing import Optional
+from typing import Optional, Callable
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
@@ -17,12 +17,15 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     aspects of the behavior system that are specific to the application.  General behavior functionality should be
     located in the module.
 
-
-
     Emergency stopped and resumed are defined as dedicated events due to their application-wide interest and possible
     subscription.  Anything that triggers an emergency stop/resume should pass through the `emergency_stop` and
     `emergency_resume` methods to ensure
     """
+
+    # events type hint
+    emergency_stopped: Callable[[str], None]
+    emergency_resumed: Callable[[str], None]
+
     def __init__(
             self,
             msg_handler: SystemMessageHandler,
