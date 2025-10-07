@@ -11,6 +11,7 @@ from multiprocessing.sharedctypes import Synchronized
 from operator import attrgetter
 from pathlib import Path
 from typing import Deque, Tuple, Optional
+from datetime import datetime
 
 import cv2
 import numpy
@@ -112,7 +113,7 @@ class VideoDetection(threading.Thread):
         self._next_frames.append((when, frame))
 
     def _check_path(self):
-        csv_file_info = self._project_info.get_webcam_presence_file()
+        csv_file_info = self._project_info.get_webcam_presence_file(when=datetime.now())
         if csv_file_info == self._file_info:
             return
         if self._csv_writer_fh is not None:
