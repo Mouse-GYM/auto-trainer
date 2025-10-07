@@ -379,7 +379,7 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func
     def _load_cell_tare_requested(self):
-        if self.state != SystemState.tunnel:
+        if self.state == SystemState.cage:
             self._tunnel_device.tare_load_cell()
             EventManager.default().post_event_content(BehaviorEventKind.headfixAutoTare)
         return False
