@@ -3,30 +3,11 @@ from dataclasses import dataclass
 from typing import Protocol, Callable, Tuple, Optional
 
 from autotrainer.core import Offset3DTuple, ObservableObject
-from autotrainer.inference import InferenceStatus
-
-
-# NB: not importing autotrainer.inference
-
 from autotrainer.inference import PoseAlgorithm
-# prevents increased chance of import loop/cycle,
-# given, for instance, InferenceProtocol is subclassed by InferenceModel which is also referred to by PoseAlgo
 
+from . import SegmentationConfiguration, DetectionConfiguration
 
-@dataclass
-class SegmentationConfiguration:
-    nonce: str
-    session_index: int
-    session_when: datetime
-    complete: Callable[[str, bool], None]
-
-
-@dataclass
-class DetectionConfiguration:
-    nonce: str
-    session_index: int
-    session_when: datetime
-    complete: Callable[[str, bool], None]
+from autotrainer.inference import InferenceStatus
 
 
 class _InferenceProtocol(Protocol):
@@ -34,7 +15,7 @@ class _InferenceProtocol(Protocol):
     status: InferenceStatus
 
     @property
-    def pose_algorithm(self) -> "autotrainer.inference.PoseAlgorithm": ...
+    def pose_algorithm(self) -> PoseAlgorithm: ...
 
     def perform_segmentation(self, configuration: SegmentationConfiguration): ...
 

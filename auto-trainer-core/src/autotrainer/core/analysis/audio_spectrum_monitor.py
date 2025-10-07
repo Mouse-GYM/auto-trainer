@@ -43,8 +43,11 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         self._config = config
         self._values_history = deque()
         self._cur_detected = False
+        perf_now = time.perf_counter()
+        self._last_engaged_perf_c: float = perf_now
+        self._last_disengaged_perf_c: float = perf_now
         self._when_start_detecting: Optional[float] = None
-        self._t_perf_next_report: float = time.perf_counter()
+        self._t_perf_next_report: float = perf_now
         self._when_next_check: float = 0
 
     @property
@@ -53,7 +56,22 @@ class AudioSpectrumThrashMonitor(ObservableObject):
 
     @is_thrashing_detected.setter
     def is_thrashing_detected(self, value):
-        self._cur_detected = self._on_property_changed(self.AUDIO_THRASHING_DETECTED_PROPERTY, value, self._cur_detected)
+        prev, self._cur_detected = self._cur_detected, value
+        if prev != value:
+            perf_now = time.perf_counter()
+            if value:
+                self._last_engaged_perf_c = perf_now
+            else:
+                self._last_disengaged_perf_c = perf_now
+            self._on_property_changed(self.AUDIO_THRASHING_DETECTED_PROPERTY, value, prev)
+
+    @property
+    def engaged_age(self):
+        return (time.perf_counter() if self._cur_detected else self._last_disengaged_perf_c) - self._last_engaged_perf_c
+
+    @property
+    def disengaged_age(self):
+        return (time.perf_counter() if not self._cur_detected else self._last_engaged_perf_c) - self._last_disengaged_perf_c
 
     def _update_history(self, values, when, index):
         hist = self._values_history

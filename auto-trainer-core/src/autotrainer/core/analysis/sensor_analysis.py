@@ -8,17 +8,19 @@ from typing import Optional, List, Tuple, IO
 
 import numpy
 
-from .head_fix_measurement import HeadFixMeasurement
-from .audio_spectrum_monitor import AudioSpectrumThrashMonitor
+from ..configuration.alarm_configuration import EmergencyAlarmConfiguration
 from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
 from ..perf_monitor import PerfMonitor
 from ..observable_object import ObservableObject
 from ..message.audio_spectrum_message import AudioSpectrumMessage
 
+from .head_fix_measurement import HeadFixMeasurement
+from .audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from .headbar_pressure_monitor import HeadbarPressureMonitor
 from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
+
 
 logger = get_verbose_logger(__name__)
 
@@ -61,6 +63,13 @@ class SensorAnalysis(ObservableObject):
         self._tare_callback = None
 
         self._audio_thrashing_monitor = AudioSpectrumThrashMonitor()
+
+        from .alarm_monitor import EmergencyAlarmMonitor
+
+        self._alarm_monitor = EmergencyAlarmMonitor(
+            EmergencyAlarmConfiguration(),
+            self._load_cell_monitor, self._audio_thrashing_monitor
+        )
 
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_window=30)
 

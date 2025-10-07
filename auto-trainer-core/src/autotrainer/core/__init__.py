@@ -240,12 +240,10 @@ from .notification import NotificationCenter, Notification, TriggerNotification,
 from .message import MotorConfigurations, Motor
 from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessageProtocol, AudioSpectrumMessage
 from .project import ProjectInfo, ProjectInterval, video_write_ext
-
-from .analysis import SensorAnalysis, MeasurementData, AudioSpectrumData
-from .analysis import LoadCellMonitor, HeadbarPressureMonitor
 from .animal import AnimalSubject
 from .configuration import SystemConfiguration, BehaviorConfiguration, CameraConfiguration, CameraId, \
     SystemConfigurationLoader
 from .configuration import HardwareConfiguration, InferenceConfiguration, PersistenceConfiguration
 from .message import MessageHandler, SystemMessageHandler
-
+from .analysis import SensorAnalysis, MeasurementData, AudioSpectrumData
+from .analysis import LoadCellMonitor, HeadbarPressureMonitor

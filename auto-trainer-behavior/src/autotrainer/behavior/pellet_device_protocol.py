@@ -2,7 +2,8 @@ from typing import Protocol, Optional, Union
 from uuid import UUID
 
 from autotrainer.core import ObservableObjectProtocol, Offset3DTuple, Motor
-from autotrainer.device import StepperConfig, ServoConfig
+
+from autotrainer.device.device_interface import StepperConfig, ServoConfig
 
 
 class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
