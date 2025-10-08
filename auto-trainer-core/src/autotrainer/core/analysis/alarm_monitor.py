@@ -1,4 +1,6 @@
+import math
 import time
+from typing import Optional
 
 from autotrainer.core import ObservableObject, LoadCellMonitor, get_verbose_logger
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
@@ -21,7 +23,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         config: EmergencyAlarmConfiguration,
         load_cell_monitor: LoadCellMonitor,
         audio_monitor: AudioSpectrumThrashMonitor,
-        topcam_presence_attrs: PresenceDetectionAttrs,
+        topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__()
         self._config = config
@@ -47,6 +49,7 @@ class EmergencyAlarmMonitor(ObservableObject):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _update_state(self):
+        topcam_attrs = self._topcam_presence_attrs
         load_cell = self._load_cell_monitor
         self._timer_update_state.cancel()
         cfg = self._config
@@ -98,7 +101,6 @@ class EmergencyAlarmMonitor(ObservableObject):
         #
         pc_load_cell_thrash = 100 * tot_load_cell_thrash_engaged / cfg.aggregate_delay
         pc_audio_thrash = 100 * tot_audio_thrash_engaged / cfg.aggregate_delay
-        topcam_attrs = self._topcam_presence_attrs
         is_emergency = (
             ((
                 pc_load_cell_thrash >= cfg.load_cell_thrash_percent_on
@@ -108,7 +110,8 @@ class EmergencyAlarmMonitor(ObservableObject):
                 or count_audio_thrash_triggers >= cfg.audio_thrash_count
             ))
             or (
-                load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
+                topcam_attrs is not None
+                and load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
                 and (
                     # last presence must be before the current load cell disengaged:
                     topcam_attrs.last_presence_start_perf_c < perf_now - load_cell.disengaged_age
@@ -125,7 +128,7 @@ class EmergencyAlarmMonitor(ObservableObject):
                 " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
                 pc_load_cell_thrash, pc_audio_thrash,
                 load_cell.disengaged_age, load_cell.engaged_age,
-                topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c,
+                *((math.nan, math.nan) if topcam_attrs is None else (topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c)),
                 perf_now)
         elif __debug__:
             logger.spam(
@@ -133,11 +136,14 @@ class EmergencyAlarmMonitor(ObservableObject):
                 " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
                 is_emergency, pc_load_cell_thrash, pc_audio_thrash,
                 load_cell.disengaged_age, load_cell.engaged_age,
-                topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c,
-                perf_now
-            )
+                *((math.nan, math.nan) if topcam_attrs is None else (topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c)),
+                perf_now)
+        #
         self.is_engaged = is_emergency
-        if not is_emergency and topcam_attrs.last_presence_start_perf_c >= perf_now - load_cell.disengaged_age:
+        if not is_emergency and (
+            topcam_attrs is None
+            or topcam_attrs.last_presence_start_perf_c >= perf_now - load_cell.disengaged_age
+        ):
             logger.verbose("Not restarting timer given topcam last_presence is more recent than load_cell disengaged")
         else:
             timer = self._timer_update_state = timer_update_state(1, self._update_state)
