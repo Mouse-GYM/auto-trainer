@@ -1,12 +1,14 @@
 import time
 
-from autotrainer.core import ObservableObject, LoadCellMonitor
+from autotrainer.core import ObservableObject, LoadCellMonitor, get_verbose_logger
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.behavior import BehaviorAlgorithm
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
+
+logger = get_verbose_logger(__name__)
 
 timer_update_state = make_daemon_timer
 
@@ -45,6 +47,10 @@ class EmergencyAlarmMonitor(ObservableObject):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _update_state(self):
+        load_cell = self._load_cell_monitor
+        logger.verbose("emergency=%s load_cell.is_engaged=%s %s %s",
+                       self._is_engaged, load_cell.is_engaged,
+                       self._load_cell_thrash_values, self._audio_thrash_values)
         self._timer_update_state.cancel()
         cfg = self._config
         perf_now = time.perf_counter()
@@ -58,7 +64,6 @@ class EmergencyAlarmMonitor(ObservableObject):
                     break
                 idx -= 1
         #
-        load_cell = self._load_cell_monitor
         if load_cell.is_engaged:
             # unless otherwise required.
             self.is_engaged = False
@@ -109,11 +114,18 @@ class EmergencyAlarmMonitor(ObservableObject):
                 load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
                 and (
                     topcam_attrs.last_presence_start_perf_c
-                    <= topcam_attrs.last_absence_start_perf_c
+                    < topcam_attrs.last_absence_start_perf_c
                     < perf_now - cfg.tunnel_to_cage_presence_missing_delay
                 )
             )
         )
+        logger.info("is_emergency=%s pc_load_cell_thrash=%.1f pc_audio_thrash=%.1f load_cell.disengaged_age=%.1f"
+                    " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
+                    is_emergency, pc_load_cell_thrash, pc_audio_thrash,
+                    load_cell.disengaged_age, load_cell.engaged_age,
+                    topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c,
+                    perf_now
+                    )
         self.is_engaged = is_emergency
         timer = self._timer_update_state = timer_update_state(1, self._update_state)
         timer.start()
