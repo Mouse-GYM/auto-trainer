@@ -56,12 +56,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
         def alarm_monitor_property_changed(name, value, _):
             if name == "is_engaged":
-                if value:
-                    self.emergency_stop("alarm-monitor")
-                else:
-                    self.emergency_resume("alarm-monitor")
+                (self.emergency_stop if value else self.emergency_resume)("alarm-monitor")
         analysis.emergency_alarm_monitor.property_changed += alarm_monitor_property_changed
-
 
     @property
     def analysis(self) -> SensorAnalysis:
