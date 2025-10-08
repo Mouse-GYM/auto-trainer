@@ -78,6 +78,8 @@ class MainWindow(QMainWindow):
         #
         app_model.load_configuration(configuration)
         self._reload_animals(self._app_model.animals)
+        #
+
 
     def close(self):
         # explicitly close main content, reason is TextBoxHandler added to root logger handlers.
@@ -452,28 +454,25 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        button = QPushButton("Emergency Stop")
-        button.setCheckable(True)
-        button.setObjectName("EmergencyButton")
-        button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
+        emergency_button = QPushButton("Emergency Stop")
+        emergency_button.setCheckable(True)
+        emergency_button.setObjectName("EmergencyButton")
+        emergency_button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
 
         def update_emergency_ui(is_toggled):
-            button.setText("Resume" if is_toggled else "Emergency Stop")
+            emergency_button.setText("Resume" if is_toggled else "Emergency Stop")
             self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED" if is_toggled else self._title)
 
         def emergency_stop_triggered(is_toggled: bool):
             behavior = self._app_model.behavior
             (behavior.emergency_stop if is_toggled else behavior.emergency_resume)("user-button")
             update_emergency_ui(is_toggled)
-        button.toggled.connect(emergency_stop_triggered)
 
-        def algo_property_changed(name, value, _):
-            if name == BehaviorAlgoProps.ALGO_PAUSED:
-                update_emergency_ui(value)
-        self._app_model.behavior.algorithm.property_changed += algo_property_changed
-        # could use behavior.{emergency_stopped,emergency_resumed} events too, but would need 2 callbacks.
+        emergency_button.toggled.connect(emergency_stop_triggered)
+        self._app_model.behavior.emergency_stopped += lambda src: update_emergency_ui(True)
+        self._app_model.behavior.emergency_resumed += lambda src: update_emergency_ui(False)
 
-        toolbar.addWidget(button)
+        toolbar.addWidget(emergency_button)
 
     def _configure_statusbar(self):
         self._status_label = QLabel("")
