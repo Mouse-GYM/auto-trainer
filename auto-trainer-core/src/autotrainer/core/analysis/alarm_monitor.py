@@ -48,9 +48,6 @@ class EmergencyAlarmMonitor(ObservableObject):
     @BehaviorAlgorithm.relay_func(wait=False)
     def _update_state(self):
         load_cell = self._load_cell_monitor
-        logger.verbose("emergency=%s load_cell.is_engaged=%s %s %s",
-                       self._is_engaged, load_cell.is_engaged,
-                       self._load_cell_thrash_values, self._audio_thrash_values)
         self._timer_update_state.cancel()
         cfg = self._config
         perf_now = time.perf_counter()
@@ -123,16 +120,21 @@ class EmergencyAlarmMonitor(ObservableObject):
                 )
             )
         )
-        logger.info("is_emergency=%s pc_load_cell_thrash=%.1f pc_audio_thrash=%.1f load_cell.disengaged_age=%.1f"
-                    " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
-                    is_emergency, pc_load_cell_thrash, pc_audio_thrash,
-                    load_cell.disengaged_age, load_cell.engaged_age,
-                    topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c,
-                    perf_now
-                    )
+        if __debug__:
+            logger.spam(
+                "is_emergency=%s pc_load_cell_thrash=%.1f pc_audio_thrash=%.1f load_cell.disengaged_age=%.1f"
+                " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
+                is_emergency, pc_load_cell_thrash, pc_audio_thrash,
+                load_cell.disengaged_age, load_cell.engaged_age,
+                topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c,
+                perf_now
+            )
         self.is_engaged = is_emergency
-        timer = self._timer_update_state = timer_update_state(1, self._update_state)
-        timer.start()
+        if not is_emergency and topcam_attrs.last_presence_start_perf_c >= perf_now - load_cell.disengaged_age:
+            logger.verbose("Not restarting timer given last_presence is more recent than load_cell disengaged")
+        else:
+            timer = self._timer_update_state = timer_update_state(1, self._update_state)
+            timer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _load_cell_monitor_prop_changed(self, name, value, _):
