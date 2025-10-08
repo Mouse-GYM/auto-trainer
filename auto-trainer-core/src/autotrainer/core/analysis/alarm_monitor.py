@@ -113,9 +113,13 @@ class EmergencyAlarmMonitor(ObservableObject):
             or (
                 load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
                 and (
-                    topcam_attrs.last_presence_start_perf_c
-                    < topcam_attrs.last_absence_start_perf_c
-                    < perf_now - cfg.tunnel_to_cage_presence_missing_delay
+                    # last presence must be before the current load cell disengaged:
+                    topcam_attrs.last_presence_start_perf_c < perf_now - load_cell.disengaged_age
+                    and (
+                        topcam_attrs.last_presence_start_perf_c
+                        < topcam_attrs.last_absence_start_perf_c
+                        < perf_now - cfg.tunnel_to_cage_presence_missing_delay
+                    )
                 )
             )
         )
