@@ -17,9 +17,10 @@ from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue,
     CameraConfiguration, CameraId, NotificationCenter, TriggerNotification, Notification
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.project import ProjectInfo
+from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
-from autotrainer.video.detection import PresenceDetectionAttrs
+
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 
 from tools.acquisition.model.user_preferences import UserPreferences

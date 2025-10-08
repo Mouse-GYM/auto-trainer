@@ -4,15 +4,24 @@ from autotrainer.core import ObservableObject, LoadCellMonitor
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.behavior import BehaviorAlgorithm
+from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 
 class EmergencyAlarmMonitor(ObservableObject):
 
-    def __init__(self, config: EmergencyAlarmConfiguration, load_cell_monitor: LoadCellMonitor, audio_monitor: AudioSpectrumThrashMonitor):
+    def __init__(
+        self,
+        *,
+        config: EmergencyAlarmConfiguration,
+        load_cell_monitor: LoadCellMonitor,
+        audio_monitor: AudioSpectrumThrashMonitor,
+        topcam_presence_attrs: PresenceDetectionAttrs,
+    ):
         super().__init__()
         self._config = config
         self._load_cell_monitor = load_cell_monitor
         self._audio_monitor = audio_monitor
+        self._topcam_presence_attrs = topcam_presence_attrs
         self._load_cell_thrash_values = []
         self._load_cell_engaged_values = []
         self._audio_thrash_values = []
@@ -36,11 +45,15 @@ class EmergencyAlarmMonitor(ObservableObject):
         #
         for values in (self._load_cell_engaged_values, self._load_cell_thrash_values, self._audio_thrash_values):
             idx = len(values) - 1
-            t_perf = values[idx][0]
-            if perf_now - t_perf > cfg.aggregate_delay:
-                del values[:idx + 1]
+            while idx >= 0:
+                t_perf = values[idx][0]
+                if perf_now - t_perf > cfg.aggregate_delay:
+                    del values[:idx + 1]
+                    break
+                idx -= 1
         #
-        if self._load_cell_monitor.is_engaged:
+        load_cell = self._load_cell_monitor
+        if load_cell.is_engaged:
             # unless otherwise required.
             self.is_engaged = False
             return
@@ -77,13 +90,22 @@ class EmergencyAlarmMonitor(ObservableObject):
         #
         pc_load_cell_thrash = 100 * tot_load_cell_thrash_engaged / cfg.aggregate_delay
         pc_audio_thrash = 100 * tot_audio_thrash_engaged / cfg.aggregate_delay
+        topcam_attrs = self._topcam_presence_attrs
         is_emergency = (
-            (
+            ((
                 pc_load_cell_thrash >= cfg.load_cell_thrash_percent_on
                 or count_load_cell_thrash_triggers >= cfg.load_cell_thrash_count
             ) and (
-                pc_audio_thrash >= cfg.spectrum_thrash_percent_on
-                or count_audio_thrash_triggers >= cfg.spectrum_thrash_count
+                pc_audio_thrash >= cfg.audio_thrash_percent_on
+                or count_audio_thrash_triggers >= cfg.audio_thrash_count
+            ))
+            or (
+                load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
+                and (
+                    topcam_attrs.last_presence_start_perf_c
+                    <= topcam_attrs.last_absence_start_perf_c
+                    < perf_now - cfg.tunnel_to_cage_presence_missing_delay
+                )
             )
         )
         self.is_engaged = is_emergency

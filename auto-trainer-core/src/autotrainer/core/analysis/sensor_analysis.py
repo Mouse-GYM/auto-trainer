@@ -8,6 +8,8 @@ from typing import Optional, List, Tuple, IO
 
 import numpy
 
+from autotrainer.core.video_detection import PresenceDetectionAttrs
+
 from ..configuration.alarm_configuration import EmergencyAlarmConfiguration
 from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
@@ -33,7 +35,7 @@ _MeasuresList = List[float]
 class SensorAnalysis(ObservableObject):
     IS_HEADBAR_SWITCH_ENGAGED_PROPERTY = "is_headbar_switch_engaged"
 
-    def __init__(self):
+    def __init__(self, *, topcam_presence: Optional[PresenceDetectionAttrs] = None):
         super().__init__()
 
         self._project_info: Optional[ProjectInfo] = None
@@ -64,11 +66,14 @@ class SensorAnalysis(ObservableObject):
 
         self._audio_thrashing_monitor = AudioSpectrumThrashMonitor()
 
-        from .alarm_monitor import EmergencyAlarmMonitor
+        from .alarm_monitor import EmergencyAlarmMonitor  # delayed import on purpose,
+        # having import loop cycles at different places still..
 
         self._alarm_monitor = EmergencyAlarmMonitor(
-            EmergencyAlarmConfiguration(),
-            self._load_cell_monitor, self._audio_thrashing_monitor
+            config=EmergencyAlarmConfiguration(),
+            load_cell_monitor=self._load_cell_monitor,
+            audio_monitor=self._audio_thrashing_monitor,
+            topcam_presence_attrs=topcam_presence,
         )
 
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_window=30)

@@ -25,9 +25,9 @@ from autotrainer.core import ObservableObject, EventManager, post_trigger_enable
     AnimalSubject
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, BehaviorConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
+from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.video import CaptureProcessStatus
-from autotrainer.video.detection import PresenceDetectionAttrs
 
 from . import DiamondTriangleOffsetConfig
 from .system_machine_state import SystemState
