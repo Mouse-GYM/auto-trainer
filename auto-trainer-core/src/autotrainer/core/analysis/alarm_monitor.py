@@ -120,7 +120,14 @@ class EmergencyAlarmMonitor(ObservableObject):
                 )
             )
         )
-        if __debug__:
+        if is_emergency and not self._is_engaged:
+            logger.notice("Engaging emergency: pc_load_cell_thrash=%.1f pc_audio_thrash=%.1f load_cell.disengaged_age=%.1f"
+                " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
+                pc_load_cell_thrash, pc_audio_thrash,
+                load_cell.disengaged_age, load_cell.engaged_age,
+                topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c,
+                perf_now)
+        elif __debug__:
             logger.spam(
                 "is_emergency=%s pc_load_cell_thrash=%.1f pc_audio_thrash=%.1f load_cell.disengaged_age=%.1f"
                 " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
@@ -131,7 +138,7 @@ class EmergencyAlarmMonitor(ObservableObject):
             )
         self.is_engaged = is_emergency
         if not is_emergency and topcam_attrs.last_presence_start_perf_c >= perf_now - load_cell.disengaged_age:
-            logger.verbose("Not restarting timer given last_presence is more recent than load_cell disengaged")
+            logger.verbose("Not restarting timer given topcam last_presence is more recent than load_cell disengaged")
         else:
             timer = self._timer_update_state = timer_update_state(1, self._update_state)
             timer.start()
