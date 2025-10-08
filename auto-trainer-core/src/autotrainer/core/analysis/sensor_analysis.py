@@ -22,7 +22,7 @@ from .audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from .headbar_pressure_monitor import HeadbarPressureMonitor
 from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
-
+# from .alarm_monitor import EmergencyAlarmMonitor  # delayed import on purpose,
 
 logger = get_verbose_logger(__name__)
 
@@ -116,6 +116,10 @@ class SensorAnalysis(ObservableObject):
     @property
     def audio_thrashing_monitor(self) -> AudioSpectrumThrashMonitor:
         return self._audio_thrashing_monitor
+
+    @property
+    def emergency_alarm_monitor(self):
+        return self._alarm_monitor
 
     @property
     def is_headbar_switch_engaged(self):

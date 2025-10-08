@@ -4,7 +4,11 @@ from autotrainer.core import ObservableObject, LoadCellMonitor
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.behavior import BehaviorAlgorithm
+from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+
+
+timer_update_state = make_daemon_timer
 
 
 class EmergencyAlarmMonitor(ObservableObject):
@@ -26,6 +30,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._load_cell_engaged_values = []
         self._audio_thrash_values = []
         self._is_engaged = False
+        self._timer_update_state = no_op_timer
         load_cell_monitor.property_changed += self._load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._audio_prop_changed
 
@@ -40,6 +45,7 @@ class EmergencyAlarmMonitor(ObservableObject):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _update_state(self):
+        self._timer_update_state.cancel()
         cfg = self._config
         perf_now = time.perf_counter()
         #
@@ -109,6 +115,8 @@ class EmergencyAlarmMonitor(ObservableObject):
             )
         )
         self.is_engaged = is_emergency
+        timer = self._timer_update_state = timer_update_state(1, self._update_state)
+        timer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _load_cell_monitor_prop_changed(self, name, value, _):

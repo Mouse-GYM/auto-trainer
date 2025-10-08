@@ -27,11 +27,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     emergency_resumed: Callable[[str], None]
 
     def __init__(
-            self,
-            msg_handler: SystemMessageHandler,
-            analysis: SensorAnalysis,
-            hardware_model: HardwareModel,
-            inference: InferenceProtocol,
+        self,
+        msg_handler: SystemMessageHandler,
+        analysis: SensorAnalysis,
+        hardware_model: HardwareModel,
+        inference: InferenceProtocol,
     ):
         super().__init__(("emergency_stopped", "emergency_resumed"))
 
@@ -48,13 +48,20 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         )
 
         self._project: Optional[ProjectInfo] = None
-
+        self._is_intersession_enabled = self._system_machine.algorithm.intersession_enabled
+        self._hardware_model = hardware_model
+        #
         self._system_machine.algorithm.property_changed += self._on_algorithm_property_changed
         self._system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
+        def alarm_monitor_property_changed(name, value, _):
+            if name == "is_engaged":
+                if value:
+                    self.emergency_stop("alarm-monitor")
+                else:
+                    self.emergency_resume("alarm-monitor")
+        analysis.emergency_alarm_monitor.property_changed += alarm_monitor_property_changed
 
-        self._is_intersession_enabled = self._system_machine.algorithm.intersession_enabled
-        self._hardware_model = hardware_model
 
     @property
     def analysis(self) -> SensorAnalysis:
