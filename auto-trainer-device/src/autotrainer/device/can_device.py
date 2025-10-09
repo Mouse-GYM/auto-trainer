@@ -804,7 +804,7 @@ def default_open_gate() -> MotorSteps:
     """
     return MotorSteps("open_gate",
                       [
-                          {'gate': '120'},
+                          {'gate': 0},
                       ]
                       )
 
@@ -818,6 +818,6 @@ def default_close_gate() -> MotorSteps:
     """
     return MotorSteps("close_gate",
                       [
-                          {'gate': '0'},
+                          {'gate': 100},
                       ]
                       )
