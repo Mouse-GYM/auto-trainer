@@ -962,6 +962,7 @@ class BehaviorAlgorithm(ObservableObject):
     def load_configuration(self, config: BehaviorConfiguration):
         self._load_pellet_cfg(config.pellet_delivery)
         self._load_head_clamp_cfg(config.head_clamp)
+        self._presence_missing_delay = config.mouse_presence.presence_missing_delay
 
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         cfg.is_enabled = self.pellet_delivery_enabled
@@ -988,6 +989,7 @@ class BehaviorAlgorithm(ObservableObject):
     def update_configuration(self, configuration: BehaviorConfiguration):
         self._update_pellet_cfg(configuration.pellet_delivery)
         self._update_head_clamp_cfg(configuration.head_clamp)
+        configuration.mouse_presence.presence_missing_delay = self._presence_missing_delay
 
     def get_diamond_triangle_drifts(self, reset: bool = False) -> Optional[Offset3DTuple]:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""

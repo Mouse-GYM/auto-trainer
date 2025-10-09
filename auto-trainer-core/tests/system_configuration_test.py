@@ -10,6 +10,7 @@ from autotrainer.core import SystemConfiguration, CameraId, HardwareConfiguratio
     PersistenceConfiguration
 from autotrainer.core.analysis import LoadCellConfiguration, HeadbarPressureConfiguration, LoadCellAutoTareConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
+from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
 from autotrainer.core.configuration.presence_configuration import MousePresenceConfig
 
@@ -21,62 +22,10 @@ v1_config_path = fixtures_path.joinpath("v1_config.yaml")
 #
 
 audio_cfg = AudioSpectrumThrashMonitorConfig()
+emergency_alarm_cfg = EmergencyAlarmConfiguration()
 
-current_default_config = {
-        # apart the version and persistence.output_location, these are all the defaults values
-         'version': SystemConfiguration.version,
-         'cameras': [],
-         'hardware': {'tunnel_identifier': HardwareConfiguration.tunnel_identifier,
-                      'pellet_identifier': HardwareConfiguration.pellet_identifier},
-         'inference': {'pose_model_location': InferenceConfiguration.pose_model_location,
-          'is_enabled': InferenceConfiguration.is_enabled,
-          'intersession_wait_time': InferenceConfiguration.intersession_wait_time},
-         'behavior': {'pellet_delivery': {
-            'auto_correct_motors_drift': PelletDeliveryConfiguration.auto_correct_motors_drift,
-             'is_enabled': PelletDeliveryConfiguration.is_enabled,
-           'is_pellet_cover_enabled': PelletDeliveryConfiguration.is_pellet_cover_enabled,
-           'is_intersession_analysis_enabled': PelletDeliveryConfiguration.is_intersession_analysis_enabled,
-           'is_intersession_pellet_shift_enabled': PelletDeliveryConfiguration.is_intersession_pellet_shift_enabled,
-           'max_pellets_per_session': PelletDeliveryConfiguration.max_pellets_per_session,
-           'max_pellets_per_day': PelletDeliveryConfiguration.max_pellets_per_day,
-           'max_pellet_missing_seconds': PelletDeliveryConfiguration.max_pellet_missing_seconds,
-           'pellet_hand_uncover_distance': PelletDeliveryConfiguration.pellet_hand_uncover_distance,
-           'triangle_pellet_expected_distance': PelletDeliveryConfiguration.triangle_pellet_expected_distance,
-           'triangle_pellet_diff_too_far_threshold': PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold,
-           'use_triangle_pellet_distance_too_far': PelletDeliveryConfiguration.use_triangle_pellet_distance_too_far,
-                                          },
-          'head_clamp': {'min_baseline_intensity': HeadClampConfiguration.min_baseline_intensity,
-           'max_baseline_intensity': HeadClampConfiguration.max_baseline_intensity,
-           'baseline_intensity_increment': HeadClampConfiguration.baseline_intensity_increment,
-           'auto_clamp_intensity': HeadClampConfiguration.auto_clamp_intensity,
-           'auto_clamp_release_tone_freq': HeadClampConfiguration.auto_clamp_release_tone_freq,
-           'auto_clamp_release_tone_delay': HeadClampConfiguration.auto_clamp_release_tone_delay,
-           'auto_clamp_no_activity_release_delay': HeadClampConfiguration.auto_clamp_no_activity_release_delay,
-           'auto_clamp_release_load_count': HeadClampConfiguration.auto_clamp_release_load_count,
-          },
 
-          'load_cell': {'weight_active_threshold': LoadCellConfiguration.weight_active_threshold,
-           'weight_inactive_threshold': LoadCellConfiguration.weight_inactive_threshold,
-           'threshold_duration': LoadCellConfiguration.threshold_duration,
-           'min_event_duration': LoadCellConfiguration.min_event_duration,
-           'min_post_event_hold_duration': LoadCellConfiguration.min_post_event_hold_duration,
-           'thrashing_var_weight_threshold_min': LoadCellConfiguration.thrashing_var_weight_threshold_min,
-           'thrashing_var_weight_threshold_max': LoadCellConfiguration.thrashing_var_weight_threshold_max,
-           'thrashing_var_min_delay': LoadCellConfiguration.thrashing_var_min_delay,
-           'thrashing_var_max_delay': LoadCellConfiguration.thrashing_var_max_delay,
-           'thrashing_min_ptp_change_count': LoadCellConfiguration.thrashing_min_ptp_change_count},
-          'headbar_pressure': {'threshold': HeadbarPressureConfiguration.threshold, 'duration': HeadbarPressureConfiguration.duration},
-          'auto_tare': {'threshold': LoadCellAutoTareConfiguration.threshold,
-                        'range_threshold': LoadCellAutoTareConfiguration.range_threshold,
-                        'duration': LoadCellAutoTareConfiguration.duration},
-         'audio': {'bins_list': audio_cfg.bins_list,
-                        'threshold_db': audio_cfg.threshold_db,
-                        'threshold_percent': audio_cfg.threshold_percent,
-                        'time_window': audio_cfg.time_window},
-         'mouse_presence': {'presence_missing_delay': MousePresenceConfig.presence_missing_delay}
-         },
-         'persistence': {'output_location': PersistenceConfiguration.output_location},
-}
+current_default_config = dataclasses.asdict(SystemConfiguration())
 
 
 v0_expected_result_config = {'version': SystemConfiguration.version,
@@ -156,6 +105,7 @@ v0_expected_result_config = {'version': SystemConfiguration.version,
   'auto_tare': {'threshold': 1.1, 'range_threshold': 1.75, 'duration': 1.0},
   'audio': current_default_config['behavior']['audio'],
   'mouse_presence': current_default_config['behavior']['mouse_presence'],
+  'emergency_alarm': current_default_config['behavior']['emergency_alarm'],
   },
  'persistence': {'output_location': '/home/autotrainer/output'}}
 
@@ -190,13 +140,12 @@ def test_load_version_1():
     behavior_dct = current_default_config['behavior']
     assert dataclasses.asdict(config) == {
         'behavior': {
-            'audio': current_default_config['behavior']['audio'],
-            'mouse_presence': current_default_config['behavior']['mouse_presence'],
-            'auto_tare': {'duration': 2.0,
-                                   'range_threshold': 0.75,
-                                   'threshold': 0.1},
-            'head_clamp': current_default_config['behavior']['head_clamp'],
-            'headbar_pressure': {'duration': 0.5, 'threshold': 20},
+            'audio': behavior_dct['audio'],
+            'mouse_presence': behavior_dct['mouse_presence'],
+            'emergency_alarm': behavior_dct['emergency_alarm'],
+            'auto_tare': behavior_dct['auto_tare'],
+            'head_clamp': behavior_dct['head_clamp'],
+            'headbar_pressure': behavior_dct['headbar_pressure'],
                      'load_cell': {'min_event_duration': 3.0,
                                    'min_post_event_hold_duration': 6.0,
                                    'thrashing_min_ptp_change_count': 3,

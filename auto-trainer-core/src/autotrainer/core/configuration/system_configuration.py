@@ -40,7 +40,7 @@ class SystemConfiguration:
 
     DEFAULT_NAME: ClassVar[str] = "system_configuration"
 
-    version: int = 3
+    version: int = 4
     cameras: List[CameraConfiguration] = field(default_factory=list)
     hardware: HardwareConfiguration = field(default_factory=HardwareConfiguration)
     inference: InferenceConfiguration = field(default_factory=InferenceConfiguration)
@@ -123,13 +123,17 @@ class SystemConfiguration:
             if as_json:
                 p = path.with_suffix(".json")
                 logger.notice("Writing to %r as json", p.as_posix())
+                content = json.dumps(asdict(self))
+                # dump before writing to file, to prevent empty file on dump issue
                 with p.open("w") as file:
-                    json.dump(asdict(self), file)
+                    file.write(content)
             if as_yaml:
                 p = path.with_suffix(".yaml")
                 logger.notice("Writing to %r as yaml", p.as_posix())
+                content = self.dump_yaml()
+                # dump before writing to file, to prevent empty file on dump issue
                 with p.open("w") as file:
-                    file.write(self.dump_yaml())
+                    file.write(content)
         except Exception as err:
             logger.exception("Error saving config to %s: %s", path, err)
             return False
@@ -144,8 +148,6 @@ class SystemConfiguration:
         return self._camera_map.get(camera_id, None)
 
     def _deserialize_version_zero(self, content: Dict):
-        # self.version = self.__class__.version
-
         self.cameras.clear()
 
         self._try_append_version_zero_camera("camera1", content)
