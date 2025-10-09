@@ -2,8 +2,7 @@ import functools
 import logging
 import threading
 from queue import Queue
-from typing import Callable, List, Tuple
-
+from typing import Callable, List, Tuple, Optional
 
 from ..analysis.sensor_analysis import SensorAnalysis
 
@@ -14,13 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 class SystemMessageHandler(MessageHandler):
-    def __init__(self, input_queue: Queue):
+    def __init__(self, input_queue: Queue, *, sensor_analysis: Optional[SensorAnalysis] = None):
         super().__init__(input_queue, name="system-message-handler")
 
         self._measurement_callback = None
         self._audio_callback = None
 
-        self._analysis = SensorAnalysis()
+        self._analysis = SensorAnalysis() if sensor_analysis is None else sensor_analysis
 
     @property
     def measurement_callback(self):

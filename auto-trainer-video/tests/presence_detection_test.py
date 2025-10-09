@@ -1,4 +1,4 @@
-from autotrainer.video.detection import PresenceDetectionAttrs
+from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 
 def test_properties():

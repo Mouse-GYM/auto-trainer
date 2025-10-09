@@ -9,7 +9,6 @@ import os
 import threading
 import time
 from multiprocessing.sharedctypes import Synchronized
-from operator import attrgetter
 from pathlib import Path
 from datetime import datetime
 from typing import Deque, Tuple, Optional, List
@@ -18,7 +17,8 @@ import cv2
 import numpy
 import numpy as np
 
-from autotrainer.core import ProjectInfo, ValueHolderDescriptor
+from autotrainer.core import ValueHolderDescriptor
+from autotrainer.core.project.project_info import ProjectInfo
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx
 

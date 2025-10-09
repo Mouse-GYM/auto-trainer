@@ -14,8 +14,7 @@ from .QtGLImageView import QGLImageView
 from .QtCaptureSettings import QCaptureSettings
 
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.pose_elements import SceneElement
-from autotrainer.video.detection import PresenceDetectionAttrs
+from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 logger = get_verbose_logger(__name__)
 

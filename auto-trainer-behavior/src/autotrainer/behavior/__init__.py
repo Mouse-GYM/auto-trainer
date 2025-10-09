@@ -1,8 +1,9 @@
 import dataclasses
 import math
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import ClassVar, List, Dict, Optional
+from typing import ClassVar, List, Dict, Optional, Callable
 from typing_extensions import Self
 
 import numpy
@@ -86,8 +87,20 @@ class DiamondTriangleOffsetConfig:
         ) * flips_motor_diamond + self.used_position
 
 
-# Protocol first (less strict)
-from .inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
+@dataclass
+class SegmentationConfiguration:
+    nonce: str
+    session_index: int
+    session_when: datetime
+    complete: Callable[[str, bool], None]
+
+
+@dataclass
+class DetectionConfiguration:
+    nonce: str
+    session_index: int
+    session_when: datetime
+    complete: Callable[[str, bool], None]
 
 
 @dataclass
@@ -101,6 +114,8 @@ class IntersessionDetection:
     configuration: DetectionConfiguration
 
 
+# Protocol first (less strict)
+from .inference_protocol import InferenceProtocol
 from .pellet_device_protocol import PelletDeviceProtocol
 
 from .intersession import IntersessionState

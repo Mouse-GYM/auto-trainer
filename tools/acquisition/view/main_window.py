@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessa
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QDialog, QFileDialog, QPushButton)
 import qtawesome as qta
 
-from autotrainer.behavior import DiamondTriangleOffsetConfig
+from autotrainer.behavior import DiamondTriangleOffsetConfig, BehaviorAlgorithm
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.core import EventManager, Offset3DTuple
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
@@ -77,6 +78,8 @@ class MainWindow(QMainWindow):
         #
         app_model.load_configuration(configuration)
         self._reload_animals(self._app_model.animals)
+        #
+
 
     def close(self):
         # explicitly close main content, reason is TextBoxHandler added to root logger handlers.
@@ -451,20 +454,25 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        button = QPushButton("Emergency Stop")
-        button.setCheckable(True)
-        button.setObjectName("EmergencyButton")
-        button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
+        emergency_button = QPushButton("Emergency Stop")
+        emergency_button.setCheckable(True)
+        emergency_button.setObjectName("EmergencyButton")
+        emergency_button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
+
+        def update_emergency_ui(is_toggled):
+            emergency_button.setText("Resume" if is_toggled else "Emergency Stop")
+            self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED" if is_toggled else self._title)
 
         def emergency_stop_triggered(is_toggled: bool):
             behavior = self._app_model.behavior
-            behavior.emergency_stop("user-button") if is_toggled else behavior.emergency_resume("user-button")
-            button.setText("Resume" if is_toggled else "Emergency Stop")
-            self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED" if is_toggled else self._title)
+            (behavior.emergency_stop if is_toggled else behavior.emergency_resume)("user-button")
+            update_emergency_ui(is_toggled)
 
-        button.toggled.connect(emergency_stop_triggered)
+        emergency_button.toggled.connect(emergency_stop_triggered)
+        self._app_model.behavior.emergency_stopped += lambda src: update_emergency_ui(True)
+        self._app_model.behavior.emergency_resumed += lambda src: update_emergency_ui(False)
 
-        toolbar.addWidget(button)
+        toolbar.addWidget(emergency_button)
 
     def _configure_statusbar(self):
         self._status_label = QLabel("")

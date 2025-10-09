@@ -17,18 +17,18 @@ from autotrainer.behavior import IntersessionState, BehaviorAlgorithm
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
-                              NotificationCenter, TriggerNotification, SystemStatusMessageKind)
+                              NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis)
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
 from autotrainer.core.configuration import SystemConfigurationDumper
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer
+from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.config import load_calib_stereo_params
 from autotrainer.inference import PoseAlgorithm, InferenceStatus
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.video import CaptureProcessStatus
-from autotrainer.video.detection import PresenceDetectionAttrs
 
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
@@ -98,12 +98,11 @@ class AppModel(ObservableObject):
         self._system_message_queue = queue.Queue()  # only dedicated to CAN bus messages reading/handling
         # so: using a multiprocess queue instead, would allow to put the CAN connection thread into a dedicated process,
         # also giving more space/freedom for the main/UI process python GIL acquire/release.
-        self._system_message_handler = SystemMessageHandler(self._system_message_queue)
+        sensor_analysis = self._analysis = SensorAnalysis(topcam_presence=self._top_camera_presence_detection)
+        #
+        self._system_message_handler = SystemMessageHandler(self._system_message_queue,
+                                                            sensor_analysis=sensor_analysis)
         self._system_message_handler.start()
-
-        # Use the default analysis object created by the message handler.  Dereferenced here for use in the class in
-        # case that changes.
-        self._analysis = self._system_message_handler.analysis
 
         self._hardware = HardwareModel(self._system_message_handler)
 
@@ -124,7 +123,6 @@ class AppModel(ObservableObject):
             square_size, _, _ = calibration_FLIR.get_calibration_info(calib_src_dir.as_posix())
             cam_names = calibration_FLIR.get_video_list(calib_src_dir.as_posix())
             path_offsets = calib_src_dir.joinpath('camera_offsets.pkl')
-            # if path_offsets.is_file():
             with open(path_offsets, "rb") as fh:
                 cam_offsets = pickle.load(fh)
         else:
@@ -133,6 +131,7 @@ class AppModel(ObservableObject):
             square_size = None
             cam_names = None
             cam_offsets = None
+            logger.warning("calib_src_dir=%r does not exist", calib_src_dir.as_posix())
 
         self._pose_algorithm = PoseAlgorithm(
             stereo_params=self._stereo_params,

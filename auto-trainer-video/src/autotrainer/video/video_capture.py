@@ -21,7 +21,7 @@ from autotrainer.core.logging import get_verbose_logger, set_logger_level, get_m
     make_log_dict_config, thread_id_filter, setup_logging
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.message import FrameIndexCategory
-from .detection import PresenceDetectionAttrs, VideoDetection
+from autotrainer.core.video_detection import PresenceDetectionAttrs, VideoDetection
 
 from .video_manager import VideoManager
 from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode

@@ -1,5 +1,5 @@
 import multiprocessing
-from typing import Optional
+from typing import Optional, Callable
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
@@ -17,18 +17,21 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     aspects of the behavior system that are specific to the application.  General behavior functionality should be
     located in the module.
 
-
-
     Emergency stopped and resumed are defined as dedicated events due to their application-wide interest and possible
     subscription.  Anything that triggers an emergency stop/resume should pass through the `emergency_stop` and
     `emergency_resume` methods to ensure
     """
+
+    # events type hint
+    emergency_stopped: Callable[[str], None]
+    emergency_resumed: Callable[[str], None]
+
     def __init__(
-            self,
-            msg_handler: SystemMessageHandler,
-            analysis: SensorAnalysis,
-            hardware_model: HardwareModel,
-            inference: InferenceProtocol,
+        self,
+        msg_handler: SystemMessageHandler,
+        analysis: SensorAnalysis,
+        hardware_model: HardwareModel,
+        inference: InferenceProtocol,
     ):
         super().__init__(("emergency_stopped", "emergency_resumed"))
 
@@ -45,13 +48,16 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         )
 
         self._project: Optional[ProjectInfo] = None
-
+        self._is_intersession_enabled = self._system_machine.algorithm.intersession_enabled
+        self._hardware_model = hardware_model
+        #
         self._system_machine.algorithm.property_changed += self._on_algorithm_property_changed
         self._system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
-
-        self._is_intersession_enabled = self._system_machine.algorithm.intersession_enabled
-        self._hardware_model = hardware_model
+        def alarm_monitor_property_changed(name, value, _):
+            if name == "is_engaged":
+                (self.emergency_stop if value else self.emergency_resume)("alarm-monitor")
+        analysis.emergency_alarm_monitor.property_changed += alarm_monitor_property_changed
 
     @property
     def analysis(self) -> SensorAnalysis:

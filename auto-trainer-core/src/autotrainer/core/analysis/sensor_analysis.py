@@ -8,17 +8,21 @@ from typing import Optional, List, Tuple, IO
 
 import numpy
 
-from .head_fix_measurement import HeadFixMeasurement
-from .audio_spectrum_monitor import AudioSpectrumThrashMonitor
+from autotrainer.core.video_detection import PresenceDetectionAttrs
+
+from ..configuration.alarm_configuration import EmergencyAlarmConfiguration
 from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
 from ..perf_monitor import PerfMonitor
 from ..observable_object import ObservableObject
 from ..message.audio_spectrum_message import AudioSpectrumMessage
 
+from .head_fix_measurement import HeadFixMeasurement
+from .audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from .headbar_pressure_monitor import HeadbarPressureMonitor
 from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
+# from .alarm_monitor import EmergencyAlarmMonitor  # delayed import on purpose,
 
 logger = get_verbose_logger(__name__)
 
@@ -31,7 +35,7 @@ _MeasuresList = List[float]
 class SensorAnalysis(ObservableObject):
     IS_HEADBAR_SWITCH_ENGAGED_PROPERTY = "is_headbar_switch_engaged"
 
-    def __init__(self):
+    def __init__(self, *, topcam_presence: Optional[PresenceDetectionAttrs] = None):
         super().__init__()
 
         self._project_info: Optional[ProjectInfo] = None
@@ -61,6 +65,16 @@ class SensorAnalysis(ObservableObject):
         self._tare_callback = None
 
         self._audio_thrashing_monitor = AudioSpectrumThrashMonitor()
+
+        from .alarm_monitor import EmergencyAlarmMonitor  # delayed import on purpose,
+        # having import loop cycles at different places still..
+
+        self._alarm_monitor = EmergencyAlarmMonitor(
+            config=EmergencyAlarmConfiguration(),
+            load_cell_monitor=self._load_cell_monitor,
+            audio_monitor=self._audio_thrashing_monitor,
+            topcam_presence_attrs=topcam_presence,
+        )
 
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_window=30)
 
@@ -102,6 +116,10 @@ class SensorAnalysis(ObservableObject):
     @property
     def audio_thrashing_monitor(self) -> AudioSpectrumThrashMonitor:
         return self._audio_thrashing_monitor
+
+    @property
+    def emergency_alarm_monitor(self):
+        return self._alarm_monitor
 
     @property
     def is_headbar_switch_engaged(self):

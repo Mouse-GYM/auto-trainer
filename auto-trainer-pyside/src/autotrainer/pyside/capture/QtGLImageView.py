@@ -6,9 +6,10 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QHBoxLayout, QGraphicsPixmapItem, \
     QGraphicsEllipseItem
 
-from autotrainer.inference import PoseTuple, PoseAlgorithm, PoseLocation
 from autotrainer.core.pose_elements import SceneElement
-from autotrainer.video.detection import PresenceDetectionAttrs
+from autotrainer.core.video_detection import PresenceDetectionAttrs
+
+from autotrainer.inference import PoseLocation
 
 
 class QGLImageView(QWidget):
