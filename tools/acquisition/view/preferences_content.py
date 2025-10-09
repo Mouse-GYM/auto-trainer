@@ -426,6 +426,8 @@ class PreferencesContent(QWidget):
             self._remove_raw_data_when_inactive_session_changed)
         form_layout.addRow("Remove saved videos when animal not seen:", self._checkbox_remove_raw_data_inactive_session)
 
+        form_layout.addRow("<b>TopCam Presence:</b>", QWidget())
+
         spinbox = self._presence_sum_percent_threshold_spinbox = QDoubleSpinBox()
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setRange(0, 100)
@@ -435,19 +437,18 @@ class PreferencesContent(QWidget):
         def value_changed(value: float):
             model.top_camera_presence_detection.pc_threshold = value
         spinbox.valueChanged.connect(value_changed)
-        form_layout.addRow("TopCam Presence % threshold:", spinbox)
+        form_layout.addRow("% threshold:", spinbox)
 
-        spinbox = self._presence_sum_percent_exclude_threshold_spinbox = QDoubleSpinBox()
+        spinbox = QDoubleSpinBox()
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setRange(0, 100)
         spinbox.setSingleStep(0.1)
         spinbox.setDecimals(1)
         spinbox.setValue(model.top_camera_presence_detection.pc_high_exclude_threshold)
         def value_changed(value: float):
-            logger.debug("updating pc_high_exclude_threshold to %s", value)
             model.top_camera_presence_detection.pc_high_exclude_threshold = value
         spinbox.valueChanged.connect(value_changed)
-        form_layout.addRow("TopCam Presence high-% exclude threshold:", spinbox)
+        form_layout.addRow("high-% exclude threshold:", spinbox)
 
         spinbox = QSpinBox()
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -457,7 +458,18 @@ class PreferencesContent(QWidget):
         def value_changed(value: float):
             model.top_camera_presence_detection.mask_lower_zero = value
         spinbox.valueChanged.connect(value_changed)
-        form_layout.addRow("TopCam Mask Lower Zero:", spinbox)
+        form_layout.addRow("Mask Lower Zero:", spinbox)
+
+        spinbox = QDoubleSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setRange(0, 100)
+        spinbox.setSingleStep(0.1)
+        spinbox.setDecimals(1)
+        spinbox.setValue(model.top_camera_presence_detection.max_delay_skip_threshold)
+        def value_changed(value: float):
+            model.top_camera_presence_detection.max_delay_skip_threshold = value
+        spinbox.valueChanged.connect(value_changed)
+        form_layout.addRow("Max Delay Skip Seconds:", spinbox)
 
         tab = QWidget(None)
         tab.setLayout(form_layout)
