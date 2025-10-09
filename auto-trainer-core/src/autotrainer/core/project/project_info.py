@@ -288,8 +288,9 @@ class ProjectInfo:
         name: str = "cage",
         ext: str = "csv",
         interval: ProjectInterval = ProjectInterval.HOUR,
+        when: Optional[datetime] = None,
     ) -> Optional[IntervalFileInfo]:
-        path = self.get_interval_path(name, interval)
+        path = self.get_interval_path(name, interval, when=when)
         return None if path is None else IntervalFileInfo(path.location,
                                                           os.path.join(path.location, f"{path.prefix}.{ext}"),
                                                           path.interval)

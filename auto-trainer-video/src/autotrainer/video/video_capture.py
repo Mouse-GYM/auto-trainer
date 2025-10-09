@@ -393,6 +393,7 @@ class VideoCapture(Process):
                     sync_barrier()
 
                 frame, when = capture()
+                frame_when = when  # save to pass to detection module
 
                 perf_now_ns = time.perf_counter_ns()
                 if cur_frame_idx == -1:
@@ -513,7 +514,7 @@ class VideoCapture(Process):
                     # mixed with newest frames
 
                 if vid_detection is not None:
-                    vid_detection.update_frame(when, frame)
+                    vid_detection.update_frame(frame_when, frame)
 
             except Exception as err:
                 logger.exception("Error during capture loop: %s", err)
