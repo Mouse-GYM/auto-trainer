@@ -109,6 +109,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         configuration.headbar_pressure = analysis.headbar_pressure_monitor.save_configuration()
         configuration.audio = analysis.audio_thrashing_monitor.config
         configuration.emergency_alarm = analysis.emergency_alarm_monitor.config
+        configuration.topcam_presence_detection = algo.top_camera_presence_detection.to_config()
 
         return configuration
 
