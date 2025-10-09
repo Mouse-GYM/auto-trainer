@@ -486,14 +486,6 @@ class PreferencesContent(QWidget):
         main_layout = QVBoxLayout()
         main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
-        # top_layout = QVBoxLayout()
-        # top_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        # sub_layout = QHBoxLayout()
-        # sub_layout.addWidget(QLabel("                                           "))
-        # sub_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        # top_layout.addLayout(sub_layout)
-        # main_layout.addLayout(top_layout)
-
         # not sure why but inner spinboxes are taking their max size while in behavior tab they don't
         # but we use similar layout scheme.
         # Found: behavior tab uses our QSwitch() which has a size hint
@@ -511,7 +503,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("<b>Use Audio & LoadCell thrashing:</b>"), cur_row, 0)
         toggle_use_audio_load_cell = QSwitch()
-        toggle_use_audio_load_cell.setCheckable(True)
+        toggle_use_audio_load_cell.setChecked(alarm_cfg.use_audio_load_cell_thrash)
         toggle_use_audio_load_cell.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def toggle_changed(value):
             toggled = value != 0
@@ -522,7 +514,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("Auto-resume on Audio & LoadCell thrash stop:"), cur_row, 0)
         toggle_auto_resume_audio_load_cell = QSwitch()
-        toggle_auto_resume_audio_load_cell.setCheckable(True)
+        toggle_auto_resume_audio_load_cell.setChecked(alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume)
         toggle_auto_resume_audio_load_cell.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def toggle_changed(value):
             toggled = value != 0
@@ -591,7 +583,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("<b>Use presence missing after exit tunnel:</b>"), cur_row, 0)
         toggle = QSwitch()
-        toggle.setCheckable(True)
+        toggle.setChecked(alarm_cfg.use_presence_missing_after_exit_tunnel)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def toggle_changed(value):
             toggled = value != 0
@@ -602,7 +594,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("Auto-resume on presence seen after exit tunnel:"), cur_row, 0)
         toggle = QSwitch()
-        toggle.setCheckable(True)
+        toggle.setChecked(alarm_cfg.auto_resume_on_presence_seen_after_exit_tunnel)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def toggle_changed(value):
             toggled = value != 0

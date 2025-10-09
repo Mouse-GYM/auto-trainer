@@ -519,11 +519,15 @@ class AppModel(ObservableObject):
             self._top_camera.load_configuration(camera)
 
         self.inference.load_configuration(configuration.inference)
-        self.behavior.load_configuration(configuration.behavior)
 
-        self._analysis.headbar_pressure_monitor.load_configuration(configuration.behavior.headbar_pressure)
-        self._analysis.load_cell_monitor.load_configuration(configuration.behavior.load_cell)
-        self._analysis.load_cell_tare_monitor.load_configuration(configuration.behavior.auto_tare)
+        behavior_cfg = configuration.behavior
+        self.behavior.load_configuration(behavior_cfg)
+
+        self._analysis.headbar_pressure_monitor.load_configuration(behavior_cfg.headbar_pressure)
+        self._analysis.load_cell_monitor.load_configuration(behavior_cfg.load_cell)
+        self._analysis.load_cell_tare_monitor.load_configuration(behavior_cfg.auto_tare)
+        self._analysis.audio_thrashing_monitor.config = behavior_cfg.audio
+        self._analysis.emergency_alarm_monitor.config = behavior_cfg.emergency_alarm
 
         self.output_location = configuration.persistence.output_location
 
