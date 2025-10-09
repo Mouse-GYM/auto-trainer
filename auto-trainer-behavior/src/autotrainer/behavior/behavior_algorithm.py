@@ -315,7 +315,7 @@ class BehaviorAlgorithm(ObservableObject):
                 break
             func, args, kwargs, event = raw
             try:
-                func(*args, **kwargs)
+                func(*args) if kwargs is None else func(*args, **kwargs)
             except Exception as err:
                 logger.exception("Failed executing %s: %s", func, err)
                 # NB: what to do else ?
@@ -339,7 +339,7 @@ class BehaviorAlgorithm(ObservableObject):
                 setattr(machine_transitions, trig, cls.relay_func(meth))
 
     @classmethod
-    def put_func_call(cls, func, args: Tuple[Any]=(), kwargs: Optional[Dict]=None,
+    def put_func_call(cls, func, args: Tuple[Any], kwargs: Optional[Dict]=None,
                       *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
         """Put a function call request to the algo dedicated thread, and eventually wait on its completion.
         See also `BehaviorAlgorithm.set_put_func_call_mode`.
@@ -347,20 +347,18 @@ class BehaviorAlgorithm(ObservableObject):
         handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue
         if threading.current_thread() is handler_thread or handler_queue is None or cls._no_handler_thread:
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
-            func(*args, **({} if kwargs is None else kwargs))
+            func(*args) if kwargs is None else func(*args, **kwargs)
         else:
             t_local_sync = getattr(cls._thread_locals, "sync_call_mode", None)
             if t_local_sync is not None:
                 wait = t_local_sync
             # logger.debug("%s: relaying to system msg handler thread", func)
             if wait:
-                prev = getattr(BehaviorAlgorithm._thread_locals, "event", None)
-                if prev is None:
+                event = getattr(cls._thread_locals, "event", None)
+                if event is None:
                     logger.debug("%s: creating event for sync handling of put_func_call %s",
                                  threading.current_thread(), func)
-                    event = BehaviorAlgorithm._thread_locals.event = threading.Event()
-                else:
-                    event = prev
+                    event = cls._thread_locals.event = threading.Event()
             else:
                 event = None
             handler_queue.put((func, args, kwargs, event))

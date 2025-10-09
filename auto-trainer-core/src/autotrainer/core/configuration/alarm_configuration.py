@@ -4,8 +4,9 @@ import dataclasses
 @dataclasses.dataclass
 class EmergencyAlarmConfiguration:
 
-    aggregate_delay: float = 5  # up to how long ago to look at previous results
-
+    use_audio_load_cell_thrash: bool = False
+    auto_resume_on_audio_load_cell_thrash_resume: bool = False
+    audio_load_cell_thrash_aggregate_delay: float = 5  # up to how long ago to look at previous results
     #
     # ( ( if count of thrashing triggers greater than this (during last aggregate_delay)
     load_cell_thrash_count: int = 3
@@ -19,6 +20,8 @@ class EmergencyAlarmConfiguration:
     # ) )
 
     # or
+    use_presence_missing_after_exit_tunnel: bool = False
+    auto_resume_on_presence_seen_after_exit_tunnel: bool = False
     tunnel_to_cage_presence_missing_delay: float = 5
 
     # then triggers ?

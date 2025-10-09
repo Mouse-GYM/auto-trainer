@@ -56,7 +56,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
         def alarm_monitor_property_changed(name, value, _):
             if name == "is_engaged":
-                (self.emergency_stop if value else self.emergency_resume)("alarm-monitor")
+                meth = self.emergency_stop if value else self.emergency_resume
+                meth("alarm-monitor")  # noqa
         analysis.emergency_alarm_monitor.property_changed += alarm_monitor_property_changed
 
     @property

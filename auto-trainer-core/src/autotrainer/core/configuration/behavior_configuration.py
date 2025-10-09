@@ -1,6 +1,6 @@
 import dataclasses
 from dataclasses import dataclass, field
-from typing import Type, Optional
+from typing import Type, Optional, Dict
 from typing_extensions import Self
 
 import yaml
@@ -77,7 +77,7 @@ class BehaviorConfiguration:
     mouse_presence: MousePresenceConfig = field(default_factory=MousePresenceConfig)
 
     @classmethod
-    def from_version_zero(cls, content: dict) -> Self:
+    def from_version_zero(cls, content: Dict) -> Self:
         configuration = cls()
 
         if "head_fix" in content:
