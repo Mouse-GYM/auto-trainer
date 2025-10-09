@@ -51,6 +51,14 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         self._when_next_check: float = 0
 
     @property
+    def config(self):
+        return self._config
+
+    @config.setter
+    def config(self, value):
+        self._config = value
+
+    @property
     def is_thrashing_detected(self):
         return self._cur_detected
 

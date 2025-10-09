@@ -479,19 +479,12 @@ class PreferencesContent(QWidget):
     def _create_alarms_tab(self):
         model = self._app_model
         analysis = model.analysis
+        load_cell_monitor = analysis.load_cell_monitor
         config = model.loaded_configuration
         behavior_cfg = config.behavior
 
         main_layout = QVBoxLayout()
         main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-
-        # top_layout = QVBoxLayout()
-        # top_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        # sub_layout = QHBoxLayout()
-        # sub_layout.addWidget(QLabel("                                           "))
-        # sub_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        # top_layout.addLayout(sub_layout)
-        # main_layout.addLayout(top_layout)
 
         # not sure why but inner spinboxes are taking their max size while in behavior tab they don't
         # but we use similar layout scheme.
@@ -503,9 +496,144 @@ class PreferencesContent(QWidget):
         main_layout.addLayout(grid_layout)
 
         cur_row = 0
-        load_cell_monitor = analysis.load_cell_monitor
+        alarm_cfg = analysis.emergency_alarm_monitor.config
 
-        grid_layout.addWidget(QLabel("<b>Load Cell Monitor</b>"), cur_row, 0)
+        grid_layout.addWidget(QLabel("<b>Emergency Alarm Monitor</b>"), cur_row, 0)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("<b>Use Audio & LoadCell thrashing:</b>"), cur_row, 0)
+        toggle_use_audio_load_cell = QSwitch()
+        toggle_use_audio_load_cell.setChecked(alarm_cfg.use_audio_load_cell_thrash)
+        toggle_use_audio_load_cell.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def toggle_changed(value):
+            toggled = value != 0
+            alarm_cfg.use_audio_load_cell_thrash = toggled
+        toggle_use_audio_load_cell.stateChanged.connect(toggle_changed)
+        grid_layout.addWidget(toggle_use_audio_load_cell, cur_row, 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Auto-resume on Audio & LoadCell thrash stop:"), cur_row, 0)
+        toggle_auto_resume_audio_load_cell = QSwitch()
+        toggle_auto_resume_audio_load_cell.setChecked(alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume)
+        toggle_auto_resume_audio_load_cell.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def toggle_changed(value):
+            toggled = value != 0
+            alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume = toggled
+        toggle_auto_resume_audio_load_cell.stateChanged.connect(toggle_changed)
+        grid_layout.addWidget(toggle_auto_resume_audio_load_cell, cur_row, 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Thrash aggregate delay (seconds):"), cur_row, 0)
+        spinbox = QDoubleSpinBox()
+        spinbox.setRange(0, 60)
+        spinbox.setDecimals(1)
+        spinbox.setValue(alarm_cfg.audio_load_cell_thrash_aggregate_delay)
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def value_changed(value):
+            alarm_cfg.audio_load_cell_thrash_aggregate_delay = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(spinbox, cur_row, 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("LoadCell thrash % time:"), cur_row, 0)
+        spinbox = QSpinBox()
+        spinbox.setRange(0, 100)
+        spinbox.setValue(alarm_cfg.load_cell_thrash_percent_on)
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def value_changed(value):
+            alarm_cfg.load_cell_thrash_percent_on = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(spinbox, cur_row, 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("LoadCell thrash count:"), cur_row, 0)
+        spinbox = QSpinBox()
+        spinbox.setRange(0, 100)
+        spinbox.setValue(alarm_cfg.load_cell_thrash_count)
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def value_changed(value):
+            alarm_cfg.load_cell_thrash_count = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(spinbox, cur_row, 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Audio thrash % time:"), cur_row, 0)
+        spinbox = QSpinBox()
+        spinbox.setRange(0, 100)
+        spinbox.setValue(alarm_cfg.audio_thrash_percent_on)
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def value_changed(value):
+            alarm_cfg.audio_thrash_percent_on = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(spinbox, cur_row, 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Audio thrash count:"), cur_row, 0)
+        spinbox = QSpinBox()
+        spinbox.setRange(0, 100)
+        spinbox.setValue(alarm_cfg.audio_thrash_count)
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def value_changed(value):
+            alarm_cfg.audio_thrash_count = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(spinbox, cur_row, 1)
+        cur_row += 1
+
+        #
+
+        grid_layout.addWidget(QLabel("<b>Use presence missing after exit tunnel:</b>"), cur_row, 0)
+        toggle = QSwitch()
+        toggle.setChecked(alarm_cfg.use_presence_missing_after_exit_tunnel)
+        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def toggle_changed(value):
+            toggled = value != 0
+            alarm_cfg.use_presence_missing_after_exit_tunnel = toggled
+        toggle.stateChanged.connect(toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Auto-resume on presence seen after exit tunnel:"), cur_row, 0)
+        toggle = QSwitch()
+        toggle.setChecked(alarm_cfg.auto_resume_on_presence_seen_after_exit_tunnel)
+        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def toggle_changed(value):
+            toggled = value != 0
+            alarm_cfg.auto_resume_on_presence_seen_after_exit_tunnel = toggled
+        toggle.stateChanged.connect(toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Presence missing delay after exit tunnel:"), cur_row, 0)
+        spinbox = QDoubleSpinBox()
+        spinbox.setRange(0, 120)
+        spinbox.setDecimals(1)
+        spinbox.setValue(alarm_cfg.tunnel_to_cage_presence_missing_delay)
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def value_changed(value):
+            alarm_cfg.tunnel_to_cage_presence_missing_delay = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(spinbox, cur_row, 1)
+        cur_row += 1
+
+        #
+        cur_row = 0
+        cur_col = 2
+        #
+        grid_layout.addWidget(QLabel("<b>Global Mouse Presence</b>"), cur_row, cur_col)
+        cur_row += 1
+        spinbox = QSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setRange(0, 100)
+        spinbox.setValue(behavior_cfg.mouse_presence.presence_missing_delay)
+        def value_changed(value):
+            behavior_cfg.mouse_presence.presence_missing_delay = value
+            model.behavior.algorithm.presence_missing_delay = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(QLabel("Missing delay:"), cur_row, cur_col)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("<b>Load Cell Monitor</b>"), cur_row, cur_col)
         cur_row += 1
 
         spinbox = QSpinBox()
@@ -515,8 +643,8 @@ class PreferencesContent(QWidget):
         def value_changed(value):
             load_cell_monitor.config.thrashing_min_ptp_change_count = value
         spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(QLabel("Thrashing PTP change count:"), cur_row, 0)
-        grid_layout.addWidget(spinbox, cur_row, 1)
+        grid_layout.addWidget(QLabel("Thrashing PTP change count:"), cur_row, cur_col)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         spinbox = QDoubleSpinBox()
@@ -527,8 +655,8 @@ class PreferencesContent(QWidget):
         def value_changed(value):
             load_cell_monitor.config.thrashing_var_weight_threshold_min = value
         spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(QLabel("Thrashing min threshold:"), cur_row, 0)
-        grid_layout.addWidget(spinbox, cur_row, 1)
+        grid_layout.addWidget(QLabel("Thrashing min threshold:"), cur_row, cur_col)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         spinbox = QDoubleSpinBox()
@@ -539,11 +667,11 @@ class PreferencesContent(QWidget):
         def value_changed(value):
             load_cell_monitor.config.thrashing_var_weight_threshold_max = value
         spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(QLabel("Thrashing max threshold:"), cur_row, 0)
-        grid_layout.addWidget(spinbox, cur_row, 1)
+        grid_layout.addWidget(QLabel("Thrashing max threshold:"), cur_row, cur_col)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("<b>Audio Monitor</b>"), cur_row, 0)
+        grid_layout.addWidget(QLabel("<b>Audio Monitor</b>"), cur_row, cur_col)
         cur_row += 1
 
         spinbox = QDoubleSpinBox()
@@ -554,8 +682,8 @@ class PreferencesContent(QWidget):
         def value_changed(value):
             behavior_cfg.audio.threshold_db = value
         spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(QLabel("Threshold db:"), cur_row, 0)
-        grid_layout.addWidget(spinbox, cur_row, 1)
+        grid_layout.addWidget(QLabel("Threshold db:"), cur_row, cur_col)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         line_edit = QLineEdit()
@@ -572,24 +700,8 @@ class PreferencesContent(QWidget):
             else:
                 behavior_cfg.audio.bins_list = list(value)
         line_edit.editingFinished.connect(value_changed)
-        grid_layout.addWidget(QLabel("Bins list:"), cur_row, 0)
-        grid_layout.addWidget(line_edit, cur_row, 1)
-        cur_row += 1
-
-        cur_row = 0
-        grid_layout.addWidget(QLabel("<b>Mouse presence missing</b>"), cur_row, 2)
-        cur_row += 1
-
-        spinbox = QSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        spinbox.setRange(0, 100)
-        spinbox.setValue(behavior_cfg.mouse_presence.presence_missing_delay)
-        def value_changed(value):
-            behavior_cfg.mouse_presence.presence_missing_delay = value
-            model.behavior.algorithm.presence_missing_delay = value
-        spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(QLabel("Missing delay:"), cur_row, 2)
-        grid_layout.addWidget(spinbox, cur_row, 3)
+        grid_layout.addWidget(QLabel("Bins list:"), cur_row, cur_col)
+        grid_layout.addWidget(line_edit, cur_row, cur_col + 1)
         cur_row += 1
 
         tab = QWidget(None)

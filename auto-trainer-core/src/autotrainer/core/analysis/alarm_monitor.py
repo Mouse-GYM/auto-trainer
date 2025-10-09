@@ -35,8 +35,18 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._audio_thrash_values = []
         self._is_engaged = False
         self._timer_update_state = no_op_timer
+        self._prev_audio_load_cell_thrash_alarm: bool = False
+        self._prev_pres_miss_after_exit_tunnel_alarm: bool = False
         load_cell_monitor.property_changed += self._load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._audio_prop_changed
+
+    @property
+    def config(self):
+        return self._config
+
+    @config.setter
+    def config(self, value):
+        self._config = value
 
     @property
     def is_engaged(self):
@@ -59,20 +69,15 @@ class EmergencyAlarmMonitor(ObservableObject):
             idx = len(values) - 1
             while idx >= 0:
                 t_perf = values[idx][0]
-                if perf_now - t_perf > cfg.aggregate_delay:
+                if perf_now - t_perf > cfg.audio_load_cell_thrash_aggregate_delay:
                     del values[:idx + 1]
                     break
                 idx -= 1
         #
-        if load_cell.is_engaged:
-            # unless otherwise required.
-            self.is_engaged = False
-            return
-        #
         count_load_cell_thrash_triggers = 0
         tot_load_cell_thrash_engaged = 0
         v = None
-        perf_c_start = perf_now - cfg.aggregate_delay
+        perf_c_start = perf_now - cfg.audio_load_cell_thrash_aggregate_delay
 
         for idx, v in enumerate(self._load_cell_thrash_values):
             if v[1]:
@@ -83,7 +88,7 @@ class EmergencyAlarmMonitor(ObservableObject):
             if v[1]:
                 tot_load_cell_thrash_engaged += perf_now - v[0]
         elif self._load_cell_monitor.thrashing_detected:
-            tot_load_cell_thrash_engaged += cfg.aggregate_delay
+            tot_load_cell_thrash_engaged += cfg.audio_load_cell_thrash_aggregate_delay
         #
         count_audio_thrash_triggers = 0
         tot_audio_thrash_engaged = 0
@@ -97,32 +102,41 @@ class EmergencyAlarmMonitor(ObservableObject):
             if v[1]:
                 tot_audio_thrash_engaged += perf_now - v[0]
         elif self._audio_monitor.is_thrashing_detected:
-            tot_audio_thrash_engaged += cfg.aggregate_delay
+            tot_audio_thrash_engaged += cfg.audio_load_cell_thrash_aggregate_delay
         #
-        pc_load_cell_thrash = 100 * tot_load_cell_thrash_engaged / cfg.aggregate_delay
-        pc_audio_thrash = 100 * tot_audio_thrash_engaged / cfg.aggregate_delay
-        is_emergency = (
-            ((
+        pc_load_cell_thrash = 100 * tot_load_cell_thrash_engaged / cfg.audio_load_cell_thrash_aggregate_delay
+        pc_audio_thrash = 100 * tot_audio_thrash_engaged / cfg.audio_load_cell_thrash_aggregate_delay
+        #
+        audio_load_cell_thrash_alarm = (
+            (
                 pc_load_cell_thrash >= cfg.load_cell_thrash_percent_on
                 or count_load_cell_thrash_triggers >= cfg.load_cell_thrash_count
             ) and (
                 pc_audio_thrash >= cfg.audio_thrash_percent_on
                 or count_audio_thrash_triggers >= cfg.audio_thrash_count
-            ))
-            or (
-                topcam_attrs is not None
-                and load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
+            )
+        )
+        #
+        pres_missing_after_exit_tunnel_alarm = (
+            topcam_attrs is not None
+            and not load_cell.is_engaged
+            and load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
+            and (
+                # last presence must be before the current load cell disengaged:
+                topcam_attrs.last_presence_start_perf_c < perf_now - load_cell.disengaged_age
                 and (
-                    # last presence must be before the current load cell disengaged:
-                    topcam_attrs.last_presence_start_perf_c < perf_now - load_cell.disengaged_age
-                    and (
-                        topcam_attrs.last_presence_start_perf_c
-                        < topcam_attrs.last_absence_start_perf_c
-                        < perf_now - cfg.tunnel_to_cage_presence_missing_delay
-                    )
+                    topcam_attrs.last_presence_start_perf_c
+                    < topcam_attrs.last_absence_start_perf_c
+                    < perf_now - cfg.tunnel_to_cage_presence_missing_delay
                 )
             )
         )
+        #
+        is_emergency = (
+               (cfg.use_audio_load_cell_thrash and audio_load_cell_thrash_alarm)
+            or (cfg.use_presence_missing_after_exit_tunnel and pres_missing_after_exit_tunnel_alarm)
+        )
+        #
         if is_emergency and not self._is_engaged:
             logger.notice("Engaging emergency: pc_load_cell_thrash=%.1f pc_audio_thrash=%.1f load_cell.disengaged_age=%.1f"
                 " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
@@ -139,7 +153,25 @@ class EmergencyAlarmMonitor(ObservableObject):
                 *((math.nan, math.nan) if topcam_attrs is None else (topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c)),
                 perf_now)
         #
-        self.is_engaged = is_emergency
+        if self._is_engaged and not is_emergency:
+            auto_disengage = ((
+                cfg.use_audio_load_cell_thrash
+                and self._prev_audio_load_cell_thrash_alarm
+                and cfg.auto_resume_on_audio_load_cell_thrash_resume
+            ) or (
+                cfg.use_presence_missing_after_exit_tunnel
+                and self._prev_pres_miss_after_exit_tunnel_alarm
+                and cfg.auto_resume_on_presence_seen_after_exit_tunnel
+            ))
+            if auto_disengage:
+                self.is_engaged = False
+                self._prev_pres_miss_after_exit_tunnel_alarm = self._prev_audio_load_cell_thrash_alarm = False
+        #
+        else:
+            self.is_engaged = is_emergency
+            self._prev_audio_load_cell_thrash_alarm = audio_load_cell_thrash_alarm
+            self._prev_pres_miss_after_exit_tunnel_alarm = pres_missing_after_exit_tunnel_alarm
+
         if not is_emergency and (
             topcam_attrs is None
             or topcam_attrs.last_presence_start_perf_c >= perf_now - load_cell.disengaged_age

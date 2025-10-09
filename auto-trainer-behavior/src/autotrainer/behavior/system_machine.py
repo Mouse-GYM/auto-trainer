@@ -622,11 +622,12 @@ class SystemMachine(StateMachine):
         t_perf_now = time.perf_counter()
         top_cam_pres_age = t_perf_now - algo.top_camera_presence_detection.last_presence_start_perf_c
         algo_paused_age = algo.algo_paused_age
+        load_cell_mon = self._analysis.load_cell_monitor
         if (
             algo_is_paused
-            and not self._analysis.load_cell_monitor.is_engaged
+            and not load_cell_mon.is_engaged
             and top_cam_pres_age <= algo_paused_age
-            and top_cam_pres_age <= self._analysis.load_cell_monitor.disengaged_age
+            and top_cam_pres_age <= load_cell_mon.disengaged_age
         ):
             # ensure we only do it first time
             if (t_perf_now - self._last_close_tunnel_gate_perf_t) >= algo_paused_age:
@@ -636,12 +637,12 @@ class SystemMachine(StateMachine):
         if self._inference.status not in {InferenceStatus.live, InferenceStatus.intersession}:
             algo.presence_missing = False
             new_delay = 0.5
-        elif self._analysis.load_cell_monitor.is_engaged:
+        elif load_cell_mon.is_engaged:
             algo.presence_missing = False
             new_delay = 0.2
         else:
             top_cam_miss = algo.presence_missing_delay - top_cam_pres_age
-            load_cell_miss = algo.presence_missing_delay - self._analysis.load_cell_monitor.disengaged_age
+            load_cell_miss = algo.presence_missing_delay - load_cell_mon.disengaged_age
             new_delay = 0.1  # if algo_is_paused else 0.25
             # if camera presence detections goes ON/triggered (shared value only)
             if top_cam_miss <= 0 and load_cell_miss <= 0:

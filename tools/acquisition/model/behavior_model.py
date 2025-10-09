@@ -56,7 +56,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
         def alarm_monitor_property_changed(name, value, _):
             if name == "is_engaged":
-                (self.emergency_stop if value else self.emergency_resume)("alarm-monitor")
+                meth = self.emergency_stop if value else self.emergency_resume
+                meth("alarm-monitor")  # noqa
         analysis.emergency_alarm_monitor.property_changed += alarm_monitor_property_changed
 
     @property
@@ -96,14 +97,18 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
 
     def save_configuration(self) -> BehaviorConfiguration:
         configuration = BehaviorConfiguration()
-        configuration.pellet_delivery.is_intersession_analysis_enabled = self._is_intersession_enabled
-        configuration.pellet_delivery.is_intersession_pellet_shift_enabled = (
-            self._system_machine.algorithm.intersession_pellet_shift_enabled)
-        self._system_machine.algorithm.update_configuration(configuration)
+        algo = self._system_machine.algorithm
+        pellet_deliver_cfg = configuration.pellet_delivery
+        pellet_deliver_cfg.is_intersession_analysis_enabled = self._is_intersession_enabled
+        pellet_deliver_cfg.is_intersession_pellet_shift_enabled = algo.intersession_pellet_shift_enabled
+        algo.update_configuration(configuration)
 
-        configuration.load_cell = self._analysis.load_cell_monitor.save_configuration()
-        configuration.auto_tare = self._analysis.load_cell_tare_monitor.save_configuration()
-        configuration.headbar_pressure = self._analysis.headbar_pressure_monitor.save_configuration()
+        analysis = self._analysis
+        configuration.load_cell = analysis.load_cell_monitor.save_configuration()
+        configuration.auto_tare = analysis.load_cell_tare_monitor.save_configuration()
+        configuration.headbar_pressure = analysis.headbar_pressure_monitor.save_configuration()
+        configuration.audio = analysis.audio_thrashing_monitor.config
+        configuration.emergency_alarm = analysis.emergency_alarm_monitor.config
 
         return configuration
 
