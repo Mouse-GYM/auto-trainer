@@ -1000,10 +1000,13 @@ class CanInterface(DeviceInterface):
             logger.warning("unhandled pos: %s", position)
             return False
 
+        prev_pos = position
         if position < 0:
             position = 0
-        elif position > 120:
-            position = 120
+        elif position > 180:
+            position = 180
+        if prev_pos != position:
+            logger.verbose("Limiting servo %s move from %.1f to %.1f", motor, prev_pos, position)
 
         acceleration = config.maximum_acceleration
 
@@ -1239,13 +1242,12 @@ class CanInterface(DeviceInterface):
         logger.debug("fixed_position ; res=%s uuid=%s", res, uuid)
         return res == 0
 
-    def move_load_servo(self, position, _unused: bool = False):
+    def move_load_servo(self, position):
         """
         Move the load arm
 
         Args:
             position: Either a position (float) or a (position, rate (%)) pair
-            _unused
 
         Returns:
             bool: True if successful else False
@@ -1270,13 +1272,12 @@ class CanInterface(DeviceInterface):
         """
         return self.move_load_servo(self.load_config.maximum_position)
 
-    def move_cover_servo(self, position, _unused: bool = False):
+    def move_cover_servo(self, position):
         """
         Move the cover servo
 
         Args:
             position: Either a position (float) or a (position, rate (%)) pair
-            _unused
 
         Returns:
             bool: True if successful else False
