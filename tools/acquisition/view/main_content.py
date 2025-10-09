@@ -125,8 +125,6 @@ class MainContent(ContentWidget):
 
         self.set_diagnostics_visible(False)
 
-        self._prev_top_cam_detect = None
-
         self._prev_parts_3d_loc = {}
         self._next_parts_3d_loc_report = time.perf_counter()
 
@@ -147,12 +145,6 @@ class MainContent(ContentWidget):
     @Slot()
     def update_image(self):
         model = self._app_model
-        top_cam_pres = model.top_camera_presence_detection
-        cur_val = top_cam_pres.presence_detected
-        if cur_val != self._prev_top_cam_detect:
-            cur_sum = top_cam_pres.pc_sum
-            logger.notice("top_camera presence detected: %s sum=%.1f", cur_val, cur_sum)
-            self._prev_top_cam_detect = cur_val
         if model.left_camera.is_enabled:
             self._left_camera_content.update_image()
         if model.right_camera.is_enabled:
