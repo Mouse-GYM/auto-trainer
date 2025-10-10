@@ -4,8 +4,8 @@ from pathlib import Path
 
 import verboselogs
 
-from autotrainer.behavior import intersession_process
-from autotrainer.behavior.analysis import IntersessionResponse
+from autotrainer.inference.analysis import intersession_process, IntersessionResponse
+
 
 this_dir = Path(__file__).parent.resolve()
 

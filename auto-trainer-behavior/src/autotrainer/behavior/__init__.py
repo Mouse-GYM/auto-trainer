@@ -123,7 +123,6 @@ from .intersession.intersession_machine import IntersessionMachine
 from .pellet import PelletMachine, PelletState
 from .behavior_algorithm import BehaviorAlgorithm
 
-from .analysis import intersession_inference, intersession_process
 from .system_machine import SystemMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol

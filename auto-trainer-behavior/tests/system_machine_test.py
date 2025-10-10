@@ -1,7 +1,4 @@
 import contextlib
-import logging
-import threading
-from functools import partial
 from itertools import chain
 from pathlib import Path
 from threading import Timer
@@ -11,14 +8,14 @@ import pytest
 
 from .conftest import MockSystemMachine
 
-from autotrainer.behavior import PelletMachine
-from autotrainer.core import HeadbarPressureMonitor
 
-from autotrainer.behavior import SystemState, PelletState, SystemMachine
-from autotrainer.behavior.analysis.intersession_process import IntersessionResponse
+from autotrainer.core import HeadbarPressureMonitor
 from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
-from .conftest import property_value_save_transitions
+from autotrainer.behavior import PelletMachine
+from autotrainer.behavior import SystemState, PelletState, SystemMachine
+
+from autotrainer.inference.analysis.intersession_process import IntersessionResponse
 
 
 def test_enter_exit_tunnel(mock_system, machine):

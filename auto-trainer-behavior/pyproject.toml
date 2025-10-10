@@ -17,5 +17,6 @@ dependencies = [
     "numpy",
     "pandas",
     "transitions",
-    "auto-trainer-core"
+    "auto-trainer-core",
+    "auto-trainer-inference",
 ]

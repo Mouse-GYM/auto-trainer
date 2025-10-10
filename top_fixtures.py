@@ -6,8 +6,7 @@ from unittest import mock
 import pytest
 import sys
 
-from autotrainer.core import EventManager
-
+from autotrainer.core import EventManager, ProjectInfo
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +28,18 @@ def auto_set_misc_log_level():
     logging.getLogger('transitions').setLevel(logging.INFO)
 
 
+@pytest.fixture
+def project_info(tmp_path):
+    root = tmp_path.joinpath("root")
+    root.mkdir()
+    prj = ProjectInfo(root=root.as_posix())
+    yield prj
+
 
 @pytest.fixture
 def m_time_time():
     """Allow to control time.time()"""
     with mock.patch.object(time, "time") as m_time:
         yield m_time
+
+

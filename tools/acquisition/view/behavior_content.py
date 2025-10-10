@@ -5,7 +5,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QLabel, QWidget, QVBoxLayout,
                                QHBoxLayout, QStackedLayout, QGridLayout, QPushButton)
 
-from autotrainer.behavior.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.pyside import CardWidget, QSwitch
 from autotrainer.pyside.xyz_label import XYZQLabel

@@ -11,14 +11,15 @@ from unittest import mock
 
 import pytest
 
+
+from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler
+from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
+
+from autotrainer.video import CaptureProcessStatus
+from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
+
 from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, PelletState, \
     BehaviorAlgorithm, InferenceProtocol
-from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler
-from autotrainer.core import ProjectInfo
-from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
-from autotrainer.device import DeviceConnectionProtocol
-from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
-from autotrainer.video import CaptureProcessStatus
 
 
 def property_value_save_transitions(old_value, new_value, *, transitions: List[Any]):
@@ -39,14 +40,6 @@ def _disable_timers():
         return mock.create_autospec(DaemonTimer)
     with mock.patch(f"{DaemonTimer.__module__}.{DaemonTimer.__name__}", new=disabled_daemon_timer):
         yield
-
-
-@pytest.fixture
-def project_info(tmp_path):
-    root = tmp_path.joinpath("root")
-    root.mkdir()
-    prj = ProjectInfo(root=root.as_posix())
-    yield prj
 
 
 @pytest.fixture

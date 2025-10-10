@@ -3,9 +3,10 @@ import sys
 
 import verboselogs
 
-from autotrainer.behavior import intersession_process
 from autotrainer.core import get_verbose_logger, ProjectInfo
 from autotrainer.core.logging import setup_logging
+
+from autotrainer.inference.analysis import intersession_process
 
 logger = get_verbose_logger(__name__)
 

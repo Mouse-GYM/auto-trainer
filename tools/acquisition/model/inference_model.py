@@ -18,17 +18,19 @@ import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
     InferenceConfiguration, Offset3DTuple, ApiEventKind
-from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.logging import get_verbose_logger, setup_logging, make_log_dict_config
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
-    intersession_process, InferenceProtocol, IntersessionBlock, IntersessionDetection
+    InferenceProtocol, IntersessionBlock, IntersessionDetection
 from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     InferenceMode, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
+from autotrainer.inference.analysis import intersession_process
+
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
+
 
 logger = get_verbose_logger(__name__)
 
