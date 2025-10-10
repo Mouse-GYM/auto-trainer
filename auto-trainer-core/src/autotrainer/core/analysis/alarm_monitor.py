@@ -1,14 +1,14 @@
 import math
+import threading
 import time
 from typing import Optional
 
-from autotrainer.core import ObservableObject, LoadCellMonitor, get_verbose_logger
-from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
-from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
-from autotrainer.behavior import BehaviorAlgorithm
+from autotrainer.core import ObservableObject, get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
-
+from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
+from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
+from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
 
 logger = get_verbose_logger(__name__)
 
@@ -39,6 +39,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._prev_pres_miss_after_exit_tunnel_alarm: bool = False
         load_cell_monitor.property_changed += self._load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._audio_prop_changed
+        self._lock = threading.RLock()  # safety
 
     @property
     def config(self):
@@ -57,8 +58,11 @@ class EmergencyAlarmMonitor(ObservableObject):
         prev, self._is_engaged = self._is_engaged, value
         self._on_property_changed("is_engaged", value, prev)
 
-    @BehaviorAlgorithm.relay_func(wait=False)
     def _update_state(self):
+        with self._lock:
+            self.__update_state()
+
+    def __update_state(self):
         topcam_attrs = self._topcam_presence_attrs
         load_cell = self._load_cell_monitor
         self._timer_update_state.cancel()
@@ -181,28 +185,29 @@ class EmergencyAlarmMonitor(ObservableObject):
             timer = self._timer_update_state = timer_update_state(1, self._update_state)
             timer.start()
 
-    @BehaviorAlgorithm.relay_func(wait=False)
     def _load_cell_monitor_prop_changed(self, name, value, _):
         perf_now = time.perf_counter()
         load_cell = self._load_cell_monitor
         if name == LoadCellMonitor.IS_THRASHING_DETECTED_PROPERTY:
-            self._load_cell_thrash_values.append((perf_now, value,
-                                                  load_cell.thrashing_disengaged_age if value
-                                                  else load_cell.thrashing_engaged_age))
+            with self._lock:
+                self._load_cell_thrash_values.append((perf_now, value,
+                                                      load_cell.thrashing_disengaged_age if value
+                                                      else load_cell.thrashing_engaged_age))
             self._update_state()
         elif name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
-            self._load_cell_engaged_values.append((perf_now, value,
+            with self._lock:
+                self._load_cell_engaged_values.append((perf_now, value,
                                                    load_cell.disengaged_age if value
                                                    else load_cell.engaged_age
                                                    ))
             self._update_state()
 
-    @BehaviorAlgorithm.relay_func(wait=False)
     def _audio_prop_changed(self, name, value, _):
         if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
             audio_monitor = self._audio_monitor
-            self._audio_thrash_values.append((time.perf_counter(), value,
-                                              audio_monitor.disengaged_age if value
-                                              else audio_monitor.engaged_age
-                                              ))
+            with self._lock:
+                self._audio_thrash_values.append((time.perf_counter(), value,
+                                                  audio_monitor.disengaged_age if value
+                                                  else audio_monitor.engaged_age
+                                                  ))
             self._update_state()

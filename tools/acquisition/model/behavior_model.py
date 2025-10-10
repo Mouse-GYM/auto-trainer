@@ -1,7 +1,7 @@
 import multiprocessing
 from typing import Optional, Callable
 
-from autotrainer.behavior import SystemMachine, InferenceProtocol
+from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
@@ -54,6 +54,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         self._system_machine.algorithm.property_changed += self._on_algorithm_property_changed
         self._system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
+
+        @BehaviorAlgorithm.relay_func
         def alarm_monitor_property_changed(name, value, _):
             if name == "is_engaged":
                 meth = self.emergency_stop if value else self.emergency_resume
