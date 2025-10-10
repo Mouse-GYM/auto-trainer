@@ -963,6 +963,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._load_pellet_cfg(config.pellet_delivery)
         self._load_head_clamp_cfg(config.head_clamp)
         self._presence_missing_delay = config.mouse_presence.presence_missing_delay
+        self._top_camera_presence_detection.load_config(config.topcam_presence_detection)
 
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         cfg.is_enabled = self.pellet_delivery_enabled

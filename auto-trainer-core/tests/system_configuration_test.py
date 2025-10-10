@@ -12,7 +12,6 @@ from autotrainer.core.analysis import LoadCellConfiguration, HeadbarPressureConf
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
-from autotrainer.core.configuration.presence_configuration import MousePresenceConfig
 
 fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
@@ -106,6 +105,7 @@ v0_expected_result_config = {'version': SystemConfiguration.version,
   'audio': current_default_config['behavior']['audio'],
   'mouse_presence': current_default_config['behavior']['mouse_presence'],
   'emergency_alarm': current_default_config['behavior']['emergency_alarm'],
+  'topcam_presence_detection': current_default_config['behavior']['topcam_presence_detection'],
   },
  'persistence': {'output_location': '/home/autotrainer/output'}}
 
@@ -140,6 +140,7 @@ def test_load_version_1():
     behavior_dct = current_default_config['behavior']
     assert dataclasses.asdict(config) == {
         'behavior': {
+            'topcam_presence_detection': behavior_dct['topcam_presence_detection'],
             'audio': behavior_dct['audio'],
             'mouse_presence': behavior_dct['mouse_presence'],
             'emergency_alarm': behavior_dct['emergency_alarm'],

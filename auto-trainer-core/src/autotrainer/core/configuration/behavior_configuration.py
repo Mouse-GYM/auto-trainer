@@ -5,12 +5,13 @@ from typing_extensions import Self
 
 import yaml
 
+from .mouse_presence_configuration import MousePresenceConfig
+from .presence_detection_configuration import PresenceDetectionConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor
 from ..analysis import LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer
 from ..analysis import HeadbarPressureConfiguration, headbar_pressure_configuration_representer
 from ..analysis import LoadCellConfiguration, load_cell_configuration_representer
 from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
-from .presence_configuration import MousePresenceConfig
 from .alarm_configuration import EmergencyAlarmConfiguration
 
 
@@ -77,6 +78,7 @@ class BehaviorConfiguration:
     audio: AudioSpectrumThrashMonitorConfig = field(default_factory=AudioSpectrumThrashMonitorConfig)
     mouse_presence: MousePresenceConfig = field(default_factory=MousePresenceConfig)
     emergency_alarm: EmergencyAlarmConfiguration = field(default_factory=EmergencyAlarmConfiguration)
+    topcam_presence_detection: PresenceDetectionConfig = field(default_factory=PresenceDetectionConfig)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -128,6 +130,7 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     dumper.add_representer(AudioSpectrumThrashMonitorConfig, audio_monitor_representer)
     dumper.add_representer(MousePresenceConfig, mouse_presence_monitor_representer)
     dumper.add_representer(EmergencyAlarmConfiguration, emergency_alarm_representer)
+    dumper.add_representer(PresenceDetectionConfig, make_camelize_representer("!PresenceDetectionConfiguration"))
 
 
 pellet_delivery_configuration_constructor = make_decamelize_constructor(PelletDeliveryConfiguration)
@@ -151,3 +154,4 @@ def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
     safe_loader.add_constructor("!AudioMonitorConfiguration", audio_monitor_configuration_constructor)
     safe_loader.add_constructor("!MousePresenceConfiguration", mouse_presence_configuration_constructor)
     safe_loader.add_constructor("!EmergencyAlarmConfiguration", emergency_alarm_configuration_constructor)
+    safe_loader.add_constructor("!PresenceDetectionConfiguration", make_decamelize_constructor(PresenceDetectionConfig))

@@ -4,33 +4,26 @@ import ctypes
 import dataclasses
 import math
 import statistics
-import multiprocessing
 import os
 import threading
 import time
 from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from datetime import datetime
-from typing import Deque, Tuple, Optional, List
+from typing import Deque, Tuple, List
 
 import cv2
 import numpy
 import numpy as np
 
 from autotrainer.core import ValueHolderDescriptor
+from autotrainer.core.configuration.presence_detection_configuration import PresenceDetectionConfig
 from autotrainer.core.project.project_info import ProjectInfo
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx
 
 
 logger = get_verbose_logger(__name__)
-
-@dataclasses.dataclass
-class PresenceDetectionConfig:
-    pc_threshold: float = 2.2  # percent  -  lower makes more sensible to noise
-    pc_high_exclude_threshold: float = 85  # percent ; this is to exclude too big % diff due to switch light ON/OFF.
-    mask_lower_zero: int = 8 # gray value. this is "smooth" the difference, to be less sensible to noise. from 0 -> 255
-    max_delay_skip_threshold: float = 0.5  # seconds, how much to keep/look at diff over previous frames
 
 
 @dataclasses.dataclass
@@ -90,6 +83,16 @@ class PresenceDetectionAttrs:
             self._movement_detected = ctx.Value(ctypes.c_bool, False)
         if self._pc_sum is None:
             self._pc_sum = ctx.Value(ctypes.c_double, 0)
+
+    def to_config(self) -> PresenceDetectionConfig:
+        return PresenceDetectionConfig(**{
+            field.name: getattr(self, field.name)
+            for field in dataclasses.fields(PresenceDetectionConfig)
+        })
+
+    def load_config(self, cfg: PresenceDetectionConfig):
+        for field in dataclasses.fields(cfg):
+            setattr(self, field.name, getattr(cfg, field.name))
 
 
 class VideoDetection(threading.Thread):
