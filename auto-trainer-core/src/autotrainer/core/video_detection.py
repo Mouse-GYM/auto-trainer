@@ -111,12 +111,19 @@ class VideoDetection(threading.Thread):
         self._file_info = None
         self._csv_writer = None
         self._csv_writer_fh = None
+        self._got_first_frame = False
         super().__init__(name="PresenceDetection")
 
     def cancel(self):
         self._stop_requested = True
 
     def update_frame(self, when: float, frame: numpy.ndarray):
+        if not self._got_first_frame:
+            self._got_first_frame = True
+            perf_now = time.perf_counter()
+            self._attrs.last_absence_start_perf_c = perf_now
+            self._attrs.last_presence_start_perf_c = perf_now
+            # this allows to get good measurement from monitors using the detection result(s)
         self._next_frames.append((when, frame))
 
     def _check_path(self):

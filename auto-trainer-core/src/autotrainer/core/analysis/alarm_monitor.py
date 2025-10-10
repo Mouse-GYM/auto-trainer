@@ -9,6 +9,7 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
+from autotrainer.core.analysis.global_mouse_presence_monitor import GlobalMousePresenceMonitor
 
 logger = get_verbose_logger(__name__)
 
@@ -24,6 +25,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         load_cell_monitor: LoadCellMonitor,
         audio_monitor: AudioSpectrumThrashMonitor,
         topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
+        global_mouse_presence: Optional[GlobalMousePresenceMonitor] = None,
     ):
         super().__init__()
         self._config = config

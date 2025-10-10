@@ -5,7 +5,7 @@ from typing_extensions import Self
 
 import yaml
 
-from .mouse_presence_configuration import MousePresenceConfig
+from .mouse_presence_configuration import GlobalMousePresenceConfig
 from .presence_detection_configuration import PresenceDetectionConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor
 from ..analysis import LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer
@@ -76,7 +76,7 @@ class BehaviorConfiguration:
     headbar_pressure: HeadbarPressureConfiguration = field(default_factory=HeadbarPressureConfiguration)
     auto_tare: LoadCellAutoTareConfiguration = field(default_factory=LoadCellAutoTareConfiguration)
     audio: AudioSpectrumThrashMonitorConfig = field(default_factory=AudioSpectrumThrashMonitorConfig)
-    mouse_presence: MousePresenceConfig = field(default_factory=MousePresenceConfig)
+    mouse_presence: GlobalMousePresenceConfig = field(default_factory=GlobalMousePresenceConfig)
     emergency_alarm: EmergencyAlarmConfiguration = field(default_factory=EmergencyAlarmConfiguration)
     topcam_presence_detection: PresenceDetectionConfig = field(default_factory=PresenceDetectionConfig)
 
@@ -128,7 +128,7 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     dumper.add_representer(LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer)
     dumper.add_representer(BehaviorConfiguration, behavior_configuration_representer)
     dumper.add_representer(AudioSpectrumThrashMonitorConfig, audio_monitor_representer)
-    dumper.add_representer(MousePresenceConfig, mouse_presence_monitor_representer)
+    dumper.add_representer(GlobalMousePresenceConfig, mouse_presence_monitor_representer)
     dumper.add_representer(EmergencyAlarmConfiguration, emergency_alarm_representer)
     dumper.add_representer(PresenceDetectionConfig, make_camelize_representer("!PresenceDetectionConfiguration"))
 
@@ -140,7 +140,7 @@ head_clamp_configuration_constructor = make_decamelize_constructor(HeadClampConf
 load_cell_auto_tare_configuration_constructor = make_decamelize_constructor(LoadCellAutoTareConfiguration)
 behavior_configuration_constructor = make_decamelize_constructor(BehaviorConfiguration)
 audio_monitor_configuration_constructor = make_decamelize_constructor(AudioSpectrumThrashMonitorConfig)
-mouse_presence_configuration_constructor = make_decamelize_constructor(MousePresenceConfig)
+mouse_presence_configuration_constructor = make_decamelize_constructor(GlobalMousePresenceConfig)
 emergency_alarm_configuration_constructor = make_decamelize_constructor(EmergencyAlarmConfiguration)
 
 

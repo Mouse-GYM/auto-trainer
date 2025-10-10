@@ -627,7 +627,6 @@ class PreferencesContent(QWidget):
         spinbox.setValue(behavior_cfg.mouse_presence.presence_missing_delay)
         def value_changed(value):
             behavior_cfg.mouse_presence.presence_missing_delay = value
-            model.behavior.algorithm.presence_missing_delay = value
         spinbox.valueChanged.connect(value_changed)
         grid_layout.addWidget(QLabel("Missing delay:"), cur_row, cur_col)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)

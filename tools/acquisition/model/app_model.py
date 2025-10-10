@@ -528,6 +528,7 @@ class AppModel(ObservableObject):
         self._analysis.load_cell_tare_monitor.load_configuration(behavior_cfg.auto_tare)
         self._analysis.audio_thrashing_monitor.config = behavior_cfg.audio
         self._analysis.emergency_alarm_monitor.config = behavior_cfg.emergency_alarm
+        self._analysis.global_mouse_presence_monitor.config = behavior_cfg.mouse_presence
 
         self.output_location = configuration.persistence.output_location
 
