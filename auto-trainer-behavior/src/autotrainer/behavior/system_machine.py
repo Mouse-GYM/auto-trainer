@@ -15,8 +15,8 @@ from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 
 from autotrainer.inference import PoseResponse, InferenceStatus
+from autotrainer.inference.analysis import IntersessionResponse
 
-from .analysis.intersession_process import IntersessionResponse
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine, IntersessionState

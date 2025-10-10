@@ -19,9 +19,8 @@ from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging
 
-from autotrainer.behavior import intersession_inference
-
 from autotrainer.inference import InferenceMode, PoseAlgorithm
+from .analysis.intersession_inference import intersession_inference
 
 logger = get_verbose_logger(__name__)
 
