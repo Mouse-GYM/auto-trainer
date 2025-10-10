@@ -3,12 +3,12 @@ import threading
 import time
 from typing import Optional
 
-from autotrainer.core import ObservableObject, LoadCellMonitor, get_verbose_logger
-from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
-from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
+from autotrainer.core import ObservableObject, get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
-
+from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
+from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
+from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
 
 logger = get_verbose_logger(__name__)
 

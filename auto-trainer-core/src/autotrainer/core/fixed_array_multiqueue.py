@@ -11,7 +11,7 @@ import numpy
 
 from autotrainer.core import get_verbose_logger
 from autotrainer.core.fixed_array_queue import BufferResult
-from autotrainer.core.message import FrameIndexCategory
+from autotrainer.core.message.frame_index import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 
 logger = get_verbose_logger(__name__)

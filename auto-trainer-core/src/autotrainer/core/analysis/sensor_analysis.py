@@ -22,7 +22,8 @@ from .audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from .headbar_pressure_monitor import HeadbarPressureMonitor
 from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
-# from .alarm_monitor import EmergencyAlarmMonitor  # delayed import on purpose,
+from .alarm_monitor import EmergencyAlarmMonitor
+
 
 logger = get_verbose_logger(__name__)
 
@@ -65,9 +66,6 @@ class SensorAnalysis(ObservableObject):
         self._tare_callback = None
 
         self._audio_thrashing_monitor = AudioSpectrumThrashMonitor()
-
-        from .alarm_monitor import EmergencyAlarmMonitor  # delayed import on purpose,
-        # having import loop cycles at different places still..
 
         self._alarm_monitor = EmergencyAlarmMonitor(
             config=EmergencyAlarmConfiguration(),
