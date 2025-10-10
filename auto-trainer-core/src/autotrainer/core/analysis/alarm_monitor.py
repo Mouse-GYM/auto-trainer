@@ -1,4 +1,5 @@
 import math
+import threading
 import time
 from typing import Optional
 
@@ -38,6 +39,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._prev_pres_miss_after_exit_tunnel_alarm: bool = False
         load_cell_monitor.property_changed += self._load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._audio_prop_changed
+        self._lock = threading.RLock()  # safety
 
     @property
     def config(self):
@@ -57,6 +59,10 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._on_property_changed("is_engaged", value, prev)
 
     def _update_state(self):
+        with self._lock:
+            self.__update_state()
+
+    def __update_state(self):
         topcam_attrs = self._topcam_presence_attrs
         load_cell = self._load_cell_monitor
         self._timer_update_state.cancel()
@@ -183,12 +189,14 @@ class EmergencyAlarmMonitor(ObservableObject):
         perf_now = time.perf_counter()
         load_cell = self._load_cell_monitor
         if name == LoadCellMonitor.IS_THRASHING_DETECTED_PROPERTY:
-            self._load_cell_thrash_values.append((perf_now, value,
-                                                  load_cell.thrashing_disengaged_age if value
-                                                  else load_cell.thrashing_engaged_age))
+            with self._lock:
+                self._load_cell_thrash_values.append((perf_now, value,
+                                                      load_cell.thrashing_disengaged_age if value
+                                                      else load_cell.thrashing_engaged_age))
             self._update_state()
         elif name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
-            self._load_cell_engaged_values.append((perf_now, value,
+            with self._lock:
+                self._load_cell_engaged_values.append((perf_now, value,
                                                    load_cell.disengaged_age if value
                                                    else load_cell.engaged_age
                                                    ))
@@ -197,8 +205,9 @@ class EmergencyAlarmMonitor(ObservableObject):
     def _audio_prop_changed(self, name, value, _):
         if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
             audio_monitor = self._audio_monitor
-            self._audio_thrash_values.append((time.perf_counter(), value,
-                                              audio_monitor.disengaged_age if value
-                                              else audio_monitor.engaged_age
-                                              ))
+            with self._lock:
+                self._audio_thrash_values.append((time.perf_counter(), value,
+                                                  audio_monitor.disengaged_age if value
+                                                  else audio_monitor.engaged_age
+                                                  ))
             self._update_state()
