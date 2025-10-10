@@ -5,7 +5,6 @@ from typing import Optional
 from autotrainer.core import ObservableObject, LoadCellMonitor, get_verbose_logger
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
-from autotrainer.behavior import BehaviorAlgorithm
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
@@ -57,7 +56,6 @@ class EmergencyAlarmMonitor(ObservableObject):
         prev, self._is_engaged = self._is_engaged, value
         self._on_property_changed("is_engaged", value, prev)
 
-    @BehaviorAlgorithm.relay_func(wait=False)
     def _update_state(self):
         topcam_attrs = self._topcam_presence_attrs
         load_cell = self._load_cell_monitor
@@ -181,7 +179,6 @@ class EmergencyAlarmMonitor(ObservableObject):
             timer = self._timer_update_state = timer_update_state(1, self._update_state)
             timer.start()
 
-    @BehaviorAlgorithm.relay_func(wait=False)
     def _load_cell_monitor_prop_changed(self, name, value, _):
         perf_now = time.perf_counter()
         load_cell = self._load_cell_monitor
@@ -197,7 +194,6 @@ class EmergencyAlarmMonitor(ObservableObject):
                                                    ))
             self._update_state()
 
-    @BehaviorAlgorithm.relay_func(wait=False)
     def _audio_prop_changed(self, name, value, _):
         if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
             audio_monitor = self._audio_monitor
