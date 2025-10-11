@@ -1096,7 +1096,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.successful_reaches_total = 0
 
     def _start_day(self):
-        self.pellet_count_day = 0  # consumed
+        self.day_pellet_count = 0  # consumed
         self.pellets_presented_day = 0
         self.successful_reaches_day = 0
 
