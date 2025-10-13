@@ -1,11 +1,13 @@
+
 import dataclasses
 
 
 @dataclasses.dataclass
-class EmergencyAlarmConfiguration:
+class _EmergencyAlarmConfiguration:
+
+    auto_resume_on_cleared: bool = False
 
     use_audio_load_cell_thrash: bool = False
-    auto_resume_on_audio_load_cell_thrash_resume: bool = False
     audio_load_cell_thrash_aggregate_delay: float = 5  # up to how long ago to look at previous results
     #
     # ( ( if count of thrashing triggers greater than this (during last aggregate_delay)
@@ -21,7 +23,25 @@ class EmergencyAlarmConfiguration:
 
     # or
     use_presence_missing_after_exit_tunnel: bool = False
-    auto_resume_on_presence_seen_after_exit_tunnel: bool = False
     tunnel_to_cage_presence_missing_delay: float = 5
 
     # then triggers ?
+    use_global_mouse_presence_missing: bool = False
+
+
+class EmergencyAlarmConfiguration(_EmergencyAlarmConfiguration):
+
+    # NB: using a subclass allows to customize the dataclass init method here:
+    # otherwise the possible default factory methods are not called.
+
+    def __init__(self, *args,
+                 # temporary:
+                 auto_resume_on_audio_load_cell_thrash_resume=None,  # noqa
+                 auto_resume_on_presence_seen_after_exit_tunnel=None,  # noqa
+                 # to allow previous config format.
+                 **kwargs,
+                 ):
+        # no positional arg (safer):
+        if len(args) > 0:
+            raise TypeError("Only kwargs allowed")
+        super().__init__(**kwargs)
