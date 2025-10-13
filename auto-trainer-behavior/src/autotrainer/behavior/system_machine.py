@@ -489,6 +489,7 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_close_gate_after_algo_paused(self):
+        # unused atm...
         algo = self._algorithm
         load_cell_mon = self._analysis.load_cell_monitor.context
         topcam_pres = algo.top_camera_presence_detection
@@ -549,8 +550,6 @@ class SystemMachine(StateMachine):
                     pellet_dev.send_retract()
                 if algo.pellet_cover_enabled:
                     pellet_dev.cover_pellet()
-                timer = self._timer_consider_close_gate = make_daemon_timer(1, self._consider_close_gate_after_algo_paused)
-                timer.start()
             else:
                 tunnel_dev.open_tunnel_gate()
                 tunnel_dev.update_head_magnet_intensity(algo.baseline_intensity)
