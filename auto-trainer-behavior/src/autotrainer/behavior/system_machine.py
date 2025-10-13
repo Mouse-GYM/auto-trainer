@@ -490,7 +490,7 @@ class SystemMachine(StateMachine):
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_close_gate_after_algo_paused(self):
         algo = self._algorithm
-        load_cell_mon = self._analysis.load_cell_monitor
+        load_cell_mon = self._analysis.load_cell_monitor.context
         topcam_pres = algo.top_camera_presence_detection
         algo_is_paused = algo.algo_paused
         perf_now = time.perf_counter()

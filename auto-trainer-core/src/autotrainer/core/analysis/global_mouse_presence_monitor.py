@@ -83,7 +83,7 @@ class GlobalMousePresenceMonitor(ObservableObject):
         #     return
         t_perf_now = time.perf_counter()
         top_cam_pres_age = t_perf_now - self._topcam_presence.last_presence_start_perf_c
-        load_cell_mon = self._load_cell_monitor
+        load_cell_mon = self._load_cell_monitor.context
         new_delay = 1
         cfg = self._config
         top_cam_miss = math.nan

@@ -66,7 +66,7 @@ class EmergencyAlarmMonitor(ObservableObject):
 
     def __update_state(self):
         topcam_attrs = self._topcam_presence_attrs
-        load_cell = self._load_cell_monitor
+        load_cell = self._load_cell_monitor.context
         self._timer_update_state.cancel()
         cfg = self._config
         perf_now = time.perf_counter()
@@ -93,7 +93,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         if v is not None:
             if v[1]:
                 tot_load_cell_thrash_engaged += perf_now - v[0]
-        elif self._load_cell_monitor.thrashing_detected:
+        elif load_cell.thrashing_detected:
             tot_load_cell_thrash_engaged += cfg.audio_load_cell_thrash_aggregate_delay
         #
         count_audio_thrash_triggers = 0
@@ -189,7 +189,7 @@ class EmergencyAlarmMonitor(ObservableObject):
 
     def _load_cell_monitor_prop_changed(self, name, value, _):
         perf_now = time.perf_counter()
-        load_cell = self._load_cell_monitor
+        load_cell = self._load_cell_monitor.context
         if name == LoadCellMonitor.IS_THRASHING_DETECTED_PROPERTY:
             with self._lock:
                 self._load_cell_thrash_values.append((perf_now, value,
