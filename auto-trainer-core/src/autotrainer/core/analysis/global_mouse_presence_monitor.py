@@ -31,10 +31,10 @@ class GlobalMousePresenceMonitor(ObservableObject):
         self._t_started = -math.inf
 
     def start(self, *, reason: str="na"):
-        logger.info("starting monitor: %s", reason)
         with self._lock:
             if self._enabled:
                 return
+            logger.info("starting monitor: %s", reason)
             self._t_started = time.perf_counter()
             self._enabled = True
             # should we too:
@@ -45,10 +45,10 @@ class GlobalMousePresenceMonitor(ObservableObject):
             timer.start()
 
     def stop(self, *, reason: str="na"):
-        logger.info("stopping monitor: %s", reason)
         with self._lock:
             if not self._enabled:
                 return
+            logger.info("stopping monitor: %s", reason)
             self._enabled = False
             self._cur_timer.cancel()
 
@@ -96,6 +96,9 @@ class GlobalMousePresenceMonitor(ObservableObject):
             else:
                 self.is_engaged = False
                 new_delay = max(top_cam_miss, load_cell_miss)
+        else:
+            if load_cell_mon.last_engaged_perf_c > self._t_started:
+                self.is_engaged = False
         logger.debug("engaged=%s top_cam_miss=%.1f load_cell_miss=%.1f new_delay=%.1f",
                      self._is_engaged, top_cam_miss, load_cell_miss, new_delay)
         #
