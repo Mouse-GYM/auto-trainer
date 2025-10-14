@@ -16,6 +16,14 @@ from .alarm_configuration import EmergencyAlarmConfiguration
 
 
 @dataclass
+class AutoCloseGateOnIntersessionConfiguration:
+
+    enabled: bool = False  # enabled/disabled
+    session_min_duration: float = 5  # do not try close gate if session duration shorter than this
+    delay_after_cage_enter: float = 2.5  # only close gate once this delay since cage enter has elapsed
+
+
+@dataclass
 class PelletDeliveryConfiguration:
     """
     Behavior model options related to pellet delivery.

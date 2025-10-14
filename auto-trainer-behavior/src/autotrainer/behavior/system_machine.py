@@ -174,7 +174,8 @@ class SystemMachine(StateMachine):
         algo = self._algorithm
         # if algo.enable_auto_close_gate_on_intersession:
         duration = datetime.now() - project.when
-        if 0 < algo.auto_close_gate_on_session_min_duration <= duration.total_seconds():
+        auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
+        if auto_close_gate_cfg.session_min_duration <= duration.total_seconds():
             timer = self._timer_consider_close_gate = make_daemon_timer(0.1, self._consider_close_gate_during_intersession)
             timer.start()
         else:
@@ -512,13 +513,14 @@ class SystemMachine(StateMachine):
             return
         load_cell_mon = self._analysis.load_cell_monitor.context
         topcam_pres = algo.top_camera_presence_detection
+        auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
         perf_now = time.perf_counter()
         if (
             not load_cell_mon.is_engaged
             and topcam_pres.last_presence_start_perf_c >= load_cell_mon.last_disengaged_perf_c
             # ensure load-cell is not re-entered by the mouse:
             and topcam_pres.last_presence_start_perf_c > load_cell_mon.last_engaged_perf_c
-            and perf_now - topcam_pres.last_presence_start_perf_c > algo.auto_close_gate_min_delay_after_exit_tunnel
+            and perf_now - topcam_pres.last_presence_start_perf_c > auto_close_gate_cfg.delay_after_cage_enter
         ):
             logger.notice(
                 "Closing tunnel gate for intersession ;"
@@ -532,7 +534,7 @@ class SystemMachine(StateMachine):
             delay = min(
                 1.0,
                 max(0.01,
-                    algo.auto_close_gate_min_delay_after_exit_tunnel - (perf_now - topcam_pres.last_presence_start_perf_c))
+                    auto_close_gate_cfg.delay_after_cage_enter - (perf_now - topcam_pres.last_presence_start_perf_c))
             )
             timer = self._timer_consider_close_gate = make_daemon_timer(delay, self._consider_close_gate_during_intersession)
             timer.start()

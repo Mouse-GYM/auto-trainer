@@ -23,7 +23,8 @@ from typing_extensions import Self
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
     AnimalSubject
-from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, BehaviorConfiguration
+from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
+    BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
@@ -221,9 +222,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.triangle_missing_time: float = 1.0
         self.pellet_hand_uncover_distance = PelletDeliveryConfiguration.pellet_hand_uncover_distance
 
-        # self.enable_auto_close_gate_on_intersession: bool = False
-        self.auto_close_gate_on_session_min_duration: float = 1_000_000  # basically disabled.
-        self.auto_close_gate_min_delay_after_exit_tunnel: float = 1
+        self.auto_close_gate_on_intersession_config = AutoCloseGateOnIntersessionConfiguration()
 
         self._pellet_count_day = 0  # consumed
         self._pellet_count_session = 0  # consumed
