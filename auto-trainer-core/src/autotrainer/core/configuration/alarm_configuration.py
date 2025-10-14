@@ -5,7 +5,9 @@ import dataclasses
 @dataclasses.dataclass
 class _EmergencyAlarmConfiguration:
 
-    auto_resume_on_cleared: bool = False  # auto-clear the alarm/algo-paused if conditions are cleared.
+    auto_resume_on_cleared: bool = False  # auto-clear the alarm if conditions are cleared.
+
+    #
 
     use_audio_load_cell_thrash: bool = False
     audio_load_cell_thrash_aggregate_delay: float = 5  # up to how long ago to look at previous results
@@ -21,8 +23,12 @@ class _EmergencyAlarmConfiguration:
     audio_thrash_percent_on: float = 50  # or percent of time it is ON during aggregate_delay
     # ) )
 
+    #
+
     use_presence_missing_after_exit_tunnel: bool = False
     tunnel_to_cage_presence_missing_delay: float = 5
+
+    #
 
     use_global_mouse_presence_missing: bool = False
 
