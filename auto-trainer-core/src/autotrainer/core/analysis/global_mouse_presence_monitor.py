@@ -67,7 +67,6 @@ class GlobalMousePresenceMonitor(ObservableObject):
 
     @is_engaged.setter
     def is_engaged(self, value):
-        # with self._lock:
         prev, self._is_engaged = self._is_engaged, value
         self._on_property_changed("is_engaged", value, prev)
 
@@ -79,8 +78,6 @@ class GlobalMousePresenceMonitor(ObservableObject):
         if not self._enabled:
             logger.debug("not enabled")
             return
-        # if self._is_engaged:
-        #     return
         t_perf_now = time.perf_counter()
         top_cam_pres_age = t_perf_now - self._topcam_presence.last_presence_start_perf_c
         load_cell_mon = self._load_cell_monitor.context
@@ -90,7 +87,7 @@ class GlobalMousePresenceMonitor(ObservableObject):
         load_cell_miss = math.nan
         if load_cell_mon.is_engaged:
             self.is_engaged = False
-        elif t_perf_now - self._t_started >  cfg.presence_missing_delay:
+        elif t_perf_now - self._t_started > cfg.presence_missing_delay:
             top_cam_miss = cfg.presence_missing_delay - top_cam_pres_age
             load_cell_miss = cfg.presence_missing_delay - load_cell_mon.disengaged_age
             # if camera presence detections goes ON/triggered (shared value only)
