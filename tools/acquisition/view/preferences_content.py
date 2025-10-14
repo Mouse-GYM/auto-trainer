@@ -208,7 +208,7 @@ class PreferencesContent(QWidget):
         def triangle_pellet_expected_distance_changed(value):
             algo.triangle_pellet_expected_distance = value
         spin_box.valueChanged.connect(triangle_pellet_expected_distance_changed)
-        grid_layout.addWidget(QLabel("Triangle-Pellet expected distance:"), cur_row, 0)
+        grid_layout.addWidget(QLabel("Triangle-Pellet expected distance (mm):"), cur_row, 0)
         grid_layout.addWidget(spin_box, cur_row, 1)
         cur_row += 1
         #
@@ -218,8 +218,21 @@ class PreferencesContent(QWidget):
         def triangle_pellet_diff_too_far_threshold_changed(value):
             algo.triangle_pellet_diff_too_far_threshold = value
         spin_box.valueChanged.connect(triangle_pellet_diff_too_far_threshold_changed)
-        grid_layout.addWidget(QLabel("Triangle-Pellet diff too far threshold:"), cur_row, 0)
+        grid_layout.addWidget(QLabel("Triangle-Pellet diff too far threshold (mm):"), cur_row, 0)
         grid_layout.addWidget(spin_box, cur_row, 1)
+        cur_row += 1
+
+        spin_box = QDoubleSpinBox()
+        spin_box.setRange(0, max(1_000_000, algo.auto_close_gate_on_session_min_duration))
+        spin_box.setDecimals(0)
+        spin_box.setValue(algo.auto_close_gate_on_session_min_duration)
+        def spinbox_value_changed(value):
+            algo.auto_close_gate_on_session_min_duration = value
+        spin_box.valueChanged.connect(spinbox_value_changed)
+        grid_layout.addWidget(QLabel("Close gate on session minimum duration (seconds):"), cur_row, 0)
+        grid_layout.addWidget(spin_box, cur_row, 1)
+        cur_row += 1
+
         #
         cur_row = 0
         # pelletDelivery:maxPelletMissingSeconds

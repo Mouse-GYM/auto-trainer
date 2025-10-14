@@ -221,6 +221,9 @@ class BehaviorAlgorithm(ObservableObject):
         self.triangle_missing_time: float = 1.0
         self.pellet_hand_uncover_distance = PelletDeliveryConfiguration.pellet_hand_uncover_distance
 
+        # self.enable_auto_close_gate_on_intersession: bool = False
+        self.auto_close_gate_on_session_min_duration: float = 1_000_000  # basically disabled.
+
         self._pellet_count_day = 0  # consumed
         self._pellet_count_session = 0  # consumed
         self._pellet_count_total = 0  # consumed
