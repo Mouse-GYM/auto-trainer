@@ -167,9 +167,11 @@ class EmergencyAlarmMonitor(ObservableObject):
         )
         #
         if is_emergency and not self._is_engaged:
-            logger.notice("Engaging emergency: global_mouse_presence_missing=%s load_cell.disengaged_age=%.1f"
+            logger.notice("Engaging emergency: audio_load_cell_thrash_alarm=%s pres_missing_after_exit_tunnel_alarm=%s global_mouse_presence_missing=%s",
+                          audio_load_cell_thrash_alarm, pres_missing_after_exit_tunnel_alarm, global_mouse_presence_missing)
+            logger.debug("load_cell.disengaged_age=%.1f"
                 " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
-                self._global_mouse_presence.is_engaged, load_cell.disengaged_age, load_cell.engaged_age,
+                load_cell.disengaged_age, load_cell.engaged_age,
                 *((math.nan, math.nan) if topcam_attrs is None else (topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c)),
                 perf_now)
         elif __debug__:
