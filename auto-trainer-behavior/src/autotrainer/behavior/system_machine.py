@@ -518,7 +518,7 @@ class SystemMachine(StateMachine):
             and topcam_pres.last_presence_start_perf_c >= load_cell_mon.last_disengaged_perf_c
             # ensure load-cell is not re-entered by the mouse:
             and topcam_pres.last_presence_start_perf_c > load_cell_mon.last_engaged_perf_c
-            and perf_now - load_cell_mon.last_disengaged_perf_c > algo.auto_close_gate_min_delay_after_exit_tunnel
+            and perf_now - topcam_pres.last_presence_start_perf_c > algo.auto_close_gate_min_delay_after_exit_tunnel
         ):
             logger.notice(
                 "Closing tunnel gate for intersession ;"
@@ -532,7 +532,7 @@ class SystemMachine(StateMachine):
             delay = min(
                 1.0,
                 max(0.01,
-                    algo.auto_close_gate_min_delay_after_exit_tunnel - (perf_now - load_cell_mon.last_disengaged_perf_c))
+                    algo.auto_close_gate_min_delay_after_exit_tunnel - (perf_now - topcam_pres.last_presence_start_perf_c))
             )
             timer = self._timer_consider_close_gate = make_daemon_timer(delay, self._consider_close_gate_during_intersession)
             timer.start()
