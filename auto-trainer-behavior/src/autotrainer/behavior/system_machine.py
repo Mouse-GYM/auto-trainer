@@ -520,7 +520,12 @@ class SystemMachine(StateMachine):
             and topcam_pres.last_presence_start_perf_c > load_cell_mon.last_engaged_perf_c
             and perf_now - load_cell_mon.last_disengaged_perf_c > algo.auto_close_gate_min_delay_after_exit_tunnel
         ):
-            logger.notice("Closing tunnel gate for intersession")
+            logger.notice(
+                "Closing tunnel gate for intersession ;"
+                " perf_now=%.1f load_cell.last_disengaged=%.1f last_engaged=%.1f topcam.last_pres=%.1f",
+                perf_now, load_cell_mon.last_disengaged_perf_c, load_cell_mon.last_engaged_perf_c,
+                topcam_pres.last_presence_start_perf_c,
+            )
             self._tunnel_device.close_tunnel_gate()
         else:
             # retry:
