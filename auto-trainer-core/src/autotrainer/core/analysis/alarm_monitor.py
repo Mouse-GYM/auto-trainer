@@ -38,8 +38,6 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._audio_thrash_values = []
         self._is_engaged = False
         self._timer_update_state = no_op_timer
-        self._prev_audio_load_cell_thrash_alarm: bool = False
-        self._prev_pres_miss_after_exit_tunnel_alarm: bool = False
         load_cell_monitor.property_changed += self._load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._audio_prop_changed
         global_mouse_presence.property_changed += self._global_mouse_presence_prop_changed
@@ -120,7 +118,7 @@ class EmergencyAlarmMonitor(ObservableObject):
             )
         )
 
-    def _check_presence_missing(self, perf_now):
+    def _check_pres_after_exit_tunnel_missing(self, perf_now):
         topcam_attrs = self._topcam_presence_attrs
         load_cell = self._load_cell_monitor.context
         cfg = self._config
@@ -130,12 +128,12 @@ class EmergencyAlarmMonitor(ObservableObject):
             and load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
             and (
                 # last presence must be before the current load cell disengaged:
-                    topcam_attrs.last_presence_start_perf_c < perf_now - load_cell.disengaged_age
-                    and (
-                        topcam_attrs.last_presence_start_perf_c
-                        < topcam_attrs.last_absence_start_perf_c
-                        < perf_now - cfg.tunnel_to_cage_presence_missing_delay
-                    )
+                topcam_attrs.last_presence_start_perf_c < perf_now - load_cell.disengaged_age
+                and (
+                    topcam_attrs.last_presence_start_perf_c
+                    < topcam_attrs.last_absence_start_perf_c
+                    < perf_now - cfg.tunnel_to_cage_presence_missing_delay
+                )
             )
         )
 
@@ -150,17 +148,17 @@ class EmergencyAlarmMonitor(ObservableObject):
         cfg = self._config
         perf_now = time.perf_counter()
         #
-        if cfg.use_audio_load_cell_thrash:
-            audio_load_cell_thrash_alarm = self._check_audio_load_cell(perf_now)
-        else:
-            audio_load_cell_thrash_alarm = False
+        audio_load_cell_thrash_alarm = (
+            self._check_audio_load_cell(perf_now) if cfg.use_audio_load_cell_thrash
+            else False)
         #
-        if cfg.use_presence_missing_after_exit_tunnel:
-            pres_missing_after_exit_tunnel_alarm = self._check_presence_missing(perf_now)
-        else:
-            pres_missing_after_exit_tunnel_alarm = False
+        pres_missing_after_exit_tunnel_alarm = (
+            self._check_pres_after_exit_tunnel_missing(perf_now) if cfg.use_presence_missing_after_exit_tunnel
+            else False)
         #
-        global_mouse_presence_missing = self._global_mouse_presence.is_engaged if cfg.use_global_mouse_presence_missing else False
+        global_mouse_presence_missing = (
+            self._global_mouse_presence.is_engaged if cfg.use_global_mouse_presence_missing
+            else False)
         #
         is_emergency = (
                audio_load_cell_thrash_alarm

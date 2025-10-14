@@ -641,9 +641,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @day_pellet_count.setter
     def day_pellet_count(self, value: int):
-        prev_value = self._pellet_count_day
-        self._pellet_count_day = self._on_property_changed(BehaviorAlgoProps.DAY_PELLET_COUNT,
-                                                           value, self._pellet_count_day)
+        prev_value, self._pellet_count_day = self._pellet_count_day, value
+        self._on_property_changed(BehaviorAlgoProps.DAY_PELLET_COUNT, value, prev_value)
         incr = value - prev_value
         if incr > 0:
             EventManager.default().post_event_content(BehaviorEventKind.dayIncreasePellet, context=value)
@@ -1085,7 +1084,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.successful_reaches_total = 0
 
     def _start_day(self):
-        self.pellet_count_day = 0  # consumed
+        self.day_pellet_count = 0  # consumed
         self.pellets_presented_day = 0
         self.successful_reaches_day = 0
 

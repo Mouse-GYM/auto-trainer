@@ -5,7 +5,7 @@ import dataclasses
 @dataclasses.dataclass
 class _EmergencyAlarmConfiguration:
 
-    auto_resume_on_cleared: bool = False
+    auto_resume_on_cleared: bool = False  # auto-clear the alarm/algo-paused if conditions are cleared.
 
     use_audio_load_cell_thrash: bool = False
     audio_load_cell_thrash_aggregate_delay: float = 5  # up to how long ago to look at previous results
@@ -21,18 +21,16 @@ class _EmergencyAlarmConfiguration:
     audio_thrash_percent_on: float = 50  # or percent of time it is ON during aggregate_delay
     # ) )
 
-    # or
     use_presence_missing_after_exit_tunnel: bool = False
     tunnel_to_cage_presence_missing_delay: float = 5
 
-    # then triggers ?
     use_global_mouse_presence_missing: bool = False
 
 
 class EmergencyAlarmConfiguration(_EmergencyAlarmConfiguration):
 
     # NB: using a subclass allows to customize the dataclass init method here:
-    # otherwise the possible default factory methods are not called.
+    # otherwise the possible default factory methods for fields of the extended dataclass are not called.
 
     def __init__(self, *args,
                  # temporary:
