@@ -25,7 +25,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         load_cell_monitor: LoadCellMonitor,
         audio_monitor: AudioSpectrumThrashMonitor,
         topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
-        global_mouse_presence: Optional[GlobalMousePresenceMonitor] = None,
+        global_mouse_presence: GlobalMousePresenceMonitor,
     ):
         super().__init__()
         self._config = config
