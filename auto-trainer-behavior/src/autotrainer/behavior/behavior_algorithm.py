@@ -177,7 +177,6 @@ class BehaviorAlgorithm(ObservableObject):
         self._head_fixation_enabled = False
         self._clean_raw_data_on_inactive_session = False
         self._auto_correct_motors_drift = False
-        self._presence_missing_delay: float = 20
         self._auto_clamp_intensity = 100
         self._auto_clamp_release_tone_freq = 7000
         self._auto_clamp_release_tone_delay = 0.1
@@ -575,14 +574,6 @@ class BehaviorAlgorithm(ObservableObject):
         return self._pellet_last_seen
 
     @property
-    def presence_missing_delay(self):
-        return self._presence_missing_delay
-
-    @presence_missing_delay.setter
-    def presence_missing_delay(self, value):
-        self._presence_missing_delay = value
-
-    @property
     def presence_missing(self) -> bool:
         return self._presence_missing
 
@@ -961,7 +952,6 @@ class BehaviorAlgorithm(ObservableObject):
     def load_configuration(self, config: BehaviorConfiguration):
         self._load_pellet_cfg(config.pellet_delivery)
         self._load_head_clamp_cfg(config.head_clamp)
-        self._presence_missing_delay = config.mouse_presence.presence_missing_delay
         self._top_camera_presence_detection.load_config(config.topcam_presence_detection)
 
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
@@ -989,7 +979,6 @@ class BehaviorAlgorithm(ObservableObject):
     def update_configuration(self, configuration: BehaviorConfiguration):
         self._update_pellet_cfg(configuration.pellet_delivery)
         self._update_head_clamp_cfg(configuration.head_clamp)
-        configuration.mouse_presence.presence_missing_delay = self._presence_missing_delay
 
     def get_diamond_triangle_drifts(self, reset: bool = False) -> Optional[Offset3DTuple]:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""

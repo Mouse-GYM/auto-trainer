@@ -55,7 +55,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         self._system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
 
-        @BehaviorAlgorithm.relay_func
+        @BehaviorAlgorithm.relay_func(wait=False)
         def alarm_monitor_property_changed(name, value, _):
             if name == "is_engaged":
                 meth = self.emergency_stop if value else self.emergency_resume
@@ -112,6 +112,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         configuration.audio = analysis.audio_thrashing_monitor.config
         configuration.emergency_alarm = analysis.emergency_alarm_monitor.config
         configuration.topcam_presence_detection = algo.top_camera_presence_detection.to_config()
+        configuration.mouse_presence = analysis.global_mouse_presence_monitor.config
 
         return configuration
 
@@ -120,15 +121,15 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
 
     def use_current_head_magnet_position_as_baseline(self):
         if self._hardware_model.head_magnet_intensity is not None:
-            self.algorithm.baseline_intensity = self._hardware_model.head_magnet_intensity
+            self._system_machine.algorithm.baseline_intensity = self._hardware_model.head_magnet_intensity
 
     def emergency_stop(self, source: str):
-        self.algorithm.algo_paused = True
+        self._system_machine.algorithm.algo_paused = True
         EventManager.default().post_event_content(ApiEventKind.emergencyStop, source)
         self.emergency_stopped(source)
 
     def emergency_resume(self, source: str):
-        self.algorithm.algo_paused = False
+        self._system_machine.algorithm.algo_paused = False
         EventManager.default().post_event_content(ApiEventKind.emergencyResume, source)
         self.emergency_resumed(source)
 

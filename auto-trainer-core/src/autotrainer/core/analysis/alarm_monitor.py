@@ -9,6 +9,7 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
+from autotrainer.core.analysis.global_mouse_presence_monitor import GlobalMousePresenceMonitor
 
 logger = get_verbose_logger(__name__)
 
@@ -24,6 +25,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         load_cell_monitor: LoadCellMonitor,
         audio_monitor: AudioSpectrumThrashMonitor,
         topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
+        global_mouse_presence: Optional[GlobalMousePresenceMonitor] = None,
     ):
         super().__init__()
         self._config = config
@@ -64,7 +66,7 @@ class EmergencyAlarmMonitor(ObservableObject):
 
     def __update_state(self):
         topcam_attrs = self._topcam_presence_attrs
-        load_cell = self._load_cell_monitor
+        load_cell = self._load_cell_monitor.context
         self._timer_update_state.cancel()
         cfg = self._config
         perf_now = time.perf_counter()
@@ -91,7 +93,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         if v is not None:
             if v[1]:
                 tot_load_cell_thrash_engaged += perf_now - v[0]
-        elif self._load_cell_monitor.thrashing_detected:
+        elif load_cell.thrashing_detected:
             tot_load_cell_thrash_engaged += cfg.audio_load_cell_thrash_aggregate_delay
         #
         count_audio_thrash_triggers = 0
@@ -187,7 +189,7 @@ class EmergencyAlarmMonitor(ObservableObject):
 
     def _load_cell_monitor_prop_changed(self, name, value, _):
         perf_now = time.perf_counter()
-        load_cell = self._load_cell_monitor
+        load_cell = self._load_cell_monitor.context
         if name == LoadCellMonitor.IS_THRASHING_DETECTED_PROPERTY:
             with self._lock:
                 self._load_cell_thrash_values.append((perf_now, value,

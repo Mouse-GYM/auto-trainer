@@ -2,6 +2,8 @@ import itertools
 import math
 import time
 import threading
+
+import dataclasses
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
@@ -61,6 +63,42 @@ class LoadCellConfiguration:
 load_cell_configuration_representer = make_camelize_representer("!LoadCellConfiguration")
 
 
+@dataclass
+class LoadCellMonitorContext:
+    # using a dedicated "context" object, allows to have all attributes consistent, given we replace the active one
+    # in the load cell monitor with new one having all needed attributes already replaced/set.
+    # See LoadCellMonitor.is_engaged and LoadCellMonitor.thrashing_detected setters below.
+    # This allows to get/read a consistent view/data of current/live context, *without* needing to take the thread lock.
+
+    is_engaged: bool = False
+    last_engaged_perf_c: float = -math.inf
+    last_disengaged_perf_c: float = -math.inf
+
+    thrashing_detected: bool = False
+    thrashing_last_engaged_perf_c: float = -math.inf
+    thrashing_last_disengaged_perf_c: float = -math.inf
+
+    @property
+    def engaged_age(self):
+        """current if is currently engaged, or previous otherwise, engaged age"""
+        return (time.perf_counter() if self.is_engaged else self.last_disengaged_perf_c) - self.last_engaged_perf_c
+
+    @property
+    def disengaged_age(self):
+        # current or previous disengaged age
+        return (time.perf_counter() if not self.is_engaged else self.last_engaged_perf_c) - self.last_disengaged_perf_c
+
+    @property
+    def thrashing_engaged_age(self):
+        """current if it is currently detected, or previous otherwise thrashing_engaged_age"""
+        return (time.perf_counter() if self.thrashing_detected else self.thrashing_last_disengaged_perf_c) - self.thrashing_last_engaged_perf_c
+
+    @property
+    def thrashing_disengaged_age(self):
+        return (
+            time.perf_counter() if not self.thrashing_detected else self.thrashing_last_engaged_perf_c) - self.thrashing_last_disengaged_perf_c
+
+
 class LoadCellMonitor(ObservableObject):
     """
     Monitor the load cell data stream and perform any required analysis.  The current implementation is used to
@@ -94,10 +132,6 @@ class LoadCellMonitor(ObservableObject):
         self._inactive_debounce = no_op_timer
         self._when = 0  # used to pass with event when engaged is changed
         self._index = 0  # used to pass with event when engaged is changed
-        self._is_engaged: bool = False
-        perf_now = time.perf_counter()
-        self._last_engaged_perf_c: float = perf_now
-        self._last_disengaged_perf_c: float = perf_now
         self._force_engaged: bool = False  # debug
         self._engaged_batch_count: int = 10  # how many last values to use as mean for check is_engaged
         # same than in HardwareModel.connect (currently hardcoded too)
@@ -106,10 +140,18 @@ class LoadCellMonitor(ObservableObject):
             Tuple[float, float, int]
             # data, when, index
         ] = deque()
-        self._thrashing_detected: bool = False
-        self._thrashing_last_engaged_perf_c: float = perf_now
-        self._thrashing_last_disengaged_perf_c: float = perf_now
+        perf_now = time.perf_counter()
         self._thread_lock = threading.RLock()  # might be required re-entrant lock !!
+        self._context = LoadCellMonitorContext(
+            last_engaged_perf_c=perf_now,
+            last_disengaged_perf_c=perf_now,
+            thrashing_last_engaged_perf_c=perf_now,
+            thrashing_last_disengaged_perf_c=perf_now,
+        )
+
+    @property
+    def context(self):
+        return self._context
 
     @property
     def config(self) -> LoadCellConfiguration:
@@ -124,59 +166,50 @@ class LoadCellMonitor(ObservableObject):
         self._config.weight_active_threshold = self._on_property_changed(
             LoadCellMonitor.LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY, value, self._config.weight_active_threshold)
 
-    def _generate_engaged_event(self, value):
-        logger.debug("is_engaged: %s -> %s", self._is_engaged, value)
-        EventManager.default().post_event_content(ApiEventKind.loadCellEngagedChanged, context=value,
-                                                  when=datetime.fromtimestamp(self._when), index=self._index)
-        self._on_property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, value, not value)
-
     @property
     def is_engaged(self) -> bool:
-        return self._is_engaged
+        return self._context.is_engaged
 
     @is_engaged.setter
     def is_engaged(self, value):
-        prev, self._is_engaged = self._is_engaged, value
-        if value != prev:
+        with self._thread_lock:
+            if value == self._context.is_engaged:
+                return
+            new_context = dataclasses.replace(self._context, is_engaged=value)
             perf_now = time.perf_counter()
             if value:
-                self._last_engaged_perf_c = perf_now
+                new_context.last_engaged_perf_c = perf_now
             else:
                 self._t_start_was_active = None
-                self._last_disengaged_perf_c = perf_now
-            self._generate_engaged_event(value)
-
-    @property
-    def engaged_age(self):
-        return (time.perf_counter() if self._is_engaged else self._last_disengaged_perf_c) - self._last_engaged_perf_c
-
-    @property
-    def disengaged_age(self):
-        return (time.perf_counter() if not self._is_engaged else self._last_engaged_perf_c) - self._last_disengaged_perf_c
+                new_context.last_disengaged_perf_c = perf_now
+            self._context = new_context
+            EventManager.default().post_event_content(ApiEventKind.loadCellEngagedChanged, context=value,
+                                                      when=datetime.fromtimestamp(self._when), index=self._index)
+            # could eventually execute the event without the lock acquired:
+            self._on_property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, value, not value)
 
     @property
     def thrashing_detected(self) -> bool:
-        return self._thrashing_detected
+        return self._context.thrashing_detected
 
     @thrashing_detected.setter
     def thrashing_detected(self, value):
-        prev, self._thrashing_detected = self._thrashing_detected, value
+        with self._thread_lock:
+            self._set_thrashing_detected(value)
+
+    def _set_thrashing_detected(self, value):
+        ctx = self._context
+        prev = ctx.thrashing_detected
         if value != prev:
+            new_ctx = dataclasses.replace(ctx, thrashing_detected=value)
             logger.debug("load_cell_monitor.thrashing_detected=%s", value)
             perf_now = time.perf_counter()
             if value:
-                self._thrashing_last_engaged_perf_c = perf_now
+                new_ctx.thrashing_last_engaged_perf_c = perf_now
             else:
-                self._thrashing_last_disengaged_perf_c = perf_now
+                new_ctx.thrashing_last_disengaged_perf_c = perf_now
+            self._context = new_ctx
             self._on_property_changed(self.IS_THRASHING_DETECTED_PROPERTY, value, prev)
-
-    @property
-    def thrashing_engaged_age(self):
-        return (time.perf_counter() if self._thrashing_detected else self._thrashing_last_disengaged_perf_c) - self._thrashing_last_engaged_perf_c
-
-    @property
-    def thrashing_disengaged_age(self):
-        return (time.perf_counter() if not self._thrashing_detected else self._thrashing_last_engaged_perf_c) - self._thrashing_last_disengaged_perf_c
 
     def load_configuration(self, configuration: LoadCellConfiguration):
         # force the on_property_changed event too (if new value differs) :
@@ -224,7 +257,7 @@ class LoadCellMonitor(ObservableObject):
 
     def _make_thrashing_check(self, when, cfg):
         if not (
-                self._is_engaged
+                self.is_engaged
                 and when - self._t_last_ptp_check >= cfg.thrashing_var_min_delay
         ):
             return
@@ -268,8 +301,9 @@ class LoadCellMonitor(ObservableObject):
         self._update_history(value, when, index)
         cfg = self._config
         t_start = self._t_start_was_active
-        cur_engaged = self._is_engaged
-        cur_thrashing = self._thrashing_detected
+        ctx = self._context
+        cur_engaged = ctx.is_engaged
+        cur_thrashing = ctx.thrashing_detected
         if __debug__:
             t_now = time.time()
             if t_now > self._t_next_hist_log:
@@ -335,7 +369,7 @@ class LoadCellMonitor(ObservableObject):
             self.__ensure_active()
 
     def __ensure_active(self):
-        if self._is_engaged:
+        if self.is_engaged:
             return
         logger.notice("Setting active / engaged ; prev weight: %s", self._values_history[-1])
         self._when = self._t_start_was_active
@@ -349,7 +383,7 @@ class LoadCellMonitor(ObservableObject):
             self.__ensure_inactive()
 
     def __ensure_inactive(self):
-        if not self._is_engaged:
+        if not self.is_engaged:
             return
         logger.notice("Setting inactive / disengaged ; prev weight: %s", self._values_history[-1])
         self._when = self._t_inactive_start
