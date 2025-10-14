@@ -512,20 +512,24 @@ class SystemMachine(StateMachine):
             return
         load_cell_mon = self._analysis.load_cell_monitor.context
         topcam_pres = algo.top_camera_presence_detection
-        # perf_now = time.perf_counter()
+        perf_now = time.perf_counter()
         if (
             not load_cell_mon.is_engaged
             and topcam_pres.last_presence_start_perf_c >= load_cell_mon.last_disengaged_perf_c
             # ensure load-cell is not re-entered by the mouse:
             and topcam_pres.last_presence_start_perf_c > load_cell_mon.last_engaged_perf_c
-            # and perf_now - load_cell_mon.last_disengaged_perf_c > desired_minimum_delay_before_close_gate
+            and perf_now - load_cell_mon.last_disengaged_perf_c > algo.auto_close_gate_min_delay_after_exit_tunnel
         ):
             logger.notice("Closing tunnel gate for intersession")
             self._tunnel_device.close_tunnel_gate()
         else:
             # retry:
-            delay = 0.5  # hesitated for 1, but 0.5 would give slightly faster/closer close (to the in-cage status)
-            timer = self._timer_consider_close_gate = make_daemon_timer(0.5, self._consider_close_gate_during_intersession)
+            delay = min(
+                1.0,
+                max(0.01,
+                    algo.auto_close_gate_min_delay_after_exit_tunnel - (perf_now - load_cell_mon.last_disengaged_perf_c))
+            )
+            timer = self._timer_consider_close_gate = make_daemon_timer(delay, self._consider_close_gate_during_intersession)
             timer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)

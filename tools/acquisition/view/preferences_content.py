@@ -233,6 +233,17 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spin_box, cur_row, 1)
         cur_row += 1
 
+        spin_box = QDoubleSpinBox()
+        spin_box.setRange(0, 60)
+        spin_box.setDecimals(1)
+        spin_box.setValue(algo.auto_close_gate_min_delay_after_exit_tunnel)
+        def spinbox_value_changed(value):
+            algo.auto_close_gate_min_delay_after_exit_tunnel = value
+        spin_box.valueChanged.connect(spinbox_value_changed)
+        grid_layout.addWidget(QLabel("Close gate on session minimum duration (seconds):"), cur_row, 0)
+        grid_layout.addWidget(spin_box, cur_row, 1)
+        cur_row += 1
+
         #
         cur_row = 0
         # pelletDelivery:maxPelletMissingSeconds

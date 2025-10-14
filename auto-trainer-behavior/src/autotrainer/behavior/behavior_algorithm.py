@@ -223,6 +223,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         # self.enable_auto_close_gate_on_intersession: bool = False
         self.auto_close_gate_on_session_min_duration: float = 1_000_000  # basically disabled.
+        self.auto_close_gate_min_delay_after_exit_tunnel: float = 1
 
         self._pellet_count_day = 0  # consumed
         self._pellet_count_session = 0  # consumed
