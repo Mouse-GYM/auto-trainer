@@ -281,7 +281,7 @@ class SystemMachine(StateMachine):
             logger.verbose("Inference status change: %s -> %s ; system_state=%s",
                            prev_value, new_value, self.state)
             if new_value in {InferenceStatus.live, InferenceStatus.intersession}:
-                self._analysis.global_mouse_presence_monitor.start()
+                self._analysis.global_mouse_presence_monitor.start(reason=f"inference={new_value}")
             else:
                 self._analysis.global_mouse_presence_monitor.stop(reason=f"inference-status={new_value}")
                 self._timer_consider_end_session.cancel()
@@ -330,7 +330,7 @@ class SystemMachine(StateMachine):
                                                               context=self.state)
             else:
                 if self._inference.status == InferenceStatus.live:
-                    self._analysis.global_mouse_presence_monitor.start()
+                    self._analysis.global_mouse_presence_monitor.start(reason="load-cell-disengaged")
                 if self.state == SystemState.tunnel and self.intersession.state == IntersessionState.idle:
                     logger.info("%s False, exiting tunnel ..", LoadCellMonitor.IS_ENGAGED_PROPERTY)
                     self.exit_tunnel(reason="load_cell_disengaged_when_tunnel")
@@ -538,7 +538,6 @@ class SystemMachine(StateMachine):
             self._timer_auto_clamp_disengage.cancel()
             self._timer_consider_close_gate.cancel()
             if new_value:
-                self._analysis.global_mouse_presence_monitor.stop(reason="algo-paused")
                 if algo.is_in_session:
                     if algo.intersession_state == IntersessionState.idle:
                         algo.end_session(reason="algo_paused")

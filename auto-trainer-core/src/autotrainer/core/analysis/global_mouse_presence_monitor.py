@@ -30,8 +30,8 @@ class GlobalMousePresenceMonitor(ObservableObject):
         self._topcam_presence = topcam_presence
         self._t_started = -math.inf
 
-    def start(self):
-        logger.info("starting monitor")
+    def start(self, *, reason: str="na"):
+        logger.info("starting monitor: %s", reason)
         with self._lock:
             if self._enabled:
                 return

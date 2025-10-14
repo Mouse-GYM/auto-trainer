@@ -37,6 +37,8 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._load_cell_engaged_values = []
         self._audio_thrash_values = []
         self._is_engaged = False
+        self._engaged_perf_c = math.nan
+        self._disengaged_perf_c = math.nan
         self._timer_update_state = no_op_timer
         load_cell_monitor.property_changed += self._load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._audio_prop_changed
@@ -58,6 +60,12 @@ class EmergencyAlarmMonitor(ObservableObject):
     @is_engaged.setter
     def is_engaged(self, value):
         prev, self._is_engaged = self._is_engaged, value
+        if prev != value:
+            perf_now = time.perf_counter()
+            if value:
+                self._engaged_perf_c = perf_now
+            else:
+                self._disengaged_perf_c = perf_now
         self._on_property_changed("is_engaged", value, prev)
 
     def _expire_audio_load_cell(self, perf_now):
