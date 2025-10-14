@@ -187,14 +187,9 @@ class EmergencyAlarmMonitor(ObservableObject):
         else:
             self.is_engaged = True
 
-        if not is_emergency and (
-            topcam_attrs is None
-            or topcam_attrs.last_presence_start_perf_c >= perf_now - load_cell.disengaged_age
-        ):
-            logger.verbose("Not restarting timer given topcam last_presence is more recent than load_cell disengaged")
-        else:
-            timer = self._timer_update_state = timer_update_state(1, self._update_state)
-            timer.start()
+        # todo: eventually adjust the timer delay depending on current state:
+        timer = self._timer_update_state = timer_update_state(1, self._update_state)
+        timer.start()
 
     def _load_cell_monitor_prop_changed(self, name, value, _):
         if not self._config.use_audio_load_cell_thrash:
