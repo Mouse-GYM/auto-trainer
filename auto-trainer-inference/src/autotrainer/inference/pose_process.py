@@ -1,4 +1,5 @@
 import logging.config
+import signal
 import time
 from enum import IntEnum
 from multiprocessing import Process, Queue
@@ -102,6 +103,8 @@ class PoseProcess(Process):
         self._process_live_when_ready = False
 
     def _do_run(self, *, log_dict_config: Optional[Dict]):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         if log_dict_config is None:
             setup_logging()
         else:

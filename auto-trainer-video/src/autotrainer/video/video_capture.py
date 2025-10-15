@@ -6,6 +6,7 @@ import queue
 import sys
 import time
 import os
+import signal
 from dataclasses import dataclass
 from queue import Queue
 from enum import IntEnum
@@ -222,6 +223,8 @@ class VideoCapture(Process):
         self._set_status(CaptureProcessStatus.INITIALIZED)
 
     def _do_run(self, log_dict_config: Optional[Dict]):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         if log_dict_config is None:
             setup_logging()
         else:

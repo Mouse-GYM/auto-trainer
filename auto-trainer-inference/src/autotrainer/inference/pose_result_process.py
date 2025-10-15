@@ -3,6 +3,7 @@ import logging.config
 import multiprocessing
 import queue
 import statistics
+import signal
 import threading
 import time
 from enum import Enum
@@ -120,6 +121,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         return self._stop_recorded
 
     def _do_run(self, *, project, log_dict_config: Optional[Dict]):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         if log_dict_config is None:
             setup_logging()
         else:
