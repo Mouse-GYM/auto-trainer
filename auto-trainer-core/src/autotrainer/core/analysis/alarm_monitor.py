@@ -37,6 +37,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._load_cell_engaged_values = []
         self._audio_thrash_values = []
         self._enabled = False
+        self._t_started = time.perf_counter()
         self._is_engaged = False
         self._engaged_reasons = []
         self._engaged_perf_c = math.nan
@@ -62,6 +63,7 @@ class EmergencyAlarmMonitor(ObservableObject):
             logger.info("starting monitor: %s", reason)
             self._enabled = True
             self._is_engaged = False  # force
+            self._t_started = time.perf_counter()
             timer = self._timer_update_state = make_daemon_timer(0.1, lambda: self._update_state(is_timer=True))
             timer.start()
 
@@ -158,6 +160,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         return (
             topcam_attrs is not None
             and not load_cell.is_engaged
+            and load_cell.last_disengaged_perf_c > self._t_started
             and load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
             and (
                 # last presence must be before the current load cell disengaged:
