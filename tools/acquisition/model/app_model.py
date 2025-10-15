@@ -446,7 +446,8 @@ class AppModel(ObservableObject):
         self._hardware.set_auto_correct_motor_drift(self._behavior.algorithm.auto_correct_motors_drift)
         logger.info("finished connecting hardware")
 
-        self._analysis.emergency_alarm_monitor.start(reason="capture-start")
+        if not self._behavior.algorithm.algo_paused:
+            self._analysis.emergency_alarm_monitor.start(reason="capture-start")
 
         return True
 
