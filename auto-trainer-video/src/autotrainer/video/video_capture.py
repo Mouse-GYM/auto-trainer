@@ -161,10 +161,7 @@ class VideoCapture(Process):
         project_info: Optional[ProjectInfo] = None,
     ):
         log_q = get_multiprocess_log_queue()
-        log_dict_config = (
-            None if log_q is None
-            else make_log_dict_config(root_log_level=logging.root.level,
-                                      log_queue=log_q))
+        log_dict_config = make_log_dict_config()
         super().__init__(
             name=attrs.camera.name,
             target=self._do_run,
