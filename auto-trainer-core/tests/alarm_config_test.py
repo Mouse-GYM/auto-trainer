@@ -1,3 +1,5 @@
+import pytest
+
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 
 
@@ -10,3 +12,8 @@ def test_alarm_config_constructor():
 def test_can_load_previous_config():
     cfg = EmergencyAlarmConfiguration(auto_resume_on_audio_load_cell_thrash_resume="foobar")
     assert isinstance(cfg, EmergencyAlarmConfiguration)
+
+
+def test_raise_with_positional_arg():
+    with pytest.raises(TypeError, match="Only kwargs allowed"):
+        EmergencyAlarmConfiguration("anything")
