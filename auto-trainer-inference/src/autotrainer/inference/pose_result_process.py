@@ -100,6 +100,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 project=project,
                 log_dict_config=log_dict_config,
             ),
+            daemon=True,
         )
         self._project = project
         self._data_queue = pose_data_queue
