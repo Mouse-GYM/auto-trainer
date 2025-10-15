@@ -160,7 +160,6 @@ class VideoCapture(Process):
         record_properties: Optional[VideoRecordProperties] = None,
         project_info: Optional[ProjectInfo] = None,
     ):
-        log_q = get_multiprocess_log_queue()
         log_dict_config = make_log_dict_config()
         super().__init__(
             name=attrs.camera.name,
@@ -223,12 +222,13 @@ class VideoCapture(Process):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         if log_dict_config is None:
-            setup_logging()
+            setup_logging(logger_level=logging.DEBUG)
         else:
             logging.config.dictConfig(log_dict_config)
 
-        logger.info("%s: started running ; name=%s cam_index=%s primary=%s",
-                    self, self._attrs.camera.name, self._camera_idx, self._attrs.is_primary)
+        logger.info("%s: started running ; name=%s cam_index=%s primary=%s log_dict=%s",
+                    self, self._attrs.camera.name, self._camera_idx, self._attrs.is_primary,
+                    log_dict_config)
         if not self._prepare_to_run():
             return
 
