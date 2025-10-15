@@ -240,8 +240,10 @@ class VideoDetection(threading.Thread):
             if pc_normalized != prev_pc_sum:
                 # NB: we have:
                 # fg_mask.size == 2073600 and fg_mask.itemsize == 1
-                logger.spam("pc_norm=%.2f pc_unnorm=%.2f hist=%s",
-                               pc_normalized, pc_unnormalized, [(d1, d2, d3) for d1, _, d2, d3 in hist_values])
+                if __debug__:
+                    if round(pc_normalized, 0) != round(prev_pc_sum, 0):
+                        logger.spam("pc_norm=%.2f pc_unnorm=%.2f hist=%s",
+                                       pc_normalized, pc_unnormalized, [(d1, d2, d3) for d1, _, d2, d3 in hist_values])
                 attrs.pc_sum = pc_normalized
                 prev_pc_sum = pc_normalized
                 prev_pc_values.append((pc_normalized, pc_unnormalized))

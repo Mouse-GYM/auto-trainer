@@ -130,7 +130,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             self._monitor_data_queue(project)
         except BaseException as err:
             logger.exception("Fatal error: %s", err)
-        cmd_thread.join()
+        self._is_running = False
+        cmd_thread.join(5)
         logger.debug("Exiting")
 
     def _monitor_cmd_queue(self):
@@ -273,7 +274,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
             next_pose_data = next_mode = next_frames_indices = None
 
-            while True:
+            while self._is_running:
                 if prev_pose_data is None:
                     try:
                         next_pose_data, next_mode, next_frames_indices = self._data_queue.get_nowait()
