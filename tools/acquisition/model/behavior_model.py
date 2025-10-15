@@ -58,8 +58,10 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         @BehaviorAlgorithm.relay_func(wait=False)
         def alarm_monitor_property_changed(name, value, _):
             if name == "is_engaged":
-                meth = self.emergency_stop if value else self.emergency_resume
-                meth("alarm-monitor")  # noqa
+                if value:
+                    self.emergency_stop(f"alarm-monitor: {analysis.emergency_alarm_monitor.engaged_reasons}")
+                else:
+                    self.emergency_resume("alarm-monitor-resumed")
         analysis.emergency_alarm_monitor.property_changed += alarm_monitor_property_changed
 
     @property

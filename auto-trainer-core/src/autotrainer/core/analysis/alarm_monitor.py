@@ -1,7 +1,7 @@
 import math
 import threading
 import time
-from typing import Optional
+from typing import Optional, List
 
 from autotrainer.core import ObservableObject, get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
@@ -36,7 +36,9 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._load_cell_thrash_values = []
         self._load_cell_engaged_values = []
         self._audio_thrash_values = []
+        self._enabled = False
         self._is_engaged = False
+        self._engaged_reasons = []
         self._engaged_perf_c = math.nan
         self._disengaged_perf_c = math.nan
         self._timer_update_state = no_op_timer
@@ -53,6 +55,21 @@ class EmergencyAlarmMonitor(ObservableObject):
     def config(self, value):
         self._config = value
 
+    def start(self, *, reason: str="na"):
+        with self._lock:
+            if self._enabled:
+                return
+            logger.info("starting monitor: %s", reason)
+            self._enabled = True
+            self._is_engaged = False  # force
+
+    def stop(self, *, reason: str="na"):
+        with self._lock:
+            if not self._enabled:
+                return
+            logger.info("stopping monitor: %s", reason)
+            self._enabled = False
+
     @property
     def is_engaged(self):
         return self._is_engaged
@@ -65,8 +82,13 @@ class EmergencyAlarmMonitor(ObservableObject):
             if value:
                 self._engaged_perf_c = perf_now
             else:
+                self._engaged_reasons = []
                 self._disengaged_perf_c = perf_now
         self._on_property_changed("is_engaged", value, prev)
+
+    @property
+    def engaged_reasons(self) -> List[str]:
+        return self._engaged_reasons
 
     def _expire_audio_load_cell(self, perf_now):
         cfg = self._config
@@ -146,6 +168,8 @@ class EmergencyAlarmMonitor(ObservableObject):
         )
 
     def _update_state(self):
+        if not self._enabled:
+            return
         with self._lock:
             self.__update_state()
 
@@ -156,17 +180,25 @@ class EmergencyAlarmMonitor(ObservableObject):
         cfg = self._config
         perf_now = time.perf_counter()
         #
+        reasons = []
+        #
         audio_load_cell_thrash_alarm = (
             self._check_audio_load_cell(perf_now) if cfg.use_audio_load_cell_thrash
             else False)
+        if audio_load_cell_thrash_alarm:
+            reasons.append("audio_load_cell_thrashing")
         #
         pres_missing_after_exit_tunnel_alarm = (
             self._check_pres_after_exit_tunnel_missing(perf_now) if cfg.use_presence_missing_after_exit_tunnel
             else False)
+        if pres_missing_after_exit_tunnel_alarm:
+            reasons.append("cage-presence-missing-after-exit-tunnel")
         #
         global_mouse_presence_missing = (
             self._global_mouse_presence.is_engaged if cfg.use_global_mouse_presence_missing
             else False)
+        if global_mouse_presence_missing:
+            reasons.append("global-mouse-presence")
         #
         is_emergency = (
                audio_load_cell_thrash_alarm
@@ -175,8 +207,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         )
         #
         if is_emergency and not self._is_engaged:
-            logger.notice("Engaging emergency: audio_load_cell_thrash_alarm=%s pres_missing_after_exit_tunnel_alarm=%s global_mouse_presence_missing=%s",
-                          audio_load_cell_thrash_alarm, pres_missing_after_exit_tunnel_alarm, global_mouse_presence_missing)
+            logger.notice("Engaging emergency: %s", reasons)
             logger.debug("load_cell.disengaged_age=%.1f"
                 " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
                 load_cell.disengaged_age, load_cell.engaged_age,
@@ -193,8 +224,10 @@ class EmergencyAlarmMonitor(ObservableObject):
         #
         if not is_emergency:
             if cfg.auto_resume_on_cleared:
+                self._engaged_reasons = []
                 self.is_engaged = False
         else:
+            self._engaged_reasons = reasons
             self.is_engaged = True
 
         # todo: eventually adjust the timer delay depending on current state:
@@ -202,6 +235,8 @@ class EmergencyAlarmMonitor(ObservableObject):
         timer.start()
 
     def _load_cell_monitor_prop_changed(self, name, value, _):
+        if not self._enabled:
+            return
         if not self._config.use_audio_load_cell_thrash:
             return
         if name == LoadCellMonitor.IS_THRASHING_DETECTED_PROPERTY:
@@ -216,6 +251,8 @@ class EmergencyAlarmMonitor(ObservableObject):
             self._update_state()
 
     def _audio_prop_changed(self, name, value, _):
+        if not self._enabled:
+            return
         if not self._config.use_audio_load_cell_thrash:
             return
         if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
@@ -228,6 +265,8 @@ class EmergencyAlarmMonitor(ObservableObject):
             self._update_state()
 
     def _global_mouse_presence_prop_changed(self, name, value, _):
+        if not self._enabled:
+            return
         if not self._config.use_global_mouse_presence_missing:
             return
         if name == "is_engaged":

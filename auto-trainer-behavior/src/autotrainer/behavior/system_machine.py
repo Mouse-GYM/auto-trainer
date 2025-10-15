@@ -553,6 +553,14 @@ class SystemMachine(StateMachine):
                 tunnel_dev.open_tunnel_gate()
                 tunnel_dev.update_head_magnet_intensity(algo.baseline_intensity)
                 pellet_dev.send_pellet()
+                #
+                if self._inference.status in {InferenceStatus.live, InferenceStatus.intersession}:
+                    global_mouse_monitor = self._analysis.global_mouse_presence_monitor
+                    global_mouse_monitor.stop(reason="algo-unpaused")  # force stop
+                    global_mouse_monitor.start(reason="algo-unpaused")
+                    emergency_monitor = self._analysis.emergency_alarm_monitor
+                    emergency_monitor.stop(reason="algo-unpaused")
+                    emergency_monitor.start(reason="algo-unpaused")
                 # trigger load cell property changed check, so that new session will be started if mouse still in tunnel
                 self._load_cell_monitor_property_changed(
                     LoadCellMonitor.IS_ENGAGED_PROPERTY, self._analysis.load_cell_monitor.is_engaged, None

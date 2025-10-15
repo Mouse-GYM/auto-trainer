@@ -37,10 +37,9 @@ class GlobalMousePresenceMonitor(ObservableObject):
             logger.info("starting monitor: %s", reason)
             self._t_started = time.perf_counter()
             self._enabled = True
-            # should we too:
-            # self._is_engaged = False #  ?
-            # to reset the current is_engaged state, and have a new one that will be generated(event)
-            # if the trigger check(s) below turn to be true again ?
+            self._is_engaged = False  # force set to False,
+            # so that if situation is same than before this start (when it was stopped),
+            # then a new trigger will be emitted.
             timer = self._cur_timer = make_daemon_timer(0.1, self._check_state)
             timer.start()
 
@@ -95,9 +94,6 @@ class GlobalMousePresenceMonitor(ObservableObject):
             if top_cam_miss < 0 and load_cell_miss < 0:
                 new_engaged = True
             else:
-                new_engaged = False
-        else:
-            if load_cell_mon.last_engaged_perf_c > self._t_started:
                 new_engaged = False
         if prev_engaged != new_engaged:
             logger.verbose("engaged=%s top_cam_miss=%.1f load_cell_miss=%.1f",
