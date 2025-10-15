@@ -231,8 +231,8 @@ class PreferencesContent(QWidget):
             auto_close_gate_cfg.enabled = enabled
             spinbox_auto_close_gate_session_min_duration.setEnabled(enabled)
             spinbox_auto_close_gate_after_cage_delay.setEnabled(enabled)
-        toggle.stateChanged.connect(toggle_changed)
         toggle.setChecked(auto_close_gate_cfg.enabled)
+        toggle.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
