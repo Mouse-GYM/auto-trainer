@@ -539,14 +539,16 @@ class AppModel(ObservableObject):
         return True
 
     def save_configuration(self):
+        loc = self._preferences.configuration_location
+        logger.info("Saving configuration to %s", loc)
         conf = self._create_configuration()
-        return conf.save_default(self._preferences.configuration_location)
+        return conf.save_default(loc)
 
     def on_activated(self):
         pass
 
     def on_close(self):
-        logger.debug("Closing..")
+        logger.debug("Closing app..")
         self._preferences.save()
 
         if self._inference is not None:
