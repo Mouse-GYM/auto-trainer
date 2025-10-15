@@ -62,12 +62,15 @@ class EmergencyAlarmMonitor(ObservableObject):
             logger.info("starting monitor: %s", reason)
             self._enabled = True
             self._is_engaged = False  # force
+            timer = self._timer_update_state = make_daemon_timer(0.1, lambda: self._update_state(is_timer=True))
+            timer.start()
 
     def stop(self, *, reason: str="na"):
         with self._lock:
             if not self._enabled:
                 return
             logger.info("stopping monitor: %s", reason)
+            self._timer_update_state.cancel()
             self._enabled = False
 
     @property
@@ -167,16 +170,15 @@ class EmergencyAlarmMonitor(ObservableObject):
             )
         )
 
-    def _update_state(self):
+    def _update_state(self, *, is_timer: bool=False):
         if not self._enabled:
             return
         with self._lock:
-            self.__update_state()
+            self.__update_state(is_timer=is_timer)
 
-    def __update_state(self):
+    def __update_state(self, *, is_timer: bool=False):
         topcam_attrs = self._topcam_presence_attrs
         load_cell = self._load_cell_monitor.context
-        self._timer_update_state.cancel()
         cfg = self._config
         perf_now = time.perf_counter()
         #
@@ -231,8 +233,9 @@ class EmergencyAlarmMonitor(ObservableObject):
             self.is_engaged = True
 
         # todo: eventually adjust the timer delay depending on current state:
-        timer = self._timer_update_state = timer_update_state(1, self._update_state)
-        timer.start()
+        if is_timer:
+            timer = self._timer_update_state = timer_update_state(1, lambda: self._update_state(is_timer=True))
+            timer.start()
 
     def _load_cell_monitor_prop_changed(self, name, value, _):
         if not self._enabled:
