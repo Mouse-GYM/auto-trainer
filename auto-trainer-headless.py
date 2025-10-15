@@ -8,14 +8,15 @@ from multiprocessing import set_start_method
 
 
 def update_log_level(value: int):
-    logging.getLogger("inference_algorithms").setLevel(value)
-    logging.getLogger("tools").setLevel(value)
-    logging.getLogger("autotrainer").setLevel(value)
-
-    if value == logging.DEBUG:
-        logging.getLogger("transitions").setLevel(logging.INFO)
-    else:
-        logging.getLogger("transitions").setLevel(logging.WARNING)
+    get_console_handler().setLevel(value)
+    # logging.getLogger("inference_algorithms").setLevel(value)
+    # logging.getLogger("tools").setLevel(value)
+    # logging.getLogger("autotrainer").setLevel(value)
+    #
+    # if value == logging.DEBUG:
+    #     logging.getLogger("transitions").setLevel(logging.INFO)
+    # else:
+    #     logging.getLogger("transitions").setLevel(logging.WARNING)
 
 
 def main():
@@ -69,7 +70,8 @@ if __name__ == '__main__':
     faulthandler.enable()
     set_start_method("spawn")
 
-    from autotrainer.core.logging import setup_logging
+    from autotrainer.core.logging import setup_logging, get_console_handler
+
     setup_logging(logger_level=logging.DEBUG, time_precision=6, multiprocess_enabled=True)
 
     sys.exit(main())
