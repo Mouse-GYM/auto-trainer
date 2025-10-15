@@ -470,7 +470,6 @@ class MainWindow(QMainWindow):
         def emergency_stop_triggered(is_toggled: bool):
             logger.verbose("emergency_stop_triggered: %s", is_toggled)
             (behavior.emergency_stop if is_toggled else behavior.emergency_resume)("user-button")
-            # update_emergency_ui(is_toggled)
 
         emergency_button.toggled.connect(emergency_stop_triggered)
         behavior.emergency_stopped += lambda src: update_emergency_ui(True)

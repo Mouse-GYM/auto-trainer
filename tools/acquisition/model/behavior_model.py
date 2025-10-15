@@ -124,12 +124,18 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             self._system_machine.algorithm.baseline_intensity = self._hardware_model.head_magnet_intensity
 
     def emergency_stop(self, source: str):
-        self._system_machine.algorithm.algo_paused = True
+        algo = self._system_machine.algorithm
+        if algo.algo_paused:
+            return
+        algo.algo_paused = True
         EventManager.default().post_event_content(ApiEventKind.emergencyStop, source)
         self.emergency_stopped(source)
 
     def emergency_resume(self, source: str):
-        self._system_machine.algorithm.algo_paused = False
+        algo = self._system_machine.algorithm
+        if not algo.algo_paused:
+            return
+        algo.algo_paused = False
         EventManager.default().post_event_content(ApiEventKind.emergencyResume, source)
         self.emergency_resumed(source)
 
