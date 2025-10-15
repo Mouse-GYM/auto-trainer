@@ -50,12 +50,19 @@ def main():
         logger.error("failed to start capture")
         return -1
 
+    exit_rc = 1
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        app_view_model.on_capture_stop()
-        return 0
+        logger.info("Interrupted, exiting..")
+        exit_rc = 0
+    except Exception as err:
+        logger.exception("Fatal error: %s", err)
+
+    app_view_model.on_capture_stop()
+
+    return exit_rc
 
 
 if __name__ == '__main__':
