@@ -63,6 +63,6 @@ if __name__ == '__main__':
     set_start_method("spawn")
 
     from autotrainer.core.logging import setup_logging
-    setup_logging()
+    setup_logging(logger_level=logging.DEBUG)
 
     sys.exit(main())
