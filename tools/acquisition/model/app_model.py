@@ -456,20 +456,24 @@ class AppModel(ObservableObject):
 
         for camera in self._cameras:
             if not camera.is_primary:
+                logger.verbose("notifying end to %s", camera.name)
                 camera.on_capture_notify_end()
 
         time.sleep(0.01)
 
         for camera in self._cameras:
             if camera.is_primary:
+                logger.verbose("notifying end to %s", camera.name)
                 camera.on_capture_notify_end()
 
         for camera in self._cameras:
             if not camera.is_primary:
+                logger.verbose("stopping capture to %s", camera.name)
                 camera.on_capture_stop()
 
         for camera in self._cameras:
             if camera.is_primary:
+                logger.verbose("stopping capture to %s", camera.name)
                 camera.on_capture_stop()
 
         if self._analysis is not None:
