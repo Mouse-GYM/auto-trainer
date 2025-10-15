@@ -112,7 +112,7 @@ class VideoDetection(threading.Thread):
         self._csv_writer = None
         self._csv_writer_fh = None
         self._got_first_frame = False
-        super().__init__(name="PresenceDetection")
+        super().__init__(name="PresenceDetection", daemon=True)
 
     def cancel(self):
         self._stop_requested = True
