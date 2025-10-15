@@ -172,14 +172,14 @@ class SystemMachine(StateMachine):
         project = self._project_info.to_local_value()
         self._intersession.perform_segmentation()
         algo = self._algorithm
-        # if algo.enable_auto_close_gate_on_intersession:
-        duration = datetime.now() - project.when
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
-        if auto_close_gate_cfg.session_min_duration <= duration.total_seconds():
-            timer = self._timer_consider_close_gate = make_daemon_timer(0.1, self._consider_close_gate_during_intersession)
-            timer.start()
-        else:
-            logger.verbose("Not starting timer to auto-close gate when mouse in cage confirmed ; session duration=%s",
+        if auto_close_gate_cfg.enabled:
+            duration = datetime.now() - project.when  # could/should be todo: have session duration recorded in project-session info.
+            if auto_close_gate_cfg.session_min_duration <= duration.total_seconds():
+                timer = self._timer_consider_close_gate = make_daemon_timer(0.1, self._consider_close_gate_during_intersession)
+                timer.start()
+            else:
+                logger.verbose("Not starting timer to auto-close gate when mouse in cage confirmed ; session duration=%s",
                            duration)
 
     def before_exit_intersession_to_cage(self):
