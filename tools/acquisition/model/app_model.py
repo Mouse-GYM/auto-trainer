@@ -562,8 +562,14 @@ class AppModel(ObservableObject):
         # should we self._message_handler.wait_terminated() ?
         self._system_message_handler.wait_terminated()
 
+        logger.debug("Putting None to process messages thread")
         self._multiproc_msg_queue.put(None)
-        self._handle_proc_msg_thread.join()
+
+        logger.debug("Joining process messages thread")
+        self._handle_proc_msg_thread.join(5)
+        if self._handle_proc_msg_thread.is_alive():
+            logger.warning("Handle process messages thread still alive ; closing queue")
+        self._multiproc_msg_queue.close()
 
         self.save_configuration()
 
