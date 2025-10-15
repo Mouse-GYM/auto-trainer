@@ -81,6 +81,7 @@ class PoseProcess(Process):
             name=self.__class__.__name__,
             target=self._do_run,
             kwargs=dict(log_dict_config=log_dict_config),
+            daemon=True,
         )
 
         self._pose_model: PoseModel

@@ -546,7 +546,7 @@ class AppModel(ObservableObject):
         pass
 
     def on_close(self):
-        # logger.verbose("AppModel.on_close")
+        logger.debug("Closing..")
         self._preferences.save()
 
         if self._inference is not None:

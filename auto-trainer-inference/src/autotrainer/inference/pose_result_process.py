@@ -540,7 +540,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                 ib_pose_data_dict,
                                 cams_read_h5_idx,
                                 cams_read_h5_dss,
-                            )
+                            ),
+                            daemon=True,
                         )
                         thread_post_process.start()
                         cams_read_h5_dss = []

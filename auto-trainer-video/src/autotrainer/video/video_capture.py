@@ -168,6 +168,7 @@ class VideoCapture(Process):
             name=attrs.camera.name,
             target=self._do_run,
             kwargs=dict(log_dict_config=log_dict_config),
+            daemon=True,
         )
 
         self._attrs = attrs
