@@ -468,16 +468,6 @@ class MainWindow(QMainWindow):
             self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED - Source: {source}" if is_toggled else self._title)
             if source != "user-button":
                 emergency_button.setChecked(is_toggled)
-            else:
-                if is_toggled:
-                    # keep global mouse presence active,
-                    # analysis.global_mouse_presence_monitor.stop(reason="user-emergency")
-                    # but not emergency, so it won't unpause this manually set algo-paused
-                    analysis.emergency_alarm_monitor.stop(reason="user-emergency")
-                else:
-                    # restart both to get new start/counters
-                    analysis.global_mouse_presence_monitor.restart(reason="user-end-emergency")
-                    analysis.emergency_alarm_monitor.restart(reason="user-end-emergency")
 
         def emergency_stop_triggered(is_toggled: bool):
             logger.verbose("emergency_stop_triggered: %s", is_toggled)
