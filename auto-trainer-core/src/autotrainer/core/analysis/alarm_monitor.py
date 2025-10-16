@@ -62,10 +62,10 @@ class EmergencyAlarmMonitor(ObservableObject):
                 return
             logger.info("starting monitor: %s", reason)
             self._enabled = True
-            self._is_engaged = False  # force
             self._t_started = time.perf_counter()
             timer = self._timer_update_state = make_daemon_timer(0.1, lambda: self._update_state(is_timer=True))
             timer.start()
+            self.is_engaged = False  # force
 
     def stop(self, *, reason: str="na"):
         with self._lock:
