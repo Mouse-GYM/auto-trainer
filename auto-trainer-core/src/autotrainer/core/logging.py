@@ -185,6 +185,8 @@ class LogQueueListenerProc(Process):
 
     def run(self):
         # print(f"{logging.root.handlers}")
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         cfg = self._log_config
         #
         console_handler = self._console_handler = make_console_handler(cfg)

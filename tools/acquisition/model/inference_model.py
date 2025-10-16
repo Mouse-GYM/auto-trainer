@@ -243,7 +243,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
     def start(self, live_queue: FixedArrayMultiQueue) -> bool:
         if self._msg_thread is None:
-            self._msg_thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue")
+            self._msg_thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue", daemon=True)
             self._msg_thread.start()
 
         if self._data_monitor_proc is None:
@@ -284,6 +284,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         return True
 
     def stop(self):
+        logger.debug("stopping..")
         proc = self._pose_process
         if proc is not None:
             self._set_status(InferenceStatus.stopping)
@@ -318,6 +319,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             clear_queue(self._inference_cmd_queue)
 
     def terminate(self):
+        logger.debug("terminating..")
         self.stop()
         data_proc = self._data_monitor_proc
         data_monitor_cmd_queue = self._data_monitor_cmd_queue
@@ -345,11 +347,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             self._msg_thread = None
 
         logger.verbose("closing mp queues")
-        for q in (data_monitor_cmd_queue, self._data_queue, self._inference_cmd_queue, msg_queue):
-            if q is not None:
-                clear_queue(q, log_dumped=True)
-                logger.debug("closing %s size=%s", q, q.qsize())
-                q.close()
+        for mp_q in (data_monitor_cmd_queue, self._data_queue, self._inference_cmd_queue, msg_queue):
+            if mp_q is not None:
+                clear_queue(mp_q, log_dumped=True)
+                logger.debug("closing %s size=%s", mp_q, mp_q.qsize())
+                mp_q.close()
 
     def load_configuration(self, configuration: InferenceConfiguration):
         self.model_location = configuration.pose_model_location

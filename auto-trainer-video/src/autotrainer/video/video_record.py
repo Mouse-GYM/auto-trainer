@@ -57,7 +57,7 @@ class VideoRecordProperties:
 
 class VideoRecord(Thread):
     def __init__(self, properties: VideoRecordProperties, input_queue: Queue):
-        Thread.__init__(self, name=properties.name)
+        Thread.__init__(self, name=properties.name, daemon=True)
         self._project_info = properties.project_info
         self._name = properties.name
         self._width = properties.frame_size[0]

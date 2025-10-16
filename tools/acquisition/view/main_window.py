@@ -574,14 +574,6 @@ class MainWindow(QMainWindow):
     def _update_log_level(value: int):
         # controlled via console and file handlers now
         get_console_handler().setLevel(value)
-        # logging.getLogger("tools").setLevel(value)
-        # logging.getLogger("autotrainer").setLevel(value)
-        # logging.getLogger("inference_algorithms").setLevel(value)
-        #
-        # if value == logging.DEBUG:
-        #     logging.getLogger("transitions").setLevel(logging.INFO)
-        # else:
-        #     logging.getLogger("transitions").setLevel(logging.WARNING)
 
     def _inference_property_changed(self, name: str, new_value, old_value):
         inference = self._app_model.inference

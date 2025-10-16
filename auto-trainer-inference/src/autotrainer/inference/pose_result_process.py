@@ -3,6 +3,7 @@ import logging.config
 import multiprocessing
 import queue
 import statistics
+import signal
 import threading
 import time
 from enum import Enum
@@ -100,6 +101,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 project=project,
                 log_dict_config=log_dict_config,
             ),
+            daemon=True,
         )
         self._project = project
         self._data_queue = pose_data_queue
@@ -119,6 +121,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         return self._stop_recorded
 
     def _do_run(self, *, project, log_dict_config: Optional[Dict]):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         if log_dict_config is None:
             setup_logging()
         else:
@@ -130,7 +134,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             self._monitor_data_queue(project)
         except BaseException as err:
             logger.exception("Fatal error: %s", err)
-        cmd_thread.join()
+        self._is_running = False
+        cmd_thread.join(5)
         logger.debug("Exiting")
 
     def _monitor_cmd_queue(self):
@@ -273,7 +278,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
             next_pose_data = next_mode = next_frames_indices = None
 
-            while True:
+            while self._is_running:
                 if prev_pose_data is None:
                     try:
                         next_pose_data, next_mode, next_frames_indices = self._data_queue.get_nowait()
@@ -539,7 +544,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                 ib_pose_data_dict,
                                 cams_read_h5_idx,
                                 cams_read_h5_dss,
-                            )
+                            ),
+                            daemon=True,
                         )
                         thread_post_process.start()
                         cams_read_h5_dss = []

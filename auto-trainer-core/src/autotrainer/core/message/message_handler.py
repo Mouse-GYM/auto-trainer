@@ -139,7 +139,9 @@ class MessageHandler(ObservableObject):
         queue = self._input_queue
         if thread is not None:
             self._current_thread = None
-            thread.join()
+            thread.join(5)
+            if thread.is_alive():
+                logger.warning("message handler thread still alive")
         if queue is not None:
             self._input_queue = None
             while not queue.empty():

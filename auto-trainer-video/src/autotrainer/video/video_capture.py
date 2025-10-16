@@ -6,6 +6,7 @@ import queue
 import sys
 import time
 import os
+import signal
 from dataclasses import dataclass
 from queue import Queue
 from enum import IntEnum
@@ -159,15 +160,12 @@ class VideoCapture(Process):
         record_properties: Optional[VideoRecordProperties] = None,
         project_info: Optional[ProjectInfo] = None,
     ):
-        log_q = get_multiprocess_log_queue()
-        log_dict_config = (
-            None if log_q is None
-            else make_log_dict_config(root_log_level=logging.root.level,
-                                      log_queue=log_q))
+        log_dict_config = make_log_dict_config()
         super().__init__(
             name=attrs.camera.name,
             target=self._do_run,
             kwargs=dict(log_dict_config=log_dict_config),
+            daemon=True,
         )
 
         self._attrs = attrs
@@ -221,13 +219,16 @@ class VideoCapture(Process):
         self._set_status(CaptureProcessStatus.INITIALIZED)
 
     def _do_run(self, log_dict_config: Optional[Dict]):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         if log_dict_config is None:
-            setup_logging()
+            setup_logging(logger_level=logging.DEBUG)
         else:
             logging.config.dictConfig(log_dict_config)
 
-        logger.info("%s: started running ; name=%s cam_index=%s primary=%s",
-                    self, self._attrs.camera.name, self._camera_idx, self._attrs.is_primary)
+        logger.info("%s: started running ; name=%s cam_index=%s primary=%s log_dict=%s",
+                    self, self._attrs.camera.name, self._camera_idx, self._attrs.is_primary,
+                    log_dict_config)
         if not self._prepare_to_run():
             return
 

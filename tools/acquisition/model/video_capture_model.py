@@ -371,6 +371,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
 
     def on_close(self):
+        logger.debug("closing %s", self.name)
         if self._video_capture is not None:
             self._video_capture.terminate()
             self._video_capture.join()

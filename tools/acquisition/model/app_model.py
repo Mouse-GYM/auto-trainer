@@ -462,20 +462,24 @@ class AppModel(ObservableObject):
 
         for camera in self._cameras:
             if not camera.is_primary:
+                logger.verbose("notifying end to %s", camera.name)
                 camera.on_capture_notify_end()
 
         time.sleep(0.01)
 
         for camera in self._cameras:
             if camera.is_primary:
+                logger.verbose("notifying end to %s", camera.name)
                 camera.on_capture_notify_end()
 
         for camera in self._cameras:
             if not camera.is_primary:
+                logger.verbose("stopping capture to %s", camera.name)
                 camera.on_capture_stop()
 
         for camera in self._cameras:
             if camera.is_primary:
+                logger.verbose("stopping capture to %s", camera.name)
                 camera.on_capture_stop()
 
         if self._analysis is not None:
@@ -541,14 +545,16 @@ class AppModel(ObservableObject):
         return True
 
     def save_configuration(self):
+        loc = self._preferences.configuration_location
+        logger.info("Saving configuration to %s", loc)
         conf = self._create_configuration()
-        return conf.save_default(self._preferences.configuration_location)
+        return conf.save_default(loc)
 
     def on_activated(self):
         pass
 
     def on_close(self):
-        # logger.verbose("AppModel.on_close")
+        logger.debug("Closing app..")
         self._preferences.save()
 
         if self._inference is not None:
@@ -564,8 +570,14 @@ class AppModel(ObservableObject):
         # should we self._message_handler.wait_terminated() ?
         self._system_message_handler.wait_terminated()
 
+        logger.debug("Putting None to process messages thread")
         self._multiproc_msg_queue.put(None)
-        self._handle_proc_msg_thread.join()
+
+        logger.debug("Joining process messages thread")
+        self._handle_proc_msg_thread.join(5)
+        if self._handle_proc_msg_thread.is_alive():
+            logger.warning("Handle process messages thread still alive ; closing queue")
+        self._multiproc_msg_queue.close()
 
         self.save_configuration()
 

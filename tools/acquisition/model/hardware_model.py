@@ -291,6 +291,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             self.send_pellet()
 
     def disconnect(self):
+        logger.verbose("disconnecting ..")
         if self._device is not None:
             self._device.request_disconnect()
 

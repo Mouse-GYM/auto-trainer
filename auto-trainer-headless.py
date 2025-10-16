@@ -8,14 +8,15 @@ from multiprocessing import set_start_method
 
 
 def update_log_level(value: int):
-    logging.getLogger("inference_algorithms").setLevel(value)
-    logging.getLogger("tools").setLevel(value)
-    logging.getLogger("autotrainer").setLevel(value)
-
-    if value == logging.DEBUG:
-        logging.getLogger("transitions").setLevel(logging.INFO)
-    else:
-        logging.getLogger("transitions").setLevel(logging.WARNING)
+    get_console_handler().setLevel(value)
+    # logging.getLogger("inference_algorithms").setLevel(value)
+    # logging.getLogger("tools").setLevel(value)
+    # logging.getLogger("autotrainer").setLevel(value)
+    #
+    # if value == logging.DEBUG:
+    #     logging.getLogger("transitions").setLevel(logging.INFO)
+    # else:
+    #     logging.getLogger("transitions").setLevel(logging.WARNING)
 
 
 def main():
@@ -50,19 +51,27 @@ def main():
         logger.error("failed to start capture")
         return -1
 
+    exit_rc = 1
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        app_view_model.on_capture_stop()
-        return 0
+        logger.info("Interrupted, exiting..")
+        exit_rc = 0
+    except Exception as err:
+        logger.exception("Fatal error: %s", err)
+
+    app_view_model.on_capture_stop()
+
+    return exit_rc
 
 
 if __name__ == '__main__':
     faulthandler.enable()
     set_start_method("spawn")
 
-    from autotrainer.core.logging import setup_logging
-    setup_logging()
+    from autotrainer.core.logging import setup_logging, get_console_handler
+
+    setup_logging(logger_level=logging.DEBUG, time_precision=6, multiprocess_enabled=True)
 
     sys.exit(main())
