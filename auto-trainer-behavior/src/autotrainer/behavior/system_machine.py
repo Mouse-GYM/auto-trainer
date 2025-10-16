@@ -1,5 +1,6 @@
 import math
 import time
+from datetime import datetime
 from functools import partial
 from itertools import chain
 from pathlib import Path
@@ -168,7 +169,18 @@ class SystemMachine(StateMachine):
         self._algorithm.system_state = SystemState.intersession
 
     def after_enter_intersession(self):
+        project = self._project_info.to_local_value()
         self._intersession.perform_segmentation()
+        algo = self._algorithm
+        auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
+        if auto_close_gate_cfg.enabled:
+            duration = datetime.now() - project.when  # could/should be todo: have session duration recorded in project-session info.
+            if auto_close_gate_cfg.session_min_duration <= duration.total_seconds():
+                timer = self._timer_consider_close_gate = make_daemon_timer(0.1, self._consider_close_gate_during_intersession)
+                timer.start()
+            else:
+                logger.verbose("Not starting timer to auto-close gate when mouse in cage confirmed ; session duration=%s",
+                           duration)
 
     def before_exit_intersession_to_cage(self):
         self._algorithm.system_state = SystemState.cage
@@ -268,6 +280,8 @@ class SystemMachine(StateMachine):
     @BehaviorAlgorithm.relay_func
     def _intersession_ended(self):
         if self.state == SystemState.intersession:
+            self._timer_consider_close_gate.cancel()
+            self._tunnel_device.open_tunnel_gate()  # always ensure open gate on intersession ended
             logger.debug("_intersession_ended: load_cell.engaged=%s",
                          self._analysis.load_cell_monitor.is_engaged)
             if self._analysis.load_cell_monitor.is_engaged and not self._algorithm.algo_paused:
@@ -488,31 +502,41 @@ class SystemMachine(StateMachine):
             timer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _consider_close_gate_after_algo_paused(self):
-        # unused atm...
+    def _consider_close_gate_during_intersession(self):
         algo = self._algorithm
+        if algo.algo_paused:
+            # algo has been paused, so cancel totally.
+            return
+        if self._state != SystemState.intersession:
+            # only valid for intersession
+            logger.debug("not anymore intersession, skipping auto-close-gate")
+            return
         load_cell_mon = self._analysis.load_cell_monitor.context
         topcam_pres = algo.top_camera_presence_detection
-        algo_is_paused = algo.algo_paused
+        auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
         perf_now = time.perf_counter()
-        top_cam_pres_age = perf_now - topcam_pres.last_presence_start_perf_c
-        algo_paused_age = algo.algo_paused_age
-        if not algo_is_paused:
-            # algo has been unpaused, so cancel totally.
-            return
-        has_closed_gate = False
         if (
             not load_cell_mon.is_engaged
-            and top_cam_pres_age <= algo_paused_age
-            and top_cam_pres_age <= load_cell_mon.disengaged_age
+            and topcam_pres.last_presence_start_perf_c >= load_cell_mon.last_disengaged_perf_c
+            # ensure load-cell is not re-entered by the mouse:
+            and topcam_pres.last_presence_start_perf_c > load_cell_mon.last_engaged_perf_c
+            and perf_now - topcam_pres.last_presence_start_perf_c > auto_close_gate_cfg.delay_after_cage_enter
         ):
-            # ensure we only do it once per algo-paused
-            if perf_now - self._last_close_tunnel_gate_perf_t >= algo_paused_age:
-                self._tunnel_device.close_tunnel_gate()
-                self._last_close_tunnel_gate_perf_t = perf_now
-                has_closed_gate = True
-        if not has_closed_gate:
-            timer = self._timer_consider_close_gate = make_daemon_timer(1, self._consider_close_gate_after_algo_paused)
+            logger.notice(
+                "Closing tunnel gate for intersession ;"
+                " perf_now=%.1f load_cell.last_disengaged=%.1f last_engaged=%.1f topcam.last_pres=%.1f",
+                perf_now, load_cell_mon.last_disengaged_perf_c, load_cell_mon.last_engaged_perf_c,
+                topcam_pres.last_presence_start_perf_c,
+            )
+            self._tunnel_device.close_tunnel_gate()
+        else:
+            # retry:
+            delay = min(
+                1.0,
+                max(0.01,
+                    auto_close_gate_cfg.delay_after_cage_enter - (perf_now - topcam_pres.last_presence_start_perf_c))
+            )
+            timer = self._timer_consider_close_gate = make_daemon_timer(delay, self._consider_close_gate_during_intersession)
             timer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)

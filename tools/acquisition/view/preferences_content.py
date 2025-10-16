@@ -134,12 +134,14 @@ class PreferencesContent(QWidget):
         main_layout.addLayout(top_layout)
         #
         cur_row = 0
+        cur_col = 0
         grid_layout = QGridLayout()
         grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         grid_layout.setSpacing(4)
         grid_layout.setHorizontalSpacing(10)
         main_layout.addLayout(grid_layout)
 
+        grid_layout.addWidget(QLabel("Deliver Pellets:"), cur_row, cur_col)
         toggle = self._pellet_delivery_toggle = QSwitch()
         def pellet_delivery_state_changed(x: int):
             algo.pellet_delivery_enabled = x != 0
@@ -147,10 +149,10 @@ class PreferencesContent(QWidget):
         toggle.setToolTip(
             "Enables pellet load-send-release cycles based on pellet detection and related factors.")
         toggle.setChecked(algo.pellet_delivery_enabled)
-        grid_layout.addWidget(QLabel("Deliver Pellets:"), cur_row, 0)
-        grid_layout.addWidget(toggle, cur_row, 1)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         #
+        grid_layout.addWidget(QLabel("Cover Pellets:"), cur_row, cur_col)
         toggle = self._pellet_cover_toggle = QSwitch()
         def pellet_cover_toggle_state_changed(x: int):
             algo.pellet_cover_enabled = x != 0
@@ -159,10 +161,10 @@ class PreferencesContent(QWidget):
         toggle.setToolTip(
             "Covers the pellet when the mouse is not in the tunnel.  Release then generates a tone when the tunnel is "
             "entered.")
-        grid_layout.addWidget(QLabel("Cover Pellets:"), cur_row, 0)
-        grid_layout.addWidget(toggle, cur_row, 1)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         #
+        grid_layout.addWidget(QLabel("Intersession Pellet Shift:"), cur_row, cur_col)
         toggle = self._allow_intersession_shift_toggle = QSwitch()
         toggle.setToolTip("Enables adjustment of the pellet delivery position based on post-session reach analysis.")
         toggle.setEnabled(app_model.inference.is_enabled)
@@ -173,10 +175,10 @@ class PreferencesContent(QWidget):
                 behavior.is_intersession_enabled = True
             algo.intersession_pellet_shift_enabled = enabled
         toggle.stateChanged.connect(allow_intersession_shift_toggle_state_changed)
-        grid_layout.addWidget(QLabel("Intersession Pellet Shift:"), cur_row, 0)
-        grid_layout.addWidget(toggle, cur_row, 1)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         #
+        grid_layout.addWidget(QLabel("Auto-correct motors drift:"), cur_row, cur_col)
         toggle = self._auto_correct_motors_drift_toggle = QSwitch()
         toggle.setChecked(self._app_model.behavior.algorithm.auto_correct_motors_drift)
         def auto_correct_motors_drift_toggle_changed(value: int):
@@ -185,11 +187,11 @@ class PreferencesContent(QWidget):
             self._app_model.behavior.algorithm.auto_correct_motors_drift = enabled
 
         toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
-        grid_layout.addWidget(QLabel("Auto-correct motors drift:"), cur_row, 0)
-        grid_layout.addWidget(toggle, cur_row, 1)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
         #
+        grid_layout.addWidget(QLabel("Use triangle-pellet distance for pellet too far detection:"), cur_row, cur_col)
         self._use_triangle_pellet_distance = algo.use_triangle_pellet_distance_too_far
         toggle = self._toggle_use_triangle_pellet_distance = QSwitch()
         def use_triangle_pellet_distance_changed(value):
@@ -198,43 +200,84 @@ class PreferencesContent(QWidget):
             algo.use_triangle_pellet_distance_too_far = enabled
         toggle.stateChanged.connect(use_triangle_pellet_distance_changed)
         toggle.setChecked(algo.use_triangle_pellet_distance_too_far)
-        grid_layout.addWidget(QLabel("Use triangle-pellet distance for pellet too far detection:"), cur_row, 0)
-        grid_layout.addWidget(toggle, cur_row, 1)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         #
-        spin_box = self._triangle_pellet_expected_distance_spinbox = QDoubleSpinBox()
-        spin_box.setRange(0, 100)
-        spin_box.setValue(algo.triangle_pellet_expected_distance)
+        grid_layout.addWidget(QLabel("Triangle-Pellet expected distance (mm):"), cur_row, cur_col)
+        spinbox = self._triangle_pellet_expected_distance_spinbox = QDoubleSpinBox()
+        spinbox.setRange(0, 100)
+        spinbox.setValue(algo.triangle_pellet_expected_distance)
         def triangle_pellet_expected_distance_changed(value):
             algo.triangle_pellet_expected_distance = value
-        spin_box.valueChanged.connect(triangle_pellet_expected_distance_changed)
-        grid_layout.addWidget(QLabel("Triangle-Pellet expected distance:"), cur_row, 0)
-        grid_layout.addWidget(spin_box, cur_row, 1)
+        spinbox.valueChanged.connect(triangle_pellet_expected_distance_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
-        spin_box = self._triangle_pellet_diff_too_far_threshold_spinbox = QDoubleSpinBox()
-        spin_box.setRange(0, 20)
-        spin_box.setValue(algo.triangle_pellet_diff_too_far_threshold)
+        grid_layout.addWidget(QLabel("Triangle-Pellet diff too far threshold (mm):"), cur_row, cur_col)
+        spinbox = self._triangle_pellet_diff_too_far_threshold_spinbox = QDoubleSpinBox()
+        spinbox.setRange(0, 20)
+        spinbox.setValue(algo.triangle_pellet_diff_too_far_threshold)
         def triangle_pellet_diff_too_far_threshold_changed(value):
             algo.triangle_pellet_diff_too_far_threshold = value
-        spin_box.valueChanged.connect(triangle_pellet_diff_too_far_threshold_changed)
-        grid_layout.addWidget(QLabel("Triangle-Pellet diff too far threshold:"), cur_row, 0)
-        grid_layout.addWidget(spin_box, cur_row, 1)
-        #
+        spinbox.valueChanged.connect(triangle_pellet_diff_too_far_threshold_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("<b>Use Auto-close gate during intersession:</b>"), cur_row, cur_col)
+        auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
+        toggle = QSwitch()
+        def toggle_changed(value):
+            enabled = value != 0
+            auto_close_gate_cfg.enabled = enabled
+            spinbox_auto_close_gate_session_min_duration.setEnabled(enabled)
+            spinbox_auto_close_gate_after_cage_delay.setEnabled(enabled)
+        toggle.setChecked(auto_close_gate_cfg.enabled)
+        toggle.stateChanged.connect(toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("session minimum duration (seconds):"), cur_row, cur_col)
+        spinbox = spinbox_auto_close_gate_session_min_duration = QDoubleSpinBox()
+        spinbox.setRange(0, max(1_000_000, auto_close_gate_cfg.session_min_duration))
+        spinbox.setDecimals(1)
+        spinbox.setValue(auto_close_gate_cfg.session_min_duration)
+        def spinbox_value_changed(value):
+            auto_close_gate_cfg.session_min_duration = value
+        spinbox.valueChanged.connect(spinbox_value_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("delay after cage enter to close (seconds):"), cur_row, cur_col)
+        spinbox = spinbox_auto_close_gate_after_cage_delay = QDoubleSpinBox()
+        spinbox.setRange(0, 60)
+        spinbox.setDecimals(1)
+        spinbox.setValue(auto_close_gate_cfg.delay_after_cage_enter)
+        def spinbox_value_changed(value):
+            auto_close_gate_cfg.delay_after_cage_enter = value
+        spinbox.valueChanged.connect(spinbox_value_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+
+        spinbox_auto_close_gate_session_min_duration.setEnabled(auto_close_gate_cfg.enabled)
+        spinbox_auto_close_gate_after_cage_delay.setEnabled(auto_close_gate_cfg.enabled)
+
+        # right part:
         cur_row = 0
+        cur_col = 2
+
         # pelletDelivery:maxPelletMissingSeconds
-        spin_box = self._max_pellet_missing_seconds = QDoubleSpinBox()
+        grid_layout.addWidget(QLabel("Pellet missing seconds:"), cur_row, cur_col)
+        spinbox = self._max_pellet_missing_seconds = QDoubleSpinBox()
         def max_pellet_missing_seconds_changed(value):
             algo.pellet_missing_time = value
-        spin_box.setValue(algo.pellet_missing_time)
-        spin_box.valueChanged.connect(max_pellet_missing_seconds_changed)
-        grid_layout.addWidget(QLabel("Pellet missing seconds:"), cur_row, 2)
-        grid_layout.addWidget(spin_box, cur_row, 3)
+        spinbox.setValue(algo.pellet_missing_time)
+        spinbox.valueChanged.connect(max_pellet_missing_seconds_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         # pelletDelivery:pelletHandUncoverDistance [1]
+        grid_layout.addWidget(QLabel("Pellet-hand minimum distance:"), cur_row, cur_col)
         toggle = self._toggle_pellet_hand_uncover_distance = QSwitch()
-        grid_layout.addWidget(QLabel("Pellet-hand minimum distance:"), cur_row, 2)
         toggle.setChecked(algo.pellet_hand_uncover_distance is not None)
         spin_box_pellet_hand_uncover_dist = self._pellet_hand_uncover_distance = QDoubleSpinBox()
         pellet_hand_uncover_label = QLabel("Pellet hand uncover distance (mm) :")
@@ -251,7 +294,7 @@ class PreferencesContent(QWidget):
             # grid_layout.update()
 
         toggle.stateChanged.connect(toggle_pellet_hand_uncover_distance_changed)
-        grid_layout.addWidget(toggle, cur_row, 3)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
         def pellet_hand_uncover_distance_changed(value):
@@ -261,8 +304,8 @@ class PreferencesContent(QWidget):
         spin_box_pellet_hand_uncover_dist.setMinimum(0)
         spin_box_pellet_hand_uncover_dist.setMaximum(100)
         spin_box_pellet_hand_uncover_dist.valueChanged.connect(pellet_hand_uncover_distance_changed)
-        grid_layout.addWidget(pellet_hand_uncover_label, cur_row, 2)
-        grid_layout.addWidget(spin_box_pellet_hand_uncover_dist, cur_row, 3)
+        grid_layout.addWidget(pellet_hand_uncover_label, cur_row, cur_col)
+        grid_layout.addWidget(spin_box_pellet_hand_uncover_dist, cur_row, cur_col + 1)
 
         if algo.pellet_hand_uncover_distance is None:
             # ensure we hide the spinbox item/line
@@ -272,65 +315,65 @@ class PreferencesContent(QWidget):
         # headClamp: autoClampReleaseToneFreq
         label = QLabel("Auto-Clamp:")
         label.setStyleSheet("font-weight: bold")
-        grid_layout.addWidget(label, cur_row, 2)
+        grid_layout.addWidget(label, cur_row, cur_col)
         cur_row += 1
 
         #
-        spin_box = self._auto_clamp_threshold_spinbox = QSpinBox(None)
-        spin_box.setValue(analysis.headbar_pressure_monitor.load_cell_engaged_threshold)
-        spin_box.setMinimum(0)
-        spin_box.setMaximum(1023)
-        spin_box.setWrapping(False)
+        grid_layout.addWidget(QLabel("Threshold:"), cur_row, cur_col)
+        spinbox = self._auto_clamp_threshold_spinbox = QSpinBox(None)
+        spinbox.setValue(analysis.headbar_pressure_monitor.load_cell_engaged_threshold)
+        spinbox.setMinimum(0)
+        spinbox.setMaximum(1023)
+        spinbox.setWrapping(False)
         def update_headbar_pressure_threshold(value):
             analysis.headbar_pressure_monitor.load_cell_engaged_threshold = value
-        spin_box.valueChanged.connect(update_headbar_pressure_threshold)
-        spin_box.setEnabled(algo.head_fixation_enabled)
-        spin_box.setToolTip("A value that adjusts the sensitivity of the headbar detector for it to be considered engaged.")
-        grid_layout.addWidget(QLabel("Threshold:"), cur_row, 2)
-        grid_layout.addWidget(spin_box, cur_row, 3)
+        spinbox.valueChanged.connect(update_headbar_pressure_threshold)
+        spinbox.setEnabled(algo.head_fixation_enabled)
+        spinbox.setToolTip("A value that adjusts the sensitivity of the headbar detector for it to be considered engaged.")
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        spin_box = self._auto_clamp_release_tone_freq = QSpinBox()
+        grid_layout.addWidget(QLabel("Release tone freq (Hz) :"), cur_row, cur_col)
+        spinbox = self._auto_clamp_release_tone_freq = QSpinBox()
         def auto_clamp_release_tone_freq_changed(value):
             algo.auto_clamp_release_tone_freq = value
-        spin_box.setMinimum(0)
-        spin_box.setMaximum(100_000)
-        spin_box.setValue(algo.auto_clamp_release_tone_freq)
-        spin_box.valueChanged.connect(auto_clamp_release_tone_freq_changed)
-        grid_layout.addWidget(QLabel("Release tone freq (Hz) :"), cur_row, 2)
-        grid_layout.addWidget(spin_box, cur_row, 3)
+        spinbox.setMinimum(0)
+        spinbox.setMaximum(100_000)
+        spinbox.setValue(algo.auto_clamp_release_tone_freq)
+        spinbox.valueChanged.connect(auto_clamp_release_tone_freq_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         # headClamp:autoClampReleaseToneDelay
-        spin_box = self._auto_clamp_release_tone_delay = QDoubleSpinBox()
+        grid_layout.addWidget(QLabel("Release tone delay (second) :"), cur_row, cur_col)
+        spinbox = self._auto_clamp_release_tone_delay = QDoubleSpinBox()
         def auto_clamp_release_tone_delay_changed(value):
             algo.auto_clamp_release_tone_delay = value
-        spin_box.setValue(algo.auto_clamp_release_tone_delay)
-        spin_box.valueChanged.connect(auto_clamp_release_tone_delay_changed)
-        grid_layout.addWidget(QLabel("Release tone delay (second) :"), cur_row, 2)
-        grid_layout.addWidget(spin_box, cur_row, 3)
+        spinbox.setValue(algo.auto_clamp_release_tone_delay)
+        spinbox.valueChanged.connect(auto_clamp_release_tone_delay_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         # headClamp:autoClampNoActivityReleaseDelay
-        spin_box = self._auto_clamp_no_activity_release_delay = QDoubleSpinBox()
+        grid_layout.addWidget(QLabel("No-activity release delay (second) :"), cur_row, cur_col)
+        spinbox = self._auto_clamp_no_activity_release_delay = QDoubleSpinBox()
         def auto_clamp_no_activity_release_delay_changed(value):
             algo.auto_clamp_no_activity_release_delay = value
-        spin_box.setValue(algo.auto_clamp_no_activity_release_delay)
-        spin_box.valueChanged.connect(auto_clamp_no_activity_release_delay_changed)
-        grid_layout.addWidget(QLabel("No-activity release delay (second) :"), cur_row, 2)
-        grid_layout.addWidget(spin_box, cur_row, 3)
+        spinbox.setValue(algo.auto_clamp_no_activity_release_delay)
+        spinbox.valueChanged.connect(auto_clamp_no_activity_release_delay_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         # headClamp:autoClampReleaseLoadCount
-        spin_box = self._auto_clamp_release_load_count = QSpinBox()
-        spin_box.setMinimum(0)
-        spin_box.setMaximum(1_000_000)
+        grid_layout.addWidget(QLabel("Release load count:"), cur_row, cur_col)
+        spinbox = self._auto_clamp_release_load_count = QSpinBox()
+        spinbox.setMinimum(0)
+        spinbox.setMaximum(1_000_000)
         def auto_clamp_release_load_count_changed(value):
             algo.auto_clamp_release_load_count = value
-        spin_box.setValue(algo.auto_clamp_release_load_count)
-        spin_box.valueChanged.connect(auto_clamp_release_load_count_changed)
-        grid_layout.addWidget(QLabel("Release load count:"), cur_row, 2)
-        grid_layout.addWidget(spin_box, cur_row, 3)
+        spinbox.setValue(algo.auto_clamp_release_load_count)
+        spinbox.valueChanged.connect(auto_clamp_release_load_count_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         #
