@@ -164,6 +164,7 @@ class VideoDetection(threading.Thread):
         next_log_report = time.perf_counter() + 5
         processed_count = 0
         expired_count = 0
+        show_report = os.getenv("PRESENCE_DETECTION_SHOW_REPORT", "").lower() in {"y", "yes", "true", "1"}
         delay_report = int(os.getenv("PRES_DET_DELAY_REPORT", "180"))
         processed_times: List[float] = []
         prev_pc_values = []
@@ -183,7 +184,7 @@ class VideoDetection(threading.Thread):
         while not self._stop_requested:
             perf_now = time.perf_counter()
             loop_start_perf_now = perf_now
-            if perf_now >= next_log_report or len(prev_pc_values) > 30:
+            if show_report and perf_now >= next_log_report:
                 actual_delay = perf_now - last_log_report
                 logger.debug("video presence detection: %s, frame/s=%.1f mean_proc_time=%.3f ; expired_count=%.1f/s ; values=%s",
                              prev_pc_values[-1][0] if len(prev_pc_values) > 0 else math.nan,
@@ -244,7 +245,6 @@ class VideoDetection(threading.Thread):
                                pc_normalized, pc_unnormalized, [(d1, d2, d3) for d1, _, d2, d3 in hist_values])
                 attrs.pc_sum = pc_normalized
                 prev_pc_sum = pc_normalized
-                prev_pc_values.append((pc_normalized, pc_unnormalized))
             #
             cur_exclude_threshold = attrs.pc_high_exclude_threshold
             is_detected = (
@@ -279,5 +279,7 @@ class VideoDetection(threading.Thread):
                 else:
                     attrs.last_absence_start_perf_c = perf_now
                 prev_gray_frame = None  # this will make us to get the following necessary next frames for next check
-            processed_times.append(time.perf_counter() - loop_start_perf_now)
+            if show_report:
+                prev_pc_values.append((pc_normalized, pc_unnormalized))
+                processed_times.append(time.perf_counter() - loop_start_perf_now)
         # end while not self._stop_requested

@@ -407,6 +407,9 @@ class MainWindow(QMainWindow):
         view_menu.addAction(self.view_diagnostics_action)
 
     def _configure_toolbar(self):
+
+        behavior = self._app_model.behavior
+
         toolbar = QToolBar("Run Toolbar")
         toolbar.setFloatable(False)
         toolbar.setMovable(False)
@@ -459,18 +462,18 @@ class MainWindow(QMainWindow):
         emergency_button.setObjectName("EmergencyButton")
         emergency_button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
 
-        def update_emergency_ui(is_toggled):
+        def update_emergency_ui(is_toggled: bool, source: str):
             emergency_button.setText("Resume" if is_toggled else "Emergency Stop")
-            self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED" if is_toggled else self._title)
+            self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED - Source: {source}" if is_toggled else self._title)
+            emergency_button.setChecked(is_toggled)
 
         def emergency_stop_triggered(is_toggled: bool):
-            behavior = self._app_model.behavior
+            logger.verbose("emergency_stop_triggered: %s", is_toggled)
             (behavior.emergency_stop if is_toggled else behavior.emergency_resume)("user-button")
-            update_emergency_ui(is_toggled)
 
         emergency_button.toggled.connect(emergency_stop_triggered)
-        self._app_model.behavior.emergency_stopped += lambda src: update_emergency_ui(True)
-        self._app_model.behavior.emergency_resumed += lambda src: update_emergency_ui(False)
+        behavior.emergency_stopped += lambda src: update_emergency_ui(True, source=src)
+        behavior.emergency_resumed += lambda src: update_emergency_ui(False, source=src)
 
         toolbar.addWidget(emergency_button)
 

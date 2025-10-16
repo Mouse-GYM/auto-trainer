@@ -58,8 +58,10 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         @BehaviorAlgorithm.relay_func(wait=False)
         def alarm_monitor_property_changed(name, value, _):
             if name == "is_engaged":
-                meth = self.emergency_stop if value else self.emergency_resume
-                meth("alarm-monitor")  # noqa
+                if value:
+                    self.emergency_stop(f"alarm-monitor: {analysis.emergency_alarm_monitor.engaged_reasons}")
+                else:
+                    self.emergency_resume("alarm-monitor-resumed")
         analysis.emergency_alarm_monitor.property_changed += alarm_monitor_property_changed
 
     @property
@@ -124,12 +126,18 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             self._system_machine.algorithm.baseline_intensity = self._hardware_model.head_magnet_intensity
 
     def emergency_stop(self, source: str):
-        self._system_machine.algorithm.algo_paused = True
+        algo = self._system_machine.algorithm
+        if algo.algo_paused:
+            return
+        algo.algo_paused = True
         EventManager.default().post_event_content(ApiEventKind.emergencyStop, source)
         self.emergency_stopped(source)
 
     def emergency_resume(self, source: str):
-        self._system_machine.algorithm.algo_paused = False
+        algo = self._system_machine.algorithm
+        if not algo.algo_paused:
+            return
+        algo.algo_paused = False
         EventManager.default().post_event_content(ApiEventKind.emergencyResume, source)
         self.emergency_resumed(source)
 

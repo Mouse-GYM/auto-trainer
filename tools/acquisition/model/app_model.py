@@ -446,10 +446,16 @@ class AppModel(ObservableObject):
         self._hardware.set_auto_correct_motor_drift(self._behavior.algorithm.auto_correct_motors_drift)
         logger.info("finished connecting hardware")
 
+        if not self._behavior.algorithm.algo_paused:
+            self._analysis.emergency_alarm_monitor.start(reason="capture-start")
+
         return True
 
     def on_capture_stop(self):
         # logger.verbose("AppModel.on_capture_stop")
+        self._analysis.emergency_alarm_monitor.stop(reason="capture-stop")
+        self._analysis.global_mouse_presence_monitor.stop(reason="capture-stop")
+
         self._inference.stop()
 
         self.hardware.disconnect()
