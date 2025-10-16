@@ -448,6 +448,7 @@ class AppModel(ObservableObject):
 
         if not self._behavior.algorithm.algo_paused:
             self._analysis.emergency_alarm_monitor.start(reason="capture-start")
+            self._analysis.global_mouse_presence_monitor.start(reason="capture-start")
 
         return True
 
