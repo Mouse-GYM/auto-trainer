@@ -75,6 +75,10 @@ class EmergencyAlarmMonitor(ObservableObject):
             self._timer_update_state.cancel()
             self._enabled = False
 
+    def restart(self, *, reason: str="na"):
+        self.stop(reason=reason)
+        self.start(reason=reason)
+
     @property
     def is_engaged(self):
         return self._is_engaged

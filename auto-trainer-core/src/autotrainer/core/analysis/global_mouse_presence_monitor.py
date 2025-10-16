@@ -51,6 +51,10 @@ class GlobalMousePresenceMonitor(ObservableObject):
             self._enabled = False
             self._cur_timer.cancel()
 
+    def restart(self, *, reason: str="na"):
+        self.stop(reason=reason)
+        self.start(reason=reason)
+
     @property
     def config(self):
         return self._config
