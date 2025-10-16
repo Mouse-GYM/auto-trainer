@@ -143,5 +143,5 @@ class AlarmContent(ContentWidget):
             self.use_global_mouse_presence_changed.emit(value)
         elif name == p.GLOBAL_MOUSE_PRESENCE_ENGAGED:
             self.global_mouse_presence_changed.emit(value)
-        elif name == EmergencyAlarmMonitor.AUTO_RESUME_ON_CONDITIONS_CLEARED:
+        elif name == p.AUTO_RESUME_ON_CONDITIONS_CLEARED:
             pass
