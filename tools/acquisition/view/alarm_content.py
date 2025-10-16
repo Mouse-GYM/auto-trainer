@@ -28,7 +28,6 @@ class AlarmContent(ContentWidget):
 
     load_cell_thrashing_changed = Signal(bool, name="load_cell_thrashing_changed")
     audio_thrashing_changed = Signal(bool, name="audio_thrashing_changed")
-    presence_missing_changed = Signal(bool, name="presence_missing_changed")  # global mouse presence
     front_door_changed = Signal(bool, name="front_door_changed")
     slide_door_changed = Signal(bool, name="slide_door_changed")
 
@@ -57,7 +56,6 @@ class AlarmContent(ContentWidget):
         icon = self._mouse_missing_status = StatusIcon.alarmIcon()
         label = self._mouse_missing_label = QLabel("Mouse Missing:")
         form_layout.addRow(label, icon)
-        self.presence_missing_changed.connect(icon.setStatus)
         self.use_global_mouse_presence_changed.connect(lambda v: self._mouse_missing_label.setStyleSheet("" if v else "color: gray"))
         self.use_global_mouse_presence_changed.emit(emergency_alarm_cfg.use_global_mouse_presence_missing)
         self.global_mouse_presence_changed.connect(icon.setStatus)
@@ -112,7 +110,6 @@ class AlarmContent(ContentWidget):
         hardware_model.property_changed += self._hardware_model_property_changed
         app_model.analysis.load_cell_monitor.property_changed += self._load_cell_property_changed
         app_model.analysis.audio_thrashing_monitor.property_changed += self._audio_thrashing_property_changed
-        app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
         app_model.analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
 
     def set_is_capture_active(self, is_editable: bool):
@@ -131,10 +128,6 @@ class AlarmContent(ContentWidget):
     def _audio_thrashing_property_changed(self, name, new_value, old_value):
         if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
             self.audio_thrashing_changed.emit(new_value)
-
-    def _behavior_algo_property_changed(self, name, new_value, old_value):
-        if name == BehaviorAlgoProps.PRESENCE_MISSING:
-            self.presence_missing_changed.emit(new_value)
 
     def _alarm_monitor_property_changed(self,  name, value, _):
         p = EmergencyAlarmMonitor
