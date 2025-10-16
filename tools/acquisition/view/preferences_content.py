@@ -291,7 +291,6 @@ class PreferencesContent(QWidget):
             spin_box_pellet_hand_uncover_dist.setEnabled(enabled)
             spin_box_pellet_hand_uncover_dist.setVisible(enabled)
             pellet_hand_uncover_label.setVisible(enabled)
-            # grid_layout.update()
 
         toggle.stateChanged.connect(toggle_pellet_hand_uncover_distance_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
@@ -522,6 +521,7 @@ class PreferencesContent(QWidget):
     def _create_alarms_tab(self):
         model = self._app_model
         analysis = model.analysis
+        alarm_monitor = analysis.emergency_alarm_monitor
         load_cell_monitor = analysis.load_cell_monitor
         config = model.loaded_configuration
         behavior_cfg = config.behavior
@@ -551,6 +551,7 @@ class PreferencesContent(QWidget):
         def toggle_changed(value):
             toggled = value != 0
             alarm_cfg.auto_resume_on_cleared = toggled
+            alarm_monitor.property_changed(alarm_monitor.AUTO_RESUME_ON_CONDITIONS_CLEARED, toggled, not toggled)
         toggle_auto_resume.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle_auto_resume, cur_row, 1)
         cur_row += 1
@@ -562,6 +563,7 @@ class PreferencesContent(QWidget):
         def toggle_changed(value):
             toggled = value != 0
             alarm_cfg.use_audio_load_cell_thrash = toggled
+            alarm_monitor.property_changed(alarm_monitor.USE_AUDIO_LOAD_CELL_THRASHING, toggled, not toggled)
         toggle_use_audio_load_cell.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle_use_audio_load_cell, cur_row, 1)
         cur_row += 1
@@ -631,6 +633,7 @@ class PreferencesContent(QWidget):
         def toggle_changed(value):
             toggled = value != 0
             alarm_cfg.use_presence_missing_after_exit_tunnel = toggled
+            alarm_monitor.property_changed(alarm_monitor.USE_PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL, toggled, not toggled)
         toggle.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle, cur_row, 1)
         cur_row += 1
@@ -661,6 +664,7 @@ class PreferencesContent(QWidget):
         def toggle_changed(value):
             toggled = value != 0
             alarm_cfg.use_global_mouse_presence_missing = toggled
+            alarm_monitor.property_changed(alarm_monitor.USE_GLOBAL_MOUSE_PRESENCE, toggled, not toggled)
         toggle.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
