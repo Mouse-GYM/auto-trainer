@@ -37,11 +37,11 @@ class GlobalMousePresenceMonitor(ObservableObject):
             logger.info("starting monitor: %s", reason)
             self._t_started = time.perf_counter()
             self._enabled = True
-            self._is_engaged = False  # force set to False,
             # so that if situation is same than before this start (when it was stopped),
             # then a new trigger will be emitted.
             timer = self._cur_timer = make_daemon_timer(0.1, self._check_state)
             timer.start()
+            self.is_engaged = False  # force set to False
 
     def stop(self, *, reason: str="na"):
         with self._lock:

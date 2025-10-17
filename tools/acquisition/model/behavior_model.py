@@ -51,6 +51,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         self._is_intersession_enabled = self._system_machine.algorithm.intersession_enabled
         self._hardware_model = hardware_model
         #
+        self._source_algo_paused = "na"
+        #
         self._system_machine.algorithm.property_changed += self._on_algorithm_property_changed
         self._system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
@@ -130,6 +132,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         if algo.algo_paused:
             return
         algo.algo_paused = True
+        self._source_algo_paused = source
         EventManager.default().post_event_content(ApiEventKind.emergencyStop, source)
         self.emergency_stopped(source)
 
@@ -137,7 +140,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         algo = self._system_machine.algorithm
         if not algo.algo_paused:
             return
+        if self._source_algo_paused == "user-button" and source != "user-button":
+            return
         algo.algo_paused = False
+        self._analysis.global_mouse_presence_monitor.restart(reason=f"end-emergency-{source}")
+        self._analysis.emergency_alarm_monitor.restart(reason=f"end-emergency-{source}")
         EventManager.default().post_event_content(ApiEventKind.emergencyResume, source)
         self.emergency_resumed(source)
 

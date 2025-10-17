@@ -409,6 +409,7 @@ class MainWindow(QMainWindow):
     def _configure_toolbar(self):
 
         behavior = self._app_model.behavior
+        analysis = behavior.analysis
 
         toolbar = QToolBar("Run Toolbar")
         toolbar.setFloatable(False)
@@ -465,7 +466,8 @@ class MainWindow(QMainWindow):
         def update_emergency_ui(is_toggled: bool, source: str):
             emergency_button.setText("Resume" if is_toggled else "Emergency Stop")
             self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED - Source: {source}" if is_toggled else self._title)
-            emergency_button.setChecked(is_toggled)
+            if source != "user-button":
+                emergency_button.setChecked(is_toggled)
 
         def emergency_stop_triggered(is_toggled: bool):
             logger.verbose("emergency_stop_triggered: %s", is_toggled)

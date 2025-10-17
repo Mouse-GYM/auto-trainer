@@ -294,10 +294,7 @@ class SystemMachine(StateMachine):
         if name == InferenceProtocol.STATUS:
             logger.verbose("Inference status change: %s -> %s ; system_state=%s",
                            prev_value, new_value, self.state)
-            if new_value in {InferenceStatus.live, InferenceStatus.intersession}:
-                self._analysis.global_mouse_presence_monitor.start(reason=f"inference={new_value}")
-            else:
-                self._analysis.global_mouse_presence_monitor.stop(reason=f"inference-status={new_value}")
+            if new_value not in {InferenceStatus.live, InferenceStatus.intersession}:
                 self._timer_consider_end_session.cancel()
             if (
                 new_value == InferenceStatus.live
@@ -578,9 +575,6 @@ class SystemMachine(StateMachine):
                 tunnel_dev.update_head_magnet_intensity(algo.baseline_intensity)
                 pellet_dev.send_pellet()
                 #
-                if self._inference.status in {InferenceStatus.live, InferenceStatus.intersession}:
-                    self._analysis.global_mouse_presence_monitor.restart(reason="algo-unpaused")
-                    self._analysis.emergency_alarm_monitor.restart(reason="algo-unpaused")
                 # trigger load cell property changed check, so that new session will be started if mouse still in tunnel
                 self._load_cell_monitor_property_changed(
                     LoadCellMonitor.IS_ENGAGED_PROPERTY, self._analysis.load_cell_monitor.is_engaged, None
