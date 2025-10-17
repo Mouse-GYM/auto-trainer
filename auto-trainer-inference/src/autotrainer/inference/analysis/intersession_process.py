@@ -56,7 +56,7 @@ def intersession_process(
         pellet_x=results_dict['shift_x'],
         pellet_y=results_dict['shift_y'],
         pellet_z=results_dict['shift_z'],
-        food_consumed=results_dict.get('pellet_consumed', 0),
+        food_consumed=results_dict['pellets_consumed'],
         successful_reaches=results_dict['successful_reaches'],
         pellets_presented=results_dict['pellets_presented'],
     )
