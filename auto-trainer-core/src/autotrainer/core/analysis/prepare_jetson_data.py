@@ -662,7 +662,7 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
         dataFrame_camera1_undistort, dataFrame_camera2_undistort,
         stereomatrix=stereomatrix, bpts=bpts, min_cluster=min_cluster, p_thresh=p_thresh
     )
-    df_3d.to_hdf(str(path_3D), "df_with_missing", format="table", mode="w")
+    # df_3d.to_hdf(str(path_3D), "df_with_missing", format="table", mode="w")
     return df_3d
 
 
