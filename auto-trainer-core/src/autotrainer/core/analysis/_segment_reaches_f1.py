@@ -12,17 +12,23 @@ def segment_reaches_f11(
     debug: int,
 ):
     #define dist and velo for each reach sequence
-    dist_p = np.sqrt((df_3d['Pellet']['x'].values-pellet_home[0])**2+
-                         (df_3d['Pellet']['y'].values-pellet_home[1])**2+
-                         (df_3d['Pellet']['z'].values-pellet_home[2])**2)
+    pellet_x_vals = df_3d['Pellet']['x'].values
+    pellet_y_vals = df_3d['Pellet']['y'].values
+    pellet_z_vals = df_3d['Pellet']['z'].values
+    dist_p = np.sqrt((pellet_x_vals - pellet_home[0])**2+
+                         (pellet_y_vals - pellet_home[1])**2+
+                         (pellet_z_vals - pellet_home[2])**2)
 
-    dist_st = np.sqrt((df_3d['Star']['x'].values-df_3d['Triangle']['x'].values)**2+
-                         (df_3d['Star']['y'].values-df_3d['Triangle']['y'].values)**2+
-                         (df_3d['Star']['z'].values-df_3d['Triangle']['z'].values)**2)
+    triangle_x_vals = df_3d['Triangle']['x'].values
+    triangle_y_vals = df_3d['Triangle']['y'].values
+    triangle_z_vals = df_3d['Triangle']['z'].values
+    dist_st = np.sqrt((df_3d['Star']['x'].values - triangle_x_vals)**2+
+                         (df_3d['Star']['y'].values - triangle_y_vals)**2+
+                         (df_3d['Star']['z'].values - triangle_z_vals)**2)
 
-    dist_tpX = df_3d['Triangle']['x'].values - df_3d['Pellet']['x'].values
-    dist_tpY = df_3d['Triangle']['y'].values - df_3d['Pellet']['y'].values
-    dist_tpZ = df_3d['Triangle']['z'].values - df_3d['Pellet']['z'].values
+    dist_tpX = triangle_x_vals - pellet_x_vals
+    dist_tpY = triangle_y_vals - pellet_y_vals
+    dist_tpZ = triangle_z_vals - pellet_z_vals
 
     dist_tvpp = np.sqrt((df_3d['Tongue_mid']['x'].values-pellet_home[0])**2+
                             (df_3d['Tongue_mid']['y'].values-pellet_home[1])**2+
@@ -39,7 +45,7 @@ def segment_reaches_f11(
     # velocity_h_filt_L = filtfilt(coeffs, [1], velocity_h_L)
     # Z_dist_h_L = df_3d['L_Hand']['z'].values-pellet_home[2]
 
-    Z_dist_p = pellet_home[2]-df_3d['Pellet']['z'].values
+    Z_dist_p = pellet_home[2] - pellet_z_vals
     Z_dist_p[df_3d['Pellet']['p'] == 0] = np.nan
     # Y_dist_p = np.abs(df_3d['Pellet']['y'].values-pellet_home[1])
 
