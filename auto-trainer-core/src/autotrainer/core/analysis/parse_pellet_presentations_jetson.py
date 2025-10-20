@@ -24,7 +24,12 @@ import pandas as pd
 from scipy.signal import savgol_coeffs, filtfilt
 
 from autotrainer.core.analysis import prepare_jetson_data as prep_jet
-from autotrainer.core.analysis._segment_reaches_f1 import segment_reaches_f11
+import autotrainer.core.analysis._segment_reaches_f1 as segment_reaches_f11_module
+
+
+print(segment_reaches_f11_module)
+segment_reaches_f11 = segment_reaches_f11_module.segment_reaches_f11
+
 
 def get_coeffs():
     # Savitzky-Golay Smoothing filter parameters
@@ -45,12 +50,11 @@ def segment_reaches(
     session,
     center_method,
     available_XYZ,
+    df_3d,
     *,
     overwrite: bool = True,
     debug: int = 0,
 ):
-# session = session_list[0]
-    
     results_dict = {
         'pellets_consumed': 0,
         'pellets_presented': 0,
@@ -59,6 +63,8 @@ def segment_reaches(
         'shift_y': 0,
         'shift_z': 0
     }
+    if df_3d is None:
+        return results_dict
     vid_tag = '.mp4'
     frame_rate = 150
     
@@ -80,12 +86,12 @@ def segment_reaches(
         # TODO: read the file and returns its results dicts..
         return results_dict
     
-    data_path_3D = os.path.join(vid_dir, vid_name_base + '_centered3D.h5')
-    if not os.path.isfile(data_path_3D):
-        print('No 3D dataframe available for %s\n' % vid_name_base)
-        return results_dict
-    
-    df_3d = pd.read_hdf(data_path_3D)
+    # data_path_3D = os.path.join(vid_dir, vid_name_base + '_centered3D.h5')
+    # if not os.path.isfile(data_path_3D):
+    #     print('No 3D dataframe available for %s\n' % vid_name_base)
+    #     return results_dict
+
+    # df_3d = pd.read_hdf(data_path_3D)
     
     coeffs = get_coeffs()
 
