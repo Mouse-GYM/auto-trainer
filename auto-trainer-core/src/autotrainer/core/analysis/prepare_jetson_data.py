@@ -452,8 +452,8 @@ def rotate_3d_points(points, x_degrees: float = 0, y_degrees: float = 0, z_degre
     return rotated_points
 
 
-def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
-    df_3d = pd.read_hdf(path_3D)
+def reorient_and_center(filtered_df_3d, centered_path_3d, src_dir, bpts, center_method, frame_rate):
+    df_3d = filtered_df_3d  # pd.read_hdf(path_3D)
     path_cam_mat = os.path.join(src_dir, 'camera_matrix')
     path_stereo_file = os.path.join(path_cam_mat, "stereo_params.pickle")
     calib_params = load_calib_stereo_params(Path(path_stereo_file))
@@ -485,8 +485,7 @@ def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
         cam_offsets=cam_offsets,
         save_offsets=True,
     )
-    real_path_3D = path_3D.replace('_filtered3D.h5', '_centered3D.h5')
-    res_df_3d.to_hdf(real_path_3D, "df_with_missing", format="table", mode="w")
+    res_df_3d.to_hdf(centered_path_3d, "df_with_missing", format="table", mode="w")
     return res_df_3d
 
 
@@ -647,7 +646,8 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
     path_cam_mat = os.path.join(calib_src_dir, 'camera_matrix')
 
     # Read the calibration variables
-    square_size, cbrow, cbcol = cal_flir.get_calibration_info(calib_src_dir)
+    # square_size, cbrow, cbcol = cal_flir.get_calibration_info(calib_src_dir)
+    # unused here
 
     # Undistort dataframes
     (
@@ -663,6 +663,7 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
         stereomatrix=stereomatrix, bpts=bpts, min_cluster=min_cluster, p_thresh=p_thresh
     )
     df_3d.to_hdf(str(path_3D), "df_with_missing", format="table", mode="w")
+    return df_3d
 
 
 def triangulate_3d_step1(
@@ -784,7 +785,12 @@ def process_raw_data(session, vid_tag, dlc_seg, calib_src_dir, center_method) ->
     if len(df_LR) == 0:
         print('No tracking obtained for %s' % session)
         return None
+    #
     raw_path_3D = os.path.join(vid_dir, vid_name_base + '_filtered3D.h5')
-    triangulate_3D(df_LR, raw_path_3D, calib_src_dir, bodyparts, min_cluster, p_thresh)
-    centered_df_3d = reorient_and_center(raw_path_3D, calib_src_dir, bodyparts, center_method, frame_rate)
+    filtered_df_3d = triangulate_3D(df_LR, raw_path_3D, calib_src_dir, bodyparts, min_cluster, p_thresh)
+    #
+    centered_path_3d = os.path.join(vid_dir, vid_name_base + '_centered3D.h5')
+    centered_df_3d = reorient_and_center(
+        filtered_df_3d, centered_path_3d, calib_src_dir, bodyparts, center_method, frame_rate)
+    #
     return centered_df_3d

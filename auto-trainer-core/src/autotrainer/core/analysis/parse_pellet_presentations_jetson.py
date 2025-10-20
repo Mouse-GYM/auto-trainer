@@ -85,14 +85,7 @@ def segment_reaches(
         print('Previous analysis found for %s\n' % vid_name_base)
         # TODO: read the file and returns its results dicts..
         return results_dict
-    
-    # data_path_3D = os.path.join(vid_dir, vid_name_base + '_centered3D.h5')
-    # if not os.path.isfile(data_path_3D):
-    #     print('No 3D dataframe available for %s\n' % vid_name_base)
-    #     return results_dict
 
-    # df_3d = pd.read_hdf(data_path_3D)
-    
     coeffs = get_coeffs()
 
     dist_p, Z_dist_p, dist_hvpp_R, pellet_events, pellet_home, frames_on_found = segment_reaches_f1(
