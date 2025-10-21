@@ -21,7 +21,7 @@ logger = get_verbose_logger(__name__)
 class InferenceCommandMessageKind(IntEnum):
     Start = 0
     Terminate = 1
-    ProcessLive = 2
+    ProcessLive = 2  # nb: not anymore used as command message.
     ProcessOffline = 3
     ProcessLiveWhenReady = 4
     SetLoggerLevel = 5
@@ -216,17 +216,22 @@ class PoseProcess(Process):
 
         reset_locals()
 
-        t_last_data = t_next_cmd = time.time()
+        t_last_data = t_next_cmd = time.perf_counter()
         while True:
-            t_now = time.time()
+            t_now = time.perf_counter()
             if t_now > t_next_cmd:
                 # do not check command queue on each loop turn, mostly useless
                 # and overhead is not that small
-                t_next_cmd = t_now + 0.01
                 for _ in range(4):  # assuming we don't get "burst" of commands
                     try:
                         cmd, context = get_command()
                     except Empty:
+                        t_next_cmd = t_now + 0.5
+                        # current processing speed of inference is ~0.05s / batch ; which has 3 frames per cam.
+                        # so it's unnecessary to wait smaller than that before trying reading next command.
+                        # also given all the related messages are infrequent and normally never following
+                        # the previous one with any that short delay
+                        #
                         break
                     logger.info("Handling command %s ...", cmd)
                     try:
@@ -266,11 +271,14 @@ class PoseProcess(Process):
             if not i_q.get_output(frame_buffer, frames_indices):
                 time.sleep(0.001)
                 continue
-            mode_used = InferenceMode.Live if i_q is self._live_input_queue else InferenceMode.Offline
+
             t_last_data = t_now
+            mode_used = InferenceMode.Live if i_q is self._live_input_queue else InferenceMode.Offline
+
             if (frames_indices[:, -1] < 0).any():
-                if not (frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all():
-                    logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices)
+                if __debug__:
+                    if not (frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all():
+                        logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices)
 
                 if (
                     i_q is self._offline_input_queue
@@ -278,10 +286,10 @@ class PoseProcess(Process):
                         FrameIndexCategory.ONLINE_NO_RECORDING,
                         FrameIndexCategory.SWITCH_TO_ONLINE]
                     ).any()
-                    and not numpy.isin(frames_indices[:, -1], [  # noqa
-                        FrameIndexCategory.SWITCH_TO_OFFLINE_MODE,
-                        FrameIndexCategory.EOF_RECORDING,
-                    ]).any()
+                    # and not numpy.isin(frames_indices[:, -1], [  # noqa
+                    #     FrameIndexCategory.SWITCH_TO_OFFLINE_MODE,
+                    #     FrameIndexCategory.EOF_RECORDING,
+                    # ]).any()
                 ):
                     # self._offline_input_queue.reset_reader()  # reset our reader index for next offline
                     self._set_process_live()
@@ -289,11 +297,12 @@ class PoseProcess(Process):
                 # elif required:
                 elif (
                     i_q is self._live_input_queue
-                    and numpy.isin(frames_indices[:, -1], [  # noqa
-                        FrameIndexCategory.EOF_RECORDING,
-                        FrameIndexCategory.SWITCH_TO_OFFLINE_MODE,
-                    ]).any()
-                    and not numpy.isin(frames_indices[:, -1], [FrameIndexCategory.SWITCH_TO_ONLINE]).any()
+                    and (frames_indices[:, -1] == FrameIndexCategory.EOF_RECORDING).any()
+                    # and numpy.isin(frames_indices[:, -1], [  # noqa
+                    #     FrameIndexCategory.EOF_RECORDING,
+                    #     FrameIndexCategory.SWITCH_TO_OFFLINE_MODE,
+                    # ]).any()
+                    # and not numpy.isin(frames_indices[:, -1], [FrameIndexCategory.SWITCH_TO_ONLINE]).any()
                     # and certainly not (frames_indices[:, -1] == SWITCH_TO_ONLINE).any() ... or any such
                 ):
                     self._input_queue = self._offline_input_queue
@@ -302,7 +311,6 @@ class PoseProcess(Process):
                     self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
                     # always get new ref:
                     reset_locals()
-                    # continue
 
             pose = predict(frame_buffer)
             # NB:
@@ -323,11 +331,12 @@ class PoseProcess(Process):
                 self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
 
             if mode_used == InferenceMode.Offline and (
-                numpy.isin(frames_indices[:, -1], [  # noqa
-                    FrameIndexCategory.EOF_OFFLINE_PROCESSING,
-                    # FrameIndexCategory.SWITCH_TO_ONLINE,
-                    ]
-                ).any()
+                frames_indices[:, -1] == FrameIndexCategory.EOF_OFFLINE_PROCESSING
+                # numpy.isin(frames_indices[:, -1], [  # noqa
+                #     FrameIndexCategory.EOF_OFFLINE_PROCESSING,
+                #     # FrameIndexCategory.SWITCH_TO_ONLINE,
+                #     ]
+                # ).any()
             ).any():
                 logger.notice("Detected end of offline queue processing: %s", frames_indices)
                 # self._offline_input_queue.reset_reader()  # reset our reader index for next offline
