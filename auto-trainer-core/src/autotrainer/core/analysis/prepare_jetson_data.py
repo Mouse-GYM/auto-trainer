@@ -4,6 +4,7 @@ Created on Tue Jan 16 16:15:29 2024
 
 @author: reynoben
 """
+import copy
 import sys
 import os
 import glob
@@ -508,6 +509,7 @@ def reorient_and_center_step1(
     cam_offsets,
     save_offsets: bool = False,
 ):
+    orig_cam_offsets = copy.deepcopy(cam_offsets)
     num_frames = np.shape(df_3d)[0]
     mask = df_3d.columns.get_level_values("bodyparts").isin(bpts)
     data_4d = df_3d.loc[:, mask].to_numpy().reshape((len(df_3d), -1, 4))
@@ -596,6 +598,9 @@ def reorient_and_center_step1(
             path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')
             with open(path_offsets, 'wb') as fh:
                 pickle.dump(cam_offsets, fh)
+
+    if orig_cam_offsets is not None and cam_offsets != orig_cam_offsets:
+        logger.warning("Loaded cam_offsets != generated: %s vs %s", orig_cam_offsets, cam_offsets)
 
     # Reorient based on camera angles
     for bp in range(len(bpts)):
