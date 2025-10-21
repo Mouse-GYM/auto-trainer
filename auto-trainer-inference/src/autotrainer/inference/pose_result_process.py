@@ -1,6 +1,7 @@
 
 import logging.config
 import multiprocessing
+import os
 import queue
 import statistics
 import signal
@@ -109,7 +110,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._msg_queue = msg_queue
         self._cams = (project.camera_1, project.camera_2)
         self._frames_per_camera = frames_per_cam
-        self._recording_live_batch = 64
+        self._recording_live_batch = int(os.getenv("INFERENCE_LIVE_BATCH", 150 * 5))  # 5s at 150 FPS
         self._monitored_parts_offsets = monitored_parts_offsets
         self._parts_offsets = 0
         self._stop_recorded = mp_ctx.Event()
