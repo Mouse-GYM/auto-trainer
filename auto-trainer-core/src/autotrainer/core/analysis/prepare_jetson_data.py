@@ -596,6 +596,7 @@ def reorient_and_center_step1(
         # Save the offsets to a pickle file
         if save_offsets:
             path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')
+            logger.notice("Saving camera-offsets to %s", path_offsets)
             with open(path_offsets, 'wb') as fh:
                 pickle.dump(cam_offsets, fh)
 
