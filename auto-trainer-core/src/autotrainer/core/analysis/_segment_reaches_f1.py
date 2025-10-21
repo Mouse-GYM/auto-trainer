@@ -12,41 +12,53 @@ def segment_reaches_f11(
     debug: int,
 ):
     #define dist and velo for each reach sequence
-    pellet_x_vals = df_3d['Pellet']['x'].values
-    pellet_y_vals = df_3d['Pellet']['y'].values
-    pellet_z_vals = df_3d['Pellet']['z'].values
+    pellet_xyz_p = df_3d['Pellet']
+    pellet_p = pellet_xyz_p['p']
+    pellet_x_vals = pellet_xyz_p['x'].values
+    pellet_y_vals = pellet_xyz_p['y'].values
+    pellet_z_vals = pellet_xyz_p['z'].values
     dist_p = np.sqrt((pellet_x_vals - pellet_home[0])**2+
                          (pellet_y_vals - pellet_home[1])**2+
                          (pellet_z_vals - pellet_home[2])**2)
 
-    triangle_x_vals = df_3d['Triangle']['x'].values
-    triangle_y_vals = df_3d['Triangle']['y'].values
-    triangle_z_vals = df_3d['Triangle']['z'].values
-    dist_st = np.sqrt((df_3d['Star']['x'].values - triangle_x_vals)**2+
-                         (df_3d['Star']['y'].values - triangle_y_vals)**2+
-                         (df_3d['Star']['z'].values - triangle_z_vals)**2)
+    triangle_xyz_p = df_3d['Triangle']
+    # triangle_p = triangle_xyz_p['p']
+    triangle_x_vals = triangle_xyz_p['x'].values
+    triangle_y_vals = triangle_xyz_p['y'].values
+    triangle_z_vals = triangle_xyz_p['z'].values
+    star_xyz_p = df_3d['Star']
+    # star_p = star_xyz_p['p']
+    dist_st = np.sqrt((star_xyz_p['x'].values - triangle_x_vals)**2+
+                         (star_xyz_p['y'].values - triangle_y_vals)**2+
+                         (star_xyz_p['z'].values - triangle_z_vals)**2)
 
     dist_tpX = triangle_x_vals - pellet_x_vals
     dist_tpY = triangle_y_vals - pellet_y_vals
     dist_tpZ = triangle_z_vals - pellet_z_vals
 
-    dist_tvpp = np.sqrt((df_3d['Tongue_mid']['x'].values-pellet_home[0])**2+
-                            (df_3d['Tongue_mid']['y'].values-pellet_home[1])**2+
-                            (df_3d['Tongue_mid']['z'].values-pellet_home[2])**2)
+    tongue_mid_xyz_p = df_3d['Tongue_mid']
+    tongue_mid_p = tongue_mid_xyz_p['p']
+    dist_tvpp = np.sqrt((tongue_mid_xyz_p['x'].values-pellet_home[0])**2+
+                            (tongue_mid_xyz_p['y'].values-pellet_home[1])**2+
+                            (tongue_mid_xyz_p['z'].values-pellet_home[2])**2)
 
-    dist_hvpp_R = np.sqrt((df_3d['R_Hand']['x'].values-pellet_home[0])**2+
-                            (df_3d['R_Hand']['y'].values-pellet_home[1])**2+
-                            (df_3d['R_Hand']['z'].values-pellet_home[2])**2)
+    r_hand_xyz_p = df_3d['R_Hand']
+    r_hand_p = r_hand_xyz_p['p']
+    dist_hvpp_R = np.sqrt((r_hand_xyz_p['x'].values-pellet_home[0])**2+
+                            (r_hand_xyz_p['y'].values-pellet_home[1])**2+
+                            (r_hand_xyz_p['z'].values-pellet_home[2])**2)
 
-    dist_hvpp_L = np.sqrt((df_3d['L_Hand']['x'].values-pellet_home[0])**2+
-                              (df_3d['L_Hand']['y'].values-pellet_home[1])**2+
-                              (df_3d['L_Hand']['z'].values-pellet_home[2])**2)
+    l_hand_xyz_p = df_3d['L_Hand']
+    l_hand_p = l_hand_xyz_p['p']
+    dist_hvpp_L = np.sqrt((l_hand_xyz_p['x'].values-pellet_home[0])**2+
+                              (l_hand_xyz_p['y'].values-pellet_home[1])**2+
+                              (l_hand_xyz_p['z'].values-pellet_home[2])**2)
     # velocity_h_L = np.diff(dist_hvpp_L)*(frame_rate/1000)
     # velocity_h_filt_L = filtfilt(coeffs, [1], velocity_h_L)
     # Z_dist_h_L = df_3d['L_Hand']['z'].values-pellet_home[2]
 
     Z_dist_p = pellet_home[2] - pellet_z_vals
-    Z_dist_p[df_3d['Pellet']['p'] == 0] = np.nan
+    Z_dist_p[pellet_p == 0] = np.nan
     # Y_dist_p = np.abs(df_3d['Pellet']['y'].values-pellet_home[1])
 
     ############################
@@ -75,7 +87,7 @@ def segment_reaches_f11(
     count = 0
     pellet_state = 0 # 0 is lost, 1 is placed
     pellet_events = []
-    for dp, st, tpX, tpY, tpZ, pp in zip(dist_p, dist_st, dist_tpX, dist_tpY, dist_tpZ, df_3d['Pellet']['p']):
+    for dp, st, tpX, tpY, tpZ, pp in zip(dist_p, dist_st, dist_tpX, dist_tpY, dist_tpZ, pellet_p):
         frm_counter += 1
         # if p == 1:
         #     print(f"{p_dist} - {frm_counter}")
@@ -118,14 +130,14 @@ def segment_reaches_f11(
             if count >= time2lost*frame_rate:
                 frames_on_lost.append(frame_at_count_begin)
                 pellet_dict['lost'] = frame_at_count_begin
-                right_test = dist_hvpp_R[frames_on_lost[-1]] < min_dist_for_grab
-                right_test = right_test and df_3d['R_Hand']['p'][frames_on_lost[-1]] == 1
-                left_test = dist_hvpp_L[frames_on_lost[-1]] < min_dist_for_grab
-                left_test = left_test and df_3d['L_Hand']['p'][frames_on_lost[-1]] == 1
-                tongue_test = df_3d['Tongue_mid']['p'][frames_on_lost[-1]] == 1
-                RVL_test = dist_hvpp_R[frames_on_lost[-1]] < dist_hvpp_L[frames_on_lost[-1]]
-                TVR_test = dist_tvpp[frames_on_lost[-1]] < dist_hvpp_L[frames_on_lost[-1]]
-                TVL_test = dist_tvpp[frames_on_lost[-1]] < dist_hvpp_R[frames_on_lost[-1]]
+                right_test = dist_hvpp_R[frame_at_count_begin] < min_dist_for_grab
+                right_test = right_test and r_hand_p[frame_at_count_begin] == 1
+                left_test = dist_hvpp_L[frame_at_count_begin] < min_dist_for_grab
+                left_test = left_test and l_hand_p[frame_at_count_begin] == 1
+                tongue_test = tongue_mid_p[frame_at_count_begin] == 1
+                RVL_test = dist_hvpp_R[frame_at_count_begin] < dist_hvpp_L[frame_at_count_begin]
+                TVR_test = dist_tvpp[frame_at_count_begin] < dist_hvpp_L[frame_at_count_begin]
+                TVL_test = dist_tvpp[frame_at_count_begin] < dist_hvpp_R[frame_at_count_begin]
                 pellet_dict['outcome'] = 'eaten'
                 if TVR_test and TVL_test and tongue_test:
                     pellet_dict['method'] = 'tongue'
@@ -137,10 +149,10 @@ def segment_reaches_f11(
                     pellet_dict['method'] = 'other'
                     pellet_dict['outcome'] = 'dropped'
                 if debug == 1:
-                    print(f"Right hand : {dist_hvpp_R[frames_on_lost[-1]]} at {frames_on_lost[-1]}")
-                    print(f"Left hand : {dist_hvpp_L[frames_on_lost[-1]]}")
-                    print(f"Tongue : {dist_tvpp[frames_on_lost[-1]]}")
-                    print(f"R/L/T conf : {df_3d['R_Hand']['p'][frames_on_lost[-1]]}/{df_3d['L_Hand']['p'][frames_on_lost[-1]]}/{df_3d['Tongue_mid']['p'][frames_on_lost[-1]]}")
+                    print(f"Right hand : {dist_hvpp_R[frame_at_count_begin]} at {frame_at_count_begin}")
+                    print(f"Left hand : {dist_hvpp_L[frame_at_count_begin]}")
+                    print(f"Tongue : {dist_tvpp[frame_at_count_begin]}")
+                    print(f"R/L/T conf : {r_hand_p[frame_at_count_begin]}/{l_hand_p[frame_at_count_begin]}/{tongue_mid_p[frame_at_count_begin]}")
                 pellet_events[-1] = pellet_dict
                 pellet_state = 2
         elif pellet_state == 2: # Waiting minimum inter-pellet interval
