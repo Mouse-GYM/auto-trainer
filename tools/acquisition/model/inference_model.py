@@ -567,7 +567,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             [] if fh is None else [ int(val.strip()) for val in fh.readlines()]
             for fh in cams_processed_fhs
         ]
-        if _local_do_debug:
+        if __debug__ and _local_do_debug:
             cams_already_processed_idx2 = [
                 [
                     l[2][0]  # the third row contains the associated frame index in h5 file ([0] to extract it from array)
@@ -667,7 +667,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             for cdx in range(n_cams):
                 offline_q.put_block(empty_frame, cdx, FrameIndexCategory.PADDING)
 
-        if _local_do_debug:
+        if __debug__ and _local_do_debug:
             for cdx in range(n_cams):
                 with open(str(cams_paths[cdx][-1]) + "_sent_to_processing.txt", "w") as fh:
                     fh.write("\n".join(map(str, chain(frames_idx_sent[cdx], [""]))))
@@ -691,7 +691,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             return False
         if len(numpy.shape(frame)) >= 3:
             frame = frame[:, :, 0]
-        self._offline_queue.put_block(frame, cam_index, frame_idx, timeout=timeout)
+        self._offline_queue.put_block(frame, cam_index, frame_idx, timeout=timeout, sleep_retry=0.025)
         return True
 
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
