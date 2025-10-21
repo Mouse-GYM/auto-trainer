@@ -468,9 +468,14 @@ def reorient_and_center(filtered_df_3d, centered_path_3d, src_dir, bpts, center_
 
     path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')
     if os.path.isfile(path_offsets):
-        logger.info("Reusing offsets file %s", path_offsets)
         with open(path_offsets, "rb") as handle:
             cam_offsets = pickle.load(handle)
+        save_offsets = False
+        logger.info("Reusing offsets file %s: %s", path_offsets, cam_offsets)
+    else:
+        cam_offsets = None
+        save_offsets = True
+        logger.warning("No camera offset file available, generated one will be saved.")
 
     res_df_3d = reorient_and_center_step1(
         df_3d=df_3d,
@@ -483,7 +488,7 @@ def reorient_and_center(filtered_df_3d, centered_path_3d, src_dir, bpts, center_
         square_size=square_size,
         cam_names=cam_names,
         cam_offsets=cam_offsets,
-        save_offsets=True,
+        save_offsets=save_offsets,
     )
     res_df_3d.to_hdf(centered_path_3d, "df_with_missing", format="table", mode="w")
     return res_df_3d
