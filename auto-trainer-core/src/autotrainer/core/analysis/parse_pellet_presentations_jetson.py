@@ -234,9 +234,17 @@ def segment_reaches_f2(
     # return
     # ########
 
+    pellet_data = df_3d['Pellet']
+    pellet_p = pellet_data['p']
+    pellet_speed = pellet_data['speed']
+
+    r_hand_data = df_3d['R_Hand']
+    r_hand_p = r_hand_data['p']
+    r_hand_speed = r_hand_data['speed']
+
     velocity_h_R = np.diff(dist_hvpp_R)*(frame_rate/1000)
     velocity_h_filt_R = filtfilt(coeffs, [1], velocity_h_R)
-    Z_dist_h_R = df_3d['R_Hand']['z'].values-pellet_home[2]
+    Z_dist_h_R = r_hand_data['z'].values - pellet_home[2]
 
     reach_events = []
     dist_list = []
@@ -257,7 +265,7 @@ def segment_reaches_f2(
                         else:
                             print('No (additional) reach detected')
                 break
-            testA = np.sum(df_3d['Pellet']['p'][frame:frame+batch_frm] > confidence)/batch_frm > 0.75 # test if pellet is there 
+            testA = np.sum(pellet_p[frame:frame+batch_frm] > confidence)/batch_frm > 0.75 # test if pellet is there
             if testA:
                 pellet_detected = True
             else:
@@ -265,7 +273,7 @@ def segment_reaches_f2(
             
             if search_status == 1:                  # search for a reach initiation
                 if pellet_detected:
-                    testD = np.sum(df_3d['R_Hand']['p'][frame:frame+batch_frm] > confidence)/batch_frm > 0.75 # test if hand is there
+                    testD = np.sum(r_hand_p[frame:frame+batch_frm] > confidence)/batch_frm > 0.75 # test if hand is there
                     if testD:
                         testA = Z_dist_h_R[frame] > -4 
                         testB = np.mean(velocity_h_filt_R[frame:frame+batch_speed]) < reach_init_speed
@@ -286,12 +294,12 @@ def segment_reaches_f2(
                             speed_hvh_init = filtfilt(coeffs, [1], speed_hvh_init)
             
             elif search_status == 2:                #search for reach max
-                speed_seg = np.asarray(df_3d['Pellet']['speed'][frame:frame + speed_window])
+                speed_seg = np.asarray(pellet_speed[frame:frame + speed_window])
                 if np.sum(speed_seg > pellet_drop_speed) > 1:
                     food_was_dropped = True 
                 if np.any(Z_dist_p[frame:frame+position_window] < pellet_drop_dist): #food dropped if pellet is too low - 
                     z_dist_indices = np.where(Z_dist_p[frame:frame+position_window] < pellet_drop_dist)
-                    testD = np.any(df_3d['Pellet']['p'][frame:frame+position_window].iloc[z_dist_indices] > confidence) 
+                    testD = np.any(pellet_p[frame:frame+position_window].iloc[z_dist_indices] > confidence)
                     if testD:
                         food_was_dropped = True   
                 # print(np.mean(speed_hvh_init[frame:frame+batch_speed]))
@@ -313,9 +321,9 @@ def segment_reaches_f2(
                 testB = np.mean(speed_hvh_init[frame:frame+batch_speed]) < reach_dirchange_speed
                 testC = np.mean(velocity_h_filt_R[frame:frame+batch_speed]) < reach_init_speed
                 testD = np.allclose(np.mean(dist_hvpp_R[frame:frame+batch_stall]), dist_hvpp_R[frame], atol = 2)
-                testE = np.isclose(np.mean(df_3d['R_Hand']['speed'][frame:frame + batch_stall]), 0, atol = 0.025) 
+                testE = np.isclose(np.mean(r_hand_speed[frame:frame + batch_stall]), 0, atol = 0.025)
                 testF = np.all(dist_hvpp_R[frame:frame + batch_stall] < 6) #4
-                speed_seg = np.asarray(df_3d['Pellet']['speed'][frame:frame + speed_window])
+                speed_seg = np.asarray(pellet_speed[frame:frame + speed_window])
                 if np.sum(speed_seg > pellet_drop_speed) > 1:
                     # print(np.sum(speed_seg > pellet_drop_speed))
                     food_was_dropped = True 
@@ -324,7 +332,7 @@ def segment_reaches_f2(
                         
                 if np.any(Z_dist_p[frame:frame+position_window] < pellet_drop_dist): #food dropped if pellet is too low
                     z_dist_indices = np.where(Z_dist_p[frame:frame+position_window] < pellet_drop_dist)
-                    testD = np.any(df_3d['Pellet']['p'][frame:frame+position_window].iloc[z_dist_indices] > confidence)
+                    testD = np.any(pellet_p[frame:frame+position_window].iloc[z_dist_indices] > confidence)
                     if testD:
                         food_was_dropped = True
                         if debug: 
@@ -425,9 +433,9 @@ def segment_reaches_f2(
         for r in reach_events:
             if r['outcome'] == 'missed' or r['outcome'] == 'dropped':
                 fail_ct += 1
-                x_off += df_3d['R_Hand']['x'][r['max']]
-                y_off += df_3d['R_Hand']['y'][r['max']]
-                z_off += df_3d['R_Hand']['z'][r['max']]
+                x_off += r_hand_data['x'][r['max']]
+                y_off += r_hand_data['y'][r['max']]
+                z_off += r_hand_data['z'][r['max']]
                 
     if fail_ct > 0:
         x_off = x_off/fail_ct
