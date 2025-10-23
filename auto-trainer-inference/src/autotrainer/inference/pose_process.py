@@ -264,7 +264,6 @@ class PoseProcess(Process):
             # should be removed once more confident
             if i_q is self._offline_input_queue and t_now > t_last_data + 15:
                 logger.warning("auto-switching to online")
-                # self._offline_input_queue.reset_reader()
                 self._set_process_live()
                 reset_locals()
 
@@ -286,24 +285,13 @@ class PoseProcess(Process):
                         FrameIndexCategory.ONLINE_NO_RECORDING,
                         FrameIndexCategory.SWITCH_TO_ONLINE]
                     ).any()
-                    # and not numpy.isin(frames_indices[:, -1], [  # noqa
-                    #     FrameIndexCategory.SWITCH_TO_OFFLINE_MODE,
-                    #     FrameIndexCategory.EOF_RECORDING,
-                    # ]).any()
                 ):
-                    # self._offline_input_queue.reset_reader()  # reset our reader index for next offline
                     self._set_process_live()
                     reset_locals()
-                # elif required:
+                # elif required, given _set_process_live called in previous if block:
                 elif (
                     i_q is self._live_input_queue
                     and (frames_indices[:, -1] == FrameIndexCategory.EOF_RECORDING).any()
-                    # and numpy.isin(frames_indices[:, -1], [  # noqa
-                    #     FrameIndexCategory.EOF_RECORDING,
-                    #     FrameIndexCategory.SWITCH_TO_OFFLINE_MODE,
-                    # ]).any()
-                    # and not numpy.isin(frames_indices[:, -1], [FrameIndexCategory.SWITCH_TO_ONLINE]).any()
-                    # and certainly not (frames_indices[:, -1] == SWITCH_TO_ONLINE).any() ... or any such
                 ):
                     self._input_queue = self._offline_input_queue
                     self._mode = InferenceMode.Offline
@@ -316,7 +304,7 @@ class PoseProcess(Process):
             # NB:
             # the data queue reader/consumer takes care of deciding what to do with the result data:
             d_q_put((pose,
-                     mode_used,  # InferenceMode.Live if self._input_queue == self._live_input_queue else InferenceMode.Offline,
+                     mode_used,
                      frames_indices.copy(),  # getting frame indices corruption in reader side without this.
                      #  frames_indices,  # it could be eventually explained if the serialisation
                      # of the frames_indices numpy array happens after the return of the queue put()..
