@@ -139,15 +139,9 @@ class AlarmContent(ContentWidget):
             self.use_presence_in_cage_after_exit_tunnel_changed.emit(value.use_presence_missing_after_exit_tunnel)
             self.use_load_cell_audio_thrash_changed.emit(value.use_audio_load_cell_thrash)
             self.use_global_mouse_presence_changed.emit(value.use_global_mouse_presence_missing)
-        elif name == p.USE_PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL:
-            self.use_presence_in_cage_after_exit_tunnel_changed.emit(value)
         elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
             self.presence_in_cage_after_exit_tunnel_changed.emit(value)
-        elif name == p.USE_AUDIO_LOAD_CELL_THRASHING:
-            self.use_load_cell_audio_thrash_changed.emit(value)
         elif name == p.AUDIO_LOAD_CELL_THRASHING_ENGAGED:
             self.load_cell_audio_thrash_changed.emit(value)
-        elif name == p.USE_GLOBAL_MOUSE_PRESENCE:
-            self.use_global_mouse_presence_changed.emit(value)
         elif name == p.GLOBAL_MOUSE_PRESENCE_ENGAGED:
             self.global_mouse_presence_changed.emit(value)

@@ -27,18 +27,9 @@ class EmergencyReason(str, enum.Enum):
 class EmergencyAlarmMonitor(ObservableObject):
 
     IS_ENGAGED = "is_engaged"
-
     CONFIG = "config"
-
-    AUTO_RESUME_ON_CONDITIONS_CLEARED = "auto_resume_on_conditions_cleared"
-
-    USE_GLOBAL_MOUSE_PRESENCE = "use_global_mouse_presence"
     GLOBAL_MOUSE_PRESENCE_ENGAGED = "global_mouse_presence_engaged"
-
-    USE_PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL = "use_presence_in_cage_after_exit_tunnel"
     PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED = "presence_in_cage_after_exit_tunnel_engaged"
-
-    USE_AUDIO_LOAD_CELL_THRASHING = "use_audio_load_cell_thrashing"
     AUDIO_LOAD_CELL_THRASHING_ENGAGED = "audio_load_cell_thrashing_engaged"
 
     def __init__(
@@ -82,15 +73,6 @@ class EmergencyAlarmMonitor(ObservableObject):
     def config(self, value: EmergencyAlarmConfiguration):
         prev, self._config = self._config, value
         self.property_changed(self.CONFIG, value, prev)
-        #
-        self.property_changed(self.AUTO_RESUME_ON_CONDITIONS_CLEARED,
-                              value.auto_resume_on_cleared, prev.auto_resume_on_cleared)
-        self.property_changed(self.USE_GLOBAL_MOUSE_PRESENCE,
-                              value.use_global_mouse_presence_missing, prev.use_global_mouse_presence_missing)
-        self.property_changed(self.USE_AUDIO_LOAD_CELL_THRASHING,
-                              value.use_audio_load_cell_thrash, prev.use_audio_load_cell_thrash)
-        self.property_changed(self.USE_PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL,
-                              value.use_presence_missing_after_exit_tunnel, prev.use_presence_missing_after_exit_tunnel)
 
     def start(self, *, reason: str="na"):
         with self._lock:
