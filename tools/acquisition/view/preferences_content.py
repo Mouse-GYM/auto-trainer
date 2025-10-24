@@ -556,7 +556,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(toggle_auto_resume, cur_row, 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("<b>Use Audio & LoadCell thrashing:</b>"), cur_row, 0)
+        grid_layout.addWidget(QLabel("<b>Use Audio & Load Cell Thrashing Alarm:</b>"), cur_row, 0)
         toggle_use_audio_load_cell = QSwitch()
         toggle_use_audio_load_cell.setChecked(alarm_cfg.use_audio_load_cell_thrash)
         toggle_use_audio_load_cell.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -626,7 +626,7 @@ class PreferencesContent(QWidget):
 
         #
 
-        grid_layout.addWidget(QLabel("<b>Use presence missing after exit tunnel:</b>"), cur_row, 0)
+        grid_layout.addWidget(QLabel("<b>Mouse Missing Alarm:</b>"), cur_row, 0)
         toggle = QSwitch()
         toggle.setChecked(alarm_cfg.use_presence_missing_after_exit_tunnel)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -682,7 +682,8 @@ class PreferencesContent(QWidget):
             grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
             cur_row += 1
 
-        grid_layout.addWidget(QLabel("<b>Load Cell Monitor</b>"), cur_row, cur_col)
+        #
+        grid_layout.addWidget(QLabel("<b>Load Cell Thrash Detector</b>"), cur_row, cur_col)
         cur_row += 1
 
         spinbox = QSpinBox()
@@ -720,7 +721,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("<b>Audio Monitor</b>"), cur_row, cur_col)
+        grid_layout.addWidget(QLabel("<b>Audio Detector</b>"), cur_row, cur_col)
         cur_row += 1
 
         spinbox = QDoubleSpinBox()
