@@ -96,7 +96,6 @@ class SystemMachine(StateMachine):
             analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
             analysis.headbar_pressure_monitor.property_changed += self._headbar_pressure_monitor_property_changed
             analysis.load_cell_tare_monitor.tare_callback = self._load_cell_tare_requested
-            analysis.global_mouse_presence_monitor.property_changed += self._handle_global_mouse_presence_property_changed
 
         self._inference = inference
         if inference is not None:
@@ -631,17 +630,6 @@ class SystemMachine(StateMachine):
             # force analysis to False,
             # this will trigger a new start session if mouse still there
             self._analysis.load_cell_monitor.is_engaged = False
-
-    @BehaviorAlgorithm.relay_func(wait=False)
-    def _handle_global_mouse_presence_property_changed(self, name, value, _):
-        algo = self._algorithm
-        if name == "is_engaged":
-            algo.presence_missing = value
-            # if value:
-            #     algo.algo_paused = True
-            # else:
-            #     algo.algo_paused = False
-            # with allow auto-resume
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _handle_detection_result(self, res: IntersessionResponse):
