@@ -282,7 +282,7 @@ class EmergencyAlarmMonitor(ObservableObject):
                 perf_now)
         #
         if not is_emergency:
-            prev_reasons = self._engaged_reasons
+            prev_reasons = self._engaged_reasons.copy()
             self._engaged_reasons.clear()
             if cfg.auto_resume_on_cleared and (
                 (EmergencyReason.MOUSE_THRASHING in prev_reasons and cfg.auto_resume_on_audio_load_cell_thrash_resume)
