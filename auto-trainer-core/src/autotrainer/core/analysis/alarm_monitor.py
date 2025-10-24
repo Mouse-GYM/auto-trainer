@@ -238,31 +238,25 @@ class EmergencyAlarmMonitor(ObservableObject):
         #
         reasons = set()
         #
-        audio_load_cell_thrash_alarm = (
-            self._check_audio_load_cell(perf_now) if cfg.use_audio_load_cell_thrash
-            else False)
-        if audio_load_cell_thrash_alarm:
-            reasons.add(EmergencyReason.MOUSE_THRASHING)
+        audio_load_cell_thrash_alarm = self._check_audio_load_cell(perf_now)
         self.audio_load_cell_thrashing_engaged = audio_load_cell_thrash_alarm
+        if audio_load_cell_thrash_alarm and cfg.use_audio_load_cell_thrash:
+            reasons.add(EmergencyReason.MOUSE_THRASHING)
         #
-        pres_missing_after_exit_tunnel_alarm = (
-            self._check_pres_after_exit_tunnel_missing(perf_now) if cfg.use_presence_missing_after_exit_tunnel
-            else False)
-        if pres_missing_after_exit_tunnel_alarm:
-            reasons.add(EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL)
+        pres_missing_after_exit_tunnel_alarm = self._check_pres_after_exit_tunnel_missing(perf_now)
         self.presence_in_cage_after_exit_tunnel_engaged = pres_missing_after_exit_tunnel_alarm
+        if pres_missing_after_exit_tunnel_alarm and cfg.use_presence_missing_after_exit_tunnel:
+            reasons.add(EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL)
         #
-        global_mouse_presence_missing = (
-            self._global_mouse_presence.is_engaged if cfg.use_global_mouse_presence_missing
-            else False) and GlobalMousePresenceMonitor.feature_enabled
-        if global_mouse_presence_missing:
-            reasons.add(EmergencyReason.GLOBAL_MOUSE_PRESENCE)
+        global_mouse_presence_missing = self._global_mouse_presence.is_engaged
         self.global_mouse_presence_engaged = global_mouse_presence_missing
+        if global_mouse_presence_missing and cfg.use_global_mouse_presence_missing:
+            reasons.add(EmergencyReason.GLOBAL_MOUSE_PRESENCE)
         #
         is_emergency = (
-               audio_load_cell_thrash_alarm
-            or pres_missing_after_exit_tunnel_alarm
-            or global_mouse_presence_missing
+            (audio_load_cell_thrash_alarm and cfg.use_audio_load_cell_thrash)
+            or (pres_missing_after_exit_tunnel_alarm and cfg.use_presence_missing_after_exit_tunnel)
+            or (global_mouse_presence_missing and cfg.use_global_mouse_presence_missing and self._global_mouse_presence.feature_enabled)
         )
         #
         if is_emergency and not self._is_engaged:
