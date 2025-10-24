@@ -1,7 +1,8 @@
+import enum
 import math
 import threading
 import time
-from typing import Optional, List
+from typing import Optional, List, Set
 
 from autotrainer.core import ObservableObject, get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
@@ -16,9 +17,18 @@ logger = get_verbose_logger(__name__)
 timer_update_state = make_daemon_timer
 
 
+class EmergencyReason(str, enum.Enum):
+
+    MOUSE_THRASHING = "MOUSE_THRASHING"
+    IN_CAGE_AFTER_EXIT_TUNNEL = "IN_CAGE_AFTER_EXIT_TUNNEL"
+    GLOBAL_MOUSE_PRESENCE = "GLOBAL_MOUSE_PRESENCE"
+
+
 class EmergencyAlarmMonitor(ObservableObject):
 
     IS_ENGAGED = "is_engaged"
+
+    CONFIG = "config"
 
     AUTO_RESUME_ON_CONDITIONS_CLEARED = "auto_resume_on_conditions_cleared"
 
@@ -52,7 +62,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._enabled = False
         self._t_started = time.perf_counter()
         self._is_engaged = False
-        self._engaged_reasons = []
+        self._engaged_reasons = set()
         self._engaged_perf_c = math.nan
         self._disengaged_perf_c = math.nan
         self._timer_update_state = no_op_timer
@@ -71,6 +81,8 @@ class EmergencyAlarmMonitor(ObservableObject):
     @config.setter
     def config(self, value: EmergencyAlarmConfiguration):
         prev, self._config = self._config, value
+        self.property_changed(self.CONFIG, value, prev)
+        #
         self.property_changed(self.AUTO_RESUME_ON_CONDITIONS_CLEARED,
                               value.auto_resume_on_cleared, prev.auto_resume_on_cleared)
         self.property_changed(self.USE_GLOBAL_MOUSE_PRESENCE,
@@ -110,17 +122,18 @@ class EmergencyAlarmMonitor(ObservableObject):
     @is_engaged.setter
     def is_engaged(self, value):
         prev, self._is_engaged = self._is_engaged, value
-        if prev != value:
-            perf_now = time.perf_counter()
-            if value:
-                self._engaged_perf_c = perf_now
-            else:
-                self._engaged_reasons = []
-                self._disengaged_perf_c = perf_now
+        if prev == value:
+            return
+        perf_now = time.perf_counter()
+        if value:
+            self._engaged_perf_c = perf_now
+        else:
+            self._engaged_reasons.clear()
+            self._disengaged_perf_c = perf_now
         self._on_property_changed(self.IS_ENGAGED, value, prev)
 
     @property
-    def engaged_reasons(self) -> List[str]:
+    def engaged_reasons(self) -> Set[str]:
         return self._engaged_reasons
 
     @property
@@ -241,20 +254,20 @@ class EmergencyAlarmMonitor(ObservableObject):
         cfg = self._config
         perf_now = time.perf_counter()
         #
-        reasons = []
+        reasons = set()
         #
         audio_load_cell_thrash_alarm = (
             self._check_audio_load_cell(perf_now) if cfg.use_audio_load_cell_thrash
             else False)
         if audio_load_cell_thrash_alarm:
-            reasons.append("audio_load_cell_thrashing")
+            reasons.add(EmergencyReason.MOUSE_THRASHING)
         self.audio_load_cell_thrashing_engaged = audio_load_cell_thrash_alarm
         #
         pres_missing_after_exit_tunnel_alarm = (
             self._check_pres_after_exit_tunnel_missing(perf_now) if cfg.use_presence_missing_after_exit_tunnel
             else False)
         if pres_missing_after_exit_tunnel_alarm:
-            reasons.append("cage-presence-missing-after-exit-tunnel")
+            reasons.add(EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL)
         self.presence_in_cage_after_exit_tunnel_engaged = pres_missing_after_exit_tunnel_alarm
         #
         global_mouse_presence_missing = (
@@ -263,7 +276,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         # temporarily forced not missing for now:
         global_mouse_presence_missing = False
         if global_mouse_presence_missing:
-            reasons.append("global-mouse-presence")
+            reasons.add(EmergencyReason.GLOBAL_MOUSE_PRESENCE)
         self.global_mouse_presence_engaged = global_mouse_presence_missing
         #
         is_emergency = (
@@ -289,8 +302,13 @@ class EmergencyAlarmMonitor(ObservableObject):
                 perf_now)
         #
         if not is_emergency:
-            if cfg.auto_resume_on_cleared:
-                self._engaged_reasons = []
+            prev_reasons = self._engaged_reasons
+            self._engaged_reasons = set()
+            if cfg.auto_resume_on_cleared and (
+                EmergencyReason.MOUSE_THRASHING in prev_reasons and cfg.auto_resume_on_audio_load_cell_thrash_resume
+                or EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL in prev_reasons and cfg.auto_resume_on_presence_seen_after_exit_tunnel
+                or EmergencyReason.GLOBAL_MOUSE_PRESENCE in prev_reasons
+            ):
                 self.is_engaged = False
         else:
             self._engaged_reasons = reasons

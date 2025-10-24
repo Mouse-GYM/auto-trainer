@@ -5,6 +5,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.core import LoadCellMonitor, get_verbose_logger
 from autotrainer.core.analysis import EmergencyAlarmMonitor
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
+from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.pyside import CardWidget, StatusIcon
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -18,6 +19,9 @@ class AlarmContent(ContentWidget):
     """
     Widget to display alarm content.
     """
+
+    # temporary:
+    _disabled_global_mouse_presence: bool = True
 
     use_load_cell_audio_thrash_changed = Signal(bool)
     load_cell_audio_thrash_changed = Signal(bool)
@@ -53,7 +57,7 @@ class AlarmContent(ContentWidget):
         label.setStyleSheet("font-weight: bold;")
         form_layout.addRow(label, None)
 
-        if False:  # temporarily disabled
+        if not self._disabled_global_mouse_presence:  # temporarily disabled
             icon = self._mouse_missing_status = StatusIcon.alarmIcon()
             label = self._mouse_missing_label = QLabel("Global Mouse Missing:")
             form_layout.addRow(label, icon)
@@ -132,7 +136,12 @@ class AlarmContent(ContentWidget):
 
     def _alarm_monitor_property_changed(self,  name, value, _):
         p = EmergencyAlarmMonitor
-        if name == p.USE_PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL:
+        if name == p.CONFIG:
+            assert isinstance(value, EmergencyAlarmConfiguration)
+            self.use_presence_in_cage_after_exit_tunnel_changed.emit(value.use_presence_missing_after_exit_tunnel)
+            self.use_load_cell_audio_thrash_changed.emit(value.use_audio_load_cell_thrash)
+            self.use_global_mouse_presence_changed.emit(value.use_global_mouse_presence_missing)
+        elif name == p.USE_PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL:
             self.use_presence_in_cage_after_exit_tunnel_changed.emit(value)
         elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
             self.presence_in_cage_after_exit_tunnel_changed.emit(value)
@@ -144,5 +153,3 @@ class AlarmContent(ContentWidget):
             self.use_global_mouse_presence_changed.emit(value)
         elif name == p.GLOBAL_MOUSE_PRESENCE_ENGAGED:
             self.global_mouse_presence_changed.emit(value)
-        elif name == p.AUTO_RESUME_ON_CONDITIONS_CLEARED:
-            pass

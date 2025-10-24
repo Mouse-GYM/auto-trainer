@@ -1,4 +1,5 @@
 import ast
+import copy
 import logging
 import math
 
@@ -21,6 +22,9 @@ logger = get_verbose_logger(__name__)
 
 
 class PreferencesContent(QWidget):
+
+    _disabled_global_mouse_presence = True  # temporary
+
     def __init__(self, preferences: UserPreferences, app_model: AppModel):
         super(PreferencesContent, self).__init__(None)
 
@@ -539,36 +543,51 @@ class PreferencesContent(QWidget):
         main_layout.addLayout(grid_layout)
 
         cur_row = 0
+        cur_col = 0
         alarm_cfg = analysis.emergency_alarm_monitor.config
 
-        grid_layout.addWidget(QLabel("<b>Emergency Alarm Monitor</b>"), cur_row, 0)
+        grid_layout.addWidget(QLabel("<b>Emergency Alarm Monitor</b>"), cur_row, cur_col)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Auto-resume on conditions cleared:"), cur_row, 0)
+        grid_layout.addWidget(QLabel("Auto-resume on conditions cleared:"), cur_row, cur_col)
         toggle_auto_resume = QSwitch()
         toggle_auto_resume.setChecked(alarm_cfg.auto_resume_on_cleared)
         toggle_auto_resume.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def toggle_changed(value):
             toggled = value != 0
-            alarm_cfg.auto_resume_on_cleared = toggled
-            alarm_monitor.property_changed(alarm_monitor.AUTO_RESUME_ON_CONDITIONS_CLEARED, toggled, not toggled)
+            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg.auto_resume_on_cleared = toggled
+            alarm_monitor.config = cfg
         toggle_auto_resume.stateChanged.connect(toggle_changed)
-        grid_layout.addWidget(toggle_auto_resume, cur_row, 1)
+        grid_layout.addWidget(toggle_auto_resume, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("<b>Use Audio & Load Cell Thrashing Alarm:</b>"), cur_row, 0)
+        grid_layout.addWidget(QLabel("<b>Use Audio & Load Cell Thrashing Alarm:</b>"), cur_row, cur_col)
         toggle_use_audio_load_cell = QSwitch()
         toggle_use_audio_load_cell.setChecked(alarm_cfg.use_audio_load_cell_thrash)
         toggle_use_audio_load_cell.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def toggle_changed(value):
             toggled = value != 0
-            alarm_cfg.use_audio_load_cell_thrash = toggled
-            alarm_monitor.property_changed(alarm_monitor.USE_AUDIO_LOAD_CELL_THRASHING, toggled, not toggled)
+            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg.use_audio_load_cell_thrash = toggled
+            alarm_monitor.config = cfg
         toggle_use_audio_load_cell.stateChanged.connect(toggle_changed)
-        grid_layout.addWidget(toggle_use_audio_load_cell, cur_row, 1)
+        grid_layout.addWidget(toggle_use_audio_load_cell, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Thrash aggregate delay (seconds):"), cur_row, 0)
+        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
+        toggle = QSwitch()
+        toggle.setChecked(alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume)
+        def toggle_changed(value):
+            toggled = value != 0
+            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg.auto_resume_on_audio_load_cell_thrash_resume = toggled
+            alarm_monitor.config = cfg
+        toggle.stateChanged.connect(toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Thrash aggregate delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         spinbox.setRange(0, 60)
         spinbox.setDecimals(1)
@@ -577,10 +596,10 @@ class PreferencesContent(QWidget):
         def value_changed(value):
             alarm_cfg.audio_load_cell_thrash_aggregate_delay = value
         spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(spinbox, cur_row, 1)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("LoadCell thrash % time:"), cur_row, 0)
+        grid_layout.addWidget(QLabel("LoadCell thrash % time:"), cur_row, cur_col)
         spinbox = QSpinBox()
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.load_cell_thrash_percent_on)
@@ -588,10 +607,10 @@ class PreferencesContent(QWidget):
         def value_changed(value):
             alarm_cfg.load_cell_thrash_percent_on = value
         spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(spinbox, cur_row, 1)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("LoadCell thrash count:"), cur_row, 0)
+        grid_layout.addWidget(QLabel("LoadCell thrash count:"), cur_row, cur_col)
         spinbox = QSpinBox()
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.load_cell_thrash_count)
@@ -599,10 +618,10 @@ class PreferencesContent(QWidget):
         def value_changed(value):
             alarm_cfg.load_cell_thrash_count = value
         spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(spinbox, cur_row, 1)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Audio thrash % time:"), cur_row, 0)
+        grid_layout.addWidget(QLabel("Audio thrash % time:"), cur_row, cur_col)
         spinbox = QSpinBox()
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.audio_thrash_percent_on)
@@ -610,10 +629,10 @@ class PreferencesContent(QWidget):
         def value_changed(value):
             alarm_cfg.audio_thrash_percent_on = value
         spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(spinbox, cur_row, 1)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Audio thrash count:"), cur_row, 0)
+        grid_layout.addWidget(QLabel("Audio thrash count:"), cur_row, cur_col)
         spinbox = QSpinBox()
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.audio_thrash_count)
@@ -621,7 +640,7 @@ class PreferencesContent(QWidget):
         def value_changed(value):
             alarm_cfg.audio_thrash_count = value
         spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(spinbox, cur_row, 1)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         #
@@ -629,20 +648,33 @@ class PreferencesContent(QWidget):
         tooltip_txt = "When not seen in cage after exit tunnel"
         label = QLabel("<b>Mouse Missing Alarm:</b>")
         label.setToolTip(tooltip_txt)
-        grid_layout.addWidget(label, cur_row, 0)
+        grid_layout.addWidget(label, cur_row, cur_col)
         toggle = QSwitch()
         toggle.setToolTip(tooltip_txt)
         toggle.setChecked(alarm_cfg.use_presence_missing_after_exit_tunnel)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def toggle_changed(value):
             toggled = value != 0
-            alarm_cfg.use_presence_missing_after_exit_tunnel = toggled
-            alarm_monitor.property_changed(alarm_monitor.USE_PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL, toggled, not toggled)
+            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg.use_presence_missing_after_exit_tunnel = toggled
+            alarm_monitor.config = cfg
         toggle.stateChanged.connect(toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, 1)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Presence missing delay after exit tunnel (seconds):"), cur_row, 0)
+        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
+        toggle = QSwitch()
+        toggle.setChecked(alarm_cfg.auto_resume_on_presence_seen_after_exit_tunnel)
+        def toggle_changed(value):
+            toggled = value != 0
+            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg.auto_resume_on_presence_seen_after_exit_tunnel = toggled
+            alarm_monitor.config = cfg
+        toggle.stateChanged.connect(toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Presence missing delay after exit tunnel (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         spinbox.setRange(0, 120)
         spinbox.setDecimals(1)
@@ -651,7 +683,7 @@ class PreferencesContent(QWidget):
         def value_changed(value):
             alarm_cfg.tunnel_to_cage_presence_missing_delay = value
         spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(spinbox, cur_row, 1)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         #
@@ -659,7 +691,7 @@ class PreferencesContent(QWidget):
         cur_col = 2
         #
         # temporarily disabled / not handled
-        if False:
+        if not self._disabled_global_mouse_presence:
             grid_layout.addWidget(QLabel("<b>Global Mouse Presence</b>"), cur_row, cur_col)
             cur_row += 1
 
@@ -669,8 +701,22 @@ class PreferencesContent(QWidget):
             toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             def toggle_changed(value):
                 toggled = value != 0
-                alarm_cfg.use_global_mouse_presence_missing = toggled
-                alarm_monitor.property_changed(alarm_monitor.USE_GLOBAL_MOUSE_PRESENCE, toggled, not toggled)
+                cfg = copy.deepcopy(alarm_monitor.config)
+                cfg.use_global_mouse_presence_missing = toggled
+                alarm_monitor.config = cfg
+            toggle.stateChanged.connect(toggle_changed)
+            grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+            cur_row += 1
+
+            grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
+            toggle = QSwitch()
+            toggle.setChecked(alarm_cfg.auto_resume_on_global_mouse_presence)
+            toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            def toggle_changed(value):
+                toggled = value != 0
+                cfg = copy.deepcopy(alarm_monitor.config)
+                cfg.auto_resume_on_global_mouse_presence = toggled
+                alarm_monitor.config = cfg
             toggle.stateChanged.connect(toggle_changed)
             grid_layout.addWidget(toggle, cur_row, cur_col + 1)
             cur_row += 1
