@@ -626,8 +626,12 @@ class PreferencesContent(QWidget):
 
         #
 
-        grid_layout.addWidget(QLabel("<b>Mouse Missing Alarm:</b>"), cur_row, 0)
+        tooltip_txt = "When not seen in cage after exit tunnel"
+        label = QLabel("<b>Mouse Missing Alarm:</b>")
+        label.setToolTip(tooltip_txt)
+        grid_layout.addWidget(label, cur_row, 0)
         toggle = QSwitch()
+        toggle.setToolTip(tooltip_txt)
         toggle.setChecked(alarm_cfg.use_presence_missing_after_exit_tunnel)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def toggle_changed(value):

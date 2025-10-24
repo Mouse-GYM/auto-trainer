@@ -55,7 +55,7 @@ class AlarmContent(ContentWidget):
 
         if False:  # temporarily disabled
             icon = self._mouse_missing_status = StatusIcon.alarmIcon()
-            label = self._mouse_missing_label = QLabel("Mouse Missing:")
+            label = self._mouse_missing_label = QLabel("Global Mouse Missing:")
             form_layout.addRow(label, icon)
             self.use_global_mouse_presence_changed.connect(lambda v: self._mouse_missing_label.setStyleSheet("" if v else "color: gray"))
             self.use_global_mouse_presence_changed.emit(emergency_alarm_cfg.use_global_mouse_presence_missing)
@@ -70,7 +70,7 @@ class AlarmContent(ContentWidget):
         self.load_cell_audio_thrash_changed.connect(icon.setStatus)
 
         icon = self._in_cage_after_tunnel_status = StatusIcon.alarmIcon()
-        label = self._in_cage_after_tunnel_label = QLabel("Presence In Cage After Tunnel:")
+        label = self._in_cage_after_tunnel_label = QLabel("Mouse Missing:")
         form_layout.addRow(label, icon)
         self.use_presence_in_cage_after_exit_tunnel_changed.connect(
             lambda v: self._in_cage_after_tunnel_label.setStyleSheet("" if v else "color: gray"))

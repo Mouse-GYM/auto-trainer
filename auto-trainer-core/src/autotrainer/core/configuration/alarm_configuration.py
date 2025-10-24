@@ -42,6 +42,7 @@ class EmergencyAlarmConfiguration(_EmergencyAlarmConfiguration):
                  # temporary:
                  auto_resume_on_audio_load_cell_thrash_resume=None,  # noqa
                  auto_resume_on_presence_seen_after_exit_tunnel=None,  # noqa
+                 auto_resume_on_global_mouse_presence=None,
                  # to allow previous config format.
                  **kwargs,
                  ):
