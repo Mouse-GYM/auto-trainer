@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabe
                                QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QSpinBox, QGridLayout,
                                QLayout, QSizePolicy, QMessageBox)
 
+from autotrainer.core.analysis.global_mouse_presence_monitor import GlobalMousePresenceMonitor
 from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration, PelletDeliveryConfiguration
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.pyside import QSwitch
@@ -22,8 +23,6 @@ logger = get_verbose_logger(__name__)
 
 
 class PreferencesContent(QWidget):
-
-    _disabled_global_mouse_presence = True  # temporary
 
     def __init__(self, preferences: UserPreferences, app_model: AppModel):
         super(PreferencesContent, self).__init__(None)
@@ -691,7 +690,7 @@ class PreferencesContent(QWidget):
         cur_col = 2
         #
         # temporarily disabled / not handled
-        if not self._disabled_global_mouse_presence:
+        if GlobalMousePresenceMonitor.feature_enabled:
             grid_layout.addWidget(QLabel("<b>Global Mouse Presence</b>"), cur_row, cur_col)
             cur_row += 1
 

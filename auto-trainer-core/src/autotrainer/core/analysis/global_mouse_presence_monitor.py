@@ -1,3 +1,4 @@
+import os
 import time
 import math
 import threading
@@ -13,6 +14,8 @@ logger = get_verbose_logger(__name__)
 
 
 class GlobalMousePresenceMonitor(ObservableObject):
+
+    feature_enabled: bool = isinstance(os.getenv("AUTOTRAINER_GLOBAL_MOUSE_PRESENCE_ENABLED", False), str)
 
     def __init__(
         self, *,

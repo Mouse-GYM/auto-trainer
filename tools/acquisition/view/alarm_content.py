@@ -5,6 +5,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.core import LoadCellMonitor, get_verbose_logger
 from autotrainer.core.analysis import EmergencyAlarmMonitor
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
+from autotrainer.core.analysis.global_mouse_presence_monitor import GlobalMousePresenceMonitor
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.pyside import CardWidget, StatusIcon
 from tools.acquisition.model.app_model import AppModel
@@ -19,9 +20,6 @@ class AlarmContent(ContentWidget):
     """
     Widget to display alarm content.
     """
-
-    # temporary:
-    _disabled_global_mouse_presence: bool = True
 
     use_load_cell_audio_thrash_changed = Signal(bool)
     load_cell_audio_thrash_changed = Signal(bool)
@@ -57,7 +55,7 @@ class AlarmContent(ContentWidget):
         label.setStyleSheet("font-weight: bold;")
         form_layout.addRow(label, None)
 
-        if not self._disabled_global_mouse_presence:  # temporarily disabled
+        if GlobalMousePresenceMonitor.feature_enabled:
             icon = self._mouse_missing_status = StatusIcon.alarmIcon()
             label = self._mouse_missing_label = QLabel("Global Mouse Missing:")
             form_layout.addRow(label, icon)
