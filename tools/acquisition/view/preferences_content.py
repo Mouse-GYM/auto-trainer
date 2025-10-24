@@ -654,31 +654,33 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 2
         #
-        grid_layout.addWidget(QLabel("<b>Global Mouse Presence</b>"), cur_row, cur_col)
-        cur_row += 1
+        # temporarily disabled / not handled
+        if False:
+            grid_layout.addWidget(QLabel("<b>Global Mouse Presence</b>"), cur_row, cur_col)
+            cur_row += 1
 
-        grid_layout.addWidget(QLabel("<b>Use Global Mouse Presence for Alarm monitor:</b>"), cur_row, cur_col)
-        toggle = QSwitch()
-        toggle.setChecked(alarm_cfg.use_global_mouse_presence_missing)
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        def toggle_changed(value):
-            toggled = value != 0
-            alarm_cfg.use_global_mouse_presence_missing = toggled
-            alarm_monitor.property_changed(alarm_monitor.USE_GLOBAL_MOUSE_PRESENCE, toggled, not toggled)
-        toggle.stateChanged.connect(toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
+            grid_layout.addWidget(QLabel("<b>Use Global Mouse Presence for Alarm monitor:</b>"), cur_row, cur_col)
+            toggle = QSwitch()
+            toggle.setChecked(alarm_cfg.use_global_mouse_presence_missing)
+            toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            def toggle_changed(value):
+                toggled = value != 0
+                alarm_cfg.use_global_mouse_presence_missing = toggled
+                alarm_monitor.property_changed(alarm_monitor.USE_GLOBAL_MOUSE_PRESENCE, toggled, not toggled)
+            toggle.stateChanged.connect(toggle_changed)
+            grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+            cur_row += 1
 
-        spinbox = QSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        spinbox.setRange(0, 3600 * 24)  # 1 day
-        spinbox.setValue(behavior_cfg.mouse_presence.presence_missing_delay)
-        def value_changed(value):
-            behavior_cfg.mouse_presence.presence_missing_delay = value
-        spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(QLabel("Missing delay (seconds):"), cur_row, cur_col)
-        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
-        cur_row += 1
+            spinbox = QSpinBox()
+            spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            spinbox.setRange(0, 3600 * 24)  # 1 day
+            spinbox.setValue(behavior_cfg.mouse_presence.presence_missing_delay)
+            def value_changed(value):
+                behavior_cfg.mouse_presence.presence_missing_delay = value
+            spinbox.valueChanged.connect(value_changed)
+            grid_layout.addWidget(QLabel("Missing delay (seconds):"), cur_row, cur_col)
+            grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+            cur_row += 1
 
         grid_layout.addWidget(QLabel("<b>Load Cell Monitor</b>"), cur_row, cur_col)
         cur_row += 1

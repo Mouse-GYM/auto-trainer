@@ -53,12 +53,13 @@ class AlarmContent(ContentWidget):
         label.setStyleSheet("font-weight: bold;")
         form_layout.addRow(label, None)
 
-        icon = self._mouse_missing_status = StatusIcon.alarmIcon()
-        label = self._mouse_missing_label = QLabel("Mouse Missing:")
-        form_layout.addRow(label, icon)
-        self.use_global_mouse_presence_changed.connect(lambda v: self._mouse_missing_label.setStyleSheet("" if v else "color: gray"))
-        self.use_global_mouse_presence_changed.emit(emergency_alarm_cfg.use_global_mouse_presence_missing)
-        self.global_mouse_presence_changed.connect(icon.setStatus)
+        if False:  # temporarily disabled
+            icon = self._mouse_missing_status = StatusIcon.alarmIcon()
+            label = self._mouse_missing_label = QLabel("Mouse Missing:")
+            form_layout.addRow(label, icon)
+            self.use_global_mouse_presence_changed.connect(lambda v: self._mouse_missing_label.setStyleSheet("" if v else "color: gray"))
+            self.use_global_mouse_presence_changed.emit(emergency_alarm_cfg.use_global_mouse_presence_missing)
+            self.global_mouse_presence_changed.connect(icon.setStatus)
 
         icon = self._mouse_thrashing_status = StatusIcon.alarmIcon()
         label = self._mouse_thrashing_label = QLabel("Thrashing:")

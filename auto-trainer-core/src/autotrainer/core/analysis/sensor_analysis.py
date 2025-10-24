@@ -124,7 +124,7 @@ class SensorAnalysis(ObservableObject):
         return self._audio_thrashing_monitor
 
     @property
-    def emergency_alarm_monitor(self):
+    def emergency_alarm_monitor(self) -> EmergencyAlarmMonitor:
         return self._alarm_monitor
 
     @property
