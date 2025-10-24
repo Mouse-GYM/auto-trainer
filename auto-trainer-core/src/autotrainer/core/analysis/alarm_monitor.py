@@ -62,7 +62,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._enabled = False
         self._t_started = time.perf_counter()
         self._is_engaged = False
-        self._engaged_reasons = set()
+        self._engaged_reasons: Set[EmergencyReason] = set()
         self._engaged_perf_c = math.nan
         self._disengaged_perf_c = math.nan
         self._timer_update_state = no_op_timer
@@ -133,8 +133,8 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._on_property_changed(self.IS_ENGAGED, value, prev)
 
     @property
-    def engaged_reasons(self) -> Set[str]:
-        return self._engaged_reasons
+    def engaged_reasons(self) -> List[str]:
+        return sorted(reason.name for reason in self._engaged_reasons)
 
     @property
     def global_mouse_presence_engaged(self):
@@ -301,7 +301,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         #
         if not is_emergency:
             prev_reasons = self._engaged_reasons
-            self._engaged_reasons = set()
+            self._engaged_reasons.clear()
             if cfg.auto_resume_on_cleared and (
                 (EmergencyReason.MOUSE_THRASHING in prev_reasons and cfg.auto_resume_on_audio_load_cell_thrash_resume)
                 or (EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL in prev_reasons and cfg.auto_resume_on_presence_seen_after_exit_tunnel)
