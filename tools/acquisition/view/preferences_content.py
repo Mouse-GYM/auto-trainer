@@ -556,7 +556,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(toggle_auto_resume, cur_row, 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("<b>Use Audio & LoadCell thrashing:</b>"), cur_row, 0)
+        grid_layout.addWidget(QLabel("<b>Use Audio & Load Cell Thrashing Alarm:</b>"), cur_row, 0)
         toggle_use_audio_load_cell = QSwitch()
         toggle_use_audio_load_cell.setChecked(alarm_cfg.use_audio_load_cell_thrash)
         toggle_use_audio_load_cell.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -626,8 +626,12 @@ class PreferencesContent(QWidget):
 
         #
 
-        grid_layout.addWidget(QLabel("<b>Use presence missing after exit tunnel:</b>"), cur_row, 0)
+        tooltip_txt = "When not seen in cage after exit tunnel"
+        label = QLabel("<b>Mouse Missing Alarm:</b>")
+        label.setToolTip(tooltip_txt)
+        grid_layout.addWidget(label, cur_row, 0)
         toggle = QSwitch()
+        toggle.setToolTip(tooltip_txt)
         toggle.setChecked(alarm_cfg.use_presence_missing_after_exit_tunnel)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def toggle_changed(value):
@@ -654,33 +658,36 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 2
         #
-        grid_layout.addWidget(QLabel("<b>Global Mouse Presence</b>"), cur_row, cur_col)
-        cur_row += 1
+        # temporarily disabled / not handled
+        if False:
+            grid_layout.addWidget(QLabel("<b>Global Mouse Presence</b>"), cur_row, cur_col)
+            cur_row += 1
 
-        grid_layout.addWidget(QLabel("<b>Use Global Mouse Presence for Alarm monitor:</b>"), cur_row, cur_col)
-        toggle = QSwitch()
-        toggle.setChecked(alarm_cfg.use_global_mouse_presence_missing)
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        def toggle_changed(value):
-            toggled = value != 0
-            alarm_cfg.use_global_mouse_presence_missing = toggled
-            alarm_monitor.property_changed(alarm_monitor.USE_GLOBAL_MOUSE_PRESENCE, toggled, not toggled)
-        toggle.stateChanged.connect(toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
+            grid_layout.addWidget(QLabel("<b>Use Global Mouse Presence for Alarm monitor:</b>"), cur_row, cur_col)
+            toggle = QSwitch()
+            toggle.setChecked(alarm_cfg.use_global_mouse_presence_missing)
+            toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            def toggle_changed(value):
+                toggled = value != 0
+                alarm_cfg.use_global_mouse_presence_missing = toggled
+                alarm_monitor.property_changed(alarm_monitor.USE_GLOBAL_MOUSE_PRESENCE, toggled, not toggled)
+            toggle.stateChanged.connect(toggle_changed)
+            grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+            cur_row += 1
 
-        spinbox = QSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        spinbox.setRange(0, 3600 * 24)  # 1 day
-        spinbox.setValue(behavior_cfg.mouse_presence.presence_missing_delay)
-        def value_changed(value):
-            behavior_cfg.mouse_presence.presence_missing_delay = value
-        spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(QLabel("Missing delay (seconds):"), cur_row, cur_col)
-        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
-        cur_row += 1
+            spinbox = QSpinBox()
+            spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            spinbox.setRange(0, 3600 * 24)  # 1 day
+            spinbox.setValue(behavior_cfg.mouse_presence.presence_missing_delay)
+            def value_changed(value):
+                behavior_cfg.mouse_presence.presence_missing_delay = value
+            spinbox.valueChanged.connect(value_changed)
+            grid_layout.addWidget(QLabel("Missing delay (seconds):"), cur_row, cur_col)
+            grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+            cur_row += 1
 
-        grid_layout.addWidget(QLabel("<b>Load Cell Monitor</b>"), cur_row, cur_col)
+        #
+        grid_layout.addWidget(QLabel("<b>Load Cell Thrash Detector</b>"), cur_row, cur_col)
         cur_row += 1
 
         spinbox = QSpinBox()
@@ -718,7 +725,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("<b>Audio Monitor</b>"), cur_row, cur_col)
+        grid_layout.addWidget(QLabel("<b>Audio Detector</b>"), cur_row, cur_col)
         cur_row += 1
 
         spinbox = QDoubleSpinBox()

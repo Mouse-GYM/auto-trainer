@@ -260,6 +260,8 @@ class EmergencyAlarmMonitor(ObservableObject):
         global_mouse_presence_missing = (
             self._global_mouse_presence.is_engaged if cfg.use_global_mouse_presence_missing
             else False)
+        # temporarily forced not missing for now:
+        global_mouse_presence_missing = False
         if global_mouse_presence_missing:
             reasons.append("global-mouse-presence")
         self.global_mouse_presence_engaged = global_mouse_presence_missing
