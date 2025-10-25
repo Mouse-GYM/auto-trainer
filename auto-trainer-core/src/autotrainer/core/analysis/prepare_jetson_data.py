@@ -4,22 +4,23 @@ Created on Tue Jan 16 16:15:29 2024
 
 @author: reynoben
 """
+import copy
 import sys
-from typing import Dict, Any, List
-
-import numpy as np
-import pandas as pd
 import os
-from scipy.signal import butter, filtfilt
 import glob
-import cv2
 import pickle
-from ...core.analysis import calibration_FLIR as cal_flir
 import yaml
 from pathlib import Path
+from typing import Dict, Any, List, Optional
+
+import cv2
+import numpy as np
+import pandas as pd
+from scipy.signal import butter, filtfilt
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.analysis.config import load_calib_stereo_params
+from autotrainer.core.analysis import calibration_FLIR as cal_flir
 
 logger = get_verbose_logger(__name__)
 
@@ -421,7 +422,7 @@ storted files are already present
     )
 
 
-def rotate_3d_points(points, x_degrees=0, y_degrees=0, z_degrees=0):
+def rotate_3d_points(points, x_degrees: float = 0, y_degrees: float = 0, z_degrees: float = 0):
     # Convert degrees to radians
     x_rad = np.radians(x_degrees)
     y_rad = np.radians(y_degrees)
@@ -452,8 +453,8 @@ def rotate_3d_points(points, x_degrees=0, y_degrees=0, z_degrees=0):
     return rotated_points
 
 
-def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
-    df_3d = pd.read_hdf(path_3D)
+def reorient_and_center(filtered_df_3d, centered_path_3d, src_dir, bpts, center_method, frame_rate):
+    df_3d = filtered_df_3d  # pd.read_hdf(path_3D)
     path_cam_mat = os.path.join(src_dir, 'camera_matrix')
     path_stereo_file = os.path.join(path_cam_mat, "stereo_params.pickle")
     calib_params = load_calib_stereo_params(Path(path_stereo_file))
@@ -468,9 +469,14 @@ def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
 
     path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')
     if os.path.isfile(path_offsets):
-        logger.info("Reusing offsets file %s", path_offsets)
         with open(path_offsets, "rb") as handle:
             cam_offsets = pickle.load(handle)
+        save_offsets = False
+        logger.info("Reusing offsets file %s: %s", path_offsets, cam_offsets)
+    else:
+        cam_offsets = None
+        save_offsets = True
+        logger.warning("No camera offset file available, generated one will be saved.")
 
     res_df_3d = reorient_and_center_step1(
         df_3d=df_3d,
@@ -483,10 +489,10 @@ def reorient_and_center(path_3D, src_dir, bpts, center_method, frame_rate):
         square_size=square_size,
         cam_names=cam_names,
         cam_offsets=cam_offsets,
-        save_offsets=True,
+        save_offsets=save_offsets,
     )
-    real_path_3D = path_3D.replace('_filtered3D.h5', '_centered3D.h5')
-    res_df_3d.to_hdf(real_path_3D, "df_with_missing", format="table", mode="w")
+    res_df_3d.to_hdf(centered_path_3d, "df_with_missing", format="table", mode="w")
+    return res_df_3d
 
 
 def reorient_and_center_step1(
@@ -503,6 +509,7 @@ def reorient_and_center_step1(
     cam_offsets,
     save_offsets: bool = False,
 ):
+    orig_cam_offsets = copy.deepcopy(cam_offsets)
     num_frames = np.shape(df_3d)[0]
     mask = df_3d.columns.get_level_values("bodyparts").isin(bpts)
     data_4d = df_3d.loc[:, mask].to_numpy().reshape((len(df_3d), -1, 4))
@@ -589,8 +596,12 @@ def reorient_and_center_step1(
         # Save the offsets to a pickle file
         if save_offsets:
             path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')
+            logger.notice("Saving camera-offsets to %s", path_offsets)
             with open(path_offsets, 'wb') as fh:
                 pickle.dump(cam_offsets, fh)
+
+    if orig_cam_offsets is not None and cam_offsets != orig_cam_offsets:
+        logger.warning("Loaded cam_offsets != generated: %s vs %s", orig_cam_offsets, cam_offsets)
 
     # Reorient based on camera angles
     for bp in range(len(bpts)):
@@ -646,7 +657,8 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
     path_cam_mat = os.path.join(calib_src_dir, 'camera_matrix')
 
     # Read the calibration variables
-    square_size, cbrow, cbcol = cal_flir.get_calibration_info(calib_src_dir)
+    # square_size, cbrow, cbcol = cal_flir.get_calibration_info(calib_src_dir)
+    # unused here
 
     # Undistort dataframes
     (
@@ -661,7 +673,8 @@ def triangulate_3D(df_LR, path_3D, calib_src_dir, bpts, min_cluster, p_thresh):
         dataFrame_camera1_undistort, dataFrame_camera2_undistort,
         stereomatrix=stereomatrix, bpts=bpts, min_cluster=min_cluster, p_thresh=p_thresh
     )
-    df_3d.to_hdf(str(path_3D), "df_with_missing", format="table", mode="w")
+    # df_3d.to_hdf(str(path_3D), "df_with_missing", format="table", mode="w")
+    return df_3d
 
 
 def triangulate_3d_step1(
@@ -753,11 +766,10 @@ def triangulate_3d_step1(
     return df_3d
 
 
-def process_raw_data(session, vid_tag, dlc_seg, calib_src_dir, center_method):
+def process_raw_data(session, vid_tag, dlc_seg, calib_src_dir, center_method) -> Optional[pd.DataFrame]:
     frame_rate = 150
     p_thresh = 0.9  # confidence threshold for DLC raw output
     min_cluster = 10  # maximum allowed interpolation
-    df_3d = []
 
     # Find video files
     mp4_list = os.path.join(session, '*' + vid_tag)
@@ -769,7 +781,7 @@ def process_raw_data(session, vid_tag, dlc_seg, calib_src_dir, center_method):
 
     if not video_paths:
         print('No Videos found!\n')
-        return
+        return None
 
     # Extract reach data, filter, prep for undistortion and triangulation
     df_LR, bodyparts = extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate)
@@ -781,15 +793,15 @@ def process_raw_data(session, vid_tag, dlc_seg, calib_src_dir, center_method):
         df.to_hdf(str(filt_path), "df_with_missing", format="table", mode="w")
         # print(f"Saved dataframe to {filt_path}")
 
-    if not len(df_LR):
+    if len(df_LR) == 0:
         print('No tracking obtained for %s' % session)
-    else:
-
-        raw_path_3D = os.path.join(vid_dir, vid_name_base + '_filtered3D.h5')
-        triangulate_3D(df_LR, raw_path_3D, calib_src_dir, bodyparts, min_cluster, p_thresh)
-        reorient_and_center(raw_path_3D, calib_src_dir, bodyparts, center_method, frame_rate)
-    path_3D = os.path.join(vid_dir, vid_name_base + '_centered3D.h5')
-
-    if os.path.isfile(path_3D):
-        df_3d = pd.read_hdf(path_3D)
-    return df_3d
+        return None
+    #
+    raw_path_3D = os.path.join(vid_dir, vid_name_base + '_filtered3D.h5')
+    filtered_df_3d = triangulate_3D(df_LR, raw_path_3D, calib_src_dir, bodyparts, min_cluster, p_thresh)
+    #
+    centered_path_3d = os.path.join(vid_dir, vid_name_base + '_centered3D.h5')
+    centered_df_3d = reorient_and_center(
+        filtered_df_3d, centered_path_3d, calib_src_dir, bodyparts, center_method, frame_rate)
+    #
+    return centered_df_3d

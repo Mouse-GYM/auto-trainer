@@ -49,8 +49,10 @@ def intersession_process(
     vid_tag = "." + video_write_ext
     dlc_seg = "_raw2D"
     center_method = (1, "Pellet")
-    process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
-    results_dict = segment_reaches(location, center_method, available_XYZ)
+    centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
+    results_dict = segment_reaches(
+        location, center_method, available_XYZ, centered_df_3d,
+    )
     logger.success("process intersession pose data complete %s", results_dict)
     return IntersessionResponse(
         pellet_x=results_dict['shift_x'],

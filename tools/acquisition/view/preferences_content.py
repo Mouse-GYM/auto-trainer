@@ -720,6 +720,7 @@ class PreferencesContent(QWidget):
             grid_layout.addWidget(toggle, cur_row, cur_col + 1)
             cur_row += 1
 
+            grid_layout.addWidget(QLabel("Missing delay (seconds):"), cur_row, cur_col)
             spinbox = QSpinBox()
             spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             spinbox.setRange(0, 3600 * 24)  # 1 day
@@ -727,7 +728,6 @@ class PreferencesContent(QWidget):
             def value_changed(value):
                 behavior_cfg.mouse_presence.presence_missing_delay = value
             spinbox.valueChanged.connect(value_changed)
-            grid_layout.addWidget(QLabel("Missing delay (seconds):"), cur_row, cur_col)
             grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
             cur_row += 1
 
