@@ -195,12 +195,12 @@ class FixedArrayMultiQueue:
         logger.debug("get_cam_missing_frames(%s): res=%s tot_puts=%s", cam_idx, res, tot_puts)
         return res
 
-    def put_block(self, content: numpy.ndarray, camera: int, frame_idx: int, *, timeout: float=10):
+    def put_block(self, content: numpy.ndarray, camera: int, frame_idx: int, *, timeout: float=10, sleep_retry: float=0.001):
         timeout = time.perf_counter() + timeout
         while self.put(content, camera, frame_idx) != BufferResult.Ok:
             if time.perf_counter() > timeout:
                 raise RuntimeError(f"Timeout waiting space in queue for cam-{camera}")
-            time.sleep(0.001)
+            time.sleep(sleep_retry)
 
     def put(self, content: numpy.ndarray, camera: int, frame_idx: Optional[int], allow_overflow: bool = True) -> BufferResult:
         buffer_index = self._buffer_index[camera]  # 0 ... up to depth - 1

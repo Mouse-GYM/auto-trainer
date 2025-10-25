@@ -1,6 +1,7 @@
 
 import logging.config
 import multiprocessing
+import os
 import queue
 import statistics
 import signal
@@ -109,7 +110,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._msg_queue = msg_queue
         self._cams = (project.camera_1, project.camera_2)
         self._frames_per_camera = frames_per_cam
-        self._recording_live_batch = 64
+        self._recording_live_batch = int(os.getenv("INFERENCE_LIVE_BATCH", 150 * 5))  # 5s at 150 FPS
         self._monitored_parts_offsets = monitored_parts_offsets
         self._parts_offsets = 0
         self._stop_recorded = mp_ctx.Event()
@@ -161,14 +162,15 @@ class InferenceMonitorDataProc(multiprocessing.Process):
     ):
         logger.notice("Processing intersession offline post-process ..")
         fill_live_end = True
-        for cdx, pdl, pdd, cur_h5_idx, cur_h5_dss in zip(
-            range_cams, ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss
+        for cdx, pdl, cur_h5_idx, cur_h5_dss in zip(
+            range_cams, ib_pose_data_list, cams_read_h5_idx, cams_read_h5_dss
         ):
             skipped = 0
             while fill_live_end and cur_h5_idx < len(cur_h5_dss):
                 ds_row = cur_h5_dss[cur_h5_idx]
                 pdl.append(ds_row[1])
-                if _local_do_debug:
+                if __debug__ and _local_do_debug:
+                    pdd = ib_pose_data_dict[cdx]
                     pdd[ds_row[2][0]] = ds_row[1]
                 cur_h5_idx += 1
                 skipped += 1
@@ -361,11 +363,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 # thx to camera capture which send a full EOF_RECORDING batch frames indices,
                 # this condition allows to know when to close/stopping writing to live files,
                 # and reopen for offline mode
-                if numpy.isin(
-                    frames_indices[:, 0], [
-                        FrameIndexCategory.EOF_RECORDING,
-                    ],
-                ).any():
+                if (frames_indices[:, 0] == FrameIndexCategory.EOF_RECORDING).any():
                     recording_in_progress = False
                     logger.notice("Detected stop of recording in progress ; mode=%s prev=%s frames_indices=%s",
                                   mode, prev_mode, frames_indices)
@@ -415,6 +413,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     cams_frame_idx_fhs = []
                     pose_paths = []
                     ib_pose_data_list = []
+                    # if __debug__:
                     ib_pose_data_dict = []
                     for cam in cams:
                         _, _, p_indices = cur_local_prj.get_video_path(cam, allow_overwrite=True)
@@ -422,7 +421,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         pose_path = Path(cur_local_prj.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live"))
                         pose_paths.append(pose_path)
                         ib_pose_data_list.append([])
-                        ib_pose_data_dict.append({})
+                        if __debug__:
+                            ib_pose_data_dict.append({})
 
                 if mode == InferenceMode.Live:
                     if recording_in_progress:  # and cams_frame_idx_fhs is not None and frames_indices is not None:
@@ -557,8 +557,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         skipped = 0
                         # append any of the live processed frame data that are before current
                         # received/processed frames indices:
-                        for cdx, pdl, cur_h5_dss, pdd, cam_fr_indices in zip(
-                            range_cams, ib_pose_data_list, cams_read_h5_dss, ib_pose_data_dict, frames_indices
+                        for cdx, pdl, cur_h5_dss, cam_fr_indices in zip(
+                            range_cams, ib_pose_data_list, cams_read_h5_dss, frames_indices
                         ):
                             cur_h5_ix = cams_read_h5_idx[cdx]
                             for fx, frame in enumerate(pose_data[cdx::len(cams)]):
@@ -572,7 +572,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                 while cur_h5_ix < len(cur_h5_dss) and frame_idx > cur_h5_dss[cur_h5_ix][2]:
                                     ix = cur_h5_dss[cur_h5_ix][2][0]
                                     f = cur_h5_dss[cur_h5_ix][1]
-                                    if _local_do_debug:
+                                    if __debug__ and _local_do_debug:
+                                        pdd = ib_pose_data_dict[cdx]
                                         if ix != len(pdl) or ix in pdd:
                                             logger.warning(
                                                 "cam-%s: detected invalid live frame ix: %s vs %s - double=%s",
@@ -583,7 +584,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                     skipped += 1
                                 cams_read_h5_idx[cdx] = cur_h5_ix
                                 f = frame.flatten()
-                                if _local_do_debug:
+                                if __debug__ and _local_do_debug:
+                                    pdd = ib_pose_data_dict[cdx]
                                     if (frame_idx != len(pdl) and frame_idx < len(cur_h5_dss)) or frame_idx in pdd:
                                         logger.warning("cam-%s: detected invalid frame idx: %s vs %s - double=%s",
                                                        cdx, frame_idx, len(pdl), frame_idx in pdd)
@@ -592,8 +594,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
                         tot_skipped += skipped
 
-            except (KeyboardInterrupt, SystemExit):
-                raise
             except Exception as err:
                 logger.exception("_monitor_data_queue: loop error processing mode=%s %s: %s",
                                  mode, type(pose_data), err)

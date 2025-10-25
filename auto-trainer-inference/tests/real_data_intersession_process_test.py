@@ -46,3 +46,19 @@ def test_index_error(project_info, caplog):
             calib_dir=this_dir.joinpath("4mm_6r_8c_4x"),
         )
     # TODO: fix underlying issue
+
+
+def test_agx001_20251015_15(project_info, benchmark):
+    project_info.root = this_dir.as_posix()
+    project_info.session = 15
+    project_info.device_id = "agx001"
+    project_info.when = datetime(2025, 10, 15)
+    res =  benchmark(lambda: intersession_process(
+        project_info,
+        calib_dir=this_dir.joinpath("4mm_6r_8c_4x"),
+    ))
+    print(res)
+    assert res == IntersessionResponse(
+        pellet_x=-1, pellet_y=1, pellet_z=0,
+        food_consumed=0, successful_reaches=0, pellets_presented=1,
+    )
