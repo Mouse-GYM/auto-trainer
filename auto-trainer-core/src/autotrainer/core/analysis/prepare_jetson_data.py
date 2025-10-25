@@ -189,7 +189,7 @@ def process_hand_data(
     for an in additional_names:
         an_x = (an, 'x')
         an_y = (an, 'y')
-        an_l = (an, 'l')
+        an_l = (an, 'likelihood')
         if dlc_seg == '_raw2D':
             newdf.loc[row_index, an_x] = df[an_x].values
             newdf.loc[row_index, an_y] = df[an_y].values

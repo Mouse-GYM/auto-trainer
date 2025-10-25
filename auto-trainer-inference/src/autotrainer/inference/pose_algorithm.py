@@ -1,4 +1,5 @@
 import dataclasses
+import itertools
 import operator
 from typing import List, Dict, Optional, Tuple, Callable
 from collections import namedtuple, defaultdict
@@ -345,22 +346,31 @@ class PoseAlgorithm(ObservableObject):
                     if maybe_dual:
                         parts_flag_3[part] = True
 
+        gpi = self.get_part_index
+
         # NB: only handling/using last frame of batch (for each cam):
         # we could eventually do all the frames and eventually make an avg ?
         cams_last_frame = [cam_frames[-1] for cam_frames in per_cam_frames]
+        # all_frames = list(itertools.zip_longest(per_cam_frames))
+        #
         parts_3d_offsets = defaultdict(dict)
-
         locations_3d = {}
-        gpi = self.get_part_index
         if self._has_hands_part_names:
+            all_lst = [
+                [f[gpi(p)] for p in self._hands_input_parts]
+                # for frames in
+                for f in itertools.chain(*per_cam_frames)
+            ]
+            all_frames = numpy.asarray(all_lst).reshape(len(all_lst), -1)
             df = pandas.DataFrame(
-                numpy.asarray(
-                    [[cam_last_frame[gpi(p)] for p in self._hands_input_parts]
-                     for cam_last_frame in cams_last_frame]
-                ).reshape(2  # nbr of frames in the dataframe
-                                                           , -1),
+                all_frames,
+                # numpy.asarray(
+                #     [[cam_last_frame[gpi(p)] for p in self._hands_input_parts]
+                #      for cam_last_frame in cams_last_frame]
+                # ).reshape(2,  # nbr of frames in the dataframe
+                #           -1),
                 columns=self._hands_input_columns)
-            process_hands_results = pandas.DataFrame(columns=self._hands_columns, index=range(2))
+            process_hands_results = pandas.DataFrame(columns=self._hands_columns, index=range(len(df)))
             process_hands_results = process_hand_data(
                 df,
                 hand_base_names=self._hand_base_names,
@@ -380,7 +390,13 @@ class PoseAlgorithm(ObservableObject):
 
         if len(pairs_3d_offsets) > 0:
             df_3d = self._handle_offsets_pose_data(
-                *(numpy.asarray([frame[gpi(p)] for p in self._measure_offset_parts]) for frame in cams_last_frame)
+                *(
+                    numpy.asarray([
+                        [frames[-1][gpi(p)] for p in self._measure_offset_parts]
+                        # for frame in frames
+                    ])
+                    for frames in per_cam_frames
+                )
             )
             for part1, part2 in pairs_3d_offsets:
                 loc1 = locations_3d[part1] = Offset3DTuple(df_3d[part1].iloc[-1, 0:3])  # last frame, 3 first columns (x, y, z)
