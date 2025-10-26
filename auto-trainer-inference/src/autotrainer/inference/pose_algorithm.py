@@ -372,21 +372,25 @@ class PoseAlgorithm(ObservableObject):
                 newdf=process_hands_results,
                 additional_names=[],
             )
+            assert len(process_hands_results) == len(df)
+            v0_raw = process_hands_results.iloc[0:len(per_cam_frames[0]) - 1].reset_index()
+            v1_raw = process_hands_results.iloc[len(per_cam_frames[0]):].reset_index()
             for elem in SceneElement.L_Hand, SceneElement.R_Hand:
                 if __debug__ and elem not in process_hands_results:
                     continue
-                v = process_hands_results[elem]
-                if v['likelihood'][0] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                    locations_1[elem] = PoseLocation(elem, -1, v['x'][0], v['y'][0])
-                if v['likelihood'][1] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                    locations_2[elem] = PoseLocation(elem, -1, v['x'][1], v['y'][1])
+                v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).iloc[0]
+                v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).iloc[0]
+                if v0['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                    locations_1[elem] = PoseLocation(elem, -1, v0['x'], v0['y'])
+                if v1['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                    locations_2[elem] = PoseLocation(elem, -1, v1['x'], v1['y'])
 
         if len(pairs_3d_offsets) > 0:
             df_3d = self._handle_offsets_pose_data(
                 *(
                     numpy.asarray([
-                        [frames[-1][gpi(p)] for p in self._measure_offset_parts]
-                        # for frame in frames
+                        [frame[gpi(p)] for p in self._measure_offset_parts]
+                        for frame in frames
                     ])
                     for frames in per_cam_frames
                 )
