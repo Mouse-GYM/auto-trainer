@@ -395,8 +395,7 @@ def undistort_points(dataframe: pd.DataFrame, path_cam_mat: str):
     filename_cam2 = Path(dataframe[1]).stem
 
     #currently no intermediate saving of this due to high speed.
-    # check if the undi#%%
-storted files are already present
+    # check if the undistorted files are already present
     if os.path.exists(os.path.join(path_undistort,filename_cam1 + '_undistort.h5')) and os.path.exists(os.path.join(
     path_undistort,filename_cam2 + '_undistort.h5')):
         print("The undistorted files are already present at %s" % os.path.join(path_undistort,filename_cam1))
@@ -765,8 +764,7 @@ def triangulate_3d_step1(
         [bpts, axis_labels],
         names=["bodyparts", "coords"],
     )
-    inds = range(num_frames)
-    df_3d = pd.DataFrame(triangulate, columns=columns, index=inds)
+    df_3d = pd.DataFrame(triangulate, columns=columns, index=range(num_frames))
     return df_3d
 
 

@@ -10,7 +10,8 @@ import pandas
 
 from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple
 from autotrainer.core.analysis.calibration import triangulate_3d_with_params
-from autotrainer.core.analysis.prepare_jetson_data import process_hand_data, reorient_and_center_step1
+from autotrainer.core.analysis.prepare_jetson_data import process_hand_data, reorient_and_center_step1, \
+    interpolate_coordinates
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.analysis.config import StereoParams
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
@@ -223,8 +224,10 @@ class PoseAlgorithm(ObservableObject):
         Will be called once after the model initialized and body parts properties have been set.
         See part_names() and get_part_index(name).
         """
+        logger.info("Initializing with parts: %s", parts)
         parts = self._parts_list[:] = [
-            SceneElement(part)
+            SceneElement(part)  # this is not exactly required anymore,
+            # but only ensure the given part will be cached within SceneElement cached items list/dict.
             for part in parts
         ]
         self._parts.clear()
@@ -278,7 +281,7 @@ class PoseAlgorithm(ObservableObject):
             df_3d=df_3d,
             stereo_file=stereo_params.as_pickle_dict(),
             center_method=center_method,
-            frame_rate=1,
+            frame_rate=150,
             bpts=self._measure_offset_parts,
             calib_metadata=self._calib_metadata,
             cam_names=self._cam_names,
@@ -347,11 +350,6 @@ class PoseAlgorithm(ObservableObject):
                         parts_flag_3[part] = True
 
         gpi = self.get_part_index
-
-        # NB: only handling/using last frame of batch (for each cam):
-        # we could eventually do all the frames and eventually make an avg ?
-        cams_last_frame = [cam_frames[-1] for cam_frames in per_cam_frames]
-        # all_frames = list(itertools.zip_longest(per_cam_frames))
         #
         parts_3d_offsets = defaultdict(dict)
         locations_3d = {}
@@ -364,11 +362,6 @@ class PoseAlgorithm(ObservableObject):
             all_frames = numpy.asarray(all_lst).reshape(len(all_lst), -1)
             df = pandas.DataFrame(
                 all_frames,
-                # numpy.asarray(
-                #     [[cam_last_frame[gpi(p)] for p in self._hands_input_parts]
-                #      for cam_last_frame in cams_last_frame]
-                # ).reshape(2,  # nbr of frames in the dataframe
-                #           -1),
                 columns=self._hands_input_columns)
             process_hands_results = pandas.DataFrame(columns=self._hands_columns, index=range(len(df)))
             process_hands_results = process_hand_data(

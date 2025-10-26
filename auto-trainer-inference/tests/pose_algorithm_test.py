@@ -35,7 +35,7 @@ def verify_all_false(flags: Dict[str, bool], except_part: str = ""):
 
 def verify_all_empty(
         algo: PoseAlgorithm,
-        locations_list: List[Dict[SceneElement, PoseLocation]], except_camera: int = -1,
+        locations_list: List[Dict[str, PoseLocation]], except_camera: int = -1,
         except_part: str = ""):
     for cdx, locations in enumerate(locations_list):
         for idx, part in enumerate(algo.part_names):

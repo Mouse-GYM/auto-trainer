@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import h5py.h5f
 import verboselogs
 
 from autotrainer.inference.analysis import intersession_process, IntersessionResponse
@@ -48,7 +49,7 @@ def test_index_error(project_info, caplog):
     # TODO: fix underlying issue
 
 
-def test_agx001_20251015_15(project_info, benchmark):
+def test_agx001_20251015_15_full(project_info, benchmark):
     project_info.root = this_dir.as_posix()
     project_info.session = 15
     project_info.device_id = "agx001"
@@ -62,3 +63,33 @@ def test_agx001_20251015_15(project_info, benchmark):
         pellet_x=-1, pellet_y=1, pellet_z=0,
         food_consumed=0, successful_reaches=0, pellets_presented=1,
     )
+
+
+def test_agx001_20251015_15_pose_process(pose_algo, project_info):
+    project_info.root = this_dir.as_posix()
+    project_info.session = 15
+    project_info.device_id = "agx001"
+    project_info.when = datetime(2025, 10, 15)
+    parts = ['Pellet', 'RH_flat', 'RH_spread', 'RH_grab', 'LH_flat', 'LH_spread', 'LH_grab',
+             'Star', 'Tongue_mid', 'Tongue_tip', 'Nose', 'Triangle', 'Mouth', 'Diamond']
+    pose_algo.initialize(parts)
+    sp = project_info.get_session_path()
+    fhs = []
+    tables = []
+    for cam in ("left", "right"):
+        p = Path(sp.location).joinpath(f"{sp.prefix}_{cam}_raw2D.h5")
+        fh = h5py.File(p, "r")
+        fhs.append(fh)
+        tables.append(fh["df_with_missing"]["table"])
+
+    all_frames = [[] for _ in range(len(fhs))]
+    for table, frames in zip(tables, all_frames):
+        for idx in range(3):
+            frames.append(table[idx][1])
+
+    pairs_3d = [
+        ('Diamond', 'Triangle'),
+    ]
+    res = pose_algo.process_frames(*all_frames, pairs_3d_offsets=pairs_3d)
+    print(res)
+
