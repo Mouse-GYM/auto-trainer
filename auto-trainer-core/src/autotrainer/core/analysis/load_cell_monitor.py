@@ -150,7 +150,7 @@ class LoadCellMonitor(ObservableObject):
         )
 
     @property
-    def context(self):
+    def context(self) -> LoadCellMonitorContext:
         return self._context
 
     @property

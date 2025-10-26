@@ -1,7 +1,8 @@
+import enum
 import math
 import threading
 import time
-from typing import Optional, List
+from typing import Optional, List, Set
 
 from autotrainer.core import ObservableObject, get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
@@ -16,19 +17,19 @@ logger = get_verbose_logger(__name__)
 timer_update_state = make_daemon_timer
 
 
+class EmergencyReason(str, enum.Enum):
+
+    MOUSE_THRASHING = "MOUSE_THRASHING"
+    IN_CAGE_AFTER_EXIT_TUNNEL = "IN_CAGE_AFTER_EXIT_TUNNEL"
+    GLOBAL_MOUSE_PRESENCE = "GLOBAL_MOUSE_PRESENCE"
+
+
 class EmergencyAlarmMonitor(ObservableObject):
 
     IS_ENGAGED = "is_engaged"
-
-    AUTO_RESUME_ON_CONDITIONS_CLEARED = "auto_resume_on_conditions_cleared"
-
-    USE_GLOBAL_MOUSE_PRESENCE = "use_global_mouse_presence"
+    CONFIG = "config"
     GLOBAL_MOUSE_PRESENCE_ENGAGED = "global_mouse_presence_engaged"
-
-    USE_PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL = "use_presence_in_cage_after_exit_tunnel"
     PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED = "presence_in_cage_after_exit_tunnel_engaged"
-
-    USE_AUDIO_LOAD_CELL_THRASHING = "use_audio_load_cell_thrashing"
     AUDIO_LOAD_CELL_THRASHING_ENGAGED = "audio_load_cell_thrashing_engaged"
 
     def __init__(
@@ -52,7 +53,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._enabled = False
         self._t_started = time.perf_counter()
         self._is_engaged = False
-        self._engaged_reasons = []
+        self._engaged_reasons: Set[EmergencyReason] = set()
         self._engaged_perf_c = math.nan
         self._disengaged_perf_c = math.nan
         self._timer_update_state = no_op_timer
@@ -71,14 +72,7 @@ class EmergencyAlarmMonitor(ObservableObject):
     @config.setter
     def config(self, value: EmergencyAlarmConfiguration):
         prev, self._config = self._config, value
-        self.property_changed(self.AUTO_RESUME_ON_CONDITIONS_CLEARED,
-                              value.auto_resume_on_cleared, prev.auto_resume_on_cleared)
-        self.property_changed(self.USE_GLOBAL_MOUSE_PRESENCE,
-                              value.use_global_mouse_presence_missing, prev.use_global_mouse_presence_missing)
-        self.property_changed(self.USE_AUDIO_LOAD_CELL_THRASHING,
-                              value.use_audio_load_cell_thrash, prev.use_audio_load_cell_thrash)
-        self.property_changed(self.USE_PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL,
-                              value.use_presence_missing_after_exit_tunnel, prev.use_presence_missing_after_exit_tunnel)
+        self.property_changed(self.CONFIG, value, prev)
 
     def start(self, *, reason: str="na"):
         with self._lock:
@@ -110,18 +104,19 @@ class EmergencyAlarmMonitor(ObservableObject):
     @is_engaged.setter
     def is_engaged(self, value):
         prev, self._is_engaged = self._is_engaged, value
-        if prev != value:
-            perf_now = time.perf_counter()
-            if value:
-                self._engaged_perf_c = perf_now
-            else:
-                self._engaged_reasons = []
-                self._disengaged_perf_c = perf_now
+        if prev == value:
+            return
+        perf_now = time.perf_counter()
+        if value:
+            self._engaged_perf_c = perf_now
+        else:
+            self._engaged_reasons.clear()
+            self._disengaged_perf_c = perf_now
         self._on_property_changed(self.IS_ENGAGED, value, prev)
 
     @property
     def engaged_reasons(self) -> List[str]:
-        return self._engaged_reasons
+        return sorted(reason.name for reason in self._engaged_reasons)
 
     @property
     def global_mouse_presence_engaged(self):
@@ -241,35 +236,27 @@ class EmergencyAlarmMonitor(ObservableObject):
         cfg = self._config
         perf_now = time.perf_counter()
         #
-        reasons = []
+        reasons = set()
         #
-        audio_load_cell_thrash_alarm = (
-            self._check_audio_load_cell(perf_now) if cfg.use_audio_load_cell_thrash
-            else False)
-        if audio_load_cell_thrash_alarm:
-            reasons.append("audio_load_cell_thrashing")
+        audio_load_cell_thrash_alarm = self._check_audio_load_cell(perf_now)
         self.audio_load_cell_thrashing_engaged = audio_load_cell_thrash_alarm
+        if audio_load_cell_thrash_alarm and cfg.use_audio_load_cell_thrash:
+            reasons.add(EmergencyReason.MOUSE_THRASHING)
         #
-        pres_missing_after_exit_tunnel_alarm = (
-            self._check_pres_after_exit_tunnel_missing(perf_now) if cfg.use_presence_missing_after_exit_tunnel
-            else False)
-        if pres_missing_after_exit_tunnel_alarm:
-            reasons.append("cage-presence-missing-after-exit-tunnel")
+        pres_missing_after_exit_tunnel_alarm = self._check_pres_after_exit_tunnel_missing(perf_now)
         self.presence_in_cage_after_exit_tunnel_engaged = pres_missing_after_exit_tunnel_alarm
+        if pres_missing_after_exit_tunnel_alarm and cfg.use_presence_missing_after_exit_tunnel:
+            reasons.add(EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL)
         #
-        global_mouse_presence_missing = (
-            self._global_mouse_presence.is_engaged if cfg.use_global_mouse_presence_missing
-            else False)
-        # temporarily forced not missing for now:
-        global_mouse_presence_missing = False
-        if global_mouse_presence_missing:
-            reasons.append("global-mouse-presence")
+        global_mouse_presence_missing = self._global_mouse_presence.is_engaged
         self.global_mouse_presence_engaged = global_mouse_presence_missing
+        if global_mouse_presence_missing and cfg.use_global_mouse_presence_missing and self._global_mouse_presence.feature_enabled:
+            reasons.add(EmergencyReason.GLOBAL_MOUSE_PRESENCE)
         #
         is_emergency = (
-               audio_load_cell_thrash_alarm
-            or pres_missing_after_exit_tunnel_alarm
-            or global_mouse_presence_missing
+            (audio_load_cell_thrash_alarm and cfg.use_audio_load_cell_thrash)
+            or (pres_missing_after_exit_tunnel_alarm and cfg.use_presence_missing_after_exit_tunnel)
+            or (global_mouse_presence_missing and cfg.use_global_mouse_presence_missing and self._global_mouse_presence.feature_enabled)
         )
         #
         if is_emergency and not self._is_engaged:
@@ -289,8 +276,13 @@ class EmergencyAlarmMonitor(ObservableObject):
                 perf_now)
         #
         if not is_emergency:
-            if cfg.auto_resume_on_cleared:
-                self._engaged_reasons = []
+            prev_reasons = self._engaged_reasons.copy()
+            self._engaged_reasons.clear()
+            if cfg.auto_resume_on_cleared and (
+                (EmergencyReason.MOUSE_THRASHING in prev_reasons and cfg.auto_resume_on_audio_load_cell_thrash_resume)
+                or (EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL in prev_reasons and cfg.auto_resume_on_presence_seen_after_exit_tunnel)
+                or (EmergencyReason.GLOBAL_MOUSE_PRESENCE in prev_reasons and cfg.auto_resume_on_global_mouse_presence)
+            ):
                 self.is_engaged = False
         else:
             self._engaged_reasons = reasons
