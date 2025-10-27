@@ -453,5 +453,10 @@ class EmulationInterface(DeviceInterface):
         if self._is_open:
             time.sleep(float(delay))
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
+        return self._is_open
 
+    def servo_attach(self, motor: Motor):
+        return self._is_open
+
+    def servo_detach(self, motor: Motor):
         return self._is_open

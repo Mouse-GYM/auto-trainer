@@ -129,6 +129,14 @@ class CanDevice(Device):
 
         no_op_handler = lambda _: None
 
+        def move_gate(value):
+            steps = MotorSteps("move_gate", [
+                {'servo_attach': Motor.TUNNEL_GATE_SERVO},
+                {'gate': value},
+                {'servo_detach': Motor.TUNNEL_GATE_SERVO},
+            ])
+            return self._start_sequence(steps)
+
         # Initialize command handlers lookup table
         self._command_handlers = {
             SystemCommandKind.REQUEST_VERSION:
@@ -142,7 +150,7 @@ class CanDevice(Device):
 
             SystemCommandKind.MOVE_COVER_SERVO: self._interface.move_cover_servo,
 
-            SystemCommandKind.MOVE_GATE_SERVO: self._interface.move_gate_servo,
+            SystemCommandKind.MOVE_GATE_SERVO: move_gate,
 
             SystemCommandKind.SET_X: self._interface.set_motor_x,
 
@@ -246,6 +254,9 @@ class CanDevice(Device):
 
             SystemCommandKind.SET_MOTOR_DRIFT: self._interface.set_motors_drift,
             SystemCommandKind.SET_AUTO_CORRECT_DRIFT: self._interface.set_auto_correct_motor_drift,
+
+            SystemCommandKind.SERVO_ATTACH: self._interface.servo_attach,
+            SystemCommandKind.SERVO_DETACH: self._interface.servo_detach,
 
             # No-op handlers
             SystemCommandKind.STREAM_START: no_op_handler,
@@ -372,7 +383,6 @@ class CanDevice(Device):
                 logger.verbose("received exit sentinel, exiting main loop ..")
                 break
             kind, data, ctx = r
-            prev_commands_count = len(cur_commands)
             if kind == "uuid":
                 if data == pending_uuid and pending_uuid is not None:
                     cur_commands.insert(0, r)
@@ -383,22 +393,35 @@ class CanDevice(Device):
             else:
                 if kind is not None:
                     cur_commands.append(r)
-            # if prev_commands_count != len(cur_commands):
-            #     logger.debug("Commands changed: %s", cur_commands)
-            if pending_uuid is not None and kind != "uuid":
+            #
+            if pending_uuid is not None and kind != "uuid":  # and not has_compound_left:
                 if time.perf_counter() < t_perf_last_command + 5:  # although could be set bit lower
                     continue
                 logger.warning("timeout waiting ack previous command: %s ; context=%s ; pending_uuid=%s",
                                self._pending_kind, self._pending_context, pending_uuid)
                 pending_uuid = None
+                # in case of pending_uuid within a compound movement:
+                # do we want to cancel the remaining steps ?
+            #
+            has_compound_left = (
+                len(self._homing_motors) > 0
+                or (self._compound_movement is not None and len(self._compound_movement) > 0)
+            )
+            if has_compound_left:
+                if pending_uuid is None:
+                    cur_commands.insert(0, ("next-compound", None, None))  # will trigger perform next compound
+                elif kind != "uuid":
+                    continue
             if len(cur_commands) == 0:
                 continue
             kind, data, ctx = cur_commands.pop(0)
             before_uuid = self._interface.uuid()
-            if kind == "uuid":
+            if kind == "next-compound":
+                self._perform_next_compound_step()
+            elif kind == "uuid":
                 logger.debug("executing ack perform next compound")
                 pending_uuid = None
-                self._perform_next_compound_step(data)
+                self._perform_next_compound_step()
             else:
                 handler = self._command_handlers.get(kind)
                 if handler is None:
@@ -409,23 +432,39 @@ class CanDevice(Device):
                     handler(*data.args, **data.kwargs)
                 else:
                     handler(data)
+                #
+                if ctx is not None:
+                    if self._pending_context is not None:
+                        logger.error("pending_context=%s and ctx=%s", self._pending_context, ctx)
+                    else:
+                        self._pending_context = ctx
+                        self._pending_kind = kind
             after_uuid = self._interface.uuid()
             t_perf_last_command = time.perf_counter()
+            has_compound_left = (
+                len(self._homing_motors) > 0
+                or (self._compound_movement is not None and len(self._compound_movement) > 0)
+            )
             if after_uuid != before_uuid:
                 # for now we have this rule:
                 if after_uuid != before_uuid + 1 and (before_uuid != 255 or after_uuid != 1):
                     logger.warning("Unexpected uuid change count: before=%s after=%s", before_uuid, after_uuid)
+                #
                 pending_uuid = after_uuid
                 if ctx is not None:
-                    if kind != "uuid":
+                    if kind not in {"uuid", "next-compound"}:
                         self._pending_context = ctx
                         self._pending_kind = kind
             else:
-                if kind != "uuid":
-                    if ctx is not None:
-                        logger.error("Handled %s with ctx=%s but CanInterface.uuid did not changed: %s",
-                                     kind, ctx, after_uuid)
-                    self._acknowledge_command(ctx)
+                if kind not in {"uuid", "next-compound"}:
+                    if self._pending_context is not None:
+                        if not has_compound_left:
+                            logger.warning("Handled %s with ctx=%s but CanInterface.uuid did not changed: %s",
+                                         self._pending_kind, self._pending_kind, after_uuid)
+                if not has_compound_left and self._pending_context is not None:
+                    self._acknowledge_command(self._pending_context)
+                    self._pending_context = None
+                    self._pending_kind = None
 
     def _handle_ack(self, msg: Acknowledge):
         cur_can_uuid = CanInterface.uuid()
@@ -465,11 +504,12 @@ class CanDevice(Device):
         Start a sequence of activities.
 
         Args:
-            movements: The motor steps to execute
+            movements: The motor/device steps to execute
         """
         if movements is None or movements.is_empty:
             self._command_complete()
         else:
+            logger.info("Starting sequence %s", movements.name)
             self._compound_movement = movements.steps
             self._perform_next_compound_step()
 
@@ -574,7 +614,9 @@ class CanDevice(Device):
         Note that 'completion' may only indicate that the message was sent to the
         target, not that the target is complete in executing the command.
         """
-        self._acknowledge_command(self._pending_context)
+        pending_ctx = self._pending_context
+        if pending_ctx is not None:
+            self._acknowledge_command(pending_ctx)
         self._pending_kind = None
         self._pending_context = None  # last
 
@@ -647,16 +689,19 @@ class CanDevice(Device):
         if self._api is not None and kind is not None:
             self.api.send_message(kind, position)
 
-    def _perform_next_compound_step(self, uuid: Optional[int] = None):
+    def _perform_next_compound_step(self):
         """
         Issue the next step in a multi-step motor sequence.
         """
         if len(self._homing_motors) > 1:
             self._homing_motors.pop(0)  # first one is/was executed by _home() function
             self._home(self._homing_motors)
-        elif self._compound_movement is not None and \
-                len(self._compound_movement) > 0:
+        elif (
+            self._compound_movement is not None
+            and len(self._compound_movement) > 0
+        ):
             step = self._compound_movement.pop(0)
+            logger.debug("executing next compound step: %s", step)
 
             save_as_fixed = step.get("save_as_fixed", False)
 
@@ -726,6 +771,13 @@ class CanDevice(Device):
                     self._home([Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
                 else:
                     logger.warning("unhandled predefined: %s", predefined)
+
+            elif "servo_attach" in step:
+                self._interface.servo_attach(step["servo_attach"])
+
+            elif "servo_detach" in step:
+                self._interface.servo_detach(step["servo_detach"])
+
         else:
             self._command_complete()
             self._compound_movement = None
@@ -804,7 +856,9 @@ def default_open_gate() -> MotorSteps:
     """
     return MotorSteps("open_gate",
                       [
+                          {'servo_attach': Motor.TUNNEL_GATE_SERVO},
                           {'gate': 0},
+                          {'servo_detach': Motor.TUNNEL_GATE_SERVO},
                       ]
                       )
 
@@ -818,6 +872,8 @@ def default_close_gate() -> MotorSteps:
     """
     return MotorSteps("close_gate",
                       [
+                          {'servo_attach': Motor.TUNNEL_GATE_SERVO},
                           {'gate': 100},
+                          {'servo_detach': Motor.TUNNEL_GATE_SERVO},
                       ]
                       )
