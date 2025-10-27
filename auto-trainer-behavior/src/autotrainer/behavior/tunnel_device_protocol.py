@@ -6,9 +6,15 @@ from autotrainer.core import ObservableObjectProtocol
 
 class TunnelDeviceProtocol(ObservableObjectProtocol, Protocol):
     """
-    Defines an expected/required set of commands from the tunnel device that are used as part of the behavior algorithm
-    and state machine.
+    Defines an expected/required set of commands and properties from the tunnel device that are used as part of the
+    behavior algorithm and state machine.
     """
+
+    @property
+    def head_magnet_intensity(self) -> Optional[float]:
+        """
+        Return the current head magnet position.
+        """
 
     def update_head_magnet_intensity(self, position: float) -> Optional[UUID]:
         """
