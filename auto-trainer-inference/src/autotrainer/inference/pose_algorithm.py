@@ -263,8 +263,16 @@ class PoseAlgorithm(ObservableObject):
         min_cluster = 10  # maximum allowed interpolation
         # not sure min_cluster change anything for when nbr frames == 1 (per cam)
         #
+        frames_per_cam = len(per_cam_detection[0])
+        #
+        # reshape then sort by confidence/likelihood and takes most likely:
+        df0_2d = pandas.DataFrame(per_cam_detection[0].reshape(frames_per_cam, -1), columns=self._measure_offset_parts_columns)
+        df0_2d = df0_2d.sort_index(level="likelihood", ascending=False).reset_index().iloc[0:1].drop(columns="index")
+        df1_2d = pandas.DataFrame(per_cam_detection[1].reshape(frames_per_cam, -1), columns=self._measure_offset_parts_columns)
+        df1_2d = df1_2d.sort_index(level="likelihood", ascending=False).reset_index().iloc[0:1].drop(columns="index")
+        #
         df_2d = pandas.DataFrame(
-            numpy.concatenate(per_cam_detection).reshape(len(per_cam_detection), -1),
+            numpy.concatenate([df0_2d.values, df1_2d.values]),
             columns=self._measure_offset_parts_columns,
         )
         # df_2d = interpolate_coordinates(df_2d, p_thresh)  # not required probably
@@ -337,6 +345,7 @@ class PoseAlgorithm(ObservableObject):
         parts_flag_2 = dict(self._default_parts_flag)
         parts_flag_3 = dict(self._default_parts_flag)
 
+        # get parts presence:
         for pose_l, pose_r in zip(left_frames, right_frames):
             for idx, part in enumerate(self._parts_list):
                 if pose_l[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PRESENT_THRESHOLD:
@@ -349,15 +358,17 @@ class PoseAlgorithm(ObservableObject):
                     if maybe_dual:
                         parts_flag_3[part] = True
 
+        cams_last_frame = [[cam_frames[-1]] for cam_frames in per_cam_frames]
+        selected_cams_frames = cams_last_frame
+
         gpi = self.get_part_index
         #
         parts_3d_offsets = defaultdict(dict)
-        locations_3d = {}
         if self._has_hands_part_names:
+            # compute L_Hand / R_Hand averaged position (based on possibly many sub-hand parts)
             all_lst = [
                 [f[gpi(p)] for p in self._hands_input_parts]
-                # for frames in
-                for f in itertools.chain(*per_cam_frames)
+                for f in itertools.chain(*selected_cams_frames)
             ]
             all_frames = numpy.asarray(all_lst).reshape(len(all_lst), -1)
             df = pandas.DataFrame(
@@ -373,28 +384,31 @@ class PoseAlgorithm(ObservableObject):
                 additional_names=[],
             )
             assert len(process_hands_results) == len(df)
-            v0_raw = process_hands_results.iloc[0:len(per_cam_frames[0]) - 1].reset_index()
-            v1_raw = process_hands_results.iloc[len(per_cam_frames[0]):].reset_index()
+            v0_raw = process_hands_results.iloc[0:len(selected_cams_frames[0])]
+            v1_raw = process_hands_results.iloc[len(selected_cams_frames[0]):]
             for elem in SceneElement.L_Hand, SceneElement.R_Hand:
                 if __debug__ and elem not in process_hands_results:
                     continue
-                v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).iloc[0]
-                v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).iloc[0]
+                # uses last(most recent) one:
+                v0 = v0_raw[elem].iloc[-1]
+                v1 = v1_raw[elem].iloc[-1]
+                # but if want uses most likelihood, then:
+                # v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
+                # v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
                 if v0['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     locations_1[elem] = PoseLocation(elem, -1, v0['x'], v0['y'])
                 if v1['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     locations_2[elem] = PoseLocation(elem, -1, v1['x'], v1['y'])
 
+        locations_3d = {}
         if len(pairs_3d_offsets) > 0:
-            df_3d = self._handle_offsets_pose_data(
-                *(
-                    numpy.asarray([
-                        [frame[gpi(p)] for p in self._measure_offset_parts]
-                        for frame in frames
-                    ])
-                    for frames in per_cam_frames
-                )
-            )
+            df_3d = self._handle_offsets_pose_data(*(
+                numpy.asarray([
+                    [frame[gpi(p)] for p in self._measure_offset_parts]
+                    for frame in frames
+                ])
+                for frames in selected_cams_frames
+            ))
             for part1, part2 in pairs_3d_offsets:
                 loc1 = locations_3d[part1] = Offset3DTuple(df_3d[part1].iloc[-1, 0:3])  # last frame, 3 first columns (x, y, z)
                 loc2 = locations_3d[part2] = Offset3DTuple(df_3d[part2].iloc[-1, 0:3])
