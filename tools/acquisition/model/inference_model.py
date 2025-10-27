@@ -110,6 +110,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     @project.setter
     def project(self, value: ProjectInfo):
         self._project = value
+        logger.debug("Putting new project info to data monitor queue: %s", value)
+        self._data_monitor_cmd_queue.put(
+            (InferenceMonitorDataProc.Msg.SET_PROJECT_INFO, (value,), None))
 
     @property
     def is_enabled(self) -> bool:

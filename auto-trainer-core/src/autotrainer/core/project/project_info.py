@@ -80,7 +80,7 @@ def _get_datetime_now() -> datetime:
 
 
 @dataclass
-class ProjectInfo:
+class _ProjectInfo:
     """Contains all details needed to uniquely identify a session project.
 
     The ProjectInfo is used/shared possibly to multiple processes.
@@ -103,17 +103,23 @@ class ProjectInfo:
     _session: Union[mp.Value, RawValueHolder] = None
     session = ValueHolderDescriptor()
 
+
+class ProjectInfo(_ProjectInfo):
+
     # custom/overloaded init to allow normal/exact same than previous argument names
     def __init__(
         self,
-        root: str=root,
-        device_id: str=device_id,
-        when: Optional[datetime]=_when,
-        ensure_exists: bool=ensure_exists,
-        camera_1: str=camera_1,
-        camera_2: str=camera_2,
+        root: str=_ProjectInfo.root,
+        device_id: str=_ProjectInfo.device_id,
+        when: Optional[datetime]=_ProjectInfo._when,
+        ensure_exists: bool=_ProjectInfo.ensure_exists,
+        camera_1: str=_ProjectInfo.camera_1,
+        camera_2: str=_ProjectInfo.camera_2,
         session: Optional[int]=None,
+        *,
+        mp_manager=None,
     ):
+        super().__init__()
         if when is not None:
             when = RawValueHolder(when.timestamp())
             if session is None:
@@ -129,17 +135,17 @@ class ProjectInfo:
         self.camera_1 = camera_1
         self.camera_2 = camera_2
         self._session = session
-        super().__init__()
-        self.__post_init__()
-
-    def __post_init__(self):
         if self._session is None and self._when is None:
-            ctx = get_mp_ctx()
+            ctx = get_mp_ctx() if mp_manager is None else mp_manager
             session_shared_obj = self._session = ctx.Value(ctypes.c_uint32, 1)
             # use the same lock for both session and when mp shared values:
             self._when = ctx.Value(ctypes.c_double,  # double required, not float !!
                                    _get_datetime_now().timestamp(),
-                                   lock=session_shared_obj.get_lock())
+                                   # with mp_manager on 3.8 we would need to access private _getvalue
+                                   # lock=(session_shared_obj if mp_manager is None
+                                   #       else session_shared_obj._getvalue()).get_lock()
+                                   # see:
+                                   )
 
     def __eq__(self, other):
         if isinstance(other, ProjectInfo):
