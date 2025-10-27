@@ -79,6 +79,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
     class Msg(str, Enum):
 
+        SET_PROJECT_INFO = "set_project_info"
         SET_POSE_ALGO = "set_pose_algo"
         POSE_RESULT_READY = "pose_result_ready"
         INTERSESSION_RESULT_READY = "intersession_result_ready"
@@ -149,6 +150,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             logger.debug("Processing cmd %s with %s // %s", cmd, args, kwargs)
             if cmd is self.Msg.SET_POSE_ALGO:
                 self._pose_algo =  args[0]
+            elif cmd is self.Msg.SET_PROJECT_INFO:
+                self._project = args[0]
 
     def _send_msg(self, msg, *args, **kwargs):
         self._msg_queue.put((msg, (args, kwargs)))
@@ -320,6 +323,9 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             df_xyp = pandas.DataFrame(arr,
                                       columns=pose_algo.pose_result_columns, index=index)
             df_xyp["frame_idx"] = list(indices_list)  # also store the frame idx with the results
+            logger.debug("Writing batch to %s", dst_path)
+            # logger.verbose("writing h5 batch (%s/%s entries): indices=%s to %s (prev-exists: %s)",
+            #                len(df_xyp), len(arr), indices_list, dst_path, os.path.exists(dst_path))
             df_xyp.to_hdf(dst_path,
                           "df_with_missing",
                           format="table",
@@ -328,6 +334,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                           )
             data_list.clear()
             indices_list.clear()
+            # logger.debug("cleared lists %s and %s",
+            #              object.__repr__(data_list), object.__repr__(indices_list))
             t1 = time.perf_counter()
             d = t1 - t0
             logger.verbose("wrote h5 batch (%s) in %sms to %s",
@@ -394,12 +402,9 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     for cam_pose_path, cam_indices, cam_h5_live in zip(pose_paths, cur_cams_indices, cur_h5_live_batch):
                         if len(cam_h5_live) == 0:
                             continue
-                        # cur = [a for a in cur_h5_live if len(a) > 0]  # if not necessary when correctly filtered ahead
-                        # cam_h5_live[:] = [a for a in cam_h5_live if len(a) > 0]  # modify in-place[:] required
-                        # but looks like is not necessary.
                         write_h5_batch(cam_pose_path, cam_h5_live, cam_indices)
                     #
-                    logger.debug("setting stop recorded")
+                    logger.debug("setting stop recorded on %s", self._stop_recorded)
                     self._stop_recorded.set()  # this is for the feeder thread to know when it can open the data files
 
             cnt_data_received += 1
@@ -421,6 +426,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     self._stop_recorded.clear()
                     cams_frame_idx_fhs = []
                     pose_paths = []
+                    cur_h5_live_batch = [[] for _ in range_cams]  # safer
+                    cur_cams_indices = [[] for _ in range_cams]  # safer
                     ib_pose_data_list = []
                     # if __debug__:
                     ib_pose_data_dict = []
@@ -451,7 +458,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                 for fx, f in zip(cam_fr_indices, cur)
                                 if fx >= 0
                             }
-                            cur = [cur[ix] for ix in sorted(cur)]
+                            cur = [cur[ix] for ix in sorted(cur)]  # should not be needed
                             if len(cur) == 0:
                                 continue
                             cam_h5_live.append(cur)

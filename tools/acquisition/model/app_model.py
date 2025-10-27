@@ -2,6 +2,7 @@ import enum
 import functools
 import json
 import logging
+import multiprocessing
 import pickle
 import queue
 import threading
@@ -62,6 +63,10 @@ class AppModel(ObservableObject):
         calib_dir: Optional[Path] = None,
     ):
         super().__init__(("on_error",))
+
+        # using a shared process manager,
+        # this allows to put shared values, created via the manager, to any multiprocesses (shared-) queue.
+        self._mp_manager = multiprocessing.get_context("spawn").Manager()
 
         self._preferences = preferences
         self._loaded_configuration: Optional[SystemConfiguration] = None
@@ -374,10 +379,21 @@ class AppModel(ObservableObject):
 
     def on_capture_start(self) -> bool:
 
-        self._project_info = ProjectInfo(root=self.output_location, device_id=self._preferences.serial_number,
-                                         ensure_exists=True, camera_1=self._left_camera.name,
-                                         camera_2=self._right_camera.name, )
+        self._project_info = ProjectInfo(
+            root=self.output_location,
+            device_id=self._preferences.serial_number,
+            ensure_exists=True,
+            camera_1=self._left_camera.name,
+            camera_2=self._right_camera.name,
+            mp_manager=self._mp_manager,  # required,
+            # so to have shared values that can be put to multiprocess queue.
+            # The active ProjectInfo must effectively be shared across all processes/threads.
+            # and/but some of the sub-processes are started early (and kept alive after),
+            # so using mp manager allows to put this ProjectInfo instance, along the shared values created via this
+            # manager, to any of these already alive sub-processes, via a multiprocess.Queue().put() call/transfer.
+        )
 
+        # Now put the new project info to all "models" :
         for model in self._models:
             model.project = self._project_info
 

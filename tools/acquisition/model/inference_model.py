@@ -110,6 +110,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     @project.setter
     def project(self, value: ProjectInfo):
         self._project = value
+        logger.debug("Putting new project info to data monitor queue: %s", value)
+        self._data_monitor_cmd_queue.put(
+            (InferenceMonitorDataProc.Msg.SET_PROJECT_INFO, (value,), None))
 
     @property
     def is_enabled(self) -> bool:
@@ -522,7 +525,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # the pose process and data monitor thread have some delay between them,
         # sometimes up to several seconds (4-5).
         # wait that we get the event from monitor data queue closing its write side to live files:
-        logger.debug("waiting stop_recorded")
+        logger.debug("waiting stop_recorded on %s", self._data_monitor_proc.stop_recorded)
         while not self._data_monitor_proc.stop_recorded.wait(1):
             if time.perf_counter() > perf_timeout:
                 raise RuntimeError("timeout waiting for intersession stop_recorded event")
