@@ -267,9 +267,9 @@ class PoseAlgorithm(ObservableObject):
         #
         # reshape then sort by confidence/likelihood and takes most likely:
         df0_2d = pandas.DataFrame(per_cam_detection[0].reshape(frames_per_cam, -1), columns=self._measure_offset_parts_columns)
-        df0_2d = df0_2d.sort_index(level="likelihood", ascending=False).reset_index().iloc[0:1].drop(columns="index")
+        df0_2d = df0_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]  # .drop(columns="index")
         df1_2d = pandas.DataFrame(per_cam_detection[1].reshape(frames_per_cam, -1), columns=self._measure_offset_parts_columns)
-        df1_2d = df1_2d.sort_index(level="likelihood", ascending=False).reset_index().iloc[0:1].drop(columns="index")
+        df1_2d = df1_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]  # .drop(columns="index")
         #
         df_2d = pandas.DataFrame(
             numpy.concatenate([df0_2d.values, df1_2d.values]),
