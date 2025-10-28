@@ -1867,3 +1867,19 @@ class CanInterface(DeviceInterface):
             position_error=self._motors_drift_error[motor_axis_idx],
         )
         return status
+
+    def servo_attach(self, motor: Motor):
+        addr = self._tgt2addr(target_of_motor(motor))
+        motor_id = _motor_to_id(motor)
+        res = self._jc.ServoAttach(addr, motor_id)
+        if res != 0:
+            logger.error("%s: ServoAttach failed: %s", motor, res)
+        return res == 0
+
+    def servo_detach(self, motor: Motor):
+        addr = self._tgt2addr(target_of_motor(motor))
+        motor_id = _motor_to_id(motor)
+        res = self._jc.ServoDetach(addr, motor_id)
+        if res != 0:
+            logger.error("%s: ServoDetach failed: %s", motor, res)
+        return res == 0

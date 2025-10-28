@@ -1,9 +1,13 @@
 import typing
 
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import EventManager, SystemStatusMessageKind, ApiEventKind
 
 from .device_interface import DeviceInterface
 from .device_api import DeviceApi
+
+
+logger = get_verbose_logger(__name__)
 
 
 class Device:
@@ -41,6 +45,7 @@ class Device:
         pass
 
     def _acknowledge_command(self, token: object):
+        logger.debug("sending command ack: %s", token)
         EventManager.default().post_event_content(ApiEventKind.deviceCommandAcknowledge, context=token)
         if self._api is not None:
             self._api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, token)

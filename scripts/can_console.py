@@ -12,7 +12,7 @@ from autotrainer.core.logging import setup_logging
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import CanDevice, DeviceConnection, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
-    CompoundMovementFile, MotorConfigurationFile, StepperStatus
+    CompoundMovementFile, MotorConfigurationFile, StepperStatus, is_servo
 
 msg_queue_active = True
 output_file = None
@@ -592,6 +592,15 @@ def handle_motor_command(motor: Motor, params, device_connection):
                                            data=float(position), context="motor step")
             time.sleep(1 + .25 * step)
         get_input = True
+
+    elif params[0] in ('attach', 'detach'):
+        if not is_servo(motor):
+            print("BAD servo motor")
+        else:
+            cmd = SystemCommandKind.SERVO_ATTACH if params[0] == "attach" else SystemCommandKind.SERVO_DETACH
+            device_connection.send_message(cmd, data=motor)
+        get_input = True
+
     else:
         print(f"Unrecognized motor command: {params[0]}")
         get_input = True
@@ -651,7 +660,9 @@ def print_help():
           " ::<cnt> Round trips")
     print("<motor> is one of: x, y, z, l[oad], c[over], m[agnet], g[ate]")
     print()
-
+    print("<servo> attach/detach              "
+          " ::Attach or Detach from a servo")
+    print()
     print("p[ellet] c[over]                   "
           " ::Cover Pellet Sequence")
     print("p[ellet] l[oad]                    "

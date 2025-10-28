@@ -499,3 +499,9 @@ class DeviceInterface:
             else:
                 res.append(-1 if motor_cfg.flip_limit_orientation else 1)
         return Offset3DTuple(*res)
+
+    def servo_attach(self, motor: Motor):
+        raise NotImplementedError
+
+    def servo_detach(self, motor: Motor):
+        raise NotImplementedError

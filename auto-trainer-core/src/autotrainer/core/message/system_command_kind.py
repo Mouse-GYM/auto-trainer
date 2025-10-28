@@ -53,6 +53,9 @@ class SystemCommandKind(IntEnum):
     SET_MOTOR_DRIFT = 225
     SET_AUTO_CORRECT_DRIFT = 226
 
+    SERVO_ATTACH = 227
+    SERVO_DETACH = 228
+
     # General actions.
     PLAY_TONE = 301
     SET_RGB_LED = 302
