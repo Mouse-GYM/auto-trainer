@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import dataclasses
 import functools
 import inspect
@@ -210,6 +211,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._intersession_state = IntersessionState.idle
         self._capture_status = CaptureProcessStatus.UNKNOWN
         self._last_capture_status_change_perf_c = time.perf_counter()
+
+        self._loaded_config: Optional[BehaviorConfiguration] = None
 
         self.min_baseline_intensity: float = 5.0
         self.max_baseline_intensity: float = 90.0
@@ -952,10 +955,19 @@ class BehaviorAlgorithm(ObservableObject):
         self.auto_clamp_release_load_count = cfg.auto_clamp_release_load_count
         self.auto_clamp_no_activity_release_delay = cfg.auto_clamp_no_activity_release_delay
 
+    def reset_configuration(self):
+        """Reset current config to the previous loaded config (via load_configuration)"""
+        prev = self._loaded_config
+        if prev is not None:
+            logger.notice("Resetting config to previous loaded")
+            self.load_configuration(prev)
+
     def load_configuration(self, config: BehaviorConfiguration):
+        self._loaded_config = copy.deepcopy(config)
         self._load_pellet_cfg(config.pellet_delivery)
         self._load_head_clamp_cfg(config.head_clamp)
-        self._top_camera_presence_detection.load_config(config.topcam_presence_detection)
+        if self._top_camera_presence_detection is not None:
+            self._top_camera_presence_detection.load_config(config.topcam_presence_detection)
 
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         cfg.is_enabled = self.pellet_delivery_enabled
