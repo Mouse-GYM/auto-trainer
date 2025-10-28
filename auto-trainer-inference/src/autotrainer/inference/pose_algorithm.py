@@ -271,10 +271,10 @@ class PoseAlgorithm(ObservableObject):
         # reshape then sort by confidence/likelihood and takes most likely:
         df0_2d = pandas.DataFrame(per_cam_detection[0].reshape(frames_per_cam, -1), columns=self._measure_offset_parts_columns)
         if frames_per_cam > 1:
-            df0_2d = df0_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]  # .drop(columns="index")
+            df0_2d = df0_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]
         df1_2d = pandas.DataFrame(per_cam_detection[1].reshape(frames_per_cam, -1), columns=self._measure_offset_parts_columns)
         if frames_per_cam > 1:
-            df1_2d = df1_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]  # .drop(columns="index")
+            df1_2d = df1_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]
         #
         df_2d = pandas.DataFrame(
             numpy.concatenate([df0_2d.values, df1_2d.values]),
@@ -294,7 +294,7 @@ class PoseAlgorithm(ObservableObject):
             df_3d=df_3d,
             stereo_file=stereo_params.as_pickle_dict(),
             center_method=center_method,
-            frame_rate=150,
+            frame_rate=150,  # could be todo: allow configure/set from camera fps itself
             bpts=self._measure_offset_parts,
             calib_metadata=self._calib_metadata,
             cam_names=self._cam_names,
