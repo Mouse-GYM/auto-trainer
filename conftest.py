@@ -28,16 +28,18 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(config, items):
-    include_functional = config.getoption("--functional")
-    include_canbus = config.getoption("--canbus")
-    include_bench = (
-        "bench" in (config.getoption("-m") or "").split(" ")
-        or config.getoption("--run-bench")
-    )
+    def has_option(mark_name, with_no_run: bool = False):
+        return (
+            mark_name in (config.getoption("-m") or "").split(" ")
+            or config.getoption(f"--{mark_name}" if with_no_run else f"--run-{mark_name}")
+        )
+    include_functional = has_option("functional", with_no_run=True)
+    include_canbus = has_option("canbus", with_no_run=True)
+    include_bench = has_option("bench")
 
     skip_functional = pytest.mark.skip(reason="need --functional option to run")
     skip_canbus = pytest.mark.skip(reason="need --canbus option to run")
-    skip_bench = pytest.mark.skip(reason="need --run-bench option to run")
+    skip_bench = pytest.mark.skip(reason="need --run-bench option or -m bench to run")
 
     for item in items:
         if "functional" in item.keywords and not include_functional:
