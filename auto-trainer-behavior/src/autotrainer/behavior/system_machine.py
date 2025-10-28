@@ -17,6 +17,7 @@ from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 
 from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
+from . import CaptureAnalysisResult
 
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
 from .inference_protocol import InferenceProtocol
@@ -275,6 +276,8 @@ class SystemMachine(StateMachine):
                     )
                 else:
                     inference.set_inference_to_online()
+            #
+            algo.session_processing_ending(CaptureAnalysisResult.CAPTURE_ONLY)
 
     @BehaviorAlgorithm.relay_func
     def _intersession_ended(self):

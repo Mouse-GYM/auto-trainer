@@ -7,7 +7,7 @@ from autotrainer.core import ProjectInfo, EventManager, transitions_allow_functi
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 
 from . import IntersessionState
-
+from .. import CaptureAnalysisResult
 
 from ..inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
 from ..behavior_algorithm import BehaviorAlgorithm
@@ -64,7 +64,7 @@ class IntersessionMachine(StateMachine):
         if res is None:
             logger.error("perform segmentation didn't started")
             self._segmentation_configuration = None
-            self.end_analysis()
+            self.end_analysis(False)
         else:
             self.events.on_analysis_started()  # should maybe conditioned by lower level lock too
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationBegin,
@@ -83,7 +83,9 @@ class IntersessionMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionBegin,
                                                       context=segment_config.nonce)
 
-    def after_end_analysis(self):
+    def after_end_analysis(self, success):
+        self._algorithm.session_processing_ending(CaptureAnalysisResult.ANALYSIS_SUCCEEDED if success
+                                                  else CaptureAnalysisResult.ANALYSIS_FAILED)
         self.events.on_analysis_ended()
         self._segmentation_configuration = None
         self._detection_configuration = None
@@ -122,18 +124,18 @@ class IntersessionMachine(StateMachine):
                          nonce, segment_config, success)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationNonceMismatch,
                                                       context=f"{segment_config.nonce}:{nonce}")
-            self.end_analysis()
+            self.end_analysis(False)
         else:
             if success:
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationEnd)
                 if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
                     self.perform_detection(segment_config)
                 else:
-                    self.end_analysis()
+                    self.end_analysis(False)
             else:
                 logger.error("perform segmentation failed. config=%s", segment_config)
                 EventManager.default().post_event_content(BehaviorEventKind.intersessionSegmentationError)
-                self.end_analysis()
+                self.end_analysis(False)
 
         self._segmentation_configuration = None
 
@@ -144,7 +146,7 @@ class IntersessionMachine(StateMachine):
                          nonce, detection_config, success)
             EventManager.default().post_event_content(BehaviorEventKind.intersessionDetectionNonceMismatch,
                                                       context=f"{detection_config.nonce}:{nonce}")
-            self.end_analysis()
+            self.end_analysis(False)
         else:
             if not success:
                 logger.error("perform detection failed. det_config=%s", detection_config)
@@ -154,7 +156,7 @@ class IntersessionMachine(StateMachine):
                     BehaviorEventKind.intersessionDetectionEnd,
                     context=f"nonce={detection_config.nonce};session_index={detection_config.session_index}")
 
-            self.end_analysis()
+            self.end_analysis(success)
 
 
     # region State Machine Requirements
@@ -177,7 +179,7 @@ class IntersessionMachine(StateMachine):
     def may_perform_detection(self):
         pass
 
-    def end_analysis(self):
+    def end_analysis(self, success: bool):
         pass
 
     def may_end_analysis(self):
