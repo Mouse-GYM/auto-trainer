@@ -117,25 +117,40 @@ def test_intersession_process_bench_agx001_20251015_15(agx001_20251015_15, bench
     )
 
 
-@pytest.mark.parametrize("frames_per_batch_per_cam", [
-    1,
-    pytest.param(2, marks=pytest.mark.xfail),
+@pytest.mark.parametrize("frames_per_batch_per_cam,select_frames_method", [
+    (1, "last_one"),
+    pytest.param(2, "all_most_likely", marks=pytest.mark.xfail),
     # for some reason with 2 frames per batch (per cam), we have missing L_Hand in locations
     #
     #         elif isinstance(obj1, dict) and isinstance(obj2, dict):
     # >           assert set(obj1) == set(obj2)
     # E           AssertionError: assert {'Diamond', 'LH_flat', 'Triangle', 'Mouth', 'Pellet', 'Star', 'Nose'} \
     #               == {'L_Hand', 'Diamond', 'LH_flat', 'Mouth', 'Star', 'Triangle', 'Nose', 'Pellet'}
-    3,
-    5,
-    10,
+    # E             Full diff:
+    # E               {
+    # E                   'Diamond',
+    # E                   'LH_flat',
+    # E             -     'L_Hand',
+    # E                   'Mouth',
+    # E                   'Nose',
+    # E                   'Pellet',
+    # E                   'Star',
+    # E                   'Triangle',
+    # E               }
+
+    (3, "last_one"),
+    (3, "all_most_likely"),
+    (5, "last_one"),
+    (5, "all_most_likely"),
+    (10, "all_most_likely"),
 ])
-def test_pose_algo_process_frames_agx001_20251015_15(pose_algo, agx001_20251015_15, frames_per_batch_per_cam):
+def test_pose_algo_process_frames_agx001_20251015_15(pose_algo, agx001_20251015_15, frames_per_batch_per_cam, select_frames_method):
     parts = ['Pellet', 'RH_flat', 'RH_spread', 'RH_grab', 'LH_flat', 'LH_spread', 'LH_grab',
              'Star', 'Tongue_mid', 'Tongue_tip', 'Nose', 'Triangle', 'Mouth', 'Diamond']
     pairs_3d = [
         ('Diamond', 'Triangle'),
     ]
+    pose_algo.process_frames_select_frames_method = select_frames_method
     pose_algo.initialize(parts)
     sp = agx001_20251015_15.get_session_path()
     fhs = []

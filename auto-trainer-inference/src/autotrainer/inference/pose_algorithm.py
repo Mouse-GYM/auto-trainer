@@ -1,7 +1,7 @@
 import dataclasses
 import itertools
 import operator
-from typing import List, Dict, Optional, Tuple, Callable
+from typing import List, Dict, Optional, Tuple, Callable, ClassVar
 from collections import namedtuple, defaultdict
 from dataclasses import dataclass
 
@@ -135,6 +135,9 @@ class PoseAlgorithm(ObservableObject):
     MIN_CONFIDENCE_PLOT_THRESHOLD = 0.9
     MIN_CONFIDENCE_PRESENT_THRESHOLD = 0.9
 
+    process_frames_select_frames_method: ClassVar[str] = "last_one"
+    # other possibility: "all_most_likely"
+
     def __init__(
         self,
         *,
@@ -267,9 +270,11 @@ class PoseAlgorithm(ObservableObject):
         #
         # reshape then sort by confidence/likelihood and takes most likely:
         df0_2d = pandas.DataFrame(per_cam_detection[0].reshape(frames_per_cam, -1), columns=self._measure_offset_parts_columns)
-        df0_2d = df0_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]  # .drop(columns="index")
+        if frames_per_cam > 1:
+            df0_2d = df0_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]  # .drop(columns="index")
         df1_2d = pandas.DataFrame(per_cam_detection[1].reshape(frames_per_cam, -1), columns=self._measure_offset_parts_columns)
-        df1_2d = df1_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]  # .drop(columns="index")
+        if frames_per_cam > 1:
+            df1_2d = df1_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]  # .drop(columns="index")
         #
         df_2d = pandas.DataFrame(
             numpy.concatenate([df0_2d.values, df1_2d.values]),
@@ -358,11 +363,12 @@ class PoseAlgorithm(ObservableObject):
                     if maybe_dual:
                         parts_flag_3[part] = True
 
-        cams_last_frame = [[cam_frames[-1]] for cam_frames in per_cam_frames]
-        selected_cams_frames = cams_last_frame
-        # other possibility is using all:
-        #   selected_cams_frames = per_cam_frames
-        # and eventually uses the most likely desired result/data.
+        if self.process_frames_select_frames_method == "last_one":
+            cams_last_frame = [[cam_frames[-1]] for cam_frames in per_cam_frames]
+            selected_cams_frames = cams_last_frame
+        else:
+            assert self.process_frames_select_frames_method == "all_most_likely"
+            selected_cams_frames = per_cam_frames
 
         gpi = self.get_part_index
         #
