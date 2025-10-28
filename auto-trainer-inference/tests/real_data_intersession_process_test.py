@@ -119,8 +119,9 @@ def test_intersession_process_bench_agx001_20251015_15(agx001_20251015_15, bench
 
 @pytest.mark.parametrize("frames_per_batch_per_cam,select_frames_method", [
     (1, "last_one"),
-    pytest.param(2, "all_most_likely", marks=pytest.mark.xfail),
-    # for some reason with 2 frames per batch (per cam), we have missing L_Hand in locations
+    (2, "all_most_likely"),  # using most likely looks better here
+    pytest.param(2, "last_one", marks=pytest.mark.xfail),
+    # so the second pair of frames give missing L_Hand in locations:
     #
     #         elif isinstance(obj1, dict) and isinstance(obj2, dict):
     # >           assert set(obj1) == set(obj2)

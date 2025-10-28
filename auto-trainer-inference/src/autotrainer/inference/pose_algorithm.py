@@ -399,11 +399,13 @@ class PoseAlgorithm(ObservableObject):
                 if __debug__ and elem not in process_hands_results:
                     continue
                 # uses last(most recent) one:
-                v0 = v0_raw[elem].iloc[-1]
-                v1 = v1_raw[elem].iloc[-1]
-                # but if want uses most likelihood, then:
-                # v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
-                # v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
+                if self.process_frames_select_frames_method == "last_one":
+                    v0 = v0_raw[elem].iloc[-1]
+                    v1 = v1_raw[elem].iloc[-1]
+                else:
+                    # but if want uses most likelihood, then:
+                    v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
+                    v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
                 if v0['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     locations_1[elem] = PoseLocation(elem, -1, v0['x'], v0['y'])
                 if v1['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
