@@ -360,6 +360,9 @@ class PoseAlgorithm(ObservableObject):
 
         cams_last_frame = [[cam_frames[-1]] for cam_frames in per_cam_frames]
         selected_cams_frames = cams_last_frame
+        # other possibility is using all:
+        #   selected_cams_frames = per_cam_frames
+        # and eventually uses the most likely desired result/data.
 
         gpi = self.get_part_index
         #
