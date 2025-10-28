@@ -1,8 +1,9 @@
-from typing import Protocol
+from typing import Protocol, List, Dict, Any
 from copy import copy
 
 
 class MotorSteps:
+
     @classmethod
     def from_dict(cls, name: str, data: dict):
 
@@ -14,9 +15,13 @@ class MotorSteps:
 
         return MotorSteps(name, steps)
 
-    def __init__(self, name: str = None, steps: list = None):
+    def __init__(self, name: str = "NA", steps: List[Dict[str, Any]] = None):
         self._name = name
         self._steps = steps
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     @property
     def steps(self):

@@ -1,6 +1,7 @@
 import pytest
 
 from autotrainer.behavior import BehaviorAlgorithm
+from autotrainer.core import BehaviorConfiguration
 
 
 @pytest.fixture
@@ -31,3 +32,14 @@ def test_set_put_func_call_mode(algo):
     #
     algo.put_func_call(record_sync_call_mode, (result,), None)
     assert prev is result[-1]
+
+
+@pytest.mark.parametrize("count", [5, 10])
+def test_reset_config(algo, count):
+    config = BehaviorConfiguration()
+    config.head_clamp.auto_clamp_release_load_count = count
+    algo.load_configuration(config)
+    assert algo.auto_clamp_release_load_count == count
+    algo.auto_clamp_release_load_count = 2 * count
+    algo.reset_configuration()
+    assert algo.auto_clamp_release_load_count == count
