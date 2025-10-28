@@ -136,6 +136,7 @@ class BehaviorAlgorithm(ObservableObject):
     # helps IDE search/completion/type-verification:
     session_starting: Callable[[], None]
     session_ending: Callable[[], None]
+    session_processing_ending: Callable[[], None]
 
     pellet_motor_drift_changed: Callable[[Offset3DTuple], None]
     cover_servo_status_changed: Callable[[CoverServoStatus], None]
@@ -161,6 +162,7 @@ class BehaviorAlgorithm(ObservableObject):
         super().__init__(event_names=(
             "session_starting",
             "session_ending",
+            "session_processing_ending",
             "cover_servo_status_changed",
             "pellet_motor_drift_changed",
             "pellets_presented_evt",  # Some unfortunate names for now given existing property names
@@ -903,10 +905,9 @@ class BehaviorAlgorithm(ObservableObject):
 
     def mouse_seen(self, seen: bool = True):
         if self._is_in_session and seen:
-            was_seen = self._session_mouse_seen
-            self._session_mouse_seen = self._on_property_changed(
-                BehaviorAlgoProps.SESSION_MOUSE_SEEN, seen, self._session_mouse_seen)
-            if not was_seen:
+            prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
+            self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, prev_seen)
+            if not prev_seen:
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
 
     @property

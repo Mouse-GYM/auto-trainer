@@ -1,4 +1,5 @@
 import contextlib
+import logging
 from itertools import chain
 from pathlib import Path
 from threading import Timer
@@ -356,3 +357,85 @@ class TestAutoClamp(MockSystemMachine):
             machine.algorithm.end_session()
         for p in file_paths:
             assert not p.exists() if feature_enabled else p.exists()
+
+    #
+
+class TestSessionProcessingEnding(MockSystemMachine):
+
+    def test_when_no_intersession(self, machine):
+        processing_ended_count = 0
+        def processing_ended():
+            nonlocal processing_ended_count
+            processing_ended_count += 1
+        #
+        algo = machine.algorithm
+        algo.intersession_enabled = False
+        algo.session_processing_ending += processing_ended
+        algo.start_session()
+        assert processing_ended_count == 0
+        algo.end_session()
+        assert processing_ended_count == 1
+
+    def test_when_intersession_mouse_not_seen(self, machine):
+        processing_ended_count = 0
+        def processing_ended():
+            nonlocal processing_ended_count
+            processing_ended_count += 1
+        #
+        algo = machine.algorithm
+        algo.intersession_enabled = True
+        algo.session_processing_ending += processing_ended
+        #
+        algo.start_session()
+        assert processing_ended_count == 0
+        algo.mouse_seen(False)
+        assert processing_ended_count == 0
+        algo.end_session()
+        assert processing_ended_count == 1
+
+    @pytest.mark.parametrize("detection_success", [False, True])
+    def test_when_intersession_mouse_seen(self, machine, detection_success):
+        processing_ended_count = 0
+        def processing_ended():
+            nonlocal processing_ended_count
+            processing_ended_count += 1
+        #
+        algo = machine.algorithm
+        algo.intersession_enabled = True
+        algo.session_processing_ending += processing_ended
+        algo.start_session()
+        algo.mouse_seen(True)
+        assert processing_ended_count == 0
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(self.mock_perform_segmentation())
+            assert processing_ended_count == 0
+            stack.enter_context(self.mock_perform_detection())
+            assert processing_ended_count == 0
+            algo.end_session()
+            assert processing_ended_count == 0
+            self.mock_complete_segmentation(True)
+            assert processing_ended_count == 0
+            self.mock_complete_detection(detection_success)
+            assert processing_ended_count == 1
+        assert processing_ended_count == 1
+
+    def test_when_intersession_mouse_seen_segmentation_fails(self, machine):
+        processing_ended_count = 0
+        def processing_ended():
+            nonlocal processing_ended_count
+            processing_ended_count += 1
+        #
+        algo = machine.algorithm
+        algo.intersession_enabled = True
+        algo.session_processing_ending += processing_ended
+        algo.start_session()
+        algo.mouse_seen(True)
+        assert processing_ended_count == 0
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(self.mock_perform_segmentation())
+            assert processing_ended_count == 0
+            algo.end_session()
+            assert processing_ended_count == 0
+            self.mock_complete_segmentation(False)
+            assert processing_ended_count == 1
+        assert processing_ended_count == 1
