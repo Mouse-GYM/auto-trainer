@@ -13,7 +13,7 @@ from .conftest import MockSystemMachine
 from autotrainer.core import HeadbarPressureMonitor
 from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
-from autotrainer.behavior import PelletMachine
+from autotrainer.behavior import PelletMachine, CaptureAnalysisResult
 from autotrainer.behavior import SystemState, PelletState, SystemMachine
 
 from autotrainer.inference.analysis.intersession_process import IntersessionResponse
@@ -364,9 +364,10 @@ class TestSessionProcessingEnding(MockSystemMachine):
 
     def test_when_no_intersession(self, machine):
         processing_ended_count = 0
-        def processing_ended():
+        def processing_ended(status):
             nonlocal processing_ended_count
             processing_ended_count += 1
+            assert status == CaptureAnalysisResult.CAPTURE_ONLY
         #
         algo = machine.algorithm
         algo.intersession_enabled = False
@@ -378,9 +379,10 @@ class TestSessionProcessingEnding(MockSystemMachine):
 
     def test_when_intersession_mouse_not_seen(self, machine):
         processing_ended_count = 0
-        def processing_ended():
+        def processing_ended(status):
             nonlocal processing_ended_count
             processing_ended_count += 1
+            assert status == CaptureAnalysisResult.CAPTURE_ONLY
         #
         algo = machine.algorithm
         algo.intersession_enabled = True
@@ -396,9 +398,14 @@ class TestSessionProcessingEnding(MockSystemMachine):
     @pytest.mark.parametrize("detection_success", [False, True])
     def test_when_intersession_mouse_seen(self, machine, detection_success):
         processing_ended_count = 0
-        def processing_ended():
+        def processing_ended(status):
             nonlocal processing_ended_count
             processing_ended_count += 1
+            assert status == (
+                CaptureAnalysisResult.ANALYSIS_SUCCEEDED if detection_success
+                else CaptureAnalysisResult.ANALYSIS_FAILED
+            )
+
         #
         algo = machine.algorithm
         algo.intersession_enabled = True
@@ -421,9 +428,10 @@ class TestSessionProcessingEnding(MockSystemMachine):
 
     def test_when_intersession_mouse_seen_segmentation_fails(self, machine):
         processing_ended_count = 0
-        def processing_ended():
+        def processing_ended(status):
             nonlocal processing_ended_count
             processing_ended_count += 1
+            assert status == CaptureAnalysisResult.ANALYSIS_FAILED
         #
         algo = machine.algorithm
         algo.intersession_enabled = True

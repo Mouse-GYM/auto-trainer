@@ -17,6 +17,7 @@ from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 
 from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
+from . import CaptureAnalysisResult
 
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
 from .inference_protocol import InferenceProtocol
@@ -182,12 +183,10 @@ class SystemMachine(StateMachine):
                            duration)
 
     def before_exit_intersession_to_cage(self):
-        self._algorithm.session_processing_ending()
         self._algorithm.system_state = SystemState.cage
         self._pellet_machine.environment_changed(caller="before_exit_intersession_to_cage")
 
     def before_exit_intersession_to_tunnel(self):
-        self._algorithm.session_processing_ending()
         self.state = SystemState.tunnel
         # set/force tunnel state required now, otherwise enter_tunnel is refused here after,
         # another possibility would be to have a dedicated trigger like "re_enter_tunnel_from_end_of_intersession"
@@ -278,7 +277,7 @@ class SystemMachine(StateMachine):
                 else:
                     inference.set_inference_to_online()
             #
-            algo.session_processing_ending()
+            algo.session_processing_ending(CaptureAnalysisResult.CAPTURE_ONLY)
 
     @BehaviorAlgorithm.relay_func
     def _intersession_ended(self):

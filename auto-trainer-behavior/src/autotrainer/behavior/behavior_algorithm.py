@@ -30,7 +30,7 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.video import CaptureProcessStatus
 
-from . import DiamondTriangleOffsetConfig
+from . import DiamondTriangleOffsetConfig, CaptureAnalysisResult
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 
@@ -136,7 +136,7 @@ class BehaviorAlgorithm(ObservableObject):
     # helps IDE search/completion/type-verification:
     session_starting: Callable[[], None]
     session_ending: Callable[[], None]
-    session_processing_ending: Callable[[], None]
+    session_processing_ending: Callable[[CaptureAnalysisResult], None]
 
     pellet_motor_drift_changed: Callable[[Offset3DTuple], None]
     cover_servo_status_changed: Callable[[CoverServoStatus], None]
