@@ -1,4 +1,5 @@
 import dataclasses
+import enum
 import math
 from dataclasses import dataclass
 from datetime import datetime
@@ -112,6 +113,12 @@ class IntersessionBlock:
 @dataclass
 class IntersessionDetection:
     configuration: DetectionConfiguration
+
+
+class CaptureAnalysisResult(str, enum.Enum):
+    CAPTURE_ONLY = "capture_only"
+    ANALYSIS_SUCCEEDED = "analysis_succeeded"
+    ANALYSIS_FAILED = "analysis_failed"
 
 
 # Protocol first (less strict)
