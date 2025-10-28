@@ -577,6 +577,9 @@ class AppModel(ObservableObject):
         if self._inference is not None:
             self._inference.terminate()
 
+        self._analysis.emergency_alarm_monitor.stop(reason="on_close")
+        self._analysis.global_mouse_presence_monitor.stop(reason="on_close")
+
         for camera in self._cameras:
             camera.on_close()
 
