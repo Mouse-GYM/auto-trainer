@@ -37,9 +37,9 @@ def pytest_collection_modifyitems(config, items):
     include_canbus = has_option("canbus", with_no_run=True)
     include_bench = has_option("bench")
 
-    skip_functional = pytest.mark.skip(reason="need --functional option to run")
-    skip_canbus = pytest.mark.skip(reason="need --canbus option to run")
-    skip_bench = pytest.mark.skip(reason="need --run-bench option or -m bench to run")
+    skip_functional = pytest.mark.skip(reason="need --functional option to run, or -m functional")
+    skip_canbus = pytest.mark.skip(reason="need --canbus option to run, or -m canbus")
+    skip_bench = pytest.mark.skip(reason="need --run-bench option to run, or -m bench")
 
     for item in items:
         if "functional" in item.keywords and not include_functional:

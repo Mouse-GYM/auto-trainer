@@ -27,7 +27,7 @@ from autotrainer.core.analysis import prepare_jetson_data as prep_jet
 import autotrainer.core.analysis._segment_reaches_f1 as segment_reaches_f11_module
 
 
-print(segment_reaches_f11_module)
+# print(segment_reaches_f11_module)
 segment_reaches_f11 = segment_reaches_f11_module.segment_reaches_f11
 
 
