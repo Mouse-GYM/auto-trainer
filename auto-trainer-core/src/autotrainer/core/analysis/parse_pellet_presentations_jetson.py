@@ -188,7 +188,7 @@ def segment_reaches_f2(
     # Minimum reach duration (seconds)
     min_reach_dur = 0.1
 
-    # The hand must come within this diestance to the pellet (mm)
+    # The hand must come within this distance to the pellet (mm)
     min_dist_from_pellet = 15
 
     batch_frm = 10

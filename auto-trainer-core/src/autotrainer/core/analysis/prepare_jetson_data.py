@@ -152,13 +152,14 @@ def process_hand_data(
     len_df = len(df)
     len_hand_cat = len(hand_base_names)
     row_index = np.arange(len_df)
+    len_shape = (len_df, len_hand_cat)
     #
     for h in hand_options:
         hand_categories = [h + item for item in hand_base_names]
 
-        likelihood_array = np.empty((len_df, len_hand_cat), dtype=np.float64)
-        y_array = np.empty((len_df, len_hand_cat), dtype=np.float64)
-        x_array = np.empty((len_df, len_hand_cat), dtype=np.float64)
+        likelihood_array = np.empty(len_shape, dtype=np.float64)
+        y_array = np.empty(len_shape, dtype=np.float64)
+        x_array = np.empty(len_shape, dtype=np.float64)
 
         for cndx, cat in enumerate(hand_categories):
             # Adjusting to use .loc to access MultiIndex properly
@@ -186,14 +187,17 @@ def process_hand_data(
 
     # Process additional bodyparts
     for an in additional_names:
+        an_x = (an, 'x')
+        an_y = (an, 'y')
+        an_l = (an, 'likelihood')
         if dlc_seg == '_raw2D':
-            newdf.loc[row_index, (an, 'x')] = df[(an, 'x')].values
-            newdf.loc[row_index, (an, 'y')] = df[(an, 'y')].values
-            newdf.loc[row_index, (an, 'likelihood')] = df[(an, 'likelihood')].values
+            newdf.loc[row_index, an_x] = df[an_x].values
+            newdf.loc[row_index, an_y] = df[an_y].values
+            newdf.loc[row_index, an_l] = df[an_l].values
         else:
-            newdf.loc[row_index, (an, 'x')] = df[(dlc_seg, an, 'x')].values
-            newdf.loc[row_index, (an, 'y')] = df[(dlc_seg, an, 'y')].values
-            newdf.loc[row_index, (an, 'likelihood')] = df[(dlc_seg, an, 'likelihood')].values
+            newdf.loc[row_index, an_x] = df[(dlc_seg, an, 'x')].values
+            newdf.loc[row_index, an_y] = df[(dlc_seg, an, 'y')].values
+            newdf.loc[row_index, an_l] = df[(dlc_seg, an, 'likelihood')].values
 
     return newdf
 
@@ -391,8 +395,7 @@ def undistort_points(dataframe: pd.DataFrame, path_cam_mat: str):
     filename_cam2 = Path(dataframe[1]).stem
 
     #currently no intermediate saving of this due to high speed.
-    # check if the undi#%%
-storted files are already present
+    # check if the undistorted files are already present
     if os.path.exists(os.path.join(path_undistort,filename_cam1 + '_undistort.h5')) and os.path.exists(os.path.join(
     path_undistort,filename_cam2 + '_undistort.h5')):
         print("The undistorted files are already present at %s" % os.path.join(path_undistort,filename_cam1))
@@ -761,8 +764,7 @@ def triangulate_3d_step1(
         [bpts, axis_labels],
         names=["bodyparts", "coords"],
     )
-    inds = range(num_frames)
-    df_3d = pd.DataFrame(triangulate, columns=columns, index=inds)
+    df_3d = pd.DataFrame(triangulate, columns=columns, index=range(num_frames))
     return df_3d
 
 
