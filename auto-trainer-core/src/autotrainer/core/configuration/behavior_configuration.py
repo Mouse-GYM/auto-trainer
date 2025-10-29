@@ -5,7 +5,8 @@ from typing_extensions import Self
 
 import yaml
 
-from .mouse_presence_configuration import GlobalMousePresenceConfig
+from autotrainer.core.logging import get_verbose_logger
+from .animal_presence_configuration import GlobalAnimalPresenceConfig
 from .presence_detection_configuration import PresenceDetectionConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor
 from ..analysis import LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer
@@ -13,6 +14,10 @@ from ..analysis import HeadbarPressureConfiguration, headbar_pressure_configurat
 from ..analysis import LoadCellConfiguration, load_cell_configuration_representer
 from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from .alarm_configuration import EmergencyAlarmConfiguration
+
+
+logger = get_verbose_logger(__name__)
+
 
 
 @dataclass
@@ -77,14 +82,14 @@ class HeadClampConfiguration:
 
 
 @dataclass
-class BehaviorConfiguration:
+class _BehaviorConfiguration:
     pellet_delivery: PelletDeliveryConfiguration = field(default_factory=PelletDeliveryConfiguration)
     head_clamp: HeadClampConfiguration = field(default_factory=HeadClampConfiguration)
     load_cell: LoadCellConfiguration = field(default_factory=LoadCellConfiguration)
     headbar_pressure: HeadbarPressureConfiguration = field(default_factory=HeadbarPressureConfiguration)
     auto_tare: LoadCellAutoTareConfiguration = field(default_factory=LoadCellAutoTareConfiguration)
     audio: AudioSpectrumThrashMonitorConfig = field(default_factory=AudioSpectrumThrashMonitorConfig)
-    mouse_presence: GlobalMousePresenceConfig = field(default_factory=GlobalMousePresenceConfig)
+    global_animal_presence: GlobalAnimalPresenceConfig = field(default_factory=GlobalAnimalPresenceConfig)
     emergency_alarm: EmergencyAlarmConfiguration = field(default_factory=EmergencyAlarmConfiguration)
     topcam_presence_detection: PresenceDetectionConfig = field(default_factory=PresenceDetectionConfig)
 
@@ -120,11 +125,24 @@ class BehaviorConfiguration:
         )
 
 
+class BehaviorConfiguration(_BehaviorConfiguration):
+    # NB: having to subclass _BehaviorConfiguration dataclass type to allow customize init signature (and body):
+
+    def __init__(self,
+                 *,
+                 mouse_presence=None,  # temporarily to be back-compatible with previous
+                 **kwargs):
+        if mouse_presence is not None:
+            logger.notice("Dropping previous mouse_presence config, new default one will be used. dropped entry: %s",
+                          mouse_presence)
+        super().__init__(**kwargs)
+
+
 pellet_delivery_configuration_representer = make_camelize_representer("!PelletDeliveryConfiguration")
 head_clamp_configuration_representer = make_camelize_representer("!HeadClampConfiguration")
 behavior_configuration_representer = make_camelize_representer("!BehaviorConfiguration")
 audio_monitor_representer = make_camelize_representer("!AudioMonitorConfiguration")
-mouse_presence_monitor_representer = make_camelize_representer("!MousePresenceConfiguration")
+animal_presence_monitor_representer = make_camelize_representer("!AnimalPresenceConfiguration")
 emergency_alarm_representer = make_camelize_representer("!EmergencyAlarmConfiguration")
 
 
@@ -136,7 +154,7 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     dumper.add_representer(LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer)
     dumper.add_representer(BehaviorConfiguration, behavior_configuration_representer)
     dumper.add_representer(AudioSpectrumThrashMonitorConfig, audio_monitor_representer)
-    dumper.add_representer(GlobalMousePresenceConfig, mouse_presence_monitor_representer)
+    dumper.add_representer(GlobalAnimalPresenceConfig, animal_presence_monitor_representer)
     dumper.add_representer(EmergencyAlarmConfiguration, emergency_alarm_representer)
     dumper.add_representer(PresenceDetectionConfig, make_camelize_representer("!PresenceDetectionConfiguration"))
 
@@ -148,7 +166,7 @@ head_clamp_configuration_constructor = make_decamelize_constructor(HeadClampConf
 load_cell_auto_tare_configuration_constructor = make_decamelize_constructor(LoadCellAutoTareConfiguration)
 behavior_configuration_constructor = make_decamelize_constructor(BehaviorConfiguration)
 audio_monitor_configuration_constructor = make_decamelize_constructor(AudioSpectrumThrashMonitorConfig)
-mouse_presence_configuration_constructor = make_decamelize_constructor(GlobalMousePresenceConfig)
+animal_presence_configuration_constructor = make_decamelize_constructor(GlobalAnimalPresenceConfig)
 emergency_alarm_configuration_constructor = make_decamelize_constructor(EmergencyAlarmConfiguration)
 
 
@@ -160,6 +178,11 @@ def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
     safe_loader.add_constructor("!HeadClampConfiguration", head_clamp_configuration_constructor)
     safe_loader.add_constructor("!LoadCellAutoTareConfiguration", load_cell_auto_tare_configuration_constructor)
     safe_loader.add_constructor("!AudioMonitorConfiguration", audio_monitor_configuration_constructor)
-    safe_loader.add_constructor("!MousePresenceConfiguration", mouse_presence_configuration_constructor)
+    #
+    safe_loader.add_constructor("!AnimalPresenceConfiguration", animal_presence_configuration_constructor)
+    safe_loader.add_constructor("!MousePresenceConfiguration", animal_presence_configuration_constructor)
+    # keeping temporarily MousePresenceConfiguration, was renamed to AnimalPresenceConfiguration. Back-compatibility.
+    # todo: remove some when later.
+    #
     safe_loader.add_constructor("!EmergencyAlarmConfiguration", emergency_alarm_configuration_constructor)
     safe_loader.add_constructor("!PresenceDetectionConfiguration", make_decamelize_constructor(PresenceDetectionConfig))

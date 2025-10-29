@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabe
                                QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QSpinBox, QGridLayout,
                                QLayout, QSizePolicy, QMessageBox)
 
-from autotrainer.core.analysis.global_mouse_presence_monitor import GlobalMousePresenceMonitor
+from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration, PelletDeliveryConfiguration
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.pyside import QSwitch
@@ -689,44 +689,20 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 2
         #
-        # temporarily disabled / not handled
-        if GlobalMousePresenceMonitor.feature_enabled:
-            grid_layout.addWidget(QLabel("<b>Global Mouse Presence</b>"), cur_row, cur_col)
+        if GlobalAnimalPresenceMonitor.feature_enabled:
+            grid_layout.addWidget(QLabel("<b>Global Animal Presence</b>"), cur_row, cur_col)
             cur_row += 1
 
-            grid_layout.addWidget(QLabel("<b>Use Global Mouse Presence for Alarm monitor:</b>"), cur_row, cur_col)
-            toggle = QSwitch()
-            toggle.setChecked(alarm_cfg.use_global_mouse_presence_missing)
-            toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            def toggle_changed(value):
-                toggled = value != 0
-                cfg = copy.deepcopy(alarm_monitor.config)
-                cfg.use_global_mouse_presence_missing = toggled
-                alarm_monitor.config = cfg
-            toggle.stateChanged.connect(toggle_changed)
-            grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-            cur_row += 1
-
-            grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
-            toggle = QSwitch()
-            toggle.setChecked(alarm_cfg.auto_resume_on_global_mouse_presence)
-            toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            def toggle_changed(value):
-                toggled = value != 0
-                cfg = copy.deepcopy(alarm_monitor.config)
-                cfg.auto_resume_on_global_mouse_presence = toggled
-                alarm_monitor.config = cfg
-            toggle.stateChanged.connect(toggle_changed)
-            grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-            cur_row += 1
-
-            grid_layout.addWidget(QLabel("Missing delay (seconds):"), cur_row, cur_col)
-            spinbox = QSpinBox()
+            grid_layout.addWidget(QLabel("Missing delay (hours):"), cur_row, cur_col)
+            spinbox = QDoubleSpinBox()
+            spinbox.setRange(0, 24 * 2)  # 2 days
+            spinbox.setDecimals(2)
+            spinbox.setSingleStep(1)
             spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            spinbox.setRange(0, 3600 * 24)  # 1 day
-            spinbox.setValue(behavior_cfg.mouse_presence.presence_missing_delay)
+            spinbox.setValue(behavior_cfg.global_animal_presence.presence_missing_delay_hours)
             def value_changed(value):
-                behavior_cfg.mouse_presence.presence_missing_delay = value
+                behavior_cfg.global_animal_presence.presence_missing_delay_hours = value
+                analysis.global_animal_presence_monitor.force_refresh()
             spinbox.valueChanged.connect(value_changed)
             grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
             cur_row += 1

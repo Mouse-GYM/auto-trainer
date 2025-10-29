@@ -464,14 +464,14 @@ class AppModel(ObservableObject):
 
         if not self._behavior.algorithm.algo_paused:
             self._analysis.emergency_alarm_monitor.start(reason="capture-start")
-            self._analysis.global_mouse_presence_monitor.start(reason="capture-start")
+            self._analysis.global_animal_presence_monitor.start(reason="capture-start")
 
         return True
 
     def on_capture_stop(self):
         # logger.verbose("AppModel.on_capture_stop")
         self._analysis.emergency_alarm_monitor.stop(reason="capture-stop")
-        self._analysis.global_mouse_presence_monitor.stop(reason="capture-stop")
+        self._analysis.global_animal_presence_monitor.stop(reason="capture-stop")
 
         self._inference.stop()
 
@@ -555,7 +555,7 @@ class AppModel(ObservableObject):
         self._analysis.load_cell_tare_monitor.load_configuration(behavior_cfg.auto_tare)
         self._analysis.audio_thrashing_monitor.config = behavior_cfg.audio
         self._analysis.emergency_alarm_monitor.config = behavior_cfg.emergency_alarm
-        self._analysis.global_mouse_presence_monitor.config = behavior_cfg.mouse_presence
+        self._analysis.global_animal_presence_monitor.config = behavior_cfg.global_animal_presence
 
         self.output_location = configuration.persistence.output_location
 
@@ -578,7 +578,7 @@ class AppModel(ObservableObject):
             self._inference.terminate()
 
         self._analysis.emergency_alarm_monitor.stop(reason="on_close")
-        self._analysis.global_mouse_presence_monitor.stop(reason="on_close")
+        self._analysis.global_animal_presence_monitor.stop(reason="on_close")
 
         for camera in self._cameras:
             camera.on_close()

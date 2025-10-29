@@ -6,9 +6,13 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler, EventManager, ApiEventKind)
+from autotrainer.core.logging import get_verbose_logger
 from tools.acquisition.model.hardware_model import HardwareModel
 
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
+
+
+logger = get_verbose_logger(__name__)
 
 
 class BehaviorModel(ObservableObject, ProjectDependentProtol):
@@ -116,7 +120,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         configuration.audio = analysis.audio_thrashing_monitor.config
         configuration.emergency_alarm = analysis.emergency_alarm_monitor.config
         configuration.topcam_presence_detection = algo.top_camera_presence_detection.to_config()
-        configuration.mouse_presence = analysis.global_mouse_presence_monitor.config
+        configuration.global_animal_presence = analysis.global_animal_presence_monitor.config
 
         return configuration
 
@@ -141,10 +145,12 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         if not algo.algo_paused:
             return
         if self._source_algo_paused == "user-button" and source != "user-button":
+            logger.verbose("Refusing resume from emergency given was set by user ; resume source=%s", source)
             return
         algo.algo_paused = False
-        self._analysis.global_mouse_presence_monitor.restart(reason=f"end-emergency-{source}")
         self._analysis.emergency_alarm_monitor.restart(reason=f"end-emergency-{source}")
+        # also restarting conveniently global animal presence monitor/alarm :
+        self._analysis.global_animal_presence_monitor.restart(reason=f"end-emergency-{source}")
         EventManager.default().post_event_content(ApiEventKind.emergencyResume, source)
         self.emergency_resumed(source)
 

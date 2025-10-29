@@ -5,7 +5,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.core import LoadCellMonitor, get_verbose_logger
 from autotrainer.core.analysis import EmergencyAlarmMonitor
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
-from autotrainer.core.analysis.global_mouse_presence_monitor import GlobalMousePresenceMonitor
+from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.pyside import CardWidget, StatusIcon
 from tools.acquisition.model.app_model import AppModel
@@ -21,10 +21,11 @@ class AlarmContent(ContentWidget):
     Widget to display alarm content.
     """
 
+    global_animal_presence_changed = Signal(bool)
+
+    # alarm monitor:
     use_load_cell_audio_thrash_changed = Signal(bool)
     load_cell_audio_thrash_changed = Signal(bool)
-    use_global_mouse_presence_changed = Signal(bool)
-    global_mouse_presence_changed = Signal(bool)
     use_presence_in_cage_after_exit_tunnel_changed = Signal(bool)
     presence_in_cage_after_exit_tunnel_changed = Signal(bool)
 
@@ -54,14 +55,6 @@ class AlarmContent(ContentWidget):
         label = QLabel("Alarms")
         label.setStyleSheet("font-weight: bold;")
         form_layout.addRow(label, None)
-
-        if GlobalMousePresenceMonitor.feature_enabled:
-            icon = self._mouse_missing_status = StatusIcon.alarmIcon()
-            label = self._mouse_missing_label = QLabel("Global Mouse Missing:")
-            form_layout.addRow(label, icon)
-            self.use_global_mouse_presence_changed.connect(lambda v: self._mouse_missing_label.setStyleSheet("" if v else "color: gray"))
-            self.use_global_mouse_presence_changed.emit(emergency_alarm_cfg.use_global_mouse_presence_missing)
-            self.global_mouse_presence_changed.connect(icon.setStatus)
 
         icon = self._mouse_thrashing_status = StatusIcon.alarmIcon()
         label = self._mouse_thrashing_label = QLabel("Thrashing:")
@@ -102,6 +95,12 @@ class AlarmContent(ContentWidget):
         form_layout.addRow("Sliding Door:", self._slide_door_status)
         self.slide_door_changed.connect(self._slide_door_status.setStatus)
 
+        if GlobalAnimalPresenceMonitor.feature_enabled:
+            icon = self._animal_missing_status = StatusIcon.alarmIcon()
+            label = self._animal_missing_label = QLabel("Animal Immobile:")
+            form_layout.addRow(label, icon)
+            self.global_animal_presence_changed.connect(icon.setStatus)
+
         content_layout.addLayout(form_layout)
 
         self._card_widget.setContentLayout(content_layout)
@@ -111,9 +110,12 @@ class AlarmContent(ContentWidget):
         self.setLayout(layout)
 
         hardware_model.property_changed += self._hardware_model_property_changed
-        app_model.analysis.load_cell_monitor.property_changed += self._load_cell_property_changed
-        app_model.analysis.audio_thrashing_monitor.property_changed += self._audio_thrashing_property_changed
-        app_model.analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
+        #
+        analysis = app_model.analysis
+        analysis.load_cell_monitor.property_changed += self._load_cell_property_changed
+        analysis.audio_thrashing_monitor.property_changed += self._audio_thrashing_property_changed
+        analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
+        analysis.global_animal_presence_monitor.property_changed += self._global_animal_presence_property_changed
 
     def set_is_capture_active(self, is_editable: bool):
         self._card_widget.setEnabled(is_editable)
@@ -138,10 +140,11 @@ class AlarmContent(ContentWidget):
             assert isinstance(value, EmergencyAlarmConfiguration)
             self.use_presence_in_cage_after_exit_tunnel_changed.emit(value.use_presence_missing_after_exit_tunnel)
             self.use_load_cell_audio_thrash_changed.emit(value.use_audio_load_cell_thrash)
-            self.use_global_mouse_presence_changed.emit(value.use_global_mouse_presence_missing)
         elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
             self.presence_in_cage_after_exit_tunnel_changed.emit(value)
         elif name == p.AUDIO_LOAD_CELL_THRASHING_ENGAGED:
             self.load_cell_audio_thrash_changed.emit(value)
-        elif name == p.GLOBAL_MOUSE_PRESENCE_ENGAGED:
-            self.global_mouse_presence_changed.emit(value)
+
+    def _global_animal_presence_property_changed(self, name, value, _):
+        if name == "is_engaged":
+            self.global_animal_presence_changed.emit(value)
