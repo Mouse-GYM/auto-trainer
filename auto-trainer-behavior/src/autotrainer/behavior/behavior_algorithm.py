@@ -94,6 +94,7 @@ class BehaviorAlgoProps(str, Enum):
     COVER_PELLET_DISTANCE = "cover_pellet_distance"
     RELEASE_PELLET_DISTANCE = "release_pellet_distance"
 
+    IS_IN_SESSION = 'is_in_session'
     INTERSESSION_STATE = 'intersession_state'
     CAPTURE_STATUS = 'capture_status'
 
@@ -812,6 +813,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_starting()
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
         self.system_state = SystemState.tunnel
+        self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, True, False)
         return True
 
     def end_session(self, *, reason: str = "NA"):
@@ -834,6 +836,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_ending()
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
+        self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)
         return True
 
     def reset_session_pellet_count(self):
