@@ -82,6 +82,15 @@ class VideoRecord(Thread):
         self._interval_mode = ProjectInterval.NONE
         self._interval_reference = -1
         self._close_event = threading.Event()
+        self._first_frame_when = time.time()
+
+    @property
+    def first_frame_when(self):
+        return self._first_frame_when
+
+    @first_frame_when.setter
+    def first_frame_when(self, value):
+        self._first_frame_when = value
 
     @property
     def close_event(self):
@@ -130,6 +139,8 @@ class VideoRecord(Thread):
                     continue
 
                 for frame, when, other_when in queue_list:
+                    when -= self._first_frame_when
+
                     if self._is_video_enabled:
                         if self._video_writer is None:
                             self._close_event.clear()

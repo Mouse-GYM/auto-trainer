@@ -400,10 +400,13 @@ class AppModel(ObservableObject):
         self._behavior.on_prepare_capture()
 
         self._inference_queue = None
+        left_cam = self._left_camera
+        right_cam = self._right_camera
+        top_cam = self._top_camera
 
         if self._inference.is_enabled:
-            shape_1 = self.left_camera.shape
-            shape_2 = self.right_camera.shape
+            shape_1 = left_cam.shape
+            shape_2 = right_cam.shape
             if shape_1 == shape_2:
                 self._inference_queue = FixedArrayMultiQueue(
                     # live queue does not need/require a lot of "depth" == total nbr of batches that can sit
@@ -418,23 +421,23 @@ class AppModel(ObservableObject):
             else:
                 logger.warning("pellet disabled: left and right camera frame sizes do not match")
 
-        did_start = self.left_camera.on_prepare_capture(self._inference_queue)
+        did_start = left_cam.on_prepare_capture(self._inference_queue)
 
         if not did_start:
             self.on_error("Camera Process Failed",
-                          _failed_camera_template(self.left_camera.name, self.left_camera.last_error))
+                          _failed_camera_template(left_cam.name, left_cam.last_error))
 
         if did_start:
-            did_start = did_start and self.right_camera.on_prepare_capture(self._inference_queue)
+            did_start = did_start and right_cam.on_prepare_capture(self._inference_queue)
             if not did_start:
                 self.on_error("Camera Process Failed",
-                              _failed_camera_template(self.right_camera.name, self.right_camera.last_error))
+                              _failed_camera_template(right_cam.name, right_cam.last_error))
 
         if did_start:
-            did_start = did_start and self.top_camera.on_prepare_capture()
+            did_start = did_start and top_cam.on_prepare_capture()
             if not did_start:
                 self.on_error("Camera Process Failed",
-                              _failed_camera_template(self.top_camera.name, self.top_camera.last_error))
+                              _failed_camera_template(top_cam.name, top_cam.last_error))
 
         if not did_start:
             logger.error("failed to start all subprocesses")
@@ -543,6 +546,7 @@ class AppModel(ObservableObject):
         if (camera := configuration.get_camera(CameraId.Right)) is not None:
             self._right_camera.load_configuration(camera)
         if (camera := configuration.get_camera(CameraId.Web)) is not None:
+            camera.record_prebuffer_duration = 0  # force for now ; so to not keep a buffer for nothing in topcam
             self._top_camera.load_configuration(camera)
 
         self.inference.load_configuration(configuration.inference)
