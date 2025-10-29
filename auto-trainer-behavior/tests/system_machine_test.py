@@ -38,7 +38,7 @@ def test_enter_exit_tunnel(mock_system, machine):
     assert machine.state == SystemState.cage
     # assert machine.mock_headfix.current_position == 0
     assert tun_dev.update_head_magnet_intensity.call_args_list == []
-    assert machine.algorithm._is_in_session is False
+    assert machine.algorithm.is_in_session is False
 
     # Should trigger enter tunnel, new session, and associated changes.
     mock_system.make_load_cell_active()
@@ -47,7 +47,7 @@ def test_enter_exit_tunnel(mock_system, machine):
     assert tun_dev.update_head_magnet_intensity.call_args_list == [
         mock.call(machine.algorithm.baseline_intensity)
     ]
-    assert machine.algorithm._is_in_session is True
+    assert machine.algorithm.is_in_session is True
     assert is_capture_triggered is True
 
     # Exit tunnel and end session.
@@ -55,7 +55,7 @@ def test_enter_exit_tunnel(mock_system, machine):
     mock_system.make_load_cell_inactive()
 
     assert machine.state == SystemState.cage
-    assert machine.algorithm._is_in_session is False
+    assert machine.algorithm.is_in_session is False
     assert is_capture_triggered is False
     assert mock_system.machine_state_trans == [
         SystemState.tunnel,
