@@ -6,10 +6,12 @@ import inspect
 import logging
 import math
 import operator
+import os
 import queue
 import statistics
 import threading
 import time
+from collections import deque
 from datetime import datetime
 from functools import partial
 from enum import Enum
@@ -130,6 +132,99 @@ def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_
 
     return wrapped
 
+#
+# shift xyz handling:
+
+ShiftXYZCallbackHandlerT = Callable[[Offset3DTuple], Optional[Offset3DTuple]]
+# takes an xyz, and returns None for no further action.
+# or return a "result/processed" xyz, that can be passed along.
+
+BufferShiftXYZCallbackHandlerT = Callable[[List[Offset3DTuple]], Offset3DTuple]
+
+
+class ShiftXYZBufferHandler:
+
+    @staticmethod
+    def make_average(buffer: List[Offset3DTuple]):
+        return sum(buffer) / len(buffer)
+
+    def __init__(self, size: int):
+        self._buffer = []
+        self._size = size
+        self._reduce_func = self.make_average
+
+    @property
+    def size(self):
+        return self._size
+
+    @size.setter
+    def size(self, value):
+        self._size = value
+
+    def __call__(self, xyz: Offset3DTuple):
+        buff = self._buffer
+        buff.append(xyz)
+        if len(buff) < self._size:
+            return None
+        res = self._reduce_func(buff)
+        buff.clear()
+        return res
+
+    def set_reduce_buffer_func(self, func: BufferShiftXYZCallbackHandlerT):
+        self._reduce_func = func
+
+
+class ShiftXYZHandler(ObservableObject):
+
+    def __init__(self):
+        super().__init__()
+        default_handler = ShiftXYZBufferHandler(int(os.getenv("HANDLE_SHIFT_XYZ_BUFFER_SIZE", 10)))
+        self._handle_new_shift_xyz_func: ShiftXYZCallbackHandlerT = default_handler
+        self._handle_processed_shift_func: Optional[ShiftXYZCallbackHandlerT] = None
+        self._last_shift_xyz: Optional[Offset3DTuple] = None
+        self._last_processed_shift_xyz: Optional[Offset3DTuple] = None
+
+    LAST_SHIFT_XYZ = "last_shift_xyz"
+
+    @property
+    def last_shift_xyz(self) -> Offset3DTuple:
+        return self._last_shift_xyz
+
+    @last_shift_xyz.setter
+    def last_shift_xyz(self, value):
+        prev, self._last_shift_xyz = self._last_shift_xyz, value
+        self._on_property_changed(self.LAST_SHIFT_XYZ, value, prev)
+
+    #
+
+    LAST_PROCESSED_SHIFT_XYZ = "last_processed_shift_xyz"
+
+    @property
+    def last_processed_shift_xyz(self) -> Offset3DTuple:
+        return self._last_processed_shift_xyz
+
+    @last_processed_shift_xyz.setter
+    def last_processed_shift_xyz(self, value):
+        prev, self._last_processed_shift_xyz = self.last_processed_shift_xyz, value
+        self._on_property_changed(self.LAST_PROCESSED_SHIFT_XYZ, value, prev)
+
+    #
+
+    def set_handle_new_shift_xyz(self, func: ShiftXYZCallbackHandlerT):
+        self._handle_new_shift_xyz_func = func
+
+    def set_handle_processed_shift_xyz(self, func: Optional[ShiftXYZCallbackHandlerT]):
+        self._handle_processed_shift_func = func
+
+    def put_new_shift_xyz(self, shift_xyz: Offset3DTuple):
+        self.last_shift_xyz = shift_xyz
+        res = self._handle_new_shift_xyz_func(shift_xyz)
+        if res is not None:
+            self.last_processed_shift_xyz = res
+            func = self._handle_processed_shift_func
+            if func is not None:
+                func(shift_xyz)  # noqa
+                # not sure why need noqa otherwise PyCharm think it's None .. despite the previous if .. :/
 
 #
 
@@ -154,12 +249,12 @@ class BehaviorAlgorithm(ObservableObject):
     _no_handler_thread: ClassVar[Optional[bool]] = False
 
     def __init__(
-            self,
-            *,
-            cover_error_min_distance_threshold: float = 2,  # millimeter
-            release_error_min_distance_threshold: float = 2,  # millimeter
-            cover_release_min_duration_threshold: float = 3,  # seconds
-            diamond_triangle_offset_config_path: Optional[Path] = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH,
+        self,
+        *,
+        cover_error_min_distance_threshold: float = 2,  # millimeter
+        release_error_min_distance_threshold: float = 2,  # millimeter
+        cover_release_min_duration_threshold: float = 3,  # seconds
+        diamond_triangle_offset_config_path: Optional[Path] = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH,
     ):
         super().__init__(event_names=(
             "session_starting",
@@ -270,6 +365,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._check_start_thread()
         self._today = None
         self._start_day()
+        #
+        self._shift_xyz_handler = ShiftXYZHandler()
 
     @classmethod
     def _check_start_thread(cls):
@@ -284,7 +381,7 @@ class BehaviorAlgorithm(ObservableObject):
                 daemon=True,
                 name="AlgoHandler",
             )
-            BehaviorAlgorithm._handler_thread_queue = (handler_thread, handler_queue)
+            cls._handler_thread_queue = (handler_thread, handler_queue)
             handler_thread.start()
 
     @staticmethod
@@ -749,6 +846,8 @@ class BehaviorAlgorithm(ObservableObject):
         if quantity:
             self.successful_reaches_evt(quantity)
 
+    #
+
     @property
     def cover_servo_status(self) -> CoverServoStatus:
         return self._cover_servo_status
@@ -776,6 +875,12 @@ class BehaviorAlgorithm(ObservableObject):
     def auto_correct_motors_drift(self, value):
         prev, self._auto_correct_motors_drift = self._auto_correct_motors_drift, value
         self._on_property_changed(BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT, value, prev)
+
+    @property
+    def shift_xyz_handler(self) -> ShiftXYZHandler:
+        return self._shift_xyz_handler
+
+    #
 
     def start_session(self, *, reason: str = "NA"):
         with self._thread_lock:

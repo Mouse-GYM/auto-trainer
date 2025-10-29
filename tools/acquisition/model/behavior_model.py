@@ -38,8 +38,6 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         self._analysis = analysis
 
         self._system_machine = SystemMachine(
-            algorithm=None,
-            project_info=None,
             msg_handler=msg_handler,
             analysis=analysis,
             tunnel_device=hardware_model,

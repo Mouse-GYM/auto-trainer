@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QLabel, QWidget, QVBoxLayout,
                                QHBoxLayout, QStackedLayout, QGridLayout, QPushButton)
 
 from autotrainer.inference.analysis import IntersessionResponse
-from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, ShiftXYZHandler
 from autotrainer.pyside import CardWidget, QSwitch
 from autotrainer.pyside.xyz_label import XYZQLabel
 from autotrainer.pyside.DayTotalCount import DailyAndTotalCountsLabel
@@ -124,8 +124,13 @@ class BehaviorContent(ContentWidget):
         right_layout.addWidget(label, right_cur_row, 1)
 
         right_cur_row += 1
-        right_layout.addWidget(QLabel("Prev. pellet shift XYZ (mm) :"), right_cur_row, 0)
+        right_layout.addWidget(QLabel("Prev. session pellet shift XYZ (mm) :"), right_cur_row, 0)
         label = self._prev_pellet_shift_label = XYZQLabel()
+        right_layout.addWidget(label, right_cur_row, 1)
+
+        right_cur_row += 1
+        right_layout.addWidget(QLabel("Prev. processed pellet shift XYZ (mm) :"), right_cur_row, 0)
+        label = self._prev_processed_pellet_shift_label = XYZQLabel()
         right_layout.addWidget(label, right_cur_row, 1)
 
         #
@@ -170,18 +175,17 @@ class BehaviorContent(ContentWidget):
         #
 
         app_model.property_changed += self._app_model_property_changed
-
         inference_model.property_changed += self._inference_model_property_changed
-        inference_model.detection_result_ready += self._inference_detection_result_ready
+        algo.shift_xyz_handler.property_changed += self._shift_xyz_property_changed
 
         system_machine.events.state_changed += lambda old, new: self._system_machine_state_label.setText(new)
         pellet_machine.events.state_changed += lambda old, new: self._pellet_machine_state_label.setText(new)
         intersession_machine.events.state_changed += lambda old, new: self._intersession_state_label.setText(new)
 
-        behavior_model.algorithm.property_changed += self._algorithm_property_changed
+        algo.property_changed += self._algorithm_property_changed
         # self._analysis.headbar_pressure_monitor.property_changed += self._force_detector_property_changed
         behavior_model.property_changed += self._behavior_model_property_changed
-        self.status_changed.connect(lambda x: self._inference_status.setText(x))
+        self.status_changed.connect(self._inference_status.setText)
         self.set_is_editable(False)
 
     def set_is_editable(self, is_editable: bool):
@@ -234,5 +238,9 @@ class BehaviorContent(ContentWidget):
             else:
                 self._location_label.setText("Inference model not specified")
 
-    def _inference_detection_result_ready(self, result: IntersessionResponse):
-        self._prev_pellet_shift_label.update_coordinate(x=result.pellet_x, y=result.pellet_y, z=result.pellet_z)
+    def _shift_xyz_property_changed(self, name, value, _):
+        if name == ShiftXYZHandler.LAST_SHIFT_XYZ:
+            self._prev_pellet_shift_label.update_coordinate(value)
+        elif name == ShiftXYZHandler.LAST_PROCESSED_SHIFT_XYZ:
+            self._prev_processed_pellet_shift_label.update_coordinate(value)
+

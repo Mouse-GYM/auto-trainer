@@ -32,11 +32,18 @@ class XYZQLabel(QLabel):
             if xyz is None:
                 xyz = math.nan, math.nan, math.nan
             x, y, z = xyz
-        self._xyz_values = self._xyz_values.replace(x=x, y=y, z=z)
-        self.setText(self.xyz_to_str(self._xyz_values, n_digits=self._n_digits))
+        cur_xyz = self._xyz_values
+        if cur_xyz is None:
+            new_xyz = Offset3DTuple(x, y, z)
+        else:
+            new_xyz = cur_xyz.replace(x=x, y=y, z=z)
+        self._xyz_values = new_xyz
+        self.setText(self.xyz_to_str(new_xyz, n_digits=self._n_digits))
 
     @staticmethod
-    def xyz_to_str(xyz: Offset3DTuple, *, n_digits: int = 1):
+    def xyz_to_str(xyz: Optional[Offset3DTuple], *, n_digits: int = 1):
+        if xyz is None:
+            return NO_UPDATES
         return " / ".join("na" if (math.isnan(v) or v is None)
                           else f"{v:.0{n_digits}f}"
                           for v in xyz)
