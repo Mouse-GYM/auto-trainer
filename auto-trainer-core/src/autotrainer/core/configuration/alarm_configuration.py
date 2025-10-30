@@ -5,10 +5,7 @@ import dataclasses
 @dataclasses.dataclass
 class _EmergencyAlarmConfiguration:
 
-    auto_resume_on_cleared: bool = False  # auto-clear the alarm if conditions are cleared.
-
-    #
-
+    # 1st possible alarm condition
     use_audio_load_cell_thrash: bool = False
     auto_resume_on_audio_load_cell_thrash_resume: bool = False
 
@@ -25,8 +22,7 @@ class _EmergencyAlarmConfiguration:
     audio_thrash_percent_on: float = 50  # or percent of time it is ON during aggregate_delay
     # ) )
 
-    #
-
+    # 2nd possible alarm condition
     use_presence_missing_after_exit_tunnel: bool = False
     auto_resume_on_presence_seen_after_exit_tunnel: bool = False
     tunnel_to_cage_presence_missing_delay: float = 5
@@ -39,6 +35,7 @@ class EmergencyAlarmConfiguration(_EmergencyAlarmConfiguration):
 
     def __init__(self, *args,
                  # temporarily:
+                 auto_resume_on_cleared: bool = False,  # noqa
                  use_global_mouse_presence_missing: bool = False,  # noqa
                  auto_resume_on_global_mouse_presence: bool = False,  # noqa
                  # was removed from emergency possible condition.

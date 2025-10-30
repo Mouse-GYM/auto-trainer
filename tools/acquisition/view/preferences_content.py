@@ -548,19 +548,6 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("<b>Emergency Alarm Monitor</b>"), cur_row, cur_col)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Auto-resume on conditions cleared:"), cur_row, cur_col)
-        toggle_auto_resume = QSwitch()
-        toggle_auto_resume.setChecked(alarm_cfg.auto_resume_on_cleared)
-        toggle_auto_resume.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        def toggle_changed(value):
-            toggled = value != 0
-            cfg = copy.deepcopy(alarm_monitor.config)
-            cfg.auto_resume_on_cleared = toggled
-            alarm_monitor.config = cfg
-        toggle_auto_resume.stateChanged.connect(toggle_changed)
-        grid_layout.addWidget(toggle_auto_resume, cur_row, cur_col + 1)
-        cur_row += 1
-
         grid_layout.addWidget(QLabel("<b>Use Audio & Load Cell Thrashing Alarm:</b>"), cur_row, cur_col)
         toggle_use_audio_load_cell = QSwitch()
         toggle_use_audio_load_cell.setChecked(alarm_cfg.use_audio_load_cell_thrash)

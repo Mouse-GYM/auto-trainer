@@ -47,7 +47,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._load_cell_engaged_values = []
         self._audio_thrash_values = []
         self._enabled = False
-        self._t_started = time.perf_counter()
+        self._t_started = math.nan
         self._is_engaged = False
         self._engaged_reasons: Set[EmergencyReason] = set()
         self._engaged_perf_c = math.nan
@@ -255,14 +255,31 @@ class EmergencyAlarmMonitor(ObservableObject):
                 perf_now)
         #
         if not is_emergency:
-            prev_reasons = self._engaged_reasons.copy()
-            self._engaged_reasons.clear()
-            if cfg.auto_resume_on_cleared and (
-                (EmergencyReason.MOUSE_THRASHING in prev_reasons and cfg.auto_resume_on_audio_load_cell_thrash_resume)
-                or (EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL in prev_reasons and cfg.auto_resume_on_presence_seen_after_exit_tunnel)
-            ):
+            check_reasons = self._engaged_reasons.copy()
+            # look if previous engaged reasons (which are now cleared), allowed auto-resume, or not.
+            # if any does not allow : don't remove the is_engaged.
+            for prev_r in list(check_reasons):
+                if prev_r == EmergencyReason.MOUSE_THRASHING and cfg.auto_resume_on_audio_load_cell_thrash_resume:
+                    check_reasons.remove(prev_r)
+                elif prev_r == EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL and cfg.auto_resume_on_presence_seen_after_exit_tunnel:
+                    check_reasons.remove(prev_r)
+            if len(check_reasons) == 0:
                 self.is_engaged = False
+            self._engaged_reasons = check_reasons  # set after is_engaged = False, given it also reset _engaged_reasons.
         else:
+            check_reasons = self._engaged_reasons.copy()
+            # if some possible condition were previously present and are not auto-resume enabled,
+            # then re-add them to current reasons of engaged.
+            for prev_r in list(check_reasons):
+                if (prev_r == EmergencyReason.MOUSE_THRASHING
+                    and not cfg.auto_resume_on_audio_load_cell_thrash_resume
+                ):
+                    reasons.add(prev_r)
+                elif (
+                    prev_r == EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL
+                    and not cfg.auto_resume_on_presence_seen_after_exit_tunnel
+                ):
+                    reasons.add(prev_r)
             self._engaged_reasons = reasons
             self.is_engaged = True
 
