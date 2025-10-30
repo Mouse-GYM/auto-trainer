@@ -40,6 +40,7 @@ class CameraConfiguration:
     is_enabled: bool = False
     is_record_enabled: bool = False
     record_mode: int = 0
+    record_prebuffer_duration: float = 2
     is_still_image_capture_enabled: bool = False
     still_image_capture_interval: float = 5.0
     scheme: str = ""
