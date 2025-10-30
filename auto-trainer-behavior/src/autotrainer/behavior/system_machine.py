@@ -82,12 +82,13 @@ class SystemMachine(StateMachine):
         self._last_close_tunnel_gate_perf_t = -math.inf
         self._is_handling_diamond_triangle = False
 
-        algorithm = self._algorithm = algorithm if algorithm is not None else BehaviorAlgorithm()
-        algorithm.project = project_info
-        algorithm.session_starting += self._session_starting
-        algorithm.session_ending += self._session_ended
-        algorithm.property_changed += self._algorithm_property_changed
-        algorithm.relay_transitions(self)
+        algo = self._algorithm = BehaviorAlgorithm() if algorithm is None else algorithm
+        algo.project = project_info
+        algo.session_starting += self._session_starting
+        algo.session_ending += self._session_ended
+        algo.property_changed += self._algorithm_property_changed
+        algo.relay_transitions(self)
+        algo.shift_xyz_handler.set_handle_processed_shift_xyz(self._handle_processed_shift_xyz)
 
         self._tunnel_device = tunnel_device
         self._msg_handler = msg_handler
@@ -117,7 +118,7 @@ class SystemMachine(StateMachine):
         intersession_machine = self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._intersession_ended
         intersession_machine.events.state_changed += self._intersession_state_changed
-        algorithm.relay_transitions(intersession_machine)
+        algo.relay_transitions(intersession_machine)
 
 
     @property
@@ -643,14 +644,22 @@ class SystemMachine(StateMachine):
             algo.increase_successful_reaches(res.successful_reaches)
         if res.pellets_presented > 0:
             algo.increase_pellets_presented(res.pellets_presented)
+        #
+        shift_xyz = Offset3DTuple(res.pellet_x, res.pellet_y, res.pellet_z)
+        algo.shift_xyz_handler.put_new_shift_xyz(shift_xyz)
+
+    def _handle_processed_shift_xyz(self, shift_xyz: Offset3DTuple):
+        logger.verbose("Received processed shift xyz: %s", shift_xyz)
         dev = self._pellet_device
         if dev is not None and self.algorithm.intersession_pellet_shift_enabled:
-            for val, meth, kind in ((res.pellet_x, dev.set_x, BehaviorEventKind.intersessionShiftX),
-                                    (res.pellet_y, dev.set_y, BehaviorEventKind.intersessionShiftY),
-                                    (res.pellet_z, dev.set_z, BehaviorEventKind.intersessionShiftZ)):
+            for val, meth, kind in ((shift_xyz[0], dev.set_x, BehaviorEventKind.intersessionShiftX),
+                                    (shift_xyz[1], dev.set_y, BehaviorEventKind.intersessionShiftY),
+                                    (shift_xyz[2], dev.set_z, BehaviorEventKind.intersessionShiftZ)):
                 if val != 0:
                     meth(val, absolute=False)
                     EventManager.default().post_event_content(kind, context=val)
+                else:
+                    logger.debug("%s == 0 ; skip", kind)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

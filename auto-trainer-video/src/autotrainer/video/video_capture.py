@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import logging.config
 import multiprocessing
 import queue
@@ -12,7 +13,7 @@ from queue import Queue
 from enum import IntEnum
 from multiprocessing import Process, Value, Array
 from threading import BrokenBarrierError
-from typing import Callable, Dict, Union, Optional, List
+from typing import Callable, Dict, Union, Optional, List, Tuple
 
 import numpy
 import verboselogs
@@ -141,6 +142,8 @@ class CaptureAttrs:
 
     msg_queue: Optional[multiprocessing.Queue] = None
     # optional msg queue to send messages to main process from camera process
+
+    record_prebuffer_duration: float = 2
 
 
 class VideoCapture(Process):
@@ -304,6 +307,20 @@ class VideoCapture(Process):
         empty_frame = numpy.zeros(self._record_properties.frame_size, dtype=numpy.uint8)
         vid_detection = self._video_detection
 
+        frames_prebuffer_list: List[Tuple[numpy.ndarray, float, float]] = []
+        #                              frame, when, perf_now/index
+        def update_frames_prebuffer(f, w, p):
+            idx = 0
+            while True:
+                if (
+                    idx >= len(frames_prebuffer_list)
+                    or (perf_now_ns - frames_prebuffer_list[idx][2]) / 1e9 < self._attrs.record_prebuffer_duration
+                ):
+                    break
+                idx += 1
+            del frames_prebuffer_list[:idx]
+            frames_prebuffer_list.append((f, w, p))
+
         released = False
         primary_acquired_count = 0
 
@@ -365,8 +382,6 @@ class VideoCapture(Process):
                     __debug__ and logger.debug("not primary released")
                     released = False
 
-        first_frame_when = 0
-
         logger.notice("%s: starting capture loop ..", self)
         while self._is_running:
             t_perf_now = time.perf_counter()
@@ -395,8 +410,6 @@ class VideoCapture(Process):
                     sync_barrier()
 
                 frame, when = capture()
-                frame_when = when  # save to pass to detection module
-
                 perf_now_ns = time.perf_counter_ns()
                 if cur_frame_idx == -1:
                     if is_primary:
@@ -406,7 +419,6 @@ class VideoCapture(Process):
                                 when, perf_now_ns)
 
                 cur_frame_idx += 1
-                when -= first_frame_when  # ensure all cams are synced on "0"
 
                 if img_q is not None:
                     # image queue goes to GUI video reader frame, currently FixedArrayQueue
@@ -421,13 +433,20 @@ class VideoCapture(Process):
                 # record queue goes to video save to disk/file
                 if self._is_record_active and record_start_frame_idx is None:
                     if primary_acquire():
-                        logger.notice("Starting record with frame %s when=%s perf_now=%s",
-                                      cur_frame_idx, when, time.perf_counter_ns())
-                        record_start_frame_idx = cur_frame_idx
-                        first_frame_when = when
-                        when -= first_frame_when
+                        record_start_frame_idx = cur_frame_idx - len(frames_prebuffer_list)
+                        first_frame_when = when if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][1]
+                        first_frame_perf_now = (perf_now_ns if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][2]) / 1e9
+                        logger.notice("Starting record with frame %s when=%s perf_now=%s ; prebuffer=%.1f (%s)",
+                                      record_start_frame_idx, first_frame_when, first_frame_perf_now,
+                                      self._attrs.record_prebuffer_duration, len(frames_prebuffer_list))
+                        #
+                        self._record.first_frame_when = first_frame_when
+                        #
+                        if len(frames_prebuffer_list) > 0:
+                            record_q.put(frames_prebuffer_list)
+                            frames_prebuffer_list = []  # reminder: don't use .clear(): record_q is thread queue
                         record_q.put([(frame, when, perf_now_ns)])  # thread queue
-                        record_q_list = self._record_queue_list = []
+                        record_q_list = self._record_queue_list = []  # ensure we (re)start clean
                         #
                         primary_release()
 
@@ -444,7 +463,6 @@ class VideoCapture(Process):
                     else:
                         # end of record/save-to-disk session/mode
                         primary_release()
-                        first_frame_when = 0
                         record_start_frame_idx = None
                         if len(record_q_list) > 0:
                             record_q.put(record_q_list)
@@ -516,7 +534,10 @@ class VideoCapture(Process):
                     # mixed with newest frames
 
                 if vid_detection is not None:
-                    vid_detection.update_frame(frame_when, frame)
+                    vid_detection.update_frame(when, frame)
+
+                if not (self._is_record_active and record_start_frame_idx is not None):
+                    update_frames_prebuffer(frame, when, perf_now_ns)
 
             except Exception as err:
                 logger.exception("Error during capture loop: %s", err)

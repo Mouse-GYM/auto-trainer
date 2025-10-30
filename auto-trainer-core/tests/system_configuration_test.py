@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from autotrainer.core import SystemConfiguration, CameraId, HardwareConfiguration, InferenceConfiguration, \
-    PersistenceConfiguration
+    PersistenceConfiguration, CameraConfiguration
 from autotrainer.core.analysis import LoadCellConfiguration, HeadbarPressureConfiguration, LoadCellAutoTareConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
@@ -33,6 +33,7 @@ v0_expected_result_config = {'version': SystemConfiguration.version,
    'is_enabled': True,
    'is_record_enabled': True,
    'record_mode': 1,
+   'record_prebuffer_duration': CameraConfiguration.record_prebuffer_duration,
    'is_still_image_capture_enabled': True,
    'still_image_capture_interval': 10.5,
    'scheme': 'random',
@@ -45,6 +46,7 @@ v0_expected_result_config = {'version': SystemConfiguration.version,
    'is_enabled': True,
    'is_record_enabled': True,
    'record_mode': 1,
+   'record_prebuffer_duration': CameraConfiguration.record_prebuffer_duration,
    'is_still_image_capture_enabled': False,
    'still_image_capture_interval': 0.0,
    'scheme': 'random',
@@ -57,6 +59,7 @@ v0_expected_result_config = {'version': SystemConfiguration.version,
    'is_enabled': True,
    'is_record_enabled': False,
    'record_mode': 0,
+   'record_prebuffer_duration': CameraConfiguration.record_prebuffer_duration,
    'is_still_image_capture_enabled': False,
    'still_image_capture_interval': 0.0,
    'scheme': 'random',
@@ -180,6 +183,7 @@ def test_load_version_1():
                      'path': '/path_cam_left',
                      'port': 0,
                      'record_mode': 1,
+                     'record_prebuffer_duration': CameraConfiguration.record_prebuffer_duration,
                      'scheme': 'playback',
                      'still_image_capture_interval': 0.0},
                     {'host': 'cam1_host',
@@ -192,6 +196,7 @@ def test_load_version_1():
                      'path': '/path_cam_right',
                      'port': 0,
                      'record_mode': 1,
+                     'record_prebuffer_duration': CameraConfiguration.record_prebuffer_duration,
                      'scheme': 'playback',
                      'still_image_capture_interval': 0.0},
                     {'host': 'cam2_host',
@@ -204,6 +209,7 @@ def test_load_version_1():
                      'path': '/path_cam_web',
                      'port': 0,
                      'record_mode': 0,
+                     'record_prebuffer_duration': CameraConfiguration.record_prebuffer_duration,
                      'scheme': 'playback',
                      'still_image_capture_interval': 0.0}],
         'hardware': {'pellet_identifier': '/dev/ttyS31',
