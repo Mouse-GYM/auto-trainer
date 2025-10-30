@@ -10,20 +10,12 @@ from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.analysis.prepare_jetson_data import process_raw_data
 from autotrainer.core.analysis.parse_pellet_presentations_jetson import segment_reaches
 
+from . import IntersessionResponse
+
+
 logger = get_verbose_logger(__name__)
 
 available_XYZ = numpy.array([[-5, 5], [-5, 5], [-5, 5]])
-
-
-@dataclass
-class IntersessionResponse:
-    # NB: all 3 x/y/z are relative values here:
-    pellet_x: int = 0
-    pellet_y: int = 0
-    pellet_z: int = 0
-    food_consumed: int = 0
-    successful_reaches: int = 0
-    pellets_presented: int = 0
 
 
 def intersession_process(
