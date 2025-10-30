@@ -261,7 +261,7 @@ class EmergencyAlarmMonitor(ObservableObject):
             for prev_r in list(check_reasons):
                 if prev_r == EmergencyReason.MOUSE_THRASHING and cfg.auto_resume_on_audio_load_cell_thrash_resume:
                     check_reasons.remove(prev_r)
-                elif prev_r == EmergencyReason.MOUSE_THRASHING and cfg.auto_resume_on_presence_seen_after_exit_tunnel:
+                elif prev_r == EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL and cfg.auto_resume_on_presence_seen_after_exit_tunnel:
                     check_reasons.remove(prev_r)
             if len(check_reasons) == 0:
                 self.is_engaged = False
@@ -277,7 +277,7 @@ class EmergencyAlarmMonitor(ObservableObject):
                 ):
                     reasons.add(prev_r)
                 elif (
-                    prev_r == EmergencyReason.MOUSE_THRASHING
+                    prev_r == EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL
                     and not cfg.auto_resume_on_presence_seen_after_exit_tunnel
                     and prev_r not in reasons
                 ):
