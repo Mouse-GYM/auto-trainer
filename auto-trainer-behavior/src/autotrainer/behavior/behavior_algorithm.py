@@ -397,12 +397,13 @@ class BehaviorAlgorithm(ObservableObject):
     @algo_paused.setter
     def algo_paused(self, value):
         prev, self._algo_paused = self._algo_paused, value
-        if value:
+        if value and not prev:
             self._algo_paused_perf_t = time.perf_counter()
         self._on_property_changed(BehaviorAlgoProps.ALGO_PAUSED, value, prev)
 
     @property
     def algo_paused_age(self):
+        # actually unused.
         return time.perf_counter() - self._algo_paused_perf_t
 
     @property
