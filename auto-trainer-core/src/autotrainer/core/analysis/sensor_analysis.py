@@ -11,7 +11,7 @@ import numpy
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from ..configuration.alarm_configuration import EmergencyAlarmConfiguration
-from ..configuration.mouse_presence_configuration import GlobalMousePresenceConfig
+from ..configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
 from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
 from ..perf_monitor import PerfMonitor
@@ -24,7 +24,7 @@ from .headbar_pressure_monitor import HeadbarPressureMonitor
 from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
 from .alarm_monitor import EmergencyAlarmMonitor
-from .global_mouse_presence_monitor import GlobalMousePresenceMonitor
+from .global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 
 logger = get_verbose_logger(__name__)
 
@@ -68,8 +68,8 @@ class SensorAnalysis(ObservableObject):
 
         self._audio_thrashing_monitor = AudioSpectrumThrashMonitor()
 
-        self._global_mouse_presence_monitor = GlobalMousePresenceMonitor(
-            config=GlobalMousePresenceConfig(),
+        self._global_animal_presence_monitor = GlobalAnimalPresenceMonitor(
+            config=GlobalAnimalPresenceConfig(),
             load_cell_monitor=self._load_cell_monitor,
             topcam_presence=topcam_presence,
         )
@@ -79,7 +79,6 @@ class SensorAnalysis(ObservableObject):
             load_cell_monitor=self._load_cell_monitor,
             audio_monitor=self._audio_thrashing_monitor,
             topcam_presence_attrs=topcam_presence,
-            global_mouse_presence=self._global_mouse_presence_monitor,
         )
 
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_window=30)
@@ -128,8 +127,8 @@ class SensorAnalysis(ObservableObject):
         return self._alarm_monitor
 
     @property
-    def global_mouse_presence_monitor(self) -> GlobalMousePresenceMonitor:
-        return self._global_mouse_presence_monitor
+    def global_animal_presence_monitor(self) -> GlobalAnimalPresenceMonitor:
+        return self._global_animal_presence_monitor
 
     @property
     def is_headbar_switch_engaged(self):

@@ -331,7 +331,7 @@ class SystemMachine(StateMachine):
             algo = self._algorithm
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
             if value:
-                self._analysis.global_mouse_presence_monitor.stop(reason="load-cell-engaged")
+                self._analysis.global_animal_presence_monitor.stop(reason="load-cell-engaged")
                 algo.presence_missing = False
                 if self.state == SystemState.cage:
                     # when app start inference is slow and takes several 10s to become live,
@@ -344,7 +344,7 @@ class SystemMachine(StateMachine):
                                                               context=self.state)
             else:
                 if self._inference.status == InferenceStatus.live:
-                    self._analysis.global_mouse_presence_monitor.start(reason="load-cell-disengaged")
+                    self._analysis.global_animal_presence_monitor.start(reason="load-cell-disengaged")
                 if self.state == SystemState.tunnel and self.intersession.state == IntersessionState.idle:
                     logger.info("%s False, exiting tunnel ..", LoadCellMonitor.IS_ENGAGED_PROPERTY)
                     self.exit_tunnel(reason="load_cell_disengaged_when_tunnel")

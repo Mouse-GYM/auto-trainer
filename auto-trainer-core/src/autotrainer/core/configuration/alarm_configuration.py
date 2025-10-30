@@ -31,18 +31,18 @@ class _EmergencyAlarmConfiguration:
     auto_resume_on_presence_seen_after_exit_tunnel: bool = False
     tunnel_to_cage_presence_missing_delay: float = 5
 
-    #
-
-    use_global_mouse_presence_missing: bool = False
-    auto_resume_on_global_mouse_presence: bool = False
-
 
 class EmergencyAlarmConfiguration(_EmergencyAlarmConfiguration):
 
     # NB: using a subclass allows to customize the dataclass init method here:
     # otherwise the possible default factory methods for fields of the extended dataclass are not called.
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args,
+                 # temporarily:
+                 use_global_mouse_presence_missing: bool = False,  # noqa
+                 auto_resume_on_global_mouse_presence: bool = False,  # noqa
+                 # was removed from emergency possible condition.
+                 **kwargs):
         # no positional arg (safer):
         if len(args) > 0:
             raise TypeError("Only kwargs allowed")

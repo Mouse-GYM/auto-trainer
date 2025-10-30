@@ -209,6 +209,7 @@ class VideoCapture(Process):
         self._record_queue_list: List = []
 
         self._detection_attrs = attrs.presence_detection_attrs
+        self._video_detection: Optional[VideoDetection] = None
 
         self.command_handler: Dict[CaptureCommandKind, Callable[[object], None]] = {
             CaptureCommandKind.TERMINATE: self._user_terminate,
