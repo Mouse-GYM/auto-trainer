@@ -339,6 +339,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             clear_queue(self._data_queue)
             clear_queue(self._msg_queue)
             clear_queue(self._inference_cmd_queue)
+            clear_queue(self._data_monitor_cmd_queue)
 
         pool = self._process_pool
         if pool is not None:
