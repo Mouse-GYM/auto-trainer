@@ -72,12 +72,11 @@ class ExternalDoorsMonitor(ObservableObject):
             return
         perf_now = time.perf_counter()
         if value:
-            if not prev:
-                self._engaged_perf_c = perf_now
+            self._engaged_perf_c = perf_now
         else:
-            if prev:
-                self._disengaged_perf_c = perf_now
-        logger.notice("is_engaged -> %s", value)
+            self._disengaged_perf_c = perf_now
+        logger.notice("is_engaged -> %s (age previous = %.1f)",
+                      value, perf_now - (self._disengaged_perf_c if value else self._engaged_perf_c))
         self._on_property_changed(self.IS_ENGAGED, value, prev)
 
     #
