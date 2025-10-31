@@ -12,7 +12,7 @@ from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 logger = get_verbose_logger(__name__)
 
 
-DoorsStateT = Dict[SystemStatusMessageKind, Tuple[Optional[float], Optional[float]]]
+DoorsStateT = Dict[SystemStatusMessageKind, Tuple[Optional[bool], Optional[float]]]
 
 
 ActiveDoors = {
@@ -77,8 +77,7 @@ class ExternalDoorsMonitor(ObservableObject):
         else:
             if prev:
                 self._disengaged_perf_c = perf_now
-        if value != prev:
-            logger.notice("is_engaged -> %s", value)
+        logger.notice("is_engaged -> %s", value)
         self._on_property_changed(self.IS_ENGAGED, value, prev)
 
     #
