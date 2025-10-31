@@ -104,23 +104,25 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         self._system_machine.algorithm.load_configuration(configuration)
 
     def save_configuration(self) -> BehaviorConfiguration:
-        configuration = BehaviorConfiguration()
+        config = BehaviorConfiguration()
         algo = self._system_machine.algorithm
-        pellet_deliver_cfg = configuration.pellet_delivery
+        pellet_deliver_cfg = config.pellet_delivery
         pellet_deliver_cfg.is_intersession_analysis_enabled = self._is_intersession_enabled
         pellet_deliver_cfg.is_intersession_pellet_shift_enabled = algo.intersession_pellet_shift_enabled
-        algo.update_configuration(configuration)
+        algo.update_configuration(config)
 
         analysis = self._analysis
-        configuration.load_cell = analysis.load_cell_monitor.save_configuration()
-        configuration.auto_tare = analysis.load_cell_tare_monitor.save_configuration()
-        configuration.headbar_pressure = analysis.headbar_pressure_monitor.save_configuration()
-        configuration.audio = analysis.audio_thrashing_monitor.config
-        configuration.emergency_alarm = analysis.emergency_alarm_monitor.config
-        configuration.topcam_presence_detection = algo.top_camera_presence_detection.to_config()
-        configuration.global_animal_presence = analysis.global_animal_presence_monitor.config
+        config.load_cell = analysis.load_cell_monitor.save_configuration()
+        config.auto_tare = analysis.load_cell_tare_monitor.save_configuration()
+        config.headbar_pressure = analysis.headbar_pressure_monitor.save_configuration()
+        config.audio = analysis.audio_thrashing_monitor.config
+        config.emergency_alarm = analysis.emergency_alarm_monitor.config
+        config.topcam_presence_detection = algo.top_camera_presence_detection.to_config()
+        config.global_animal_presence = analysis.global_animal_presence_monitor.config
+        config.external_doors = analysis.external_doors_monitor.config
+        logger.debug("config.external_doors=%s", config.external_doors)
 
-        return configuration
+        return config
 
     def on_prepare_capture(self):
         self._system_machine.project = self._project
@@ -146,9 +148,12 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             logger.verbose("Refusing resume from emergency given was set by user ; resume source=%s", source)
             return
         algo.algo_paused = False
-        self._analysis.emergency_alarm_monitor.restart(reason=f"end-emergency-{source}")
+        analysis = self._analysis
+        reason = f"end-emergency-{source}"
+        analysis.emergency_alarm_monitor.restart(reason=reason)
+        analysis.external_doors_monitor.restart(reason=reason)
         # also restarting conveniently global animal presence monitor/alarm :
-        self._analysis.global_animal_presence_monitor.restart(reason=f"end-emergency-{source}")
+        analysis.global_animal_presence_monitor.restart(reason=reason)
         EventManager.default().post_event_content(ApiEventKind.emergencyResume, source)
         self.emergency_resumed(source)
 

@@ -557,8 +557,6 @@ class PreferencesContent(QWidget):
         model = self._app_model
         analysis = model.analysis
         load_cell_monitor = analysis.load_cell_monitor
-        config = model.loaded_configuration
-        behavior_cfg = config.behavior
 
         main_layout = QVBoxLayout()
         main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
@@ -582,9 +580,9 @@ class PreferencesContent(QWidget):
             spinbox.setDecimals(2)
             spinbox.setSingleStep(1)
             spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            spinbox.setValue(behavior_cfg.global_animal_presence.presence_missing_delay_hours)
+            spinbox.setValue(analysis.global_animal_presence_monitor.config.presence_missing_delay_hours)
             def value_changed(value):
-                behavior_cfg.global_animal_presence.presence_missing_delay_hours = value
+                analysis.global_animal_presence_monitor.config.presence_missing_delay_hours = value
                 analysis.global_animal_presence_monitor.force_refresh()
             spinbox.valueChanged.connect(value_changed)
             grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
@@ -645,9 +643,9 @@ class PreferencesContent(QWidget):
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setDecimals(1)
         spinbox.setRange(0, 200)
-        spinbox.setValue(behavior_cfg.audio.threshold_db)
+        spinbox.setValue(analysis.audio_thrashing_monitor.config.threshold_db)
         def value_changed(value):
-            behavior_cfg.audio.threshold_db = value
+            analysis.audio_thrashing_monitor.config.threshold_db = value
         spinbox.valueChanged.connect(value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -655,7 +653,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Bins list:"), cur_row, cur_col)
         line_edit = QLineEdit()
         line_edit.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        line_edit.setText(str(behavior_cfg.audio.bins_list))
+        line_edit.setText(str(analysis.audio_thrashing_monitor.config.bins_list))
         def value_changed(line_edit=line_edit):
             value = line_edit.text()
             try:
@@ -665,7 +663,7 @@ class PreferencesContent(QWidget):
             except Exception as err:
                 QMessageBox.critical(self, "Invalid", f"Invalid value for bins list: {err}")
             else:
-                behavior_cfg.audio.bins_list = list(value)
+                analysis.audio_thrashing_monitor.config.bins_list = list(value)
         line_edit.editingFinished.connect(value_changed)
         grid_layout.addWidget(line_edit, cur_row, cur_col + 1)
         cur_row += 1
@@ -676,14 +674,18 @@ class PreferencesContent(QWidget):
 
         return tab
 
-
     def _create_alarms_tab(self):
         model = self._app_model
         analysis = model.analysis
         alarm_monitor = analysis.emergency_alarm_monitor
+        alarm_cfg = analysis.emergency_alarm_monitor.config
 
         main_layout = QVBoxLayout()
         main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+
+        label = QLabel("<b>Emergency Alarm Monitor</b>")
+        label.setContentsMargins(0, 0, 0, 10)
+        main_layout.addWidget(label)
 
         # not sure why but inner spinboxes are taking their max size while in behavior tab they don't
         # but we use similar layout scheme.
@@ -696,15 +698,6 @@ class PreferencesContent(QWidget):
 
         cur_row = 0
         cur_col = 0
-        alarm_cfg = analysis.emergency_alarm_monitor.config
-
-        grid_layout.addWidget(QLabel("<b>Emergency Alarm Monitor</b>"), cur_row, cur_col)
-        cur_row += 1
-
-        w = QWidget()
-        w.setMinimumHeight(5)
-        grid_layout.addWidget(w, cur_row, cur_col)
-        cur_row += 1
 
         label = QLabel("<b>Use Audio & Load Cell Thrashing Alarm:</b>")
         grid_layout.addWidget(label, cur_row, cur_col)
@@ -830,6 +823,49 @@ class PreferencesContent(QWidget):
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def value_changed(value):
             alarm_cfg.tunnel_to_cage_presence_missing_delay = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+
+        # right side:
+
+        cur_row = 0
+        cur_col = 2
+
+        grid_layout.addWidget(QLabel("<b>Use External Doors Open:</b>"), cur_row, cur_col)
+        toggle = QSwitch()
+        toggle.setToolTip(tooltip_txt)
+        toggle.setChecked(alarm_cfg.use_external_doors_open)
+        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def toggle_changed(value):
+            toggled = value != 0
+            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg.use_external_doors_open = toggled
+            alarm_monitor.config = cfg
+        toggle.stateChanged.connect(toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
+        toggle = QSwitch()
+        toggle.setChecked(alarm_cfg.auto_resume_on_external_doors_close)
+        def toggle_changed(value):
+            toggled = value != 0
+            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg.auto_resume_on_external_doors_close = toggled
+            alarm_monitor.config = cfg
+        toggle.stateChanged.connect(toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Trigger Open delay (seconds):"), cur_row, cur_col)
+        spinbox = QDoubleSpinBox()
+        spinbox.setRange(0, 3600)
+        spinbox.setDecimals(1)
+        spinbox.setValue(analysis.external_doors_monitor.config.trigger_open_delay)
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        def value_changed(value):
+            analysis.external_doors_monitor.config.trigger_open_delay = value
         spinbox.valueChanged.connect(value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1

@@ -7,6 +7,7 @@ import yaml
 
 from autotrainer.core.logging import get_verbose_logger
 from .animal_presence_configuration import GlobalAnimalPresenceConfig
+from .external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 from .presence_detection_configuration import PresenceDetectionConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor
 from ..analysis import LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer
@@ -91,6 +92,7 @@ class _BehaviorConfiguration:
     audio: AudioSpectrumThrashMonitorConfig = field(default_factory=AudioSpectrumThrashMonitorConfig)
     global_animal_presence: GlobalAnimalPresenceConfig = field(default_factory=GlobalAnimalPresenceConfig)
     emergency_alarm: EmergencyAlarmConfiguration = field(default_factory=EmergencyAlarmConfiguration)
+    external_doors: ExternalDoorsMonitorConfig = field(default_factory=ExternalDoorsMonitorConfig)
     topcam_presence_detection: PresenceDetectionConfig = field(default_factory=PresenceDetectionConfig)
 
     @classmethod
@@ -157,6 +159,7 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     dumper.add_representer(GlobalAnimalPresenceConfig, animal_presence_monitor_representer)
     dumper.add_representer(EmergencyAlarmConfiguration, emergency_alarm_representer)
     dumper.add_representer(PresenceDetectionConfig, make_camelize_representer("!PresenceDetectionConfiguration"))
+    dumper.add_representer(ExternalDoorsMonitorConfig, make_camelize_representer("!ExternalDoorsMonitorConfiguration"))
 
 
 pellet_delivery_configuration_constructor = make_decamelize_constructor(PelletDeliveryConfiguration)
@@ -186,3 +189,4 @@ def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
     #
     safe_loader.add_constructor("!EmergencyAlarmConfiguration", emergency_alarm_configuration_constructor)
     safe_loader.add_constructor("!PresenceDetectionConfiguration", make_decamelize_constructor(PresenceDetectionConfig))
+    safe_loader.add_constructor("!ExternalDoorsMonitorConfiguration", make_decamelize_constructor(ExternalDoorsMonitorConfig))
