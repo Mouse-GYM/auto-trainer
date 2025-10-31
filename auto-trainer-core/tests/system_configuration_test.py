@@ -11,7 +11,8 @@ from autotrainer.core import SystemConfiguration, CameraId, HardwareConfiguratio
 from autotrainer.core.analysis import LoadCellConfiguration, HeadbarPressureConfiguration, LoadCellAutoTareConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
-from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
+from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
+    AutoCloseGateOnIntersessionConfiguration
 
 fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
@@ -110,6 +111,7 @@ v0_expected_result_config = {'version': SystemConfiguration.version,
   'emergency_alarm': current_default_config['behavior']['emergency_alarm'],
   'topcam_presence_detection': current_default_config['behavior']['topcam_presence_detection'],
   'external_doors': {'trigger_open_delay': 5},
+  'auto_close_gate_on_intersession': dataclasses.asdict(AutoCloseGateOnIntersessionConfiguration()),
   },
  'persistence': {'output_location': '/home/autotrainer/output'}}
 
@@ -144,6 +146,7 @@ def test_load_version_1():
     behavior_dct = current_default_config['behavior']
     assert dataclasses.asdict(config) == {
         'behavior': {
+            'auto_close_gate_on_intersession': behavior_dct['auto_close_gate_on_intersession'],
             'external_doors': {'trigger_open_delay': 5},
             'topcam_presence_detection': behavior_dct['topcam_presence_detection'],
             'audio': behavior_dct['audio'],

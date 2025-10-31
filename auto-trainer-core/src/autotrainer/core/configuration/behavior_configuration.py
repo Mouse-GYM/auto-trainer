@@ -94,6 +94,7 @@ class _BehaviorConfiguration:
     emergency_alarm: EmergencyAlarmConfiguration = field(default_factory=EmergencyAlarmConfiguration)
     external_doors: ExternalDoorsMonitorConfig = field(default_factory=ExternalDoorsMonitorConfig)
     topcam_presence_detection: PresenceDetectionConfig = field(default_factory=PresenceDetectionConfig)
+    auto_close_gate_on_intersession: AutoCloseGateOnIntersessionConfiguration = field(default_factory=AutoCloseGateOnIntersessionConfiguration)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -160,6 +161,7 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     dumper.add_representer(EmergencyAlarmConfiguration, emergency_alarm_representer)
     dumper.add_representer(PresenceDetectionConfig, make_camelize_representer("!PresenceDetectionConfiguration"))
     dumper.add_representer(ExternalDoorsMonitorConfig, make_camelize_representer("!ExternalDoorsMonitorConfiguration"))
+    dumper.add_representer(AutoCloseGateOnIntersessionConfiguration, make_camelize_representer("!AutoCloseGateOnIntersessionConfiguration"))
 
 
 pellet_delivery_configuration_constructor = make_decamelize_constructor(PelletDeliveryConfiguration)
@@ -173,20 +175,22 @@ animal_presence_configuration_constructor = make_decamelize_constructor(GlobalAn
 emergency_alarm_configuration_constructor = make_decamelize_constructor(EmergencyAlarmConfiguration)
 
 
-def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
-    safe_loader.add_constructor("!BehaviorConfiguration", behavior_configuration_constructor)
-    safe_loader.add_constructor("!PelletDeliveryConfiguration", pellet_delivery_configuration_constructor)
-    safe_loader.add_constructor("!LoadCellConfiguration", load_cell_configuration_constructor)
-    safe_loader.add_constructor("!HeadbarPressureConfiguration", headbar_pressure_configuration_constructor)
-    safe_loader.add_constructor("!HeadClampConfiguration", head_clamp_configuration_constructor)
-    safe_loader.add_constructor("!LoadCellAutoTareConfiguration", load_cell_auto_tare_configuration_constructor)
-    safe_loader.add_constructor("!AudioMonitorConfiguration", audio_monitor_configuration_constructor)
+def add_behavior_configuration_constructors(loader: Type[yaml.SafeLoader]):
+    loader.add_constructor("!BehaviorConfiguration", behavior_configuration_constructor)
+    loader.add_constructor("!PelletDeliveryConfiguration", pellet_delivery_configuration_constructor)
+    loader.add_constructor("!LoadCellConfiguration", load_cell_configuration_constructor)
+    loader.add_constructor("!HeadbarPressureConfiguration", headbar_pressure_configuration_constructor)
+    loader.add_constructor("!HeadClampConfiguration", head_clamp_configuration_constructor)
+    loader.add_constructor("!LoadCellAutoTareConfiguration", load_cell_auto_tare_configuration_constructor)
+    loader.add_constructor("!AudioMonitorConfiguration", audio_monitor_configuration_constructor)
     #
-    safe_loader.add_constructor("!AnimalPresenceConfiguration", animal_presence_configuration_constructor)
-    safe_loader.add_constructor("!MousePresenceConfiguration", animal_presence_configuration_constructor)
+    loader.add_constructor("!AnimalPresenceConfiguration", animal_presence_configuration_constructor)
+    loader.add_constructor("!MousePresenceConfiguration", animal_presence_configuration_constructor)
     # keeping temporarily MousePresenceConfiguration, was renamed to AnimalPresenceConfiguration. Back-compatibility.
     # todo: remove some when later.
     #
-    safe_loader.add_constructor("!EmergencyAlarmConfiguration", emergency_alarm_configuration_constructor)
-    safe_loader.add_constructor("!PresenceDetectionConfiguration", make_decamelize_constructor(PresenceDetectionConfig))
-    safe_loader.add_constructor("!ExternalDoorsMonitorConfiguration", make_decamelize_constructor(ExternalDoorsMonitorConfig))
+    loader.add_constructor("!EmergencyAlarmConfiguration", emergency_alarm_configuration_constructor)
+    loader.add_constructor("!PresenceDetectionConfiguration", make_decamelize_constructor(PresenceDetectionConfig))
+    loader.add_constructor("!ExternalDoorsMonitorConfiguration", make_decamelize_constructor(ExternalDoorsMonitorConfig))
+    loader.add_constructor("!AutoCloseGateOnIntersessionConfiguration",
+                           make_decamelize_constructor(AutoCloseGateOnIntersessionConfiguration))

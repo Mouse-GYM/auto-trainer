@@ -1078,7 +1078,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._load_head_clamp_cfg(config.head_clamp)
         if self._top_camera_presence_detection is not None:
             self._top_camera_presence_detection.load_config(config.topcam_presence_detection)
-        # self.auto_close_gate_on_intersession_config = config.  # not saved yet to config
+        self.auto_close_gate_on_intersession_config = config.auto_close_gate_on_intersession
 
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         cfg.is_enabled = self.pellet_delivery_enabled
@@ -1102,9 +1102,10 @@ class BehaviorAlgorithm(ObservableObject):
         cfg.auto_clamp_release_load_count = self.auto_clamp_release_load_count
         cfg.auto_clamp_no_activity_release_delay = self.auto_clamp_no_activity_release_delay
 
-    def update_configuration(self, configuration: BehaviorConfiguration):
-        self._update_pellet_cfg(configuration.pellet_delivery)
-        self._update_head_clamp_cfg(configuration.head_clamp)
+    def update_configuration(self, config: BehaviorConfiguration):
+        self._update_pellet_cfg(config.pellet_delivery)
+        self._update_head_clamp_cfg(config.head_clamp)
+        config.auto_close_gate_on_intersession = self.auto_close_gate_on_intersession_config
 
     def get_diamond_triangle_drifts(self, reset: bool = False) -> Optional[Offset3DTuple]:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""
