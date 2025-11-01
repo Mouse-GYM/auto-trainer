@@ -394,9 +394,10 @@ class SystemMachine(StateMachine):
     # @BehaviorAlgorithm.relay_func(wait=False)
     # not needed, already called by _pose_changed which has already it.
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
+        if offset is None:
+            return
         if (
-            offset is not None
-            and self._state == SystemState.tunnel
+            self._state == SystemState.tunnel
             and self._pellet_machine.state == PelletState.monitoring
             # TODO: monitoring only happens when mouse hands near pellet seen, which uncover the pellet,
             #  we might want to also handle/capture it when state is send and covering ?
@@ -406,7 +407,7 @@ class SystemMachine(StateMachine):
             and self._pellet_machine.can_use_pellet_command()
         ):
             last_pos = self._pellet_device.last_position
-            if last_pos is not None and offset is not None:
+            if last_pos is not None:
                 if not self._is_handling_diamond_triangle:
                     self._is_handling_diamond_triangle = True
                     logger.info("Starting handling diamond-triangle offset ; current offset=%s pos=%s",
