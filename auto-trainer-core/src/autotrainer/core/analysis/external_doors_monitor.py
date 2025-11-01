@@ -117,7 +117,7 @@ class ExternalDoorsMonitor(ObservableObject):
         cfg = self._config
         new_engaged = (
             perf_now - self._t_started >= cfg.trigger_open_delay
-            and all(
+            and any(
                 door_open and door_last_perf_c is not None and perf_now - door_last_perf_c >= cfg.trigger_open_delay
                 for door_open, door_last_perf_c in (
                     doors_state[active_door]
