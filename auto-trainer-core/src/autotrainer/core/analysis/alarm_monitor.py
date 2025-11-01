@@ -5,6 +5,7 @@ import time
 from typing import Optional, List, Set
 
 from autotrainer.core import ObservableObject
+from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.analysis.external_doors_monitor import ExternalDoorsMonitor
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
@@ -25,7 +26,7 @@ class EmergencyReason(str, enum.Enum):
     DOORS_OPEN = "DOORS_OPEN"
 
 
-class EmergencyAlarmMonitor(ObservableObject):
+class EmergencyAlarmMonitor(BaseDetector):
 
     IS_ENGAGED = "is_engaged"
     CONFIG = "config"
@@ -51,14 +52,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._load_cell_thrash_values = []
         self._load_cell_engaged_values = []
         self._audio_thrash_values = []
-        self._enabled = False
-        self._t_started = math.nan
-        self._is_engaged = False
         self._engaged_reasons: Set[EmergencyReason] = set()
-        self._engaged_perf_c = math.nan
-        self._disengaged_perf_c = math.nan
-        self._timer_update_state = no_op_timer
-        self._lock = threading.RLock()
         self._audio_load_cell_thrashing_engaged = False
         self._presence_in_cage_after_exit_tunnel_engaged = False
         self._ext_doors_open_engaged = False
@@ -73,46 +67,6 @@ class EmergencyAlarmMonitor(ObservableObject):
     def config(self, value: EmergencyAlarmConfiguration):
         prev, self._config = self._config, value
         self.property_changed(self.CONFIG, value, prev)
-
-    def start(self, *, reason: str="na"):
-        with self._lock:
-            if self._enabled:
-                return
-            logger.info("starting monitor: %s", reason)
-            self._enabled = True
-            self._t_started = time.perf_counter()
-            self.is_engaged = False  # force
-            timer = self._timer_update_state = make_daemon_timer(0.1, lambda: self._update_state(is_timer=True))
-            timer.start()
-
-    def stop(self, *, reason: str="na"):
-        with self._lock:
-            if not self._enabled:
-                return
-            logger.info("stopping monitor: %s", reason)
-            self._timer_update_state.cancel()
-            self._enabled = False
-
-    def restart(self, *, reason: str="na"):
-        self.stop(reason=reason)
-        self.start(reason=reason)
-
-    @property
-    def is_engaged(self):
-        return self._is_engaged
-
-    @is_engaged.setter
-    def is_engaged(self, value):
-        prev, self._is_engaged = self._is_engaged, value
-        if prev == value:
-            return
-        perf_now = time.perf_counter()
-        if value:
-            self._engaged_perf_c = perf_now
-        else:
-            self._engaged_reasons.clear()
-            self._disengaged_perf_c = perf_now
-        self._on_property_changed(self.IS_ENGAGED, value, prev)
 
     @property
     def engaged_reasons(self) -> List[str]:
@@ -215,13 +169,7 @@ class EmergencyAlarmMonitor(ObservableObject):
             )
         )
 
-    def _update_state(self, *, is_timer: bool=False):
-        with self._lock:
-            if not self._enabled:
-                return
-            self.__update_state(is_timer=is_timer)
-
-    def __update_state(self, *, is_timer: bool=False):
+    def _check_state(self):
         topcam_attrs = self._topcam_presence_attrs
         load_cell = self._load_cell_monitor.context
         cfg = self._config
@@ -293,9 +241,8 @@ class EmergencyAlarmMonitor(ObservableObject):
             self._engaged_reasons = reasons
             self.is_engaged = True
 
-        if is_timer:
-            timer = self._timer_update_state = timer_update_state(1, lambda: self._update_state(is_timer=True))
-            timer.start()
+        timer = self._cur_timer = timer_update_state(1, self.check_state)
+        timer.start()
 
     def _load_cell_monitor_prop_changed(self, name, value, _):
         if not self._enabled:
@@ -309,9 +256,9 @@ class EmergencyAlarmMonitor(ObservableObject):
                 self._load_cell_thrash_values.append((perf_now, value,
                                                       load_cell.thrashing_disengaged_age if value
                                                       else load_cell.thrashing_engaged_age))
-            self._update_state()
+            self._check_state()
         elif name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
-            self._update_state()
+            self._check_state()
 
     def _audio_prop_changed(self, name, value, _):
         if not self._enabled:
@@ -325,8 +272,8 @@ class EmergencyAlarmMonitor(ObservableObject):
                                                   audio_monitor.disengaged_age if value
                                                   else audio_monitor.engaged_age
                                                   ))
-            self._update_state()
+            self.refresh_state()
 
     def _ext_doors_prop_changed(self, name, value, _):
         if name == "is_engaged":
-            self._update_state()
+            self.refresh_state()

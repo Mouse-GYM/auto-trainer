@@ -4,6 +4,7 @@ import math
 import threading
 
 from autotrainer.core import ObservableObject
+from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
@@ -13,7 +14,7 @@ from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
 logger = get_verbose_logger(__name__)
 
 
-class GlobalAnimalPresenceMonitor(ObservableObject):
+class GlobalAnimalPresenceMonitor(BaseDetector):
 
     feature_enabled = True
 
@@ -24,51 +25,9 @@ class GlobalAnimalPresenceMonitor(ObservableObject):
         topcam_presence: PresenceDetectionAttrs,
     ):
         super().__init__()
-        self._enabled = False
-        self._is_engaged = False
-        self._cur_timer = no_op_timer
         self._config = config
-        self._lock = threading.RLock()
         self._load_cell_monitor = load_cell_monitor
         self._topcam_presence = topcam_presence
-        self._t_started = -math.inf
-
-    def start(self, *, reason: str="na"):
-        with self._lock:
-            if self._enabled:
-                return
-            logger.info("starting monitor: %s", reason)
-            self._t_started = time.perf_counter()
-            self._enabled = True
-            # so that if situation is same than before this start (when it was stopped),
-            # then a new trigger will be emitted.
-            timer = self._cur_timer = make_daemon_timer(0.1, self._check_state)
-            self.is_engaged = False  # force set to False
-            timer.start()
-
-    def stop(self, *, reason: str="na"):
-        with self._lock:
-            if not self._enabled:
-                return
-            logger.info("stopping monitor: %s", reason)
-            self._cur_timer.cancel()
-            self._enabled = False
-
-    def restart(self, *, reason: str="na"):
-        self.stop(reason=reason)
-        self.start(reason=reason)
-
-    def force_refresh(self):
-        """Ensure check_state is called "~now" (i.e very shortly)
-        This monitor can effectively uses very long timer. which must be cancelled,
-         in order for a new one to be created.
-        """
-        with self._lock:
-            if not self._enabled:
-                return
-            self._cur_timer.cancel()
-            timer = self._cur_timer = make_daemon_timer(0.1, self._check_state)
-            timer.start()
 
     @property
     def config(self):
@@ -78,25 +37,9 @@ class GlobalAnimalPresenceMonitor(ObservableObject):
     def config(self, value):
         self._config = value
 
-    @property
-    def is_engaged(self):
-        """is_engaged == True means global mouse presence is missing"""
-        return self._is_engaged
-
-    @is_engaged.setter
-    def is_engaged(self, value):
-        prev, self._is_engaged = self._is_engaged, value
-        self._on_property_changed("is_engaged", value, prev)
-
     def _check_state(self):
-        with self._lock:
-            self.__check_state()
-
-    def __check_state(self):
-        if not self._enabled:
-            logger.debug("not enabled")
-            return
         t_perf_now = time.perf_counter()
+        self._cur_timer.cancel()
         cfg = self._config
         load_cell_mon = self._load_cell_monitor.context
         top_cam_pres_age = t_perf_now - self._topcam_presence.last_presence_start_perf_c

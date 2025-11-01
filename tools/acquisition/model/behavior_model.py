@@ -7,6 +7,7 @@ from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler, EventManager, ApiEventKind)
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.video_detection import PresenceDetectionAttrs
 from tools.acquisition.model.hardware_model import HardwareModel
 
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
@@ -36,6 +37,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         analysis: SensorAnalysis,
         hardware_model: HardwareModel,
         inference: InferenceProtocol,
+        *,
+        topcam_presence: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__(("emergency_stopped", "emergency_resumed"))
 
@@ -47,6 +50,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             tunnel_device=hardware_model,
             pellet_device=hardware_model,
             inference=inference,
+            topcam_presence=topcam_presence,
         )
 
         self._project: Optional[ProjectInfo] = None
@@ -149,11 +153,12 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             return
         algo.algo_paused = False
         analysis = self._analysis
-        reason = f"end-emergency-{source}"
-        analysis.emergency_alarm_monitor.restart(reason=reason)
-        analysis.external_doors_monitor.restart(reason=reason)
-        # also restarting conveniently global animal presence monitor/alarm :
-        analysis.global_animal_presence_monitor.restart(reason=reason)
+        analysis.restart()
+        # reason = f"end-emergency-{source}"
+        # analysis.emergency_alarm_monitor.restart(reason=reason)
+        # analysis.external_doors_monitor.restart(reason=reason)
+        # # also restarting conveniently global animal presence monitor/alarm :
+        # analysis.global_animal_presence_monitor.restart(reason=reason)
         EventManager.default().post_event_content(ApiEventKind.emergencyResume, source)
         self.emergency_resumed(source)
 

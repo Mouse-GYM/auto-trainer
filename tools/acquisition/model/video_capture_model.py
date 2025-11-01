@@ -153,11 +153,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
     def camera_source(self, value: CaptureCameraAttrs):
         if self._camera_source == value:
             return
-
         old_value = self._camera_source
-
         self._update_camera_source(value)
-
         self.property_changed(self.CAMERA_PROP, value, old_value)
 
     @property
