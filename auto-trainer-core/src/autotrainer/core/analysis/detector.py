@@ -39,7 +39,7 @@ class BaseDetector(ObservableObject):
         else:
             self._disengaged_perf_c = perf_now
         logger.notice("%s: is_engaged -> %s (age previous = %.1f)",
-                      self, value, perf_now - (self._disengaged_perf_c if value else self._engaged_perf_c))
+                      self.__class__.__name__, value, perf_now - (self._disengaged_perf_c if value else self._engaged_perf_c))
         self._on_property_changed(self.IS_ENGAGED, value, prev)
 
     def _check_state(self):
@@ -60,7 +60,7 @@ class BaseDetector(ObservableObject):
             if self._enabled:
                 return
             self._cur_timer.cancel()  # safer (or required if there is/was a real timer, actually).
-            logger.verbose("%s: starting monitor", self)
+            logger.verbose("%s: starting monitor", self.__class__.__name__)
             self._enabled = True
             self._t_started = time.perf_counter()
             self._start()
@@ -74,7 +74,7 @@ class BaseDetector(ObservableObject):
         with self._lock:
             if not self._enabled:
                 return
-            logger.verbose("%s: stopping monitor", self)
+            logger.verbose("%s: stopping monitor", self.__class__.__name__)
             self._enabled = False
             self._cur_timer.cancel()
             self._stop()
