@@ -9,9 +9,11 @@ from typing import Optional, List, Tuple, IO
 import numpy
 
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from .external_doors_monitor import ExternalDoorsMonitor
 
 from ..configuration.alarm_configuration import EmergencyAlarmConfiguration
 from ..configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
+from ..configuration.external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
 from ..perf_monitor import PerfMonitor
@@ -35,6 +37,7 @@ _MeasuresList = List[float]
 
 # TODO: Separate true analysis from data recording to file(s) for post-analysis.
 class SensorAnalysis(ObservableObject):
+
     IS_HEADBAR_SWITCH_ENGAGED_PROPERTY = "is_headbar_switch_engaged"
 
     def __init__(self, *, topcam_presence: Optional[PresenceDetectionAttrs] = None):
@@ -74,10 +77,13 @@ class SensorAnalysis(ObservableObject):
             topcam_presence=topcam_presence,
         )
 
+        self._external_doors_monitor = ExternalDoorsMonitor(ExternalDoorsMonitorConfig())
+
         self._alarm_monitor = EmergencyAlarmMonitor(
             config=EmergencyAlarmConfiguration(),
             load_cell_monitor=self._load_cell_monitor,
             audio_monitor=self._audio_thrashing_monitor,
+            external_doors_monitor=self._external_doors_monitor,
             topcam_presence_attrs=topcam_presence,
         )
 
@@ -129,6 +135,10 @@ class SensorAnalysis(ObservableObject):
     @property
     def global_animal_presence_monitor(self) -> GlobalAnimalPresenceMonitor:
         return self._global_animal_presence_monitor
+
+    @property
+    def external_doors_monitor(self) -> ExternalDoorsMonitor:
+        return self._external_doors_monitor
 
     @property
     def is_headbar_switch_engaged(self):

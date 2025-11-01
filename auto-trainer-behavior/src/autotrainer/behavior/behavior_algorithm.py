@@ -1078,6 +1078,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._load_head_clamp_cfg(config.head_clamp)
         if self._top_camera_presence_detection is not None:
             self._top_camera_presence_detection.load_config(config.topcam_presence_detection)
+        # self.auto_close_gate_on_intersession_config = config.  # not saved yet to config
 
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         cfg.is_enabled = self.pellet_delivery_enabled

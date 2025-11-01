@@ -27,6 +27,10 @@ class _EmergencyAlarmConfiguration:
     auto_resume_on_presence_seen_after_exit_tunnel: bool = False
     tunnel_to_cage_presence_missing_delay: float = 5
 
+    # 3rd
+    use_external_doors_open: bool = False
+    auto_resume_on_external_doors_close: bool = False
+
 
 class EmergencyAlarmConfiguration(_EmergencyAlarmConfiguration):
 

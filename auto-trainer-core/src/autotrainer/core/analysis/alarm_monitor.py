@@ -4,13 +4,14 @@ import threading
 import time
 from typing import Optional, List, Set
 
-from autotrainer.core import ObservableObject, get_verbose_logger
+from autotrainer.core import ObservableObject
+from autotrainer.core.analysis.external_doors_monitor import ExternalDoorsMonitor
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
-from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 
 logger = get_verbose_logger(__name__)
 
@@ -21,6 +22,7 @@ class EmergencyReason(str, enum.Enum):
 
     MOUSE_THRASHING = "MOUSE_THRASHING"
     IN_CAGE_AFTER_EXIT_TUNNEL = "IN_CAGE_AFTER_EXIT_TUNNEL"
+    DOORS_OPEN = "DOORS_OPEN"
 
 
 class EmergencyAlarmMonitor(ObservableObject):
@@ -29,6 +31,7 @@ class EmergencyAlarmMonitor(ObservableObject):
     CONFIG = "config"
     PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED = "presence_in_cage_after_exit_tunnel_engaged"
     AUDIO_LOAD_CELL_THRASHING_ENGAGED = "audio_load_cell_thrashing_engaged"
+    # DOORS_OPEN_ENGAGED = "doors_open_engaged"
 
     def __init__(
         self,
@@ -36,12 +39,14 @@ class EmergencyAlarmMonitor(ObservableObject):
         config: EmergencyAlarmConfiguration,
         load_cell_monitor: LoadCellMonitor,
         audio_monitor: AudioSpectrumThrashMonitor,
+        external_doors_monitor: ExternalDoorsMonitor,
         topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__()
         self._config = config
         self._load_cell_monitor = load_cell_monitor
         self._audio_monitor = audio_monitor
+        self._external_doors_monitor = external_doors_monitor
         self._topcam_presence_attrs = topcam_presence_attrs
         self._load_cell_thrash_values = []
         self._load_cell_engaged_values = []
@@ -56,6 +61,7 @@ class EmergencyAlarmMonitor(ObservableObject):
         self._lock = threading.RLock()
         self._audio_load_cell_thrashing_engaged = False
         self._presence_in_cage_after_exit_tunnel_engaged = False
+        self._ext_doors_open_engaged = False
         load_cell_monitor.property_changed += self._load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._audio_prop_changed
 
@@ -75,9 +81,9 @@ class EmergencyAlarmMonitor(ObservableObject):
             logger.info("starting monitor: %s", reason)
             self._enabled = True
             self._t_started = time.perf_counter()
+            self.is_engaged = False  # force
             timer = self._timer_update_state = make_daemon_timer(0.1, lambda: self._update_state(is_timer=True))
             timer.start()
-            self.is_engaged = False  # force
 
     def stop(self, *, reason: str="na"):
         with self._lock:
@@ -210,9 +216,9 @@ class EmergencyAlarmMonitor(ObservableObject):
         )
 
     def _update_state(self, *, is_timer: bool=False):
-        if not self._enabled:
-            return
         with self._lock:
+            if not self._enabled:
+                return
             self.__update_state(is_timer=is_timer)
 
     def __update_state(self, *, is_timer: bool=False):
@@ -223,28 +229,28 @@ class EmergencyAlarmMonitor(ObservableObject):
         #
         reasons = set()
         #
-        audio_load_cell_thrash_alarm = self._check_audio_load_cell(perf_now)
-        self.audio_load_cell_thrashing_engaged = audio_load_cell_thrash_alarm
-        if audio_load_cell_thrash_alarm and cfg.use_audio_load_cell_thrash:
+        self.audio_load_cell_thrashing_engaged = self._check_audio_load_cell(perf_now)
+        if self.audio_load_cell_thrashing_engaged and cfg.use_audio_load_cell_thrash:
             reasons.add(EmergencyReason.MOUSE_THRASHING)
         #
-        pres_missing_after_exit_tunnel_alarm = self._check_pres_after_exit_tunnel_missing(perf_now)
-        self.presence_in_cage_after_exit_tunnel_engaged = pres_missing_after_exit_tunnel_alarm
-        if pres_missing_after_exit_tunnel_alarm and cfg.use_presence_missing_after_exit_tunnel:
+        self.presence_in_cage_after_exit_tunnel_engaged = self._check_pres_after_exit_tunnel_missing(perf_now)
+        if self.presence_in_cage_after_exit_tunnel_engaged and cfg.use_presence_missing_after_exit_tunnel:
             reasons.add(EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL)
         #
-        is_emergency = (
-            (audio_load_cell_thrash_alarm and cfg.use_audio_load_cell_thrash)
-            or (pres_missing_after_exit_tunnel_alarm and cfg.use_presence_missing_after_exit_tunnel)
-        )
+        self._ext_doors_open_engaged = self._external_doors_monitor.is_engaged
+        if self._ext_doors_open_engaged and cfg.use_external_doors_open:
+            reasons.add(EmergencyReason.DOORS_OPEN)
+        #
+        is_emergency = len(reasons) > 0
         #
         if is_emergency and not self._is_engaged:
             logger.notice("Engaging emergency: %s", reasons)
-            logger.debug("load_cell.disengaged_age=%.1f"
-                " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
-                load_cell.disengaged_age, load_cell.engaged_age,
-                *((math.nan, math.nan) if topcam_attrs is None else (topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c)),
-                perf_now)
+            if __debug__:
+                logger.debug("load_cell.disengaged_age=%.1f"
+                    " load_cell.engaged_age=%.1f presence_start_perf_c=%.1f absence_start_perf_c=%.1f perf_now=%.1f",
+                    load_cell.disengaged_age, load_cell.engaged_age,
+                    *((math.nan, math.nan) if topcam_attrs is None else (topcam_attrs.last_presence_start_perf_c, topcam_attrs.last_absence_start_perf_c)),
+                    perf_now)
         elif __debug__:
             logger.spam(
                 "is_emergency=%s load_cell.disengaged_age=%.1f"
@@ -259,31 +265,34 @@ class EmergencyAlarmMonitor(ObservableObject):
             # look if previous engaged reasons (which are now cleared), allowed auto-resume, or not.
             # if any does not allow : don't remove the is_engaged.
             for prev_r in list(check_reasons):
-                if prev_r == EmergencyReason.MOUSE_THRASHING and cfg.auto_resume_on_audio_load_cell_thrash_resume:
+                if ((prev_r == EmergencyReason.MOUSE_THRASHING and cfg.auto_resume_on_audio_load_cell_thrash_resume)
+                 or (prev_r == EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL and cfg.auto_resume_on_presence_seen_after_exit_tunnel)
+                 or (prev_r == EmergencyReason.DOORS_OPEN and cfg.auto_resume_on_external_doors_close)
+                ):
                     check_reasons.remove(prev_r)
-                elif prev_r == EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL and cfg.auto_resume_on_presence_seen_after_exit_tunnel:
-                    check_reasons.remove(prev_r)
+            #
             if len(check_reasons) == 0:
                 self.is_engaged = False
-            self._engaged_reasons = check_reasons  # set after is_engaged = False, given it also reset _engaged_reasons.
+            self._engaged_reasons = check_reasons  # always reset with what remains in check_reasons.
         else:
             check_reasons = self._engaged_reasons.copy()
             # if some possible condition were previously present and are not auto-resume enabled,
             # then re-add them to current reasons of engaged.
             for prev_r in list(check_reasons):
-                if (prev_r == EmergencyReason.MOUSE_THRASHING
+                if ((
+                    prev_r == EmergencyReason.MOUSE_THRASHING
                     and not cfg.auto_resume_on_audio_load_cell_thrash_resume
-                ):
-                    reasons.add(prev_r)
-                elif (
+                ) or (
                     prev_r == EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL
                     and not cfg.auto_resume_on_presence_seen_after_exit_tunnel
-                ):
+                ) or (
+                    prev_r == EmergencyReason.DOORS_OPEN
+                    and not cfg.auto_resume_on_external_doors_close
+                )):
                     reasons.add(prev_r)
             self._engaged_reasons = reasons
             self.is_engaged = True
 
-        # todo: eventually adjust the timer delay depending on current state:
         if is_timer:
             timer = self._timer_update_state = timer_update_state(1, lambda: self._update_state(is_timer=True))
             timer.start()
@@ -316,4 +325,8 @@ class EmergencyAlarmMonitor(ObservableObject):
                                                   audio_monitor.disengaged_age if value
                                                   else audio_monitor.engaged_age
                                                   ))
+            self._update_state()
+
+    def _ext_doors_prop_changed(self, name, value, _):
+        if name == "is_engaged":
             self._update_state()

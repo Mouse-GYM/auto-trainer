@@ -379,6 +379,8 @@ class AppModel(ObservableObject):
 
     def on_capture_start(self) -> bool:
 
+        analysis = self._analysis
+
         self._project_info = ProjectInfo(
             root=self.output_location,
             device_id=self._preferences.serial_number,
@@ -396,6 +398,8 @@ class AppModel(ObservableObject):
         # Now put the new project info to all "models" :
         for model in self._models:
             model.project = self._project_info
+
+        analysis.project_info = self._project_info
 
         self._behavior.on_prepare_capture()
 
@@ -449,9 +453,6 @@ class AppModel(ObservableObject):
         if self._inference.is_enabled:
             self._inference.start(self._inference_queue)
 
-        if self._analysis is not None:
-            self._analysis.project_info = self._project_info
-
         for camera in self._cameras:
             if camera.is_primary:
                 camera.on_capture_start()
@@ -466,15 +467,18 @@ class AppModel(ObservableObject):
         logger.info("finished connecting hardware")
 
         if not self._behavior.algorithm.algo_paused:
-            self._analysis.emergency_alarm_monitor.start(reason="capture-start")
-            self._analysis.global_animal_presence_monitor.start(reason="capture-start")
+            analysis.emergency_alarm_monitor.start(reason="capture-start")
+            analysis.global_animal_presence_monitor.start(reason="capture-start")
+            analysis.external_doors_monitor.start(reason="capture-start")
 
         return True
 
     def on_capture_stop(self):
         # logger.verbose("AppModel.on_capture_stop")
-        self._analysis.emergency_alarm_monitor.stop(reason="capture-stop")
-        self._analysis.global_animal_presence_monitor.stop(reason="capture-stop")
+        analysis = self._analysis
+        analysis.emergency_alarm_monitor.stop(reason="capture-stop")
+        analysis.global_animal_presence_monitor.stop(reason="capture-stop")
+        analysis.external_doors_monitor.stop(reason="capture-start")
 
         self._inference.stop()
 
@@ -502,8 +506,7 @@ class AppModel(ObservableObject):
                 logger.verbose("stopping capture to %s", camera.name)
                 camera.on_capture_stop()
 
-        if self._analysis is not None:
-            self._analysis.project_info = None
+        analysis.project_info = None
 
         self._is_recording_trigger = False
 
@@ -560,6 +563,7 @@ class AppModel(ObservableObject):
         self._analysis.audio_thrashing_monitor.config = behavior_cfg.audio
         self._analysis.emergency_alarm_monitor.config = behavior_cfg.emergency_alarm
         self._analysis.global_animal_presence_monitor.config = behavior_cfg.global_animal_presence
+        self._analysis.external_doors_monitor.config = behavior_cfg.external_doors
 
         self.output_location = configuration.persistence.output_location
 
@@ -581,8 +585,10 @@ class AppModel(ObservableObject):
         if self._inference is not None:
             self._inference.terminate()
 
-        self._analysis.emergency_alarm_monitor.stop(reason="on_close")
-        self._analysis.global_animal_presence_monitor.stop(reason="on_close")
+        analysis = self._analysis
+        analysis.emergency_alarm_monitor.stop(reason="on_close")
+        analysis.global_animal_presence_monitor.stop(reason="on_close")
+        analysis.external_doors_monitor.stop(reason="capture-start")
 
         for camera in self._cameras:
             camera.on_close()

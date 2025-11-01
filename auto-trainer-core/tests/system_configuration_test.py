@@ -12,6 +12,7 @@ from autotrainer.core.analysis import LoadCellConfiguration, HeadbarPressureConf
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
+from autotrainer.core.configuration.external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 
 fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
@@ -25,7 +26,7 @@ emergency_alarm_cfg = EmergencyAlarmConfiguration()
 
 
 current_default_config = dataclasses.asdict(SystemConfiguration())
-
+behavior_default_config = current_default_config['behavior']
 
 v0_expected_result_config = {'version': SystemConfiguration.version,
  'cameras': [{'id': CameraId.Left,
@@ -105,10 +106,11 @@ v0_expected_result_config = {'version': SystemConfiguration.version,
    'thrashing_min_ptp_change_count': 3},
   'headbar_pressure': {'threshold': 10, 'duration': 1.5},
   'auto_tare': {'threshold': 1.1, 'range_threshold': 1.75, 'duration': 1.0},
-  'audio': current_default_config['behavior']['audio'],
-  'global_animal_presence': current_default_config['behavior']['global_animal_presence'],
-  'emergency_alarm': current_default_config['behavior']['emergency_alarm'],
-  'topcam_presence_detection': current_default_config['behavior']['topcam_presence_detection'],
+  'audio': behavior_default_config['audio'],
+  'global_animal_presence': behavior_default_config['global_animal_presence'],
+  'emergency_alarm': behavior_default_config['emergency_alarm'],
+  'topcam_presence_detection': behavior_default_config['topcam_presence_detection'],
+  'external_doors': behavior_default_config['external_doors'],
   },
  'persistence': {'output_location': '/home/autotrainer/output'}}
 
@@ -140,39 +142,42 @@ def test_load_version_1():
     path = fixtures_path.joinpath("v1_config.yaml")
     with path.open() as fh:
         config = SystemConfiguration.load_yaml(fh)
-    behavior_dct = current_default_config['behavior']
     assert dataclasses.asdict(config) == {
         'behavior': {
-            'topcam_presence_detection': behavior_dct['topcam_presence_detection'],
-            'audio': behavior_dct['audio'],
-            'global_animal_presence': behavior_dct['global_animal_presence'],
-            'emergency_alarm': behavior_dct['emergency_alarm'],
-            'auto_tare': behavior_dct['auto_tare'],
-            'head_clamp': behavior_dct['head_clamp'],
-            'headbar_pressure': behavior_dct['headbar_pressure'],
-                     'load_cell': {'min_event_duration': 3.0,
-                                   'min_post_event_hold_duration': 6.0,
-                                   'thrashing_min_ptp_change_count': 3,
-                                   'thrashing_var_max_delay': 0.2,
-                                   'thrashing_var_min_delay': 0.05,
-                                   'thrashing_var_weight_threshold_max': 30,
-                                   'thrashing_var_weight_threshold_min': 20,
-                                   'threshold_duration': 0.25,
-                                   'weight_active_threshold': 15.0,
-                                   'weight_inactive_threshold': 2},
-                     'pellet_delivery': {'is_enabled': False,
-                                         'is_intersession_analysis_enabled': True,
-                                         'is_intersession_pellet_shift_enabled': True,
-                                         'is_pellet_cover_enabled': True,
-                                         'max_pellet_missing_seconds': 15,
-                                         'max_pellets_per_day': 75,
-                                         'max_pellets_per_session': 10,
-                                         'pellet_hand_uncover_distance': PelletDeliveryConfiguration.pellet_hand_uncover_distance,
-                                         'auto_correct_motors_drift': False,
-                                         'triangle_pellet_expected_distance': PelletDeliveryConfiguration.triangle_pellet_expected_distance,
-                                         'triangle_pellet_diff_too_far_threshold': PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold,
-                                         'use_triangle_pellet_distance_too_far': PelletDeliveryConfiguration.use_triangle_pellet_distance_too_far,
-                                         }},
+            'external_doors': behavior_default_config['external_doors'],
+            'topcam_presence_detection': behavior_default_config['topcam_presence_detection'],
+            'audio': behavior_default_config['audio'],
+            'global_animal_presence': behavior_default_config['global_animal_presence'],
+            'emergency_alarm': behavior_default_config['emergency_alarm'],
+            'auto_tare': behavior_default_config['auto_tare'],
+            'head_clamp': behavior_default_config['head_clamp'],
+            'headbar_pressure': behavior_default_config['headbar_pressure'],
+            'load_cell': {
+                'min_event_duration': 3.0,
+                'min_post_event_hold_duration': 6.0,
+                'thrashing_min_ptp_change_count': 3,
+                'thrashing_var_max_delay': 0.2,
+                'thrashing_var_min_delay': 0.05,
+                'thrashing_var_weight_threshold_max': 30,
+                'thrashing_var_weight_threshold_min': 20,
+                'threshold_duration': 0.25,
+                'weight_active_threshold': 15.0,
+                'weight_inactive_threshold': 2},
+            'pellet_delivery': {
+                'is_enabled': False,
+                'is_intersession_analysis_enabled': True,
+                'is_intersession_pellet_shift_enabled': True,
+                'is_pellet_cover_enabled': True,
+                'max_pellet_missing_seconds': 15,
+                'max_pellets_per_day': 75,
+                'max_pellets_per_session': 10,
+                'pellet_hand_uncover_distance': PelletDeliveryConfiguration.pellet_hand_uncover_distance,
+                'auto_correct_motors_drift': False,
+                'triangle_pellet_expected_distance': PelletDeliveryConfiguration.triangle_pellet_expected_distance,
+                'triangle_pellet_diff_too_far_threshold': PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold,
+                'use_triangle_pellet_distance_too_far': PelletDeliveryConfiguration.use_triangle_pellet_distance_too_far,
+            }
+        },
         'cameras': [{'host': None,
                      'id': CameraId.Left,
                      'is_enabled': True,
