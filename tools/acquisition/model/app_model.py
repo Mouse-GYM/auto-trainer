@@ -354,7 +354,7 @@ class AppModel(ObservableObject):
     def notes(self, value: str):
         self._notes = self._on_property_changed("notes", value, self._notes)
 
-    def add_animal(self, name: str, select: bool = True):
+    def add_animal(self, name: str, select: bool = False):
         if not name or len(name) == 0:
             return
 
