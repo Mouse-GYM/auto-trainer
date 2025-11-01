@@ -56,7 +56,6 @@ class ExternalDoorsMonitor(BaseDetector):
         self._doors_state = _make_external_doors_state()
 
     def _check_state(self):
-        self._cur_timer.cancel()  # ensure any possible timer is skipped/cancelled
         doors_state = self._doors_state
         perf_now = time.perf_counter()
         cfg = self._config
@@ -72,9 +71,9 @@ class ExternalDoorsMonitor(BaseDetector):
                     min_delay = r
         self.is_engaged = new_engaged
         if not new_engaged and not math.isinf(min_delay):
-            timer = self._cur_timer = make_daemon_timer(min_delay, self.check_state)
-            timer.start()
-            logger.verbose("created timer for check state with delay=%.1f", min_delay)
+            logger.debug("timer for next check state delay=%.1f", min_delay)
+            return min_delay
+        return None
 
     def update_door_state(self, door, is_open):
         if __debug__:

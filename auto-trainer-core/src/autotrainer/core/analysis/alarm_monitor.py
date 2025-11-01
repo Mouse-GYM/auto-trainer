@@ -240,9 +240,7 @@ class EmergencyAlarmMonitor(BaseDetector):
                     reasons.add(prev_r)
             self._engaged_reasons = reasons
             self.is_engaged = True
-
-        timer = self._cur_timer = timer_update_state(1, self.check_state)
-        timer.start()
+        return 1  # timer_delay
 
     def _load_cell_monitor_prop_changed(self, name, value, _):
         if not self._enabled:
@@ -256,9 +254,9 @@ class EmergencyAlarmMonitor(BaseDetector):
                 self._load_cell_thrash_values.append((perf_now, value,
                                                       load_cell.thrashing_disengaged_age if value
                                                       else load_cell.thrashing_engaged_age))
-            self._check_state()
+            self.check_state()
         elif name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
-            self._check_state()
+            self.check_state()
 
     def _audio_prop_changed(self, name, value, _):
         if not self._enabled:
@@ -272,8 +270,8 @@ class EmergencyAlarmMonitor(BaseDetector):
                                                   audio_monitor.disengaged_age if value
                                                   else audio_monitor.engaged_age
                                                   ))
-            self.refresh_state()
+            self.check_state()
 
     def _ext_doors_prop_changed(self, name, value, _):
         if name == "is_engaged":
-            self.refresh_state()
+            self.check_state()

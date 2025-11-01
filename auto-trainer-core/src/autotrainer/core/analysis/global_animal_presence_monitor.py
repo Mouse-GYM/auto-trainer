@@ -39,7 +39,6 @@ class GlobalAnimalPresenceMonitor(BaseDetector):
 
     def _check_state(self):
         t_perf_now = time.perf_counter()
-        self._cur_timer.cancel()
         cfg = self._config
         load_cell_mon = self._load_cell_monitor.context
         top_cam_pres_age = t_perf_now - self._topcam_presence.last_presence_start_perf_c
@@ -63,5 +62,4 @@ class GlobalAnimalPresenceMonitor(BaseDetector):
         logger.debug("engaged=%s top_cam_miss=%.1f load_cell_miss=%.1f ; new_delay=%.1f",
                      new_engaged, top_cam_miss, load_cell_miss, timer_delay)
         self.is_engaged = new_engaged
-        new_timer = self._cur_timer = make_daemon_timer(timer_delay, self._check_state)
-        new_timer.start()
+        return timer_delay

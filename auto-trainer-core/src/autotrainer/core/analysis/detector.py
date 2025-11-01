@@ -42,15 +42,23 @@ class BaseDetector(ObservableObject):
                       self.__class__.__name__, value, perf_now - (self._disengaged_perf_c if value else self._engaged_perf_c))
         self._on_property_changed(self.IS_ENGAGED, value, prev)
 
-    def _check_state(self):
-        pass
+    def _make_new_timer(self, delay: float):
+        self._cur_timer.cancel()  # safer
+        timer = self._cur_timer = make_daemon_timer(delay, self.check_state)
+        timer.start()
+
+    def _check_state(self) -> Optional[float]:
+        raise NotImplementedError
 
     def check_state(self):
         with self._lock:
             if not self._enabled:
                 return
-            self._cur_timer.cancel()
-            self._check_state()
+            next_delay = self._check_state()
+            if next_delay is not None:
+                self._make_new_timer(next_delay)
+            else:
+                self._cur_timer.cancel()
 
     def _start(self):
         pass
@@ -59,13 +67,11 @@ class BaseDetector(ObservableObject):
         with self._lock:
             if self._enabled:
                 return
-            self._cur_timer.cancel()  # safer (or required if there is/was a real timer, actually).
             logger.verbose("%s: starting monitor", self.__class__.__name__)
             self._enabled = True
             self._t_started = time.perf_counter()
             self._start()
-            timer = self._cur_timer = make_daemon_timer(0.01, self.check_state)
-            timer.start()
+            self._make_new_timer(0.01)
 
     def _stop(self):
         pass
@@ -91,6 +97,4 @@ class BaseDetector(ObservableObject):
         with self._lock:
             if not self._enabled:
                 return
-            self._cur_timer.cancel()
-            timer = self._cur_timer = make_daemon_timer(0.01, self.check_state)
-            timer.start()
+            self._make_new_timer(0.01)
