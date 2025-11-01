@@ -229,14 +229,12 @@ class EmergencyAlarmMonitor(ObservableObject):
         #
         reasons = set()
         #
-        audio_load_cell_thrash_alarm = self._check_audio_load_cell(perf_now)
-        self.audio_load_cell_thrashing_engaged = audio_load_cell_thrash_alarm
-        if audio_load_cell_thrash_alarm and cfg.use_audio_load_cell_thrash:
+        self.audio_load_cell_thrashing_engaged = self._check_audio_load_cell(perf_now)
+        if self.audio_load_cell_thrashing_engaged and cfg.use_audio_load_cell_thrash:
             reasons.add(EmergencyReason.MOUSE_THRASHING)
         #
-        pres_missing_after_exit_tunnel_alarm = self._check_pres_after_exit_tunnel_missing(perf_now)
-        self.presence_in_cage_after_exit_tunnel_engaged = pres_missing_after_exit_tunnel_alarm
-        if pres_missing_after_exit_tunnel_alarm and cfg.use_presence_missing_after_exit_tunnel:
+        self.presence_in_cage_after_exit_tunnel_engaged = self._check_pres_after_exit_tunnel_missing(perf_now)
+        if self.presence_in_cage_after_exit_tunnel_engaged and cfg.use_presence_missing_after_exit_tunnel:
             reasons.add(EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL)
         #
         self._ext_doors_open_engaged = self._external_doors_monitor.is_engaged
