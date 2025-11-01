@@ -157,4 +157,4 @@ class ExternalDoorsMonitor(ObservableObject):
             logger.notice("%s: is_open: %s -> %s", door, prev_open, is_open)
             new_perf_c = time.perf_counter() if is_open else prev_perf_c
             doors_state[door] = (is_open, new_perf_c)
-            self.check_state()
+            self.force_refresh()
