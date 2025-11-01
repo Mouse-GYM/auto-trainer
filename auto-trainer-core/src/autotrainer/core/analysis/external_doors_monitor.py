@@ -81,6 +81,18 @@ class ExternalDoorsMonitor(ObservableObject):
 
     #
 
+    def force_refresh(self):
+        """Ensure check_state is called "~now" (i.e very shortly)
+        This monitor can effectively uses very long timer. which must be cancelled,
+         in order for a new one to be created.
+        """
+        with self._lock:
+            if not self._enabled:
+                return
+            self._cur_timer.cancel()
+            timer = self._cur_timer = make_daemon_timer(0.1, self.check_state)
+            timer.start()
+
     def start(self, *, reason: str = "na"):
         with self._lock:
             if self._enabled:
@@ -112,25 +124,25 @@ class ExternalDoorsMonitor(ObservableObject):
     def _check_state(self):
         if not self._enabled:
             return
+        self._cur_timer.cancel()  # ensure any possible timer is skipped/cancelled
         doors_state = self._doors_state
         perf_now = time.perf_counter()
         cfg = self._config
-        new_engaged = (
-            perf_now - self._t_started >= cfg.trigger_open_delay
-            and any(
-                door_open and door_last_perf_c is not None and perf_now - door_last_perf_c >= cfg.trigger_open_delay
-                for door_open, door_last_perf_c in (
-                    doors_state[active_door]
-                    # NB: using indexing on the doors state dict is greatly safer, than iterating over it,
-                    # if it would be modified by another thread at the same time.
-                    for active_door in ActiveDoors
-                )
-            )
-        )
+        min_delay = math.inf
+        new_engaged = False
+        for door in ActiveDoors:
+            door_open, door_last_perf_c = doors_state[door]
+            if door_open:
+                r = cfg.trigger_open_delay - (perf_now - door_last_perf_c)
+                if r < 0:
+                    new_engaged = True
+                elif r < min_delay:
+                    min_delay = r
         self.is_engaged = new_engaged
-        # retry in 1s:
-        timer = self._cur_timer = make_daemon_timer(1, self.check_state)
-        timer.start()
+        if not new_engaged and not math.isinf(min_delay):
+            timer = self._cur_timer = make_daemon_timer(min_delay, self.check_state)
+            timer.start()
+            logger.verbose("created timer for check state with delay=%.1f", min_delay)
 
     def update_door_state(self, door, is_open):
         if door not in ActiveDoors:
@@ -145,4 +157,4 @@ class ExternalDoorsMonitor(ObservableObject):
             logger.notice("%s: is_open: %s -> %s", door, prev_open, is_open)
             new_perf_c = time.perf_counter() if is_open else prev_perf_c
             doors_state[door] = (is_open, new_perf_c)
-            # don't call check_state: it's a recurrent timer
+            self.check_state()
