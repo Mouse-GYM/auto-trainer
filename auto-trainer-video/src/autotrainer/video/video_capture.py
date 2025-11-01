@@ -20,7 +20,7 @@ import verboselogs
 
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo, SystemStatusMessageKind
 from autotrainer.core.logging import get_verbose_logger, set_logger_level, get_multiprocess_log_queue, \
-    make_log_dict_config, thread_id_filter, setup_logging
+    make_log_dict_config, thread_id_filter, setup_logging, install_log_exception_hook
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.video_detection import PresenceDetectionAttrs, VideoDetection
@@ -229,6 +229,7 @@ class VideoCapture(Process):
             setup_logging(logger_level=logging.DEBUG)
         else:
             logging.config.dictConfig(log_dict_config)
+            install_log_exception_hook()
 
         logger.info("%s: started running ; name=%s cam_index=%s primary=%s log_dict=%s",
                     self, self._attrs.camera.name, self._camera_idx, self._attrs.is_primary,
@@ -236,7 +237,10 @@ class VideoCapture(Process):
         if not self._prepare_to_run():
             return
 
-        self._run_capture_loop()
+        try:
+            self._run_capture_loop()
+        except BaseException as err:
+            logger.exception("Fatal error: %s", err)
         self._terminate_capture_loop()
 
     def _set_status(self, status: CaptureProcessStatus):

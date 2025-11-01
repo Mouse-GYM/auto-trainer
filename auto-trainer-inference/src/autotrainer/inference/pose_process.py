@@ -9,7 +9,8 @@ from typing import Optional, Callable, List, Dict
 import numpy
 
 from autotrainer.core import FixedArrayMultiQueue, PerfMonitor
-from autotrainer.core.logging import get_verbose_logger, get_multiprocess_log_queue, make_log_dict_config, setup_logging
+from autotrainer.core.logging import get_verbose_logger, get_multiprocess_log_queue, make_log_dict_config, \
+    setup_logging, install_log_exception_hook
 from autotrainer.core.message import FrameIndexCategory
 from . import DlcPoseModel, MemoryPoseModel
 from .pose_model import PoseModel
@@ -109,7 +110,15 @@ class PoseProcess(Process):
             setup_logging()
         else:
             logging.config.dictConfig(log_dict_config)
+            install_log_exception_hook()
 
+        logger.info("started with %s", log_dict_config)
+        try:
+            self.__do_run()
+        except BaseException as err:
+            logger.exception("Fatal error: %s", err)
+
+    def __do_run(self):
         self._send_message(InferenceStatusMessageKind.Created)
 
         model_path = self._model_location

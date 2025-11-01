@@ -4,7 +4,7 @@ import pathlib
 import time
 import logging
 from multiprocessing.context import BaseContext
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, cast, Dict, Any
 from multiprocessing import Queue, Value, Array
 from threading import Event
 import urllib
@@ -100,7 +100,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._errors = mp_ctx.Array("c", bytes(512))
         self._shape = None
 
-        self._orig_conf: Optional[CameraConfiguration] = None
+        self._cur_conf: CameraConfiguration = CameraConfiguration()
         self._is_enabled = True
         self._is_primary = False
 
@@ -308,7 +308,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 presence_detection_attrs=self._presence_detection,
                 is_primary=self._is_primary,
                 msg_queue=self._msg_queue,
-                record_prebuffer_duration=self._orig_conf.record_prebuffer_duration,
+                record_prebuffer_duration=self._cur_conf.record_prebuffer_duration,
             )
 
             rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
@@ -382,7 +382,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
     def load_configuration(self, conf: CameraConfiguration):
         self._id = conf.id
         self._name = str(conf.id)
-        self._orig_conf = conf
+        self._cur_conf = conf  # keeping config on self too
         self.is_enabled = conf.is_enabled
         self.is_recording_enabled = conf.is_record_enabled
         self.record_mode = VideoRecordMode(conf.record_mode)
@@ -427,9 +427,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     def save_configuration(self) -> CameraConfiguration:
         parsed = urlparse(self._camera_source.url)
-
         params = VideoManager.parse_params(self._camera_source.url)
-
+        # allow to not have below assignations to floats or bools being annotated as "type-error" :
+        params = cast(Dict[str, Any], params)
         for key in params:
             try:
                 val = float(params[key])
@@ -445,13 +445,15 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         # undo the %-encode which happened in self.load_configuration():
         path = urllib.parse.unquote(parsed.path)[1:]  # [1:] for strip of first leading "/"
 
+        conf = self._cur_conf
+
         return CameraConfiguration(id=self._id, name=self._name, is_enabled=self._is_enabled,
                                    is_record_enabled=self._is_recording_enabled,
                                    record_mode=self._record_mode.value,
                                    is_still_image_capture_enabled=self._is_still_capture_enabled,
                                    still_image_capture_interval=self.still_image_capture_interval,
                                    scheme=parsed.scheme, host=parsed.hostname, port=parsed.port or 0, path=path,
-                                   params=params, record_prebuffer_duration=self._orig_conf.record_prebuffer_duration)
+                                   params=params, record_prebuffer_duration=conf.record_prebuffer_duration)
 
     def _wait_for_capture_status(self, expected: CaptureProcessStatus, timeout: int):
         perf_timeout = time.perf_counter() + timeout

@@ -866,6 +866,7 @@ class PreferencesContent(QWidget):
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def value_changed(value):
             analysis.external_doors_monitor.config.trigger_open_delay = value
+            analysis.external_doors_monitor.force_refresh()
         spinbox.valueChanged.connect(value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1

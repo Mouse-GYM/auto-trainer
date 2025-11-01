@@ -191,6 +191,14 @@ class LogQueueListenerProc(Process):
         #
         console_handler = self._console_handler = make_console_handler(cfg)
 
+        # NB: start the listener as soon as possible
+        listener = self._listener = WithThreadIdQueueListener(
+            self._queue,
+            console_handler,
+            respect_handler_level=True,  # False,  # True,
+        )
+        listener.start()
+
         base_logger = get_verbose_logger(cfg.base_logger_name)
         base_logger.addHandler(console_handler)
 
@@ -198,12 +206,8 @@ class LogQueueListenerProc(Process):
         base_logger.info("Starting log queue listener. config=%s", self._log_config)
         base_logger.setLevel(cfg.root_level)
 
-        listener = self._listener = WithThreadIdQueueListener(
-            self._queue,
-            console_handler,
-            respect_handler_level=True,  # False,  # True,
-        )
-        listener.start()
+        # NB: must be installed AFTER the listener is started
+        install_log_exception_hook()
 
         command_q = self._command_queue
         while True:
@@ -225,6 +229,19 @@ class LogQueueListenerProc(Process):
                 logger.error("Failed executing cmd %r: %s", cmd, err)
         # end while True
         listener.stop()
+
+
+def main_exception_hook(exc_type, exc_value, exc_traceback):
+    logger.exception("Fatal unhandled main-thread exception: %s", exc_value)
+
+
+def thread_exception_hook(arg):
+    logger.exception("Fatal unhandled thread exception: %s", arg.exc_value)
+
+
+def install_log_exception_hook():
+    sys.excepthook = main_exception_hook
+    threading.excepthook = thread_exception_hook
 
 
 def get_root_handler():
@@ -477,6 +494,8 @@ def setup_logging(
     #             top_logger.level, top_logger.propagate, top_logger.handlers)
 
     _already_setup = True
+
+    install_log_exception_hook()
 
     return desired_logger
 
