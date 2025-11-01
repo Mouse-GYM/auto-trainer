@@ -18,7 +18,7 @@ import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
     InferenceConfiguration, Offset3DTuple, ApiEventKind
-from autotrainer.core.logging import get_verbose_logger, setup_logging, make_log_dict_config
+from autotrainer.core.logging import get_verbose_logger, setup_logging, make_log_dict_config, install_log_exception_hook
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
     InferenceProtocol, IntersessionBlock, IntersessionDetection
 from autotrainer.core.message import FrameIndexCategory
@@ -48,6 +48,16 @@ def check_frame_count(file_path: Path):
         return None, None
     logger.verbose("Opened %s: tot_frames=%s size=%s", file_path.name, count, file_path.stat().st_size)
     return capture, count
+
+
+def _pool_init(log_dict_cfg):
+    """For process pool below"""
+    if log_dict_cfg is None:
+        setup_logging()
+    else:
+        logging.config.dictConfig(log_dict_cfg)
+        install_log_exception_hook()
+    logger.info("Initialized pool worker")
 
 
 class InferenceModel(InferenceProtocol, ProjectDependentProtol):
@@ -102,6 +112,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 for hand_part in AllHandsParts
             },
         }
+        self._process_pool: Optional[multiprocessing.Pool] = None
 
     @property
     def project(self) -> ProjectInfo:
@@ -245,6 +256,14 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 self._offline_queue.put_frame_index_category(empty, FrameIndexCategory.SWITCH_TO_ONLINE)
 
     def start(self, live_queue: FixedArrayMultiQueue) -> bool:
+
+        self._process_pool = multiprocessing.Pool(
+            processes=1,  # we only need 1 atm
+            initializer=_pool_init,
+            initargs=(make_log_dict_config(),),
+            maxtasksperchild = int(os.getenv("INFERENCE_PROCESS_POOL_MAX_TASKS_PER_CHILD", 4096)),
+        )
+
         if self._msg_thread is None:
             self._msg_thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue", daemon=True)
             self._msg_thread.start()
@@ -320,6 +339,16 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             clear_queue(self._data_queue)
             clear_queue(self._msg_queue)
             clear_queue(self._inference_cmd_queue)
+            clear_queue(self._data_monitor_cmd_queue)
+
+        pool = self._process_pool
+        if pool is not None:
+            logger.verbose("Terminating process pool %s", pool)
+            pool.close()
+            pool.terminate()
+            pool.join()
+            logger.verbose("process pool joined and terminated %s", pool)
+            self._process_pool = None
 
     def terminate(self):
         logger.debug("terminating..")
@@ -339,7 +368,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                     if data_proc.exitcode is None:
                         data_proc.kill()
                         data_proc.join(5)
-            logger.verbose("joined %s", data_proc)
+            logger.verbose("joined %s ; exit_code=%s", data_proc, data_proc.exitcode)
 
         msg_thread = self._msg_thread
         msg_queue = self._msg_queue
@@ -704,31 +733,19 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         project.session = detection_config.session_index
         project.when = detection_config.session_when
 
-        log_dict_config = make_log_dict_config()
-        if log_dict_config is not None:
-            pool_initfunc = logging.config.dictConfig
-            pool_initargs = (log_dict_config,)
+        try:
+            async_res = self._process_pool.apply_async(
+                intersession_process,
+                args=(project,),
+                kwds=dict(calib_dir=self._calib_dir),
+            )
+            result = async_res.get()
+        except Exception as err:
+            logger.exception("Error processing intersession: %s", err)
+            processed_ok = False
+            result = None
         else:
-            pool_initfunc = setup_logging
-            pool_initargs = ()
-
-        # TODO: spawn once a pool, and make reuses of it, with same children (but with max nbr of calls)
-        with multiprocessing.Pool(
-            processes=1,
-            initializer=pool_initfunc,
-            initargs=pool_initargs,
-        ) as pool:
-            try:
-                async_res = pool.apply_async(intersession_process,
-                                             args=(project,),
-                                             kwds=dict(calib_dir=self._calib_dir),
-                                             )
-                result = async_res.get()
-            except Exception as err:
-                logger.exception("Error processing intersession: %s", err)
-                processed_ok = False
-            else:
-                processed_ok = True
+            processed_ok = True
 
         intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
         # NB: triggering/calling the "complete" of the detection BEFORE trigger the detection_result_ready below,

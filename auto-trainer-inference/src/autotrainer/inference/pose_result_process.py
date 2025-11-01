@@ -19,7 +19,7 @@ import pandas
 from autotrainer.core import ProjectInfo
 from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
-from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging
+from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook
 
 from autotrainer.inference import InferenceMode, PoseAlgorithm
 from .analysis.intersession_inference import intersession_inference
@@ -129,6 +129,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             setup_logging()
         else:
             logging.config.dictConfig(log_dict_config)
+            install_log_exception_hook()
+        #
         cmd_thread = threading.Thread(target=self._monitor_cmd_queue, daemon=True)
         cmd_thread.start()
         logger.info("Running monitor_data_queue")
@@ -136,12 +138,13 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             self._monitor_data_queue(project)
         except BaseException as err:
             logger.exception("Fatal error: %s", err)
+            self._cmd_queue.put(None)  # ensure monitor cmd thread will exit too
         self._is_running = False
-        cmd_thread.join(5)
+        cmd_thread.join(3)
         logger.debug("Exiting")
 
     def _monitor_cmd_queue(self):
-        while True:
+        while self._is_running:
             raw = self._cmd_queue.get()
             if raw is None:
                 self._is_running = False
