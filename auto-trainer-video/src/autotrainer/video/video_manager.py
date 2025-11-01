@@ -1,6 +1,6 @@
 import sys
 from enum import Enum
-from typing import Optional
+from typing import Optional, Dict
 from urllib.parse import urlparse
 
 import cv2
@@ -70,18 +70,14 @@ class VideoManager:
             return None
 
     @classmethod
-    def parse_params(cls, camera_url: str) -> dict:
+    def parse_params(cls, camera_url: str) -> Dict[str, str]:
         parameters = dict()
-
         parsed = urlparse(camera_url)
-
         params = parsed.query.split("&")
-
         for param in params:
             values = param.split("=")
             if len(values) == 2:
                 parameters[values[0].lower()] = values[1]
-
         return parameters
 
     @classmethod
