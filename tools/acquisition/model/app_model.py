@@ -474,7 +474,8 @@ class AppModel(ObservableObject):
         return True
 
     def on_capture_stop(self):
-        # logger.verbose("AppModel.on_capture_stop")
+        logger.debug("AppModel.on_capture_stop")
+
         analysis = self._analysis
         analysis.emergency_alarm_monitor.stop(reason="capture-stop")
         analysis.global_animal_presence_monitor.stop(reason="capture-stop")
@@ -571,9 +572,10 @@ class AppModel(ObservableObject):
 
     def save_configuration(self):
         loc = self._preferences.configuration_location
-        logger.info("Saving configuration to %s", loc)
-        conf = self._create_configuration()
-        return conf.save_default(loc)
+        if self._loaded_configuration is not None:
+            logger.info("Saving configuration to %s", loc)
+            conf = self._create_configuration()
+            return conf.save_default(loc)
 
     def on_activated(self):
         pass
@@ -608,6 +610,9 @@ class AppModel(ObservableObject):
         if self._handle_proc_msg_thread.is_alive():
             logger.warning("Handle process messages thread still alive ; closing queue")
         self._multiproc_msg_queue.close()
+
+        self._mp_manager.shutdown()
+        self._mp_manager.join()
 
         self.save_configuration()
 

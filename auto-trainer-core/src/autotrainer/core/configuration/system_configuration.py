@@ -84,6 +84,7 @@ class SystemConfiguration:
             logger.notice("Detected config version change/mismatch, saving old config to %s,"
                           " and replacing with new after.", new_p)
             shutil.copy2(file_path, new_p)
+            configuration.version = SystemConfiguration.version
             # and save new one over previous:
             configuration.save_file(file_path.with_suffix(""), as_yaml=True)
 
@@ -198,9 +199,13 @@ SystemConfigurationDumper.add_representer(SystemConfiguration, system_configurat
 
 system_configuration_constructor = make_decamelize_constructor(SystemConfiguration)
 
-SystemConfigurationLoader.add_constructor("!SystemConfiguration", system_configuration_constructor)
-SystemConfigurationLoader.add_constructor("!CameraConfiguration", camera_configuration_constructor)
-SystemConfigurationLoader.add_constructor("!HardwareConfiguration", hardware_configuration_constructor)
-SystemConfigurationLoader.add_constructor("!InferenceConfiguration", inference_configuration_constructor)
-SystemConfigurationLoader.add_constructor("!PersistenceConfiguration", persistence_configuration_constructor)
-add_behavior_configuration_constructors(SystemConfigurationLoader)
+for cls in SystemConfigurationLoader, :
+    # SystemConfigurationSafeLoader:
+    # no need also add on SystemConfigurationSafeLoader given it subclass SystemConfigurationLoader
+
+    cls.add_constructor("!SystemConfiguration", system_configuration_constructor)
+    cls.add_constructor("!CameraConfiguration", camera_configuration_constructor)
+    cls.add_constructor("!HardwareConfiguration", hardware_configuration_constructor)
+    cls.add_constructor("!InferenceConfiguration", inference_configuration_constructor)
+    cls.add_constructor("!PersistenceConfiguration", persistence_configuration_constructor)
+    add_behavior_configuration_constructors(cls)

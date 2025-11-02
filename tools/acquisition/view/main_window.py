@@ -51,6 +51,11 @@ class MainWindow(QMainWindow):
         self._update_log_level(self._preferences.log_level)
 
         app_model = self._app_model = AppModel(self._preferences, app_version)
+        try:
+            app_model.load_configuration(configuration)
+        except Exception as err:
+            app_model.on_close()
+            raise RuntimeError(f"Could not load config: {err}") from err
 
         self._title = f"Auto Trainer - Acquisition v{app_version}"
 
@@ -76,7 +81,6 @@ class MainWindow(QMainWindow):
         app_model.inference.property_changed += self._inference_property_changed
         user_preferences.property_changed += self._preferences_property_changed
         #
-        app_model.load_configuration(configuration)
         self._reload_animals(self._app_model.animals)
         #
 

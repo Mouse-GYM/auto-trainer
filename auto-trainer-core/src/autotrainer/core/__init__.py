@@ -212,15 +212,17 @@ def make_decamelize_constructor(cls: Type[ConfigItemCls]):
         if loader.safe_load:
             names = [f.name for f in dataclasses.fields(cls)]
             before_count = len(content)
+            before_s = set(content)
             content = {
                 k: v
                 for k, v in content.items()
                 if k in names
             }
             filtered_count = before_count - len(content)
+            after_s = set(content)
             if filtered_count != 0:
-                logger.verbose("%s: safe load filtered %s unknown properties/attributes",
-                               cls.__qualname__, filtered_count)
+                logger.verbose("%s: safe load filtered %s unknown properties/attributes: %s",
+                               cls.__qualname__, filtered_count, sorted(list(before_s - after_s)))
         return cls(**content)
 
     return constructor

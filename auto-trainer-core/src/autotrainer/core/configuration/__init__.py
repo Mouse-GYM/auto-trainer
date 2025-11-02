@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import yaml
 
+
+from autotrainer.core.logging import get_verbose_logger
+
+logger = get_verbose_logger(__name__)
+
+
 def generic_constructor(loader, tag, node):
     cls_name = node.__class__.__name__
     if cls_name == "SequenceNode":
@@ -26,8 +32,24 @@ class SystemConfigurationLoader(yaml.SafeLoader):
 
 
 class SystemConfigurationSafeLoader(SystemConfigurationLoader):
+
     safe_load = True
 
+    def ignore_unknown(self, suffix, node):
+        logger.warning("Skipping/ignoring tag/section %s", suffix)
+        return None
+
+
+def _ignore_unknown(loader, suffix, node):
+    return loader.ignore_unknown(suffix, node)
+
+
+# allow to ignore unknown tags:
+SystemConfigurationSafeLoader.add_multi_constructor('', _ignore_unknown)
+SystemConfigurationSafeLoader.add_multi_constructor('!', _ignore_unknown)
+
+
+#
 
 class SystemConfigurationDumper(yaml.SafeDumper):
     """Dedicated yaml dumper for SystemConfiguration"""

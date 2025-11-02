@@ -53,5 +53,8 @@ if __name__ == '__main__':
 
     try:
         sys.exit(main())
+    except Exception as err:
+        logger.exception("Fatal error: %s", err)
+        sys.exit(1)
     finally:
         stop_multiproc_logging()
