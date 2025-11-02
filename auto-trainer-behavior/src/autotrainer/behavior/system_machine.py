@@ -92,6 +92,7 @@ class SystemMachine(StateMachine):
         algo.session_ending += self._session_ended
         algo.property_changed += self._algorithm_property_changed
         algo.relay_transitions(self)
+        # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
         algo.shift_xyz_handler.set_handle_processed_shift_xyz(self._handle_processed_shift_xyz)
 
         self._tunnel_device = tunnel_device
