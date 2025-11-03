@@ -602,8 +602,8 @@ class AppModel(ObservableObject):
         EventManager.default().close()
 
         self.hardware.disconnect()
+
         self._system_message_handler.request_terminate()
-        # should we self._message_handler.wait_terminated() ?
         self._system_message_handler.wait_terminated()
 
         logger.debug("Putting None to process messages thread")
@@ -615,8 +615,10 @@ class AppModel(ObservableObject):
             logger.warning("Handle process messages thread still alive ; closing queue")
         self._multiproc_msg_queue.close()
 
-        self._mp_manager.shutdown()
-        self._mp_manager.join()
+        mp_mgr = self._mp_manager
+        logger.debug("shutting down multiprocess manager %s", mp_mgr)
+        mp_mgr.shutdown()
+        mp_mgr.join()
 
         self.save_configuration()
 
