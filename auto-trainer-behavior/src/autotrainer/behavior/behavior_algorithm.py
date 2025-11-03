@@ -508,10 +508,6 @@ class BehaviorAlgorithm(ObservableObject):
     def top_camera_presence_detection(self) -> PresenceDetectionAttrs:
         return self._topcam_presence
 
-    @top_camera_presence_detection.setter
-    def top_camera_presence_detection(self, value):
-        self._topcam_presence = value
-
     @property
     def system_state(self) -> SystemState:
         return self._system_state
