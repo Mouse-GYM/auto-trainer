@@ -149,16 +149,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         if not algo.algo_paused:
             return
         if self._source_algo_paused == "user-button" and source != "user-button":
-            logger.verbose("Refusing resume from emergency given was set by user ; resume source=%s", source)
+            logger.notice("Refusing resume from emergency given was set by user ; resume source=%s", source)
             return
         algo.algo_paused = False
-        analysis = self._analysis
-        analysis.restart()
-        # reason = f"end-emergency-{source}"
-        # analysis.emergency_alarm_monitor.restart(reason=reason)
-        # analysis.external_doors_monitor.restart(reason=reason)
-        # # also restarting conveniently global animal presence monitor/alarm :
-        # analysis.global_animal_presence_monitor.restart(reason=reason)
+        # restart full analysis so that monitors/detectors counters/context are reset, as if app was just started:
+        self._analysis.restart()
         EventManager.default().post_event_content(ApiEventKind.emergencyResume, source)
         self.emergency_resumed(source)
 

@@ -11,7 +11,7 @@ logger = get_verbose_logger(__name__)
 
 
 class BaseDetector(ObservableObject):
-    
+
     def __init__(self):
         super().__init__()
         self._enabled = False

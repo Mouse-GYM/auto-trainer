@@ -561,7 +561,6 @@ class MainWindow(QMainWindow):
             self._preferences.selected_animal if self._app_model.selected_animal is None
             else self._app_model.selected_animal.name
         )
-        logger.debug("find_animal_name=%s", find_animal_name)
 
         # prevent on_animal_changed event:
         self._animal_dropdown.blockSignals(True)
