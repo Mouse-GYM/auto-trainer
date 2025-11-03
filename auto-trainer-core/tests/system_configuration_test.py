@@ -250,7 +250,7 @@ persistence: !PersistenceConfiguration
     assert isinstance(cfg, SystemConfiguration)
     expected_result = copy.deepcopy(current_default_config)
     # apart the version and persistence.output_location, these are all the defaults values
-    expected_result["version"] = SystemConfiguration.version
+    expected_result["version"] = SystemConfiguration.version + 1
     expected_result["persistence"]["output_location"] = "/output_location_path"
     assert dataclasses.asdict(cfg) == expected_result
 
