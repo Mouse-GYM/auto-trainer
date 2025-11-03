@@ -21,6 +21,7 @@ class BaseDetector(ObservableObject):
         self._disengaged_perf_c = math.nan
         self._cur_timer = no_op_timer
         self._lock = threading.RLock()
+        self._logger = get_verbose_logger(self.__class__.__module__)
 
     IS_ENGAGED = "is_engaged"
 
@@ -38,8 +39,8 @@ class BaseDetector(ObservableObject):
             self._engaged_perf_c = perf_now
         else:
             self._disengaged_perf_c = perf_now
-        logger.notice("%s: is_engaged -> %s (age previous = %.1f)",
-                      self.__class__.__name__, value, perf_now - (self._disengaged_perf_c if value else self._engaged_perf_c))
+        self._logger.notice("is_engaged -> %s (age previous = %.1f)",
+                            value, perf_now - (self._disengaged_perf_c if value else self._engaged_perf_c))
         self._on_property_changed(self.IS_ENGAGED, value, prev)
 
     def _make_new_timer(self, delay: float):
@@ -56,8 +57,10 @@ class BaseDetector(ObservableObject):
                 return
             next_delay = self._check_state()
             if next_delay is not None:
+                # "recurrent/timed" detector
                 self._make_new_timer(next_delay)
             else:
+                # detector that will resume by explicit refresh
                 self._cur_timer.cancel()
 
     def _start(self):
@@ -90,10 +93,7 @@ class BaseDetector(ObservableObject):
         self.start()
 
     def refresh_state(self):
-        """Ensure check_state is called "~now" (i.e very shortly)
-        This monitor can effectively uses very long timer. which must be cancelled,
-         in order for a new one to be created.
-        """
+        """Ensure check_state is called "~now" (i.e very shortly)"""
         with self._lock:
             if not self._enabled:
                 return
