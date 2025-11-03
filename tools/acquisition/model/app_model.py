@@ -543,8 +543,6 @@ class AppModel(ObservableObject):
         else:
             logger.info("using configuration from %r", file_path.as_posix())
 
-        self._loaded_configuration = configuration
-
         if (camera := configuration.get_camera(CameraId.Left)) is not None:
             self._left_camera.load_configuration(camera)
         if (camera := configuration.get_camera(CameraId.Right)) is not None:
@@ -568,14 +566,20 @@ class AppModel(ObservableObject):
 
         self.output_location = configuration.persistence.output_location
 
+        # only at the end:
+        self._loaded_configuration = configuration
+
         return True
 
     def save_configuration(self):
+        if self._loaded_configuration is None:
+            # do not save if loaded_config is still None, which signify the load configuration failed,
+            # so we won't overwrite the (currently) bad user config file with one having all defaults.
+            return
         loc = self._preferences.configuration_location
-        if self._loaded_configuration is not None:
-            logger.info("Saving configuration to %s", loc)
-            conf = self._create_configuration()
-            return conf.save_default(loc)
+        logger.info("Saving configuration to %s", loc)
+        conf = self._create_configuration()
+        conf.save_default(loc)
 
     def on_activated(self):
         pass

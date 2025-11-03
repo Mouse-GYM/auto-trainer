@@ -7,18 +7,6 @@ import faulthandler
 from multiprocessing import set_start_method
 
 
-def update_log_level(value: int):
-    get_console_handler().setLevel(value)
-    # logging.getLogger("inference_algorithms").setLevel(value)
-    # logging.getLogger("tools").setLevel(value)
-    # logging.getLogger("autotrainer").setLevel(value)
-    #
-    # if value == logging.DEBUG:
-    #     logging.getLogger("transitions").setLevel(logging.INFO)
-    # else:
-    #     logging.getLogger("transitions").setLevel(logging.WARNING)
-
-
 def main():
     from tools.acquisition.model.user_preferences import UserPreferences
     from tools.acquisition.model.app_model import AppModel
@@ -39,17 +27,22 @@ def main():
 
     preferences = UserPreferences()
 
-    update_log_level(preferences.log_level)
+    get_console_handler().setLevel(preferences.log_level)
 
     app_view_model = AppModel(preferences)
 
-    app_view_model.load_configuration(configuration)
+    try:
+        app_view_model.load_configuration(configuration)
+    except Exception as err:
+        logger.exception("Could not load config: %s", err)
+        app_view_model.on_close()
+        return 1
 
     app_view_model.on_activated()
 
     if not app_view_model.on_capture_start():
         logger.error("failed to start capture")
-        return -1
+        return 1
 
     exit_rc = 1
     try:
@@ -62,6 +55,7 @@ def main():
         logger.exception("Fatal error: %s", err)
 
     app_view_model.on_capture_stop()
+    app_view_model.on_close()
 
     return exit_rc
 
@@ -70,8 +64,15 @@ if __name__ == '__main__':
     faulthandler.enable()
     set_start_method("spawn")
 
-    from autotrainer.core.logging import setup_logging, get_console_handler
+    # must be AFTER set_start_method below:
+    from autotrainer.core.logging import setup_logging, get_console_handler, stop_multiproc_logging
 
-    setup_logging(logger_level=logging.DEBUG, time_precision=6, multiprocess_enabled=True)
+    logger = setup_logging(logger_level=logging.DEBUG, time_precision=6, multiprocess_enabled=True)
 
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as err:
+        logger.exception("Fatal error: %s", err)
+        sys.exit(1)
+    finally:
+        stop_multiproc_logging()
