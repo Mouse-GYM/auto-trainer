@@ -1018,6 +1018,8 @@ class BehaviorAlgorithm(ObservableObject):
     def mouse_seen(self, seen: bool = True):
         if self._is_in_session and seen:
             prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
+            if not prev_seen:
+                logger.verbose("Session mouse seen")
             self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, prev_seen)
             if not prev_seen:
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)

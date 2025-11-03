@@ -474,6 +474,9 @@ class SystemMachine(StateMachine):
             response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
         #
         algo = self._algorithm
+        if algo.is_in_session and not algo.session_mouse_seen and response.mouse_seen:
+            logger.verbose("session first mouse_seen: parts=%s locations=%s", response.parts_flags, response.locations)
+        #
         algo.pellet_seen(response.pellet_seen)
         algo.mouse_seen(response.mouse_seen)
         algo.triangle_seen(response.triangle_seen)
