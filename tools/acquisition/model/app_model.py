@@ -67,8 +67,10 @@ class AppModel(ObservableObject):
         super().__init__(("on_error",))
 
         # using a shared process manager,
-        # this allows to put shared values, created via the manager, to any multiprocesses (shared-) queue.
+        # this allows to put shared values, created via the manager, to any multiprocess shared queue, notably.
         self._mp_manager = multiprocessing.get_context("spawn").Manager()
+        # otherwise (new) shared values can only be inherited from newly spawned sub-process(es) and not from already
+        # existing sub-process(es).
 
         self._preferences = preferences
         self._loaded_configuration: Optional[SystemConfiguration] = None
