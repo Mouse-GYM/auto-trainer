@@ -193,7 +193,8 @@ class ShiftXYZHandler(ObservableObject):
     @last_shift_xyz.setter
     def last_shift_xyz(self, value):
         prev, self._last_shift_xyz = self._last_shift_xyz, value
-        self._on_property_changed(self.LAST_SHIFT_XYZ, value, prev)
+        # use property_changed, which always call the property changed callbacks, even if same value than prev:
+        self.property_changed(self.LAST_SHIFT_XYZ, value, prev)
 
     #
 
@@ -206,7 +207,8 @@ class ShiftXYZHandler(ObservableObject):
     @last_processed_shift_xyz.setter
     def last_processed_shift_xyz(self, value):
         prev, self._last_processed_shift_xyz = self.last_processed_shift_xyz, value
-        self._on_property_changed(self.LAST_PROCESSED_SHIFT_XYZ, value, prev)
+        # use property_changed, which always call the property changed callbacks, even if same value than prev:
+        self.property_changed(self.LAST_PROCESSED_SHIFT_XYZ, value, prev)
 
     #
 
