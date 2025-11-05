@@ -1,5 +1,6 @@
 import logging
 import os
+import signal
 import sys
 
 import verboselogs
@@ -129,6 +130,13 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
     try_register_api_event_plugin()
 
     window = MainWindow(app, preferences, configuration, "2.0.1", is_dev)
+
+    # conveniently allow close/exit app with SIGINT (ctrl-c) :
+    def handle_sigint(signum, frame):
+        logger.notice("Got signal %s ; closing window..", signum)
+        window.close()
+
+    signal.signal(signal.SIGINT, handle_sigint)
 
     window.show()
 

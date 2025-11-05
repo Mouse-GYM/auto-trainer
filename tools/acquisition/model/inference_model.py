@@ -52,6 +52,8 @@ def check_frame_count(file_path: Path):
 
 def _pool_init(log_dict_cfg):
     """For process pool below"""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     if log_dict_cfg is None:
         setup_logging()
     else:

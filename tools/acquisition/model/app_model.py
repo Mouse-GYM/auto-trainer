@@ -474,7 +474,8 @@ class AppModel(ObservableObject):
         return True
 
     def on_capture_stop(self):
-        # logger.verbose("AppModel.on_capture_stop")
+        logger.debug("AppModel.on_capture_stop")
+
         analysis = self._analysis
         analysis.emergency_alarm_monitor.stop(reason="capture-stop")
         analysis.global_animal_presence_monitor.stop(reason="capture-stop")
@@ -542,8 +543,6 @@ class AppModel(ObservableObject):
         else:
             logger.info("using configuration from %r", file_path.as_posix())
 
-        self._loaded_configuration = configuration
-
         if (camera := configuration.get_camera(CameraId.Left)) is not None:
             self._left_camera.load_configuration(camera)
         if (camera := configuration.get_camera(CameraId.Right)) is not None:
@@ -567,13 +566,20 @@ class AppModel(ObservableObject):
 
         self.output_location = configuration.persistence.output_location
 
+        # only at the end:
+        self._loaded_configuration = configuration
+
         return True
 
     def save_configuration(self):
+        if self._loaded_configuration is None:
+            # do not save if loaded_config is still None, which signify the load configuration failed,
+            # so we won't overwrite the (currently) bad user config file with one having all defaults.
+            return
         loc = self._preferences.configuration_location
         logger.info("Saving configuration to %s", loc)
         conf = self._create_configuration()
-        return conf.save_default(loc)
+        conf.save_default(loc)
 
     def on_activated(self):
         pass
@@ -596,8 +602,8 @@ class AppModel(ObservableObject):
         EventManager.default().close()
 
         self.hardware.disconnect()
+
         self._system_message_handler.request_terminate()
-        # should we self._message_handler.wait_terminated() ?
         self._system_message_handler.wait_terminated()
 
         logger.debug("Putting None to process messages thread")
@@ -608,6 +614,11 @@ class AppModel(ObservableObject):
         if self._handle_proc_msg_thread.is_alive():
             logger.warning("Handle process messages thread still alive ; closing queue")
         self._multiproc_msg_queue.close()
+
+        mp_mgr = self._mp_manager
+        logger.debug("shutting down multiprocess manager %s", mp_mgr)
+        mp_mgr.shutdown()
+        mp_mgr.join()
 
         self.save_configuration()
 

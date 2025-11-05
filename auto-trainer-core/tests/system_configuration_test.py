@@ -10,6 +10,7 @@ from autotrainer.core import SystemConfiguration, CameraId, HardwareConfiguratio
     PersistenceConfiguration, CameraConfiguration
 from autotrainer.core.analysis import LoadCellConfiguration, HeadbarPressureConfiguration, LoadCellAutoTareConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
+from autotrainer.core.configuration import SystemConfigurationSafeLoader
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
 from autotrainer.core.configuration.external_doors_monitor_configuration import ExternalDoorsMonitorConfig
@@ -251,4 +252,22 @@ persistence: !PersistenceConfiguration
     # apart the version and persistence.output_location, these are all the defaults values
     expected_result["version"] = SystemConfiguration.version + 1
     expected_result["persistence"]["output_location"] = "/output_location_path"
+    assert dataclasses.asdict(cfg) == expected_result
+
+
+def test_safe_loader_ignore_unknown_tags():
+    config_text = f"""
+    !SystemConfiguration
+    version: {SystemConfiguration.version + 1}
+    unknown_attribute: 42
+    bar: !unknown_tag
+    baz:
+    - !second_unknown_tag
+      param1: anything
+    """
+    cfg = SystemConfiguration.load_yaml(io.StringIO(config_text))
+    assert isinstance(cfg, SystemConfiguration)
+    expected_result = copy.deepcopy(current_default_config)
+    # apart the version, these are all the defaults values
+    expected_result["version"] = SystemConfiguration.version + 1
     assert dataclasses.asdict(cfg) == expected_result
