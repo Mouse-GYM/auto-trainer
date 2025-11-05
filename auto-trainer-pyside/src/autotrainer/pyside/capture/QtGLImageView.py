@@ -1,3 +1,4 @@
+import os
 from typing import Dict, Optional
 
 from PySide6.QtCore import Qt
@@ -46,8 +47,8 @@ class QGLImageView(QWidget):
 
         self._points: Dict[SceneElement, QGraphicsEllipseItem] = {}
 
-        def add_managed_point(color, elem: SceneElement):
-            point = self._points[elem] = QGraphicsEllipseItem(0, 0, 5, 5)
+        def add_managed_point(color, elem: SceneElement, *, size_w: float=5, size_h: float=5):
+            point = self._points[elem] = QGraphicsEllipseItem(0, 0, size_w, size_h)
             pen = QPen(color)
             pen.setWidth(1)
             point.setPen(pen)
@@ -62,6 +63,8 @@ class QGLImageView(QWidget):
         add_managed_point(Qt.GlobalColor.green, SceneElement.Triangle)
         add_managed_point(Qt.GlobalColor.white, SceneElement.L_Hand)
         add_managed_point(Qt.GlobalColor.yellow, SceneElement.R_Hand)
+        if os.getenv("AUTOTRAINER_SHOW_NOSE"):
+            add_managed_point(Qt.GlobalColor.cyan, SceneElement.Nose, size_w=1.75, size_h=1.75)
         # was previously used until we had L/R_Hand :
         # add_managed_point(Qt.GlobalColor.white, SceneElement.LH_grab)
         # add_managed_point(Qt.GlobalColor.yellow, SceneElement.RH_grab)
