@@ -480,8 +480,12 @@ class SystemMachine(StateMachine):
             response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
         #
         algo = self._algorithm
-        if algo.is_in_session and not algo.session_mouse_seen and response.mouse_seen:
-            logger.verbose("session first mouse_seen: parts=%s locations=%s", response.parts_flags, response.locations)
+        v = getattr(self, "_prev_pose_changed", 0)
+        if time.perf_counter() > v + 1:
+        # if not algo.session_mouse_seen and response.mouse_seen:
+            logger.verbose("session first mouse_seen: is_in_session=%s parts=%s locations=%s 3d=%s",
+                           algo.is_in_session, response.parts_flags, response.locations, response.locations_3d)
+            self._prev_pose_changed = time.perf_counter()
         #
         algo.pellet_seen(response.pellet_seen)
         algo.mouse_seen(response.mouse_seen)
@@ -490,7 +494,6 @@ class SystemMachine(StateMachine):
             return
         #
         self._handle_pellet_hands_offsets(response)
-        #
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     @BehaviorAlgorithm.relay_func

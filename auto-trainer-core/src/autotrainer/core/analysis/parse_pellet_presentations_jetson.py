@@ -23,8 +23,12 @@ import numpy as np
 import pandas as pd
 from scipy.signal import savgol_coeffs, filtfilt
 
-from autotrainer.core.analysis import prepare_jetson_data as prep_jet
 import autotrainer.core.analysis._segment_reaches_f1 as segment_reaches_f11_module
+from autotrainer.core import get_verbose_logger
+from autotrainer.core.analysis import prepare_jetson_data as prep_jet
+
+
+logger = get_verbose_logger(__name__)
 
 
 # print(segment_reaches_f11_module)
@@ -47,11 +51,11 @@ def get_ln():
 
 
 def segment_reaches(
+    *,
     session,
     center_method,
-    available_XYZ,
+    available_shift_xyz,
     df_3d,
-    *,
     overwrite: bool = True,
     debug: int = 0,
 ):
@@ -97,7 +101,7 @@ def segment_reaches(
     )
 
     pellets_consumed, pellets_presented, successful_reaches, shift_xyz, reach_events = segment_reaches_f2(
-        available_XYZ=available_XYZ,
+        available_shift_xyz=available_shift_xyz,
         df_3d=df_3d,
         coeffs=coeffs,
         vid_dir=vid_dir,
@@ -136,8 +140,12 @@ def segment_reaches_f1(
     # bodyparts = df_3d.columns.get_level_values('bodyparts').unique()
     bp4speed = ['R_Hand','L_Hand','Pellet']
     for bp in bp4speed:
-        dist_vec = np.sqrt(np.diff(df_3d[bp]['x']) ** 2 + np.diff(df_3d[bp]['y']) ** 2 +
-                        np.diff(df_3d[bp]['z']) ** 2)  # calculate distance
+        df_bp = df_3d[bp]
+        dist_vec = np.sqrt(
+              np.diff(df_bp['x']) ** 2
+            + np.diff(df_bp['y']) ** 2
+            + np.diff(df_bp['z']) ** 2
+        )  # calculate distance
         dist_vec = np.concatenate(([dist_vec[0]], dist_vec))  # adjust size
         speed_vec = dist_vec * (frame_rate / 1000)  # convert to speed in mm/ms
         
@@ -147,24 +155,31 @@ def segment_reaches_f1(
         df_3d.loc[:, (bp, 'speed')] = speed_vec_filt
 
     if center_method[0] > 0 and center_method[1] == 'Pellet':
-        pellet_home = [0,0,0]
+        pellet_home = [0, 0, 0]
     else:
+        # how many frames to use at start for getting pellet home pos:
+        n_frames_mean = 50   # todo
         pellet_home = []
-        for pos in ['x','y','z']:
-            filtered_values = df_3d['Pellet'].loc[df_3d['Pellet']['p'] == 1, pos]
-            pellet_home.append(filtered_values.median())
+        df_3d_pellet = df_3d["Pellet"]
+        for pos in ('x', 'y', 'z'):
+            # using n_frames_mean first frame where p == 1 :
+            ploc = df_3d_pellet.loc[df_3d_pellet['p'] == 1].loc[:n_frames_mean, pos].median()
+            pellet_home.append(ploc)
+
+    pellet_home = (pellet_home[0], pellet_home[1], pellet_home[2])
+    logger.verbose("segment_reaches: using pellet_home=%s", pellet_home)
 
     return segment_reaches_f11(
         df_3d=df_3d,
         frame_rate=frame_rate,
-        pellet_home=(pellet_home[0], pellet_home[1], pellet_home[2]),
+        pellet_home=pellet_home,
         debug=debug,
     )
 
 
 def segment_reaches_f2(
     *,
-    available_XYZ,
+    available_shift_xyz,
     df_3d: pd.DataFrame,
     coeffs,
     vid_dir,
@@ -213,7 +228,7 @@ def segment_reaches_f2(
                 # print(np.round((Z_dist_p[pellet_events[p]['placed']:end_search])))
                 # print(pellet_events[p]['placed'],end_search)
                 if np.nanmin(Z_dist_p[pellet_events[p]['placed']:end_search]) <= pellet_drop_dist:
-                    if debug == 2:
+                    if debug >= 2:
                         print(f'DROP: Z dist at {get_ln()}')
                     pellet_events[p]['outcome'] = 'dropped'
                 
@@ -259,7 +274,7 @@ def segment_reaches_f2(
         while frame < frm_ct - batch_frm:             # test if we reached the next pellet placement 
             if frmindex < len(frames_on_found)-1 and frame >= frames_on_found[frmindex+1]: 
                 if search_status == 1:
-                    if debug == 2:
+                    if debug >= 2:
                         if not pellet_detected:
                             print('No pellet detected')
                         else:
@@ -404,7 +419,7 @@ def segment_reaches_f2(
     with open(pellet_file_path, 'wb') as f:
         pickle.dump(pellet_events, f)
     
-    if debug == 1:
+    if debug >= 1:
         print(pellet_events)
 
     shift_x: float = 0
@@ -455,14 +470,14 @@ def segment_reaches_f2(
         elif z_off > -0.5:
             shift_z = 1
 
-    if shift_x < available_XYZ[0,0]: shift_x = 0
-    if shift_x > available_XYZ[0,1]: shift_x = 0
-    if shift_y < available_XYZ[1,0]: shift_y = 0
-    if shift_y > available_XYZ[1,1]: shift_y = 0
-    if shift_z < available_XYZ[2,0]: shift_z = 0
-    if shift_z > available_XYZ[2,1]: shift_z = 0
-    
-    if debug == 1:
+    if not (available_shift_xyz[0, 0] <= shift_x <= available_shift_xyz[0, 1]):
+        shift_x = 0
+    if not (available_shift_xyz[1, 0] <= shift_y <= available_shift_xyz[1, 1]):
+        shift_y = 0
+    if not (available_shift_xyz[2, 0] <= shift_y <= available_shift_xyz[2, 1]):
+        shift_z = 0
+
+    if debug >= 1:
         print(reach_events)
 
     pellets_presented = len(pellet_events) -1

@@ -17,9 +17,11 @@ def segment_reaches_f11(
     pellet_x_vals = pellet_xyz_p['x'].values
     pellet_y_vals = pellet_xyz_p['y'].values
     pellet_z_vals = pellet_xyz_p['z'].values
-    dist_p = np.sqrt((pellet_x_vals - pellet_home[0])**2+
-                         (pellet_y_vals - pellet_home[1])**2+
-                         (pellet_z_vals - pellet_home[2])**2)
+    dist_p = np.sqrt(
+          (pellet_x_vals - pellet_home[0]) ** 2
+        + (pellet_y_vals - pellet_home[1]) ** 2
+        + (pellet_z_vals - pellet_home[2]) ** 2
+    )
 
     triangle_xyz_p = df_3d['Triangle']
     # triangle_p = triangle_xyz_p['p']
@@ -148,7 +150,7 @@ def segment_reaches_f11(
                 else:
                     pellet_dict['method'] = 'other'
                     pellet_dict['outcome'] = 'dropped'
-                if debug == 1:
+                if debug >= 1:
                     print(f"Right hand : {dist_hvpp_R[frame_at_count_begin]} at {frame_at_count_begin}")
                     print(f"Left hand : {dist_hvpp_L[frame_at_count_begin]}")
                     print(f"Tongue : {dist_tvpp[frame_at_count_begin]}")

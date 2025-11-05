@@ -6,8 +6,11 @@ import numpy
 
 from autotrainer.core import ProjectInfo, video_write_ext
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.pose_elements import SceneElement
 
+# todo: prepare_jetson_data could or should probably be moved in here/inference, given only used here..
 from autotrainer.core.analysis.prepare_jetson_data import process_raw_data
+
 from autotrainer.core.analysis.parse_pellet_presentations_jetson import segment_reaches
 
 from . import IntersessionResponse
@@ -15,7 +18,8 @@ from . import IntersessionResponse
 
 logger = get_verbose_logger(__name__)
 
-available_XYZ = numpy.array([[-5, 5], [-5, 5], [-5, 5]])
+
+AvailableShiftXYZ = numpy.array([[-5, 5], [-5, 5], [-5, 5]])
 
 
 def intersession_process(
@@ -40,10 +44,14 @@ def intersession_process(
     calib_src_dir = calib_src_dir.as_posix()
     vid_tag = "." + video_write_ext
     dlc_seg = "_raw2D"
-    center_method = (1, "Pellet")
+    center_method = (1, SceneElement.Diamond)
     centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
     results_dict = segment_reaches(
-        location, center_method, available_XYZ, centered_df_3d,
+        session=location,
+        center_method=center_method,
+        available_shift_xyz=AvailableShiftXYZ,
+        df_3d=centered_df_3d,
+        debug=2,
     )
     logger.success("process intersession pose data complete %s", results_dict)
     return IntersessionResponse(
