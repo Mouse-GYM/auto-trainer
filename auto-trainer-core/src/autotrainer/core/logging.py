@@ -232,7 +232,8 @@ class LogQueueListenerProc(Process):
 
 
 def main_exception_hook(exc_type, exc_value, exc_traceback):
-    logger.exception("Fatal unhandled main-thread exception: %s", exc_value)
+    logger.exception("Fatal unhandled main-thread exception: %s",
+                     exc_value, exc_info=(exc_type, exc_value, exc_traceback))
 
 
 def thread_exception_hook(arg):
