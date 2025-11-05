@@ -426,14 +426,6 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(self.calib_diamond_triangle_action)
 
-        if self._is_dev:
-            toolbar.addSeparator()
-            toolbar.addAction(self.capture_trigger_action)
-            toolbar.addAction(self.force_detector_action)
-            toolbar.addAction(self.pellet_seen_action)
-            toolbar.addAction(self.mouse_seen_action)
-            toolbar.addAction(self.mouse_near_pellet_action)
-
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         toolbar.addWidget(spacer)
@@ -482,6 +474,18 @@ class MainWindow(QMainWindow):
         behavior.emergency_resumed += lambda src: update_emergency_ui(False, source=src)
 
         toolbar.addWidget(emergency_button)
+
+        if self._is_dev:
+            self.addToolBarBreak()
+            toolbar = QToolBar("Dev Toolbar")
+            self.addToolBar(toolbar)
+            toolbar.setFloatable(False)
+            toolbar.setMovable(False)
+            toolbar.addAction(self.capture_trigger_action)
+            toolbar.addAction(self.force_detector_action)
+            toolbar.addAction(self.pellet_seen_action)
+            toolbar.addAction(self.mouse_seen_action)
+            toolbar.addAction(self.mouse_near_pellet_action)
 
     def _configure_statusbar(self):
         self._status_label = QLabel("")
