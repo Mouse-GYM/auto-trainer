@@ -3,7 +3,7 @@ import dataclasses
 from typing import Tuple, Optional, Dict, List
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QVBoxLayout, QHBoxLayout
+from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QStackedLayout
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import PerfMonitor, SensorAnalysis, LoadCellMonitor, Offset3DTuple, SystemMessageHandler
@@ -94,17 +94,18 @@ def _make_graph_plot(graph: _GraphItem):
 
 
 class AnalysisContent(ContentWidget):
+
     diamond_triangle_offset_changed = Signal(str, name="diamond_triangle_offset_changed")
     star_triangle_offset_changed = Signal(str, name="star_triangle_offset_changed")
     measurement_graph_changed = Signal(str, name="measurement_graph_changed")
 
     def __init__(
-            self,
-            hardware_model: HardwareModel,
-            inference_model: InferenceModel,
-            analysis: SensorAnalysis,
-            msg_handler: SystemMessageHandler,
-            user_pref: UserPreferences,
+        self,
+        hardware_model: HardwareModel,
+        inference_model: InferenceModel,
+        analysis: SensorAnalysis,
+        msg_handler: SystemMessageHandler,
+        user_pref: UserPreferences,
     ):
         super().__init__()
 
@@ -114,6 +115,7 @@ class AnalysisContent(ContentWidget):
 
         # Header
         layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
 
         layout.addWidget(QLabel("D-T:"))
         self._triangle_diamond_offset = QLabel("n/a")
@@ -125,7 +127,7 @@ class AnalysisContent(ContentWidget):
         self.star_triangle_offset_changed.connect(self._star_triangle_offset.setText)
         layout.addWidget(self._star_triangle_offset)
 
-        layout.addStretch(1)
+        # layout.addStretch(1)
 
         self._load_cell_monitor_engaged = QtIndicator(text="Load Cell")
         layout.addWidget(self._load_cell_monitor_engaged)
@@ -158,9 +160,13 @@ class AnalysisContent(ContentWidget):
                 # logger.debug("set new graph: %s", measure_plot)
 
         # Footer
-        self._footer = QWidget(None)
+        self._footer = QWidget()
+        self._footer.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        self._footer.setContentsMargins(0, 0, 0, 0)
+
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
 
         layout.addWidget(QLabel("Load Cell Threshold (g):"))
         self._load_cell_engaged_threshold_line_edit = QLineEdit(None, None)
@@ -168,15 +174,22 @@ class AnalysisContent(ContentWidget):
         self._load_cell_engaged_threshold_line_edit.setText(str(self._analysis.load_cell_monitor.load_cell_engaged_threshold))
         layout.addWidget(self._load_cell_engaged_threshold_line_edit)
 
-        layout.addStretch(1)
-
         self._footer.setLayout(layout)
 
-        self._card_widget.footer.setContent(self._footer)
+        self._stack_layout = QStackedLayout()
+        self._stack_layout.addWidget(self._footer)
+
+        widget = QWidget()
+        widget.setLayout(self._stack_layout)
+
+        self._card_widget.footer.setContent(widget)
 
         # Final layout
         layout = QVBoxLayout()
         layout.addWidget(self._card_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
         self.setLayout(layout)
 
         self._perf_monitor = PerfMonitor(name="headFixContent", units="mps", report_window=30)

@@ -6,7 +6,7 @@ from typing import List, Optional, Dict
 import numpy
 from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QImage, QPainter
-from PySide6.QtWidgets import QWidget, QLabel, QComboBox, QHBoxLayout, QVBoxLayout, QStackedLayout
+from PySide6.QtWidgets import QWidget, QLabel, QComboBox, QHBoxLayout, QVBoxLayout, QStackedLayout, QSizePolicy
 
 from autotrainer.inference import PoseLocation
 from autotrainer.pyside.CardWidget import CardWidget
@@ -62,7 +62,10 @@ class QCaptureView(QWidget):
 
         # Content/Image
         widget = QWidget()
+        widget.setContentsMargins(0, 0, 0, 0)
         self._content_stack = QStackedLayout()
+        self._content_stack.setSpacing(0)
+        self._content_stack.setContentsMargins(0, 0, 0, 0)
         widget.setLayout(self._content_stack)
         self._card_widget.setContentWidget(widget)
 
@@ -87,13 +90,14 @@ class QCaptureView(QWidget):
         self._is_recording = QLabel("")
         self._is_recording.setStyleSheet("border: 1px solid gray; border-radius: 8; background-color: green;")
         self._is_recording.setFixedSize(16, 16)
+        self._is_recording.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._is_recording.setVisible(False)
 
         self._footer = QWidget()
-        self._footer.setMinimumHeight(32)
+        # self._footer.setMinimumHeight(32)
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self._status_label, stretch=1)
+        layout.addWidget(self._status_label)
         layout.addWidget(self._is_recording)
         self._footer.setLayout(layout)
 
@@ -101,6 +105,8 @@ class QCaptureView(QWidget):
 
         layout = QVBoxLayout()
         layout.addWidget(self._card_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         self.setLayout(layout)
 

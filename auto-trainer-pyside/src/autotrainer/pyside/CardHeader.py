@@ -12,6 +12,7 @@ class CardHeader(QWidget):
 
     def __init__(self, title: str = "", background_color: Optional[str] = None, title_color: Optional[str] = None):
         super().__init__()
+        self.setContentsMargins(0, 0, 0, 0)
 
         if background_color is None:
             background_color = CardHeader.DEFAULT_BACKGROUND_COLOR
@@ -26,7 +27,7 @@ class CardHeader(QWidget):
             "; padding: 8px; border-top-left-radius: 6px; border-top-right-radius: 6px}")
 
         self._layout = QHBoxLayout()
-        self._layout.setContentsMargins(6, 4, 4, 6)
+        self._layout.setContentsMargins(2, 4, 4, 2)
 
         self._title_label = QLabel(title)
         self._title_label.setStyleSheet(f"font-weight: bold; color: {title_color}")

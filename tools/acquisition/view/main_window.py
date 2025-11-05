@@ -1,19 +1,15 @@
-import enum
-import logging
-import threading
 import time
 from itertools import chain
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QCoreApplication, QEnum
-from PySide6.QtGui import QAction, QIcon, QKeySequence, QPixmap, QColor
+from PySide6.QtCore import Qt, QCoreApplication
+from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
-                               QSizePolicy, QWidget, QComboBox, QLineEdit, QDialog, QFileDialog, QPushButton)
+                               QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton)
 import qtawesome as qta
 
-from autotrainer.behavior import DiamondTriangleOffsetConfig, BehaviorAlgorithm
-from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.behavior import DiamondTriangleOffsetConfig, TrainingMode
 from autotrainer.core import EventManager, Offset3DTuple
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
@@ -38,13 +34,6 @@ DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is con
 
 #
 
-# todo: should be somewhere else surely
-class TrainingMode(str, enum.Enum):
-    MANUAL = "Manual"
-    MANUAL_AND_PROTOCOL = "Manual with Protocol"
-    AUTOMATIC = "Automatic"
-
-
 training_modes_2_style = {
     TrainingMode.MANUAL: "manual-style",
     TrainingMode.MANUAL_AND_PROTOCOL: "manual-protocol-style",
@@ -55,6 +44,7 @@ training_modes_2_style = {
 
 
 class MainWindow(QMainWindow):
+
     def __init__(self, app: QApplication, user_preferences: UserPreferences, configuration: str = None,
                  app_version: str = "", is_dev: bool = False):
         super(MainWindow, self).__init__(None)
@@ -432,6 +422,8 @@ class MainWindow(QMainWindow):
         analysis = behavior.analysis
 
         toolbar = QToolBar("Run Toolbar")
+        toolbar.setContentsMargins(0, 0, 0, 4)
+        toolbar.setStyleSheet("QToolBar{spacing: 4px;}")
         toolbar.setFloatable(False)
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
@@ -451,7 +443,7 @@ class MainWindow(QMainWindow):
         self._notes.setMinimumWidth(300)
         self._notes.setText(self._app_model.notes)
         self._notes.textChanged.connect(self.notes_changed)
-        self._notes.setContentsMargins(4, 0, 8, 0)
+        # self._notes.setContentsMargins(4, 0, 8, 0)
         toolbar.addWidget(self._notes)
 
         toolbar.addWidget(QLabel("Subject:"))
@@ -468,16 +460,16 @@ class MainWindow(QMainWindow):
         combo = self._training_mode_combo = QComboBox()
         toolbar.addWidget(combo)
         combo.setDuplicatesEnabled(False)
-        for training_mode in TrainingMode:
-            combo.addItem(training_mode.value,
-                          (training_mode,)  # userData: encapsulated in a tuple,
+        for mode in TrainingMode:
+            combo.addItem(mode.value,
+                          (mode,)  # userData: encapsulated in a tuple,
                           # otherwise pyside drops the enum member and only keep the value string.
                           # this is because it's a typed str-subclass enum.
                           )
+
         def index_changed(idx, combo=combo):
-            current_training_mode = combo.currentData()[0]
-            print(current_training_mode)
-            # todo
+            selected_mode = combo.currentData()[0]
+            self._app_model.behavior.algorithm.training_mode = selected_mode
         combo.currentIndexChanged.connect(index_changed)
 
         toolbar.addSeparator()
@@ -510,6 +502,8 @@ class MainWindow(QMainWindow):
         if self._is_dev:
             self.addToolBarBreak()
             toolbar = QToolBar("Dev Toolbar")
+            toolbar.setContentsMargins(0, 0, 0, 0)
+            toolbar.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Minimum)
             self.addToolBar(toolbar)
             toolbar.setFloatable(False)
             toolbar.setMovable(False)

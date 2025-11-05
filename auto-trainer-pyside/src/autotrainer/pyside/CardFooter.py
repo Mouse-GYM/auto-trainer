@@ -18,6 +18,6 @@ class CardFooter(QWidget):
 
     def setContent(self, widget: QWidget):
         self._layout = QVBoxLayout()
-        self._layout.setContentsMargins(6, 2, 2,6)
+        self._layout.setContentsMargins(4, 2, 2, 4)
         self._layout.addWidget(widget)
         self.setLayout(self._layout)

@@ -121,6 +121,13 @@ class CaptureAnalysisResult(str, enum.Enum):
     ANALYSIS_FAILED = "analysis_failed"
 
 
+class TrainingMode(str, enum.Enum):  # todo: eventually find better place
+    MANUAL = "Manual"
+    MANUAL_AND_PROTOCOL = "Manual with Protocol"
+    AUTOMATIC = "Automatic"
+
+
+
 # Protocol first (less strict)
 from .inference_protocol import InferenceProtocol
 from .pellet_device_protocol import PelletDeviceProtocol

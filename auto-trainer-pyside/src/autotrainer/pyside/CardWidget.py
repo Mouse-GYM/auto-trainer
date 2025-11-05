@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6 import QtCore
-from PySide6.QtWidgets import QWidget, QGridLayout, QLayout
+from PySide6.QtWidgets import QWidget, QGridLayout, QLayout, QSizePolicy
 
 from .CardFooter import CardFooter
 from .CardHeader import CardHeader
@@ -16,8 +16,11 @@ class CardWidget(QWidget):
                  content_layout: Optional[QLayout] = None, header_right_layout: Optional[QWidget | QLayout] = None):
         super().__init__()
 
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
+
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setObjectName("CardWidget")
+        # self.setObjectName("CardWidget")
 
         style = _DEFAULT_STYLE
 
@@ -41,6 +44,7 @@ class CardWidget(QWidget):
         self._layout.addWidget(self._footer, 2, 0)
 
         self.setLayout(self._layout)
+        self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
 
         self._layout.setRowStretch(1, 1)
 

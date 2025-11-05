@@ -3,7 +3,7 @@ import math
 from PySide6.QtCore import Qt
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QLabel, QWidget, QVBoxLayout,
-                               QHBoxLayout, QStackedLayout, QGridLayout, QPushButton)
+                               QHBoxLayout, QStackedLayout, QGridLayout, QPushButton, QSizePolicy)
 
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, ShiftXYZHandler
@@ -38,15 +38,23 @@ class BehaviorContent(ContentWidget):
         self._inference_status = QLabel("")
         self._card_widget = CardWidget(title="Behavior", header_right_layout=self._inference_status)
 
-        content = QWidget(None)
+        content = QWidget()
+        content.setContentsMargins(0, 4, 0, 4)
 
         hbox_main_layout = QHBoxLayout()
-        # hbox_main_layout.setStretch(0, 1)
-        # hbox_main_layout.setStretch(1, 1)
+        hbox_main_layout.setContentsMargins(0, 0, 0, 0)
+        hbox_main_layout.setSpacing(4)
 
-        left_layout = self._left_layout = QGridLayout(None)
+        left_layout = self._left_layout = QGridLayout()
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setHorizontalSpacing(4)
+        left_layout.setVerticalSpacing(0)
         left_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+
         right_layout = self._right_layout = QGridLayout(None)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setHorizontalSpacing(4)
+        right_layout.setVerticalSpacing(0)
         right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         left_cur_row = 0
@@ -70,9 +78,6 @@ class BehaviorContent(ContentWidget):
         label = self._intersession_state_label = QLabel(self._behavior_model.system_machine.intersession.state)
         left_layout.addWidget(label, left_cur_row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         left_cur_row += 1
-
-        # left_layout.addWidget(QLabel(""), left_cur_row, 0)
-        # left_cur_row += 1
 
         left_layout.addWidget(QLabel("Intersession Analysis:"), left_cur_row, 0)
         toggle = self._intersession_toggle = QSwitch()
@@ -144,21 +149,23 @@ class BehaviorContent(ContentWidget):
         self._card_widget.setContentWidget(content)
 
         # Footer
-        self._basic_footer = QWidget(None)
+        self._basic_footer = QWidget()
+        self._basic_footer.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        self._basic_footer.setContentsMargins(0, 0, 0, 0)
 
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
         layout.addWidget(QLabel("Inference model:"))
         self._location_label = QLabel("")
         layout.addWidget(self._location_label)
-        layout.addStretch(1)
 
         self._basic_footer.setLayout(layout)
 
         self._stack_layout = QStackedLayout()
         self._stack_layout.addWidget(self._basic_footer)
 
-        widget = QWidget(None)
+        widget = QWidget()
         widget.setLayout(self._stack_layout)
 
         self._card_widget.footer.setContent(widget)
@@ -166,6 +173,9 @@ class BehaviorContent(ContentWidget):
         # Final layout
         layout = QVBoxLayout()
         layout.addWidget(self._card_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
         self.setLayout(layout)
 
         self._inference_status.setText(f"Inference: {inference_model.status}")

@@ -23,8 +23,8 @@ class CameraContent(ContentWidget):
         self._model = capture_model
 
         layout = QGridLayout()
-
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         capture_view = self._capture_view = QCaptureView()
         self._settings = capture_view.settings

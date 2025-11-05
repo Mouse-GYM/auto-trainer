@@ -57,8 +57,9 @@ class HardwareControlContent(ContentWidget):
             self._travel_limits = _alogus_travel_limits
 
         layout = QGridLayout(None)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setHorizontalSpacing(16)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setHorizontalSpacing(8)
+        layout.setVerticalSpacing(4)
 
         label = QLabel("Tunnel")
         label.setStyleSheet("font-weight: bold")
@@ -197,6 +198,9 @@ class HardwareControlContent(ContentWidget):
         # Final layout
         layout = QVBoxLayout()
         layout.addWidget(self._card_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
         self.setLayout(layout)
 
         self.setEnabled(False)
