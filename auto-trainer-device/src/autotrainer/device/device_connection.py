@@ -56,7 +56,7 @@ class DeviceConnection(DeviceConnectionProtocol):
 
         self._name = name
 
-        self._read_limit: int = 50 if HAVE_CAN_DEVICE else math.inf
+        self._read_limit: int = 50 if HAVE_CAN_DEVICE else 2000
         self._collect_ms: int = 5  # so freq == 200 Hz
 
         # The means of providing non-blocking access to the device.
