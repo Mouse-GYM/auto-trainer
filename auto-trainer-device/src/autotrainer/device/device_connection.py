@@ -37,8 +37,12 @@ class DeviceConnection(DeviceConnectionProtocol):
     arguments provided, in a non-blocking fashion.
     """
 
-    def __init__(self, device: Device, message_queue: Queue = None,
-                 message_callback: Callable[[int, object], None] = None, name="device-connection"):
+    def __init__(self,
+                 device: Device,
+                 message_queue: Queue,
+                 message_callback: Callable[[int, object], None] = None,
+                 name="device-connection"):
+
         super().__init__()
 
         # The message queue and the callback are ways to get data from the device back to the client script or
@@ -115,6 +119,7 @@ class DeviceConnection(DeviceConnectionProtocol):
             self._cmd_queue.put((_REQUEST_DISCONNECT, None, None))
 
     def send_message(self, kind: int, data: object = None, context: object = None):
+        """Send a command/message to the device (writer-thread)"""
         self._device.notify_message(kind, data, context)
 
     def use_compound_movements(self, data: CompoundMovementDataSet):

@@ -414,7 +414,6 @@ class CanDevice(Device):
         has_read_from_queue = False
         pending_uuid = None
         repeated_command_count = 0
-        prev_commands_with_uuid_timeout_state = collections.deque(maxlen=10)  # todo
         while True:
             if has_read_from_queue:
                 q.task_done()
@@ -453,16 +452,16 @@ class CanDevice(Device):
                 if time.perf_counter() - t_perf_last_command_with_uuid < self.default_command_ack_timeout_duration:
                     # continue poll input queue for uuid ack
                     continue
+                self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, True, None)
                 logger.warning("timeout waiting ack previous command: %s ; context=%s ; pending_uuid=%s",
                                self._pending_kind, self._pending_context, pending_uuid)
                 pending_uuid = None
                 repeated_command_count += 1
                 if repeated_command_count >= self.default_command_ack_timeout_repeat_count:
-                    raise RuntimeError("Reached default_command_max_repeat_count")
-                # prev_commands_with_uuid_timeout_state[-1] += 1
+                    raise RuntimeError("Reached default_command_ack_timeout_repeat_count")
                 assert self._prev_command is not None
                 if self._prev_command_is_relative:
-                    raise RuntimeError(f"Command {self._prev_command} ack timedout ; refusing retry given relative.")
+                    raise RuntimeError(f"Command {self._prev_command} uuid ack timed out ; refusing retry given relative.")
                 cur_commands.insert(0, self._prev_command)
                 self._prev_command = None
                 retrying = True
@@ -499,7 +498,6 @@ class CanDevice(Device):
                     success = self._perform_next_compound_step()
                     if success:
                         break
-                    # logger.error("Failed executing next compound %s to bus", kind)
                 if not success:
                     raise RuntimeError("too many failure trying _perform_next_compound_step")
             else:

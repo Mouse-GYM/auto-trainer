@@ -13,6 +13,8 @@ logger = get_verbose_logger(__name__)
 class Device(ObservableObject):
     """Defines the required methods to represent a device."""
 
+    UUID_ACK_TIMEOUT_ENGAGED = "uuid_ack_timeout_engaged"
+
     def __init__(
         self,
         dev_interface: DeviceInterface = None,
@@ -71,6 +73,7 @@ class Device(ObservableObject):
 
     @device_interface.setter
     def device_interface(self, value: DeviceInterface):
+        # unused
         self._interface = value
 
     def get_motor_flips(self):
