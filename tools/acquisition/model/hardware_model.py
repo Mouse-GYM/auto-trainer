@@ -389,11 +389,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 dev.send_message(cmd_kind, SystemDataArgsKwargs(0, relative=True))
 
     def _ack_received(self, token: UUID):
-        if token is not None and token not in self._pending_tokens:
-            logger.warning("pending_token != ack_received token: %s vs pending_tokens=%s",
-                           token, self._pending_tokens)
-        else:
-            self._pending_tokens.pop(token, None)
+        popped = self._pending_tokens.pop(token, None)
+        if popped is None:
+            logger.warning("Received unexpected ack token: %s", token)
 
     def wait_pending_command_acked(self, token, timeout: float = 3):
         t_perf_start = time.perf_counter()

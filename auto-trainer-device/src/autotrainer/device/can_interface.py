@@ -964,8 +964,13 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and \
-            self._jc.Delay(addr, int(delay_sec * 1000), CanInterface.next_uuid())
+        if addr is None:
+            logger.error("PELLET_DEVICE addr None")
+            return False
+        uuid = CanInterface.next_uuid()
+        res = self._jc.Delay(addr, int(delay_sec * 1000), uuid)
+        logger.debug("Delay addr=%s res=%s uuid=%s", addr, res, uuid)
+        return res == 0
 
     def tare_load_cell(self) -> bool:
         """
@@ -975,8 +980,13 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
-        return (addr is not None and
-                self._jc.LoadCellTare(addr, 0, CanInterface.next_uuid()) == 0)
+        if addr is None:
+            logger.error("MAGNET_DEVICE addr None")
+            return False
+        uuid = self.next_uuid()
+        res = self._jc.LoadCellTare(addr, 0, uuid)
+        logger.debug("LoadCellTare addr=%s res=%s uuid=%s", addr, res, uuid)
+        return res == 0
 
     def _move_servo_motor(self, motor: Motor, position, config: ServoConfig):
         """
@@ -1117,7 +1127,6 @@ class CanInterface(DeviceInterface):
                 logger.debug("limited turns_position to max ; was %.1f", turns_position)
                 turns_position = _STEPPER_MAX_TURNS
 
-
         uuid = CanInterface.next_uuid()
         res = self._jc.StepperMove(
             addr,
@@ -1129,7 +1138,7 @@ class CanInterface(DeviceInterface):
             save_as_fixed,
             uuid,
         )
-        logger.debug("%s: res=%s uuid=%s", motor, res, uuid)
+        logger.debug("%s: StepperMove res=%s uuid=%s", motor, res, uuid)
         return res == 0
 
     def move_magnet_servo(self, position) -> bool:
@@ -1161,6 +1170,7 @@ class CanInterface(DeviceInterface):
         return self.move_motor_x(position, save_as_fixed=True, relative=relative)
 
     def move_motor(self, motor: Motor, position, *, save_as_fixed: bool = False, relative: bool = False):
+        # unused
         # only for steppers, XYZ
         return self._move_stepper_motor(
             motor, position, self._motor_configs[motor],
@@ -1239,7 +1249,7 @@ class CanInterface(DeviceInterface):
             return False
         uuid = CanInterface.next_uuid()
         res = self._jc.SendToFixedXYZ(addr, uuid)
-        logger.debug("fixed_position ; res=%s uuid=%s", res, uuid)
+        logger.debug("SendToFixedXYZ res=%s uuid=%s", res, uuid)
         return res == 0
 
     def move_load_servo(self, position):
@@ -1324,9 +1334,8 @@ class CanInterface(DeviceInterface):
         # Third arg - forward/rev. Go in forward direction if the non-zero locations are negative
         uuid = CanInterface.next_uuid()
         res = self._jc.StepperHome(addr, _motor_to_id(motor), uuid)
-        logger.debug("addr=%s motor=%s : home request => res=%s uuid=%s", addr, motor, res, uuid)
+        logger.debug("%s StepperHome res=%s uuid=%s", motor, res, uuid)
         return res == 0
-
 
     def _write_stepper_config(self, config: StepperConfig) -> bool:
         """
@@ -1357,10 +1366,11 @@ class CanInterface(DeviceInterface):
                                     home_vel,
                                     config.flip_limit_orientation,
                                     uuid)
-        logger.debug("write_stepper_config: addr=%s config=%s: res=%s uuid=%s", addr, config, res, uuid)
+        logger.debug("StepperCfgWrite addr=%s config=%s: res=%s uuid=%s",
+                     addr, config, res, uuid)
         if res != 0:
             logger.error(
-                f"stepper {addr} {motor_id} config write failed")
+                "stepper %s addr=%s config write failed", config.motor, addr)
             return False
         return True
 
@@ -1391,10 +1401,9 @@ class CanInterface(DeviceInterface):
                                   config.maximum_velocity,
                                   config.maximum_acceleration,
                                   uuid)
-        logger.debug("write_servo_config: addr=%s config=%s: res=%s uuid=%s", addr, config, res, uuid)
+        logger.debug("ServoCfgWrite addr=%s config=%s: res=%s uuid=%s", addr, config, res, uuid)
         if res != 0:
-            logger.error(
-                f"servo {addr} {motor_id} config write failed")
+            logger.error("servo %s %s config write failed", addr, motor_id)
             return False
         return True
 
@@ -1457,7 +1466,8 @@ class CanInterface(DeviceInterface):
         elif gpio == DigitalOutputs.STIMULUS_4:
             gpio_id = 7
         else:
-            return False
+            logger.warning("Unhandled digital output: %s", gpio)
+            return True
 
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         if addr is None:
@@ -1494,7 +1504,7 @@ class CanInterface(DeviceInterface):
 
         Args:
             channel: Channel #
-            millivolts: desired oltage output (millivolts)
+            millivolts: desired voltage output (millivolts)
 
         Returns:
             bool: True if successful else False
@@ -1510,8 +1520,7 @@ class CanInterface(DeviceInterface):
                                                             millivolts,
                                                             CanInterface.next_uuid()) == 0
 
-    def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> (
-        bool):
+    def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> bool:
         """
         Set the colors of a 3-color LED.
 
@@ -1539,15 +1548,15 @@ class CanInterface(DeviceInterface):
         """
         pellet = self._tgt2addr(Target.PELLET_DEVICE)
         magnet = self._tgt2addr(Target.MAGNET_DEVICE)
-
-        pellet = pellet is not None and \
-                 self._jc.BootloaderCommand(pellet,
-                                            JerryCANBootloaderCmd.SubCommand.VERSION)
-        magnet = magnet is not None and \
-                 self._jc.BootloaderCommand(magnet,
-                                            JerryCANBootloaderCmd.SubCommand.VERSION)
-
-        return pellet & magnet
+        if pellet is None or magnet is None:
+            logger.error("Cannot request version: pellet addr=%s magnet addr=%s", pellet, magnet)
+            return False
+        rc = self._jc.BootloaderCommand(pellet,
+                                        JerryCANBootloaderCmd.SubCommand.VERSION)
+        if rc == 0:
+             rc = self._jc.BootloaderCommand(magnet,
+                                             JerryCANBootloaderCmd.SubCommand.VERSION)
+        return rc == 0
 
     # NOTE: E-Stop is not implemented in the target
     # def emergency_stop(self) -> bool:

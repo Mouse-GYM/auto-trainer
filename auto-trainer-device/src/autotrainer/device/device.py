@@ -1,7 +1,7 @@
-import typing
+from typing import Optional, Any
 
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core import EventManager, SystemStatusMessageKind, ApiEventKind
+from autotrainer.core import EventManager, SystemStatusMessageKind, ApiEventKind, ObservableObject
 
 from .device_interface import DeviceInterface
 from .device_api import DeviceApi
@@ -10,10 +10,17 @@ from .device_api import DeviceApi
 logger = get_verbose_logger(__name__)
 
 
-class Device:
+class Device(ObservableObject):
     """Defines the required methods to represent a device."""
 
-    def __init__(self, dev_interface: DeviceInterface = None, api: DeviceApi = None):
+    def __init__(
+        self,
+        dev_interface: DeviceInterface = None,
+        api: Optional[DeviceApi] = None,
+        *,
+        event_names=(),
+    ):
+        super().__init__(event_names=event_names)
         self._api = api
         self._interface = dev_interface
 
@@ -23,7 +30,7 @@ class Device:
     def disconnect(self):
         pass
 
-    def notify_data(self, data: typing.Any) -> None:
+    def notify_data(self, data: Any) -> None:
         """Notification for data received from the device
 
         :param data: one or more bytes received from the device to be handled/interpreted by this Device instance
