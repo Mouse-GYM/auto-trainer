@@ -1,3 +1,4 @@
+import enum
 import logging
 import threading
 import time
@@ -5,7 +6,7 @@ from itertools import chain
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QCoreApplication
+from PySide6.QtCore import Qt, QCoreApplication, QEnum
 from PySide6.QtGui import QAction, QIcon, QKeySequence, QPixmap, QColor
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QDialog, QFileDialog, QPushButton)
@@ -34,6 +35,21 @@ DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT = 30  # maximum time before automated sto
 # if not enough data is captured after that time the calib is automatically finished/stopped (and ask for retry)
 DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is considered noisy, and a retry proposed
 
+
+#
+
+# todo: should be somewhere else surely
+class TrainingMode(str, enum.Enum):
+    MANUAL = "Manual"
+    MANUAL_AND_PROTOCOL = "Manual with Protocol"
+    AUTOMATIC = "Automatic"
+
+
+training_modes_2_style = {
+    TrainingMode.MANUAL: "manual-style",
+    TrainingMode.MANUAL_AND_PROTOCOL: "manual-protocol-style",
+    TrainingMode.AUTOMATIC: "automatic-style",
+}
 
 #
 
@@ -447,6 +463,22 @@ class MainWindow(QMainWindow):
         self._animal_dropdown.currentIndexChanged.connect(self._animal_changed)
         self._animal_dropdown.lineEdit().editingFinished.connect(self._add_animal)
         toolbar.addWidget(self._animal_dropdown)
+
+        toolbar.addWidget(QLabel("Training Mode:"))
+        combo = self._training_mode_combo = QComboBox()
+        toolbar.addWidget(combo)
+        combo.setDuplicatesEnabled(False)
+        for training_mode in TrainingMode:
+            combo.addItem(training_mode.value,
+                          (training_mode,)  # userData: encapsulated in a tuple,
+                          # otherwise pyside drops the enum member and only keep the value string.
+                          # this is because it's a typed str-subclass enum.
+                          )
+        def index_changed(idx, combo=combo):
+            current_training_mode = combo.currentData()[0]
+            print(current_training_mode)
+            # todo
+        combo.currentIndexChanged.connect(index_changed)
 
         toolbar.addSeparator()
 
