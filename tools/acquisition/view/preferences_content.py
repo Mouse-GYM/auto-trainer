@@ -583,7 +583,7 @@ class PreferencesContent(QWidget):
             spinbox.setValue(analysis.global_animal_presence_monitor.config.presence_missing_delay_hours)
             def value_changed(value):
                 analysis.global_animal_presence_monitor.config.presence_missing_delay_hours = value
-                analysis.global_animal_presence_monitor.force_refresh()
+                analysis.global_animal_presence_monitor.refresh_state()
             spinbox.valueChanged.connect(value_changed)
             grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
             cur_row += 1
@@ -866,7 +866,7 @@ class PreferencesContent(QWidget):
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def value_changed(value):
             analysis.external_doors_monitor.config.trigger_open_delay = value
-            analysis.external_doors_monitor.force_refresh()
+            analysis.external_doors_monitor.refresh_state()
         spinbox.valueChanged.connect(value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1

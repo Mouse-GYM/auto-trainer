@@ -257,6 +257,7 @@ class BehaviorAlgorithm(ObservableObject):
         release_error_min_distance_threshold: float = 2,  # millimeter
         cover_release_min_duration_threshold: float = 3,  # seconds
         diamond_triangle_offset_config_path: Optional[Path] = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH,
+        topcam_presence: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__(event_names=(
             "session_starting",
@@ -337,7 +338,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._cover_servo_status = CoverServoStatus.OK
 
-        self._top_camera_presence_detection: Optional[PresenceDetectionAttrs] = None
+        self._topcam_presence: Optional[PresenceDetectionAttrs] = topcam_presence
         self._presence_missing = False
 
         self._diamond_triangle_offset_config_path = diamond_triangle_offset_config_path
@@ -507,11 +508,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def top_camera_presence_detection(self) -> PresenceDetectionAttrs:
-        return self._top_camera_presence_detection
-
-    @top_camera_presence_detection.setter
-    def top_camera_presence_detection(self, value):
-        self._top_camera_presence_detection = value
+        return self._topcam_presence
 
     @property
     def system_state(self) -> SystemState:
@@ -1078,8 +1075,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._loaded_config = copy.deepcopy(config)
         self._load_pellet_cfg(config.pellet_delivery)
         self._load_head_clamp_cfg(config.head_clamp)
-        if self._top_camera_presence_detection is not None:
-            self._top_camera_presence_detection.load_config(config.topcam_presence_detection)
+        if self._topcam_presence is not None:
+            self._topcam_presence.load_config(config.topcam_presence_detection)
         # self.auto_close_gate_on_intersession_config = config.  # not saved yet to config
 
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):

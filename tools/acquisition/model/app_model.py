@@ -54,6 +54,8 @@ class AppModel(ObservableObject):
 
     class Props(str, enum.Enum):
         SELECTED_ANIMAL = "selected_animal"
+        OUTPUT_LOCATION = "output_location"
+        ANIMAL_NAME = "animal_name"
 
     def __init__(
         self,
@@ -65,8 +67,10 @@ class AppModel(ObservableObject):
         super().__init__(("on_error",))
 
         # using a shared process manager,
-        # this allows to put shared values, created via the manager, to any multiprocesses (shared-) queue.
+        # this allows to put shared values, created via the manager, to any multiprocess shared queue, notably.
         self._mp_manager = multiprocessing.get_context("spawn").Manager()
+        # otherwise (new) shared values can only be inherited from newly spawned sub-process(es) and not from already
+        # existing sub-process(es).
 
         self._preferences = preferences
         self._loaded_configuration: Optional[SystemConfiguration] = None
@@ -148,9 +152,10 @@ class AppModel(ObservableObject):
 
         self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir)
 
-        behavior = self._behavior = BehaviorModel(
-            self._system_message_handler, self._analysis, self._hardware, self._inference)
-        behavior.algorithm.top_camera_presence_detection = self._top_camera_presence_detection
+        self._behavior = BehaviorModel(
+            self._system_message_handler, self._analysis, self._hardware, self._inference,
+            topcam_presence=self._top_camera_presence_detection,
+        )
 
         self._output_location = ""
 
@@ -178,7 +183,6 @@ class AppModel(ObservableObject):
 
         self._hardware.property_changed += self._on_hardware_property_changed
         self._behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
-        self._behavior.property_changed += self._on_behavior_model_property_changed
         preferences.property_changed += self._on_preferences_property_changed
         self._inference.property_changed += self._on_inference_property_changed
 
@@ -294,10 +298,6 @@ class AppModel(ObservableObject):
         return self._system_message_handler
 
     @property
-    def output_location(self) -> str:
-        return self._output_location
-
-    @property
     def animals(self) -> List[AnimalSubject]:
         return self._animals
 
@@ -311,13 +311,16 @@ class AppModel(ObservableObject):
 
     @selected_animal.setter
     def selected_animal(self, selected_animal: Optional[AnimalSubject]):
-        algo = self._behavior.algorithm
         prev, self._selected_animal = self._selected_animal, selected_animal
-        self._on_property_changed(self.Props.SELECTED_ANIMAL, selected_animal, prev)
-        self._preferences.selected_animal = "" if selected_animal is None else selected_animal.name
-        if selected_animal is not None and prev != selected_animal:
-            hardware = self.hardware
-            self.property_changed("animal_name", selected_animal.name, self.animal_name)
+        if selected_animal == prev:
+            return
+        hardware = self.hardware
+        self.property_changed(self.Props.ANIMAL_NAME, *(
+            ("(none)", "(none)") if selected_animal is None
+            else (selected_animal.name, self.animal_name)
+        ))
+        if selected_animal is not None:
+            algo = self._behavior.algorithm
             algo.baseline_intensity = selected_animal.baseline_magnet_intensity
             algo.reset_selected_animal(selected_animal)
             hardware.update_head_magnet_intensity(selected_animal.baseline_magnet_intensity)
@@ -325,8 +328,12 @@ class AppModel(ObservableObject):
             hardware.set_y(self._selected_animal.pellet_y)
             hardware.set_z(self._selected_animal.pellet_z)
             hardware.send_pellet()
-        else:
-            self.property_changed("animal_name", "(none)", "(none)")
+        self._on_property_changed(self.Props.SELECTED_ANIMAL, selected_animal, prev)
+        self._preferences.selected_animal = "" if selected_animal is None else selected_animal.name
+
+    @property
+    def output_location(self) -> str:
+        return self._output_location
 
     @output_location.setter
     def output_location(self, value: str):
@@ -334,20 +341,12 @@ class AppModel(ObservableObject):
             return
         old_value = self._output_location
         self._output_location = value
-        self.property_changed("output_location", value, old_value)
+        self.property_changed(self.Props.OUTPUT_LOCATION, value, old_value)
 
     @property
     def animal_name(self) -> str:
-        if self._selected_animal is not None:
-            return self._selected_animal.name
-        else:
-            return "(none)"
-
-    @animal_name.setter
-    def animal_name(self, value: str):
-        # not used actually
-        self._preferences.selected_animal = value
-        self._animal_name = self._on_property_changed("animal_name", value, self._animal_name)
+        animal = self._selected_animal
+        return "(none)" if animal is None else animal.name
 
     @property
     def notes(self) -> str:
@@ -357,7 +356,7 @@ class AppModel(ObservableObject):
     def notes(self, value: str):
         self._notes = self._on_property_changed("notes", value, self._notes)
 
-    def add_animal(self, name: str, select: bool = True):
+    def add_animal(self, name: str, select: bool = False):
         if not name or len(name) == 0:
             return
 
@@ -467,9 +466,7 @@ class AppModel(ObservableObject):
         logger.info("finished connecting hardware")
 
         if not self._behavior.algorithm.algo_paused:
-            analysis.emergency_alarm_monitor.start(reason="capture-start")
-            analysis.global_animal_presence_monitor.start(reason="capture-start")
-            analysis.external_doors_monitor.start(reason="capture-start")
+            analysis.start()
 
         return True
 
@@ -477,12 +474,9 @@ class AppModel(ObservableObject):
         logger.debug("AppModel.on_capture_stop")
 
         analysis = self._analysis
-        analysis.emergency_alarm_monitor.stop(reason="capture-stop")
-        analysis.global_animal_presence_monitor.stop(reason="capture-stop")
-        analysis.external_doors_monitor.stop(reason="capture-start")
+        analysis.stop()
 
         self._inference.stop()
-
         self.hardware.disconnect()
 
         for camera in self._cameras:
@@ -592,9 +586,7 @@ class AppModel(ObservableObject):
             self._inference.terminate()
 
         analysis = self._analysis
-        analysis.emergency_alarm_monitor.stop(reason="on_close")
-        analysis.global_animal_presence_monitor.stop(reason="on_close")
-        analysis.external_doors_monitor.stop(reason="capture-start")
+        analysis.stop()
 
         for camera in self._cameras:
             camera.on_close()
@@ -658,9 +650,6 @@ class AppModel(ObservableObject):
             self._save_metadata(now,
                                 self._project_info.get_metadata_file(-1, when=now),
                                 self._project_info.session)
-
-    def _on_behavior_model_property_changed(self, name: str, new_value, old_value):
-        logger.debug("behavior property changed: %s: %s -> %s", name, old_value, new_value)
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
         if name == UserPreferences.SELECTED_ANIMAL:

@@ -89,6 +89,24 @@ class SensorAnalysis(ObservableObject):
 
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_window=30)
 
+        self._detectors = [
+            self._external_doors_monitor,
+            self._global_animal_presence_monitor,
+            self._alarm_monitor,
+        ]
+
+    def start(self):
+        for detector in self._detectors:
+            detector.start()
+
+    def stop(self):
+        for detector in self._detectors:
+            detector.stop()
+
+    def restart(self):
+        for detector in self._detectors:
+            detector.restart()
+
     @property
     def project_info(self) -> ProjectInfo:
         return self._project_info

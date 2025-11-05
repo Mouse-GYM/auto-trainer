@@ -536,7 +536,7 @@ class MainWindow(QMainWindow):
         self._app_model.notes = value
 
     def _add_animal(self):
-        self._app_model.add_animal(self._animal_dropdown.currentText())
+        self._app_model.add_animal(self._animal_dropdown.currentText(), select=True)
 
     def _animal_changed(self, index: int):
         if self._animal_dropdown.currentIndex() != -1:
@@ -566,9 +566,13 @@ class MainWindow(QMainWindow):
             else self._app_model.selected_animal.name
         )
 
+        # prevent on_animal_changed event:
+        self._animal_dropdown.blockSignals(True)
         for animal in animals:
             self._animal_dropdown.addItem(animal.name, animal)
+        self._animal_dropdown.blockSignals(False)
 
+        # we set the good one here:
         if find_animal_name is not None:
             index = self._animal_dropdown.findText(find_animal_name)
             if index != -1:

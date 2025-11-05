@@ -74,9 +74,15 @@ def system_msg_queue():
 
 
 @pytest.fixture
-def system_msg_handler(system_msg_queue):
+def sensor_analysis():
+    s = SensorAnalysis()
+    yield s
+
+
+@pytest.fixture
+def system_msg_handler(system_msg_queue, sensor_analysis):
     # now/atm unused
-    handler = SystemMessageHandler(system_msg_queue)
+    handler = SystemMessageHandler(system_msg_queue, sensor_analysis=sensor_analysis)
     handler.start()
     yield handler
     handler.request_terminate()
@@ -84,7 +90,7 @@ def system_msg_handler(system_msg_queue):
 
 
 @pytest.fixture
-def machine(tunnel_device, pellet_device, inference, project_info):
+def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis):
     # prevents some test to fail due to handling function in dedicated thread
     BehaviorAlgorithm._no_handler_thread = True
     #
@@ -95,7 +101,7 @@ def machine(tunnel_device, pellet_device, inference, project_info):
         machine = SystemMachine(
             tunnel_device=tunnel_device,
             pellet_device=pellet_device,
-            analysis=SensorAnalysis(),
+            analysis=sensor_analysis,
             inference=inference,
             project_info=project_info,
         )

@@ -14,6 +14,7 @@ from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
+from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
@@ -53,6 +54,7 @@ class SystemMachine(StateMachine):
                  tunnel_device: TunnelDeviceProtocol = None,
                  pellet_device: PelletDeviceProtocol = None,
                  inference: InferenceProtocol = None,
+                 topcam_presence: Optional[PresenceDetectionAttrs] = None,
                  ):
 
         initial_state = SystemState.cage
@@ -82,12 +84,15 @@ class SystemMachine(StateMachine):
         self._last_close_tunnel_gate_perf_t = -math.inf
         self._is_handling_diamond_triangle = False
 
-        algo = self._algorithm = BehaviorAlgorithm() if algorithm is None else algorithm
+        algo = self._algorithm = BehaviorAlgorithm(
+            topcam_presence=topcam_presence,
+        ) if algorithm is None else algorithm
         algo.project = project_info
         algo.session_starting += self._session_starting
         algo.session_ending += self._session_ended
         algo.property_changed += self._algorithm_property_changed
         algo.relay_transitions(self)
+        # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
         algo.shift_xyz_handler.set_handle_processed_shift_xyz(self._handle_processed_shift_xyz)
 
         self._tunnel_device = tunnel_device
@@ -115,7 +120,7 @@ class SystemMachine(StateMachine):
         # But this is already handled by load_cell_engaged property, basically.
         pellet_machine.events.state_changed += self._pellet_state_changed
 
-        intersession_machine = self._intersession = IntersessionMachine(self.algorithm, self._project_info, inference)
+        intersession_machine = self._intersession = IntersessionMachine(algo, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._intersession_ended
         intersession_machine.events.state_changed += self._intersession_state_changed
         algo.relay_transitions(intersession_machine)
@@ -331,7 +336,7 @@ class SystemMachine(StateMachine):
             algo = self._algorithm
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
             if value:
-                self._analysis.global_animal_presence_monitor.stop(reason="load-cell-engaged")
+                self._analysis.global_animal_presence_monitor.stop()
                 algo.presence_missing = False
                 if self.state == SystemState.cage:
                     # when app start inference is slow and takes several 10s to become live,
@@ -344,7 +349,7 @@ class SystemMachine(StateMachine):
                                                               context=self.state)
             else:
                 if self._inference.status == InferenceStatus.live:
-                    self._analysis.global_animal_presence_monitor.start(reason="load-cell-disengaged")
+                    self._analysis.global_animal_presence_monitor.start()
                 if self.state == SystemState.tunnel and self.intersession.state == IntersessionState.idle:
                     logger.info("%s False, exiting tunnel ..", LoadCellMonitor.IS_ENGAGED_PROPERTY)
                     self.exit_tunnel(reason="load_cell_disengaged_when_tunnel")
@@ -390,9 +395,10 @@ class SystemMachine(StateMachine):
     # @BehaviorAlgorithm.relay_func(wait=False)
     # not needed, already called by _pose_changed which has already it.
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
+        if offset is None:
+            return
         if (
-            offset is not None
-            and self._state == SystemState.tunnel
+            self._state == SystemState.tunnel
             and self._pellet_machine.state == PelletState.monitoring
             # TODO: monitoring only happens when mouse hands near pellet seen, which uncover the pellet,
             #  we might want to also handle/capture it when state is send and covering ?
@@ -402,7 +408,7 @@ class SystemMachine(StateMachine):
             and self._pellet_machine.can_use_pellet_command()
         ):
             last_pos = self._pellet_device.last_position
-            if last_pos is not None and offset is not None:
+            if last_pos is not None:
                 if not self._is_handling_diamond_triangle:
                     self._is_handling_diamond_triangle = True
                     logger.info("Starting handling diamond-triangle offset ; current offset=%s pos=%s",
