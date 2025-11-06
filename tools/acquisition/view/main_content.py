@@ -175,6 +175,7 @@ class MainContent(ContentWidget):
         self._content_widgets.append(hardware_status_content)
 
         alarm_content = self._alarm_content = AlarmContent(self._app_model, self._app_model.hardware)
+        alarm_content.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         end_layout.addWidget(alarm_content)
         self._alarm_content_manual_layout = end_layout
 

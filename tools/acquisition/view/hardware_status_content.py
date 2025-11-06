@@ -81,7 +81,7 @@ class HardwareStatusContent(ContentWidget):
 
         content = QWidget()
         content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        content.setContentsMargins(0, 4, 0, 4)
+        content.setContentsMargins(4, 4, 0, 4)
         content.setLayout(content_layout)
 
         self._card_widget.setContentWidget(content)

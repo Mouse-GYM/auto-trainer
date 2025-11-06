@@ -145,7 +145,7 @@ class BehaviorContent(ContentWidget):
 
         content = QWidget()
         content.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-        content.setContentsMargins(0, 4, 0, 4)
+        content.setContentsMargins(4, 4, 4, 4)
         content.setLayout(hbox_main_layout)
 
         self._card_widget.setContentWidget(content)

@@ -44,7 +44,7 @@ class AlarmContent(ContentWidget):
 
     def __init__(self, app_model: AppModel, hardware_model: HardwareModel):
         super().__init__()
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         self._app_model = app_model
         self._hardware_model = hardware_model
@@ -54,10 +54,10 @@ class AlarmContent(ContentWidget):
 
         content_layout = QVBoxLayout()
         content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        content_layout.setContentsMargins(4, 4, 4, 4)
+        # content_layout.setContentsMargins(0, 0, 0, 0)
 
         form_layout = QFormLayout()
-        form_layout.setContentsMargins(0, 0, 0, 0)
+        form_layout.setContentsMargins(4, 4, 0, 0)
         form_layout.setHorizontalSpacing(4)
 
         emergency_alarm = app_model.behavior.analysis.emergency_alarm_monitor
@@ -121,6 +121,8 @@ class AlarmContent(ContentWidget):
         content_layout.addLayout(form_layout)
 
         self._card_widget.setContentLayout(content_layout)
+        self._card_widget.setContentsMargins(0, 0, 0, 0)
+        self._card_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout()
         layout.addWidget(self._card_widget)

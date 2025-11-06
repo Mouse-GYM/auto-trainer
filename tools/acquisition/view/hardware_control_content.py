@@ -61,7 +61,7 @@ class HardwareControlContent(ContentWidget):
             self._travel_limits = _alogus_travel_limits
 
         layout = QGridLayout()
-        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setContentsMargins(4, 4, 4, 4)
         layout.setHorizontalSpacing(8)
         layout.setVerticalSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -152,8 +152,6 @@ class HardwareControlContent(ContentWidget):
         form_layout.addRow(QLabel("Pellet Z (mm):"), right_layout)
 
         layout.addLayout(form_layout, 1, 2)
-
-        # layout.setColumnStretch(3, 1)
 
         button_layout = QVBoxLayout()
         button_layout.setSpacing(4)
