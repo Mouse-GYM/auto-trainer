@@ -161,7 +161,6 @@ class AnalysisContent(ContentWidget):
 
         # Footer
         self._footer = QWidget()
-        self._footer.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._footer.setContentsMargins(0, 0, 0, 0)
 
         layout = QHBoxLayout()
@@ -180,6 +179,7 @@ class AnalysisContent(ContentWidget):
         self._stack_layout.addWidget(self._footer)
 
         widget = QWidget()
+        widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         widget.setLayout(self._stack_layout)
 
         self._card_widget.footer.setContent(widget)

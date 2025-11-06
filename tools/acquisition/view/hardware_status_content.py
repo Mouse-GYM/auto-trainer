@@ -11,6 +11,7 @@ from tools.acquisition.view.content_widget import ContentWidget
 
 
 class HardwareStatusContent(ContentWidget):
+
     head_magnet_changed = Signal(float, name="head_magnet_changed")
     pellet_x_changed = Signal(float, name="pellet_x_changed")
     pellet_y_changed = Signal(float, name="pellet_y_changed")
@@ -23,6 +24,7 @@ class HardwareStatusContent(ContentWidget):
 
     def __init__(self, message_handler: MessageHandler):
         super().__init__()
+        # self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
 
         self._model = message_handler
 
@@ -31,12 +33,14 @@ class HardwareStatusContent(ContentWidget):
         self._model.property_changed += self._model_property_changed
 
         content_layout = QVBoxLayout()
-        layout = QGridLayout()
-        content_layout.addLayout(layout)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
-        layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        layout.setContentsMargins(2, 2, 2, 2)
+        layout = QGridLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setHorizontalSpacing(4)
+        content_layout.addLayout(layout)
 
         cur_row = cur_col = 0
 
@@ -52,7 +56,7 @@ class HardwareStatusContent(ContentWidget):
         #
 
         label = QLabel("<b>Pellet:</b>")
-        label.setContentsMargins(0, 8, 0, 0)
+        label.setContentsMargins(0, 4, 0, 0)
         layout.addWidget(label, cur_row, cur_col)
         cur_row += 1
 
@@ -75,16 +79,22 @@ class HardwareStatusContent(ContentWidget):
         self._cover_arm = QLabel("(no updates)")
         layout.addWidget(self._cover_arm, cur_row, cur_col + 1)
 
-        self._card_widget.setContentLayout(content_layout)
+        content = QWidget()
+        content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        content.setContentsMargins(0, 4, 0, 4)
+        content.setLayout(content_layout)
 
+        self._card_widget.setContentWidget(content)
+
+        #
         # Final layout
         layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self._card_widget)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
         self.setLayout(layout)
-        self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
 
         def xyz_update(xyz_label: XYZQLabel, coord, value):
             xyz_label.update_coordinate(**{coord: value})

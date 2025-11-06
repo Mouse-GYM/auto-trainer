@@ -3,7 +3,7 @@ import typing
 
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import (QLabel, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout,
-                               QFormLayout, QStackedLayout)
+                               QFormLayout, QStackedLayout, QSizePolicy)
 
 from autotrainer.core import AnimalSubject
 from autotrainer.model import EnvironmentProvider, HardwareVersion
@@ -35,11 +35,15 @@ class HardwareControlContent(ContentWidget):
 
     def __init__(self, model: HardwareModel):
         super().__init__()
+        self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
 
         self._model = model
 
         # Header
         layout = QHBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(4)
 
         layout.addWidget(QLabel("Tunnel:"))
         self._tunnel_version = QLabel("(unknown version)")
@@ -56,29 +60,29 @@ class HardwareControlContent(ContentWidget):
         else:
             self._travel_limits = _alogus_travel_limits
 
-        layout = QGridLayout(None)
+        layout = QGridLayout()
         layout.setContentsMargins(2, 2, 2, 2)
         layout.setHorizontalSpacing(8)
         layout.setVerticalSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
-        label = QLabel("Tunnel")
-        label.setStyleSheet("font-weight: bold")
+        label = QLabel("<b>Tunnel</b>")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label, 0, 0)
-        label = QLabel("Pellet Release Location")
-        label.setStyleSheet("font-weight: bold")
+        label = QLabel("<b>Pellet Release Location</b>")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label, 0, 2)
-        label = QLabel("Compound Move")
-        label.setStyleSheet("font-weight: bold")
+        label = QLabel("<b>Compound Move</b>")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label, 0, 4)
 
-        form_layout = QFormLayout(None)
+        form_layout = QFormLayout()
+        form_layout.setContentsMargins(0, 0, 0, 0)
+        form_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         form_layout.setHorizontalSpacing(8)
         form_layout.setVerticalSpacing(4)
 
-        self._position = QSpinBox(None)
+        self._position = QSpinBox()
         self._position.setValue(0)
         self._position.setMaximum(100)
         self._position.setWrapping(False)
@@ -98,13 +102,11 @@ class HardwareControlContent(ContentWidget):
 
         layout.addLayout(form_layout, 1, 0)
 
-        layout.setColumnStretch(1, 1)
-
-        form_layout = QFormLayout(None)
+        form_layout = QFormLayout()
         form_layout.setHorizontalSpacing(8)
         form_layout.setVerticalSpacing(4)
 
-        self._x_pos = QSpinBox(None)
+        self._x_pos = QSpinBox()
         self._x_pos.setValue(0)
         self._x_pos.setMinimum(self._travel_limits["x"][0])
         self._x_pos.setMaximum(self._travel_limits["x"][1])
@@ -151,7 +153,7 @@ class HardwareControlContent(ContentWidget):
 
         layout.addLayout(form_layout, 1, 2)
 
-        layout.setColumnStretch(3, 1)
+        # layout.setColumnStretch(3, 1)
 
         button_layout = QVBoxLayout()
         button_layout.setSpacing(4)
@@ -170,33 +172,34 @@ class HardwareControlContent(ContentWidget):
         self._cover_button = QPushButton("Cover")
         self._cover_button.clicked.connect(lambda: self._model.cover_pellet())
         button_layout.addWidget(self._cover_button)
-        button_layout.addStretch(1)
 
         layout.addLayout(button_layout, 1, 4)
-
         self._card_widget.setContentLayout(layout)
+        self._card_widget.setSizePolicy(self.sizePolicy())
 
         # Footer
-        self._basic_footer = QWidget(None)
+        self._basic_footer = QWidget()
 
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(QLabel("Command in progress:"))
         self._command_label = QLabel("None")
-        layout.addWidget(self._command_label, stretch=1)
+        layout.addWidget(self._command_label)
 
         self._basic_footer.setLayout(layout)
 
         self._stack_layout = QStackedLayout()
+        self._stack_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self._stack_layout.addWidget(self._basic_footer)
 
-        widget = QWidget(None)
+        widget = QWidget()
         widget.setLayout(self._stack_layout)
 
         self._card_widget.footer.setContent(widget)
 
         # Final layout
         layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self._card_widget)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)

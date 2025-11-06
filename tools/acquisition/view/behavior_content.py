@@ -38,11 +38,9 @@ class BehaviorContent(ContentWidget):
         self._inference_status = QLabel("")
         self._card_widget = CardWidget(title="Behavior", header_right_layout=self._inference_status)
 
-        content = QWidget()
-        content.setContentsMargins(0, 4, 0, 4)
-
         hbox_main_layout = QHBoxLayout()
-        hbox_main_layout.setContentsMargins(0, 0, 0, 0)
+        hbox_main_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        hbox_main_layout.setContentsMargins(0, 0, 0, 4)
         hbox_main_layout.setSpacing(4)
 
         left_layout = self._left_layout = QGridLayout()
@@ -145,12 +143,15 @@ class BehaviorContent(ContentWidget):
 
         #
 
+        content = QWidget()
+        content.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        content.setContentsMargins(0, 4, 0, 4)
         content.setLayout(hbox_main_layout)
+
         self._card_widget.setContentWidget(content)
 
         # Footer
         self._basic_footer = QWidget()
-        self._basic_footer.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self._basic_footer.setContentsMargins(0, 0, 0, 0)
 
         layout = QHBoxLayout()
@@ -172,6 +173,7 @@ class BehaviorContent(ContentWidget):
 
         # Final layout
         layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self._card_widget)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -193,7 +195,6 @@ class BehaviorContent(ContentWidget):
         intersession_machine.events.state_changed += lambda old, new: self._intersession_state_label.setText(new)
 
         algo.property_changed += self._algorithm_property_changed
-        # self._analysis.headbar_pressure_monitor.property_changed += self._force_detector_property_changed
         behavior_model.property_changed += self._behavior_model_property_changed
         self.status_changed.connect(self._inference_status.setText)
         self.set_is_editable(False)

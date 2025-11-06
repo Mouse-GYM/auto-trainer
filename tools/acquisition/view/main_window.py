@@ -422,8 +422,8 @@ class MainWindow(QMainWindow):
         analysis = behavior.analysis
 
         toolbar = QToolBar("Run Toolbar")
-        toolbar.setContentsMargins(0, 0, 0, 4)
-        toolbar.setStyleSheet("QToolBar{spacing: 4px;}")
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.setStyleSheet("spacing: 4px")
         toolbar.setFloatable(False)
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
@@ -443,7 +443,6 @@ class MainWindow(QMainWindow):
         self._notes.setMinimumWidth(300)
         self._notes.setText(self._app_model.notes)
         self._notes.textChanged.connect(self.notes_changed)
-        # self._notes.setContentsMargins(4, 0, 8, 0)
         toolbar.addWidget(self._notes)
 
         toolbar.addWidget(QLabel("Subject:"))

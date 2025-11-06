@@ -3,8 +3,8 @@ import typing
 from typing import Tuple
 
 from PySide6 import QtCore
-from PySide6.QtCore import QTimer, Slot, Signal
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QStackedLayout, QWidget
+from PySide6.QtCore import QTimer, Slot, Signal, Qt
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QStackedLayout, QWidget, QSizePolicy
 
 from autotrainer.behavior import TrainingMode
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
@@ -60,8 +60,13 @@ class MainContent(ContentWidget):
         self._mid_protocol_phase_widget = self._create_protocol_phase_mid_widget()
         self._mid_stacked_layout.addWidget(self._mid_protocol_phase_widget)
 
-        self._end_stacked_layout = QStackedLayout()
-        main_layout.addLayout(self._end_stacked_layout)
+        end_stacked_widget = QWidget()
+        end_stacked_widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
+
+        self._end_stacked_layout = QStackedLayout(end_stacked_widget)
+        self._end_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+
+        main_layout.addWidget(end_stacked_widget)
 
         self._end_widget_manual = self._create_end_widget_manual()
         self._end_stacked_layout.addWidget(self._end_widget_manual)
@@ -74,6 +79,7 @@ class MainContent(ContentWidget):
 
         self._is_diagnostics_visible = True
         self.set_diagnostics_visible(False)
+        # TODO: keeping/making diagnostic visible break a bit top alignment of that parts present in bottom of UI
 
         self._prev_parts_3d_loc = {}
         self._next_parts_3d_loc_report = time.perf_counter()
@@ -135,7 +141,6 @@ class MainContent(ContentWidget):
             app_model.behavior,
             app_model.inference,
         )
-        # self._layout.addWidget(behavior_content, 1, 0, 1, 3)
         mid_layout.addWidget(behavior_content)
         self._content_widgets.append(behavior_content)
 
@@ -146,7 +151,6 @@ class MainContent(ContentWidget):
             app_model.message_handler,
             app_model.preferences,
         )
-        # self._layout.addWidget(self._analysis_content, 1, 3, 1, 3)
         mid_layout.addWidget(self._analysis_content)
         self._content_widgets.append(self._analysis_content)
 
@@ -158,6 +162,7 @@ class MainContent(ContentWidget):
         widget.setContentsMargins(4, 4, 4, 4)
 
         end_layout = QHBoxLayout(widget)
+        end_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         end_layout.setContentsMargins(0, 0, 0, 0)
         end_layout.setSpacing(4)
 
@@ -165,23 +170,16 @@ class MainContent(ContentWidget):
         end_layout.addWidget(self._hardware_control_content)
         self._content_widgets.append(self._hardware_control_content)
 
-        sub_layout = QHBoxLayout()
-        sub_layout.setContentsMargins(0, 0, 0, 0)
-        sub_layout.setSpacing(4)
-
         hardware_status_content = HardwareStatusContent(self._app_model.message_handler)
-        sub_layout.addWidget(hardware_status_content)
+        end_layout.addWidget(hardware_status_content)
         self._content_widgets.append(hardware_status_content)
 
         alarm_content = self._alarm_content = AlarmContent(self._app_model, self._app_model.hardware)
-        sub_layout.addWidget(alarm_content)
-        self._alarm_content_manual_layout = sub_layout
-
-        end_layout.addLayout(sub_layout)
+        end_layout.addWidget(alarm_content)
+        self._alarm_content_manual_layout = end_layout
 
         # Optional fourth row - diagnostics
         self._diagnostics_content = DiagnosticsContent(self._app_model)
-        # self._layout.addWidget(self._diagnostics_content, 4, 0, 1, 6)
         end_layout.addWidget(self._diagnostics_content)
 
         return widget
