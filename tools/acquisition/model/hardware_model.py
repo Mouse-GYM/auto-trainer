@@ -19,8 +19,8 @@ _nans_offset3dTuple = Offset3DTuple(math.nan, math.nan, math.nan)
 
 
 _reg_pellet_version_clean = re.compile("pellet ?:? *")
-_reg_tunnel_version_clean = re.compile("pellet ?:? *")
-_reg_magnet_version_clean = re.compile("pellet ?:? *")
+_reg_tunnel_version_clean = re.compile("tunnel ?:? *")
+_reg_magnet_version_clean = re.compile("magnet ?:? *")
 
 
 class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol):
