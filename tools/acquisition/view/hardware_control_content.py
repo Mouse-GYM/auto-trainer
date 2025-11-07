@@ -179,6 +179,7 @@ class HardwareControlContent(ContentWidget):
         self._basic_footer = QWidget()
 
         layout = QHBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(QLabel("Command in progress:"))
         self._command_label = QLabel("None")
