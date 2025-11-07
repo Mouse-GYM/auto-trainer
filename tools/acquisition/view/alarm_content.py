@@ -44,7 +44,6 @@ class AlarmContent(ContentWidget):
 
     def __init__(self, app_model: AppModel, hardware_model: HardwareModel):
         super().__init__()
-        # self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         self._app_model = app_model
         self._hardware_model = hardware_model
@@ -57,7 +56,6 @@ class AlarmContent(ContentWidget):
         content_layout.setContentsMargins(4, 4, 0, 0)
 
         form_layout = QFormLayout()
-        # form_layout.setContentsMargins(0, 0, 0, 0)
         form_layout.setHorizontalSpacing(32)
 
         emergency_alarm = app_model.behavior.analysis.emergency_alarm_monitor
