@@ -5,7 +5,7 @@ from typing import List, Optional, Dict
 
 import numpy
 from PySide6.QtCore import Qt, Signal, Slot, QSize
-from PySide6.QtGui import QImage, QPainter
+from PySide6.QtGui import QImage, QPainter, QTextDocument
 from PySide6.QtWidgets import QWidget, QLabel, QComboBox, QHBoxLayout, QVBoxLayout, QStackedLayout, QSizePolicy
 
 from autotrainer.inference import PoseLocation
@@ -83,38 +83,40 @@ class QCaptureView(QWidget):
         self._content_stack.addWidget(self._settings)
 
         # Footer
-        label = self._status_label = QLabel("")
+        footer = self._footer = QWidget()
+        footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+
+        label = self._status_label = QLabel(" " * 255)
         label.setWordWrap(True)
-        label.setMinimumHeight(32)
-        label.setMaximumHeight(64)
         label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        # label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        self._is_recording = QLabel("")
-        self._is_recording.setStyleSheet("border: 1px solid gray; border-radius: 8; background-color: green;")
-        self._is_recording.setFixedSize(16, 16)
-        self._is_recording.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self._is_recording.setVisible(False)
-        self._is_recording.setAlignment(Qt.AlignmentFlag.AlignRight)
+        # this really makes sure that the label will expand as necessary when its text is changed
+        lbl_l = QVBoxLayout()
+        lbl_l.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        lbl_l.addWidget(label)
+        footer_layout.addLayout(lbl_l, 0)
 
-        self._footer = QWidget()
-        self._footer.setMinimumHeight(32)
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self._status_label, 0, Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(self._is_recording, 0, Qt.AlignmentFlag.AlignRight)
-        self._footer.setLayout(layout)
-        # self._footer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        #
+        label = self._is_recording = QLabel("")
+        label.setStyleSheet("border: 1px solid gray; border-radius: 8; background-color: green;")
+        label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        label.setFixedSize(16, 16)
+        label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        label.setVisible(False)
+        label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        footer_layout.addWidget(self._is_recording, 0, Qt.AlignmentFlag.AlignRight)
 
-        self._card_widget.footer.setContent(self._footer)
+        self._card_widget.footer.setContent(footer)
 
+        final_layout = QVBoxLayout()
+        final_layout.addWidget(self._card_widget)
+        final_layout.setContentsMargins(0, 0, 0, 0)
+        final_layout.setSpacing(0)
 
-        layout = QVBoxLayout()
-        layout.addWidget(self._card_widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        self.setLayout(layout)
+        self.setLayout(final_layout)
 
         self.set_is_editable(False)
 
@@ -270,4 +272,5 @@ class QCaptureView(QWidget):
             text = "Capture disabled."
 
         self._status_label.setText(text)
+        self._status_label.update()
         self.update()
