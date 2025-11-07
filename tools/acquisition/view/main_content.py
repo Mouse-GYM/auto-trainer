@@ -74,6 +74,10 @@ class MainContent(ContentWidget):
         self._end_protocol_phase_widget = self._create_protocol_phase_end_widget()
         self._end_stacked_layout.addWidget(self._end_protocol_phase_widget)
 
+        # Optional fourth row - diagnostics
+        self._diagnostics_content = DiagnosticsContent(self._app_model)
+        main_layout.addWidget(self._diagnostics_content)
+
         self._frame_count = 0
         self._start = 0
 
@@ -186,10 +190,6 @@ class MainContent(ContentWidget):
         alarm_content.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         end_layout.addWidget(alarm_content)
         self._alarm_content_manual_layout = end_layout
-
-        # Optional fourth row - diagnostics
-        self._diagnostics_content = DiagnosticsContent(self._app_model)
-        end_layout.addWidget(self._diagnostics_content)
 
         return widget
 
