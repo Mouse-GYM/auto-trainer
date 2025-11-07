@@ -60,7 +60,7 @@ class HardwareControlContent(ContentWidget):
             self._travel_limits = _alogus_travel_limits
 
         layout = QGridLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(8, 4, 8, 4)
         layout.setHorizontalSpacing(8)
         layout.setVerticalSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -73,6 +73,7 @@ class HardwareControlContent(ContentWidget):
         layout.addWidget(label, 0, 2)
         label = QLabel("<b>Compound Move</b>")
         label.setAlignment(Qt.AlignCenter)
+        label.setContentsMargins(0, 0, 0, 4)  # ensure small margin below
         layout.addWidget(label, 0, 4)
 
         form_layout = QFormLayout()
@@ -169,8 +170,8 @@ class HardwareControlContent(ContentWidget):
         self._cover_button = QPushButton("Cover")
         self._cover_button.clicked.connect(lambda: self._model.cover_pellet())
         button_layout.addWidget(self._cover_button)
-
         layout.addLayout(button_layout, 1, 4)
+
         self._card_widget.setContentLayout(layout)
         self._card_widget.setSizePolicy(self.sizePolicy())
 

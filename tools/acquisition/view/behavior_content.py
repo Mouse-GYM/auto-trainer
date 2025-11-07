@@ -40,7 +40,7 @@ class BehaviorContent(ContentWidget):
 
         hbox_main_layout = QHBoxLayout()
         hbox_main_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        hbox_main_layout.setContentsMargins(0, 0, 4, 0)
+        hbox_main_layout.setContentsMargins(4, 4, 4, 4)
         hbox_main_layout.setSpacing(16)
 
         left_layout = self._left_layout = QGridLayout()
@@ -50,9 +50,9 @@ class BehaviorContent(ContentWidget):
         left_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         right_layout = self._right_layout = QGridLayout()
-        right_layout.setContentsMargins(0, 0, 4, 0)
-        right_layout.setHorizontalSpacing(4)
+        right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setVerticalSpacing(4)
+        right_layout.setHorizontalSpacing(8)
         right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         left_cur_row = 0

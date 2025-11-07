@@ -53,7 +53,7 @@ class AlarmContent(ContentWidget):
 
         content_layout = QVBoxLayout()
         content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        content_layout.setContentsMargins(4, 4, 0, 0)
+        content_layout.setContentsMargins(8, 4, 8, 4)
 
         form_layout = QFormLayout()
         form_layout.setHorizontalSpacing(32)
@@ -62,6 +62,7 @@ class AlarmContent(ContentWidget):
         emergency_alarm_cfg = emergency_alarm.config
 
         label = QLabel("<b>Alarms</b>")
+        label.setContentsMargins(0, 0, 0, 4)
         form_layout.addRow(label, None)
 
         def on_use_changed(do_use, *, lbl):
@@ -91,7 +92,7 @@ class AlarmContent(ContentWidget):
         #
 
         label = QLabel("<b>Detectors</b>")
-        label.setContentsMargins(0, 8, 0, 0)
+        label.setContentsMargins(0, 8, 0, 4)
         form_layout.addRow(label, None)
 
         self._load_cell_thrash_status = StatusIcon.alarmIcon()

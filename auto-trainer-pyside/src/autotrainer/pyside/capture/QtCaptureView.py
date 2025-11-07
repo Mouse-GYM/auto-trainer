@@ -84,12 +84,14 @@ class QCaptureView(QWidget):
 
         # Footer
         footer = self._footer = QWidget()
-        footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+        footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         footer_layout = QHBoxLayout(footer)
         footer_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
 
         label = self._status_label = QLabel(" " * 255)
         label.setWordWrap(True)
+        label.setContentsMargins(0, 0, 0, 0)
         label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
