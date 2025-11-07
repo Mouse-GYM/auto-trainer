@@ -54,11 +54,11 @@ class AlarmContent(ContentWidget):
 
         content_layout = QVBoxLayout()
         content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        # content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setContentsMargins(4, 4, 0, 0)
 
         form_layout = QFormLayout()
-        form_layout.setContentsMargins(4, 4, 0, 0)
-        form_layout.setHorizontalSpacing(4)
+        # form_layout.setContentsMargins(0, 0, 0, 0)
+        form_layout.setHorizontalSpacing(32)
 
         emergency_alarm = app_model.behavior.analysis.emergency_alarm_monitor
         emergency_alarm_cfg = emergency_alarm.config

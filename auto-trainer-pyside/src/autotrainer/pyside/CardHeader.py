@@ -28,8 +28,7 @@ class CardHeader(QWidget):
             "; padding: 8px; border-top-left-radius: 6px; border-top-right-radius: 6px}")
 
         self._layout = QHBoxLayout()
-        self._layout.setContentsMargins(2, 4, 4, 2)
-        # self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setContentsMargins(6, 4, 4, 6)
 
         self._title_label = QLabel(f"<b>{title}</b>")
         if title_color is not None:

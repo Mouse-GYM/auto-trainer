@@ -145,7 +145,7 @@ class MainContent(ContentWidget):
 
         mid_layout = QHBoxLayout(widget)
         mid_layout.setContentsMargins(4, 4, 4, 4)
-        mid_layout.setSpacing(8)
+        mid_layout.setSpacing(16)
 
         behavior_content = BehaviorContent(
             app_model,

@@ -43,7 +43,7 @@ class HardwareControlContent(ContentWidget):
         layout = QHBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(4)
+        layout.setSpacing(16)
 
         layout.addWidget(QLabel("Tunnel:"))
         self._tunnel_version = QLabel("(unknown version)")
