@@ -100,16 +100,21 @@ class MainContent(ContentWidget):
     def _create_top_widget_manual(self):
         widget = QWidget()
         widget.setContentsMargins(0, 0, 0, 0)
-        widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         top_layout = QHBoxLayout(widget)
         top_layout.setContentsMargins(4, 4, 4, 4)
         top_layout.setSpacing(4)
+        top_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # allow auto set of spacing between cameras
+        top_layout.addStretch(1)
 
         self._left_camera_content = CameraContent(self._app_model.left_camera)
         self._left_camera_content.camera_view.setTitle("Left Camera")
         # self._left_camera_content.camera_view.setSize(450, 300)
         top_layout.addWidget(self._left_camera_content)
         self._content_widgets.append(self._left_camera_content)
+
+        top_layout.addStretch(1)
 
         self._right_camera_content = CameraContent(self._app_model.right_camera)
         self._right_camera_content.camera_view.setTitle("Right Camera")
@@ -118,12 +123,16 @@ class MainContent(ContentWidget):
         top_layout.addWidget(self._right_camera_content)
         self._content_widgets.append(self._right_camera_content)
 
+        top_layout.addStretch(1)
+
         self._top_camera_content = CameraContent(self._app_model.top_camera)
         self._top_camera_content.camera_view.setTitle("Top Camera")
         # self._top_camera_content.camera_view.setSize(450, 300)
         # self._layout.addWidget(self._top_camera_content, 0, 4, 1, 2)
         top_layout.addWidget(self._top_camera_content)
         self._content_widgets.append(self._top_camera_content)
+
+        top_layout.addStretch(1)
 
         return widget
 
