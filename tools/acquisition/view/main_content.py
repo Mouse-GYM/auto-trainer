@@ -170,12 +170,12 @@ class MainContent(ContentWidget):
     def _create_end_widget_manual(self):
         # Third row - hardware & alarms
         widget = QWidget()
-        widget.setContentsMargins(4, 4, 4, 4)
+        widget.setContentsMargins(4, 0, 4, 0)
 
         end_layout = QHBoxLayout(widget)
         end_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        end_layout.setContentsMargins(0, 0, 0, 0)
-        end_layout.setSpacing(8)
+        end_layout.setContentsMargins(4, 4, 4, 4)
+        end_layout.setSpacing(16)
 
         self._hardware_control_content = HardwareControlContent(self._app_model.hardware)
         end_layout.addWidget(self._hardware_control_content)
@@ -194,10 +194,10 @@ class MainContent(ContentWidget):
 
     def _create_protocol_phase_mid_widget(self):
         widget = QWidget()
-        widget.setContentsMargins(4, 4, 4, 4)
+        widget.setContentsMargins(4, 0, 4, 0)
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(16)
         card = CardWidget(title="Protocol")
         layout.addWidget(card)
 
@@ -208,11 +208,10 @@ class MainContent(ContentWidget):
 
     def _create_protocol_phase_end_widget(self):
         widget = QWidget()
-        widget.setContentsMargins(4, 4, 4, 4)
-
+        widget.setContentsMargins(4, 0, 4, 0)
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(16)
 
         card = CardWidget(title="Protocol Progress")
         layout.addWidget(card)

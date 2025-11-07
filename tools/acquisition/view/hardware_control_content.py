@@ -35,7 +35,6 @@ class HardwareControlContent(ContentWidget):
 
     def __init__(self, model: HardwareModel):
         super().__init__()
-        self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
 
         self._model = model
 
@@ -60,7 +59,7 @@ class HardwareControlContent(ContentWidget):
             self._travel_limits = _alogus_travel_limits
 
         layout = QGridLayout()
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setHorizontalSpacing(8)
         layout.setVerticalSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)

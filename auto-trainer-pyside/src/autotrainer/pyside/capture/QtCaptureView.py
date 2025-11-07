@@ -83,25 +83,28 @@ class QCaptureView(QWidget):
         self._content_stack.addWidget(self._settings)
 
         # Footer
-        self._status_label = QLabel("")
-        # self._status_label.setWordWrap(True)
-        self._status_label.setAlignment(Qt.AlignLeft)
+        label = self._status_label = QLabel("")
+        label.setWordWrap(True)
+        label.setMinimumHeight(32)
+        label.setMaximumHeight(64)
+        label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        # label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         self._is_recording = QLabel("")
         self._is_recording.setStyleSheet("border: 1px solid gray; border-radius: 8; background-color: green;")
         self._is_recording.setFixedSize(16, 16)
-        self._is_recording.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        self._is_recording.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._is_recording.setVisible(False)
         self._is_recording.setAlignment(Qt.AlignmentFlag.AlignRight)
 
         self._footer = QWidget()
-        self._footer.setMinimumHeight(16)
+        self._footer.setMinimumHeight(32)
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._status_label, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self._is_recording, 0, Qt.AlignmentFlag.AlignRight)
         self._footer.setLayout(layout)
-        self._footer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        # self._footer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         self._card_widget.footer.setContent(self._footer)
 
@@ -267,3 +270,4 @@ class QCaptureView(QWidget):
             text = "Capture disabled."
 
         self._status_label.setText(text)
+        self.update()

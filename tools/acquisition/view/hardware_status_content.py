@@ -24,7 +24,6 @@ class HardwareStatusContent(ContentWidget):
 
     def __init__(self, message_handler: MessageHandler):
         super().__init__()
-        # self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
 
         self._model = message_handler
 
