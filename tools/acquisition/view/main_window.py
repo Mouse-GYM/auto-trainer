@@ -419,10 +419,9 @@ class MainWindow(QMainWindow):
     def _configure_toolbar(self):
 
         behavior = self._app_model.behavior
-        analysis = behavior.analysis
 
         toolbar = QToolBar("Run Toolbar")
-        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.setContentsMargins(0, 0, 0, 4)
         toolbar.setStyleSheet("spacing: 4px")
         toolbar.setFloatable(False)
         toolbar.setMovable(False)
@@ -466,8 +465,8 @@ class MainWindow(QMainWindow):
                           # this is because it's a typed str-subclass enum.
                           )
 
-        def index_changed(idx, combo=combo):
-            selected_mode = combo.currentData()[0]
+        def index_changed(_):
+            selected_mode = self._training_mode_combo.currentData()[0]  # unpack from tuple, see above.
             self._app_model.behavior.algorithm.training_mode = selected_mode
         combo.currentIndexChanged.connect(index_changed)
 

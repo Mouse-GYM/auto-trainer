@@ -102,10 +102,10 @@ class MainContent(ContentWidget):
 
     def _create_top_widget_manual(self):
         widget = QWidget()
-        widget.setContentsMargins(0, 0, 0, 0)
+        widget.setContentsMargins(4, 4, 4, 4)
         top_layout = QHBoxLayout(widget)
         top_layout.setContentsMargins(4, 4, 4, 4)
-        top_layout.setSpacing(4)
+        top_layout.setSpacing(8)
         top_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # allow auto set of spacing between cameras
@@ -141,11 +141,11 @@ class MainContent(ContentWidget):
 
     def _create_mid_widget_manual(self, app_model):
         widget = QWidget()
-        widget.setContentsMargins(4, 0, 4, 4)
+        widget.setContentsMargins(4, 0, 4, 0)
 
         mid_layout = QHBoxLayout(widget)
-        mid_layout.setContentsMargins(0, 0, 0, 0)
-        mid_layout.setSpacing(4)
+        mid_layout.setContentsMargins(4, 4, 4, 4)
+        mid_layout.setSpacing(8)
 
         behavior_content = BehaviorContent(
             app_model,
@@ -175,7 +175,7 @@ class MainContent(ContentWidget):
         end_layout = QHBoxLayout(widget)
         end_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         end_layout.setContentsMargins(0, 0, 0, 0)
-        end_layout.setSpacing(4)
+        end_layout.setSpacing(8)
 
         self._hardware_control_content = HardwareControlContent(self._app_model.hardware)
         end_layout.addWidget(self._hardware_control_content)
