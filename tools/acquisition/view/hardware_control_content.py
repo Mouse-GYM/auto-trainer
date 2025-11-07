@@ -30,6 +30,7 @@ _alogus_travel_limits = {
 
 
 class HardwareControlContent(ContentWidget):
+
     position_changed = Signal(int, name="position_changed")
     command_changed = Signal(str, name="command_changed")
 

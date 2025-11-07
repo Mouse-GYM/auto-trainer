@@ -1,4 +1,5 @@
 import math
+import re
 import threading
 import time
 from queue import Queue
@@ -15,6 +16,11 @@ from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, Devic
 logger = get_verbose_logger(__name__)
 
 _nans_offset3dTuple = Offset3DTuple(math.nan, math.nan, math.nan)
+
+
+_reg_pellet_version_clean = re.compile("pellet ?:? *")
+_reg_tunnel_version_clean = re.compile("pellet ?:? *")
+_reg_magnet_version_clean = re.compile("pellet ?:? *")
 
 
 class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol):
@@ -322,14 +328,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             if version.find("module") != -1:
                 version = version.replace("module", "").strip()
             if version.find("pellet") != -1:
-                self._on_property_changed(self.PELLET_VERSION_PROPERTY, version.replace("pellet ", "").strip(),
-                                          old_value)
+                clean_v = _reg_pellet_version_clean.sub("", version).strip()
+                self._on_property_changed(self.PELLET_VERSION_PROPERTY, clean_v, old_value)
             elif version.find("magnet") != -1:
-                self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, version.replace("magnet ", "").strip(),
-                                          old_value)
+                clean_v = _reg_magnet_version_clean.sub("", version).strip()
+                self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, clean_v, old_value)
             elif version.find("tunnel") != -1:
-                self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, version.replace("tunnel ", "").strip(),
-                                          old_value)
+                clean_v = _reg_tunnel_version_clean.sub("", version).strip()
+                self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, clean_v, old_value)
 
     def _send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         with self._lock:
