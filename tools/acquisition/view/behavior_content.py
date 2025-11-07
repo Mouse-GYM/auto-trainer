@@ -46,13 +46,13 @@ class BehaviorContent(ContentWidget):
         left_layout = self._left_layout = QGridLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setHorizontalSpacing(4)
-        left_layout.setVerticalSpacing(0)
+        left_layout.setVerticalSpacing(4)
         left_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         right_layout = self._right_layout = QGridLayout()
         right_layout.setContentsMargins(0, 0, 4, 0)
         right_layout.setHorizontalSpacing(4)
-        right_layout.setVerticalSpacing(0)
+        right_layout.setVerticalSpacing(4)
         right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         left_cur_row = 0
@@ -104,7 +104,7 @@ class BehaviorContent(ContentWidget):
         #
 
         right_cur_row = 0
-        label = QLabel("Count")
+        label = QLabel("Pellet Counts")
         label.setStyleSheet("font-weight: bold;")
         right_layout.addWidget(label, right_cur_row, 0)
         label = QLabel("day / total")
@@ -112,27 +112,36 @@ class BehaviorContent(ContentWidget):
         right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1
 
-        right_layout.addWidget(QLabel("Pellets consumed:"), right_cur_row, 0)
-        self._pellets_consumed_label = DailyAndTotalCountsLabel(day=algo.day_pellet_count, total=algo.total_pellet_count)
-        right_layout.addWidget(self._pellets_consumed_label, right_cur_row, 1)
-
-        right_cur_row += 1
-        right_layout.addWidget(QLabel("Pellets presented:"), right_cur_row, 0)
+        right_layout.addWidget(QLabel("Presented:"), right_cur_row, 0)
         self._pellets_presented_label = DailyAndTotalCountsLabel(day=algo.pellets_presented_day, total=algo.pellets_presented_day)
         right_layout.addWidget(self._pellets_presented_label, right_cur_row, 1)
-
         right_cur_row += 1
-        right_layout.addWidget(QLabel("Successful Reaches:"), right_cur_row, 0)
+
+        right_layout.addWidget(QLabel("Consumed:"), right_cur_row, 0)
+        self._pellets_consumed_label = DailyAndTotalCountsLabel(day=algo.day_pellet_count, total=algo.total_pellet_count)
+        right_layout.addWidget(self._pellets_consumed_label, right_cur_row, 1)
+        right_cur_row += 1
+
+        right_layout.addWidget(QLabel("Reached:"), right_cur_row, 0)
         label = self._successful_reaches_label = DailyAndTotalCountsLabel(day=algo.successful_reaches_day, total=algo.successful_reaches_total)
         right_layout.addWidget(label, right_cur_row, 1)
-
         right_cur_row += 1
-        right_layout.addWidget(QLabel("Prev. session pellet shift XYZ (mm) :"), right_cur_row, 0)
+
+        label = QLabel("<b>Pellet Shift XYZ</b>")
+        label.setContentsMargins(0, 4, 0, 0)
+        right_layout.addWidget(label, right_cur_row, 0)
+        label = QLabel("<b>mm</b>")
+        label.setContentsMargins(0, 4, 0, 0)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        right_layout.addWidget(label, right_cur_row, 1)
+        right_cur_row += 1
+
+        right_layout.addWidget(QLabel("Prev. session:"), right_cur_row, 0)
         label = self._prev_pellet_shift_label = XYZQLabel()
         right_layout.addWidget(label, right_cur_row, 1)
-
         right_cur_row += 1
-        right_layout.addWidget(QLabel("Prev. processed pellet shift XYZ (mm) :"), right_cur_row, 0)
+
+        right_layout.addWidget(QLabel("Prev. processed:"), right_cur_row, 0)
         label = self._prev_processed_pellet_shift_label = XYZQLabel()
         right_layout.addWidget(label, right_cur_row, 1)
 
