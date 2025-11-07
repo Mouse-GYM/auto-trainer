@@ -421,8 +421,6 @@ class MainWindow(QMainWindow):
         behavior = self._app_model.behavior
 
         toolbar = QToolBar("Run Toolbar")
-        toolbar.setContentsMargins(4, 4, 4, 4)
-        toolbar.setStyleSheet("spacing: 8px")
         toolbar.setFloatable(False)
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
@@ -442,6 +440,8 @@ class MainWindow(QMainWindow):
         self._notes.setMinimumWidth(300)
         self._notes.setText(self._app_model.notes)
         self._notes.textChanged.connect(self.notes_changed)
+        self._notes.setContentsMargins(4, 0, 8, 0)
+        # note: this margin allows the emergency button to be greater
         toolbar.addWidget(self._notes)
 
         toolbar.addWidget(QLabel("Subject:"))
@@ -454,7 +454,9 @@ class MainWindow(QMainWindow):
         self._animal_dropdown.lineEdit().editingFinished.connect(self._add_animal)
         toolbar.addWidget(self._animal_dropdown)
 
-        toolbar.addWidget(QLabel("Training Mode:"))
+        label = QLabel("Training Mode:")
+        label.setContentsMargins(8, 0, 0, 0)
+        toolbar.addWidget(label)
         combo = self._training_mode_combo = QComboBox()
         toolbar.addWidget(combo)
         combo.setDuplicatesEnabled(False)
@@ -501,7 +503,6 @@ class MainWindow(QMainWindow):
             self.addToolBarBreak()
             toolbar = QToolBar("Dev Toolbar")
             toolbar.setContentsMargins(0, 0, 0, 0)
-            toolbar.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Minimum)
             self.addToolBar(toolbar)
             toolbar.setFloatable(False)
             toolbar.setMovable(False)
