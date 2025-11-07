@@ -360,7 +360,7 @@ class VideoCapture(Process):
                         primary_sema.release()
                         __debug__ and logger.debug("sem released")
                         released = True
-                    if net_q.event.wait(0.001):
+                    if net_q.event.is_set():  # don't wait and continue processing if not already set
                         __debug__ and logger.debug("event obtained")
                         return True
                     return False
