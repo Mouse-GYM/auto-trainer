@@ -100,6 +100,7 @@ class MainContent(ContentWidget):
     def _create_top_widget_manual(self):
         widget = QWidget()
         widget.setContentsMargins(0, 0, 0, 0)
+        widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         top_layout = QHBoxLayout(widget)
         top_layout.setContentsMargins(4, 4, 4, 4)
         top_layout.setSpacing(4)
@@ -107,9 +108,7 @@ class MainContent(ContentWidget):
         self._left_camera_content = CameraContent(self._app_model.left_camera)
         self._left_camera_content.camera_view.setTitle("Left Camera")
         # self._left_camera_content.camera_view.setSize(450, 300)
-
         top_layout.addWidget(self._left_camera_content)
-        # self._layout.addWidget(self._left_camera_content, 0, 0, 1, 2)
         self._content_widgets.append(self._left_camera_content)
 
         self._right_camera_content = CameraContent(self._app_model.right_camera)
@@ -151,7 +150,7 @@ class MainContent(ContentWidget):
             app_model.message_handler,
             app_model.preferences,
         )
-        mid_layout.addWidget(self._analysis_content)
+        mid_layout.addWidget(self._analysis_content, 3)
         self._content_widgets.append(self._analysis_content)
 
         return widget

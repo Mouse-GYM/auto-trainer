@@ -3,7 +3,7 @@ from typing import Dict
 from numpy import ndarray
 
 from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QGridLayout
+from PySide6.QtWidgets import QGridLayout, QSizePolicy
 
 from autotrainer.core import NotificationCenter, TriggerNotification, Notification
 from autotrainer.inference import PoseLocation
@@ -20,6 +20,7 @@ class CameraContent(ContentWidget):
     def __init__(self, capture_model: VideoCaptureModel):
         super().__init__()
 
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self._model = capture_model
 
         layout = QGridLayout()

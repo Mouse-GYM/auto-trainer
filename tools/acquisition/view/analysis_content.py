@@ -127,8 +127,6 @@ class AnalysisContent(ContentWidget):
         self.star_triangle_offset_changed.connect(self._star_triangle_offset.setText)
         layout.addWidget(self._star_triangle_offset)
 
-        # layout.addStretch(1)
-
         self._load_cell_monitor_engaged = QtIndicator(text="Load Cell")
         layout.addWidget(self._load_cell_monitor_engaged)
 
@@ -179,7 +177,7 @@ class AnalysisContent(ContentWidget):
         self._stack_layout.addWidget(self._footer)
 
         widget = QWidget()
-        widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         widget.setLayout(self._stack_layout)
 
         self._card_widget.footer.setContent(widget)
