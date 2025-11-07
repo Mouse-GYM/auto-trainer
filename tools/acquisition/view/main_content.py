@@ -83,7 +83,6 @@ class MainContent(ContentWidget):
 
         self._is_diagnostics_visible = True
         self.set_diagnostics_visible(False)
-        # TODO: keeping/making diagnostic visible break a bit top alignment of that parts present in bottom of UI
 
         self._prev_parts_3d_loc = {}
         self._next_parts_3d_loc_report = time.perf_counter()

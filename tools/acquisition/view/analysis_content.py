@@ -2,8 +2,9 @@ import dataclasses
 
 from typing import Tuple, Optional, Dict, List
 
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QStackedLayout
+from PySide6.QtCore import Signal, Qt
+from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QStackedLayout, \
+    QDoubleSpinBox
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import PerfMonitor, SensorAnalysis, LoadCellMonitor, Offset3DTuple, SystemMessageHandler
@@ -109,7 +110,7 @@ class AnalysisContent(ContentWidget):
     ):
         super().__init__()
 
-        self._model = hardware_model
+        self._hardware_model = hardware_model
         self._analysis = analysis
         self._user_pref = user_pref
 
@@ -164,12 +165,18 @@ class AnalysisContent(ContentWidget):
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         layout.addWidget(QLabel("Load Cell Threshold (g):"))
-        self._load_cell_engaged_threshold_line_edit = QLineEdit(None, None)
-        self._load_cell_engaged_threshold_line_edit.editingFinished.connect(self._update_trigger)
-        self._load_cell_engaged_threshold_line_edit.setText(str(self._analysis.load_cell_monitor.load_cell_engaged_threshold))
-        layout.addWidget(self._load_cell_engaged_threshold_line_edit)
+        spinbox = self._load_cell_engaged_threshold_spinbox = QDoubleSpinBox()
+        spinbox.setDecimals(1)
+        spinbox.setSingleStep(1)
+        spinbox.setRange(0, 100)
+        def value_changed(value):
+            analysis.load_cell_monitor.load_cell_engaged_threshold = value
+        spinbox.valueChanged.connect(value_changed)
+        spinbox.setValue(analysis.load_cell_monitor.load_cell_engaged_threshold)
+        layout.addWidget(spinbox)
 
         self._footer.setLayout(layout)
 
@@ -193,8 +200,6 @@ class AnalysisContent(ContentWidget):
         self._perf_monitor = PerfMonitor(name="headFixContent", units="mps", report_window=30)
 
         self.set_is_editable(False)
-
-        self._model.property_changed += self._model_property_changed
 
         inference_model.star_triangle_offset_changed += self._star_triangle_offset_changed
         inference_model.diamond_triangle_offset_changed += self._diamond_triangle_offset_changed
@@ -242,12 +247,6 @@ class AnalysisContent(ContentWidget):
             audio_plot = self._measurement_plots[_audio_graph.name]
             audio_plot.replace_cache(spectrum)
 
-    def _update_trigger(self):
-        try:
-            self._model.load_trigger = float(self._load_cell_engaged_threshold_line_edit.text())
-        except Exception as ex:
-            logger.warning(ex)
-
     def _load_cell_monitor_property_changed(self, name, value, _):
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
             if value:
@@ -255,13 +254,7 @@ class AnalysisContent(ContentWidget):
             else:
                 self._plot_weight.getPlotItem().getViewBox().setBackgroundColor(_INACTIVE_LOAD_CELL_COLOR)
         elif name == LoadCellMonitor.LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY:
-            self._load_cell_engaged_threshold_line_edit.setText(str(value))
-
-    def _model_property_changed(self, name, value, _):
-        # If any of the values may be coming from a different thread (e.g., the device), a signal is generally needed
-        # rather than direct set/update.
-        if name == "load_trigger":  # not anymore used
-            self._load_cell_engaged_threshold_line_edit.setText(str(value))
+            self._load_cell_engaged_threshold_spinbox.setValue(value)
 
     def _diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         self.diamond_triangle_offset_changed.emit(_render_offset_3d_value(offset))
