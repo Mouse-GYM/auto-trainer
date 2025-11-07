@@ -421,8 +421,8 @@ class MainWindow(QMainWindow):
         behavior = self._app_model.behavior
 
         toolbar = QToolBar("Run Toolbar")
-        toolbar.setContentsMargins(0, 0, 0, 4)
-        toolbar.setStyleSheet("spacing: 4px")
+        toolbar.setContentsMargins(4, 4, 4, 4)
+        toolbar.setStyleSheet("spacing: 8px")
         toolbar.setFloatable(False)
         toolbar.setMovable(False)
         self.addToolBar(toolbar)

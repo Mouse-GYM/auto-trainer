@@ -46,7 +46,7 @@ class MainContent(ContentWidget):
         main_layout = self._main_layout = QVBoxLayout()
         self.setLayout(main_layout)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setSpacing(4)
 
         self._top_widget_manual = self._create_top_widget_manual()
         main_layout.addWidget(self._top_widget_manual)
@@ -105,7 +105,7 @@ class MainContent(ContentWidget):
         widget.setContentsMargins(4, 4, 4, 4)
         top_layout = QHBoxLayout(widget)
         top_layout.setContentsMargins(4, 4, 4, 4)
-        top_layout.setSpacing(8)
+        top_layout.setSpacing(16)  # given only 3 cam widgets not very large
         top_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # allow auto set of spacing between cameras
