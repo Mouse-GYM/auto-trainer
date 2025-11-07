@@ -165,9 +165,10 @@ class BehaviorContent(ContentWidget):
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(QLabel("Inference model:"))
-        self._location_label = QLabel("")
-        layout.addWidget(self._location_label)
+        self._model_location_label = QLabel("")
+        layout.addWidget(self._model_location_label)
 
         self._basic_footer.setLayout(layout)
 
@@ -253,9 +254,9 @@ class BehaviorContent(ContentWidget):
             self.status_changed.emit(f"Inference: {value}")
         elif name == "model_location":
             if value is not None and len(value) > 0:
-                self._location_label.setText(value)
+                self._model_location_label.setText(value)
             else:
-                self._location_label.setText("Inference model not specified")
+                self._model_location_label.setText("Inference model not specified")
 
     def _shift_xyz_property_changed(self, name, value, _):
         if name == ShiftXYZHandler.LAST_SHIFT_XYZ:
