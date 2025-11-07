@@ -91,6 +91,8 @@ class MainContent(ContentWidget):
         self._timer.timeout.connect(self.update_image)
         self._timer.start(int(1000 / self._app_model.preferences.live_feed_refresh_rate))
 
+        self._hardware_control_content.set_selected_animal(app_model.selected_animal)
+
         # finally, register handlers to events:
         app_model.property_changed += self._model_property_changed
         #
