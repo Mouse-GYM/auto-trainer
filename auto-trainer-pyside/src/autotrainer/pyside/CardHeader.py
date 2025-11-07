@@ -39,8 +39,7 @@ class CardHeader(QWidget):
         self.setLayout(self._layout)
 
     def setTitle(self, title: str, color: Optional[str] = None):
-        if color is not None:
-            title = f"<b>{title}</b>"
+        title = f"<b>{title}</b>"
         self._title_label.setText(title)
         if color is not None:
             self._title_label.setStyleSheet(f"color: {color}")
