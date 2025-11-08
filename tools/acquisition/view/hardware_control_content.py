@@ -173,7 +173,7 @@ class HardwareControlContent(ContentWidget):
         layout.addLayout(button_layout, 1, 4)
 
         self._card_widget.setContentLayout(layout)
-        self._card_widget.setSizePolicy(self.sizePolicy())
+        # self._card_widget.setSizePolicy(self.sizePolicy())
 
         # Footer
         self._basic_footer = QWidget()

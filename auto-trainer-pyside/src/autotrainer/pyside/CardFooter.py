@@ -11,13 +11,14 @@ class CardFooter(QWidget):
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("CardFooter")
         self.setStyleSheet("#CardFooter {background-color: #d9d9d9; padding: 16px; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px}")
-        self.setContentsMargins(4, 4, 4, 4)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setContentsMargins(0, 0, 0, 0)
         self._layout = None
 
     def setContent(self, widget: QWidget):
         self._layout = QVBoxLayout()
-        self._layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
+        self._layout.setContentsMargins(4, 2, 4, 4)
         self._layout.addWidget(widget)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.setLayout(self._layout)

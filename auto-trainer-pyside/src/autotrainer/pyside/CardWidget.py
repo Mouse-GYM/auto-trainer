@@ -63,22 +63,23 @@ class CardWidget(QWidget):
         self._footer.setVisible(visible)
 
     def setContentWidget(self, widget: Optional[QWidget]):
-        last_w = self._last_widget_or_layout
-        if last_w is not None:
-            self._layout.removeWidget(last_w)
-            last_w.setParent(None)  # THIS IS REQUIRED,
+        last_w_or_l = self._last_widget_or_layout
+        if last_w_or_l is not None:
+            self._layout.removeWidget(last_w_or_l)
+            last_w_or_l.setParent(None)  # THIS IS REQUIRED,
             # otherwise the last widget will continue display itself on top of any other
             # already selected previously.
-            last_w.hide()
-            last_w.update()  # force update to ensure widget is hidden
+            last_w_or_l.hide()
+            last_w_or_l.update()  # force update to ensure widget is hidden
 
         if widget is not None:
             self._layout.addWidget(widget, 1, 0)
-            self.setSizePolicy(widget.sizePolicy())
+            # self.setSizePolicy(widget.sizePolicy())
             # widget.setParent(self)  # not required, this is implicit with addWidget()
 
         self._last_widget_or_layout = widget
         widget.show()
+        widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._layout.update()  # force update to ensure layout is refreshed
 
     def setContentLayout(self, layout: QLayout):
@@ -90,3 +91,5 @@ class CardWidget(QWidget):
                 self._layout.removeItem(last)
         self._layout.addLayout(layout, 1, 0)
         self._last_widget_or_layout = layout
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._layout.update()  # force update to ensure layout is refreshed

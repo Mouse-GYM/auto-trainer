@@ -17,6 +17,7 @@ from tools.acquisition.view.content_widget import ContentWidget
 
 
 class BehaviorContent(ContentWidget):
+
     status_changed = Signal(str, name="status_changed")
 
     def __init__(self,
@@ -45,20 +46,21 @@ class BehaviorContent(ContentWidget):
 
         left_layout = self._left_layout = QGridLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setHorizontalSpacing(4)
+        left_layout.setHorizontalSpacing(8)
         left_layout.setVerticalSpacing(4)
         left_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         right_layout = self._right_layout = QGridLayout()
         right_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setHorizontalSpacing(8)
         right_layout.setVerticalSpacing(4)
-        right_layout.setHorizontalSpacing(8)
         right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         left_cur_row = 0
 
         label = QLabel("States")
         label.setStyleSheet("font-weight: bold;")
+        label.setContentsMargins(0, 0, 0, 4)
         left_layout.addWidget(label, left_cur_row, 0)
         left_cur_row += 1
 
@@ -95,12 +97,15 @@ class BehaviorContent(ContentWidget):
 
         left_layout.addWidget(QLabel("Head Magnet Baseline:"), left_cur_row, 0)
         self._baseline_label = QLabel(f"{self._behavior_model.algorithm.baseline_intensity}%")
-        hbox_layout = QHBoxLayout()
-        hbox_layout.addWidget(self._baseline_label)
+        # hbox_layout = QHBoxLayout()
+        # hbox_layout.addWidget(self._baseline_label)
+        left_layout.addWidget(self._baseline_label, left_cur_row, 1)
+        left_cur_row += 1
         button = self._make_baseline_button = QPushButton("Make Current Position Baseline")
         button.clicked.connect(self._make_position_baseline)
-        hbox_layout.addWidget(self._make_baseline_button)
-        left_layout.addLayout(hbox_layout, left_cur_row, 1)
+        # hbox_layout.addWidget(self._make_baseline_button)
+        # left_layout.addLayout(hbox_layout, left_cur_row, 1)
+        left_layout.addWidget(button, left_cur_row, 0)
         #
 
         right_cur_row = 0
@@ -128,7 +133,7 @@ class BehaviorContent(ContentWidget):
         right_cur_row += 1
 
         label = QLabel("<b>Pellet Shift XYZ</b>")
-        label.setContentsMargins(0, 4, 0, 0)
+        label.setContentsMargins(0, 8, 0, 0)
         right_layout.addWidget(label, right_cur_row, 0)
         label = QLabel("<b>mm</b>")
         label.setContentsMargins(0, 4, 0, 0)

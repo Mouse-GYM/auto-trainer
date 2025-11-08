@@ -155,18 +155,19 @@ class AnalysisContent(ContentWidget):
             if graph is not None and (selected is None or graph.name != selected.name):
                 self._selected_graph = graph
                 measure_plot = self._measurement_plots[graph.name]
+                # measure_plot.centralWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 self._card_widget.setContentWidget(measure_plot)
                 # logger.debug("set new graph: %s", measure_plot)
 
         # Footer
         self._footer = QWidget()
+        # self._footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self._footer.setContentsMargins(0, 0, 0, 0)
 
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
-        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-
+        layout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(QLabel("Load Cell Threshold (g):"))
         spinbox = self._load_cell_engaged_threshold_spinbox = QDoubleSpinBox()
         spinbox.setDecimals(1)

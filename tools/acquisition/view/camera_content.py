@@ -20,7 +20,6 @@ class CameraContent(ContentWidget):
     def __init__(self, capture_model: VideoCaptureModel):
         super().__init__()
 
-        # self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._model = capture_model
 
         layout = QGridLayout()

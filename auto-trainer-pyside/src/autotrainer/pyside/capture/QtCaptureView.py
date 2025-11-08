@@ -84,12 +84,12 @@ class QCaptureView(QWidget):
 
         # Footer
         footer = self._footer = QWidget()
-        footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         footer_layout = QHBoxLayout(footer)
         footer_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         footer_layout.setContentsMargins(0, 0, 0, 0)
 
-        label = self._status_label = QLabel(" " * 255)
+        label = self._status_label = QLabel("")
         label.setWordWrap(True)
         label.setContentsMargins(0, 0, 0, 0)
         label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -99,7 +99,7 @@ class QCaptureView(QWidget):
         lbl_l = QVBoxLayout()
         lbl_l.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         lbl_l.addWidget(label)
-        footer_layout.addLayout(lbl_l, 0)
+        footer_layout.addLayout(lbl_l)
 
         #
         label = self._is_recording = QLabel("")
@@ -112,6 +112,7 @@ class QCaptureView(QWidget):
         footer_layout.addWidget(self._is_recording, 0, Qt.AlignmentFlag.AlignRight)
 
         self._card_widget.footer.setContent(footer)
+        footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         final_layout = QVBoxLayout()
         final_layout.addWidget(self._card_widget)
