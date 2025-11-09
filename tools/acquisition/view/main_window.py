@@ -78,7 +78,7 @@ class MainWindow(QMainWindow):
         self._configure_toolbar()
         self._configure_statusbar()
 
-        self.setMaximumSize(1880, 1080)
+        # self.setMaximumSize(1880, 1080)
 
         self._open_dialogs = []
 
