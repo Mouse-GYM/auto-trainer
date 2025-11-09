@@ -164,7 +164,7 @@ class MainContent(ContentWidget):
             app_model.message_handler,
             app_model.preferences,
         )
-        mid_layout.addWidget(self._analysis_content, 3)
+        mid_layout.addWidget(self._analysis_content, 1)
         self._content_widgets.append(self._analysis_content)
 
         return widget

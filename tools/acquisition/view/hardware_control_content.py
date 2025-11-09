@@ -60,7 +60,7 @@ class HardwareControlContent(ContentWidget):
             self._travel_limits = _alogus_travel_limits
 
         layout = QGridLayout()
-        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setContentsMargins(8, 4, 8, 6)
         layout.setHorizontalSpacing(8)
         layout.setVerticalSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -77,7 +77,7 @@ class HardwareControlContent(ContentWidget):
         layout.addWidget(label, 0, 4)
 
         form_layout = QFormLayout()
-        form_layout.setContentsMargins(0, 0, 0, 0)
+        form_layout.setContentsMargins(0, 4, 0, 0)
         form_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         form_layout.setHorizontalSpacing(8)
         form_layout.setVerticalSpacing(4)

@@ -76,6 +76,7 @@ class BehaviorContent(ContentWidget):
 
         left_layout.addWidget(QLabel("Intersession:"), left_cur_row, 0)
         label = self._intersession_state_label = QLabel(self._behavior_model.system_machine.intersession.state)
+        label.setContentsMargins(0, 0, 0, 4)
         left_layout.addWidget(label, left_cur_row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         left_cur_row += 1
 
@@ -96,24 +97,21 @@ class BehaviorContent(ContentWidget):
         left_cur_row += 1
 
         left_layout.addWidget(QLabel("Head Magnet Baseline:"), left_cur_row, 0)
-        self._baseline_label = QLabel(f"{self._behavior_model.algorithm.baseline_intensity}%")
-        # hbox_layout = QHBoxLayout()
-        # hbox_layout.addWidget(self._baseline_label)
+        label = self._baseline_label = QLabel(f"{self._behavior_model.algorithm.baseline_intensity}%")
+        label.setContentsMargins(0, 4, 0, 0)
         left_layout.addWidget(self._baseline_label, left_cur_row, 1)
         left_cur_row += 1
         button = self._make_baseline_button = QPushButton("Make Current Position Baseline")
         button.clicked.connect(self._make_position_baseline)
-        # hbox_layout.addWidget(self._make_baseline_button)
-        # left_layout.addLayout(hbox_layout, left_cur_row, 1)
         left_layout.addWidget(button, left_cur_row, 0)
         #
 
         right_cur_row = 0
-        label = QLabel("Pellet Counts")
-        label.setStyleSheet("font-weight: bold;")
+        label = QLabel("<b>Pellet Counts</b>")
+        label.setContentsMargins(0, 0, 0, 4)
         right_layout.addWidget(label, right_cur_row, 0)
-        label = QLabel("day / total")
-        label.setStyleSheet("font-weight: bold;")
+        label = QLabel("<b>day / total</b>")
+        label.setContentsMargins(0, 0, 0, 4)
         right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1
 
@@ -133,10 +131,10 @@ class BehaviorContent(ContentWidget):
         right_cur_row += 1
 
         label = QLabel("<b>Pellet Shift XYZ</b>")
-        label.setContentsMargins(0, 8, 0, 0)
+        label.setContentsMargins(0, 8, 0, 4)
         right_layout.addWidget(label, right_cur_row, 0)
         label = QLabel("<b>mm</b>")
-        label.setContentsMargins(0, 4, 0, 0)
+        label.setContentsMargins(0, 8, 0, 4)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1

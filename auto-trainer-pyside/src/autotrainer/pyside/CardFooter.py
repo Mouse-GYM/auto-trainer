@@ -20,5 +20,6 @@ class CardFooter(QWidget):
         self._layout.setContentsMargins(4, 2, 4, 4)
         self._layout.addWidget(widget)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        widget.setContentsMargins(4, 2, 2, 2)
         widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.setLayout(self._layout)

@@ -37,7 +37,7 @@ class HardwareStatusContent(ContentWidget):
 
         layout = QGridLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(2, 2, 0, 0)
         layout.setHorizontalSpacing(8)
         content_layout.addLayout(layout)
 
