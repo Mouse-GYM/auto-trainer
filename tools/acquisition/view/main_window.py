@@ -397,7 +397,7 @@ class MainWindow(QMainWindow):
         self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
         self.preferences_action.triggered.connect(lambda: self._show_preferences())
 
-        self.emergency_stop_action = QAction("Emergency Stop", self)
+        self.emergency_stop_action = QAction("Emergency", self)
         self.emergency_stop_action.setCheckable(True)
 
         self.quit_action = QAction("Quit")
@@ -478,13 +478,13 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        emergency_button = QPushButton("Emergency Stop")
+        emergency_button = QPushButton("Emergency")
         emergency_button.setCheckable(True)
         emergency_button.setObjectName("EmergencyButton")
         emergency_button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
 
         def update_emergency_ui(is_toggled: bool, source: str):
-            emergency_button.setText("Resume" if is_toggled else "Emergency Stop")
+            emergency_button.setText("Resume" if is_toggled else "Emergency")
             self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED - Source: {source}" if is_toggled else self._title)
             if source != "user-button":
                 emergency_button.setChecked(is_toggled)
