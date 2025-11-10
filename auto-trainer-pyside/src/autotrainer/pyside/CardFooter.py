@@ -1,23 +1,25 @@
 from __future__ import annotations
 
 from PySide6 import QtCore
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy
 
 
 class CardFooter(QWidget):
     def __init__(self):
         super().__init__()
-
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("CardFooter")
         self.setStyleSheet("#CardFooter {background-color: #d9d9d9; padding: 16px; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px}")
-
         self.setContentsMargins(0, 0, 0, 0)
-
         self._layout = None
 
     def setContent(self, widget: QWidget):
         self._layout = QVBoxLayout()
-        self._layout.setContentsMargins(6, 2, 2,6)
+        self._layout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
+        self._layout.setContentsMargins(4, 2, 4, 4)
         self._layout.addWidget(widget)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        widget.setContentsMargins(4, 2, 2, 2)
+        widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.setLayout(self._layout)

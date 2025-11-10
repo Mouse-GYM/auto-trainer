@@ -3,13 +3,15 @@ import typing
 from typing import Tuple
 
 from PySide6 import QtCore
-from PySide6.QtCore import QTimer, Slot
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout
+from PySide6.QtCore import QTimer, Slot, Signal, Qt
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QStackedLayout, QWidget, QSizePolicy
 
+from autotrainer.behavior import TrainingMode
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference import PoseResponse, PoseAlgorithm, InferenceStatus
-from autotrainer.pyside import Separator
+from autotrainer.pyside import Separator, CardWidget
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.view.alarm_content import AlarmContent
@@ -25,6 +27,9 @@ logger = get_verbose_logger(__name__)
 
 
 class MainContent(ContentWidget):
+
+    training_mode_changed = Signal(TrainingMode)
+
     def __init__(self, app_model: AppModel):
         super().__init__()
 
@@ -38,91 +43,46 @@ class MainContent(ContentWidget):
 
         self.setContentsMargins(0, 0, 0, 0)
 
-        self._layout = QGridLayout()
-        self._layout.setHorizontalSpacing(0)
-        self._layout.setVerticalSpacing(0)
-        self._layout.setSpacing(0)
-        self._layout.setContentsMargins(0, 0, 0, 0)
+        main_layout = self._main_layout = QVBoxLayout()
+        self.setLayout(main_layout)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(4)
 
-        # self._layout.setColumnStretch(7, 1)
-
-        # First rows - cameras
-
-        self._left_camera_content = CameraContent(self._app_model.left_camera)
-        self._left_camera_content.camera_view.setTitle("Left Camera")
-        # self._left_camera_content.camera_view.setSize(450, 300)
-
-        self._layout.addWidget(self._left_camera_content, 0, 0, 1, 2)
-        self._content_widgets.append(self._left_camera_content)
-
-        self._right_camera_content = CameraContent(self._app_model.right_camera)
-        self._right_camera_content.camera_view.setTitle("Right Camera")
-        # self._right_camera_content.camera_view.setSize(450, 300)
-
-        self._layout.addWidget(self._right_camera_content, 0, 2, 1, 2)
-        self._content_widgets.append(self._right_camera_content)
-
-        self._top_camera_content = CameraContent(self._app_model.top_camera)
-        self._top_camera_content.camera_view.setTitle("Top Camera")
-        self._top_camera_content.camera_view.setSize(450, 300)
-
-        self._layout.addWidget(self._top_camera_content, 0, 4, 1, 2)
-        self._content_widgets.append(self._top_camera_content)
+        self._top_widget_manual = self._create_top_widget_manual()
+        main_layout.addWidget(self._top_widget_manual)
 
         # Second row - behavior and analysis
+        self._mid_stacked_layout = QStackedLayout()
+        main_layout.addLayout(self._mid_stacked_layout)
 
-        behavior_content = BehaviorContent(
-            app_model,
-            app_model.behavior,
-            app_model.inference,
-        )
-        self._layout.addWidget(behavior_content, 1, 0, 1, 3)
-        self._content_widgets.append(behavior_content)
+        self._mid_widget_manual = self._create_mid_widget_manual(app_model)
+        self._mid_stacked_layout.addWidget(self._mid_widget_manual)
 
-        self._analysis_content = AnalysisContent(
-            app_model.hardware,
-            app_model.inference,
-            app_model.analysis,
-            app_model.message_handler,
-            app_model.preferences,
-        )
-        self._layout.addWidget(self._analysis_content, 1, 3, 1, 3)
-        self._content_widgets.append(self._analysis_content)
+        self._protocol_phase_progress_widget = self._create_protocol_phase_progress_widget()
+        self._mid_stacked_layout.addWidget(self._protocol_phase_progress_widget)
 
-        # Third row - hardware & alarms
+        end_stacked_widget = QWidget()
+        end_stacked_widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
 
-        self._hardware_control_content = HardwareControlContent(self._app_model.hardware)
-        self._layout.addWidget(self._hardware_control_content, 2, 0, 1, 3)
-        self._content_widgets.append(self._hardware_control_content)
+        self._end_stacked_layout = QStackedLayout(end_stacked_widget)
+        self._end_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
-        sub_layout = QHBoxLayout()
+        main_layout.addWidget(end_stacked_widget)
 
-        hardware_status_content = HardwareStatusContent(self._app_model.message_handler)
-        sub_layout.addWidget(hardware_status_content, 1)
-        self._content_widgets.append(hardware_status_content)
+        self._end_widget_manual = self._create_end_widget_manual()
+        self._end_stacked_layout.addWidget(self._end_widget_manual)
 
-        alarm_content = self._alarm_content = AlarmContent(self._app_model, self._app_model.hardware)
-        sub_layout.addWidget(alarm_content, 0)
-
-        self._layout.addLayout(sub_layout, 2, 3, 1, 3)
+        self._protocol_phase_main_widget = self._create_protocol_phase_main_widget()
+        self._end_stacked_layout.addWidget(self._protocol_phase_main_widget)
 
         # Optional fourth row - diagnostics
-
         self._diagnostics_content = DiagnosticsContent(self._app_model)
-        self._layout.addWidget(self._diagnostics_content, 4, 0, 1, 6)
-
-        self._layout.setRowStretch(1, 1)
-
-        self._layout.addWidget(Separator("#b9b9b9"), 5, 0, 1, 8)
-
-        self.setLayout(self._layout)
-
-        self._is_diagnostics_visible = True
+        main_layout.addWidget(self._diagnostics_content)
 
         self._frame_count = 0
-
         self._start = 0
 
+        self._is_diagnostics_visible = True
         self.set_diagnostics_visible(False)
 
         self._prev_parts_3d_loc = {}
@@ -132,11 +92,157 @@ class MainContent(ContentWidget):
         self._timer.timeout.connect(self.update_image)
         self._timer.start(int(1000 / self._app_model.preferences.live_feed_refresh_rate))
 
+        self._hardware_control_content.set_selected_animal(app_model.selected_animal)
+
         # finally, register handlers to events:
         app_model.property_changed += self._model_property_changed
         #
         inference = app_model.inference
         inference.pose_response_ready += self.refresh_pose
+        #
+        app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
+        self.training_mode_changed.connect(self._update_training_mode)
+
+    def _create_top_widget_manual(self):
+        widget = QWidget()
+        widget.setContentsMargins(4, 4, 4, 4)
+        top_layout = QHBoxLayout(widget)
+        top_layout.setContentsMargins(4, 4, 4, 4)
+        top_layout.setSpacing(16)
+        top_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+
+        # allow auto set of spacing between cameras
+        top_layout.addStretch(1)
+
+        self._left_camera_content = CameraContent(self._app_model.left_camera)
+        self._left_camera_content.camera_view.setTitle("Left Camera")
+        # self._left_camera_content.camera_view.setSize(450, 300)
+        top_layout.addWidget(self._left_camera_content)
+        self._content_widgets.append(self._left_camera_content)
+
+        top_layout.addStretch(1)
+
+        self._right_camera_content = CameraContent(self._app_model.right_camera)
+        self._right_camera_content.camera_view.setTitle("Right Camera")
+        # self._right_camera_content.camera_view.setSize(450, 300)
+        # self._layout.addWidget(self._right_camera_content, 0, 2, 1, 2)
+        top_layout.addWidget(self._right_camera_content)
+        self._content_widgets.append(self._right_camera_content)
+
+        top_layout.addStretch(1)
+
+        self._top_camera_content = CameraContent(self._app_model.top_camera)
+        self._top_camera_content.camera_view.setTitle("Top Camera")
+        # self._top_camera_content.camera_view.setSize(450, 300)
+        # self._layout.addWidget(self._top_camera_content, 0, 4, 1, 2)
+        top_layout.addWidget(self._top_camera_content)
+        self._content_widgets.append(self._top_camera_content)
+
+        top_layout.addStretch(1)
+
+        return widget
+
+    def _create_mid_widget_manual(self, app_model):
+        widget = QWidget()
+        widget.setContentsMargins(4, 0, 4, 0)
+
+        mid_layout = QHBoxLayout(widget)
+        mid_layout.setContentsMargins(4, 4, 4, 4)
+        mid_layout.setSpacing(16)
+
+        behavior_content = BehaviorContent(
+            app_model,
+            app_model.behavior,
+            app_model.inference,
+        )
+        mid_layout.addWidget(behavior_content)
+        self._content_widgets.append(behavior_content)
+
+        self._analysis_content = AnalysisContent(
+            app_model.hardware,
+            app_model.inference,
+            app_model.analysis,
+            app_model.message_handler,
+            app_model.preferences,
+        )
+        mid_layout.addWidget(self._analysis_content, 1)
+        self._content_widgets.append(self._analysis_content)
+
+        return widget
+
+    def _create_end_widget_manual(self):
+        # Third row - hardware & alarms
+        widget = QWidget()
+        widget.setContentsMargins(4, 0, 4, 0)
+
+        end_layout = QHBoxLayout(widget)
+        end_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        end_layout.setContentsMargins(4, 4, 4, 4)
+        end_layout.setSpacing(16)
+
+        self._hardware_control_content = HardwareControlContent(self._app_model.hardware)
+        end_layout.addWidget(self._hardware_control_content)
+        self._content_widgets.append(self._hardware_control_content)
+
+        hardware_status_content = HardwareStatusContent(self._app_model.message_handler)
+        end_layout.addWidget(hardware_status_content)
+        self._content_widgets.append(hardware_status_content)
+
+        alarm_content = self._alarm_content = AlarmContent(self._app_model, self._app_model.hardware)
+        alarm_content.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        end_layout.addWidget(alarm_content)
+        self._alarm_content_manual_layout = end_layout
+
+        return widget
+
+    def _create_protocol_phase_main_widget(self):
+        widget = QWidget()
+        widget.setContentsMargins(4, 0, 4, 0)
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(16)
+        card = CardWidget(title="Protocol")
+        layout.addWidget(card)
+
+        card = CardWidget(title="Phase")
+        layout.addWidget(card)
+
+        self._protocol_progress_alarm_content_layout = layout
+
+        return widget
+
+    def _create_protocol_phase_progress_widget(self):
+        widget = QWidget()
+        widget.setContentsMargins(4, 0, 4, 0)
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(16)
+
+        card = CardWidget(title="Protocol Progress")
+        layout.addWidget(card)
+
+        right_layout = QHBoxLayout()
+        layout.addLayout(right_layout)
+
+        card = CardWidget(title="Phase Progress")
+        right_layout.addWidget(card)
+
+        return widget
+
+    def _update_training_mode(self, training_mode: TrainingMode):
+        alarm_content = self._alarm_content
+        # remove from both, given if not present then it's identical to no-op,
+        self._protocol_progress_alarm_content_layout.removeWidget(alarm_content)
+        self._alarm_content_manual_layout.removeWidget(alarm_content)
+        # and will add it back where needed:
+        if training_mode == TrainingMode.MANUAL:
+            self._alarm_content_manual_layout.addWidget(alarm_content)
+            self._mid_stacked_layout.setCurrentWidget(self._mid_widget_manual)
+            self._end_stacked_layout.setCurrentWidget(self._end_widget_manual)
+        else:
+            self._protocol_progress_alarm_content_layout.addWidget(alarm_content)
+            self._mid_stacked_layout.setCurrentWidget(self._protocol_phase_progress_widget)
+            self._end_stacked_layout.setCurrentWidget(self._protocol_phase_main_widget)
 
     def close(self):
          self._diagnostics_content.close()  # to ensure the textbox handler is remove from root logger handlers
@@ -197,13 +303,17 @@ class MainContent(ContentWidget):
     def set_diagnostics_visible(self, is_visible: bool):
         self._diagnostics_content.setVisible(is_visible)
         self._is_diagnostics_visible = is_visible
-        if is_visible:
-            self._layout.setRowStretch(1, 0)
-            self._layout.setRowStretch(4, 1)
-        else:
-            self._layout.setRowStretch(1, 1)
-            self._layout.setRowStretch(4, 0)
+        # if is_visible:
+        #     self._layout.setRowStretch(1, 0)
+        #     self._layout.setRowStretch(4, 1)
+        # else:
+        #     self._layout.setRowStretch(1, 1)
+        #     self._layout.setRowStretch(4, 0)
 
-    def _model_property_changed(self, name: str, value, old_value):
+    def _model_property_changed(self, name: str, value, _):
         if name == "selected_animal" and value is not None:
             self._hardware_control_content.set_selected_animal(value)
+
+    def _behavior_algo_property_changed(self, name, value, _):
+        if name == BehaviorAlgoProps.TRAINING_MODE:
+            self.training_mode_changed.emit(value)

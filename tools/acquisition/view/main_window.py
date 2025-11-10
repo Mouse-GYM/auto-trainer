@@ -1,18 +1,15 @@
-import logging
-import threading
 import time
 from itertools import chain
 from pathlib import Path
 from typing import List, Optional
 
 from PySide6.QtCore import Qt, QCoreApplication
-from PySide6.QtGui import QAction, QIcon, QKeySequence, QPixmap, QColor
+from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
-                               QSizePolicy, QWidget, QComboBox, QLineEdit, QDialog, QFileDialog, QPushButton)
+                               QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton)
 import qtawesome as qta
 
-from autotrainer.behavior import DiamondTriangleOffsetConfig, BehaviorAlgorithm
-from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.behavior import DiamondTriangleOffsetConfig, TrainingMode
 from autotrainer.core import EventManager, Offset3DTuple
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
@@ -37,8 +34,17 @@ DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is con
 
 #
 
+training_modes_2_style = {
+    TrainingMode.MANUAL: "manual-style",
+    TrainingMode.MANUAL_AND_PROTOCOL: "manual-protocol-style",
+    TrainingMode.AUTOMATIC: "automatic-style",
+}
+
+#
+
 
 class MainWindow(QMainWindow):
+
     def __init__(self, app: QApplication, user_preferences: UserPreferences, configuration: str = None,
                  app_version: str = "", is_dev: bool = False):
         super(MainWindow, self).__init__(None)
@@ -72,7 +78,7 @@ class MainWindow(QMainWindow):
         self._configure_toolbar()
         self._configure_statusbar()
 
-        self.setMaximumSize(1880, 1080)
+        # self.setMaximumSize(1880, 1080)
 
         self._open_dialogs = []
 
@@ -413,7 +419,6 @@ class MainWindow(QMainWindow):
     def _configure_toolbar(self):
 
         behavior = self._app_model.behavior
-        analysis = behavior.analysis
 
         toolbar = QToolBar("Run Toolbar")
         toolbar.setFloatable(False)
@@ -426,14 +431,6 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(self.calib_diamond_triangle_action)
 
-        if self._is_dev:
-            toolbar.addSeparator()
-            toolbar.addAction(self.capture_trigger_action)
-            toolbar.addAction(self.force_detector_action)
-            toolbar.addAction(self.pellet_seen_action)
-            toolbar.addAction(self.mouse_seen_action)
-            toolbar.addAction(self.mouse_near_pellet_action)
-
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         toolbar.addWidget(spacer)
@@ -444,6 +441,7 @@ class MainWindow(QMainWindow):
         self._notes.setText(self._app_model.notes)
         self._notes.textChanged.connect(self.notes_changed)
         self._notes.setContentsMargins(4, 0, 8, 0)
+        # note: this margin allows the emergency button to be greater
         toolbar.addWidget(self._notes)
 
         toolbar.addWidget(QLabel("Subject:"))
@@ -455,6 +453,24 @@ class MainWindow(QMainWindow):
         self._animal_dropdown.currentIndexChanged.connect(self._animal_changed)
         self._animal_dropdown.lineEdit().editingFinished.connect(self._add_animal)
         toolbar.addWidget(self._animal_dropdown)
+
+        label = QLabel("Training Mode:")
+        label.setContentsMargins(8, 0, 0, 0)
+        toolbar.addWidget(label)
+        combo = self._training_mode_combo = QComboBox()
+        toolbar.addWidget(combo)
+        combo.setDuplicatesEnabled(False)
+        for mode in TrainingMode:
+            combo.addItem(mode.value,
+                          (mode,)  # userData: encapsulated in a tuple,
+                          # otherwise pyside drops the enum member and only keep the value string.
+                          # this is because it's a typed str-subclass enum.
+                          )
+
+        def index_changed(_):
+            selected_mode = self._training_mode_combo.currentData()[0]  # unpack from tuple, see above.
+            self._app_model.behavior.algorithm.training_mode = selected_mode
+        combo.currentIndexChanged.connect(index_changed)
 
         toolbar.addSeparator()
 
@@ -482,6 +498,19 @@ class MainWindow(QMainWindow):
         behavior.emergency_resumed += lambda src: update_emergency_ui(False, source=src)
 
         toolbar.addWidget(emergency_button)
+
+        if self._is_dev:
+            self.addToolBarBreak()
+            toolbar = QToolBar("Dev Toolbar")
+            toolbar.setContentsMargins(0, 0, 0, 0)
+            self.addToolBar(toolbar)
+            toolbar.setFloatable(False)
+            toolbar.setMovable(False)
+            toolbar.addAction(self.capture_trigger_action)
+            toolbar.addAction(self.force_detector_action)
+            toolbar.addAction(self.pellet_seen_action)
+            toolbar.addAction(self.mouse_seen_action)
+            toolbar.addAction(self.mouse_near_pellet_action)
 
     def _configure_statusbar(self):
         self._status_label = QLabel("")

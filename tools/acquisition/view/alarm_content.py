@@ -1,7 +1,7 @@
 from functools import partial
 
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QFormLayout
+from PySide6.QtCore import Signal, Qt
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QFormLayout, QSizePolicy
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.core import LoadCellMonitor, get_verbose_logger
@@ -52,15 +52,17 @@ class AlarmContent(ContentWidget):
         self._card_widget.header.setTitle("Alarms & Detectors", color="white")
 
         content_layout = QVBoxLayout()
-        content_layout.setContentsMargins(8, 8, 8, 8)
+        content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        content_layout.setContentsMargins(8, 4, 8, 4)
 
         form_layout = QFormLayout()
-        form_layout.setHorizontalSpacing(24)
+        form_layout.setHorizontalSpacing(32)
 
         emergency_alarm = app_model.behavior.analysis.emergency_alarm_monitor
         emergency_alarm_cfg = emergency_alarm.config
 
         label = QLabel("<b>Alarms</b>")
+        label.setContentsMargins(0, 0, 0, 4)
         form_layout.addRow(label, None)
 
         def on_use_changed(do_use, *, lbl):
@@ -90,7 +92,7 @@ class AlarmContent(ContentWidget):
         #
 
         label = QLabel("<b>Detectors</b>")
-        label.setContentsMargins(0, 12, 0, 0)
+        label.setContentsMargins(0, 8, 0, 4)
         form_layout.addRow(label, None)
 
         self._load_cell_thrash_status = StatusIcon.alarmIcon()
@@ -122,9 +124,15 @@ class AlarmContent(ContentWidget):
         content_layout.addLayout(form_layout)
 
         self._card_widget.setContentLayout(content_layout)
+        self._card_widget.setContentsMargins(0, 0, 0, 0)
+        self._card_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout()
         layout.addWidget(self._card_widget)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
         self.setLayout(layout)
 
         hardware_model.property_changed += self._hardware_model_property_changed

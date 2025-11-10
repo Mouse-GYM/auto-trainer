@@ -34,6 +34,7 @@ class InvokeMethod(QObject):
 class ContentWidget(QWidget):
     def __init__(self):
         super().__init__()
+        self.setContentsMargins(0, 0, 0, 0)
 
     def set_is_editable(self, is_editable: bool):
         pass

@@ -18,6 +18,8 @@ class QGLImageView(QWidget):
         """Image view for a camera, (width, height) is the dimention of the output model"""
         super().__init__()
 
+        self.setContentsMargins(0, 0, 0, 0)
+
         self._width = float(width)
         self._height = float(height)
 
@@ -75,6 +77,7 @@ class QGLImageView(QWidget):
         layout = QHBoxLayout()
         layout.addWidget(view)
         layout.setContentsMargins(0, 0, 0, 0)
+
         self.setLayout(layout)
 
         self._count = 0

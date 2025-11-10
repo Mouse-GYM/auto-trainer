@@ -1,6 +1,7 @@
 import contextlib
 import copy
 import dataclasses
+import enum
 import functools
 import inspect
 import logging
@@ -14,7 +15,6 @@ import time
 from collections import deque
 from datetime import datetime
 from functools import partial
-from enum import Enum
 from functools import reduce
 from pathlib import Path
 from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union, Dict
@@ -33,19 +33,19 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.video import CaptureProcessStatus
 
-from . import DiamondTriangleOffsetConfig, CaptureAnalysisResult
+from . import DiamondTriangleOffsetConfig, CaptureAnalysisResult, TrainingMode
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 
 logger = get_verbose_logger(__name__)
 
 
-class CheckThresholdWay(str, Enum):
+class CheckThresholdWay(str, enum.Enum):
     TRIGGER_IF_GREATER = "trigger_if_greater"
     TRIGGER_IF_SMALLER = "trigger_if_smaller"
 
 
-class CoverServoStatus(int, Enum):
+class CoverServoStatus(int, enum.Enum):
     OK = 0
     COVER_POSITION_ERROR = 1
     RELEASE_POSITION_ERROR = 2
@@ -70,9 +70,11 @@ class CheckElementDistanceContext:
     error_start_timestamp: Optional[float] = None
 
 
-class BehaviorAlgoProps(str, Enum):
+class BehaviorAlgoProps(str, enum.Enum):
 
     ALGO_PAUSED = 'algo_paused'
+
+    TRAINING_MODE = 'training_mode'
 
     AUTO_CLAMP_INTENSITY = 'auto_clamp_intensity'
     BASELINE_INTENSITY = 'baseline_intensity'
@@ -293,6 +295,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._is_in_session = False
         self._start_session_reason = "NA"
         self._stop_session_reason = "NA"
+        self._training_mode = TrainingMode.MANUAL
 
         self._session_mouse_seen = False
         self._pellet_seen = False
@@ -505,6 +508,15 @@ class BehaviorAlgorithm(ObservableObject):
     def algo_paused_age(self):
         # actually unused.
         return time.perf_counter() - self._algo_paused_perf_t
+
+    @property
+    def training_mode(self):
+        return self._training_mode
+
+    @training_mode.setter
+    def training_mode(self, value):
+        prev, self._training_mode = self._training_mode, value
+        self._on_property_changed(BehaviorAlgoProps.TRAINING_MODE, value, prev)
 
     @property
     def top_camera_presence_detection(self) -> PresenceDetectionAttrs:

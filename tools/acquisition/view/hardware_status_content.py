@@ -1,7 +1,7 @@
 from functools import partial
 
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtWidgets import QVBoxLayout, QLabel, QHBoxLayout, QWidget, QGridLayout, QFormLayout
+from PySide6.QtWidgets import QVBoxLayout, QLabel, QHBoxLayout, QWidget, QGridLayout, QFormLayout, QSizePolicy
 
 from autotrainer.core import MessageHandler
 from autotrainer.pyside import CardWidget
@@ -11,6 +11,7 @@ from tools.acquisition.view.content_widget import ContentWidget
 
 
 class HardwareStatusContent(ContentWidget):
+
     head_magnet_changed = Signal(float, name="head_magnet_changed")
     pellet_x_changed = Signal(float, name="pellet_x_changed")
     pellet_y_changed = Signal(float, name="pellet_y_changed")
@@ -30,54 +31,68 @@ class HardwareStatusContent(ContentWidget):
 
         self._model.property_changed += self._model_property_changed
 
-        layout = QGridLayout(None)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setHorizontalSpacing(16)
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
-        label = QLabel("Tunnel")
-        label.setStyleSheet("font-weight: bold")
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label, 0, 0)
+        layout = QGridLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        layout.setContentsMargins(2, 2, 0, 0)
+        layout.setHorizontalSpacing(8)
+        content_layout.addLayout(layout)
 
-        label = QLabel("Pellet")
-        label.setStyleSheet("font-weight: bold")
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label, 0, 2)
+        cur_row = cur_col = 0
 
-        form_layout = QFormLayout(None)
-        form_layout.setHorizontalSpacing(8)
-        form_layout.setVerticalSpacing(4)
+        label = QLabel("<b>Tunnel:</b>")
+        layout.addWidget(label, cur_row, cur_col)
+        cur_row += 1
 
+        layout.addWidget(QLabel("Head magnet (%):"), cur_row, cur_col)
         self._head_magnet = QLabel("(no updates)")
-        form_layout.addRow("Head magnet (%):", self._head_magnet)
+        layout.addWidget(self._head_magnet, cur_row, cur_col + 1)
+        cur_row += 1
 
-        layout.addLayout(form_layout, 1, 0)
-
-        form_layout = QFormLayout(None)
-        form_layout.setHorizontalSpacing(8)
-        form_layout.setVerticalSpacing(4)
-
-        self._pellet_xyz = XYZQLabel()
-        form_layout.addRow("XYZ (mm) :", self._pellet_xyz)
-        self._send_pellet_xyz = XYZQLabel()
-        form_layout.addRow("Send XYZ (mm) :", self._send_pellet_xyz)
         #
+
+        label = QLabel("<b>Pellet:</b>")
+        label.setContentsMargins(0, 4, 0, 0)
+        layout.addWidget(label, cur_row, cur_col)
+        cur_row += 1
+
+        layout.addWidget(QLabel("XYZ (mm):"), cur_row, cur_col)
+        self._pellet_xyz = XYZQLabel()
+        layout.addWidget(self._pellet_xyz, cur_row, cur_col + 1)
+        cur_row += 1
+
+        layout.addWidget(QLabel("Send XYZ (mm):"), cur_row, cur_col)
+        self._send_pellet_xyz = XYZQLabel()
+        layout.addWidget(self._send_pellet_xyz, cur_row, cur_col + 1)
+        cur_row += 1
+
+        layout.addWidget(QLabel("Load Arm (\u00b0):"), cur_row, cur_col)
         self._load_arm = QLabel("(no updates)")
-        form_layout.addRow("Load Arm (\u00b0):", self._load_arm)
+        layout.addWidget(self._load_arm, cur_row, cur_col + 1)
+        cur_row += 1
+
+        layout.addWidget(QLabel("Cover Arm (\u00b0):"), cur_row, cur_col)
         self._cover_arm = QLabel("(no updates)")
-        form_layout.addRow("Cover Arm (\u00b0):", self._cover_arm)
+        layout.addWidget(self._cover_arm, cur_row, cur_col + 1)
 
-        layout.addLayout(form_layout, 1, 2)
+        content = QWidget()
+        content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        content.setContentsMargins(8, 4, 4, 4)
+        content.setLayout(content_layout)
 
-        layout.setRowStretch(2, 1)
-        layout.setColumnStretch(1, 1)
-        layout.setColumnStretch(3, 1)
+        self._card_widget.setContentWidget(content)
 
-        self._card_widget.setContentLayout(layout)
-
+        #
         # Final layout
         layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self._card_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
         self.setLayout(layout)
 
         def xyz_update(xyz_label: XYZQLabel, coord, value):

@@ -2,8 +2,8 @@ from typing import Dict
 
 from numpy import ndarray
 
-from PySide6.QtCore import Slot
-from PySide6.QtWidgets import QGridLayout
+from PySide6.QtCore import Slot, Qt
+from PySide6.QtWidgets import QGridLayout, QSizePolicy
 
 from autotrainer.core import NotificationCenter, TriggerNotification, Notification
 from autotrainer.inference import PoseLocation
@@ -23,8 +23,9 @@ class CameraContent(ContentWidget):
         self._model = capture_model
 
         layout = QGridLayout()
-
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         capture_view = self._capture_view = QCaptureView()
         self._settings = capture_view.settings

@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6 import QtCore
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLayout
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy
 
 
 class CardHeader(QWidget):
@@ -12,6 +13,8 @@ class CardHeader(QWidget):
 
     def __init__(self, title: str = "", background_color: Optional[str] = None, title_color: Optional[str] = None):
         super().__init__()
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         if background_color is None:
             background_color = CardHeader.DEFAULT_BACKGROUND_COLOR
@@ -28,29 +31,30 @@ class CardHeader(QWidget):
         self._layout = QHBoxLayout()
         self._layout.setContentsMargins(6, 4, 4, 6)
 
-        self._title_label = QLabel(title)
-        self._title_label.setStyleSheet(f"font-weight: bold; color: {title_color}")
-        self._layout.addWidget(self._title_label, 1)
+        self._title_label = QLabel(f"<b>{title}</b>")
+        if title_color is not None:
+            self._title_label.setStyleSheet(f"color: {title_color}")
+        self._layout.addWidget(self._title_label)
 
         self.setLayout(self._layout)
 
     def setTitle(self, title: str, color: Optional[str] = None):
-        layout = QHBoxLayout()
-        layout.setContentsMargins(6, 4, 4, 6)
-
+        title = f"<b>{title}</b>"
         self._title_label.setText(title)
         if color is not None:
-            self._title_label.setStyleSheet(f"font-weight: bold; color: {color}")
+            self._title_label.setStyleSheet(f"color: {color}")
 
     def setRightContent(self, content: Optional[QWidget | QLayout] = None):
         if content is not None:
             if isinstance(content, QWidget):
-                self._layout.addWidget(content, 0, QtCore.Qt.AlignRight)
+                self._layout.addWidget(content, 0, Qt.AlignmentFlag.AlignRight)
             else:
                 self._layout.addLayout(content, 0)
+                content.setAlignment(Qt.AlignmentFlag.AlignRight)
 
     def setContent(self, widget: QWidget):
         self._layout = QVBoxLayout()
-        self._layout.setContentsMargins(6, 4, 4, 6)
+        # self._layout.setContentsMargins(6, 4, 4, 6)
+        self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.addWidget(widget)
         self.setLayout(self._layout)
