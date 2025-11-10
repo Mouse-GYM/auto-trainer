@@ -4,7 +4,7 @@ from typing import Optional
 
 from PySide6 import QtCore
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy
 
 
 class CardHeader(QWidget):
@@ -14,6 +14,7 @@ class CardHeader(QWidget):
     def __init__(self, title: str = "", background_color: Optional[str] = None, title_color: Optional[str] = None):
         super().__init__()
         self.setContentsMargins(0, 0, 0, 0)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         if background_color is None:
             background_color = CardHeader.DEFAULT_BACKGROUND_COLOR
