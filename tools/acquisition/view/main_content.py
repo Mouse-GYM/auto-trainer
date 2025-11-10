@@ -57,8 +57,9 @@ class MainContent(ContentWidget):
 
         self._mid_widget_manual = self._create_mid_widget_manual(app_model)
         self._mid_stacked_layout.addWidget(self._mid_widget_manual)
-        self._mid_protocol_phase_widget = self._create_protocol_phase_mid_widget()
-        self._mid_stacked_layout.addWidget(self._mid_protocol_phase_widget)
+
+        self._protocol_phase_progress_widget = self._create_protocol_phase_progress_widget()
+        self._mid_stacked_layout.addWidget(self._protocol_phase_progress_widget)
 
         end_stacked_widget = QWidget()
         end_stacked_widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
@@ -71,8 +72,8 @@ class MainContent(ContentWidget):
         self._end_widget_manual = self._create_end_widget_manual()
         self._end_stacked_layout.addWidget(self._end_widget_manual)
 
-        self._end_protocol_phase_widget = self._create_protocol_phase_end_widget()
-        self._end_stacked_layout.addWidget(self._end_protocol_phase_widget)
+        self._protocol_phase_main_widget = self._create_protocol_phase_main_widget()
+        self._end_stacked_layout.addWidget(self._protocol_phase_main_widget)
 
         # Optional fourth row - diagnostics
         self._diagnostics_content = DiagnosticsContent(self._app_model)
@@ -194,7 +195,7 @@ class MainContent(ContentWidget):
 
         return widget
 
-    def _create_protocol_phase_mid_widget(self):
+    def _create_protocol_phase_main_widget(self):
         widget = QWidget()
         widget.setContentsMargins(4, 0, 4, 0)
         layout = QHBoxLayout(widget)
@@ -206,9 +207,11 @@ class MainContent(ContentWidget):
         card = CardWidget(title="Phase")
         layout.addWidget(card)
 
+        self._protocol_progress_alarm_content_layout = layout
+
         return widget
 
-    def _create_protocol_phase_end_widget(self):
+    def _create_protocol_phase_progress_widget(self):
         widget = QWidget()
         widget.setContentsMargins(4, 0, 4, 0)
         layout = QHBoxLayout(widget)
@@ -224,8 +227,6 @@ class MainContent(ContentWidget):
         card = CardWidget(title="Phase Progress")
         right_layout.addWidget(card)
 
-        self._protocol_progress_alarm_content_layout = right_layout
-
         return widget
 
     def _update_training_mode(self, training_mode: TrainingMode):
@@ -240,8 +241,8 @@ class MainContent(ContentWidget):
             self._end_stacked_layout.setCurrentWidget(self._end_widget_manual)
         else:
             self._protocol_progress_alarm_content_layout.addWidget(alarm_content)
-            self._mid_stacked_layout.setCurrentWidget(self._mid_protocol_phase_widget)
-            self._end_stacked_layout.setCurrentWidget(self._end_protocol_phase_widget)
+            self._mid_stacked_layout.setCurrentWidget(self._protocol_phase_progress_widget)
+            self._end_stacked_layout.setCurrentWidget(self._protocol_phase_main_widget)
 
     def close(self):
          self._diagnostics_content.close()  # to ensure the textbox handler is remove from root logger handlers
