@@ -508,8 +508,13 @@ class MainWindow(QMainWindow):
         for plan_index, plan in enumerate(self._training_plans):
             combo.addItem(plan.name, userData=plan)
             combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
-        combo.addItem("", userData=None)  # put it last
-        combo.setItemData(len(self._training_plans), "Select a training protocol", Qt.ToolTipRole)
+        empty_txt = "" if len(self._training_plans) > 0 else " " * 64
+        combo.addItem(empty_txt, userData=None)  # put it last
+        tooltip_txt = (
+            "Select a training protocol" if len(self._training_plans) > 0
+            else "There are no training protocols in the Autotrainer folder"
+        )
+        combo.setItemData(len(self._training_plans), tooltip_txt, Qt.ToolTipRole)
         selected_animal = self._app_model.selected_animal
         if selected_animal is not None:
             plan_id = selected_animal.training.current_protocol

@@ -30,7 +30,7 @@ class AnimalTraining:
 
     # NB: protocol == plan
 
-    current_protocol: str = None
+    current_protocol: Optional[str] = None
     protocols: List[str] = dataclasses.field(default_factory=list)
 
 
