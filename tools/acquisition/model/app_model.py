@@ -671,7 +671,8 @@ class AppModel(ObservableObject):
                 left_cam.text_overlay = f"Intersession: {value}"
             else:
                 left_cam.text_overlay = None
-
+        elif name == BehaviorAlgoProps.TRAINING_PLAN:
+            self._save_animal_metadata(cur_selected_animal)
         # elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
         #     self._hardware.set_auto_correct_motor_drift(value)
         # already handled by SystemMachine
