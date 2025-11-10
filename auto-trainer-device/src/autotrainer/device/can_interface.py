@@ -69,6 +69,10 @@ from .stepper_motor import mm_to_turns, turns_to_mm
 logger = get_verbose_logger(__name__)
 
 
+class MissingDeviceAddressError(RuntimeError):
+    """Dedicated for when device address could not be read"""
+
+
 _STEPPER_MAX_TURNS = 15  # absolute max nbr of turns for each stepper, hardcoded for now.
 _STEPPER_MAX_POS = turns_to_mm(_STEPPER_MAX_TURNS)
 
@@ -634,6 +638,8 @@ class CanInterface(DeviceInterface):
              int: CANbus address of the given target
         """
         dst = self.pellet_address if target == Target.PELLET_DEVICE else self.magnet_address
+        if dst is None:
+            raise MissingDeviceAddressError(f"{target} missing address")
         return dst
 
     def _assign_address(self, message):
@@ -964,8 +970,10 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and \
-            self._jc.Delay(addr, int(delay_sec * 1000), CanInterface.next_uuid())
+        uuid = CanInterface.next_uuid()
+        res = self._jc.Delay(addr, int(delay_sec * 1000), uuid)
+        logger.debug("Delay addr=%s res=%s uuid=%s", addr, res, uuid)
+        return res == 0
 
     def tare_load_cell(self) -> bool:
         """
@@ -975,8 +983,10 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.MAGNET_DEVICE)
-        return (addr is not None and
-                self._jc.LoadCellTare(addr, 0, CanInterface.next_uuid()) == 0)
+        uuid = self.next_uuid()
+        res = self._jc.LoadCellTare(addr, 0, uuid)
+        logger.debug("LoadCellTare addr=%s res=%s uuid=%s", addr, res, uuid)
+        return res == 0
 
     def _move_servo_motor(self, motor: Motor, position, config: ServoConfig):
         """
@@ -997,8 +1007,7 @@ class CanInterface(DeviceInterface):
             velocity = float(position[1]) / 100.0 * config.maximum_velocity
             position = float(position[0])
         else:
-            logger.warning("unhandled pos: %s", position)
-            return False
+            raise RuntimeError("Unhandled position: %s", position)
 
         prev_pos = position
         if position < 0:
@@ -1011,9 +1020,7 @@ class CanInterface(DeviceInterface):
         acceleration = config.maximum_acceleration
 
         addr = self._tgt2addr(target_of_motor(motor))
-        if addr is None:
-            logger.warning("no addr for motor-servo=%s", motor)
-            return False
+
         uuid = CanInterface.next_uuid()
         res = self._jc.ServoMove(addr, _motor_to_id(motor),
                                                        position,
@@ -1047,9 +1054,6 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(target_of_motor(motor))
-        if addr is None:
-            logger.error("%s: target addr is None", motor)
-            return False
 
         if isinstance(position, (float, int)):
             velocity = config.maximum_velocity
@@ -1117,7 +1121,6 @@ class CanInterface(DeviceInterface):
                 logger.debug("limited turns_position to max ; was %.1f", turns_position)
                 turns_position = _STEPPER_MAX_TURNS
 
-
         uuid = CanInterface.next_uuid()
         res = self._jc.StepperMove(
             addr,
@@ -1129,7 +1132,7 @@ class CanInterface(DeviceInterface):
             save_as_fixed,
             uuid,
         )
-        logger.debug("%s: res=%s uuid=%s", motor, res, uuid)
+        logger.debug("%s: StepperMove res=%s uuid=%s", motor, res, uuid)
         return res == 0
 
     def move_magnet_servo(self, position) -> bool:
@@ -1161,6 +1164,7 @@ class CanInterface(DeviceInterface):
         return self.move_motor_x(position, save_as_fixed=True, relative=relative)
 
     def move_motor(self, motor: Motor, position, *, save_as_fixed: bool = False, relative: bool = False):
+        # unused
         # only for steppers, XYZ
         return self._move_stepper_motor(
             motor, position, self._motor_configs[motor],
@@ -1235,11 +1239,9 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        if addr is None:
-            return False
         uuid = CanInterface.next_uuid()
         res = self._jc.SendToFixedXYZ(addr, uuid)
-        logger.debug("fixed_position ; res=%s uuid=%s", res, uuid)
+        logger.debug("SendToFixedXYZ res=%s uuid=%s", res, uuid)
         return res == 0
 
     def move_load_servo(self, position):
@@ -1318,15 +1320,11 @@ class CanInterface(DeviceInterface):
             return False
 
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        if addr is None:
-            logger.warning("No pellet device addr found")
-            return False
         # Third arg - forward/rev. Go in forward direction if the non-zero locations are negative
         uuid = CanInterface.next_uuid()
         res = self._jc.StepperHome(addr, _motor_to_id(motor), uuid)
-        logger.debug("addr=%s motor=%s : home request => res=%s uuid=%s", addr, motor, res, uuid)
+        logger.debug("%s StepperHome res=%s uuid=%s", motor, res, uuid)
         return res == 0
-
 
     def _write_stepper_config(self, config: StepperConfig) -> bool:
         """
@@ -1340,9 +1338,6 @@ class CanInterface(DeviceInterface):
         """
         motor_id = _motor_to_id(config.motor)
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        if addr is None:
-            logger.error("No address for target %s for motor %s", Target.PELLET_DEVICE, config.motor)
-            return False
 
         max_vel = mm_to_turns(config.maximum_velocity)
         max_acc = mm_to_turns(config.maximum_acceleration)
@@ -1357,10 +1352,11 @@ class CanInterface(DeviceInterface):
                                     home_vel,
                                     config.flip_limit_orientation,
                                     uuid)
-        logger.debug("write_stepper_config: addr=%s config=%s: res=%s uuid=%s", addr, config, res, uuid)
+        logger.debug("StepperCfgWrite addr=%s config=%s: res=%s uuid=%s",
+                     addr, config, res, uuid)
         if res != 0:
             logger.error(
-                f"stepper {addr} {motor_id} config write failed")
+                "stepper %s addr=%s config write failed", config.motor, addr)
             return False
         return True
 
@@ -1378,9 +1374,6 @@ class CanInterface(DeviceInterface):
         target = target_of_motor(config.motor)
 
         addr = self._tgt2addr(target)
-        if addr is None:
-            logger.error("No address for target %s for motor %s", target, config.motor)
-            return False
 
         uuid = CanInterface.next_uuid()
         res = self._jc.ServoCfgWrite(addr, motor_id,
@@ -1391,10 +1384,9 @@ class CanInterface(DeviceInterface):
                                   config.maximum_velocity,
                                   config.maximum_acceleration,
                                   uuid)
-        logger.debug("write_servo_config: addr=%s config=%s: res=%s uuid=%s", addr, config, res, uuid)
+        logger.debug("ServoCfgWrite addr=%s config=%s: res=%s uuid=%s", addr, config, res, uuid)
         if res != 0:
-            logger.error(
-                f"servo {addr} {motor_id} config write failed")
+            logger.error("servo %s %s config write failed", addr, motor_id)
             return False
         return True
 
@@ -1418,9 +1410,6 @@ class CanInterface(DeviceInterface):
             msg.stepper.motor_id = _motor_to_id(motor)
 
         addr = self._tgt2addr(target)
-        if addr is None:
-            logger.warning("tgt2addr None for motor=%s target=%s", motor, target)
-            return False
         res = self._jc.CfgRead(addr, msg)
         logger.debug("motor=%s: tentative request addr=%s tgt=%s => res=%s", motor, addr, target, res)
         return res == 0
@@ -1457,11 +1446,9 @@ class CanInterface(DeviceInterface):
         elif gpio == DigitalOutputs.STIMULUS_4:
             gpio_id = 7
         else:
-            return False
+            raise ValueError(f"Unhandled digital output {gpio}")
 
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        if addr is None:
-            return False
         uuid = CanInterface.next_uuid()
         res = self._jc.GPIOWrite(addr, 0, gpio_id, state, uuid)
         logger.debug("set_digital_output addr=%s gpio_id=%s state=%s res=%s uuid=%s",
@@ -1480,8 +1467,6 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        if addr is None:
-            return False
         uuid = CanInterface.next_uuid()
         res = self._jc.ToneWrite(addr, 0, frequency, duration_ms, uuid)
         logger.debug("emit_tone addr=%s freq=%s duration_ms=%s res=%s uuid=%s",
@@ -1494,7 +1479,7 @@ class CanInterface(DeviceInterface):
 
         Args:
             channel: Channel #
-            millivolts: desired oltage output (millivolts)
+            millivolts: desired voltage output (millivolts)
 
         Returns:
             bool: True if successful else False
@@ -1502,16 +1487,12 @@ class CanInterface(DeviceInterface):
         if channel == AnalogOutputs.STATUS_OUT:
             channel = 0
         else:
-            return False
+            raise ValueError(f"Unhandled channel {channel}")
 
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and self._jc.AnalogOutWrite(addr,
-                                                            channel,
-                                                            millivolts,
-                                                            CanInterface.next_uuid()) == 0
+        return self._jc.AnalogOutWrite(addr, channel, millivolts, CanInterface.next_uuid()) == 0
 
-    def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> (
-        bool):
+    def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> bool:
         """
         Set the colors of a 3-color LED.
 
@@ -1524,7 +1505,7 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return addr is not None and self._jc.RGBLEDWrite(addr,
+        return self._jc.RGBLEDWrite(addr,
                                                          red_percent,
                                                          green_percent,
                                                          blue_percent,
@@ -1539,15 +1520,12 @@ class CanInterface(DeviceInterface):
         """
         pellet = self._tgt2addr(Target.PELLET_DEVICE)
         magnet = self._tgt2addr(Target.MAGNET_DEVICE)
-
-        pellet = pellet is not None and \
-                 self._jc.BootloaderCommand(pellet,
-                                            JerryCANBootloaderCmd.SubCommand.VERSION)
-        magnet = magnet is not None and \
-                 self._jc.BootloaderCommand(magnet,
-                                            JerryCANBootloaderCmd.SubCommand.VERSION)
-
-        return pellet & magnet
+        rc = self._jc.BootloaderCommand(pellet,
+                                        JerryCANBootloaderCmd.SubCommand.VERSION)
+        if rc == 0:
+             rc = self._jc.BootloaderCommand(magnet,
+                                             JerryCANBootloaderCmd.SubCommand.VERSION)
+        return rc == 0
 
     # NOTE: E-Stop is not implemented in the target
     # def emergency_stop(self) -> bool:

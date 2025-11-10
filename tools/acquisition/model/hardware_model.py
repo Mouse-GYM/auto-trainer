@@ -24,11 +24,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     TUNNEL_IDENTIFIER_PROPERTY = "tunnel_identifier"
     PELLET_IDENTIFIER_PROPERTY = "pellet_identifier"
 
-    PENDING_COMMAND_TOKEN_PROPERTY = "pending_command_token"
     PENDING_COMMAND_PROPERTY = "pending_command"
 
     FRONT_DOOR_PROPERTY = "front_door"
     SLIDE_DOOR_PROPERTY = "slide_door"
+
+    DEVICE_ACK_TIMEOUT_ENGAGED = "device_ack_timeout_engaged"
 
     def __init__(self, message_handler: MessageHandler):
         super().__init__()
@@ -59,15 +60,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._slide_door_open: bool = False
 
         self._lock = threading.RLock()  # **required** re-entrant lock !!
-
-    @property
-    def pending_command_token(self) -> Optional[UUID]:
-        return self._pending_command_token
-
-    @pending_command_token.setter
-    def pending_command_token(self, value: Optional[UUID]):
-        self._pending_command_token = self._on_property_changed(HardwareModel.PENDING_COMMAND_TOKEN_PROPERTY, value,
-                                                                self._pending_command_token)
 
     @property
     def pending_command(self) -> Optional[SystemCommandKind]:
@@ -257,25 +249,19 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
         # configured to generate messages as frequently as the real device.
         buffer_size = 10 if HAVE_CAN_DEVICE else 1
-        self._device = DeviceConnection(CanDevice(buffer_size=buffer_size), cmd_queue)
-        self._device.name = "can-device"
+        can_device = CanDevice(buffer_size=buffer_size)
+        can_device.property_changed += self._device_property_changed
 
+        self._device = DeviceConnection(can_device, cmd_queue, name="can-device")
         self._device.request_connect()
 
-        if self._device is not self._device:
-            self._device.request_connect()
-
         self._send_command(self._device, SystemCommandKind.REQUEST_VERSION)
-
-        if self._device is not self._device:
-            self._send_command(self._device, SystemCommandKind.REQUEST_VERSION)
 
         # load and set motors and move configs
         self._device.load_default_motor_config()
         self._device.load_default_move_config()
 
         self._send_command(self._device, SystemCommandKind.STREAM_START)
-
         self._send_command(self._device, SystemCommandKind.UPDATE_SCALE_TARE)
 
         self.send_home()
@@ -283,11 +269,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if animal is not None:
             self.delay(0.5)
             self.update_head_magnet_intensity(animal.baseline_magnet_intensity)
-            # self._send_command(self._device, SystemCommandKind.MOVE_MAGNET_SERVO,
-            #                    animal.baseline_magnet_intensity)
             self.set_x(animal.pellet_x)
-            self.set_z(animal.pellet_z)
             self.set_y(animal.pellet_y)
+            self.set_z(animal.pellet_z)
             self.send_pellet()
 
     def disconnect(self):
@@ -299,6 +283,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, "", None)
         self._on_property_changed(self.PELLET_VERSION_PROPERTY, "", None)
+
+    def _device_property_changed(self, name: str, value, _):
+        if name == self._device.device.UUID_ACK_TIMEOUT_ENGAGED:
+            self.property_changed(self.DEVICE_ACK_TIMEOUT_ENGAGED, value, _)
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
@@ -389,11 +377,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 dev.send_message(cmd_kind, SystemDataArgsKwargs(0, relative=True))
 
     def _ack_received(self, token: UUID):
-        if token is not None and token not in self._pending_tokens:
-            logger.warning("pending_token != ack_received token: %s vs pending_tokens=%s",
-                           token, self._pending_tokens)
-        else:
-            self._pending_tokens.pop(token, None)
+        popped = self._pending_tokens.pop(token, None)
+        if popped is None:
+            logger.warning("Received unexpected ack token: %s", token)
 
     def wait_pending_command_acked(self, token, timeout: float = 3):
         t_perf_start = time.perf_counter()

@@ -456,6 +456,7 @@ class DeviceInterface:
             self._auto_correct_motor_drift = value
             if not value:
                 self._motors_drift = no_drift
+        return True
 
     def set_motors_drift(self, drifts: Offset3DTuple):
         prev_drifts = self._motors_drift
@@ -484,6 +485,7 @@ class DeviceInterface:
         # end motors loop
         # previous loop could have modified drifts, so assign after the loop:
         self._motors_drift = drifts
+        return True
 
     def move_motor(self, motor: Motor, position, *, save_as_fixed: bool = False, relative: bool = False):
         # only for steppers, XYZ

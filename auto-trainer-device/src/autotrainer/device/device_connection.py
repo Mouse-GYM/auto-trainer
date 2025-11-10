@@ -6,12 +6,12 @@ from queue import Queue, Empty
 from threading import Thread
 from typing import Callable, Union
 
+import autotrainer.device
 from autotrainer.core import MotorConfigurations, SystemCommandKind, Offset3DTuple, Motor
-
 from .can_device import HAVE_CAN_DEVICE
 from .device import Device
 from .device_api import DeviceApi
-from .device_interface import ServoConfig, StepperConfig
+from .device_interface import DeviceInterface, ServoConfig, StepperConfig
 from .device_connection_protocol import DeviceConnectionProtocol
 from .motor_steps import CompoundMovementDataSet, MotorSteps
 from autotrainer.core.logging import get_verbose_logger
@@ -37,15 +37,20 @@ class DeviceConnection(DeviceConnectionProtocol):
     arguments provided, in a non-blocking fashion.
     """
 
-    def __init__(self, device: Device, message_queue: Queue = None,
-                 message_callback: Callable[[int, object], None] = None, name="device-connection"):
+    def __init__(self,
+                 device: Device,
+                 message_queue: Queue,
+                 message_callback: Callable[[int, object], None] = None,
+                 name="device-connection"):
+
         super().__init__()
 
         # The message queue and the callback are ways to get data from the device back to the client script or
         # application that created this object.  Commands and data to the device are sent through send message.
 
-        self._device = device
-        self._interface = device.device_interface
+        # without explicit import, this allows to have completion working on these instances attributes access:
+        self._device: Union[Device, "autotrainer.device.can_device.CanDevice"] = device
+        self._interface: Union[DeviceInterface, "autotrainer.device.can_interface.CanInterface"] = device.device_interface
         self._message_callback = message_callback
         self._message_queue = message_queue
         self._cmd_queue: Queue = Queue()
@@ -55,7 +60,7 @@ class DeviceConnection(DeviceConnectionProtocol):
 
         self._name = name
 
-        self._read_limit: int = 50 if HAVE_CAN_DEVICE else math.inf
+        self._read_limit: int = 50 if HAVE_CAN_DEVICE else 2000
         self._collect_ms: int = 5  # so freq == 200 Hz
 
         # The means of providing non-blocking access to the device.
@@ -114,8 +119,8 @@ class DeviceConnection(DeviceConnectionProtocol):
             self._cmd_queue.put((_REQUEST_DISCONNECT, None, None))
 
     def send_message(self, kind: int, data: object = None, context: object = None):
-        if self._cmd_queue is not None:
-            self._cmd_queue.put_nowait((kind, data, context))
+        """Send a command/message to the device (writer-thread)"""
+        self._device.notify_message(kind, data, context)
 
     def use_compound_movements(self, data: CompoundMovementDataSet):
         self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, data.load_pellet)
@@ -150,6 +155,7 @@ class DeviceConnection(DeviceConnectionProtocol):
 
     def _start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
+            logger.verbose("Starting new reader thread for %s", self._name)
             self._current_thread = Thread(target=self._run, name=self._name)
             self._current_thread.start()
 
@@ -217,13 +223,17 @@ class DeviceConnection(DeviceConnectionProtocol):
                 try:
                     cmd, data, context = self._cmd_queue.get_nowait()
                 except Empty:
-                    t_next_cmd_queue_read = t_perf_now + 0.05
+                    # no need check too often for request disconnect only
+                    t_next_cmd_queue_read = t_perf_now + 0.5
                 else:
                     if cmd == _REQUEST_DISCONNECT:
                         self._cmd_queue.task_done()
                         logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
                         break
                     else:
+                        assert False,  f"should not be needed anymore but got unknown {cmd}"
+                        # we should simply make the request disconnect be handled differently,
+                        # and have the senders of these cmd/data/context directly put to the device
                         self._device.notify_message(cmd, data, context)
                         self._cmd_queue.task_done()
 

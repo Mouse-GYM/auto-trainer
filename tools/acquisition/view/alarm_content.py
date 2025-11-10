@@ -23,8 +23,6 @@ class AlarmContent(ContentWidget):
     Widget to display alarm content.
     """
 
-    global_animal_presence_changed = Signal(bool)
-
     # alarm monitor:
     use_load_cell_audio_thrash_changed = Signal(bool)
     load_cell_audio_thrash_changed = Signal(bool)
@@ -41,6 +39,8 @@ class AlarmContent(ContentWidget):
     audio_thrashing_changed = Signal(bool, name="audio_thrashing_changed")
     front_door_changed = Signal(bool, name="front_door_changed")
     slide_door_changed = Signal(bool, name="slide_door_changed")
+    global_animal_presence_changed = Signal(bool)
+    device_ack_timeout_changed = Signal(bool)
 
     def __init__(self, app_model: AppModel, hardware_model: HardwareModel):
         super().__init__()
@@ -115,6 +115,10 @@ class AlarmContent(ContentWidget):
             form_layout.addRow(label, icon)
             self.global_animal_presence_changed.connect(icon.setStatus)
 
+        icon = self._device_ack_timeout_status = StatusIcon.alarmIcon()
+        form_layout.addRow("Device Ack Timeout:", icon)
+        self.device_ack_timeout_changed.connect(icon.setStatus)
+
         content_layout.addLayout(form_layout)
 
         self._card_widget.setContentLayout(content_layout)
@@ -135,11 +139,13 @@ class AlarmContent(ContentWidget):
     def set_is_capture_active(self, is_editable: bool):
         self._card_widget.setEnabled(is_editable)
 
-    def _hardware_model_property_changed(self, property_name: str, value, _):
-        if property_name == HardwareModel.FRONT_DOOR_PROPERTY:
+    def _hardware_model_property_changed(self, name: str, value, _):
+        if name == HardwareModel.FRONT_DOOR_PROPERTY:
             self.front_door_changed.emit(value)
-        elif property_name == HardwareModel.SLIDE_DOOR_PROPERTY:
+        elif name == HardwareModel.SLIDE_DOOR_PROPERTY:
             self.slide_door_changed.emit(value)
+        elif name == HardwareModel.DEVICE_ACK_TIMEOUT_ENGAGED:
+            self.device_ack_timeout_changed.emit(value)
 
     def _load_cell_property_changed(self, name: str, new_value, _):
         if name == LoadCellMonitor.IS_THRASHING_DETECTED_PROPERTY:
