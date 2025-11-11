@@ -1,27 +1,33 @@
 import time
 import typing
-from typing import Tuple
+from typing import Tuple, Optional
 
 from PySide6 import QtCore
 from PySide6.QtCore import QTimer, Slot, Signal, Qt
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QStackedLayout, QWidget, QSizePolicy
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QStackedLayout, QWidget, QSizePolicy, QScrollBar, \
+    QScrollArea
+
+from autotrainer.core.logging import get_verbose_logger
+
+from autotrainer.inference import PoseResponse, PoseAlgorithm, InferenceStatus
 
 from autotrainer.behavior import TrainingMode
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
-from autotrainer.core import Offset3DTuple
-from autotrainer.core.logging import get_verbose_logger
-from autotrainer.inference import PoseResponse, PoseAlgorithm, InferenceStatus
-from autotrainer.pyside import Separator, CardWidget
 
+from autotrainer.pyside import Separator, CardWidget
+from autotrainer.pyside.StackedWidget import StackedWidget
+from autotrainer.pyside.content_widget import ContentWidget
+
+from autotrainer.training import TrainingPlan
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.view.alarm_content import AlarmContent
 from tools.acquisition.view.analysis_content import AnalysisContent
-from tools.acquisition.view.content_widget import ContentWidget
 from tools.acquisition.view.behavior_content import BehaviorContent
 from tools.acquisition.view.camera_content import CameraContent
 from tools.acquisition.view.diagnostics_content import DiagnosticsContent
 from tools.acquisition.view.hardware_control_content import HardwareControlContent
 from tools.acquisition.view.hardware_status_content import HardwareStatusContent
+from tools.acquisition.view.training_plan_content import TrainingPlanContent
 
 logger = get_verbose_logger(__name__)
 
@@ -29,6 +35,7 @@ logger = get_verbose_logger(__name__)
 class MainContent(ContentWidget):
 
     training_mode_changed = Signal(TrainingMode)
+    training_plan_changed = Signal(TrainingPlan)
 
     def __init__(self, app_model: AppModel):
         super().__init__()
@@ -61,19 +68,18 @@ class MainContent(ContentWidget):
         self._protocol_phase_progress_widget = self._create_protocol_phase_progress_widget()
         self._mid_stacked_layout.addWidget(self._protocol_phase_progress_widget)
 
-        end_stacked_widget = QWidget()
-        end_stacked_widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
+        #
 
-        self._end_stacked_layout = QStackedLayout(end_stacked_widget)
-        self._end_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        end_stacked_widget = self._end_stacked_widget = StackedWidget()
+        # end_stacked_widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
 
         main_layout.addWidget(end_stacked_widget)
 
         self._end_widget_manual = self._create_end_widget_manual()
-        self._end_stacked_layout.addWidget(self._end_widget_manual)
+        end_stacked_widget.addWidget(self._end_widget_manual)
 
         self._protocol_phase_main_widget = self._create_protocol_phase_main_widget()
-        self._end_stacked_layout.addWidget(self._protocol_phase_main_widget)
+        end_stacked_widget.addWidget(self._protocol_phase_main_widget)
 
         # Optional fourth row - diagnostics
         self._diagnostics_content = DiagnosticsContent(self._app_model)
@@ -102,6 +108,7 @@ class MainContent(ContentWidget):
         #
         app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
         self.training_mode_changed.connect(self._update_training_mode)
+        self.training_plan_changed.connect(self._update_training_plan)
 
     def _create_top_widget_manual(self):
         widget = QWidget()
@@ -189,7 +196,7 @@ class MainContent(ContentWidget):
         self._content_widgets.append(hardware_status_content)
 
         alarm_content = self._alarm_content = AlarmContent(self._app_model, self._app_model.hardware)
-        alarm_content.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        alarm_content.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
         end_layout.addWidget(alarm_content)
         self._alarm_content_manual_layout = end_layout
 
@@ -198,13 +205,17 @@ class MainContent(ContentWidget):
     def _create_protocol_phase_main_widget(self):
         widget = QWidget()
         widget.setContentsMargins(4, 0, 4, 0)
+
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(16)
-        card = CardWidget(title="Protocol")
-        layout.addWidget(card)
+
+        plan_content = self._training_plan_content = TrainingPlanContent()
+        plan_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(plan_content)
 
         card = CardWidget(title="Phase")
+        # card.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
         layout.addWidget(card)
 
         self._protocol_progress_alarm_content_layout = layout
@@ -230,6 +241,7 @@ class MainContent(ContentWidget):
         return widget
 
     def _update_training_mode(self, training_mode: TrainingMode):
+        logger.verbose("updating training mode to %s", training_mode)
         alarm_content = self._alarm_content
         # remove from both, given if not present then it's identical to no-op,
         self._protocol_progress_alarm_content_layout.removeWidget(alarm_content)
@@ -238,11 +250,28 @@ class MainContent(ContentWidget):
         if training_mode == TrainingMode.MANUAL:
             self._alarm_content_manual_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._mid_widget_manual)
-            self._end_stacked_layout.setCurrentWidget(self._end_widget_manual)
+            end_w = self._end_widget_manual
+            self._end_stacked_widget.setCurrentWidget(self._end_widget_manual)
         else:
             self._protocol_progress_alarm_content_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._protocol_phase_progress_widget)
-            self._end_stacked_layout.setCurrentWidget(self._protocol_phase_main_widget)
+            end_w = self._protocol_phase_main_widget
+            self._end_stacked_widget.setCurrentWidget(self._protocol_phase_main_widget)
+        self._end_stacked_widget.setMaximumHeight(
+            end_w
+            .sizeHint().height()
+        )
+        animal = self._app_model.selected_animal
+        plan = (
+            None if animal is None
+            else self._app_model.get_training_plan_by_id(animal.training.current_protocol)
+        )
+        self._update_training_plan(plan)
+        self.update()
+
+    def _update_training_plan(self, training_plan: Optional[TrainingPlan]):
+        self._training_plan_content.set_training_plan(training_plan)
+        self.update()
 
     def close(self):
          self._diagnostics_content.close()  # to ensure the textbox handler is remove from root logger handlers
@@ -317,3 +346,5 @@ class MainContent(ContentWidget):
     def _behavior_algo_property_changed(self, name, value, _):
         if name == BehaviorAlgoProps.TRAINING_MODE:
             self.training_mode_changed.emit(value)
+        elif name == BehaviorAlgoProps.TRAINING_PLAN:
+            self.training_plan_changed.emit(value)

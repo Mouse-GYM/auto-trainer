@@ -6,11 +6,14 @@ from PySide6.QtWidgets import (QLabel, QSpinBox, QWidget, QPushButton, QVBoxLayo
                                QFormLayout, QStackedLayout, QSizePolicy)
 
 from autotrainer.core import AnimalSubject
+
 from autotrainer.model import EnvironmentProvider, HardwareVersion
+
 from autotrainer.pyside import CardWidget
+from autotrainer.pyside.content_widget import ContentWidget
+
 from tools.acquisition.model.hardware_model import HardwareModel
 
-from tools.acquisition.view.content_widget import ContentWidget
 
 logger = logging.getLogger(__name__)
 
@@ -172,28 +175,25 @@ class HardwareControlContent(ContentWidget):
         button_layout.addWidget(self._cover_button)
         layout.addLayout(button_layout, 1, 4)
 
-        self._card_widget.setContentLayout(layout)
-        # self._card_widget.setSizePolicy(self.sizePolicy())
+        # central layout/widget
+        widget = QWidget()
+        widget.setLayout(layout)
+        self._card_widget.setContentWidget(widget)
 
         # Footer
         self._basic_footer = QWidget()
-
         layout = QHBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(QLabel("Command in progress:"))
         self._command_label = QLabel("None")
         layout.addWidget(self._command_label)
-
         self._basic_footer.setLayout(layout)
-
         self._stack_layout = QStackedLayout()
         self._stack_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self._stack_layout.addWidget(self._basic_footer)
-
         widget = QWidget()
         widget.setLayout(self._stack_layout)
-
         self._card_widget.footer.setContent(widget)
 
         # Final layout
@@ -204,6 +204,7 @@ class HardwareControlContent(ContentWidget):
         layout.setSpacing(0)
 
         self.setLayout(layout)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         self.setEnabled(False)
 

@@ -24,12 +24,14 @@ from autotrainer.core import AnimalSubject
 from autotrainer.core.configuration import SystemConfigurationDumper
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer
+from autotrainer.core.training_plan import load_training_plans
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.config import load_calib_stereo_params
 from autotrainer.inference import PoseAlgorithm, InferenceStatus
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.video import CaptureProcessStatus
 
+from autotrainer.training import TrainingPlan
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
@@ -149,6 +151,15 @@ class AppModel(ObservableObject):
         )
 
         self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir)
+
+        #
+
+        self._training_plans: List[TrainingPlan] = load_training_plans(
+            Path(preferences.configuration_location).joinpath("training/protocols"))
+        self._training_plan_by_plan_id = {
+            plan.plan_id: plan
+            for idx, plan in enumerate(self._training_plans)
+        }
 
         self._behavior = BehaviorModel(
             self._system_message_handler, self._analysis, self._hardware, self._inference,
@@ -354,6 +365,12 @@ class AppModel(ObservableObject):
     def notes(self, value: str):
         self._notes = self._on_property_changed("notes", value, self._notes)
 
+    @property
+    def training_plans(self) -> List[TrainingPlan]:
+        return self._training_plans
+
+    def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
+        return self._training_plan_by_plan_id.get(plan_id)
     #
 
     def add_animal(self, name: str, select: bool = False):
@@ -630,7 +647,7 @@ class AppModel(ObservableObject):
         path = Path(self._preferences.animal_location)
 
         if path.exists() and path.is_dir():
-            files = [x.name for x in path.iterdir() if not x.is_dir() and ".json" in x.name]
+            files = [x.name for x in path.glob("*.json")]
             loaded = [AnimalSubject.from_file(str(path.joinpath(x))) for x in files]
             animals = sorted((x for x in loaded if x is not None), key=lambda a: a.name)
 

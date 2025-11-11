@@ -9,11 +9,12 @@ from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QVBoxLayout, QHBoxLayo
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import PerfMonitor, SensorAnalysis, LoadCellMonitor, Offset3DTuple, SystemMessageHandler
 from autotrainer.pyside import PGWidget, CardWidget, QtIndicator
+from autotrainer.pyside.content_widget import ContentWidget
+
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.user_preferences import UserPreferences
 
-from tools.acquisition.view.content_widget import ContentWidget
 
 logger = get_verbose_logger(__name__)
 

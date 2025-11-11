@@ -28,7 +28,8 @@ class CardHeader(QWidget):
             "#CardHeader {background-color: " + background_color + \
             "; padding: 8px; border-top-left-radius: 6px; border-top-right-radius: 6px}")
 
-        self._layout = QHBoxLayout()
+        self._layout = QHBoxLayout(self)
+        # self.setLayout(self._layout)
         self._layout.setContentsMargins(6, 4, 4, 6)
 
         self._title_label = QLabel(f"<b>{title}</b>")
@@ -36,7 +37,8 @@ class CardHeader(QWidget):
             self._title_label.setStyleSheet(f"color: {title_color}")
         self._layout.addWidget(self._title_label)
 
-        self.setLayout(self._layout)
+        self._right_content: Optional[QWidget, QLayout] = None
+
 
     def setTitle(self, title: str, color: Optional[str] = None):
         title = f"<b>{title}</b>"
@@ -45,7 +47,13 @@ class CardHeader(QWidget):
             self._title_label.setStyleSheet(f"color: {color}")
 
     def setRightContent(self, content: Optional[QWidget | QLayout] = None):
+        prev = self._right_content
+        if prev is not None:
+            self._layout.removeWidget(prev)
+            prev.setParent(None)  # required
+
         if content is not None:
+            self._right_content = content
             if isinstance(content, QWidget):
                 self._layout.addWidget(content, 0, Qt.AlignmentFlag.AlignRight)
             else:
