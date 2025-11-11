@@ -71,7 +71,7 @@ class MainContent(ContentWidget):
         #
 
         end_stacked_widget = self._end_stacked_widget = StackedWidget()
-        # end_stacked_widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        end_stacked_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         main_layout.addWidget(end_stacked_widget)
 
@@ -112,9 +112,10 @@ class MainContent(ContentWidget):
 
     def _create_top_widget_manual(self):
         widget = QWidget()
-        widget.setContentsMargins(4, 4, 4, 4)
+        widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        widget.setContentsMargins(4, 4, 4, 0)
         top_layout = QHBoxLayout(widget)
-        top_layout.setContentsMargins(4, 4, 4, 4)
+        top_layout.setContentsMargins(4, 4, 4, 0)
         top_layout.setSpacing(16)
         top_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
@@ -154,7 +155,7 @@ class MainContent(ContentWidget):
         widget.setContentsMargins(4, 0, 4, 0)
 
         mid_layout = QHBoxLayout(widget)
-        mid_layout.setContentsMargins(4, 4, 4, 4)
+        mid_layout.setContentsMargins(4, 4, 4, 0)
         mid_layout.setSpacing(16)
 
         behavior_content = BehaviorContent(
@@ -208,7 +209,7 @@ class MainContent(ContentWidget):
 
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(16)
+        layout.setSpacing(8)
 
         plan_content = self._training_plan_content = TrainingPlanContent()
         plan_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -226,8 +227,8 @@ class MainContent(ContentWidget):
         widget = QWidget()
         widget.setContentsMargins(4, 0, 4, 0)
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(16)
+        layout.setContentsMargins(4, 4, 4, 0)
+        layout.setSpacing(8)
 
         card = CardWidget(title="Protocol Progress")
         layout.addWidget(card)
@@ -250,17 +251,11 @@ class MainContent(ContentWidget):
         if training_mode == TrainingMode.MANUAL:
             self._alarm_content_manual_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._mid_widget_manual)
-            end_w = self._end_widget_manual
             self._end_stacked_widget.setCurrentWidget(self._end_widget_manual)
         else:
             self._protocol_progress_alarm_content_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._protocol_phase_progress_widget)
-            end_w = self._protocol_phase_main_widget
             self._end_stacked_widget.setCurrentWidget(self._protocol_phase_main_widget)
-        self._end_stacked_widget.setMaximumHeight(
-            end_w
-            .sizeHint().height()
-        )
         animal = self._app_model.selected_animal
         plan = (
             None if animal is None

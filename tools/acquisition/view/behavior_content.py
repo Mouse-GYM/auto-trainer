@@ -27,6 +27,8 @@ class BehaviorContent(ContentWidget):
                  inference_model: InferenceModel):
         super().__init__()
 
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+
         system_machine = behavior_model.system_machine
         algo = system_machine.algorithm
         pellet_machine = system_machine.pellet
