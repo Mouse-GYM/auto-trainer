@@ -27,6 +27,7 @@ from tools.acquisition.view.camera_content import CameraContent
 from tools.acquisition.view.diagnostics_content import DiagnosticsContent
 from tools.acquisition.view.hardware_control_content import HardwareControlContent
 from tools.acquisition.view.hardware_status_content import HardwareStatusContent
+from tools.acquisition.view.training_phase_content import TrainingPhaseContent
 from tools.acquisition.view.training_plan_content import TrainingPlanContent
 
 logger = get_verbose_logger(__name__)
@@ -208,16 +209,16 @@ class MainContent(ContentWidget):
         widget.setContentsMargins(4, 0, 4, 0)
 
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(4, 4, 4, 0)
         layout.setSpacing(8)
 
         plan_content = self._training_plan_content = TrainingPlanContent()
         plan_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(plan_content)
 
-        card = CardWidget(title="Phase")
-        # card.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
-        layout.addWidget(card)
+        phase_content = self._training_phase_content = TrainingPhaseContent()
+        phase_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(phase_content)
 
         self._protocol_progress_alarm_content_layout = layout
 
@@ -266,6 +267,7 @@ class MainContent(ContentWidget):
 
     def _update_training_plan(self, training_plan: Optional[TrainingPlan]):
         self._training_plan_content.set_training_plan(training_plan)
+        self._training_phase_content.set_training_phase(None if training_plan is None else training_plan.current_phase)
         self.update()
 
     def close(self):
