@@ -59,14 +59,17 @@ class TrainingPhaseCard(CardWidget):
 
         dev = self._make_device(phase)
         dev.setStyleSheet(border_with_padding_style)
+        dev.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         left.addWidget(dev, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         predicate = self._make_predicates(phase)
         predicate.setStyleSheet(border_with_padding_style)
+        predicate.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         left.addWidget(predicate, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         behavior = self._make_behavior(phase)
         behavior.setStyleSheet(border_with_padding_style)
+        behavior.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         sub.addWidget(behavior, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
     def _apply_background(self, grid):
@@ -219,6 +222,10 @@ class TrainingPhaseContent(StackedWidget):
             logger.debug("Using cache for phase to %s", phase)
             self.setCurrentWidget(card)
             return
+
+        if card is not None:
+            self.removeWidget(card)
+            card.setParent(None)
 
         logger.debug("Adding new phase %s with %s actions", phase.phase_id, len(phase.session_actions))
         card = TrainingPhaseCard(phase)
