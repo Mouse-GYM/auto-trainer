@@ -117,6 +117,8 @@ class MainWindow(QMainWindow):
         super().close()
 
     def on_capture_start_stop(self, is_toggled):
+        self._animal_dropdown.setEnabled(not is_toggled)
+        self._training_plan_combo.setEnabled(not is_toggled)
         if is_toggled:
             self.main_content.set_is_capture_active(True)
             self.edit_camera_settings_action.setEnabled(False)
