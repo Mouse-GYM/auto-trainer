@@ -1,3 +1,4 @@
+import threading
 import time
 from itertools import chain
 from pathlib import Path
@@ -40,6 +41,7 @@ DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is con
 class MainWindow(QMainWindow):
 
     training_mode_changed = Signal(TrainingMode)
+    running_status_changed = Signal(bool)  # True == running
 
     def __init__(self, app: QApplication, user_preferences: UserPreferences, configuration: str = None,
                  app_version: str = "", is_dev: bool = False):
@@ -93,53 +95,63 @@ class MainWindow(QMainWindow):
         #
         self._reload_animals(self._app_model.animals)
         #
+        self.running_status_changed.connect(self._set_start_or_stop)
 
+    @property
+    def app_model(self) -> AppModel:
+        return self._app_model
 
     def close(self):
         # explicitly close main content, reason is TextBoxHandler added to root logger handlers.
+        self._app_model.on_capture_stop()
         self.main_content.close()
         super().close()
 
-    def on_capture_start_stop(self, is_toggled):
-        if is_toggled:
-            self.main_content.set_is_capture_active(True)
-            self.edit_camera_settings_action.setEnabled(False)
-            self.run_action.setEnabled(False)
-            self._status_label.setText("Starting subprocesses...")
-            logger.info("starting subprocesses")
-            QCoreApplication.processEvents()
-            # This call should not really happen on the UI thread (takes too long).  Above hack to ensure UI elements
-            # update.
-            if self._app_model.on_capture_start():
-                self._status_label.setText("")
-                icon = qta.icon('ei.stop')
-                self.run_action.setText("Stop")
-                self.run_action.setIcon(icon)
-                self.run_action.setEnabled(True)
-            else:
-                self._status_label.setText("Startup failed")
-                self.main_content.set_is_capture_active(False)
-                self.edit_camera_settings_action.setEnabled(True)
-                icon = qta.icon('ei.play')
-                self.run_action.setChecked(False)
-                self.run_action.setText("Start")
-                self.run_action.setIcon(icon)
-                self.run_action.setEnabled(True)
+    def _set_start_or_stop(self, started: bool):
+        self.main_content.set_is_capture_active(started)
+        #
+        stopped = not started
+        self._animal_dropdown.setEnabled(stopped)
+        self._training_plan_combo.setEnabled(stopped)
+        self.edit_camera_settings_action.setEnabled(stopped)
+        #
+        if started:
+            icon = qta.icon('ei.stop')
+            self.run_action.setText("Stop")
+            self.run_action.setIcon(icon)
         else:
-            self.run_action.setEnabled(False)
-            self._status_label.setText("Stopping subprocesses...")
-            logger.info("stopping subprocesses")
-            QCoreApplication.processEvents()
-            # This call should not really happen on the UI thread (takes too long).  Above hack to ensure UI elements
-            # update.
-            self._app_model.on_capture_stop()
-            self.main_content.set_is_capture_active(False)
-            self.edit_camera_settings_action.setEnabled(True)
-            self._status_label.setText("")
             icon = qta.icon('ei.play')
+            self.run_action.setChecked(False)
             self.run_action.setText("Start")
             self.run_action.setIcon(icon)
-            self.run_action.setEnabled(True)
+
+    def on_capture_start_stop(self, is_toggled):
+        self.run_action.setEnabled(False)
+        self.running_status_changed.emit(is_toggled)
+        if is_toggled:
+            self._status_label.setText("Starting subprocesses...")
+            def doit():
+                logger.info("starting subprocesses")
+                try:
+                    started = self._app_model.on_capture_start()
+                except Exception as err:
+                    logger.exception("app_model.on_capture_start failed: %s", err)
+                    started = False
+                if started:
+                    self._status_label.setText("")
+                else:
+                    self._status_label.setText("Startup failed")
+                    self.running_status_changed.emit(False)
+                self.run_action.setEnabled(True)
+            threading.Thread(target=doit, daemon=True).start()
+        else:
+            self._status_label.setText("Stopping subprocesses...")
+            logger.info("stopping subprocesses")
+            def doit():
+                self._app_model.on_capture_stop()
+                self.run_action.setEnabled(True)
+                self._status_label.setText("")
+            threading.Thread(target=doit, daemon=True).start()
 
     @staticmethod
     def calculate_std_dev_manual(data):

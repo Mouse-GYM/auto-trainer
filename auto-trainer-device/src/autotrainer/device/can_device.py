@@ -388,21 +388,6 @@ class CanDevice(Device):
     def get_motor_config(self, motor: Motor):
         return self._interface.get_motor_configuration(motor)
 
-    def _set_move_x(self, position):
-        steps = MotorSteps("set_move_x",
-                           [{'x': position}, {'x': position, 'save_as_fixed': True}])
-        return self._start_sequence(steps)
-
-    def _set_move_y(self, position):
-        steps = MotorSteps("set_move_y",
-                           [{'y': position}, {'y': position, 'save_as_fixed': True}])
-        return self._start_sequence(steps)
-
-    def _set_move_z(self, position):
-        steps = MotorSteps("set_move_z",
-                           [{'z': position}, {'z': position, 'save_as_fixed': True}])
-        return self._start_sequence(steps)
-
     def _send_retract(self, _):
         self._prev_command_is_relative = True
         return self._interface.move_motor_y(self._retract_distance, relative=True)
@@ -559,7 +544,7 @@ class CanDevice(Device):
                     self._command_complete()
 
     def _handle_ack(self, msg: Acknowledge):
-        cur_can_uuid = CanInterface.uuid()
+        cur_can_uuid = self._interface.uuid()
         logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s",
                      msg.target, msg.uuid, cur_can_uuid)
         self._put_to_cmd_queue((_uuid_ack, msg.uuid, None))
