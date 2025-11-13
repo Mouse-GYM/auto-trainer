@@ -380,7 +380,6 @@ class EmulationInterface(DeviceInterface):
         for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR):
             self._positions[motor] = self._send_pos[motor]
         self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
-
         return self._is_open
 
     def emit_tone(self, frequency, duration_ms) -> bool:
@@ -438,6 +437,7 @@ class EmulationInterface(DeviceInterface):
     def stepper_home(self, motor: Motor):
         self._positions[motor] = 0.0
         self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
+        return self._is_open
 
     def request_version(self):
         if self._is_open:
