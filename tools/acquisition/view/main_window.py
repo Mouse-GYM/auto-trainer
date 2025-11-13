@@ -3,18 +3,23 @@ from itertools import chain
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QCoreApplication
+from PySide6.QtCore import Qt, QCoreApplication, Signal
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
-                               QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton)
+                               QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout)
 import qtawesome as qta
 
-from autotrainer.behavior import DiamondTriangleOffsetConfig, TrainingMode
-from autotrainer.core import EventManager, Offset3DTuple
+from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.pose_elements import SceneElement
+
 from autotrainer.inference import InferenceStatus, PoseResponse
+
+from autotrainer.behavior import DiamondTriangleOffsetConfig, TrainingMode
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+
+from autotrainer.training import TrainingPlan
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
@@ -32,18 +37,24 @@ DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT = 30  # maximum time before automated sto
 DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is considered noisy, and a retry proposed
 
 
-#
 
-training_modes_2_style = {
-    TrainingMode.MANUAL: "manual-style",
-    TrainingMode.MANUAL_AND_PROTOCOL: "manual-protocol-style",
-    TrainingMode.AUTOMATIC: "automatic-style",
-}
-
-#
+def _load_training_plans(dir_path: Path):
+    files = list(dir_path.glob("*.json"))
+    plans = {}
+    logger.verbose("Loading training plans: %s", files)
+    for path in files:
+        plans[path] = TrainingPlan.from_json_file(path)
+    plans_seen = {}
+    for path, plan in plans.items():
+        prev = plans_seen.setdefault(plan.plan_id, path)
+        if prev != path:
+            raise RuntimeError(f"Training Protocols: same plan_id: {prev} vs {path}")
+    return list(plans.values())
 
 
 class MainWindow(QMainWindow):
+
+    training_mode_changed = Signal(TrainingMode)
 
     def __init__(self, app: QApplication, user_preferences: UserPreferences, configuration: str = None,
                  app_version: str = "", is_dev: bool = False):
@@ -62,6 +73,13 @@ class MainWindow(QMainWindow):
         except Exception as err:
             app_model.on_close()
             raise RuntimeError(f"Could not load config: {err}") from err
+
+        self._training_plans: List[TrainingPlan] = _load_training_plans(
+            Path(user_preferences.configuration_location).joinpath("training/protocols"))
+        self._training_plan_index_by_plan_id = {
+            plan.plan_id: idx
+            for idx, plan in enumerate(self._training_plans)
+        }
 
         self._title = f"Auto Trainer - Acquisition v{app_version}"
 
@@ -85,7 +103,9 @@ class MainWindow(QMainWindow):
         app_model.property_changed += self._app_model_property_changed
         app_model.on_error += self._show_error
         app_model.inference.property_changed += self._inference_property_changed
+        app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
         user_preferences.property_changed += self._preferences_property_changed
+
         #
         self._reload_animals(self._app_model.animals)
         #
@@ -99,7 +119,7 @@ class MainWindow(QMainWindow):
     def on_capture_start_stop(self, is_toggled):
         if is_toggled:
             self.main_content.set_is_capture_active(True)
-            self.edit_configuration_action.setEnabled(False)
+            self.edit_camera_settings_action.setEnabled(False)
             self.run_action.setEnabled(False)
             self._status_label.setText("Starting subprocesses...")
             logger.info("starting subprocesses")
@@ -115,7 +135,7 @@ class MainWindow(QMainWindow):
             else:
                 self._status_label.setText("Startup failed")
                 self.main_content.set_is_capture_active(False)
-                self.edit_configuration_action.setEnabled(True)
+                self.edit_camera_settings_action.setEnabled(True)
                 icon = qta.icon('ei.play')
                 self.run_action.setChecked(False)
                 self.run_action.setText("Start")
@@ -130,7 +150,7 @@ class MainWindow(QMainWindow):
             # update.
             self._app_model.on_capture_stop()
             self.main_content.set_is_capture_active(False)
-            self.edit_configuration_action.setEnabled(True)
+            self.edit_camera_settings_action.setEnabled(True)
             self._status_label.setText("")
             icon = qta.icon('ei.play')
             self.run_action.setText("Start")
@@ -338,9 +358,9 @@ class MainWindow(QMainWindow):
         self._preferences.last_window_y = self.pos().y()
         super(MainWindow, self).moveEvent(e)
 
-    def _edit_configuration(self):
+    def _edit_camera_settings(self):
         # isChecked() has already swapped to the new value by the time this is called
-        if not self.edit_configuration_action.isChecked():
+        if not self.edit_camera_settings_action.isChecked():
             self.main_content.set_is_editable(False)
             self.run_action.setEnabled(True)
         else:
@@ -352,57 +372,58 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def _create_actions(self):
-        self.edit_configuration_action = QAction(QIcon(qta.icon("fa5s.edit")), "Edit Configuration", self)
-        self.edit_configuration_action.setCheckable(True)
-        self.edit_configuration_action.setChecked(False)
-        self.edit_configuration_action.triggered.connect(self._edit_configuration)
+        action = self.edit_camera_settings_action = QAction(QIcon(qta.icon("fa5s.edit")), "Edit Camera Settings", self)
+        action.setToolTip("Edit Camera Settings")
+        action.setCheckable(True)
+        action.setChecked(False)
+        action.triggered.connect(self._edit_camera_settings)
 
-        self.run_action = QAction(QIcon(qta.icon("ei.play")), "Start", self)
-        self.run_action.setToolTip("Start or stop acquisition")
-        self.run_action.setCheckable(True)
-        self.run_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
-        self.run_action.triggered.connect(self.on_capture_start_stop)
+        action = self.run_action = QAction(QIcon(qta.icon("ei.play")), "Start", self)
+        action.setToolTip("Start or stop acquisition")
+        action.setCheckable(True)
+        action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
+        action.triggered.connect(self.on_capture_start_stop)
 
         self._calib_run = None
         self._timer_calibrate = no_op_timer
-        self.calib_diamond_triangle_action = QAction(QIcon(qta.icon("fa5s.crosshairs")), "Calibrate", self)
-        self.calib_diamond_triangle_action.setToolTip("Calibrate diamond-triangle")
-        self.calib_diamond_triangle_action.setCheckable(True)
-        self.calib_diamond_triangle_action.triggered.connect(self.on_calibrate_diamond_triangle)
-        self.calib_diamond_triangle_action.setEnabled(False)
+        action = self.calib_diamond_triangle_action = QAction(QIcon(qta.icon("fa5s.crosshairs")), "Calibrate Coordinate System", self)
+        action.setToolTip("Calibrate the relative offset between the pellet delivery spoon and the tunnel")
+        action.setCheckable(True)
+        action.triggered.connect(self.on_calibrate_diamond_triangle)
+        action.setEnabled(False)
 
-        self.view_diagnostics_action = QAction("Diagnostics", self)
-        self.view_diagnostics_action.setToolTip("Show or hide diagnostics panel")
-        self.view_diagnostics_action.setCheckable(True)
-        self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
-        self.view_diagnostics_action.triggered.connect(lambda: self._toggle_diagnostics_view())
+        action = self.view_diagnostics_action = QAction("Diagnostics", self)
+        action.setToolTip("Show or hide diagnostics panel")
+        action.setCheckable(True)
+        action.setChecked(self.main_content.is_diagnostics_visible)
+        action.triggered.connect(lambda: self._toggle_diagnostics_view())
 
-        self.capture_trigger_action = QAction("Load Cell", self)
-        self.capture_trigger_action.setCheckable(True)
-        self.capture_trigger_action.triggered.connect(self._internal_simulate_trigger)
+        action = self.capture_trigger_action = QAction("Load Cell", self)
+        action.setCheckable(True)
+        action.triggered.connect(self._internal_simulate_trigger)
 
-        self.force_detector_action = QAction("Force Detector", self)
-        self.force_detector_action.setCheckable(True)
-        self.force_detector_action.triggered.connect(self._internal_set_force_detector_seen)
+        action = self.force_detector_action = QAction("Force Detector", self)
+        action.setCheckable(True)
+        action.triggered.connect(self._internal_set_force_detector_seen)
 
-        self.pellet_seen_action = QAction("Pellet Seen", self)
-        self.pellet_seen_action.triggered.connect(self._internal_set_pellet_seen)
+        action = self.pellet_seen_action = QAction("Pellet Seen", self)
+        action.triggered.connect(self._internal_set_pellet_seen)
 
-        self.mouse_seen_action = QAction("Mouse Seen", self)
-        self.mouse_seen_action.triggered.connect(self._internal_set_mouse_seen)
+        action = self.mouse_seen_action = QAction("Mouse Seen", self)
+        action.triggered.connect(self._internal_set_mouse_seen)
 
-        self.mouse_near_pellet_action = QAction("Hands near pellet", self)
-        self.mouse_near_pellet_action.triggered.connect(self._internal_mouse_near_pellet)
+        action = self.mouse_near_pellet_action = QAction("Hands near pellet", self)
+        action.triggered.connect(self._internal_mouse_near_pellet)
 
-        self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
-        self.preferences_action.triggered.connect(lambda: self._show_preferences())
+        action = self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
+        action.triggered.connect(lambda: self._show_preferences())
 
-        self.emergency_stop_action = QAction("Emergency Stop", self)
-        self.emergency_stop_action.setCheckable(True)
+        action = self.emergency_stop_action = QAction("Emergency", self)
+        action.setCheckable(True)
 
-        self.quit_action = QAction("Quit")
-        self.quit_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_Q))
-        self.quit_action.triggered.connect(lambda: self._app.quit())
+        action = self.quit_action = QAction("Quit")
+        action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_Q))
+        action.triggered.connect(lambda: self._app.quit())
 
     def _configure_menubar(self):
         menu_bar = self.menuBar()
@@ -413,12 +434,20 @@ class MainWindow(QMainWindow):
         file_menu = menu_bar.addMenu("File")
         file_menu.addAction(self.quit_action)
 
-        view_menu = menu_bar.addMenu("View")
-        view_menu.addAction(self.view_diagnostics_action)
+        edit_menu = menu_bar.addMenu("Edit")
+        edit_menu.addAction(self.edit_camera_settings_action)
+
+        tools_menu = menu_bar.addMenu("Tools")
+        tools_menu.addAction(self.calib_diamond_triangle_action)
+
+        if self._is_dev:
+            view_menu = menu_bar.addMenu("View")
+            view_menu.addAction(self.view_diagnostics_action)
 
     def _configure_toolbar(self):
 
-        behavior = self._app_model.behavior
+        app_model = self._app_model
+        behavior = app_model.behavior
 
         toolbar = QToolBar("Run Toolbar")
         toolbar.setFloatable(False)
@@ -426,10 +455,6 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar)
 
         toolbar.addAction(self.run_action)
-        toolbar.addSeparator()
-        toolbar.addAction(self.edit_configuration_action)
-        toolbar.addSeparator()
-        toolbar.addAction(self.calib_diamond_triangle_action)
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -454,6 +479,8 @@ class MainWindow(QMainWindow):
         self._animal_dropdown.lineEdit().editingFinished.connect(self._add_animal)
         toolbar.addWidget(self._animal_dropdown)
 
+        toolbar.addSeparator()
+
         label = QLabel("Training Mode:")
         label.setContentsMargins(8, 0, 0, 0)
         toolbar.addWidget(label)
@@ -469,8 +496,52 @@ class MainWindow(QMainWindow):
 
         def index_changed(_):
             selected_mode = self._training_mode_combo.currentData()[0]  # unpack from tuple, see above.
-            self._app_model.behavior.algorithm.training_mode = selected_mode
+            behavior.algorithm.training_mode = selected_mode
         combo.currentIndexChanged.connect(index_changed)
+
+        label = QLabel("Protocol:")
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        label.setContentsMargins(8, 0, 0, 0)
+        layout.addWidget(label)
+        combo = self._training_plan_combo = QComboBox()
+        for plan_index, plan in enumerate(self._training_plans):
+            combo.addItem(plan.name, userData=plan)
+            combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
+        empty_txt = "" if len(self._training_plans) > 0 else " " * 64
+        combo.addItem(empty_txt, userData=None)  # put it last
+        tooltip_txt = (
+            "Select a training protocol" if len(self._training_plans) > 0
+            else "There are no training protocols in the Autotrainer folder"
+        )
+        combo.setItemData(len(self._training_plans), tooltip_txt, Qt.ToolTipRole)
+        selected_animal = self._app_model.selected_animal
+        if selected_animal is not None:
+            plan_id = selected_animal.training.current_protocol
+            if plan_id is not None:
+                plan_combo_index = self._training_plan_index_by_plan_id.get(plan_id, None)
+                if plan_combo_index is None:
+                    logger.warning("Animal has current protocol %r but no such protocol found", plan_id)
+                else:
+                    combo.setCurrentIndex(plan_combo_index)
+
+        layout.addWidget(combo)
+        def index_changed(_):
+            selected_plan: Optional[TrainingPlan] = self._training_plan_combo.currentData()
+            app_model.selected_animal.training.current_protocol = (
+                None if selected_plan is None
+                else selected_plan.plan_id
+            )
+            behavior.algorithm.property_changed(BehaviorAlgoProps.TRAINING_PLAN, selected_plan, None)
+
+        combo.currentIndexChanged.connect(index_changed)
+
+        def update_training_mode(training_mode):
+            self._widget_training_plan_action.setVisible(training_mode != TrainingMode.MANUAL)
+
+        self._widget_training_plan_action = toolbar.addWidget(widget)
+        update_training_mode(self._app_model.behavior.algorithm.training_mode)
+        self.training_mode_changed.connect(update_training_mode)
 
         toolbar.addSeparator()
 
@@ -478,13 +549,13 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        emergency_button = QPushButton("Emergency Stop")
+        emergency_button = QPushButton("Emergency")
         emergency_button.setCheckable(True)
         emergency_button.setObjectName("EmergencyButton")
         emergency_button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
 
         def update_emergency_ui(is_toggled: bool, source: str):
-            emergency_button.setText("Resume" if is_toggled else "Emergency Stop")
+            emergency_button.setText("Resume" if is_toggled else "Emergency")
             self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED - Source: {source}" if is_toggled else self._title)
             if source != "user-button":
                 emergency_button.setChecked(is_toggled)
@@ -567,13 +638,21 @@ class MainWindow(QMainWindow):
     def _add_animal(self):
         self._app_model.add_animal(self._animal_dropdown.currentText(), select=True)
 
-    def _animal_changed(self, index: int):
-        if self._animal_dropdown.currentIndex() != -1:
-            self._app_model.selected_animal = self._animal_dropdown.currentData()
-        else:
+    def _animal_changed(self, _):
+        if self._animal_dropdown.currentIndex() == -1:
             self._app_model.selected_animal = None
+            self._training_plan_combo.setCurrentIndex(len(self._training_plans))
+        else:
+            animal: AnimalSubject = self._animal_dropdown.currentData()
+            plan_id = animal.training.current_protocol
+            plan_combo_index = len(self._training_plans) if plan_id is None else self._training_plan_index_by_plan_id.get(plan_id)
+            if plan_combo_index is None:
+                logger.warning("Animal has unknown plan: %s", plan_id)
+                plan_combo_index = len(self._training_plans)
+            self._training_plan_combo.setCurrentIndex(plan_combo_index)
+            self._app_model.selected_animal = animal
 
-    def _app_model_property_changed(self, name: str, value, _old_value):
+    def _app_model_property_changed(self, name: str, value, _):
         if name == "animals":
             self._reload_animals(value)
         elif name == "selected_animal":
@@ -583,6 +662,7 @@ class MainWindow(QMainWindow):
                 index = self._animal_dropdown.findText(value.name)
                 if index != -1:
                     self._animal_dropdown.setCurrentIndex(index)
+                    self._animal_changed(None)  # this will also update/set the toolbar display animal plan/protocol
 
     def _reload_animals(self, animals):
         self._animal_dropdown.clear()
@@ -618,3 +698,7 @@ class MainWindow(QMainWindow):
         inference = self._app_model.inference
         if name == inference.STATUS:
             self.calib_diamond_triangle_action.setEnabled(new_value == InferenceStatus.live)
+
+    def _behavior_algo_property_changed(self, name, value, _):
+        if name == BehaviorAlgoProps.TRAINING_MODE:
+            self.training_mode_changed.emit(value)

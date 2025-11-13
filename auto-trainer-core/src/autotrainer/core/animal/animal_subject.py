@@ -27,8 +27,11 @@ def _load_old_format(data: Dict[str, Any]):
 
 @dataclass
 class AnimalTraining:
-    current_protocol: Any = None
-    protocols: List[Any] = dataclasses.field(default_factory=list)
+
+    # NB: protocol == plan
+
+    current_protocol: Optional[str] = None
+    protocols: List[str] = dataclasses.field(default_factory=list)
 
 
 @dataclass
