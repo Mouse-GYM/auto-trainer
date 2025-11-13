@@ -36,11 +36,16 @@ class TrainingPlanContent(StackedWidget):
 
     def _show_training_plan(self, card: CardWidget, scroll_area: QScrollArea, plan: TrainingPlan):
         self.setCurrentWidget(card)
-        cur_phase_id = None if plan.current_phase is None else plan.current_phase.phase_id
+        phase = plan.current_phase
+        cur_phase_id = None if phase is None else plan.current_phase.phase_id
+        logger.debug("showing %s with cur_phase_id = %s ; %s",
+                     phase, cur_phase_id, "None" if phase is None else phase.name)
         for phase in plan.phases:
             phase_widget_name = self._get_phase_widget_name(plan, phase)
             widget = card.findChild(QWidget, phase_widget_name)
-            if widget is not None:
+            if widget is None:
+                logger.warning("%s not found", phase_widget_name)
+            else:
                 assert isinstance(widget, QWidget)
                 label_phase_widget_name = self._get_phase_label_name(plan, phase)
                 if cur_phase_id is not None and phase.phase_id == cur_phase_id:
@@ -56,6 +61,7 @@ class TrainingPlanContent(StackedWidget):
                     """)
                 else:
                     widget.setStyleSheet("")
+        self.update()
 
     def set_training_plan(self, plan: Optional[TrainingPlan]):
         logger.verbose("Setting training plan to %s", plan)

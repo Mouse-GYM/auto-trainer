@@ -1,3 +1,4 @@
+import dataclasses
 import threading
 import time
 from itertools import chain
@@ -126,14 +127,15 @@ class MainWindow(QMainWindow):
             self.run_action.setIcon(icon)
 
     def on_capture_start_stop(self, is_toggled):
+        app_model = self._app_model
         self.run_action.setEnabled(False)
         self.running_status_changed.emit(is_toggled)
         if is_toggled:
-            self._status_label.setText("Starting subprocesses...")
+            self._status_label.setText("Starting acquisition...")
             def doit():
                 logger.info("starting subprocesses")
                 try:
-                    started = self._app_model.on_capture_start()
+                    started = app_model.on_capture_start()
                 except Exception as err:
                     logger.exception("app_model.on_capture_start failed: %s", err)
                     started = False
@@ -145,13 +147,35 @@ class MainWindow(QMainWindow):
                 self.run_action.setEnabled(True)
             threading.Thread(target=doit, daemon=True).start()
         else:
-            self._status_label.setText("Stopping subprocesses...")
-            logger.info("stopping subprocesses")
+            self._status_label.setText("Stopping acquisition...")
             def doit():
-                self._app_model.on_capture_stop()
+                logger.info("stopping subprocesses")
+                app_model.on_capture_stop()
                 self.run_action.setEnabled(True)
                 self._status_label.setText("")
             threading.Thread(target=doit, daemon=True).start()
+
+    def on_previous_plan_phase(self):
+        app_model = self._app_model
+        plan = app_model.training_plan
+        if plan is None:
+            return
+        plan.fallback()
+        if app_model.behavior.algorithm.training_mode == TrainingMode.MANUAL_AND_PROTOCOL:
+            self.previous_training_phase_action.setVisible(plan.can_fallback)
+            self.next_training_phase_action.setVisible(plan.can_advance)
+        self.main_content.training_plan_changed.emit(plan)
+
+    def on_next_plan_phase(self):
+        app_model = self._app_model
+        plan = app_model.training_plan
+        if plan is None:
+            return
+        plan.advance()
+        if app_model.behavior.algorithm.training_mode == TrainingMode.MANUAL_AND_PROTOCOL:
+            self.previous_training_phase_action.setVisible(plan.can_fallback)
+            self.next_training_phase_action.setVisible(plan.can_advance)
+        self.main_content.training_plan_changed.emit(plan)
 
     @staticmethod
     def calculate_std_dev_manual(data):
@@ -380,6 +404,16 @@ class MainWindow(QMainWindow):
         action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
         action.triggered.connect(self.on_capture_start_stop)
 
+        action = self.next_training_phase_action = QAction(QIcon(qta.icon("fa5s.arrow-alt-circle-right")), "Next Phase", self)
+        action.setVisible(False)
+        action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
+        action.triggered.connect(self.on_next_plan_phase)
+
+        action = self.previous_training_phase_action = QAction(QIcon(qta.icon("fa5s.arrow-alt-circle-left")), "Previous Phase", self)
+        action.setVisible(False)
+        action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
+        action.triggered.connect(self.on_previous_plan_phase)
+
         self._calib_run = None
         self._timer_calibrate = no_op_timer
         action = self.calib_diamond_triangle_action = QAction(QIcon(qta.icon("fa5s.crosshairs")), "Calibrate Coordinate System", self)
@@ -452,6 +486,9 @@ class MainWindow(QMainWindow):
 
         toolbar.addAction(self.run_action)
 
+        toolbar.addAction(self.previous_training_phase_action)
+        toolbar.addAction(self.next_training_phase_action)
+
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         toolbar.addWidget(spacer)
@@ -466,14 +503,14 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self._notes)
 
         toolbar.addWidget(QLabel("Subject:"))
-        self._animal_dropdown = QComboBox()
-        self._animal_dropdown.setMinimumWidth(100)
-        self._animal_dropdown.setEditable(True)
-        self._animal_dropdown.setDuplicatesEnabled(False)
-        self._animal_dropdown.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        self._animal_dropdown.currentIndexChanged.connect(self._animal_changed)
-        self._animal_dropdown.lineEdit().editingFinished.connect(self._add_animal)
-        toolbar.addWidget(self._animal_dropdown)
+        combo = self._animal_dropdown = QComboBox()
+        combo.setMinimumWidth(100)
+        combo.setEditable(True)
+        combo.setDuplicatesEnabled(False)
+        combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        combo.currentIndexChanged.connect(self._animal_changed)
+        combo.lineEdit().editingFinished.connect(self._add_animal)
+        toolbar.addWidget(combo)
 
         toolbar.addSeparator()
 
@@ -501,9 +538,11 @@ class MainWindow(QMainWindow):
         label.setContentsMargins(8, 0, 0, 0)
         layout.addWidget(label)
         combo = self._training_plan_combo = QComboBox()
-        for plan_index, plan in enumerate(app_model.training_plans):
-            combo.addItem(plan.name, userData=plan)
-            combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
+        def add_plans():
+            for plan_index, plan in enumerate(app_model.training_plans):
+                combo.addItem(plan.name, userData=plan.plan_id)
+                combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
+        add_plans()
         empty_txt = "" if self._training_plans_count > 0 else " " * 64
         combo.addItem(empty_txt, userData=None)  # put it last
         tooltip_txt = (
@@ -511,37 +550,40 @@ class MainWindow(QMainWindow):
             else "There are no training protocols in the Autotrainer folder"
         )
         combo.setItemData(self._training_plans_count, tooltip_txt, Qt.ToolTipRole)
-        selected_animal = self._app_model.selected_animal
-        if selected_animal is not None:
-            plan_id = selected_animal.training.current_protocol
-            if plan_id is not None:
-                plan_combo_index = self._training_plan_index_by_plan_id.get(plan_id, None)
-                if plan_combo_index is None:
-                    logger.warning("Animal has current protocol %r but no such protocol found", plan_id)
-                else:
-                    combo.setCurrentIndex(plan_combo_index)
+        def set_animal_plan():
+            selected_animal = self._app_model.selected_animal
+            if selected_animal is not None:
+                plan_id = selected_animal.training.current_protocol
+                if plan_id is not None:
+                    plan_combo_index = self._training_plan_index_by_plan_id.get(plan_id, None)
+                    if plan_combo_index is None:
+                        logger.warning("Animal has current protocol %r but no such protocol found", plan_id)
+                    else:
+                        combo.setCurrentIndex(plan_combo_index)
+        set_animal_plan()
 
         layout.addWidget(combo)
         def index_changed(_):
-            selected_plan: Optional[TrainingPlan] = self._training_plan_combo.currentData()
-            animal = app_model.selected_animal
-            if animal is not None:
-                animal.training.current_protocol = (
-                    None if selected_plan is None
-                    else selected_plan.plan_id
-                )
-            behavior.algorithm.property_changed(BehaviorAlgoProps.TRAINING_PLAN, selected_plan, None)
+            plan_id = self._training_plan_combo.currentData()
+            selected_plan: Optional[TrainingPlan] = self._app_model.get_training_plan_by_id(plan_id)
+            logger.debug("plan changed: %s -> %s", plan_id, selected_plan)
+            self._app_model.training_plan = selected_plan
 
         combo.currentIndexChanged.connect(index_changed)
 
         def update_training_mode(training_mode):
             logger.debug("Updating training_mode to %s", training_mode)
+            app_model.behavior.algorithm.training_mode = training_mode
             self._widget_training_plan_action.setVisible(training_mode != TrainingMode.MANUAL)
             animal = app_model.selected_animal
             training_plan_idx = None if animal is None else self._training_plan_index_by_plan_id.get(animal.training.current_protocol)
             if training_plan_idx is None:
                 training_plan_idx = self._training_plans_count
+            # plan = None if animal is None else app_model.attached_plan
+            self._training_plan_combo.blockSignals(True)
             self._training_plan_combo.setCurrentIndex(training_plan_idx)
+            self._training_plan_combo.blockSignals(False)
+            self._refresh_prev_next_phases()
 
         self._widget_training_plan_action = toolbar.addWidget(widget)
         update_training_mode(self._app_model.behavior.algorithm.training_mode)
@@ -645,32 +687,52 @@ class MainWindow(QMainWindow):
     def _animal_changed(self, _):
         if self._animal_dropdown.currentIndex() == -1:
             self._app_model.selected_animal = None
-            self._training_plan_combo.setCurrentIndex(self._training_plans_count)
         else:
-            animal: AnimalSubject = self._animal_dropdown.currentData()
-            plan_id = animal.training.current_protocol
-            plan_combo_index = self._training_plans_count if plan_id is None else self._training_plan_index_by_plan_id.get(plan_id)
-            if plan_combo_index is None:
-                logger.warning("Animal has unknown plan_id: %s", plan_id)
-                plan_combo_index = self._training_plans_count
-            self._training_plan_combo.setCurrentIndex(plan_combo_index)
+            animal_id = self._animal_dropdown.currentData()
+            animal: AnimalSubject = self._app_model.get_animal_by_id(animal_id)
+            # logger.debug("animal: %s", dataclasses.asdict(animal))
             self._app_model.selected_animal = animal
 
+    def _refresh_prev_next_phases(self):
+        attached = self._app_model.attached_plan
+        if attached is None or self._app_model.behavior.algorithm.training_mode == TrainingMode.MANUAL:
+            self.previous_training_phase_action.setVisible(False)
+            self.next_training_phase_action.setVisible(False)
+            return
+        self.previous_training_phase_action.setVisible(attached.can_fallback)
+        self.next_training_phase_action.setVisible(attached.can_advance)
+
     def _app_model_property_changed(self, name: str, value, _):
+        props = self._app_model.Props
         if name == "animals":
             self._reload_animals(value)
-        elif name == "selected_animal":
+        elif name == props.SELECTED_ANIMAL:
+            animal_dropdown = self._animal_dropdown
+            animal_dropdown.blockSignals(True)
             if value is None:
-                self._animal_dropdown.clear()
+                animal_dropdown.setCurrentIndex(-1)
             else:
+                assert isinstance(value, AnimalSubject)
                 index = self._animal_dropdown.findText(value.name)
                 if index != -1:
                     self._animal_dropdown.setCurrentIndex(index)
-                    self._animal_changed(None)  # this will also update/set the toolbar display animal plan/protocol
+                    # self._animal_changed(None)  # this will also update/set the toolbar display animal plan/protocol
+            animal_dropdown.blockSignals(False)
+            self._refresh_prev_next_phases()
 
-    def _reload_animals(self, animals):
-        self._animal_dropdown.clear()
+        elif name == props.TRAINING_PLAN:
+            if value is not None:
+                assert isinstance(value, TrainingPlan)
+                index = self._training_plan_index_by_plan_id.get(value.plan_id, -1)
+            else:
+                index = -1
+            logger.debug("changing plan: index=%s -> %s", index, value)
+            self._training_plan_combo.blockSignals(True)
+            self._training_plan_combo.setCurrentIndex(index)
+            self._training_plan_combo.blockSignals(False)
+            self._refresh_prev_next_phases()
 
+    def _reload_animals(self, animals: List[AnimalSubject]):
         # get current selected animal before adding them,
         # given when adding that's modifying the currently selected one too,
         # which reset the preference selected to that one...
@@ -681,8 +743,9 @@ class MainWindow(QMainWindow):
 
         # prevent on_animal_changed event:
         self._animal_dropdown.blockSignals(True)
-        for animal in animals:
-            self._animal_dropdown.addItem(animal.name, animal)
+        self._animal_dropdown.clear()
+        for idx, animal in enumerate(animals):
+            self._animal_dropdown.addItem(animal.name, animal.id)
         self._animal_dropdown.blockSignals(False)
 
         # we set the good one here:
@@ -706,3 +769,4 @@ class MainWindow(QMainWindow):
     def _behavior_algo_property_changed(self, name, value, _):
         if name == BehaviorAlgoProps.TRAINING_MODE:
             self.training_mode_changed.emit(value)
+            self._refresh_prev_next_phases()

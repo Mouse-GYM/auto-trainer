@@ -75,7 +75,6 @@ class BehaviorAlgoProps(str, enum.Enum):
     ALGO_PAUSED = 'algo_paused'
 
     TRAINING_MODE = 'training_mode'
-    TRAINING_PLAN = 'training_plan'
 
     AUTO_CLAMP_INTENSITY = 'auto_clamp_intensity'
     BASELINE_INTENSITY = 'baseline_intensity'

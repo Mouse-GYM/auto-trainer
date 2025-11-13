@@ -18,7 +18,7 @@ from autotrainer.pyside import Separator, CardWidget
 from autotrainer.pyside.StackedWidget import StackedWidget
 from autotrainer.pyside.content_widget import ContentWidget
 
-from autotrainer.training import TrainingPlan
+from autotrainer.training import TrainingPlan, TrainingPhase
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.view.alarm_content import AlarmContent
 from tools.acquisition.view.analysis_content import AnalysisContent
@@ -257,17 +257,16 @@ class MainContent(ContentWidget):
             self._protocol_progress_alarm_content_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._protocol_phase_progress_widget)
             self._end_stacked_widget.setCurrentWidget(self._protocol_phase_main_widget)
-        animal = self._app_model.selected_animal
-        plan = (
-            None if animal is None
-            else self._app_model.get_training_plan_by_id(animal.training.current_protocol)
-        )
-        self._update_training_plan(plan)
+            plan = self._app_model.training_plan
+            self._update_training_plan(plan)
         self.update()
 
     def _update_training_plan(self, training_plan: Optional[TrainingPlan]):
         self._training_plan_content.set_training_plan(training_plan)
-        self._training_phase_content.set_training_phase(None if training_plan is None else training_plan.current_phase)
+        self._training_phase_content.set_training_phase(
+            None if training_plan is None else training_plan.current_phase,
+            force_refresh=True,
+        )
         self.update()
 
     def close(self):
@@ -329,19 +328,26 @@ class MainContent(ContentWidget):
     def set_diagnostics_visible(self, is_visible: bool):
         self._diagnostics_content.setVisible(is_visible)
         self._is_diagnostics_visible = is_visible
-        # if is_visible:
-        #     self._layout.setRowStretch(1, 0)
-        #     self._layout.setRowStretch(4, 1)
-        # else:
-        #     self._layout.setRowStretch(1, 1)
-        #     self._layout.setRowStretch(4, 0)
 
     def _model_property_changed(self, name: str, value, _):
-        if name == "selected_animal" and value is not None:
-            self._hardware_control_content.set_selected_animal(value)
+        app_model = self._app_model
+        props = AppModel.Props
+        if name == props.SELECTED_ANIMAL:
+            if value is not None:
+                self._hardware_control_content.set_selected_animal(value)
+                self.training_plan_changed.emit(app_model.training_plan)  # ensure it's refreshed too
+        elif name == props.TRAINING_PLAN:
+            assert isinstance(value, (type(None), TrainingPlan))
+            self.training_plan_changed.emit(value)
+            # self._training_phase_content.set_training_phase(None if value is None else value.current_phase)
+        elif name == props.TRAINING_PHASE:
+            phase = app_model.training_plan.current_phase
+            if phase != value:
+                raise RuntimeError("plan phase != new phase: %s", phase, value)
+            self.training_plan_changed.emit(app_model.training_plan)
+            # self._training_phase_content.set_training_phase(value, force_refresh=True)
+            # handled by training_plan_changed.
 
     def _behavior_algo_property_changed(self, name, value, _):
         if name == BehaviorAlgoProps.TRAINING_MODE:
             self.training_mode_changed.emit(value)
-        elif name == BehaviorAlgoProps.TRAINING_PLAN:
-            self.training_plan_changed.emit(value)
