@@ -29,7 +29,6 @@ class CardHeader(QWidget):
             "; padding: 8px; border-top-left-radius: 6px; border-top-right-radius: 6px}")
 
         self._layout = QHBoxLayout(self)
-        # self.setLayout(self._layout)
         self._layout.setContentsMargins(6, 4, 4, 6)
 
         self._title_label = QLabel(f"<b>{title}</b>")
@@ -62,7 +61,7 @@ class CardHeader(QWidget):
 
     def setContent(self, widget: QWidget):
         self._layout = QVBoxLayout()
-        # self._layout.setContentsMargins(6, 4, 4, 6)
-        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setContentsMargins(6, 4, 4, 6)
+        # self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.addWidget(widget)
         self.setLayout(self._layout)
