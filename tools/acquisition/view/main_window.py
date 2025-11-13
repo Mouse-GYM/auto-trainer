@@ -18,12 +18,12 @@ from autotrainer.inference import InferenceStatus, PoseResponse
 
 from autotrainer.behavior import DiamondTriangleOffsetConfig, TrainingMode
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.pyside.content_widget import InvokeMethod
 
 from autotrainer.training import TrainingPlan
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
-from tools.acquisition.view.content_widget import InvokeMethod
 from tools.acquisition.view.main_content import MainContent
 from tools.acquisition.view.preferences_dialog import PreferencesDialog
 
@@ -35,21 +35,6 @@ DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION = 3  # duration of calibration data acqu
 DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT = 30  # maximum time before automated stop of calibration
 # if not enough data is captured after that time the calib is automatically finished/stopped (and ask for retry)
 DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is considered noisy, and a retry proposed
-
-
-
-def _load_training_plans(dir_path: Path):
-    files = list(dir_path.glob("*.json"))
-    plans = {}
-    logger.verbose("Loading training plans: %s", files)
-    for path in files:
-        plans[path] = TrainingPlan.from_json_file(path)
-    plans_seen = {}
-    for path, plan in plans.items():
-        prev = plans_seen.setdefault(plan.plan_id, path)
-        if prev != path:
-            raise RuntimeError(f"Training Protocols: same plan_id: {prev} vs {path}")
-    return list(plans.values())
 
 
 class MainWindow(QMainWindow):
@@ -74,12 +59,11 @@ class MainWindow(QMainWindow):
             app_model.on_close()
             raise RuntimeError(f"Could not load config: {err}") from err
 
-        self._training_plans: List[TrainingPlan] = _load_training_plans(
-            Path(user_preferences.configuration_location).joinpath("training/protocols"))
         self._training_plan_index_by_plan_id = {
             plan.plan_id: idx
-            for idx, plan in enumerate(self._training_plans)
+            for idx, plan in enumerate(app_model.training_plans)
         }
+        self._training_plans_count = len(app_model.training_plans)
 
         self._title = f"Auto Trainer - Acquisition v{app_version}"
 
@@ -462,7 +446,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addWidget(QLabel("Notes:"))
         self._notes = QLineEdit()
-        self._notes.setMinimumWidth(300)
+        self._notes.setMinimumWidth(100)
         self._notes.setText(self._app_model.notes)
         self._notes.textChanged.connect(self.notes_changed)
         self._notes.setContentsMargins(4, 0, 8, 0)
@@ -471,7 +455,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addWidget(QLabel("Subject:"))
         self._animal_dropdown = QComboBox()
-        self._animal_dropdown.setMinimumWidth(200)
+        self._animal_dropdown.setMinimumWidth(100)
         self._animal_dropdown.setEditable(True)
         self._animal_dropdown.setDuplicatesEnabled(False)
         self._animal_dropdown.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
@@ -505,16 +489,16 @@ class MainWindow(QMainWindow):
         label.setContentsMargins(8, 0, 0, 0)
         layout.addWidget(label)
         combo = self._training_plan_combo = QComboBox()
-        for plan_index, plan in enumerate(self._training_plans):
+        for plan_index, plan in enumerate(app_model.training_plans):
             combo.addItem(plan.name, userData=plan)
             combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
-        empty_txt = "" if len(self._training_plans) > 0 else " " * 64
+        empty_txt = "" if self._training_plans_count > 0 else " " * 64
         combo.addItem(empty_txt, userData=None)  # put it last
         tooltip_txt = (
-            "Select a training protocol" if len(self._training_plans) > 0
+            "Select a training protocol" if self._training_plans_count > 0
             else "There are no training protocols in the Autotrainer folder"
         )
-        combo.setItemData(len(self._training_plans), tooltip_txt, Qt.ToolTipRole)
+        combo.setItemData(self._training_plans_count, tooltip_txt, Qt.ToolTipRole)
         selected_animal = self._app_model.selected_animal
         if selected_animal is not None:
             plan_id = selected_animal.training.current_protocol
@@ -528,16 +512,24 @@ class MainWindow(QMainWindow):
         layout.addWidget(combo)
         def index_changed(_):
             selected_plan: Optional[TrainingPlan] = self._training_plan_combo.currentData()
-            app_model.selected_animal.training.current_protocol = (
-                None if selected_plan is None
-                else selected_plan.plan_id
-            )
+            animal = app_model.selected_animal
+            if animal is not None:
+                animal.training.current_protocol = (
+                    None if selected_plan is None
+                    else selected_plan.plan_id
+                )
             behavior.algorithm.property_changed(BehaviorAlgoProps.TRAINING_PLAN, selected_plan, None)
 
         combo.currentIndexChanged.connect(index_changed)
 
         def update_training_mode(training_mode):
+            logger.debug("Updating training_mode to %s", training_mode)
             self._widget_training_plan_action.setVisible(training_mode != TrainingMode.MANUAL)
+            animal = app_model.selected_animal
+            training_plan_idx = None if animal is None else self._training_plan_index_by_plan_id.get(animal.training.current_protocol)
+            if training_plan_idx is None:
+                training_plan_idx = self._training_plans_count
+            self._training_plan_combo.setCurrentIndex(training_plan_idx)
 
         self._widget_training_plan_action = toolbar.addWidget(widget)
         update_training_mode(self._app_model.behavior.algorithm.training_mode)
@@ -641,14 +633,14 @@ class MainWindow(QMainWindow):
     def _animal_changed(self, _):
         if self._animal_dropdown.currentIndex() == -1:
             self._app_model.selected_animal = None
-            self._training_plan_combo.setCurrentIndex(len(self._training_plans))
+            self._training_plan_combo.setCurrentIndex(self._training_plans_count)
         else:
             animal: AnimalSubject = self._animal_dropdown.currentData()
             plan_id = animal.training.current_protocol
-            plan_combo_index = len(self._training_plans) if plan_id is None else self._training_plan_index_by_plan_id.get(plan_id)
+            plan_combo_index = self._training_plans_count if plan_id is None else self._training_plan_index_by_plan_id.get(plan_id)
             if plan_combo_index is None:
-                logger.warning("Animal has unknown plan: %s", plan_id)
-                plan_combo_index = len(self._training_plans)
+                logger.warning("Animal has unknown plan_id: %s", plan_id)
+                plan_combo_index = self._training_plans_count
             self._training_plan_combo.setCurrentIndex(plan_combo_index)
             self._app_model.selected_animal = animal
 

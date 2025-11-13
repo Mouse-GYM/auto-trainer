@@ -8,12 +8,13 @@ from PySide6.QtWidgets import (QLabel, QWidget, QVBoxLayout,
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, ShiftXYZHandler
 from autotrainer.pyside import CardWidget, QSwitch
+from autotrainer.pyside.content_widget import ContentWidget
 from autotrainer.pyside.xyz_label import XYZQLabel
 from autotrainer.pyside.DayTotalCount import DailyAndTotalCountsLabel
+
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
-from tools.acquisition.view.content_widget import ContentWidget
 
 
 class BehaviorContent(ContentWidget):
@@ -25,6 +26,8 @@ class BehaviorContent(ContentWidget):
                  behavior_model: BehaviorModel,
                  inference_model: InferenceModel):
         super().__init__()
+
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
 
         system_machine = behavior_model.system_machine
         algo = system_machine.algorithm

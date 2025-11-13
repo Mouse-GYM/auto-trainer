@@ -10,10 +10,10 @@ from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrash
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.pyside import CardWidget, StatusIcon
+from autotrainer.pyside.content_widget import ContentWidget
+
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.hardware_model import HardwareModel
-
-from tools.acquisition.view.content_widget import ContentWidget
 
 logger = get_verbose_logger(__name__)
 
@@ -125,7 +125,7 @@ class AlarmContent(ContentWidget):
 
         self._card_widget.setContentLayout(content_layout)
         self._card_widget.setContentsMargins(0, 0, 0, 0)
-        self._card_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._card_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout()
         layout.addWidget(self._card_widget)

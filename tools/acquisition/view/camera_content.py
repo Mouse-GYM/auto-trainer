@@ -1,5 +1,6 @@
 from typing import Dict
 
+from autotrainer.pyside.content_widget import ContentWidget
 from numpy import ndarray
 
 from PySide6.QtCore import Slot, Qt
@@ -13,12 +14,13 @@ from autotrainer.video import VideoRecordMode
 from autotrainer.pyside import QCaptureView
 
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
-from tools.acquisition.view.content_widget import ContentWidget
 
 
 class CameraContent(ContentWidget):
     def __init__(self, capture_model: VideoCaptureModel):
         super().__init__()
+
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         self._model = capture_model
 

@@ -48,6 +48,8 @@ class CardWidget(QWidget):
 
         self._last_widget_or_layout = None
 
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+
         if content_layout is not None:
             self.setContentLayout(content_layout)
 
@@ -78,8 +80,7 @@ class CardWidget(QWidget):
             # widget.setParent(self)  # not required, this is implicit with addWidget()
 
         self._last_widget_or_layout = widget
-        widget.show()
-        widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self._layout.update()  # force update to ensure layout is refreshed
 
     def setContentLayout(self, layout: QLayout):
@@ -91,5 +92,4 @@ class CardWidget(QWidget):
                 self._layout.removeItem(last)
         self._layout.addLayout(layout, 1, 0)
         self._last_widget_or_layout = layout
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._layout.update()  # force update to ensure layout is refreshed
