@@ -97,13 +97,10 @@ def segment_reaches_f11(
             testA = dp <= min_dist_from_orig
             testB = pp == 1 # is the pellet detected in frame
             testC = st > 12 or np.isnan(st) # was the cover open or not installed?
-            testDx = (3.5 < tpX < 4.5) and not np.isnan(tpX)
+            testDx = (2 < tpX < 4.5) and not np.isnan(tpX)
             testDy = (1 < tpY < 5) and not np.isnan(tpY)
-            testDz = (3 < tpZ < 4) and not np.isnan(tpZ)
+            testDz = (1.5 < tpZ < 4) and not np.isnan(tpZ)
             testD = testDx and testDy and testDz # was the pellet a correct distance from the triangle?
-            # x 3.5 : 4.5
-            # y 1 : 5
-            # z 3 : 4
 
             if testA and testB and testC and testD:
                 count += 1
