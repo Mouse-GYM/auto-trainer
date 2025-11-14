@@ -17,9 +17,11 @@ logger = get_verbose_logger()
 
 # 3 coordinate systems,
 # but each has some axis direction difference (when one increases, the other decreases)
-flips_inference_diamond = Offset3DTuple(1, -1, -1)
-flips_motor_diamond = Offset3DTuple(1, 1, -1)
-flips_inference_motor = flips_inference_diamond * flips_motor_diamond
+flips_inference_motor = Offset3DTuple(1, -1, 1)
+flips_inference_diamond = Offset3DTuple(-1, -1, 1)
+
+# defining flips between motor and diamond with flips between motor and inference * flips between inference and diamond:
+flips_motor_diamond = flips_inference_motor * flips_inference_diamond
 
 
 # keeping top level atm, given not quite sure where to put
