@@ -294,7 +294,7 @@ def segment_reaches_f2(
                         testB = np.mean(velocity_h_filt_R[frame:frame+batch_speed]) < reach_init_speed
                         
                         if testA and testB: 
-                            if debug == 2:
+                            if debug >= 2:
                                 print('reach began at frame %d!' % frame)
                             reach_dict = {
                                 'init': frame,
@@ -320,7 +320,7 @@ def segment_reaches_f2(
                 # print(np.mean(speed_hvh_init[frame:frame+batch_speed]))
                 testB = np.mean(speed_hvh_init[frame:frame+batch_speed]) > reach_dirchange_speed
                 if testB:
-                    if debug == 2:
+                    if debug >= 2:
                         print('reach max at frame %d!' % int(frame+3))
                     # reach_events.append(('reachMax', int(frame+3)))
                     reach_dict['max'] = int(frame+3)
@@ -342,7 +342,7 @@ def segment_reaches_f2(
                 if np.sum(speed_seg > pellet_drop_speed) > 1:
                     # print(np.sum(speed_seg > pellet_drop_speed))
                     food_was_dropped = True 
-                    if debug == 2:
+                    if debug >= 2:
                         print(f'DROP: speed drop - line {get_ln()} - frame {frame}')
                         
                 if np.any(Z_dist_p[frame:frame+position_window] < pellet_drop_dist): #food dropped if pellet is too low
@@ -354,7 +354,7 @@ def segment_reaches_f2(
                           print(f'DROP: pellet too low - line {get_ln()} - frame {frame}')
     
                 if testA and testC and not food_was_dropped: #and pellet_detected: 
-                    if debug == 2:
+                    if debug >= 2:
                         print('reach ended at frame %d!: NEW REACH' % int(frame-1))
                     reach_dict['end'] = int(frame-1)
                     reach_dict['outcome'] = 'missed'
@@ -363,7 +363,7 @@ def segment_reaches_f2(
                     dist_list.append(dist_hvpp_R[max_frm])
 
                 elif testD and testE and testF: # and not food_was_dropped:
-                    if debug == 2: 
+                    if debug >= 2:
                       print('reach stalled')
                     # reach_events.append(('reachEnd_stalled', int(frame+10)))
                     reach_dict['end'] = int(frame+10)
@@ -374,7 +374,7 @@ def segment_reaches_f2(
                 elif testA and testB:
                     pTest = np.mean(dist_p[frame:frame+batch_frm]) < 2 # pellet wasnt dropped and still in original position 
                     if food_was_dropped:
-                        if debug == 2:
+                        if debug >= 2:
                             print ('reach ended at frame %d!: DROPPED' % int(frame+2))
                         # reach_events.append(('reachEnd_dropped', int(frame+2)))
                         reach_dict['end'] = int(frame+2)
@@ -383,7 +383,7 @@ def segment_reaches_f2(
                         pellet_events[lp]['outcome'] = 'dropped'
                         keep_looking = False
                     elif pellet_detected and pTest:
-                        if debug == 2:
+                        if debug >= 2:
                             print('reach ended at frame %d!: MISSED' % int(frame+2))
                         # reach_events.append(('reachEnd_missed', int(frame+2)))
                         reach_dict['end'] = int(frame+2)
@@ -392,7 +392,7 @@ def segment_reaches_f2(
                         frame += 2
                         search_status = 1  
                     else:
-                        if debug == 2:
+                        if debug >= 2:
                             print('reach ended at frame %d!: GRABBED' % int(frame+2)) #alt: pellet position close to hand(within some threshold)
                         # reach_events.append(('reachEnd_grabbed', int(frame+2)))
                         reach_dict['end'] = int(frame+2)

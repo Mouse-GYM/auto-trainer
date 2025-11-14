@@ -89,10 +89,14 @@ def segment_reaches_f11(
     count = 0
     pellet_state = 0 # 0 is lost, 1 is placed
     pellet_events = []
+
+    #
+
     for dp, st, tpX, tpY, tpZ, pp in zip(dist_p, dist_st, dist_tpX, dist_tpY, dist_tpZ, pellet_p):
         frm_counter += 1
-        # if p == 1:
-        #     print(f"{p_dist} - {frm_counter}")
+        if debug >= 3:
+            print(f"{frm_counter} > {dp=} {st} {tpX} {tpX} {tpY} {tpZ}")
+
         if pellet_state == 0: # Searching for placement
             testA = dp <= min_dist_from_orig
             testB = pp == 1 # is the pellet detected in frame
@@ -105,7 +109,11 @@ def segment_reaches_f11(
             if testA and testB and testC and testD:
                 count += 1
             else:
-                count = 0
+                if count != 0:
+                    if debug >= 1:
+                        print(f"tests failed: {count}: {testA=} {testB=} {testC=} {testD=} ; {testDx} {testDy} {testDz}")
+                    count = 0
+
                 frame_at_count_begin = frm_counter
 
             if count >= n_frames_2_place:
@@ -123,6 +131,8 @@ def segment_reaches_f11(
             if dp > min_dist_from_orig or pp == 0:
                 count += 1
             else:
+                if debug >= 1:
+                    print(f"state==1: {count=} ; {dp} > {min_dist_from_orig} ; {pp=}")
                 count = 0
                 frame_at_count_begin = frm_counter
 
