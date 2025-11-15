@@ -16,14 +16,12 @@ def load_training_plans(dir_path: Path):
     logger.verbose("Loading training plans: %s", files)
     for path in files:
         plans[path] = TrainingPlan.from_json_file(path)
-    plans_seen = {}
+    phase_ids = {}
     for path, plan in plans.items():
-        prev = plans_seen.setdefault(plan.plan_id, path)
-        if prev != path:
-            raise RuntimeError(f"Training Protocols: duplicated plan_id: {prev} vs {path}")
-        phase_ids = {}
         for phase in plan.phases:
-            prev = phase_ids.setdefault(phase.phase_id, phase)
-            if prev != phase:
-                raise RuntimeError(f"Duplicated phase_id: {phase.phase_id} in phase {phase.name} vs {prev.name}")
+            prev_path, prev_phase = phase_ids.setdefault(phase.phase_id, (path, phase))
+            if path != prev_path:
+                raise RuntimeError(f"Duplicated phase_id: {phase.phase_id} in path {path} vs {prev_path}")
+            if id(prev_phase) != id(phase):
+                raise RuntimeError(f"Duplicated phase_id: {phase.phase_id} in path {path}: {prev_phase} vs {phase}")
     return list(plans.values())

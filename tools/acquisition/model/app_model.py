@@ -164,12 +164,8 @@ class AppModel(ObservableObject):
 
         #
 
-        self._training_plans: List[TrainingPlan] = load_training_plans(
-            Path(preferences.configuration_location).joinpath("training/protocols"))
-        self._training_plan_by_plan_id = {
-            plan.plan_id: plan
-            for idx, plan in enumerate(self._training_plans)
-        }
+        self._training_plans: List[TrainingPlan] = []
+        self._training_plan_by_plan_id: Dict[str, TrainingPlan] = {}
 
         self._behavior = BehaviorModel(
             self._system_message_handler, self._analysis, self._hardware, self._inference,
@@ -707,6 +703,13 @@ class AppModel(ObservableObject):
 
         # only at the end:
         self._loaded_configuration = configuration
+
+        self._training_plans = load_training_plans(
+            Path(self._preferences.configuration_location).joinpath("training/protocols"))
+        self._training_plan_by_plan_id = {
+            plan.plan_id: plan
+            for idx, plan in enumerate(self._training_plans)
+        }
 
         return True
 
