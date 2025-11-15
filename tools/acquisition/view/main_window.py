@@ -5,7 +5,7 @@ from itertools import chain
 from pathlib import Path
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QCoreApplication, Signal
+from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout)
@@ -161,9 +161,7 @@ class MainWindow(QMainWindow):
         if plan is None:
             return
         plan.fallback()
-        if app_model.behavior.algorithm.training_mode == TrainingMode.MANUAL_AND_PROTOCOL:
-            self.previous_training_phase_action.setVisible(plan.can_fallback)
-            self.next_training_phase_action.setVisible(plan.can_advance)
+        self._refresh_prev_next_phases()
         self.main_content.training_plan_changed.emit(plan)
 
     def on_next_plan_phase(self):
@@ -172,9 +170,7 @@ class MainWindow(QMainWindow):
         if plan is None:
             return
         plan.advance()
-        if app_model.behavior.algorithm.training_mode == TrainingMode.MANUAL_AND_PROTOCOL:
-            self.previous_training_phase_action.setVisible(plan.can_fallback)
-            self.next_training_phase_action.setVisible(plan.can_advance)
+        self._refresh_prev_next_phases()
         self.main_content.training_plan_changed.emit(plan)
 
     @staticmethod
@@ -699,8 +695,28 @@ class MainWindow(QMainWindow):
             self.previous_training_phase_action.setVisible(False)
             self.next_training_phase_action.setVisible(False)
             return
-        self.previous_training_phase_action.setVisible(attached.can_fallback)
-        self.next_training_phase_action.setVisible(attached.can_advance)
+        for action, can_do, direction in (
+            (self.previous_training_phase_action, attached.can_fallback, "left"),
+            (self.next_training_phase_action, attached.can_advance, "right"),
+        ):
+            action.setVisible(True)
+            name = f"fa5s.arrow-alt-circle-{direction}"
+            if can_do:
+                action.setIcon(qta.icon(name))
+            else:
+                # https://qtawesome.readthedocs.io/en/latest/_generate/qtawesome.icon.html#qtawesome.icon
+                icon = QIcon(qta.icon(
+                    name, 'fa5s.ban',
+                    options=[
+                        {'scale_factor': 1},
+                        { # 'color': 'red',
+                         'color_disabled': 'red',  # have to use this one
+                         # 'opacity': 0.7
+                        },  # Color the ban symbol red
+                    ]
+                ))
+                action.setIcon(icon)
+            action.setEnabled(can_do)
 
     def _app_model_property_changed(self, name: str, value, _):
         props = self._app_model.Props
