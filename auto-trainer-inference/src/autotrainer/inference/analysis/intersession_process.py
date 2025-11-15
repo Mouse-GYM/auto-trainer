@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +22,9 @@ logger = get_verbose_logger(__name__)
 AvailableShiftXYZ = numpy.array([[-5, 5], [-5, 5], [-5, 5]])
 
 
+_segment_reach_debug: int = int(os.getenv("AUTOTRAINER_SEGMENT_REACH_DEBUG", 0))
+
+
 def intersession_process(
     project: ProjectInfo,
     *,
@@ -34,10 +37,8 @@ def intersession_process(
     :param calib_dir: calibration directory if not default.
     :return: information required to update behavior for future sessions
     """
-    # left_input = project.get_intersession_pose_path(name=project.camera_1, allow_overwrite=True)
-    # right_input = project.get_intersession_pose_path(name=project.camera_2, allow_overwrite=True)
     location, _, _ = project.get_session_path()
-    logger.info(f"process intersession pose data using {location}")
+    logger.info("process intersession pose data using %s", location)
     calib_src_dir = Path("~/Autotrainer/4mm_6r_8c_4x").expanduser() if calib_dir is None else calib_dir
     if not calib_src_dir.is_dir():
         logger.warning("calib_src_dir %s is not a directory",  calib_src_dir)
@@ -51,7 +52,7 @@ def intersession_process(
         center_method=center_method,
         available_shift_xyz=AvailableShiftXYZ,
         df_3d=centered_df_3d,
-        debug=2,
+        debug=_segment_reach_debug,
     )
     logger.success("process intersession pose data complete %s", results_dict)
     return IntersessionResponse(
