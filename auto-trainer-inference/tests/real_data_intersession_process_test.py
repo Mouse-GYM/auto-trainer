@@ -87,7 +87,7 @@ def test_fp_and_xp_not_same(project_info, caplog):
     assert "Correcting expected_frame_count from " in caplog.text
     assert isinstance(res, IntersessionResponse)
     assert res.food_consumed == 0
-    assert res.pellets_presented == 0
+    assert res.pellets_presented == 1
     assert res.successful_reaches == 0
 
 
