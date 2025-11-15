@@ -209,7 +209,7 @@ class MainContent(ContentWidget):
         widget.setContentsMargins(4, 0, 4, 0)
 
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(4, 4, 4, 0)
+        layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(8)
 
         plan_content = self._training_plan_content = TrainingPlanContent()
@@ -345,8 +345,6 @@ class MainContent(ContentWidget):
             if phase != value:
                 raise RuntimeError("plan phase != new phase: %s", phase, value)
             self.training_plan_changed.emit(app_model.training_plan)
-            # self._training_phase_content.set_training_phase(value, force_refresh=True)
-            # handled by training_plan_changed.
 
     def _behavior_algo_property_changed(self, name, value, _):
         if name == BehaviorAlgoProps.TRAINING_MODE:

@@ -61,6 +61,7 @@ class AppModel(ObservableObject):
         SELECTED_ANIMAL = "selected_animal"
         OUTPUT_LOCATION = "output_location"
         ANIMAL_NAME = "animal_name"
+        NOTES = "notes"
         TRAINING_PLAN = "training_plan"
         TRAINING_PHASE = "training_plan.current_phase"
 
@@ -420,7 +421,7 @@ class AppModel(ObservableObject):
 
     @notes.setter
     def notes(self, value: str):
-        self._notes = self._on_property_changed("notes", value, self._notes)
+        self._notes = self._on_property_changed(self.Props.NOTES, value, self._notes)
 
     @property
     def training_plans(self) -> List[TrainingPlan]:

@@ -157,7 +157,7 @@ class MainWindow(QMainWindow):
 
     def on_previous_plan_phase(self):
         app_model = self._app_model
-        plan = app_model.training_plan
+        plan = app_model.attached_plan
         if plan is None:
             return
         plan.fallback()
@@ -168,7 +168,7 @@ class MainWindow(QMainWindow):
 
     def on_next_plan_phase(self):
         app_model = self._app_model
-        plan = app_model.training_plan
+        plan = app_model.attached_plan
         if plan is None:
             return
         plan.advance()
@@ -726,10 +726,13 @@ class MainWindow(QMainWindow):
                 index = self._training_plan_index_by_plan_id.get(value.plan_id, -1)
             else:
                 index = -1
-            logger.debug("changing plan: index=%s -> %s", index, value)
+            logger.debug("changing plan: index=%s -> %s", index, None if value is None else value.name)
             self._training_plan_combo.blockSignals(True)
             self._training_plan_combo.setCurrentIndex(index)
             self._training_plan_combo.blockSignals(False)
+            self._refresh_prev_next_phases()
+
+        elif name == props.TRAINING_PHASE:
             self._refresh_prev_next_phases()
 
     def _reload_animals(self, animals: List[AnimalSubject]):
