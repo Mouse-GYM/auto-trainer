@@ -257,7 +257,8 @@ class MainContent(ContentWidget):
             self._protocol_progress_alarm_content_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._protocol_phase_progress_widget)
             self._end_stacked_widget.setCurrentWidget(self._protocol_phase_main_widget)
-            plan = self._app_model.training_plan
+            animal = self._app_model.selected_animal
+            plan = None if animal is None else self._app_model.get_training_plan_by_id(animal.training.current_protocol)
             self._update_training_plan(plan)
         self.update()
 
