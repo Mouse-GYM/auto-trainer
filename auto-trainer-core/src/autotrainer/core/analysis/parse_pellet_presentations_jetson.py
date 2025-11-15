@@ -162,8 +162,8 @@ def segment_reaches_f1(
         pellet_home = []
         df_3d_pellet = df_3d["Pellet"]
         for pos in ('x', 'y', 'z'):
-            # using n_frames_mean first frame where p == 1 :
-            ploc = df_3d_pellet.loc[df_3d_pellet['p'] == 1].loc[:n_frames_mean, pos].median()
+            # using n_frames_mean first frames where p == 1 :
+            ploc = df_3d_pellet.iloc[:n_frames_mean].loc[df_3d_pellet['p'] == 1, pos].median()
             pellet_home.append(ploc)
 
     pellet_home = (pellet_home[0], pellet_home[1], pellet_home[2])
