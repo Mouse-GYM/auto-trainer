@@ -530,6 +530,7 @@ class MainWindow(QMainWindow):
 
         label = QLabel("Protocol:")
         widget = QWidget()
+        self._widget_training_plan_action = toolbar.addWidget(widget)
         layout = QHBoxLayout(widget)
         label.setContentsMargins(8, 0, 0, 0)
         layout.addWidget(label)
@@ -569,19 +570,16 @@ class MainWindow(QMainWindow):
 
         def update_training_mode(training_mode):
             logger.debug("Updating training_mode to %s", training_mode)
-            app_model.behavior.algorithm.training_mode = training_mode
             self._widget_training_plan_action.setVisible(training_mode != TrainingMode.MANUAL)
             animal = app_model.selected_animal
-            training_plan_idx = None if animal is None else self._training_plan_index_by_plan_id.get(animal.training.current_protocol)
+            plan = self._app_model.get_training_plan_by_id(None if animal is None else animal.training.current_protocol)
+            training_plan_idx = None if plan is None else self._training_plan_index_by_plan_id.get(plan.plan_id)
             if training_plan_idx is None:
                 training_plan_idx = self._training_plans_count
-            # plan = None if animal is None else app_model.attached_plan
-            self._training_plan_combo.blockSignals(True)
             self._training_plan_combo.setCurrentIndex(training_plan_idx)
-            self._training_plan_combo.blockSignals(False)
+            self.main_content.training_plan_changed.emit(plan)
             self._refresh_prev_next_phases()
 
-        self._widget_training_plan_action = toolbar.addWidget(widget)
         update_training_mode(self._app_model.behavior.algorithm.training_mode)
         self.training_mode_changed.connect(update_training_mode)
 
@@ -788,4 +786,3 @@ class MainWindow(QMainWindow):
     def _behavior_algo_property_changed(self, name, value, _):
         if name == BehaviorAlgoProps.TRAINING_MODE:
             self.training_mode_changed.emit(value)
-            self._refresh_prev_next_phases()

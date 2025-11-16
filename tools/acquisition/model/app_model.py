@@ -203,8 +203,6 @@ class AppModel(ObservableObject):
         preferences.property_changed += self._on_preferences_property_changed
         self._inference.property_changed += self._on_inference_property_changed
 
-        self._load_animals()
-
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_release_pellet(self):
         algo = self._behavior.algorithm
@@ -424,10 +422,21 @@ class AppModel(ObservableObject):
         return self._training_plans
 
     def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
+        if plan_id is None:
+            return None
+        attached = self._attached_plan
+        if attached is not None and attached.plan_id == plan_id:
+            logger.debug("get_training_plan_by_id: reusing attached: %s", attached)
+            return attached
+        plan = self._training_plan
+        if plan is not None and plan.plan_id == plan_id:
+            logger.debug("get_training_plan_by_id: reusing current: %s", attached)
+            return plan
         plan = self._training_plan_by_plan_id.get(plan_id)
         if plan is None:
+            logger.warning("Unknown plan_id: %s", plan_id)
             return None
-        plan = copy.deepcopy(plan)  # always
+        plan = copy.deepcopy(plan)  # always, so that different mouses won't share same plan instance
         animal = self._selected_animal
         if animal is not None:
             prog = animal.training.get_plan_progress(plan.plan_id)
@@ -461,7 +470,7 @@ class AppModel(ObservableObject):
             if plan is None:
                 return
         prog = plan.serialize_progress()
-        logger.verbose("%s: detaching from plan %s ; progress = %s", animal.name, plan, prog)
+        logger.notice("%s: detaching from plan %s", animal.name, plan.plan_id)
         animal.training.set_plan_progress(plan.plan_id, prog)
         plan.property_changed -= self._on_training_plan_property_changed  # last
         plan.behavior_algorithm = plan.pellet_device = plan.tunnel_device = None
@@ -710,6 +719,9 @@ class AppModel(ObservableObject):
             plan.plan_id: plan
             for idx, plan in enumerate(self._training_plans)
         }
+
+        # and:
+        self._load_animals()
 
         return True
 
