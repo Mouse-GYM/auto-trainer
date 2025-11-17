@@ -54,7 +54,7 @@ class TrainingPhaseCard(CardWidget):
         left = QVBoxLayout()
         sub.addLayout(left)
 
-        left.setSpacing(8)
+        left.setSpacing(4)
         left.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         dev = self._make_device(phase)
@@ -127,6 +127,7 @@ class TrainingPhaseCard(CardWidget):
 
     def _make_predicates(self, phase: TrainingPhase):
         widget = QWidget()
+        widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         layout.setSpacing(0)

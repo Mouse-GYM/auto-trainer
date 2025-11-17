@@ -73,6 +73,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(self._title)
 
         self.main_content = MainContent(app_model)
+        # self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
 
         self.setContentsMargins(0, 0, 0, 0)
         self.setCentralWidget(self.main_content)

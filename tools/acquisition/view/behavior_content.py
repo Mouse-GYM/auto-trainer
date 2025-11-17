@@ -40,7 +40,7 @@ class BehaviorContent(ContentWidget):
         self._analysis = behavior_model.analysis
 
         self._inference_status = QLabel("")
-        self._card_widget = CardWidget(title="Behavior", header_right_layout=self._inference_status)
+        card = self._card_widget = CardWidget(title="Behavior", header_right_layout=self._inference_status)
 
         hbox_main_layout = QHBoxLayout()
         hbox_main_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -163,7 +163,7 @@ class BehaviorContent(ContentWidget):
         content.setContentsMargins(4, 4, 4, 4)
         content.setLayout(hbox_main_layout)
 
-        self._card_widget.setContentWidget(content)
+        card.setContentWidget(content)
 
         # Footer
         self._basic_footer = QWidget()

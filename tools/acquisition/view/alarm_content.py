@@ -1,7 +1,7 @@
 from functools import partial
 
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QFormLayout, QSizePolicy
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QFormLayout, QSizePolicy, QScrollArea, QWidget, QHBoxLayout
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.core import LoadCellMonitor, get_verbose_logger
@@ -44,19 +44,22 @@ class AlarmContent(ContentWidget):
 
     def __init__(self, app_model: AppModel, hardware_model: HardwareModel):
         super().__init__()
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         self._app_model = app_model
         self._hardware_model = hardware_model
 
-        self._card_widget = CardWidget(header_background_color="red")
-        self._card_widget.header.setTitle("Alarms & Detectors", color="white")
+        card = self._card_widget = CardWidget(header_background_color="red")
+        # card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        card.header.setTitle("Alarms & Detectors", color="white")
 
         content_layout = QVBoxLayout()
-        content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         content_layout.setContentsMargins(8, 4, 8, 4)
 
         form_layout = QFormLayout()
-        form_layout.setHorizontalSpacing(32)
+        form_layout.setHorizontalSpacing(16)
+        form_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
 
         emergency_alarm = app_model.behavior.analysis.emergency_alarm_monitor
         emergency_alarm_cfg = emergency_alarm.config
@@ -123,13 +126,38 @@ class AlarmContent(ContentWidget):
 
         content_layout.addLayout(form_layout)
 
-        self._card_widget.setContentLayout(content_layout)
-        self._card_widget.setContentsMargins(0, 0, 0, 0)
-        self._card_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        scroll_area = QScrollArea()
+        scroll_area.setStyleSheet("")
+        scroll_area.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        scroll_area.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setWidgetResizable(True)
+
+        content_widget = QWidget()
+        content_widget.setLayout(content_layout)
+        # content_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+        scroll_area.setWidget(content_widget)
+
+        final_widget = QWidget()
+        final_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        final_widget.setContentsMargins(0, 0, 0, 0)
+        vbox = QVBoxLayout(final_widget)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        vbox.addWidget(scroll_area)
+
+        card.setContentWidget(final_widget)
+        # card.setContentWidget(content_widget)
+        # card.setContentLayout(content_layout)
+        card.setContentsMargins(0, 0, 0, 0)
+        # card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         layout = QVBoxLayout()
-        layout.addWidget(self._card_widget)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(card)
+        # layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 

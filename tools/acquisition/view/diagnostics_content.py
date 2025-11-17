@@ -29,6 +29,7 @@ class DiagnosticsContent(QWidget):
 
         # Header
         self._header = QWidget()
+
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
 

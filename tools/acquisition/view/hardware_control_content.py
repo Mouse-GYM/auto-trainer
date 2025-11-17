@@ -44,8 +44,8 @@ class HardwareControlContent(ContentWidget):
 
         # Header
         layout = QHBoxLayout()
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        layout.setSpacing(16)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        layout.setSpacing(8)
 
         layout.addWidget(QLabel("Tunnel:"))
         self._tunnel_version = QLabel("(unknown version)")
@@ -56,6 +56,7 @@ class HardwareControlContent(ContentWidget):
         layout.addWidget(self._pellet_version)
 
         self._card_widget = CardWidget(title="Hardware Control", header_right_layout=layout)
+        # self._card_widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred)
 
         if EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ:
             self._travel_limits = _anshutz_travel_limits
@@ -178,6 +179,7 @@ class HardwareControlContent(ContentWidget):
         # central layout/widget
         widget = QWidget()
         widget.setLayout(layout)
+        # widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Pre)
         self._card_widget.setContentWidget(widget)
 
         # Footer
@@ -204,7 +206,7 @@ class HardwareControlContent(ContentWidget):
         layout.setSpacing(0)
 
         self.setLayout(layout)
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        # self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         self.setEnabled(False)
 

@@ -80,23 +80,23 @@ class TrainingPlanContent(StackedWidget):
 
         card = CardWidget(title="Protocol")
         card.header.setRightContent(None if plan is None else QLabel(plan.name))
-        card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        # card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
-        widget = QWidget()
+        content_widget = QWidget()
         # widget.setContentsMargins(0, 0, 0, 0)
 
-        vbox = QVBoxLayout(widget)
+        vbox_layout = QVBoxLayout(content_widget)
         # vbox.setContentsMargins(0, 0, 0, 0)
-        vbox.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        vbox_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         label = QLabel(plan.description)
         # label.setContentsMargins(0, 0, 0, 0)
         label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         label.setStyleSheet("color: gray")
-        vbox.addWidget(label, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        vbox_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         scroll_area = QScrollArea()
-        vbox.addWidget(scroll_area)
+        vbox_layout.addWidget(scroll_area)
         # scroll_area.setContentsMargins(0, 0, 0, 0)
         scroll_area.setStyleSheet("")
         scroll_area.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -105,8 +105,8 @@ class TrainingPlanContent(StackedWidget):
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setWidgetResizable(True)
 
-        widget.setStyleSheet("background-color: white")
-        card.setContentWidget(widget)
+        content_widget.setStyleSheet("background-color: white")
+        card.setContentWidget(content_widget)
 
         grid_widget = QWidget()
         # grid_widget.setContentsMargins(0, 0, 0, 0)

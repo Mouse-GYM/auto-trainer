@@ -5,7 +5,7 @@ from typing import Tuple, Optional
 from PySide6 import QtCore
 from PySide6.QtCore import QTimer, Slot, Signal, Qt
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QStackedLayout, QWidget, QSizePolicy, QScrollBar, \
-    QScrollArea
+    QScrollArea, QLayout
 
 from autotrainer.core.logging import get_verbose_logger
 
@@ -15,7 +15,7 @@ from autotrainer.behavior import TrainingMode
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 
 from autotrainer.pyside import Separator, CardWidget
-from autotrainer.pyside.StackedWidget import StackedWidget
+from autotrainer.pyside.StackedWidget import StackedWidget, StackedLayout
 from autotrainer.pyside.content_widget import ContentWidget
 
 from autotrainer.training import TrainingPlan, TrainingPhase
@@ -60,31 +60,31 @@ class MainContent(ContentWidget):
         main_layout.addWidget(self._top_widget_manual)
 
         # Second row - behavior and analysis
-        self._mid_stacked_layout = QStackedLayout()
-        main_layout.addLayout(self._mid_stacked_layout)
+        mid_stacked_layout = self._mid_stacked_layout = QStackedLayout()
+        main_layout.addLayout(mid_stacked_layout)
+        mid_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         self._mid_widget_manual = self._create_mid_widget_manual(app_model)
-        self._mid_stacked_layout.addWidget(self._mid_widget_manual)
+        mid_stacked_layout.addWidget(self._mid_widget_manual)
 
         self._protocol_phase_progress_widget = self._create_protocol_phase_progress_widget()
         self._mid_stacked_layout.addWidget(self._protocol_phase_progress_widget)
 
         #
 
-        end_stacked_widget = self._end_stacked_widget = StackedWidget()
-        end_stacked_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        end_stacked_layout = self._end_stacked_layout = StackedLayout()
+        end_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        main_layout.addLayout(end_stacked_layout)
 
-        main_layout.addWidget(end_stacked_widget)
-
-        self._end_widget_manual = self._create_end_widget_manual()
-        end_stacked_widget.addWidget(self._end_widget_manual)
+        end_widget_manual = self._end_widget_manual = self._create_end_widget_manual()
+        end_stacked_layout.addWidget(end_widget_manual)
 
         self._protocol_phase_main_widget = self._create_protocol_phase_main_widget()
-        end_stacked_widget.addWidget(self._protocol_phase_main_widget)
+        end_stacked_layout.addWidget(self._protocol_phase_main_widget)
 
         # Optional fourth row - diagnostics
         self._diagnostics_content = DiagnosticsContent(self._app_model)
-        main_layout.addWidget(self._diagnostics_content)
+        main_layout.addWidget(self._diagnostics_content, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         self._frame_count = 0
         self._start = 0
@@ -133,8 +133,6 @@ class MainContent(ContentWidget):
 
         self._right_camera_content = CameraContent(self._app_model.right_camera)
         self._right_camera_content.camera_view.setTitle("Right Camera")
-        # self._right_camera_content.camera_view.setSize(450, 300)
-        # self._layout.addWidget(self._right_camera_content, 0, 2, 1, 2)
         top_layout.addWidget(self._right_camera_content)
         self._content_widgets.append(self._right_camera_content)
 
@@ -142,8 +140,6 @@ class MainContent(ContentWidget):
 
         self._top_camera_content = CameraContent(self._app_model.top_camera)
         self._top_camera_content.camera_view.setTitle("Top Camera")
-        # self._top_camera_content.camera_view.setSize(450, 300)
-        # self._layout.addWidget(self._top_camera_content, 0, 4, 1, 2)
         top_layout.addWidget(self._top_camera_content)
         self._content_widgets.append(self._top_camera_content)
 
@@ -153,9 +149,11 @@ class MainContent(ContentWidget):
 
     def _create_mid_widget_manual(self, app_model):
         widget = QWidget()
+        widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Expanding)
         widget.setContentsMargins(4, 0, 4, 0)
 
         mid_layout = QHBoxLayout(widget)
+        mid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         mid_layout.setContentsMargins(4, 4, 4, 0)
         mid_layout.setSpacing(16)
 
@@ -182,6 +180,7 @@ class MainContent(ContentWidget):
     def _create_end_widget_manual(self):
         # Third row - hardware & alarms
         widget = QWidget()
+        widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         widget.setContentsMargins(4, 0, 4, 0)
 
         end_layout = QHBoxLayout(widget)
@@ -189,16 +188,18 @@ class MainContent(ContentWidget):
         end_layout.setContentsMargins(4, 4, 4, 4)
         end_layout.setSpacing(16)
 
-        self._hardware_control_content = HardwareControlContent(self._app_model.hardware)
-        end_layout.addWidget(self._hardware_control_content)
-        self._content_widgets.append(self._hardware_control_content)
+        # NB: using stretch=1 on 2 first widgets to allow them to expand,
+        # while leaving alarm content on its minimum width, given horizontal layout.
+        hardware_control_content = self._hardware_control_content = HardwareControlContent(self._app_model.hardware)
+        end_layout.addWidget(hardware_control_content, stretch=1)
+        self._content_widgets.append(hardware_control_content)
 
-        hardware_status_content = HardwareStatusContent(self._app_model.message_handler)
-        end_layout.addWidget(hardware_status_content)
+        hardware_status_content = self._hardware_status_content = HardwareStatusContent(self._app_model.message_handler)
+        end_layout.addWidget(hardware_status_content, stretch=1)
         self._content_widgets.append(hardware_status_content)
 
+        # self._alarm_content can be relocated inside other widget, see where it's used.
         alarm_content = self._alarm_content = AlarmContent(self._app_model, self._app_model.hardware)
-        alarm_content.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
         end_layout.addWidget(alarm_content)
         self._alarm_content_manual_layout = end_layout
 
@@ -212,13 +213,12 @@ class MainContent(ContentWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(8)
 
+        # NB: same remark than manual end widget for stretch=1 :
         plan_content = self._training_plan_content = TrainingPlanContent()
-        plan_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        layout.addWidget(plan_content)
+        layout.addWidget(plan_content, stretch=1)
 
         phase_content = self._training_phase_content = TrainingPhaseContent()
-        phase_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        layout.addWidget(phase_content)
+        layout.addWidget(phase_content, stretch=1)
 
         self._protocol_progress_alarm_content_layout = layout
 
@@ -252,17 +252,18 @@ class MainContent(ContentWidget):
         if training_mode == TrainingMode.MANUAL:
             self._alarm_content_manual_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._mid_widget_manual)
-            self._end_stacked_widget.setCurrentWidget(self._end_widget_manual)
+            self._end_stacked_layout.setCurrentWidget(self._end_widget_manual)
         else:
             self._protocol_progress_alarm_content_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._protocol_phase_progress_widget)
-            self._end_stacked_widget.setCurrentWidget(self._protocol_phase_main_widget)
+            self._end_stacked_layout.setCurrentWidget(self._protocol_phase_main_widget)
             animal = self._app_model.selected_animal
             plan = None if animal is None else self._app_model.get_training_plan_by_id(animal.training.current_protocol)
             self._update_training_plan(plan)
         self.update()
 
     def _update_training_plan(self, training_plan: Optional[TrainingPlan]):
+        logger.debug("setting plan to %s", training_plan)
         self._training_plan_content.set_training_plan(training_plan)
         self._training_phase_content.set_training_phase(
             None if training_plan is None else training_plan.current_phase,

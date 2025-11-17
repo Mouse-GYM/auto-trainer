@@ -74,6 +74,7 @@ _graph_by_name = {
 
 def _make_graph_plot(graph: _GraphItem):
     widget = QWidget()
+    widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
     layout = QHBoxLayout()
     plot = PGWidget(widget)
     plot.setBackground("w")
@@ -88,7 +89,7 @@ def _make_graph_plot(graph: _GraphItem):
     if graph.x_range is not None:
         view_box.setRange(xRange=graph.x_range)
     view_box.setRange(yRange=graph.y_range)
-    layout.addWidget(plot)
+    layout.addWidget(plot, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
     widget.setLayout(layout)
     plot.widget = widget
     plot.getPlotItem().getViewBox().setBackgroundColor(_GRAY_COLOR_TUPLE)
@@ -138,7 +139,7 @@ class AnalysisContent(ContentWidget):
         self._headbar_switch_engaged = QtIndicator(text="Headbar DIO Switch")
         layout.addWidget(self._headbar_switch_engaged)
 
-        self._card_widget = CardWidget(title="Analysis", header_right_layout=layout)
+        card = self._card_widget = CardWidget(title="Analysis", header_right_layout=layout)
 
         self._measurement_plots: Dict[str, PGWidget] = {
             graph.name: _make_graph_plot(graph)
