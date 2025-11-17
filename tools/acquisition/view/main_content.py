@@ -180,7 +180,7 @@ class MainContent(ContentWidget):
     def _create_end_widget_manual(self):
         # Third row - hardware & alarms
         widget = QWidget()
-        widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        # widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         widget.setContentsMargins(4, 0, 4, 0)
 
         end_layout = QHBoxLayout(widget)
