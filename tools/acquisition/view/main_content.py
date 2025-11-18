@@ -60,6 +60,9 @@ class MainContent(ContentWidget):
         main_layout.addWidget(self._top_widget_manual)
 
         # Second row - behavior and analysis
+
+        # NB: Using regular/pyside QStackedLayout, instead of our StackedLayout subclass in autotrainer.pyside,
+
         mid_stacked_layout = self._mid_stacked_layout = QStackedLayout()
         main_layout.addLayout(mid_stacked_layout)
         mid_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -72,7 +75,7 @@ class MainContent(ContentWidget):
 
         #
 
-        end_stacked_layout = self._end_stacked_layout = StackedLayout()
+        end_stacked_layout = self._end_stacked_layout = QStackedLayout()
         end_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         main_layout.addLayout(end_stacked_layout)
 

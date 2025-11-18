@@ -24,7 +24,7 @@ class CardWidget(QWidget):
     ):
         super().__init__()
 
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.setContentsMargins(0, 0, 0, 0)
 
@@ -52,7 +52,7 @@ class CardWidget(QWidget):
         layout.addWidget(header)
 
         content_widget = self._content_widget = StackedWidget()
-        content_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # content_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(content_widget)
 
         self._footer = CardFooter()

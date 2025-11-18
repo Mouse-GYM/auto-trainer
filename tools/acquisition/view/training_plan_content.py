@@ -79,18 +79,18 @@ class TrainingPlanContent(StackedWidget):
         logger.debug("Adding new plan %s with %s phases", plan.plan_id, len(plan.phases))
 
         card = CardWidget(title="Protocol")
-        card.header.setRightContent(None if plan is None else QLabel(plan.name))
+        card.header.setRightContent(QLabel(plan.name))
         # card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
         content_widget = QWidget()
-        # widget.setContentsMargins(0, 0, 0, 0)
+        content_widget.setContentsMargins(0, 0, 0, 0)
 
         vbox_layout = QVBoxLayout(content_widget)
-        # vbox.setContentsMargins(0, 0, 0, 0)
+        vbox_layout.setContentsMargins(0, 0, 0, 0)
         vbox_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         label = QLabel(plan.description)
-        # label.setContentsMargins(0, 0, 0, 0)
+        label.setContentsMargins(4, 4, 0, 0)
         label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         label.setStyleSheet("color: gray")
         vbox_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)

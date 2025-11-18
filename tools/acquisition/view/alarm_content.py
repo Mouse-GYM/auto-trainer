@@ -44,13 +44,13 @@ class AlarmContent(ContentWidget):
 
     def __init__(self, app_model: AppModel, hardware_model: HardwareModel):
         super().__init__()
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self._app_model = app_model
         self._hardware_model = hardware_model
 
         card = self._card_widget = CardWidget(header_background_color="red")
-        card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         card.header.setTitle("Alarms & Detectors", color="white")
 
         content_layout = QHBoxLayout()
@@ -137,29 +137,17 @@ class AlarmContent(ContentWidget):
 
         content_widget = QWidget()
         content_widget.setLayout(content_layout)
-        content_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-        # scroll_area.setWidget(content_widget)
-
-        # final_widget = QWidget()
-        # # final_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        # final_widget.setContentsMargins(0, 0, 0, 0)
-        # vbox = QVBoxLayout(final_widget)
-        # vbox.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMinimumSize)
-        # vbox.setContentsMargins(0, 0, 0, 0)
-        # vbox.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        # # vbox.addWidget(scroll_area)
-        # vbox.addWidget(content_widget)
+        # content_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         card.setContentWidget(content_widget)
         # card.layout().setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         # card.setContentWidget(content_widget)
         # card.setContentLayout(content_layout)
         card.setContentsMargins(0, 0, 0, 0)
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout()
-        layout.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMinimumSize)
+        # layout.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMinimumSize)
         layout.addWidget(card)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         layout.setContentsMargins(0, 0, 0, 0)

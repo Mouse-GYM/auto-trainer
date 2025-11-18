@@ -138,9 +138,9 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     signal.signal(signal.SIGINT, handle_sigint)
 
-    # window.show()
-    window.showMaximized()
-    # window.move(QtGui.QGuiApplication.primaryScreen().availableGeometry().center() - window.rect().center())
+    window.show()
+    # window.showMaximized()
+    window.move(QtGui.QGuiApplication.primaryScreen().availableGeometry().center() - window.rect().center())
 
     window.on_activated()
 
