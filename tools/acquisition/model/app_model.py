@@ -387,7 +387,7 @@ class AppModel(ObservableObject):
         if value is None:
             if animal is not None:
                 self._detach_training_plan(animal)  # in case of
-        else:
+        elif animal is not None:
             if self._behavior.algorithm.training_mode != TrainingMode.MANUAL:
                 self._attach_training_plan(value)
         self._on_property_changed(self.Props.TRAINING_PLAN, value, prev)
