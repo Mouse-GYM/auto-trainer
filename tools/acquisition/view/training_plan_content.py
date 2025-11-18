@@ -102,7 +102,7 @@ class TrainingPlanContent(QStackedWidget):
         scroll_area.setStyleSheet("")
         scroll_area.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         scroll_area.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        scroll_area.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
+        # scroll_area.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setWidgetResizable(True)
 
@@ -112,7 +112,7 @@ class TrainingPlanContent(QStackedWidget):
         grid_widget = QWidget()
         # grid_widget.setContentsMargins(0, 0, 0, 0)
         grid_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        grid_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+        # grid_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
 
         scroll_area.setWidget(grid_widget)
 
@@ -132,7 +132,7 @@ class TrainingPlanContent(QStackedWidget):
         for phase_nr, phase in enumerate(plan.phases, start=1):
             phase_widget_name = self._get_phase_widget_name(plan, phase)
             widget = QWidget()
-            widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+            # widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
             # widget.setContentsMargins(0, 0, 0, 0)
             widget.setObjectName(phase_widget_name)
             phase_widgets.append(widget)

@@ -79,10 +79,13 @@ class MainContent(ContentWidget):
 
         # Third row // bottom widgets
 
-        end_stacked_layout = self._end_stacked_layout = QStackedLayout()
+        end_stacked_widget = self._end_stacked_widget = QWidget()
+        end_stacked_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        end_stacked_layout = self._end_stacked_layout = QStackedLayout(end_stacked_widget)
         end_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         # end_stacked_layout.setSizeConstraint(QStackedLayout.SizeConstraint.SetMinimumSize)
-        main_layout.addLayout(end_stacked_layout, stretch=0)
+        # main_layout.addLayout(end_stacked_layout, stretch=0)
+        main_layout.addWidget(end_stacked_widget)
 
         end_widget_manual = self._end_widget_manual = self._create_end_widget_manual()
         # end_widget_manual.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
@@ -271,27 +274,33 @@ class MainContent(ContentWidget):
 
     def _adjust_bottom_size(self):
         # TODO: make this work
-        return
+        # return
         # trying make the bottom widgets always takes their minimum size but don't succeed yet...
         current_bottom = self._end_stacked_layout.currentWidget()
         if current_bottom == self._protocol_phase_main_widget:
             min_height = max(
-                self._training_phase_content.minimumHeight(),
-                self._alarm_content.minimumHeight()
+                self._training_phase_content.minimumSizeHint().height(),
+                self._alarm_content.minimumSizeHint().height()
             )
         else:
             min_height = current_bottom.minimumSizeHint().height()
             if min_height == 0:
                 min_height = current_bottom.minimumSize().height()
-        if min_height == 0:
-            return
-        current_bottom.setMaximumHeight(min_height)
-        parent = current_bottom
+        if min_height != 0:
+            current_bottom.setMaximumHeight(min_height)
+        current_bottom.update()
+        self._end_stacked_widget.setMaximumHeight(self._end_stacked_widget.minimumSizeHint().height())
+        self._end_stacked_widget.update()
+        self.update()
+        return
+        parent = current_bottom.parent()
         while parent is not None:
-            parent.updateGeometry()
+            # parent.updateGeometry()
             parent.adjustSize()
             parent.update()
-            break
+            parent.resize(parent.minimumSizeHint())
+            parent.update()
+            # break
             parent = parent.parent()
         return
 
