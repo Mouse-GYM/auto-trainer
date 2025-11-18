@@ -28,7 +28,7 @@ class StackedLayout(QStackedLayout):
         current = self.currentWidget()
         if current:
             # Check for specific minimum size, otherwise use sizeHint
-            s = current.minimumSize()
+            s = current.minimumSizeHint()
             if s.isEmpty():
                 s = current.minimumSize()
             return s

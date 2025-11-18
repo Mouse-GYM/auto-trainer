@@ -81,17 +81,36 @@ class MainContent(ContentWidget):
 
         end_stacked_widget = self._end_stacked_widget = QWidget()
         # end_stacked_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        end_stacked_layout = self._end_stacked_layout = QStackedLayout(end_stacked_widget)
+        end_stacked_layout = self._end_stacked_layout = StackedLayout(end_stacked_widget)
+
         end_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         # end_stacked_layout.setSizeConstraint(QStackedLayout.SizeConstraint.SetMinimumSize)
-        main_layout.addWidget(end_stacked_widget)  # , alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        main_layout.addWidget(end_stacked_widget)
 
         end_widget_manual = self._end_widget_manual = self._create_end_widget_manual()
-        # end_widget_manual.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         end_stacked_layout.addWidget(end_widget_manual)
 
+        # we limit end_protocol_phase widget to max size between alarm and phase content:
+        def size_hint(orig=end_stacked_widget.sizeHint):
+            sz = orig()
+            if end_stacked_layout.currentWidget() == end_protocol_phase_widget:
+                h1 = self._training_phase_content.minimumSizeHint().height()
+                h2 = self._alarm_content.minimumSizeHint().height()
+                sz.setHeight(max(h1, h2))
+            return sz
+        end_stacked_widget.size_hint = size_hint
+
+        def min_size(orig=end_stacked_widget.minimumSize):
+            sz = orig()
+            if end_stacked_layout.currentWidget() == end_protocol_phase_widget:
+                tpc = self._training_phase_content
+                h1 = tpc.minimumSize().height()    # or tpc.minimumSizeHint().height()
+                h2 = self._alarm_content.minimumSize().height()
+                sz.setHeight(max(h1, h2))
+            return sz
+        end_stacked_widget.minimumSize = min_size
+
         end_protocol_phase_widget = self._protocol_phase_end_widget = self._create_protocol_phase_end_widget()
-        # end_protocol_phase_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         end_stacked_layout.addWidget(end_protocol_phase_widget)
 
         end_stacked_layout.setCurrentWidget(end_widget_manual)
@@ -243,11 +262,11 @@ class MainContent(ContentWidget):
 
         # NB: same remark than manual end widget for stretch=1 :
         plan_content = self._training_plan_content = TrainingPlanContent()
-        plan_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # plan_content.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         left.addWidget(plan_content)  # , alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         phase_content = self._training_phase_content = TrainingPhaseContent()
-        phase_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
+        # phase_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
         left.addWidget(phase_content)  #, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         layout.addLayout(left, stretch=1)
@@ -274,37 +293,6 @@ class MainContent(ContentWidget):
 
         return widget
 
-    def _adjust_bottom_size(self):
-        # TODO: make this work
-        # return
-        # trying make the bottom widgets always takes their minimum size but don't succeed yet...
-        current_bottom = self._end_stacked_layout.currentWidget()
-        tphc = self._training_phase_content
-        if current_bottom == self._protocol_phase_end_widget:
-            w = tphc.currentWidget()
-            tphc.update()
-            tphc.adjustSize()
-            tphc.update()
-            h1, h2 = w.minimumSizeHint().height(), \
-                self._alarm_content.minimumSizeHint().height()
-            # logger.debug("h1=%s h2=%s", h1, h2)
-            min_height = max(h1, h2) + 4
-        else:
-            min_height = current_bottom.minimumSize().height()
-            if min_height == 0:
-                min_height = current_bottom.minimumSizeHint().height()
-        if min_height != 0:
-            current_bottom.setMaximumHeight(min_height)
-        current_bottom.update()
-        self._end_stacked_widget.update()
-        self._end_stacked_widget.setMaximumHeight(self._end_stacked_widget.minimumSizeHint().height())
-        self._end_stacked_widget.adjustSize()
-        self._end_stacked_widget.update()
-        self._main_layout.update()
-        # self.adjustSize()
-        self.update()
-        return
-
     def _update_training_mode(self, training_mode: TrainingMode):
         logger.verbose("updating training mode to %s", training_mode)
         alarm_content = self._alarm_content
@@ -323,16 +311,20 @@ class MainContent(ContentWidget):
             animal = self._app_model.selected_animal
             plan = None if animal is None else self._app_model.get_training_plan_by_id(animal.training.current_protocol)
             self._update_training_plan(plan)
-        self._adjust_bottom_size()
+        # self._end_stacked_widget.resize(self._end_stacked_widget.minimumSizeHint())
+        # self._end_stacked_widget.update()
+        # self.update()
 
     def _update_training_plan(self, plan: Optional[TrainingPlan]):
         logger.debug("setting plan to %s (%s)", plan, hex(id(plan)))
-        self._training_plan_content.set_training_plan(plan)
         self._training_phase_content.set_training_phase(
             None if plan is None else plan.current_phase,
             force_refresh=True,
         )
-        self._adjust_bottom_size()
+        self._training_plan_content.set_training_plan(plan)
+        # self._end_stacked_widget.resize(self._end_stacked_widget.minimumSizeHint())
+        # self._end_stacked_widget.update()
+        # self.update()
 
     def close(self):
          self._diagnostics_content.close()  # to ensure the textbox handler is remove from root logger handlers
