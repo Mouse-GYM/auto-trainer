@@ -38,7 +38,7 @@ class TrainingPhaseCard(CardWidget):
         label.setContentsMargins(0, 0, 0, 0)
         label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         label.setStyleSheet("color: gray")
-        # label.setWordWrap(True)
+        label.setWordWrap(True)
         layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         border_with_padding_style = f"""QLabel {{

@@ -89,6 +89,7 @@ class AppModel(ObservableObject):
 
         self._training_mode = TrainingMode.MANUAL
         self._training_plan: Optional[TrainingPlan] = None
+        self._training_plan_animal: Optional[AnimalSubject] = None
 
         mp_ctx = get_mp_ctx()
 
@@ -358,6 +359,8 @@ class AppModel(ObservableObject):
             hardware.set_y(animal.pellet_y)
             hardware.set_z(animal.pellet_z)
             hardware.send_pellet()
+            # self.training_plan = None
+            # set to None first, to ensure new one is updated, otherwise that would reuse same plan from previous mouse
             plan = self.get_training_plan_by_id(animal.training.current_protocol)
             self.training_plan = plan
         else:
@@ -395,9 +398,11 @@ class AppModel(ObservableObject):
     @training_plan.setter
     def training_plan(self, value: Optional[TrainingPlan]):
         prev, self._training_plan = self._training_plan, value
-        if value == prev:
+        prev_animal = self._training_plan_animal
+        if value == prev and prev_animal == self._selected_animal:
             return
         animal = self._selected_animal
+        self._training_plan_animal = animal
         if animal is not None:
             attached = self._attached_plan
             if attached is not None:
@@ -450,10 +455,6 @@ class AppModel(ObservableObject):
         if attached is not None and attached.plan_id == plan_id:
             logger.debug("get_training_plan_by_id: reusing attached: %s", attached)
             return attached
-        plan = self._training_plan
-        if plan is not None and plan.plan_id == plan_id:
-            logger.debug("get_training_plan_by_id: reusing current: %s", attached)
-            return plan
         plan = self._training_plan_by_plan_id.get(plan_id)
         if plan is None:
             logger.warning("Unknown plan_id: %s", plan_id)

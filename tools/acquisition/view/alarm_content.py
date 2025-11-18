@@ -140,9 +140,6 @@ class AlarmContent(ContentWidget):
         # content_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         card.setContentWidget(content_widget)
-        # card.layout().setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
-        # card.setContentWidget(content_widget)
-        # card.setContentLayout(content_layout)
         card.setContentsMargins(0, 0, 0, 0)
         # card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
