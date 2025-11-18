@@ -477,6 +477,7 @@ class AppModel(ObservableObject):
                 logger.verbose("Plan %s already attached", plan.plan_id)
                 return
             self._detach_training_plan(animal, attached)
+        logger.success("Animal %s: attaching plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
         plan.is_automatic = self._training_mode == TrainingMode.AUTOMATIC
         plan.behavior_algorithm = algo
         plan.pellet_device = self._hardware
@@ -484,7 +485,6 @@ class AppModel(ObservableObject):
         self._attached_plan = plan
         plan.property_changed += self._on_training_plan_property_changed  # first, to be sure get everything
         plan.resume()
-        logger.success("Animal %s: attached plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
 
     def _detach_training_plan(self, animal: AnimalSubject, plan: Optional[TrainingPlan] = None):
         if plan is None:
@@ -498,6 +498,7 @@ class AppModel(ObservableObject):
         plan.behavior_algorithm = plan.pellet_device = plan.tunnel_device = None
         self._attached_plan = None
         self._save_animal_metadata(animal)
+
     #
 
     def add_animal(self, name: str, select: bool = False):
@@ -895,6 +896,7 @@ class AppModel(ObservableObject):
                     left_cam.text_overlay = f"Intersession: {algo.intersession_state}"
 
     def _on_training_plan_property_changed(self, name, value, _):
+        logger.debug("train_plan property changed: %s -> %s", name, value)
         if name == "current_phase":
             self.property_changed(self.Props.TRAINING_PHASE, value, _)
 

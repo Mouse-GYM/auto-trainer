@@ -161,7 +161,7 @@ class MainWindow(QMainWindow):
         plan = app_model.attached_plan
         if plan is None:
             return
-        logger.verbose("fallback on plan %s (%s)", plan.plan_id, hex(id(plan)))
+        logger.info("fallback on plan %s (%s)", plan.plan_id, hex(id(plan)))
         plan.fallback()
         self._refresh_prev_next_phases()
         self.main_content.training_plan_changed.emit(plan)
@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
         plan = app_model.attached_plan
         if plan is None:
             return
-        logger.verbose("advance on plan %s (%s)", plan.plan_id, hex(id(plan)))
+        logger.info("advance on plan %s (%s)", plan.plan_id, hex(id(plan)))
         plan.advance()
         self._refresh_prev_next_phases()
         self.main_content.training_plan_changed.emit(plan)
