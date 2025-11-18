@@ -458,7 +458,7 @@ class AppModel(ObservableObject):
         if plan is None:
             logger.warning("Unknown plan_id: %s", plan_id)
             return None
-        plan = copy.deepcopy(plan)  # always, so that different mouses won't share same plan instance
+        # plan = copy.deepcopy(plan)  # always, so that different mouses won't share same plan instance
         animal = self._selected_animal
         if animal is not None:
             prog = animal.training.get_plan_progress(plan.plan_id)
