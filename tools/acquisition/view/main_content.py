@@ -60,14 +60,14 @@ class MainContent(ContentWidget):
         main_layout.setSpacing(4)
 
         self._top_widget_manual = self._create_top_widget_manual()
-        main_layout.addWidget(self._top_widget_manual)
+        main_layout.addWidget(self._top_widget_manual, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         # Second row - behavior and analysis
 
         # NB: Using regular/pyside QStackedLayout, instead of our StackedLayout subclass in autotrainer.pyside,
 
         mid_stacked_layout = self._mid_stacked_layout = QStackedLayout()
-        main_layout.addLayout(mid_stacked_layout)
+        main_layout.addLayout(mid_stacked_layout, stretch=1)
         mid_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         self._mid_widget_manual = self._create_mid_widget_manual(app_model)
@@ -81,7 +81,7 @@ class MainContent(ContentWidget):
         end_stacked_layout = self._end_stacked_layout = QStackedLayout()
         end_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         # end_stacked_layout.setSizeConstraint(QStackedLayout.SizeConstraint.SetMinimumSize)
-        main_layout.addLayout(end_stacked_layout)
+        main_layout.addLayout(end_stacked_layout, stretch=0)
 
         end_widget_manual = self._end_widget_manual = self._create_end_widget_manual()
         # end_widget_manual.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
@@ -95,7 +95,7 @@ class MainContent(ContentWidget):
 
         # Optional fourth row - diagnostics
         self._diagnostics_content = DiagnosticsContent(self._app_model)
-        main_layout.addWidget(self._diagnostics_content)  # , alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        main_layout.addWidget(self._diagnostics_content, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         self._frame_count = 0
         self._start = 0
@@ -274,31 +274,25 @@ class MainContent(ContentWidget):
         # trying make the bottom widgets always takes their minimum size but don't succeed yet...
         current_bottom = self._end_stacked_layout.currentWidget()
         if current_bottom == self._protocol_phase_main_widget:
-            min_height = min(
+            min_height = max(
                 self._training_phase_content.minimumHeight(),
                 self._alarm_content.minimumHeight()
             )
         else:
             min_height = current_bottom.minimumSizeHint().height()
+            if min_height == 0:
+                min_height = current_bottom.minimumSize().height()
+        if min_height == 0:
+            return
         current_bottom.setMaximumHeight(min_height)
-        current_bottom.updateGeometry()
-        current_bottom.adjustSize()
-        current_bottom.update()
+        parent = current_bottom
+        while parent is not None:
+            parent.updateGeometry()
+            parent.adjustSize()
+            parent.update()
+            break
+            parent = parent.parent()
         return
-        # self._end_widget_manual.setMaximumHeight(min_size.height())
-        # self._end_widget_manual.adjustSize()
-        # self._end_widget_manual.updateGeometry()
-        # self._end_widget_manual.update()
-        # self._protocol_phase_main_widget.setMaximumHeight(min_size.height())
-        # self._protocol_phase_main_widget.adjustSize()
-        # self._protocol_phase_main_widget.updateGeometry()
-        # self._protocol_phase_main_widget.update()
-        self._end_stacked_layout.update()
-        self._main_layout.update()
-        self.updateGeometry()
-        self.adjustSize()
-        self.update()
-        self.setMaximumHeight(self.minimumSizeHint().height())
 
     def _update_training_mode(self, training_mode: TrainingMode):
         logger.verbose("updating training mode to %s", training_mode)

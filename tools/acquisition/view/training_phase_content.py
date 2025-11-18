@@ -205,7 +205,7 @@ class TrainingPhaseCard(CardWidget):
         return widget
 
 
-class TrainingPhaseContent(StackedWidget):
+class TrainingPhaseContent(QStackedWidget):
 
     def __init__(self):
         super().__init__()

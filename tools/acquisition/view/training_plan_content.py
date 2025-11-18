@@ -14,7 +14,7 @@ from autotrainer.training import TrainingPlan
 logger = get_verbose_logger(__name__)
 
 
-class TrainingPlanContent(StackedWidget):
+class TrainingPlanContent(QStackedWidget):
 
     phase_desc_truncate_length = 92
 
