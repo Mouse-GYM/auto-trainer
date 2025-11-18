@@ -60,7 +60,8 @@ class MainContent(ContentWidget):
         main_layout.setSpacing(4)
 
         self._top_widget_manual = self._create_top_widget_manual()
-        main_layout.addWidget(self._top_widget_manual, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        main_layout.addWidget(self._top_widget_manual)
+        # don't put alignment or the stretch used below won't be effective
 
         # Second row - behavior and analysis
 
