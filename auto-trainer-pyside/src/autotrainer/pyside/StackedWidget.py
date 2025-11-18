@@ -10,7 +10,7 @@ class StackedWidget(QStackedWidget):
             # Check for specific minimum size, otherwise use sizeHint
             s = current.minimumSize()
             if s.isEmpty():
-                s = current.minimumSize()
+                s = current.minimumSizeHint()
             return s
         return super().minimumSize()
 
