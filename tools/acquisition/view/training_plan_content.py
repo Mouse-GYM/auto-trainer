@@ -20,6 +20,7 @@ class TrainingPlanContent(StackedWidget):
 
     def __init__(self):
         super().__init__()
+        # self.setMaximumHeight(250)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._plan_card_by_plan_id: Dict[str, Tuple[CardWidget, QScrollArea]] = {}
         self._plans_by_plan_id: Dict[str, TrainingPlan] = {}

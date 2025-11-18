@@ -709,7 +709,7 @@ class MainWindow(QMainWindow):
                     options=[
                         {'scale_factor': 1},
                         { # 'color': 'red',
-                         'color_disabled': 'red',  # have to use this one
+                         # 'color_disabled': 'red',  # have to use this one
                          # 'opacity': 0.7
                         },  # Color the ban symbol red
                     ]
