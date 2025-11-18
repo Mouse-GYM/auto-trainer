@@ -314,11 +314,11 @@ class MainContent(ContentWidget):
             self._update_training_plan(plan)
         self._adjust_bottom_size()
 
-    def _update_training_plan(self, training_plan: Optional[TrainingPlan]):
-        logger.debug("setting plan to %s", training_plan)
-        self._training_plan_content.set_training_plan(training_plan)
+    def _update_training_plan(self, plan: Optional[TrainingPlan]):
+        logger.debug("setting plan to %s (%s)", plan, hex(id(plan)))
+        self._training_plan_content.set_training_plan(plan)
         self._training_phase_content.set_training_phase(
-            None if training_plan is None else training_plan.current_phase,
+            None if plan is None else plan.current_phase,
             force_refresh=True,
         )
         self._adjust_bottom_size()

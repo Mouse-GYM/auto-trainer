@@ -477,7 +477,6 @@ class AppModel(ObservableObject):
                 logger.verbose("Plan %s already attached", plan.plan_id)
                 return
             self._detach_training_plan(animal, attached)
-        logger.notice("Animal %s: attaching plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
         plan.is_automatic = self._training_mode == TrainingMode.AUTOMATIC
         plan.behavior_algorithm = algo
         plan.pellet_device = self._hardware
@@ -485,6 +484,7 @@ class AppModel(ObservableObject):
         self._attached_plan = plan
         plan.property_changed += self._on_training_plan_property_changed  # first, to be sure get everything
         plan.resume()
+        logger.success("Animal %s: attached plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
 
     def _detach_training_plan(self, animal: AnimalSubject, plan: Optional[TrainingPlan] = None):
         if plan is None:
@@ -492,7 +492,7 @@ class AppModel(ObservableObject):
             if plan is None:
                 return
         prog = plan.serialize_progress()
-        logger.notice("%s: detaching from plan %s", animal.name, plan.plan_id)
+        logger.notice("%s: detaching from plan %s (%s)", animal.name, plan.plan_id, hex(id(plan)))
         animal.training.set_plan_progress(plan.plan_id, prog)
         plan.property_changed -= self._on_training_plan_property_changed  # last
         plan.behavior_algorithm = plan.pellet_device = plan.tunnel_device = None
