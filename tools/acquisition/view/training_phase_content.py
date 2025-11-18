@@ -74,6 +74,7 @@ class TrainingPhaseCard(CardWidget):
         behavior.setStyleSheet(border_with_padding_style)
         # behavior.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         sub.addWidget(behavior, stretch=1)
+        sub.addStretch(1)
 
     def _apply_background(self, grid):
         for row in range(grid.rowCount()):
