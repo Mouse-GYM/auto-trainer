@@ -58,10 +58,12 @@ def _failed_camera_template(name: str, error: str):
 class AppModel(ObservableObject):
 
     class Props(str, enum.Enum):
+        ANIMALS = "animals"
         SELECTED_ANIMAL = "selected_animal"
         OUTPUT_LOCATION = "output_location"
         ANIMAL_NAME = "animal_name"
         NOTES = "notes"
+        TRAINING_MODE = 'training_mode'
         TRAINING_PLAN = "training_plan"
         TRAINING_PHASE = "training_plan.current_phase"
 
@@ -85,6 +87,7 @@ class AppModel(ObservableObject):
 
         self._app_version = app_version
 
+        self._training_mode = TrainingMode.MANUAL
         self._training_plan: Optional[TrainingPlan] = None
 
         mp_ctx = get_mp_ctx()
@@ -318,7 +321,7 @@ class AppModel(ObservableObject):
 
     @animals.setter
     def animals(self, value: List[AnimalSubject]):
-        self._animals = self._on_property_changed("animals", value, self._animals)
+        self._animals = self._on_property_changed(self.Props.ANIMALS, value, self._animals)
 
     def get_animal_by_id(self, animal_id) -> Optional[AnimalSubject]:
         for animal in self._animals:
@@ -363,6 +366,25 @@ class AppModel(ObservableObject):
         self._preferences.selected_animal = "" if animal is None else animal.name
 
     @property
+    def training_mode(self):
+        return self._training_mode
+
+    @training_mode.setter
+    def training_mode(self, value):
+        prev, self._training_mode = self._training_mode, value
+        if prev == value:
+            return
+        animal = self._selected_animal
+        if value == TrainingMode.MANUAL:
+            if animal is not None:
+                self._detach_training_plan(animal)
+        else:
+            plan = self._training_plan
+            if plan is not None and self._attached_plan is None:
+                self._attach_training_plan(plan)
+        self._on_property_changed(self.Props.TRAINING_MODE, value, prev)
+
+    @property
     def attached_plan(self) -> Optional[TrainingPlan]:
         return self._attached_plan
 
@@ -388,7 +410,7 @@ class AppModel(ObservableObject):
             if animal is not None:
                 self._detach_training_plan(animal)  # in case of
         elif animal is not None:
-            if self._behavior.algorithm.training_mode != TrainingMode.MANUAL:
+            if self._training_mode != TrainingMode.MANUAL:
                 self._attach_training_plan(value)
         self._on_property_changed(self.Props.TRAINING_PLAN, value, prev)
 
@@ -456,7 +478,7 @@ class AppModel(ObservableObject):
                 return
             self._detach_training_plan(animal, attached)
         logger.notice("Animal %s: attaching plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
-        plan.is_automatic = algo.training_mode == TrainingMode.AUTOMATIC
+        plan.is_automatic = self._training_mode == TrainingMode.AUTOMATIC
         plan.behavior_algorithm = algo
         plan.pellet_device = self._hardware
         plan.tunnel_device = self._hardware
@@ -597,10 +619,10 @@ class AppModel(ObservableObject):
             None if (animal is None or animal.training.current_protocol is None)
             else self.get_training_plan_by_id(animal.training.current_protocol)
         )
-        if algo.training_mode == TrainingMode.MANUAL or animal is None:
+        if self._training_mode == TrainingMode.MANUAL or animal is None:
             logger.notice("training mode is MANUAL or animal is none")
             # forcing manual so:
-            algo.training_mode = TrainingMode.MANUAL
+            self.training_mode = TrainingMode.MANUAL
             if animal is not None:
                 hardware = self._hardware
                 hardware.delay(0.5)
@@ -835,13 +857,6 @@ class AppModel(ObservableObject):
             prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
             if value != prev:
                 self._save_animal_metadata(animal)
-        elif name == BehaviorAlgoProps.TRAINING_MODE:
-            if value == TrainingMode.MANUAL:
-                self._detach_training_plan(animal)
-            else:
-                plan = self._training_plan
-                if plan is not None and self._attached_plan is None:
-                    self._attach_training_plan(plan)
         # elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
         #     self._hardware.set_auto_correct_motor_drift(value)
         # already handled by SystemMachine

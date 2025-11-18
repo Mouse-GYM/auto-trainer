@@ -118,7 +118,7 @@ class MainContent(ContentWidget):
         inference = app_model.inference
         inference.pose_response_ready += self.refresh_pose
         #
-        app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
+        # app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
         self.training_mode_changed.connect(self._update_training_mode)
         self.training_plan_changed.connect(self._update_training_plan)
 
@@ -396,6 +396,8 @@ class MainContent(ContentWidget):
             if value is not None:
                 self._hardware_control_content.set_selected_animal(value)
                 self.training_plan_changed.emit(app_model.training_plan)  # ensure it's refreshed too
+        elif name == props.TRAINING_MODE:
+            self.training_mode_changed.emit(value)
         elif name == props.TRAINING_PLAN:
             assert isinstance(value, (type(None), TrainingPlan))
             self.training_plan_changed.emit(value)
@@ -407,5 +409,4 @@ class MainContent(ContentWidget):
             self.training_plan_changed.emit(app_model.training_plan)
 
     def _behavior_algo_property_changed(self, name, value, _):
-        if name == BehaviorAlgoProps.TRAINING_MODE:
-            self.training_mode_changed.emit(value)
+        pass  # currently unused

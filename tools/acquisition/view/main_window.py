@@ -91,7 +91,7 @@ class MainWindow(QMainWindow):
         app_model.property_changed += self._app_model_property_changed
         app_model.on_error += self._show_error
         app_model.inference.property_changed += self._inference_property_changed
-        app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
+        # app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
         user_preferences.property_changed += self._preferences_property_changed
 
         #
@@ -526,7 +526,7 @@ class MainWindow(QMainWindow):
 
         def index_changed(_):
             selected_mode = self._training_mode_combo.currentData()[0]  # unpack from tuple, see above.
-            behavior.algorithm.training_mode = selected_mode
+            self._app_model.training_mode = selected_mode
         combo.currentIndexChanged.connect(index_changed)
 
         label = QLabel("Protocol:")
@@ -581,7 +581,7 @@ class MainWindow(QMainWindow):
             self.main_content.training_plan_changed.emit(plan)
             self._refresh_prev_next_phases()
 
-        update_training_mode(self._app_model.behavior.algorithm.training_mode)
+        update_training_mode(self._app_model.training_mode)
         self.training_mode_changed.connect(update_training_mode)
 
         toolbar.addSeparator()
@@ -690,7 +690,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_prev_next_phases(self):
         attached = self._app_model.attached_plan
-        if attached is None or self._app_model.behavior.algorithm.training_mode == TrainingMode.MANUAL:
+        if attached is None or self._app_model.training_mode == TrainingMode.MANUAL:
             self.previous_training_phase_action.setVisible(False)
             self.next_training_phase_action.setVisible(False)
             return
@@ -719,7 +719,7 @@ class MainWindow(QMainWindow):
 
     def _app_model_property_changed(self, name: str, value, _):
         props = self._app_model.Props
-        if name == "animals":
+        if name == props.ANIMALS:
             self._reload_animals(value)
         elif name == props.SELECTED_ANIMAL:
             animal_dropdown = self._animal_dropdown
@@ -734,6 +734,9 @@ class MainWindow(QMainWindow):
                     # self._animal_changed(None)  # this will also update/set the toolbar display animal plan/protocol
             animal_dropdown.blockSignals(False)
             self._refresh_prev_next_phases()
+
+        elif name == props.TRAINING_MODE:
+            self.training_mode_changed.emit(value)
 
         elif name == props.TRAINING_PLAN:
             if value is not None:
@@ -785,5 +788,4 @@ class MainWindow(QMainWindow):
             self.calib_diamond_triangle_action.setEnabled(new_value == InferenceStatus.live)
 
     def _behavior_algo_property_changed(self, name, value, _):
-        if name == BehaviorAlgoProps.TRAINING_MODE:
-            self.training_mode_changed.emit(value)
+        pass
