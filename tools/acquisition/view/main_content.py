@@ -98,7 +98,7 @@ class MainContent(ContentWidget):
                 h2 = self._alarm_content.minimumSizeHint().height()
                 sz.setHeight(max(h1, h2))
             return sz
-        end_stacked_widget.size_hint = size_hint
+        end_stacked_widget.sizeHint = size_hint
 
         def min_size(orig=end_stacked_widget.minimumSize):
             sz = orig()
