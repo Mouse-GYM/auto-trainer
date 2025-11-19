@@ -11,7 +11,7 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 import yaml
 
@@ -499,7 +499,6 @@ class AppModel(ObservableObject):
         plan.behavior_algorithm = plan.pellet_device = plan.tunnel_device = None
         self._attached_plan = None
         self._save_animal_metadata(animal)
-
     #
 
     def add_animal(self, name: str, select: bool = False):
@@ -931,7 +930,7 @@ class AppModel(ObservableObject):
 
     def _save_metadata(self, when: datetime, file_name: str, session: int = None):
         when_as_utc = when.astimezone(timezone.utc)
-        info = {
+        info: Dict[str, Any] = {
             "date": when.strftime("%Y%m%d_%H%M%S"),
             "created": when.timestamp(),
             "createdUtc": when_as_utc.timestamp(),  # same than created

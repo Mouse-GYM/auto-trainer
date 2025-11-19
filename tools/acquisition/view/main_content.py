@@ -28,7 +28,9 @@ from tools.acquisition.view.diagnostics_content import DiagnosticsContent
 from tools.acquisition.view.hardware_control_content import HardwareControlContent
 from tools.acquisition.view.hardware_status_content import HardwareStatusContent
 from tools.acquisition.view.training_phase_content import TrainingPhaseContent
+from tools.acquisition.view.training_phase_progress_content import TrainingPhaseProgressContent
 from tools.acquisition.view.training_plan_content import TrainingPlanContent
+from tools.acquisition.view.training_plan_progress_content import TrainingPlanProgressContent
 
 logger = get_verbose_logger(__name__)
 
@@ -64,7 +66,6 @@ class MainContent(ContentWidget):
         # don't put alignment or the stretch used below won't be effective
 
         # Second row - behavior and analysis
-
         # NB: Using regular/pyside QStackedLayout, instead of our StackedLayout subclass in autotrainer.pyside,
 
         mid_stacked_layout = self._mid_stacked_layout = QStackedLayout()
@@ -281,16 +282,12 @@ class MainContent(ContentWidget):
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(4, 4, 4, 0)
         layout.setSpacing(8)
-
-        card = CardWidget(title="Protocol Progress")
-        layout.addWidget(card)
-
+        content = self._training_plan_progress_content = TrainingPlanProgressContent()
+        layout.addWidget(content)
         right_layout = QHBoxLayout()
         layout.addLayout(right_layout)
-
-        card = CardWidget(title="Phase Progress")
-        right_layout.addWidget(card)
-
+        content = self._training_phase_progress_content = TrainingPhaseProgressContent()
+        right_layout.addWidget(content)
         return widget
 
     def _update_training_mode(self, training_mode: TrainingMode):
@@ -311,9 +308,6 @@ class MainContent(ContentWidget):
             animal = self._app_model.selected_animal
             plan = None if animal is None else self._app_model.get_training_plan_by_id(animal.training.current_protocol)
             self._update_training_plan(plan)
-        # self._end_stacked_widget.resize(self._end_stacked_widget.minimumSizeHint())
-        # self._end_stacked_widget.update()
-        # self.update()
 
     def _update_training_plan(self, plan: Optional[TrainingPlan]):
         logger.debug("setting plan to %s (%s)", plan, hex(id(plan)))
@@ -322,9 +316,9 @@ class MainContent(ContentWidget):
             force_refresh=True,
         )
         self._training_plan_content.set_training_plan(plan)
-        # self._end_stacked_widget.resize(self._end_stacked_widget.minimumSizeHint())
-        # self._end_stacked_widget.update()
-        # self.update()
+        self._training_plan_progress_content.set_training_plan_progress(plan)
+        phase = None if plan is None else plan.current_phase
+        self._training_phase_progress_content.set_training_phase_progress(phase)
 
     def close(self):
          self._diagnostics_content.close()  # to ensure the textbox handler is remove from root logger handlers
