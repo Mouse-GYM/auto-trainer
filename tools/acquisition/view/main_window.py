@@ -702,21 +702,7 @@ class MainWindow(QMainWindow):
         ):
             action.setVisible(True)
             name = f"fa5s.arrow-alt-circle-{direction}"
-            if can_do:
-                action.setIcon(qta.icon(name))
-            else:
-                # https://qtawesome.readthedocs.io/en/latest/_generate/qtawesome.icon.html#qtawesome.icon
-                icon = QIcon(qta.icon(
-                    name, 'fa5s.ban',
-                    options=[
-                        {'scale_factor': 1},
-                        { # 'color': 'red',
-                         # 'color_disabled': 'red',  # have to use this one
-                         # 'opacity': 0.7
-                        },  # Color the ban symbol red
-                    ]
-                ))
-                action.setIcon(icon)
+            action.setIcon(qta.icon(name))
             action.setEnabled(can_do)
 
     def _app_model_property_changed(self, name: str, value, _):
