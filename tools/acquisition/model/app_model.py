@@ -1,3 +1,5 @@
+import dataclasses
+import copy
 import enum
 import json
 import logging
@@ -9,11 +11,10 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import yaml
 
-from autotrainer.behavior import IntersessionState, BehaviorAlgorithm
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
@@ -24,18 +25,22 @@ from autotrainer.core import AnimalSubject
 from autotrainer.core.configuration import SystemConfigurationDumper
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer
-from autotrainer.core.training_plan import load_training_plans
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.config import load_calib_stereo_params
-from autotrainer.inference import PoseAlgorithm, InferenceStatus
-from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+
 from autotrainer.video import CaptureProcessStatus
+from autotrainer.inference import PoseAlgorithm, InferenceStatus
+
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode
 
 from autotrainer.training import TrainingPlan
+
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
+from tools.acquisition.model.training_plan import load_training_plans
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
@@ -53,9 +58,14 @@ def _failed_camera_template(name: str, error: str):
 class AppModel(ObservableObject):
 
     class Props(str, enum.Enum):
+        ANIMALS = "animals"
         SELECTED_ANIMAL = "selected_animal"
         OUTPUT_LOCATION = "output_location"
         ANIMAL_NAME = "animal_name"
+        NOTES = "notes"
+        TRAINING_MODE = 'training_mode'
+        TRAINING_PLAN = "training_plan"
+        TRAINING_PHASE = "training_plan.current_phase"
 
     def __init__(
         self,
@@ -76,6 +86,10 @@ class AppModel(ObservableObject):
         self._loaded_configuration: Optional[SystemConfiguration] = None
 
         self._app_version = app_version
+
+        self._training_mode = TrainingMode.MANUAL
+        self._training_plan: Optional[TrainingPlan] = None
+        self._training_plan_animal: Optional[AnimalSubject] = None
 
         mp_ctx = get_mp_ctx()
 
@@ -154,12 +168,8 @@ class AppModel(ObservableObject):
 
         #
 
-        self._training_plans: List[TrainingPlan] = load_training_plans(
-            Path(preferences.configuration_location).joinpath("training/protocols"))
-        self._training_plan_by_plan_id = {
-            plan.plan_id: plan
-            for idx, plan in enumerate(self._training_plans)
-        }
+        self._training_plans: List[TrainingPlan] = []
+        self._training_plan_by_plan_id: Dict[str, TrainingPlan] = {}
 
         self._behavior = BehaviorModel(
             self._system_message_handler, self._analysis, self._hardware, self._inference,
@@ -185,8 +195,10 @@ class AppModel(ObservableObject):
         ]
 
         self._animals: List[AnimalSubject] = []
+        self._animal_by_id: Dict[str, AnimalSubject] = {}
 
         self._selected_animal: Optional[AnimalSubject] = None
+        self._attached_plan: Optional[TrainingPlan] = None
 
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
@@ -194,8 +206,6 @@ class AppModel(ObservableObject):
         self._behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
         preferences.property_changed += self._on_preferences_property_changed
         self._inference.property_changed += self._on_inference_property_changed
-
-        self._load_animals()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_release_pellet(self):
@@ -312,33 +322,102 @@ class AppModel(ObservableObject):
 
     @animals.setter
     def animals(self, value: List[AnimalSubject]):
-        self._animals = self._on_property_changed("animals", value, self._animals)
+        self._animals = self._on_property_changed(self.Props.ANIMALS, value, self._animals)
+
+    def get_animal_by_id(self, animal_id) -> Optional[AnimalSubject]:
+        for animal in self._animals:
+            if animal.id == animal_id:
+                return animal
+        return None
 
     @property
     def selected_animal(self) -> Optional[AnimalSubject]:
         return self._selected_animal
 
     @selected_animal.setter
-    def selected_animal(self, selected_animal: Optional[AnimalSubject]):
-        prev, self._selected_animal = self._selected_animal, selected_animal
-        if selected_animal == prev:
+    def selected_animal(self, animal: Optional[AnimalSubject]):
+        prev, self._selected_animal = self._selected_animal, animal
+        if animal == prev:
             return
+        attached_plan = self._attached_plan
+        if prev is not None and attached_plan is not None:
+            self._detach_training_plan(prev, attached_plan)
+        logger.debug("updating animal to %s (prev=%s)", animal, prev)
+        if prev is not None:
+            self._save_animal_metadata(prev)  # in case of
         hardware = self.hardware
         self.property_changed(self.Props.ANIMAL_NAME, *(
-            ("(none)", "(none)") if selected_animal is None
-            else (selected_animal.name, self.animal_name)
+            ("(none)", "(none)") if animal is None
+            else (animal.name, self.animal_name)
         ))
-        if selected_animal is not None:
+        if animal is not None:
             algo = self._behavior.algorithm
-            algo.baseline_intensity = selected_animal.baseline_magnet_intensity
-            algo.reset_selected_animal(selected_animal)
-            hardware.update_head_magnet_intensity(selected_animal.baseline_magnet_intensity)
-            hardware.set_x(self._selected_animal.pellet_x)
-            hardware.set_y(self._selected_animal.pellet_y)
-            hardware.set_z(self._selected_animal.pellet_z)
+            algo.baseline_intensity = animal.baseline_magnet_intensity
+            algo.reset_selected_animal(animal)
+            hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
+            hardware.set_x(animal.pellet_x)
+            hardware.set_y(animal.pellet_y)
+            hardware.set_z(animal.pellet_z)
             hardware.send_pellet()
-        self._on_property_changed(self.Props.SELECTED_ANIMAL, selected_animal, prev)
-        self._preferences.selected_animal = "" if selected_animal is None else selected_animal.name
+            # self.training_plan = None
+            # set to None first, to ensure new one is updated, otherwise that would reuse same plan from previous mouse
+            plan = self.get_training_plan_by_id(animal.training.current_protocol)
+            self.training_plan = plan
+        else:
+            self.training_plan = None
+        self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
+        self._preferences.selected_animal = "" if animal is None else animal.name
+
+    @property
+    def training_mode(self):
+        return self._training_mode
+
+    @training_mode.setter
+    def training_mode(self, value):
+        prev, self._training_mode = self._training_mode, value
+        if prev == value:
+            return
+        animal = self._selected_animal
+        if value == TrainingMode.MANUAL:
+            if animal is not None:
+                self._detach_training_plan(animal)
+        else:
+            plan = self._training_plan
+            if plan is not None and self._attached_plan is None:
+                self._attach_training_plan(plan)
+        self._on_property_changed(self.Props.TRAINING_MODE, value, prev)
+
+    @property
+    def attached_plan(self) -> Optional[TrainingPlan]:
+        return self._attached_plan
+
+    @property
+    def training_plan(self) -> Optional[TrainingPlan]:
+        return self._training_plan
+
+    @training_plan.setter
+    def training_plan(self, value: Optional[TrainingPlan]):
+        prev, self._training_plan = self._training_plan, value
+        prev_animal = self._training_plan_animal
+        if value == prev and prev_animal == self._selected_animal:
+            return
+        animal = self._selected_animal
+        self._training_plan_animal = animal
+        if animal is not None:
+            attached = self._attached_plan
+            if attached is not None:
+                self._detach_training_plan(animal, attached)
+            new_plan_id = None if value is None else value.plan_id
+            prev_plan_id, animal.training.current_protocol = animal.training.current_protocol, new_plan_id
+            if new_plan_id != prev_plan_id:
+                self._save_animal_metadata(animal)
+        if value is None:
+            if animal is not None:
+                self._detach_training_plan(animal)  # in case of
+        elif animal is not None:
+            if self._training_mode != TrainingMode.MANUAL:
+                self._attach_training_plan(value)
+        self._on_property_changed(self.Props.TRAINING_PLAN, value, prev)
 
     @property
     def output_location(self) -> str:
@@ -363,14 +442,64 @@ class AppModel(ObservableObject):
 
     @notes.setter
     def notes(self, value: str):
-        self._notes = self._on_property_changed("notes", value, self._notes)
+        self._notes = self._on_property_changed(self.Props.NOTES, value, self._notes)
 
     @property
     def training_plans(self) -> List[TrainingPlan]:
         return self._training_plans
 
     def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
-        return self._training_plan_by_plan_id.get(plan_id)
+        if plan_id is None:
+            return None
+        attached = self._attached_plan
+        if attached is not None and attached.plan_id == plan_id:
+            logger.debug("get_training_plan_by_id: reusing attached: %s", attached)
+            return attached
+        plan = self._training_plan_by_plan_id.get(plan_id)
+        if plan is None:
+            logger.warning("Unknown plan_id: %s", plan_id)
+            return None
+        # plan = copy.deepcopy(plan)  # always, so that different mouses won't share same plan instance
+        animal = self._selected_animal
+        if animal is not None:
+            prog = animal.training.get_plan_progress(plan.plan_id)
+            if prog is not None:
+                logger.debug("%s: deserializing plan progress: %s", animal, prog)
+                plan.deserialize_progress(prog)
+        return plan
+
+    def _attach_training_plan(self, plan: TrainingPlan):
+        algo = self._behavior.algorithm
+        animal = self._selected_animal
+        assert animal is not None
+        attached = self._attached_plan
+        if attached is not None:
+            if attached.plan_id == plan.plan_id:
+                logger.verbose("Plan %s already attached", plan.plan_id)
+                return
+            self._detach_training_plan(animal, attached)
+        logger.success("Animal %s: attaching plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
+        plan.is_automatic = self._training_mode == TrainingMode.AUTOMATIC
+        plan.behavior_algorithm = algo
+        plan.pellet_device = self._hardware
+        plan.tunnel_device = self._hardware
+        self._attached_plan = plan
+        plan.property_changed += self._on_training_plan_property_changed  # first, to be sure get everything
+        plan.resume()
+
+    def _detach_training_plan(self, animal: AnimalSubject, plan: Optional[TrainingPlan] = None):
+        if plan is None:
+            plan = self._attached_plan
+            if plan is None:
+                return
+        prog = plan.serialize_progress()
+        logger.notice("%s: detaching from plan %s (%s)", animal.name, plan.plan_id, hex(id(plan)))
+        animal.training.set_plan_progress(plan.plan_id, prog)
+        plan.property_changed -= self._on_training_plan_property_changed  # last
+        plan.behavior_algorithm = plan.pellet_device = plan.tunnel_device = None
+        self._attached_plan = None
+        self._save_animal_metadata(animal)
+
     #
 
     def add_animal(self, name: str, select: bool = False):
@@ -384,9 +513,9 @@ class AppModel(ObservableObject):
             animal.to_file(Path(self._preferences.animal_location).joinpath(f"{name}.json"))
 
             # Ensure property change events for listeners
-            animals = self._animals.copy()  # not sure why we don't append directly instead of copy+append+setattr
-            animals.append(animal)
-            self.animals = animals
+            # animals = self._animals.copy()  # not sure why we don't append directly instead of copy+append+setattr
+            self._animals.append(animal)
+            self.animals = self._animals
         else:
             animal = animal[0]
 
@@ -478,17 +607,45 @@ class AppModel(ObservableObject):
                 camera.on_capture_start()
 
         logger.debug("connecting hardware ...")
-        self._hardware.connect(self._system_message_handler.input_queue, self._selected_animal)
+        self._hardware.connect(self._system_message_handler.input_queue)
         self._hardware.set_auto_correct_motor_drift(self._behavior.algorithm.auto_correct_motors_drift)
         logger.info("finished connecting hardware")
 
-        if not self._behavior.algorithm.algo_paused:
+        algo = self._behavior.algorithm
+
+        if not algo.algo_paused:
             analysis.start()
+
+        animal = self._selected_animal
+        plan = (
+            None if (animal is None or animal.training.current_protocol is None)
+            else self.get_training_plan_by_id(animal.training.current_protocol)
+        )
+        if self._training_mode == TrainingMode.MANUAL or animal is None:
+            logger.notice("training mode is MANUAL or animal is none")
+            # forcing manual so:
+            self.training_mode = TrainingMode.MANUAL
+            if animal is not None:
+                hardware = self._hardware
+                hardware.delay(0.5)
+                hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
+                hardware.set_x(animal.pellet_x)
+                hardware.set_y(animal.pellet_y)
+                hardware.set_z(animal.pellet_z)
+                hardware.send_pellet()
+        else:
+            if plan is not None:
+                self._attach_training_plan(plan)
 
         return True
 
     def on_capture_stop(self):
         logger.debug("AppModel.on_capture_stop")
+
+        animal = self._selected_animal
+        plan = self._attached_plan
+        if animal is not None and plan is not None:
+            self._detach_training_plan(animal, plan)
 
         analysis = self._analysis
         analysis.stop()
@@ -579,6 +736,16 @@ class AppModel(ObservableObject):
 
         # only at the end:
         self._loaded_configuration = configuration
+
+        self._training_plans = load_training_plans(
+            Path(self._preferences.configuration_location).joinpath("training/protocols"))
+        self._training_plan_by_plan_id = {
+            plan.plan_id: plan
+            for idx, plan in enumerate(self._training_plans)
+        }
+
+        # and:
+        self._load_animals()
 
         return True
 
@@ -676,37 +843,40 @@ class AppModel(ObservableObject):
                     break
 
     def _on_behavior_algo_property_changed(self, name: str, value, _):
-        cur_selected_animal = self._selected_animal
-        if cur_selected_animal is None:
-            return
-        if name == BehaviorAlgoProps.BASELINE_INTENSITY:
-            self._selected_animal.baseline_magnet_intensity = value
-            self._save_animal_metadata(cur_selected_animal)
-        elif name == BehaviorAlgoProps.INTERSESSION_STATE:
+        if name == BehaviorAlgoProps.INTERSESSION_STATE:
             left_cam = self._left_camera
             if value != IntersessionState.idle:
                 left_cam.text_overlay = f"Intersession: {value}"
             else:
                 left_cam.text_overlay = None
-        elif name == BehaviorAlgoProps.TRAINING_PLAN:
-            self._save_animal_metadata(cur_selected_animal)
+            return
+        #
+        animal = self._selected_animal
+        if animal is None:
+            return
+        #
+        if name == BehaviorAlgoProps.BASELINE_INTENSITY:
+            prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
+            if value != prev:
+                self._save_animal_metadata(animal)
         # elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
         #     self._hardware.set_auto_correct_motor_drift(value)
         # already handled by SystemMachine
 
     def _on_hardware_property_changed(self, name: str, value, _):
-        cur_selected_animal = self._selected_animal
-        if cur_selected_animal is None:
+        animal = self._selected_animal
+        if animal is None:
             return
         if name == "set_x":
-            cur_selected_animal.pellet_x = value
+            prev, animal.pellet_x = animal.pellet_x, value
         elif name == "set_y":
-            cur_selected_animal.pellet_y = value
+            prev, animal.pellet_y = animal.pellet_y, value
         elif name == "set_z":
-            cur_selected_animal.pellet_z = value
+            prev, animal.pellet_z = animal.pellet_z, value
         else:
             return
-        self._save_animal_metadata(cur_selected_animal)
+        if prev != value:
+            self._save_animal_metadata(animal)
 
     def _on_inference_property_changed(self, name: str, new_value, old_value):
         if name == InferenceModel.STATUS:
@@ -726,10 +896,18 @@ class AppModel(ObservableObject):
                 else:
                     left_cam.text_overlay = f"Intersession: {algo.intersession_state}"
 
-    def _save_animal_metadata(self, animal):
-        if animal is not None:
-            animal.to_file(
-                Path(self._preferences.animal_location).joinpath(f"{animal.name}.json"))
+    def _on_training_plan_property_changed(self, name, value, _):
+        logger.debug("train_plan property changed: %s -> %s", name, value)
+        if name == "current_phase":
+            self.property_changed(self.Props.TRAINING_PHASE, value, _)
+
+    def _save_animal_metadata(self, animal: AnimalSubject):
+        prev_animals = self._animals
+        for idx, prev_animal in enumerate(prev_animals):
+            if prev_animal.id == animal.id:
+                prev_animals[idx] = animal
+        animal.to_file(
+            Path(self._preferences.animal_location).joinpath(f"{animal.name}.json"))
 
     def _create_configuration(self) -> SystemConfiguration:
         hardware_configuration = HardwareConfiguration(tunnel_identifier="CAN", pellet_identifier="CAN")

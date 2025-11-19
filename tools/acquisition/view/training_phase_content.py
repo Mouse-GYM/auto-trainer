@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QGridLayout, QLabel, QVBoxLayout, QWidget, QStacke
 from autotrainer.core.logging import get_verbose_logger
 
 from autotrainer.pyside import CardWidget
-from autotrainer.pyside.StackedWidget import StackedWidget
+from autotrainer.pyside.StackedContent import StackedWidget
 
 from autotrainer.training import TrainingPlan, TrainingPhase
 
@@ -18,8 +18,6 @@ some_light_gray = "#C7C5C5"
 
 
 class TrainingPhaseCard(CardWidget):
-
-    _border_style = "border: 1px solid gray;"
 
     def __init__(self, phase: TrainingPhase):
         super().__init__(title="Current Phase")
@@ -33,44 +31,50 @@ class TrainingPhaseCard(CardWidget):
         self.setContentWidget(widget)
 
         layout = QVBoxLayout(widget)
-        layout.setSpacing(6)
+        layout.setContentsMargins(6, 4, 2, 0)
+        layout.setSpacing(4)
 
         label = QLabel(phase.description)
         label.setContentsMargins(0, 0, 0, 0)
         label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         label.setStyleSheet("color: gray")
-        # label.setWordWrap(True)
+        label.setWordWrap(True)
         layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         border_with_padding_style = f"""QLabel {{
-            {self._border_style}
+            border: 1px solid gray;
             margin: 0px;
-            padding: 3px;
+            padding: 2px;
         }}"""
 
         sub = QHBoxLayout()
-        layout.addLayout(sub, stretch=1)
+        sub.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(sub)
 
         left = QVBoxLayout()
-        sub.addLayout(left)
-
-        left.setSpacing(8)
         left.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        left.setContentsMargins(0, 0, 0, 0)
+        left.setSpacing(4)
+        # left.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
+        sub.addLayout(left)
 
         dev = self._make_device(phase)
         dev.setStyleSheet(border_with_padding_style)
-        dev.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        left.addWidget(dev, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        # dev.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        left.addWidget(dev, stretch=1)  # , alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         predicate = self._make_predicates(phase)
         predicate.setStyleSheet(border_with_padding_style)
-        predicate.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        left.addWidget(predicate, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        # predicate.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        left.addWidget(predicate, stretch=1)  # , alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+
+        left.addStretch(1)  # allows consume any remaining space
 
         behavior = self._make_behavior(phase)
         behavior.setStyleSheet(border_with_padding_style)
-        behavior.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        sub.addWidget(behavior, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        # behavior.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        sub.addWidget(behavior, stretch=1)
+        sub.addStretch(1)
 
     def _apply_background(self, grid):
         for row in range(grid.rowCount()):
@@ -127,11 +131,12 @@ class TrainingPhaseCard(CardWidget):
 
     def _make_predicates(self, phase: TrainingPhase):
         widget = QWidget()
+        widget.setContentsMargins(0, 0, 0, 0)
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         layout.setSpacing(0)
         label = self._make_sub_panel_head("Predicates & Actions")
-        layout.addWidget(label)
+        layout.addWidget(label, stretch=1)
 
         grid = QGridLayout()
         layout.addLayout(grid)
@@ -152,7 +157,6 @@ class TrainingPhaseCard(CardWidget):
 
     def _make_behavior(self, phase: TrainingPhase):
         widget = QWidget()
-        widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         widget.setContentsMargins(0, 0, 0, 0)
 
         layout = QVBoxLayout(widget)

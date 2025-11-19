@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QLabel, QWidget, QVBoxLayout,
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, ShiftXYZHandler
 from autotrainer.pyside import CardWidget, QSwitch
+from autotrainer.pyside.StackedContent import StackedLayout
 from autotrainer.pyside.content_widget import ContentWidget
 from autotrainer.pyside.xyz_label import XYZQLabel
 from autotrainer.pyside.DayTotalCount import DailyAndTotalCountsLabel
@@ -40,7 +41,7 @@ class BehaviorContent(ContentWidget):
         self._analysis = behavior_model.analysis
 
         self._inference_status = QLabel("")
-        self._card_widget = CardWidget(title="Behavior", header_right_layout=self._inference_status)
+        card = self._card_widget = CardWidget(title="Behavior", header_right_layout=self._inference_status)
 
         hbox_main_layout = QHBoxLayout()
         hbox_main_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -163,7 +164,7 @@ class BehaviorContent(ContentWidget):
         content.setContentsMargins(4, 4, 4, 4)
         content.setLayout(hbox_main_layout)
 
-        self._card_widget.setContentWidget(content)
+        card.setContentWidget(content)
 
         # Footer
         self._basic_footer = QWidget()
@@ -178,7 +179,7 @@ class BehaviorContent(ContentWidget):
 
         self._basic_footer.setLayout(layout)
 
-        self._stack_layout = QStackedLayout()
+        self._stack_layout = StackedLayout()
         self._stack_layout.addWidget(self._basic_footer)
 
         widget = QWidget()

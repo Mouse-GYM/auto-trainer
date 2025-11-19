@@ -28,7 +28,7 @@ class HardwareStatusContent(ContentWidget):
         self._model = message_handler
 
         self._card_widget = CardWidget(title="Hardware Status")
-        self._card_widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
+        # self._card_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self._model.property_changed += self._model_property_changed
 
@@ -80,7 +80,7 @@ class HardwareStatusContent(ContentWidget):
         layout.addWidget(self._cover_arm, cur_row, cur_col + 1)
 
         content = QWidget()
-        content.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Expanding)
+        # content.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Minimum)
         content.setContentsMargins(8, 4, 4, 4)
         content.setLayout(content_layout)
 
@@ -95,7 +95,7 @@ class HardwareStatusContent(ContentWidget):
         layout.setSpacing(0)
 
         self.setLayout(layout)
-        self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Expanding)
+        # self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Expanding)
 
         def xyz_update(xyz_label: XYZQLabel, coord, value):
             xyz_label.update_coordinate(**{coord: value})

@@ -10,6 +10,7 @@ from autotrainer.core import AnimalSubject
 from autotrainer.model import EnvironmentProvider, HardwareVersion
 
 from autotrainer.pyside import CardWidget
+from autotrainer.pyside.StackedContent import StackedLayout
 from autotrainer.pyside.content_widget import ContentWidget
 
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -44,8 +45,8 @@ class HardwareControlContent(ContentWidget):
 
         # Header
         layout = QHBoxLayout()
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        layout.setSpacing(16)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        layout.setSpacing(8)
 
         layout.addWidget(QLabel("Tunnel:"))
         self._tunnel_version = QLabel("(unknown version)")
@@ -56,6 +57,7 @@ class HardwareControlContent(ContentWidget):
         layout.addWidget(self._pellet_version)
 
         self._card_widget = CardWidget(title="Hardware Control", header_right_layout=layout)
+        # self._card_widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred)
 
         if EnvironmentProvider.hardware_version() == HardwareVersion.ANSHUTZ:
             self._travel_limits = _anshutz_travel_limits
@@ -178,6 +180,7 @@ class HardwareControlContent(ContentWidget):
         # central layout/widget
         widget = QWidget()
         widget.setLayout(layout)
+        # widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Pre)
         self._card_widget.setContentWidget(widget)
 
         # Footer
@@ -189,7 +192,7 @@ class HardwareControlContent(ContentWidget):
         self._command_label = QLabel("None")
         layout.addWidget(self._command_label)
         self._basic_footer.setLayout(layout)
-        self._stack_layout = QStackedLayout()
+        self._stack_layout = StackedLayout()
         self._stack_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self._stack_layout.addWidget(self._basic_footer)
         widget = QWidget()
@@ -204,7 +207,7 @@ class HardwareControlContent(ContentWidget):
         layout.setSpacing(0)
 
         self.setLayout(layout)
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        # self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         self.setEnabled(False)
 

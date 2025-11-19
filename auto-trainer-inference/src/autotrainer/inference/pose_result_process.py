@@ -138,10 +138,17 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             self._monitor_data_queue(project)
         except BaseException as err:
             logger.exception("Fatal error: %s", err)
-            self._cmd_queue.put(None)  # ensure monitor cmd thread will exit too
-        self._is_running = False
+        self._is_running = False  # before below put
+        self._cmd_queue.put(None)  # ensure monitor cmd thread will exit too
         cmd_thread.join(3)
-        logger.debug("Exiting")
+        flushed = 0
+        while True:
+            try:
+                self._cmd_queue.get_nowait()
+            except queue.Empty:
+                break
+            flushed += 1
+        logger.debug("Exiting ; cmd_thread alive: %s ; cmd_queue_flushed=%s", cmd_thread.is_alive(), flushed)
 
     def _monitor_cmd_queue(self):
         while self._is_running:

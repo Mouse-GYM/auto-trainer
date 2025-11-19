@@ -15,6 +15,7 @@ from .QtCaptureSettings import QCaptureSettings
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from ..StackedContent import StackedLayout
 
 logger = get_verbose_logger(__name__)
 
@@ -54,6 +55,7 @@ class QCaptureView(QWidget):
         self._camera_name = QLabel("")
 
         top_layout = QHBoxLayout()
+        top_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         top_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.addWidget(self._camera)
         top_layout.addWidget(self._camera_name)
@@ -63,7 +65,7 @@ class QCaptureView(QWidget):
         # Content/Image
         widget = QWidget()
         widget.setContentsMargins(0, 0, 0, 0)
-        self._content_stack = QStackedLayout()
+        self._content_stack = StackedLayout()
         self._content_stack.setSpacing(0)
         self._content_stack.setContentsMargins(0, 0, 0, 0)
         widget.setLayout(self._content_stack)
@@ -109,12 +111,13 @@ class QCaptureView(QWidget):
         label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         label.setVisible(False)
         label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        footer_layout.addWidget(self._is_recording, 0, Qt.AlignmentFlag.AlignRight)
+        footer_layout.addWidget(self._is_recording, alignment=Qt.AlignmentFlag.AlignRight)
 
         self._card_widget.footer.setContent(footer)
         footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         final_layout = QVBoxLayout()
+        final_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         final_layout.addWidget(self._card_widget)
         final_layout.setContentsMargins(0, 0, 0, 0)
         final_layout.setSpacing(0)

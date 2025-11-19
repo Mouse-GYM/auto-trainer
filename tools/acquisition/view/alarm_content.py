@@ -1,7 +1,7 @@
 from functools import partial
 
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QFormLayout, QSizePolicy
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QFormLayout, QSizePolicy, QScrollArea, QWidget, QHBoxLayout, QLayout
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.core import LoadCellMonitor, get_verbose_logger
@@ -44,92 +44,109 @@ class AlarmContent(ContentWidget):
 
     def __init__(self, app_model: AppModel, hardware_model: HardwareModel):
         super().__init__()
+        # self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self._app_model = app_model
         self._hardware_model = hardware_model
 
-        self._card_widget = CardWidget(header_background_color="red")
-        self._card_widget.header.setTitle("Alarms & Detectors", color="white")
+        card = self._card_widget = CardWidget(header_background_color="red")
+        # card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        card.header.setTitle("Alarms & Detectors", color="white")
 
-        content_layout = QVBoxLayout()
-        content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        content_layout = QHBoxLayout()
+        # content_layout.setSizeConstraint(QHBoxLayout.SizeConstraint.SetFixedSize)
+        content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        content_layout.setSpacing(16)
         content_layout.setContentsMargins(8, 4, 8, 4)
 
-        form_layout = QFormLayout()
-        form_layout.setHorizontalSpacing(32)
+        form_layout_alarms = QFormLayout()
+        form_layout_alarms.setHorizontalSpacing(8)
+        form_layout_alarms.setVerticalSpacing(4)
+        form_layout_alarms.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
 
         emergency_alarm = app_model.behavior.analysis.emergency_alarm_monitor
         emergency_alarm_cfg = emergency_alarm.config
 
         label = QLabel("<b>Alarms</b>")
         label.setContentsMargins(0, 0, 0, 4)
-        form_layout.addRow(label, None)
+        form_layout_alarms.addRow(label, None)
 
         def on_use_changed(do_use, *, lbl):
             lbl.setStyleSheet("" if do_use else "color: gray")
 
         icon = self._mouse_thrashing_status = StatusIcon.alarmIcon()
         label = self._mouse_thrashing_label = QLabel("Thrashing:")
-        form_layout.addRow(label, icon)
+        form_layout_alarms.addRow(label, icon)
         self.use_load_cell_audio_thrash_changed.connect(partial(on_use_changed, lbl=label))
         self.use_load_cell_audio_thrash_changed.emit(emergency_alarm_cfg.use_audio_load_cell_thrash)
         self.load_cell_audio_thrash_changed.connect(icon.setStatus)
 
         icon = self._in_cage_after_tunnel_status = StatusIcon.alarmIcon()
         label = self._in_cage_after_tunnel_label = QLabel("Mouse Missing:")
-        form_layout.addRow(label, icon)
+        form_layout_alarms.addRow(label, icon)
         self.use_presence_in_cage_after_exit_tunnel_changed.connect(partial(on_use_changed, lbl=label))
         self.use_presence_in_cage_after_exit_tunnel_changed.emit(emergency_alarm_cfg.use_presence_missing_after_exit_tunnel)
         self.presence_in_cage_after_exit_tunnel_changed.connect(icon.setStatus)
 
         icon = self._external_door_status = StatusIcon.alarmIcon()
         label = self._external_door_label = QLabel("External doors:")
-        form_layout.addRow(label, icon)
+        form_layout_alarms.addRow(label, icon)
         self.use_external_door_changed.connect(partial(on_use_changed, lbl=label))
         self.use_external_door_changed.emit(emergency_alarm_cfg.use_external_doors_open)
         self.external_door_status_changed.connect(icon.setStatus)
 
         #
 
+        form_layout_detectors = QFormLayout()
+        form_layout_detectors.setHorizontalSpacing(16)
+        form_layout_detectors.setVerticalSpacing(4)
+        form_layout_detectors.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+
         label = QLabel("<b>Detectors</b>")
-        label.setContentsMargins(0, 8, 0, 4)
-        form_layout.addRow(label, None)
+        label.setContentsMargins(0, 0, 0, 4)
+        form_layout_detectors.addRow(label, None)
 
         self._load_cell_thrash_status = StatusIcon.alarmIcon()
-        form_layout.addRow("Load Cell Thrash:", self._load_cell_thrash_status)
+        form_layout_detectors.addRow("Load Cell Thrash:", self._load_cell_thrash_status)
         self.load_cell_thrashing_changed.connect(self._load_cell_thrash_status.setStatus)
 
         self._audio_spectrum_status = StatusIcon.alarmIcon()
-        form_layout.addRow("Audio:", self._audio_spectrum_status)
+        form_layout_detectors.addRow("Audio:", self._audio_spectrum_status)
         self.audio_thrashing_changed.connect(self._audio_spectrum_status.setStatus)
 
         self._front_door_status = StatusIcon.doorIcon()
-        form_layout.addRow("Front Door:", self._front_door_status)
+        form_layout_detectors.addRow("Front Door:", self._front_door_status)
         self.front_door_changed.connect(self._front_door_status.setStatus)
 
         self._slide_door_status = StatusIcon.doorIcon()
-        form_layout.addRow("Sliding Door:", self._slide_door_status)
+        form_layout_detectors.addRow("Sliding Door:", self._slide_door_status)
         self.slide_door_changed.connect(self._slide_door_status.setStatus)
 
         if GlobalAnimalPresenceMonitor.feature_enabled:
             icon = self._animal_missing_status = StatusIcon.alarmIcon()
             label = self._animal_missing_label = QLabel("Animal Immobile:")
-            form_layout.addRow(label, icon)
+            form_layout_detectors.addRow(label, icon)
             self.global_animal_presence_changed.connect(icon.setStatus)
 
         icon = self._device_ack_timeout_status = StatusIcon.alarmIcon()
-        form_layout.addRow("Device Ack Timeout:", icon)
+        form_layout_detectors.addRow("Device Ack Timeout:", icon)
         self.device_ack_timeout_changed.connect(icon.setStatus)
 
-        content_layout.addLayout(form_layout)
+        content_layout.addLayout(form_layout_alarms)
+        content_layout.addLayout(form_layout_detectors)
 
-        self._card_widget.setContentLayout(content_layout)
-        self._card_widget.setContentsMargins(0, 0, 0, 0)
-        self._card_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        content_widget = QWidget()
+        content_widget.setLayout(content_layout)
+        # content_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        card.setContentWidget(content_widget)
+        card.setContentsMargins(0, 0, 0, 0)
+        # card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout()
-        layout.addWidget(self._card_widget)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        # layout.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMinimumSize)
+        layout.addWidget(card)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 

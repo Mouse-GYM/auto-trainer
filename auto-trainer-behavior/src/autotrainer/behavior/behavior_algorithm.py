@@ -74,9 +74,6 @@ class BehaviorAlgoProps(str, enum.Enum):
 
     ALGO_PAUSED = 'algo_paused'
 
-    TRAINING_MODE = 'training_mode'
-    TRAINING_PLAN = 'training_plan'
-
     AUTO_CLAMP_INTENSITY = 'auto_clamp_intensity'
     BASELINE_INTENSITY = 'baseline_intensity'
     DAY_PELLET_COUNT = 'day_pellet_count'  # consumed
@@ -296,7 +293,6 @@ class BehaviorAlgorithm(ObservableObject):
         self._is_in_session = False
         self._start_session_reason = "NA"
         self._stop_session_reason = "NA"
-        self._training_mode = TrainingMode.MANUAL
 
         self._session_mouse_seen = False
         self._pellet_seen = False
@@ -509,15 +505,6 @@ class BehaviorAlgorithm(ObservableObject):
     def algo_paused_age(self):
         # actually unused.
         return time.perf_counter() - self._algo_paused_perf_t
-
-    @property
-    def training_mode(self):
-        return self._training_mode
-
-    @training_mode.setter
-    def training_mode(self, value):
-        prev, self._training_mode = self._training_mode, value
-        self._on_property_changed(BehaviorAlgoProps.TRAINING_MODE, value, prev)
 
     @property
     def top_camera_presence_detection(self) -> PresenceDetectionAttrs:

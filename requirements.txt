@@ -1,5 +1,3 @@
-auto-trainer-api==0.9.0
-auto-trainer-training==0.9.1
 deeplabcut==2.3.9
 events==0.5
 numpy<2  # ==1.23.5
