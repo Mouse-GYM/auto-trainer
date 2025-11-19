@@ -15,6 +15,7 @@ from .QtCaptureSettings import QCaptureSettings
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from ..StackedContent import StackedLayout
 
 logger = get_verbose_logger(__name__)
 
@@ -64,7 +65,7 @@ class QCaptureView(QWidget):
         # Content/Image
         widget = QWidget()
         widget.setContentsMargins(0, 0, 0, 0)
-        self._content_stack = QStackedLayout()
+        self._content_stack = StackedLayout()
         self._content_stack.setSpacing(0)
         self._content_stack.setContentsMargins(0, 0, 0, 0)
         widget.setLayout(self._content_stack)

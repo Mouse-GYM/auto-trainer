@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QVBoxLayout, QHBoxLayo
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import PerfMonitor, SensorAnalysis, LoadCellMonitor, Offset3DTuple, SystemMessageHandler
 from autotrainer.pyside import PGWidget, CardWidget, QtIndicator
+from autotrainer.pyside.StackedContent import StackedLayout
 from autotrainer.pyside.content_widget import ContentWidget
 
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -183,7 +184,7 @@ class AnalysisContent(ContentWidget):
 
         self._footer.setLayout(layout)
 
-        self._stack_layout = QStackedLayout()
+        self._stack_layout = StackedLayout()
         self._stack_layout.addWidget(self._footer)
 
         widget = QWidget()

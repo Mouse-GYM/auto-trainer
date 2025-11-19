@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QWidget, QGridLayout, QLayout, QSizePolicy, QVBoxL
 
 from .CardFooter import CardFooter
 from .CardHeader import CardHeader
-from .StackedWidget import StackedWidget
+from .StackedContent import StackedWidget
 
 _DEFAULT_STYLE = "border-color: #ddd; border-width: 1px; border-style: solid; border-radius: 6px;"
 

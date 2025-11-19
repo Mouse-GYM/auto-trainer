@@ -14,6 +14,12 @@ class StackedWidget(QStackedWidget):
             return s
         return super().minimumSize()
 
+    def minimumSizeHint(self):
+        current = self.currentWidget()
+        if current:
+            return current.minimumSizeHint()
+        return super().minimumSizeHint()
+
     def sizeHint(self):
         current = self.currentWidget()
         if current:
@@ -28,9 +34,9 @@ class StackedLayout(QStackedLayout):
         current = self.currentWidget()
         if current:
             # Check for specific minimum size, otherwise use sizeHint
-            s = current.minimumSizeHint()
+            s = current.minimumSize()
             if s.isEmpty():
-                s = current.minimumSize()
+                s = current.minimumSizeHint()
             return s
         return super().minimumSize()
 

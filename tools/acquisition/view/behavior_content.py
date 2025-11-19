@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QLabel, QWidget, QVBoxLayout,
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, ShiftXYZHandler
 from autotrainer.pyside import CardWidget, QSwitch
+from autotrainer.pyside.StackedContent import StackedLayout
 from autotrainer.pyside.content_widget import ContentWidget
 from autotrainer.pyside.xyz_label import XYZQLabel
 from autotrainer.pyside.DayTotalCount import DailyAndTotalCountsLabel
@@ -178,7 +179,7 @@ class BehaviorContent(ContentWidget):
 
         self._basic_footer.setLayout(layout)
 
-        self._stack_layout = QStackedLayout()
+        self._stack_layout = StackedLayout()
         self._stack_layout.addWidget(self._basic_footer)
 
         widget = QWidget()

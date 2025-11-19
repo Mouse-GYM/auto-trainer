@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QGridLayout, QLabel, QVBoxLayout, QWidget, QStacke
 from autotrainer.core.logging import get_verbose_logger
 
 from autotrainer.pyside import CardWidget
-from autotrainer.pyside.StackedWidget import StackedWidget
+from autotrainer.pyside.StackedContent import StackedWidget
 
 from autotrainer.training import TrainingPlan
 
@@ -14,7 +14,7 @@ from autotrainer.training import TrainingPlan
 logger = get_verbose_logger(__name__)
 
 
-class TrainingPlanContent(QStackedWidget):
+class TrainingPlanContent(StackedWidget):
 
     phase_desc_truncate_length = 92
 

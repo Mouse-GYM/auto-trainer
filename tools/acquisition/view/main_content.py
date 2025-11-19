@@ -15,7 +15,7 @@ from autotrainer.behavior import TrainingMode
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 
 from autotrainer.pyside import Separator, CardWidget
-from autotrainer.pyside.StackedWidget import StackedWidget, StackedLayout
+from autotrainer.pyside.StackedContent import StackedWidget, StackedLayout
 from autotrainer.pyside.content_widget import ContentWidget
 
 from autotrainer.training import TrainingPlan, TrainingPhase

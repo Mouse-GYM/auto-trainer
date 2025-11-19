@@ -10,6 +10,7 @@ from autotrainer.core import AnimalSubject
 from autotrainer.model import EnvironmentProvider, HardwareVersion
 
 from autotrainer.pyside import CardWidget
+from autotrainer.pyside.StackedContent import StackedLayout
 from autotrainer.pyside.content_widget import ContentWidget
 
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -191,7 +192,7 @@ class HardwareControlContent(ContentWidget):
         self._command_label = QLabel("None")
         layout.addWidget(self._command_label)
         self._basic_footer.setLayout(layout)
-        self._stack_layout = QStackedLayout()
+        self._stack_layout = StackedLayout()
         self._stack_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self._stack_layout.addWidget(self._basic_footer)
         widget = QWidget()
