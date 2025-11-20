@@ -39,7 +39,7 @@ class TrainingPhaseCard(CardWidget):
         label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         label.setStyleSheet("color: gray")
         label.setWordWrap(True)
-        layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignTop) # | Qt.AlignmentFlag.AlignLeft)
 
         border_with_padding_style = f"""QLabel {{
             border: 1px solid gray;
@@ -55,25 +55,21 @@ class TrainingPhaseCard(CardWidget):
         left.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         left.setContentsMargins(0, 0, 0, 0)
         left.setSpacing(4)
-        # left.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
         sub.addLayout(left)
 
         dev = self._make_device(phase)
         dev.setStyleSheet(border_with_padding_style)
-        # dev.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        left.addWidget(dev, stretch=1)  # , alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        left.addWidget(dev)
 
         predicate = self._make_predicates(phase)
         predicate.setStyleSheet(border_with_padding_style)
-        # predicate.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        left.addWidget(predicate, stretch=1)  # , alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        left.addWidget(predicate)
 
         left.addStretch(1)  # allows consume any remaining space
 
         behavior = self._make_behavior(phase)
         behavior.setStyleSheet(border_with_padding_style)
-        # behavior.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        sub.addWidget(behavior, stretch=1)
+        sub.addWidget(behavior, stretch=0)
         sub.addStretch(1)
 
     def _apply_background(self, grid):
@@ -94,7 +90,10 @@ class TrainingPhaseCard(CardWidget):
         font.setPointSize(10)
         label.setFont(font)
         label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        # NB: this expanding of the panel head allows the panel to expand as necessarily to fill the layout containing
+        # it (and its parent layout).
+        # i.e: the panels on same column will have all the same width being the maximum one of them.
         return label
 
     def _make_device(self, phase: TrainingPhase):
