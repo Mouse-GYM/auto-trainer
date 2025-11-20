@@ -103,12 +103,6 @@ class MainWindow(QMainWindow):
     def app_model(self) -> AppModel:
         return self._app_model
 
-    def close(self):
-        # explicitly close main content, reason is TextBoxHandler added to root logger handlers.
-        self._app_model.on_capture_stop()
-        self.main_content.close()
-        super().close()
-
     def _set_start_or_stop(self, started: bool):
         self.main_content.set_is_capture_active(started)
         #
@@ -364,8 +358,10 @@ class MainWindow(QMainWindow):
         self.main_content.on_activated()
 
     def closeEvent(self, event):
+        logger.debug("MainWindow.closeEvent: %s", event)
         self._app_model.on_close()
         self._timer_calibrate.cancel()
+        self.main_content.close()
         dialogs = self._open_dialogs
         self._open_dialogs = []
         for dialog in dialogs:

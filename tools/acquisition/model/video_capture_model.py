@@ -277,6 +277,15 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         if not self._is_enabled:
             return True
         self._frame_count = 0
+
+        # before everything below, particularly video_reader
+        self._video_image_queue = None if self._shape is None else FixedArrayQueue(
+            3,
+            self._shape,
+            name="video_q",
+            mp_ctx=get_mp_ctx(),
+        )
+
         self._video_reader_initialize()
 
         if self._camera_source is not None:
@@ -342,25 +351,29 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._send_command(CaptureCommandKind.DISABLE_CAPTURE)
 
     def on_capture_stop(self):
-        if not self._is_enabled:
-            return
+        # if not self._is_enabled:
+        #     # risky: if enabled is changed after started
+        #     return
 
         self._video_reader_teardown()
 
-        if self._video_capture is not None:
+        video_capture = self._video_capture
+        if video_capture is not None:
             self._send_command(CaptureCommandKind.TERMINATE)
             if self._wait_for_capture_status(CaptureProcessStatus.TERMINATED, 5):
                 logger.debug(f"<{self._name}> video capture terminate acknowledged")
             else:
                 logger.error(f"<{self._name}> did not receive process terminates status")
 
-        if self._video_capture is not None:
+        if video_capture is not None:
             self._trace("waiting for process termination")
-            while self._video_capture.is_alive():
+            while video_capture.is_alive():
                 time.sleep(0.1)
-            self._trace("process terminated")
-            self._video_capture.join()
+            video_capture.join()
+            self._trace(f"process terminated: exitcode={video_capture.exitcode}")
             self._video_capture = None
+
+        self._video_image_queue = None
 
         # NB: clearing video cmd queue having waited & joined the capture process is best.
         clear_queue(self._video_command_queue)
@@ -374,6 +387,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         if self._video_capture is not None:
             self._video_capture.terminate()
             self._video_capture.join()
+            self._video_capture = None
         self._video_reader_teardown()
 
     def load_configuration(self, conf: CameraConfiguration):
@@ -491,15 +505,10 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             height = int(properties["width"])
             if width > 0 and height > 0:
                 self.shape = (width, height)
+            else:
+                logger.error("Invalid shape: %s", (width, height))
         else:
             self.shape = (300, 200)
-
-        self._video_image_queue = None if self._shape is None else FixedArrayQueue(
-            3,
-            self._shape,
-            name="video_q",
-            mp_ctx=get_mp_ctx(),
-        )
 
         self._camera_source = cam
 
@@ -516,9 +525,11 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             self._video_reader.start()
 
     def _video_reader_teardown(self):
-        if self._video_reader is not None:
+        reader = self._video_reader
+        if reader is not None:
             self._video_reader_stop_event.set()
-            self._video_reader.join()
+            reader.join()
+            logger.debug("%s: joined video_reader", self.name)
             self._video_reader = None
 
     def _send_command(self, cmd: CaptureCommandKind, context: object = None):

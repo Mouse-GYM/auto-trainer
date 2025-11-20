@@ -525,6 +525,12 @@ class AppModel(ObservableObject):
 
         analysis = self._analysis
 
+        # first:
+        self._behavior.system_machine.intersession.reset_to_idle()
+        # to ensure clear state on start, previous segmentation/detection could have fails,
+        # and left behind their context.
+
+        # also:
         self._project_info = ProjectInfo(
             root=self.output_location,
             device_id=self._preferences.serial_number,
@@ -568,6 +574,8 @@ class AppModel(ObservableObject):
                 )
             else:
                 logger.warning("pellet disabled: left and right camera frame sizes do not match")
+        else:
+            self._inference_queue = None
 
         did_start = left_cam.on_prepare_capture(self._inference_queue)
 
@@ -762,7 +770,9 @@ class AppModel(ObservableObject):
         pass
 
     def on_close(self):
-        logger.debug("Closing app..")
+        logger.debug("AppModel.on_close")
+        self.on_capture_stop()  # ensure
+
         self._preferences.save()
 
         if self._inference is not None:
@@ -880,20 +890,18 @@ class AppModel(ObservableObject):
     def _on_inference_property_changed(self, name: str, new_value, old_value):
         if name == InferenceModel.STATUS:
             algo = self._behavior.algorithm
+            is_running = new_value in {InferenceStatus.live, InferenceStatus.intersession}
             new_is_live = new_value == InferenceStatus.live
             left_cam = self._left_camera
             left_cam.display_dots_detection = new_is_live
             self._right_camera.display_dots_detection = new_is_live
-            if new_is_live:
-                if algo.intersession_state == IntersessionState.idle:
-                    left_cam.text_overlay = None
-                else:
-                    left_cam.text_overlay = f"Intersession: {algo.intersession_state}"
-            else:
-                if algo.intersession_state == IntersessionState.idle:
-                    left_cam.text_overlay = f"Inference: {new_value}"
-                else:
-                    left_cam.text_overlay = f"Intersession: {algo.intersession_state}"
+            parts = []
+            if not is_running:
+                parts.append(f"Inference: {new_value}")
+            if is_running:
+                if algo.intersession_state != IntersessionState.idle:
+                    parts.append(f"Intersession: {algo.intersession_state}")
+            left_cam.text_overlay = None if len(parts) == 0 else "\n".join(parts)
 
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("train_plan property changed: %s -> %s", name, value)
