@@ -28,7 +28,7 @@ class TrainingPhaseProgressContent(CardWidget):
     phase_desc_truncate_length = 92
 
     def __init__(self):
-        super().__init__(title="Phase Progress", header_background_color="#e7f5ff")
+        super().__init__(title="Phase Progress")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._plan_card_by_plan_id: Dict[str, Tuple[CardWidget, QScrollArea]] = {}
         self._plans_by_plan_id: Dict[str, TrainingPlan] = {}
