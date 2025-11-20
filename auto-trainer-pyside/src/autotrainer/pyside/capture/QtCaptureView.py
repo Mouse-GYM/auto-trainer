@@ -64,6 +64,7 @@ class QCaptureView(QWidget):
 
         # Content/Image
         widget = QWidget()
+        widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         widget.setContentsMargins(0, 0, 0, 0)
         self._content_stack = StackedLayout()
         self._content_stack.setSpacing(0)

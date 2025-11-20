@@ -50,11 +50,11 @@ class AlarmContent(ContentWidget):
         self._hardware_model = hardware_model
 
         card = self._card_widget = CardWidget(header_background_color="red")
-        # card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+
         card.header.setTitle("Alarms & Detectors", color="white")
 
         content_layout = QHBoxLayout()
-        # content_layout.setSizeConstraint(QHBoxLayout.SizeConstraint.SetFixedSize)
         content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         content_layout.setSpacing(16)
         content_layout.setContentsMargins(8, 4, 8, 4)

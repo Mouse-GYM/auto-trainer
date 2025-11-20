@@ -3,7 +3,7 @@ import typing
 from typing import Tuple, Optional
 
 from PySide6 import QtCore
-from PySide6.QtCore import QTimer, Slot, Signal, Qt
+from PySide6.QtCore import QTimer, Slot, Signal, Qt, QSize
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QStackedLayout, QWidget, QSizePolicy, QScrollBar, \
     QScrollArea, QLayout
 
@@ -45,8 +45,6 @@ class MainContent(ContentWidget):
 
         self._app_model = app_model
 
-        # self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("MainContent")
         self.setStyleSheet("#MainContent {background-color: #f7f7f7}")
@@ -56,7 +54,6 @@ class MainContent(ContentWidget):
         self.setContentsMargins(0, 0, 0, 0)
 
         main_layout = self._main_layout = QVBoxLayout()
-        # main_layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
         self.setLayout(main_layout)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(4)
@@ -66,11 +63,8 @@ class MainContent(ContentWidget):
         # don't put alignment or the stretch used below won't be effective
 
         # Second row - behavior and analysis
-        # NB: Using regular/pyside QStackedLayout, instead of our StackedLayout subclass in autotrainer.pyside,
-
-        mid_stacked_layout = self._mid_stacked_layout = QStackedLayout()
+        mid_stacked_layout = self._mid_stacked_layout = StackedLayout()
         main_layout.addLayout(mid_stacked_layout, stretch=1)
-        mid_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         self._mid_widget_manual = self._create_mid_widget_manual(app_model)
         mid_stacked_layout.addWidget(self._mid_widget_manual)
@@ -79,46 +73,62 @@ class MainContent(ContentWidget):
         mid_stacked_layout.addWidget(self._protocol_phase_progress_widget)
 
         # Third row // bottom widgets
-
         end_stacked_widget = self._end_stacked_widget = QWidget()
-        # end_stacked_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         end_stacked_layout = self._end_stacked_layout = StackedLayout(end_stacked_widget)
 
-        end_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        # end_stacked_layout.setSizeConstraint(QStackedLayout.SizeConstraint.SetMinimumSize)
-        main_layout.addWidget(end_stacked_widget)
+        end_stacked_layout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
+        main_layout.addWidget(end_stacked_widget, alignment=Qt.AlignmentFlag.AlignBottom)
 
         end_widget_manual = self._end_widget_manual = self._create_end_widget_manual()
         end_stacked_layout.addWidget(end_widget_manual)
 
         # we limit end_protocol_phase widget to max size between alarm and phase content:
         def size_hint(orig=end_stacked_widget.sizeHint):
-            sz = orig()
             if end_stacked_layout.currentWidget() == end_protocol_phase_widget:
-                h1 = self._training_phase_content.minimumSizeHint().height()
-                h2 = self._alarm_content.minimumSizeHint().height()
-                sz.setHeight(max(h1, h2))
-            return sz
+                sz1 = self._training_phase_content.minimumSizeHint()
+                sz2 = self._alarm_content.minimumSizeHint()
+                w = max(sz1.width(), sz2.width())
+                h = max(sz1.height(), sz2.height())
+                return QSize(w, h)
+            else:
+                return orig()
         end_stacked_widget.sizeHint = size_hint
 
         def min_size(orig=end_stacked_widget.minimumSize):
-            sz = orig()
             if end_stacked_layout.currentWidget() == end_protocol_phase_widget:
-                tpc = self._training_phase_content
-                h1 = tpc.minimumSize().height()    # or tpc.minimumSizeHint().height()
-                h2 = self._alarm_content.minimumSize().height()
-                sz.setHeight(max(h1, h2))
-            return sz
+                sz1 = self._training_phase_content.minimumSize()
+                sz2 = self._alarm_content.minimumSize()
+                w = max(sz1.width(), sz2.width())
+                h = max(sz1.height(), sz2.height())
+                return QSize(w, h)
+            else:
+                return orig()
         end_stacked_widget.minimumSize = min_size
+
+        # def max_size(orig=end_stacked_widget.maximumSize):
+        #     if end_stacked_layout.currentWidget() == end_protocol_phase_widget:
+        #         tpc = self._training_phase_content
+        #         h1 = tpc.maximumSize().height()    # or tpc.minimumSizeHint().height()
+        #         h2 = self._alarm_content.maximumSize().height()
+        #         sz.setHeight(max(h1, h2))
+        #     else:
+        #         return orig()
+        #     return sz
+        # end_stacked_widget.maximumSize = size_hint
 
         end_protocol_phase_widget = self._protocol_phase_end_widget = self._create_protocol_phase_end_widget()
         end_stacked_layout.addWidget(end_protocol_phase_widget)
+
+        self._training_plan_content.sizeHint = size_hint  # trying
+        # self._training_plan_content.minimumSize = size_hint
+        # self._training_phase_content.sizeHint = size_hint
+        # self._training_phase_content.minimumSize = size_hint
 
         end_stacked_layout.setCurrentWidget(end_widget_manual)
 
         # Optional fourth row - diagnostics
         self._diagnostics_content = DiagnosticsContent(self._app_model)
-        main_layout.addWidget(self._diagnostics_content)  # , alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        main_layout.addWidget(self._diagnostics_content)
 
         self._frame_count = 0
         self._start = 0
@@ -159,7 +169,6 @@ class MainContent(ContentWidget):
 
         self._left_camera_content = CameraContent(self._app_model.left_camera)
         self._left_camera_content.camera_view.setTitle("Left Camera")
-        # self._left_camera_content.camera_view.setSize(450, 300)
         top_layout.addWidget(self._left_camera_content)
         self._content_widgets.append(self._left_camera_content)
 
@@ -196,7 +205,6 @@ class MainContent(ContentWidget):
             app_model.behavior,
             app_model.inference,
         )
-        # behavior_content.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
         mid_layout.addWidget(behavior_content)
         self._content_widgets.append(behavior_content)
 
@@ -207,7 +215,6 @@ class MainContent(ContentWidget):
             app_model.message_handler,
             app_model.preferences,
         )
-        # self._analysis_content.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
         mid_layout.addWidget(self._analysis_content, 1)
         self._content_widgets.append(self._analysis_content)
 
@@ -216,7 +223,6 @@ class MainContent(ContentWidget):
     def _create_end_widget_manual(self):
         # Third row - hardware & alarms
         widget = QWidget()
-        # widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         widget.setContentsMargins(4, 0, 4, 0)
 
         end_layout = QHBoxLayout(widget)
@@ -250,7 +256,7 @@ class MainContent(ContentWidget):
 
     def _create_protocol_phase_end_widget(self):
         widget = QWidget()
-        # widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+        # widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         widget.setContentsMargins(4, 0, 4, 0)
 
         layout = QHBoxLayout(widget)
@@ -263,12 +269,10 @@ class MainContent(ContentWidget):
 
         # NB: same remark than manual end widget for stretch=1 :
         plan_content = self._training_plan_content = TrainingPlanContent()
-        # plan_content.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        left.addWidget(plan_content)  # , alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        left.addWidget(plan_content)
 
         phase_content = self._training_phase_content = TrainingPhaseContent()
-        # phase_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
-        left.addWidget(phase_content)  #, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        left.addWidget(phase_content)
 
         layout.addLayout(left, stretch=1)
 
@@ -278,6 +282,7 @@ class MainContent(ContentWidget):
 
     def _create_protocol_phase_progress_widget(self):
         widget = QWidget()
+        widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         widget.setContentsMargins(4, 0, 4, 0)
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(4, 4, 4, 0)
@@ -301,13 +306,15 @@ class MainContent(ContentWidget):
             self._alarm_content_manual_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._mid_widget_manual)
             self._end_stacked_layout.setCurrentWidget(self._end_widget_manual)
+            plan = None
         else:
             self._protocol_progress_alarm_content_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._protocol_phase_progress_widget)
             self._end_stacked_layout.setCurrentWidget(self._protocol_phase_end_widget)
             animal = self._app_model.selected_animal
             plan = None if animal is None else self._app_model.get_training_plan_by_id(animal.training.current_protocol)
-            self._update_training_plan(plan)
+        self._update_training_plan(plan)
+        self.update()
 
     def _update_training_plan(self, plan: Optional[TrainingPlan]):
         logger.debug("setting plan to %s (%s)", plan, hex(id(plan)))
@@ -319,6 +326,9 @@ class MainContent(ContentWidget):
         self._training_plan_progress_content.set_training_plan_progress(plan)
         phase = None if plan is None else plan.current_phase
         self._training_phase_progress_content.set_training_phase_progress(phase)
+        self._end_stacked_widget.update()
+        self.updateGeometry()
+        self.update()
 
     def close(self):
          self._diagnostics_content.close()  # to ensure the textbox handler is remove from root logger handlers

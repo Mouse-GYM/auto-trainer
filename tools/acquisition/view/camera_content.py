@@ -8,7 +8,6 @@ from PySide6.QtWidgets import QGridLayout, QSizePolicy
 
 from autotrainer.core import NotificationCenter, TriggerNotification, Notification
 from autotrainer.inference import PoseLocation
-from autotrainer.core.pose_elements import SceneElement
 from autotrainer.pyside.capture.QtCaptureView import ImageData
 from autotrainer.video import VideoRecordMode
 from autotrainer.pyside import QCaptureView
@@ -20,8 +19,6 @@ class CameraContent(ContentWidget):
     def __init__(self, capture_model: VideoCaptureModel):
         super().__init__()
 
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-
         self._model = capture_model
 
         layout = QGridLayout()
@@ -30,22 +27,24 @@ class CameraContent(ContentWidget):
         layout.setSpacing(0)
 
         capture_view = self._capture_view = QCaptureView()
-        self._settings = capture_view.settings
-        self._settings.setIsVideoCaptureEnabled(capture_model.is_enabled)
-        self._settings.setIsVideoRecordEnabled(capture_model.is_recording_enabled)
-        self._settings.setRecordMode(capture_model.record_mode)
-        self._settings.setStillImageCaptureEnabled(capture_model.is_still_capture_enabled)
-        self._settings.setStillImageCaptureInterval(capture_model.still_image_capture_interval)
+        capture_view.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+        settings = self._settings = capture_view.settings
+        settings.setIsVideoCaptureEnabled(capture_model.is_enabled)
+        settings.setIsVideoRecordEnabled(capture_model.is_recording_enabled)
+        settings.setRecordMode(capture_model.record_mode)
+        settings.setStillImageCaptureEnabled(capture_model.is_still_capture_enabled)
+        settings.setStillImageCaptureInterval(capture_model.still_image_capture_interval)
 
         capture_view.setCameras(capture_model.camera_list)
         capture_view.setCamera(capture_model.camera_source)
         capture_view.camera_changed.connect(self._camera_source_changed)
 
-        self._settings.capture_enabled_changed.connect(self._camera_enabled_changed)
-        self._settings.record_enabled_changed.connect(self._recording_enabled_changed)
-        self._settings.record_mode_changed.connect(self._recording_enabled_changed)
-        self._settings.image_capture_enabled_changed.connect(self._is_still_image_capture_enabled_changed)
-        self._settings.image_capture_interval_changed.connect(self._still_image_capture_interval_changed)
+        settings.capture_enabled_changed.connect(self._camera_enabled_changed)
+        settings.record_enabled_changed.connect(self._recording_enabled_changed)
+        settings.record_mode_changed.connect(self._recording_enabled_changed)
+        settings.image_capture_enabled_changed.connect(self._is_still_image_capture_enabled_changed)
+        settings.image_capture_interval_changed.connect(self._still_image_capture_interval_changed)
 
         layout.addWidget(self._capture_view)
 

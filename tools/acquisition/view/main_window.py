@@ -532,10 +532,11 @@ class MainWindow(QMainWindow):
         combo.currentIndexChanged.connect(index_changed)
 
         label = QLabel("Protocol:")
+        label.setContentsMargins(8, 0, 0, 0)
         widget = QWidget()
         self._widget_training_plan_action = toolbar.addWidget(widget)
         layout = QHBoxLayout(widget)
-        label.setContentsMargins(8, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(label)
         combo = self._training_plan_combo = QComboBox()
         def add_plans():
