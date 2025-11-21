@@ -235,7 +235,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @display_dots_detection.setter
     def display_dots_detection(self, value):
-        self._display_dots_detection = self._on_property_changed(self.DISPLAY_DOTS_DETECTION_PROP, value, self._display_dots_detection)
+        prev, self._display_dots_detection = self._display_dots_detection, value
+        self._on_property_changed(self.DISPLAY_DOTS_DETECTION_PROP, value, prev)
 
     @property
     def text_overlay(self):
@@ -243,7 +244,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @text_overlay.setter
     def text_overlay(self, value):
-        self._text_overlay = self._on_property_changed(self.TEXT_OVERLAY_PROP, value, self._text_overlay)
+        prev, self._text_overlay = self._text_overlay, value
+        self._on_property_changed(self.TEXT_OVERLAY_PROP, value, prev)
 
     @property
     def is_trace_enabled(self) -> bool:

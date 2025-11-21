@@ -844,6 +844,16 @@ class AppModel(ObservableObject):
                                 self._project_info.get_metadata_file(-1, when=now),
                                 self._project_info.session)
 
+    def _update_status_text_overlay(self):
+        parts = []
+        cur_inf_status = self._inference.status
+        is_running = cur_inf_status in {InferenceStatus.live, InferenceStatus.intersession}
+        if not is_running:
+            parts.append(f"Inference: {cur_inf_status}")
+        if cur_inf_status == InferenceStatus.intersession:
+            parts.append(f"Intersession: {self._behavior.algorithm.intersession_state}")
+        self._left_camera.text_overlay = None if len(parts) == 0 else "\n".join(parts)
+
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
         if name == UserPreferences.SELECTED_ANIMAL:
             for animal in self._animals:
@@ -853,11 +863,7 @@ class AppModel(ObservableObject):
 
     def _on_behavior_algo_property_changed(self, name: str, value, _):
         if name == BehaviorAlgoProps.INTERSESSION_STATE:
-            left_cam = self._left_camera
-            if value != IntersessionState.idle:
-                left_cam.text_overlay = f"Intersession: {value}"
-            else:
-                left_cam.text_overlay = None
+            self._update_status_text_overlay()
             return
         #
         animal = self._selected_animal
@@ -895,13 +901,7 @@ class AppModel(ObservableObject):
             left_cam = self._left_camera
             left_cam.display_dots_detection = new_is_live
             self._right_camera.display_dots_detection = new_is_live
-            parts = []
-            if not is_running:
-                parts.append(f"Inference: {new_value}")
-            if is_running:
-                if algo.intersession_state != IntersessionState.idle:
-                    parts.append(f"Intersession: {algo.intersession_state}")
-            left_cam.text_overlay = None if len(parts) == 0 else "\n".join(parts)
+            self._update_status_text_overlay()
 
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("train_plan property changed: %s -> %s", name, value)
