@@ -948,7 +948,7 @@ class AppModel(ObservableObject):
             self.property_changed(self.Props.TRAINING_PHASE, value, _)
 
     def _save_animal_metadata(self, animal: AnimalSubject, *, backup_previous: bool = False, sender: str="na"):
-        prev_animals = self._animals
+        prev_animals = self._animals  # in case _animals content is copied, we reset it to current animal
         for idx, prev_animal in enumerate(prev_animals):
             if prev_animal.id == animal.id:
                 prev_animals[idx] = animal
