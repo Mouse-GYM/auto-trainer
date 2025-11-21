@@ -3,6 +3,7 @@ import copy
 import enum
 import json
 import logging
+import math
 import multiprocessing
 import pickle
 import queue
@@ -11,20 +12,24 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Callable, Any
 
 import yaml
 
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
-                              NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis)
+                              NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis,
+                              Offset3DTuple)
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
 from autotrainer.core.configuration import SystemConfigurationDumper
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer
+
+from autotrainer.core.project.project_info import DATE_FORMAT, DATE_TIME_FORMAT
+
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.config import load_calib_stereo_params
 
@@ -34,7 +39,7 @@ from autotrainer.inference import PoseAlgorithm, InferenceStatus
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode
 
-from autotrainer.training import TrainingPlan
+from autotrainer.training import TrainingPlan, TrainingPhase
 
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
@@ -57,6 +62,9 @@ def _failed_camera_template(name: str, error: str):
 
 class AppModel(ObservableObject):
 
+    configuration_loaded_event: Callable[[SystemConfiguration], None]
+    on_error: Callable[[str, str], None]
+
     class Props(str, enum.Enum):
         ANIMALS = "animals"
         SELECTED_ANIMAL = "selected_animal"
@@ -74,7 +82,7 @@ class AppModel(ObservableObject):
         *,
         calib_dir: Optional[Path] = None,
     ):
-        super().__init__(("on_error",))
+        super().__init__(('on_error', 'configuration_loaded_event'))
 
         # using a shared process manager,
         # this allows to put shared values, created via the manager, to any multiprocess shared queue, notably.
@@ -177,13 +185,9 @@ class AppModel(ObservableObject):
         )
 
         self._output_location = ""
-
         self._is_recording_trigger = False
-
         self._project_info = None
-
         self._animal_name = ""
-
         self._notes = ""
 
         self._models: List[ProjectDependentProtol] = [
@@ -199,6 +203,7 @@ class AppModel(ObservableObject):
 
         self._selected_animal: Optional[AnimalSubject] = None
         self._attached_plan: Optional[TrainingPlan] = None
+        self._attached_animal: Optional[AnimalSubject] = None
 
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
@@ -339,34 +344,28 @@ class AppModel(ObservableObject):
         prev, self._selected_animal = self._selected_animal, animal
         if animal == prev:
             return
-        attached_plan = self._attached_plan
-        if prev is not None and attached_plan is not None:
-            self._detach_training_plan(prev, attached_plan)
+        self._detach_training_plan()  # always
         logger.debug("updating animal to %s (prev=%s)", animal, prev)
         if prev is not None:
-            self._save_animal_metadata(prev)  # in case of
-        hardware = self.hardware
+            self._save_animal_metadata(prev, sender="selected_animal_detach")  # in case of
         self.property_changed(self.Props.ANIMAL_NAME, *(
             ("(none)", "(none)") if animal is None
             else (animal.name, self.animal_name)
         ))
-        if animal is not None:
+        if animal is None:
+            self.training_plan = None
+        else:
             algo = self._behavior.algorithm
             algo.baseline_intensity = animal.baseline_magnet_intensity
-            algo.reset_selected_animal(animal)
-            hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
-            hardware.set_x(animal.pellet_x)
-            hardware.set_y(animal.pellet_y)
-            hardware.set_z(animal.pellet_z)
-            hardware.send_pellet()
-            # self.training_plan = None
-            # set to None first, to ensure new one is updated, otherwise that would reuse same plan from previous mouse
-            plan = self.get_training_plan_by_id(animal.training.current_protocol)
-            self.training_plan = plan
-        else:
-            self.training_plan = None
+            algo.reset_selected_animal_counts(animal)
+            if self._training_mode == TrainingMode.MANUAL:
+                # only set animal base position if manual training mode
+                self._set_animal_base_positions_and_send_to_deliver(animal)
+            self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
+
         self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
         self._preferences.selected_animal = "" if animal is None else animal.name
+        logger.success("Switched to animal %s", animal)
 
     @property
     def training_mode(self):
@@ -377,10 +376,8 @@ class AppModel(ObservableObject):
         prev, self._training_mode = self._training_mode, value
         if prev == value:
             return
-        animal = self._selected_animal
         if value == TrainingMode.MANUAL:
-            if animal is not None:
-                self._detach_training_plan(animal)
+            self._detach_training_plan()
         else:
             plan = self._training_plan
             if plan is not None and self._attached_plan is None:
@@ -397,23 +394,19 @@ class AppModel(ObservableObject):
 
     @training_plan.setter
     def training_plan(self, value: Optional[TrainingPlan]):
-        prev, self._training_plan = self._training_plan, value
-        prev_animal = self._training_plan_animal
-        if value == prev and prev_animal == self._selected_animal:
-            return
         animal = self._selected_animal
+        prev, self._training_plan = self._training_plan, value
+        if prev == value and self._training_plan_animal == animal:
+            return
         self._training_plan_animal = animal
         if animal is not None:
-            attached = self._attached_plan
-            if attached is not None:
-                self._detach_training_plan(animal, attached)
+            self._detach_training_plan()
             new_plan_id = None if value is None else value.plan_id
             prev_plan_id, animal.training.current_protocol = animal.training.current_protocol, new_plan_id
             if new_plan_id != prev_plan_id:
-                self._save_animal_metadata(animal)
+                self._save_animal_metadata(animal, sender="animal_current_plan_changed")
         if value is None:
-            if animal is not None:
-                self._detach_training_plan(animal)  # in case of
+            self._detach_training_plan()  # always
         elif animal is not None:
             if self._training_mode != TrainingMode.MANUAL:
                 self._attach_training_plan(value)
@@ -474,31 +467,34 @@ class AppModel(ObservableObject):
         assert animal is not None
         attached = self._attached_plan
         if attached is not None:
-            if attached.plan_id == plan.plan_id:
+            if attached.plan_id == plan.plan_id and animal == self._attached_animal:
                 logger.verbose("Plan %s already attached", plan.plan_id)
                 return
-            self._detach_training_plan(animal, attached)
+            self._detach_training_plan()
         logger.success("Animal %s: attaching plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
         plan.is_automatic = self._training_mode == TrainingMode.AUTOMATIC
         plan.behavior_algorithm = algo
         plan.pellet_device = self._hardware
         plan.tunnel_device = self._hardware
         self._attached_plan = plan
+        self._attached_animal = animal
         plan.property_changed += self._on_training_plan_property_changed  # first, to be sure get everything
         plan.resume()
 
-    def _detach_training_plan(self, animal: AnimalSubject, plan: Optional[TrainingPlan] = None):
+    def _detach_training_plan(self):
+        plan = self._attached_plan
         if plan is None:
-            plan = self._attached_plan
-            if plan is None:
-                return
+            return
         prog = plan.serialize_progress()
+        animal = self._attached_animal
+        assert animal is not None
         logger.notice("%s: detaching from plan %s (%s)", animal.name, plan.plan_id, hex(id(plan)))
         animal.training.set_plan_progress(plan.plan_id, prog)
         plan.property_changed -= self._on_training_plan_property_changed  # last
         plan.behavior_algorithm = plan.pellet_device = plan.tunnel_device = None
         self._attached_plan = None
-        self._save_animal_metadata(animal)
+        self._attached_animal = None
+        self._save_animal_metadata(animal, sender="detach_plan")
     #
 
     def add_animal(self, name: str, select: bool = False):
@@ -508,13 +504,15 @@ class AppModel(ObservableObject):
         animal = [x for x in self._animals if x.name == name]
 
         if len(animal) == 0:
-            animal = AnimalSubject(name)
-            animal.to_file(Path(self._preferences.animal_location).joinpath(f"{name}.json"))
+            logger.info("Adding new animal name=%s", name)
+            animal = AnimalSubject(name=name)
+            self._save_animal_metadata(animal)
 
             # Ensure property change events for listeners
-            # animals = self._animals.copy()  # not sure why we don't append directly instead of copy+append+setattr
-            self._animals.append(animal)
-            self.animals = self._animals
+            animals = self._animals
+            animals.append(animal)
+            self._animals = None
+            self.animals = animals
         else:
             animal = animal[0]
 
@@ -621,30 +619,22 @@ class AppModel(ObservableObject):
             else self.get_training_plan_by_id(animal.training.current_protocol)
         )
         if self._training_mode == TrainingMode.MANUAL or animal is None:
-            logger.notice("training mode is MANUAL or animal is none")
+            # logger.notice("training mode is MANUAL or animal is none")
             # forcing manual so:
             self.training_mode = TrainingMode.MANUAL
-            if animal is not None:
-                hardware = self._hardware
-                hardware.delay(0.5)
-                hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
-                hardware.set_x(animal.pellet_x)
-                hardware.set_y(animal.pellet_y)
-                hardware.set_z(animal.pellet_z)
-                hardware.send_pellet()
         else:
-            if plan is not None:
+            if plan is not None and self._training_mode != TrainingMode.MANUAL:
                 self._attach_training_plan(plan)
+
+        if self._attached_animal is None and animal is not None:
+            self._set_animal_base_positions_and_send_to_deliver(animal)
 
         return True
 
     def on_capture_stop(self):
         logger.debug("AppModel.on_capture_stop")
 
-        animal = self._selected_animal
-        plan = self._attached_plan
-        if animal is not None and plan is not None:
-            self._detach_training_plan(animal, plan)
+        self._detach_training_plan()  # always
 
         analysis = self._analysis
         analysis.stop()
@@ -746,6 +736,8 @@ class AppModel(ObservableObject):
         # and:
         self._load_animals()
 
+        self.configuration_loaded_event(configuration)
+
         return True
 
     def save_configuration(self):
@@ -823,6 +815,9 @@ class AppModel(ObservableObject):
                 self.selected_animal = animal
                 break
 
+        if self.selected_animal is None and len(animals) > 0:
+            self.selected_animal = animals[0]
+
         self.animals = animals
 
     def _trigger_received(self, notification: Notification):
@@ -833,6 +828,39 @@ class AppModel(ObservableObject):
             self._save_metadata(now,
                                 self._project_info.get_metadata_file(-1, when=now),
                                 self._project_info.session)
+
+    def _set_animal_base_positions_and_send_to_deliver(self, animal: AnimalSubject):
+        xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_y)
+        logger.verbose("Setting animal base positions and sending to %s is_pellet_dcs=%s",
+                       xyz.humanize(n_digits=1), animal.is_pellet_dcs)
+        algo = self._behavior.algorithm
+        cfg = algo.diamond_triangle_config
+        if cfg is None and animal.is_pellet_dcs:
+            logger.warning("loaded animal with pellet DCS, but no diamond-triangle config, forcing to 0")
+            animal.is_pellet_dcs = False
+            animal.pellet_x = animal.pellet_y = animal.pellet_z = 0
+            self._save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
+        if animal.is_pellet_dcs:
+            assert cfg is not None
+            xyz = cfg.diamond_to_motor(xyz)
+        else:
+            if cfg is not None:
+                assert not animal.is_pellet_dcs
+                save_xyz = cfg.motor_to_diamond(xyz)
+                logger.notice("Converting animal pellet XYZ to DCS: %s -> %s",
+                              xyz.humanize(), save_xyz.humanize())
+                animal.pellet_x = save_xyz.x
+                animal.pellet_y = save_xyz.y
+                animal.pellet_z = save_xyz.z
+                animal.is_pellet_dcs = True
+                self._save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
+        hardware = self._hardware
+        hardware.delay(0.5)
+        hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
+        hardware.set_x(xyz.x)
+        hardware.set_y(xyz.y)
+        hardware.set_z(xyz.z)
+        hardware.send_pellet()
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
         if name == UserPreferences.SELECTED_ANIMAL:
@@ -857,7 +885,7 @@ class AppModel(ObservableObject):
         if name == BehaviorAlgoProps.BASELINE_INTENSITY:
             prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
             if value != prev:
-                self._save_animal_metadata(animal)
+                self._save_animal_metadata(animal, sender="baseline_magnet_intensity")
         # elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
         #     self._hardware.set_auto_correct_motor_drift(value)
         # already handled by SystemMachine
@@ -866,18 +894,36 @@ class AppModel(ObservableObject):
         animal = self._selected_animal
         if animal is None:
             return
-        if name == "set_x":
-            prev, animal.pellet_x = animal.pellet_x, value
-        elif name == "set_y":
-            prev, animal.pellet_y = animal.pellet_y, value
-        elif name == "set_z":
-            prev, animal.pellet_z = animal.pellet_z, value
-        else:
-            return
-        if prev != value:
-            self._save_animal_metadata(animal)
+        if name in {'set_x', 'set_y', 'set_z'}:
+            hardware = self._hardware
+            coord = name[-1]
+            coord_idx = "xyz".index(coord)
+            # prevent NaN if hardware has not yet reported any send_x :
+            t = [hardware.send_x, hardware.send_y, hardware.send_z]
+            t[coord_idx] = value
+            if any((math.isnan(v) or v is None) for v in t):
+                logger.verbose("hardware set_xyz has NaN/None still: %s", t)
+                return
+            changed = False
+            xyz = orig_xyz = Offset3DTuple(*t)
+            cfg = self._behavior.algorithm.diamond_triangle_config
+            if cfg is None:
+                changed |= animal.is_pellet_dcs
+                animal.is_pellet_dcs = False
+            else:
+                changed |= not animal.is_pellet_dcs
+                animal.is_pellet_dcs = True
+                xyz = cfg.motor_to_diamond(xyz)
+            pellet_dcs_changed = changed
 
-    def _on_inference_property_changed(self, name: str, new_value, old_value):
+            animal.pellet_x = xyz.x
+            animal.pellet_y = xyz.y
+            animal.pellet_z = xyz.z
+            changed |= xyz != orig_xyz
+            if changed:
+                self._save_animal_metadata(animal, sender=f"hardware_{name}", backup_previous=pellet_dcs_changed)
+
+    def _on_inference_property_changed(self, name: str, new_value, _):
         if name == InferenceModel.STATUS:
             algo = self._behavior.algorithm
             new_is_live = new_value == InferenceStatus.live
@@ -896,17 +942,23 @@ class AppModel(ObservableObject):
                     left_cam.text_overlay = f"Intersession: {algo.intersession_state}"
 
     def _on_training_plan_property_changed(self, name, value, _):
-        logger.debug("train_plan property changed: %s -> %s", name, value)
         if name == "current_phase":
+            if value is not None:
+                assert isinstance(value, TrainingPhase)
             self.property_changed(self.Props.TRAINING_PHASE, value, _)
 
-    def _save_animal_metadata(self, animal: AnimalSubject):
+    def _save_animal_metadata(self, animal: AnimalSubject, *, backup_previous: bool = False, sender: str="na"):
         prev_animals = self._animals
         for idx, prev_animal in enumerate(prev_animals):
             if prev_animal.id == animal.id:
                 prev_animals[idx] = animal
-        animal.to_file(
-            Path(self._preferences.animal_location).joinpath(f"{animal.name}.json"))
+        dst = Path(self._preferences.animal_location).joinpath(f"{animal.name}.json")
+        logger.verbose("Saving %s to %s ; sender=%s", animal, dst, sender)
+        if backup_previous:
+            if dst.exists():
+                now = datetime.now()
+                dst.with_suffix(f'.bak-{now.strftime(DATE_TIME_FORMAT)}').write_bytes(dst.read_bytes())
+        animal.to_file(dst)
 
     def _create_configuration(self) -> SystemConfiguration:
         hardware_configuration = HardwareConfiguration(tunnel_identifier="CAN", pellet_identifier="CAN")

@@ -7,6 +7,7 @@ from PySide6.QtCore import QTimer, Slot, Signal, Qt, QSize
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QStackedLayout, QWidget, QSizePolicy, QScrollBar, \
     QScrollArea, QLayout
 
+from autotrainer.core import AnimalSubject
 from autotrainer.core.logging import get_verbose_logger
 
 from autotrainer.inference import PoseResponse, PoseAlgorithm, InferenceStatus
@@ -230,22 +231,13 @@ class MainContent(ContentWidget):
         end_layout.setContentsMargins(4, 4, 4, 4)
         end_layout.setSpacing(16)
 
-        left = QHBoxLayout()
-        left.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        left.setContentsMargins(0, 0, 0, 0)
-        left.setSpacing(8)
-
-        # NB: using stretch=1 on 2 first widgets to allow them to expand,
-        # while leaving alarm content on its minimum width, given horizontal layout.
-        hardware_control_content = self._hardware_control_content = HardwareControlContent(self._app_model.hardware)
-        left.addWidget(hardware_control_content)
+        hardware_control_content = self._hardware_control_content = HardwareControlContent(self._app_model)
+        end_layout.addWidget(hardware_control_content)
         self._content_widgets.append(hardware_control_content)
 
-        hardware_status_content = self._hardware_status_content = HardwareStatusContent(self._app_model.message_handler)
-        left.addWidget(hardware_status_content)
+        hardware_status_content = self._hardware_status_content = HardwareStatusContent(self._app_model)
+        end_layout.addWidget(hardware_status_content)
         self._content_widgets.append(hardware_status_content)
-
-        end_layout.addLayout(left, stretch=1)
 
         # self._alarm_content can be relocated inside other widget, see where it's used.
         alarm_content = self._alarm_content = AlarmContent(self._app_model, self._app_model.hardware)
@@ -394,9 +386,8 @@ class MainContent(ContentWidget):
         app_model = self._app_model
         props = AppModel.Props
         if name == props.SELECTED_ANIMAL:
-            if value is not None:
-                self._hardware_control_content.set_selected_animal(value)
-                self.training_plan_changed.emit(app_model.training_plan)  # ensure it's refreshed too
+            self._hardware_control_content.set_selected_animal(value)
+            self.training_plan_changed.emit(app_model.training_plan)  # ensure it's refreshed too
         elif name == props.TRAINING_MODE:
             self.training_mode_changed.emit(value)
         elif name == props.TRAINING_PLAN:
