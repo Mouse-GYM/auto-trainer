@@ -411,7 +411,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         )
 
     def _set_status(self, status: InferenceStatus):
-        self._status = self._on_property_changed(self.STATUS, status, self._status)
+        prev, self._status = self._status, status
+        self._on_property_changed(self.STATUS, status, prev)
 
     def _send_message(self, kind: InferenceCommandMessageKind, context: typing.Any = None):
         cmd_queue = self._inference_cmd_queue
