@@ -134,10 +134,12 @@ class QCaptureView(QWidget):
 
     def set_text_overlay(self, value):
         self._text_overlay = value
+        self._is_frame_dirty = True
         # logger.verbose("got new text overlay: %r", value)
 
     def set_display_dots_detection(self, value):
         self._display_dots_detection = value
+        self._is_frame_dirty = True
 
     def set_is_capture_active(self, is_active: bool):
         self._camera.setEnabled(not is_active)
