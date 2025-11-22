@@ -27,11 +27,30 @@ def _load_old_format(data: Dict[str, Any]):
 
 @dataclass
 class AnimalTraining:
+    """Animal Training configuration"""
 
-    # NB: protocol == plan
+    # NB: protocol == plan ; todo: could/should better be moved to auto-trainer-training repo
 
     current_protocol: Optional[str] = None
-    protocols: List[str] = dataclasses.field(default_factory=list)
+    protocols: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
+
+    def get_plan_progress(self, plan_id: str) -> Optional[Dict[str, Any]]:
+        # {"plan_id": self.plan_id,
+        #                 "progress_state": self.progress_state,
+        #                 "current_phase_id": None if self.current_phase is None else self.current_phase.phase_id,
+        #                 "progress": progress
+        #                 }
+        for prot in self.protocols:
+            if prot.get('plan_id') == plan_id:
+                return prot
+        return None
+
+    def set_plan_progress(self, plan_id: str, progress: Dict[str, Any]):
+        for idx, prog in enumerate(self.protocols):
+            if prog['plan_id'] == plan_id:
+                self.protocols[idx] = progress
+                return
+        self.protocols.append(progress)
 
 
 @dataclass
@@ -48,6 +67,12 @@ class AnimalSubject:
     pellet_z: int = 0
 
     training: AnimalTraining = dataclasses.field(default_factory=AnimalTraining)
+
+    def __post_init__(self):
+        if self.id is None:
+            self.id = str(uuid.uuid4())
+        if not self.name:
+            self.name = f"Mouse-{self.id}"
 
     def __repr__(self):
         return f"{self.__class__.__name__}(name={self.name})"

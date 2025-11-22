@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QVBoxLayout, QHBoxLayo
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import PerfMonitor, SensorAnalysis, LoadCellMonitor, Offset3DTuple, SystemMessageHandler
 from autotrainer.pyside import PGWidget, CardWidget, QtIndicator
+from autotrainer.pyside.StackedContent import StackedLayout
 from autotrainer.pyside.content_widget import ContentWidget
 
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -74,6 +75,7 @@ _graph_by_name = {
 
 def _make_graph_plot(graph: _GraphItem):
     widget = QWidget()
+    widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
     layout = QHBoxLayout()
     plot = PGWidget(widget)
     plot.setBackground("w")
@@ -88,7 +90,7 @@ def _make_graph_plot(graph: _GraphItem):
     if graph.x_range is not None:
         view_box.setRange(xRange=graph.x_range)
     view_box.setRange(yRange=graph.y_range)
-    layout.addWidget(plot)
+    layout.addWidget(plot, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
     widget.setLayout(layout)
     plot.widget = widget
     plot.getPlotItem().getViewBox().setBackgroundColor(_GRAY_COLOR_TUPLE)
@@ -138,7 +140,7 @@ class AnalysisContent(ContentWidget):
         self._headbar_switch_engaged = QtIndicator(text="Headbar DIO Switch")
         layout.addWidget(self._headbar_switch_engaged)
 
-        self._card_widget = CardWidget(title="Analysis", header_right_layout=layout)
+        card = self._card_widget = CardWidget(title="Analysis", header_right_layout=layout)
 
         self._measurement_plots: Dict[str, PGWidget] = {
             graph.name: _make_graph_plot(graph)
@@ -182,7 +184,7 @@ class AnalysisContent(ContentWidget):
 
         self._footer.setLayout(layout)
 
-        self._stack_layout = QStackedLayout()
+        self._stack_layout = StackedLayout()
         self._stack_layout.addWidget(self._footer)
 
         widget = QWidget()

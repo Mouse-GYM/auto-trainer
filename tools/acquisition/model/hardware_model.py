@@ -248,7 +248,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def delay(self, amount: float):
         return self._send_with_token(self._device, SystemCommandKind.DELAY, amount)
 
-    def connect(self, cmd_queue: Queue, animal: Optional[AnimalSubject] = None):
+    def connect(self, cmd_queue: Queue):
         self._last_coordinates = _nans_offset3dTuple
         self._last_set_coordinates = _nans_offset3dTuple
 
@@ -271,14 +271,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._send_command(self._device, SystemCommandKind.UPDATE_SCALE_TARE)
 
         self.send_home()
-
-        if animal is not None:
-            self.delay(0.5)
-            self.update_head_magnet_intensity(animal.baseline_magnet_intensity)
-            self.set_x(animal.pellet_x)
-            self.set_y(animal.pellet_y)
-            self.set_z(animal.pellet_z)
-            self.send_pellet()
 
     def disconnect(self):
         logger.verbose("disconnecting ..")

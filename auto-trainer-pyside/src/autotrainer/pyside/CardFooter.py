@@ -12,6 +12,7 @@ class CardFooter(QWidget):
         self.setObjectName("CardFooter")
         self.setStyleSheet("#CardFooter {background-color: #d9d9d9; padding: 16px; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px}")
         self.setContentsMargins(0, 0, 0, 0)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         self._layout = None
 
     def setContent(self, widget: QWidget):
@@ -19,7 +20,6 @@ class CardFooter(QWidget):
         self._layout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
         self._layout.setContentsMargins(4, 2, 4, 4)
         self._layout.addWidget(widget)
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         widget.setContentsMargins(4, 2, 2, 2)
         widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.setLayout(self._layout)

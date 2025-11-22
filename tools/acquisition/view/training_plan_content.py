@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QGridLayout, QLabel, QVBoxLayout, QWidget, QStacke
 from autotrainer.core.logging import get_verbose_logger
 
 from autotrainer.pyside import CardWidget
-from autotrainer.pyside.StackedWidget import StackedWidget
+from autotrainer.pyside.StackedContent import StackedWidget
 
 from autotrainer.training import TrainingPlan
 
@@ -20,6 +20,7 @@ class TrainingPlanContent(StackedWidget):
 
     def __init__(self):
         super().__init__()
+        # self.setMaximumHeight(250)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._plan_card_by_plan_id: Dict[str, Tuple[CardWidget, QScrollArea]] = {}
         self._plans_by_plan_id: Dict[str, TrainingPlan] = {}
@@ -36,11 +37,16 @@ class TrainingPlanContent(StackedWidget):
 
     def _show_training_plan(self, card: CardWidget, scroll_area: QScrollArea, plan: TrainingPlan):
         self.setCurrentWidget(card)
-        cur_phase_id = None if plan.current_phase is None else plan.current_phase.phase_id
+        phase = plan.current_phase
+        cur_phase_id = None if phase is None else plan.current_phase.phase_id
+        logger.debug("showing %s with cur_phase_id = %s ; %s",
+                     phase, cur_phase_id, "None" if phase is None else phase.name)
         for phase in plan.phases:
             phase_widget_name = self._get_phase_widget_name(plan, phase)
             widget = card.findChild(QWidget, phase_widget_name)
-            if widget is not None:
+            if widget is None:
+                logger.warning("%s not found", phase_widget_name)
+            else:
                 assert isinstance(widget, QWidget)
                 label_phase_widget_name = self._get_phase_label_name(plan, phase)
                 if cur_phase_id is not None and phase.phase_id == cur_phase_id:
@@ -56,6 +62,7 @@ class TrainingPlanContent(StackedWidget):
                     """)
                 else:
                     widget.setStyleSheet("")
+        self.update()
 
     def set_training_plan(self, plan: Optional[TrainingPlan]):
         logger.verbose("Setting training plan to %s", plan)
@@ -73,34 +80,33 @@ class TrainingPlanContent(StackedWidget):
         logger.debug("Adding new plan %s with %s phases", plan.plan_id, len(plan.phases))
 
         card = CardWidget(title="Protocol")
-        card.header.setRightContent(None if plan is None else QLabel(plan.name))
-        card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        card.header.setRightContent(QLabel(plan.name))
 
-        widget = QWidget()
-        # widget.setContentsMargins(0, 0, 0, 0)
+        content_widget = QWidget()
+        content_widget.setContentsMargins(0, 0, 0, 0)
 
-        vbox = QVBoxLayout(widget)
-        # vbox.setContentsMargins(0, 0, 0, 0)
-        vbox.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        vbox_layout = QVBoxLayout(content_widget)
+        vbox_layout.setContentsMargins(0, 0, 0, 0)
+        vbox_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         label = QLabel(plan.description)
-        # label.setContentsMargins(0, 0, 0, 0)
+        label.setContentsMargins(4, 4, 0, 0)
         label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         label.setStyleSheet("color: gray")
-        vbox.addWidget(label, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        vbox_layout.addWidget(label)
 
         scroll_area = QScrollArea()
-        vbox.addWidget(scroll_area)
+        vbox_layout.addWidget(scroll_area)
         # scroll_area.setContentsMargins(0, 0, 0, 0)
         scroll_area.setStyleSheet("")
         scroll_area.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         scroll_area.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        scroll_area.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
+        # scroll_area.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.MinimumExpanding)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setWidgetResizable(True)
 
-        widget.setStyleSheet("background-color: white")
-        card.setContentWidget(widget)
+        content_widget.setStyleSheet("background-color: white")
+        card.setContentWidget(content_widget)
 
         grid_widget = QWidget()
         # grid_widget.setContentsMargins(0, 0, 0, 0)
@@ -125,7 +131,7 @@ class TrainingPlanContent(StackedWidget):
         for phase_nr, phase in enumerate(plan.phases, start=1):
             phase_widget_name = self._get_phase_widget_name(plan, phase)
             widget = QWidget()
-            widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+            # widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
             # widget.setContentsMargins(0, 0, 0, 0)
             widget.setObjectName(phase_widget_name)
             phase_widgets.append(widget)

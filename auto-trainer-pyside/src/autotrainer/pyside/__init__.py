@@ -14,3 +14,4 @@ from .TextBoxHandler import TextBoxHandler
 from .QtSwitch import QSwitch
 from .QtLabeledSwitch import QLabeledSwitch
 from .QtIndicator import QtIndicator
+
