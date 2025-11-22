@@ -34,8 +34,13 @@ def animals_dir(tmp_path):
 
 
 @pytest.fixture
-def user_pref(tmp_path, config_dir, animals_dir):
-    pref = UserPreferences(settings_file_path=tmp_path.joinpath("settings.ini"))
+def settings_ini_path(tmp_path):
+    return tmp_path.joinpath("settings.ini")
+
+
+@pytest.fixture
+def user_pref(tmp_path, config_dir, animals_dir, settings_ini_path):
+    pref = UserPreferences(settings_file_path=settings_ini_path)
     pref.configuration_location = config_dir
     pref.animal_location = animals_dir
     p = tmp_path.joinpath("logs")
@@ -68,21 +73,39 @@ def app_model(user_pref, calib_dir, diamond_config_path):
     return app
 
 
-def test_load_config(app_model, config_dir, animals_dir, calib_dir):
+def test_user_preferences(settings_ini_path, user_pref, config_dir):
+    assert Path(user_pref._settings.fileName()) == settings_ini_path
+    assert not settings_ini_path.exists()
+    user_pref.selected_animal = "foobar"
+    user_pref.save()
+    assert settings_ini_path.exists()
+    user_pref = UserPreferences(settings_file_path=settings_ini_path)
+    assert Path(user_pref.configuration_location) == config_dir
+    assert user_pref.selected_animal == "foobar"
+
+
+def test_load_config(app_model, config_dir, animals_dir, calib_dir, settings_ini_path):
     res = app_model.load_configuration()
     assert res is True
     assert app_model.left_camera.name == "left"
+    assert app_model.right_camera.name == "right"
     assert app_model.top_camera.name == "web"
+    assert app_model.output_location == ""
     pref = app_model.preferences
     assert Path(pref.animal_location) == animals_dir
     assert Path(pref.configuration_location) == config_dir
+
     # ...
 
 
-def test_start_stop(app_model):
+def test_start_stop(app_model, settings_ini_path):
+    assert not settings_ini_path.exists()
     assert app_model.load_configuration() is True
     assert app_model.on_capture_start() is True
     app_model.on_capture_stop()
+    assert not settings_ini_path.exists()  # still
+    app_model.on_close()
+    assert settings_ini_path.exists()  # but saved on close
     # ...
 
 
