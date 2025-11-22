@@ -895,8 +895,6 @@ class AppModel(ObservableObject):
 
     def _on_inference_property_changed(self, name: str, new_value, old_value):
         if name == InferenceModel.STATUS:
-            algo = self._behavior.algorithm
-            is_running = new_value in {InferenceStatus.live, InferenceStatus.intersession}
             new_is_live = new_value == InferenceStatus.live
             left_cam = self._left_camera
             left_cam.display_dots_detection = new_is_live

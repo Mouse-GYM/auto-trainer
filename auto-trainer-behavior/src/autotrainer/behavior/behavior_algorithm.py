@@ -524,8 +524,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @intersession_state.setter
     def intersession_state(self, value: IntersessionState):
-        self._intersession_state = self._on_property_changed(BehaviorAlgoProps.INTERSESSION_STATE, value,
-                                                             self._intersession_state)
+        prev, self._intersession_state = self._intersession_state, value
+        self._on_property_changed(BehaviorAlgoProps.INTERSESSION_STATE, value, prev)
 
     @property
     def capture_status(self) -> CaptureProcessStatus:
