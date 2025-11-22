@@ -852,7 +852,7 @@ class AppModel(ObservableObject):
             parts.append(f"Inference: {cur_inf_status}")
         cur_inter_state = self._behavior.system_machine.intersession.state
         if cur_inter_state != IntersessionState.idle:
-            parts.append(f"Intersession: {self._behavior.algorithm.intersession_state}")
+            parts.append(f"Intersession: {cur_inter_state}")
         self._left_camera.text_overlay = None if len(parts) == 0 else "\n".join(parts)
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
