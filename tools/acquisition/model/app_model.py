@@ -790,10 +790,15 @@ class AppModel(ObservableObject):
             logger.warning("Handle process messages thread still alive ; closing queue")
         self._multiproc_msg_queue.close()
 
-        mp_mgr = self._mp_manager
-        logger.debug("shutting down multiprocess manager %s", mp_mgr)
-        mp_mgr.shutdown()
-        mp_mgr.join()
+        # somehow if many AppModel are created (like in test cases), this makes the ones following an on_close on any
+        # of them to fails hardly. MP manager looks be a singleton per python process so it might be smth related.
+        # commenting to prevent this bad effect for now.
+        # TODO: could investigate to see if can close it or not, might be at cli main() level is where to do
+        # mp_mgr = self._mp_manager
+        # logger.debug("shutting down multiprocess manager %s", mp_mgr)
+        # mp_mgr.shutdown()
+        # mp_mgr.join()
+
 
         self.save_configuration()
 

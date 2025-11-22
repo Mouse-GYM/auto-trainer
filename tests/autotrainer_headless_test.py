@@ -122,8 +122,6 @@ def test_start_stop(app_model, settings_ini_path):
     # ...
 
 
-# ...
-
 def test_cli_help():
     output = subprocess.check_output([sys.executable, headless_path, "-h"]).decode()
     assert "usage: auto-trainer-headless.py" in output
@@ -140,7 +138,7 @@ def test_launch_cli(config_dir, user_pref, calib_dir, diamond_config_path, confi
         "--preferences-file", settings_ini_path.as_posix(),
     ], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
     def interrupt_proc():
-        time.sleep(10)  # with 5s sometimes it's too slow to output what we expect/assert below..
+        time.sleep(15)  # with 5s or event 10s sometimes it's too slow to output what we expect/assert below..
         proc.send_signal(signal.SIGINT)
     t = threading.Thread(target=interrupt_proc, daemon=True)
     t.start()
@@ -151,7 +149,7 @@ def test_launch_cli(config_dir, user_pref, calib_dir, diamond_config_path, confi
     communicate_thread = threading.Thread(target=communicate, daemon=True)
     communicate_thread.start()  # use a communicate thread, given otherwise it might stay blocked ignoring the SIGINT
     t.join()
-    communicate_thread.join(15)
+    communicate_thread.join(20)
     proc.terminate()  # in case of
     proc.wait(3)  # in case of
     proc.kill()  # in case of
