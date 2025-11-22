@@ -850,7 +850,8 @@ class AppModel(ObservableObject):
         is_running = cur_inf_status in {InferenceStatus.live, InferenceStatus.intersession}
         if not is_running:
             parts.append(f"Inference: {cur_inf_status}")
-        if cur_inf_status == InferenceStatus.intersession:
+        cur_inter_state = self._behavior.system_machine.intersession.state
+        if cur_inter_state != IntersessionState.idle:
             parts.append(f"Intersession: {self._behavior.algorithm.intersession_state}")
         self._left_camera.text_overlay = None if len(parts) == 0 else "\n".join(parts)
 
