@@ -46,7 +46,8 @@ class UserPreferences(ObservableObject):
             QCoreApplication.setApplicationName("Auto Trainer")
             # IniFormat is required for the settings_file_path to be effective,
             # otherwise it's prepended with XDG_CONFIG_DIR :
-            settings_args.append(QSettings.IniFormat)
+            if settings_file_path is not None:
+                settings_args.append(QSettings.IniFormat)
             settings = self._settings = QSettings(*settings_args)
 
         logger.verbose("Using setting ini file: %r", settings.fileName())
