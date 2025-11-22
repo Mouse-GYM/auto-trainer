@@ -1,3 +1,10 @@
+import os
+import signal
+import subprocess
+import sys
+import threading
+import time
+
 import pytest
 
 from pathlib import Path
@@ -8,7 +15,8 @@ from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
 
 
-top_dir = Path(__file__).parent
+top_dir = Path(__file__).parent.parent  # supposed be the repo top/root dir
+headless_path = top_dir.joinpath("auto-trainer-headless.py")
 
 
 @pytest.fixture
@@ -24,6 +32,11 @@ def config_dir(tmp_path):
         config.cameras.append(cam)
     config.save_default(cfg_dir)
     return cfg_dir
+
+
+@pytest.fixture
+def config_file_path(config_dir):
+    return config_dir.joinpath(SystemConfiguration.make_default_yaml_config_path(config_dir))
 
 
 @pytest.fixture
@@ -110,3 +123,44 @@ def test_start_stop(app_model, settings_ini_path):
 
 
 # ...
+
+def test_cli_help():
+    output = subprocess.check_output([sys.executable, headless_path, "-h"]).decode()
+    assert "usage: auto-trainer-headless.py" in output
+
+
+# @pytest.mark.functional
+def test_launch_cli(config_dir, user_pref, calib_dir, diamond_config_path, config_file_path, settings_ini_path):
+    user_pref.save()  # do not forget ! otherwise default home config dirs/files are used
+    env = os.environ.copy()
+    env['AUTOTRAINER_DIAMOND_TRIANGLE_CONFIG'] = diamond_config_path.as_posix()  # same for this !
+    proc = subprocess.Popen([
+        sys.executable, headless_path,
+        "-c", config_file_path.as_posix(),
+        "--preferences-file", settings_ini_path.as_posix(),
+    ], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
+    def interrupt_proc():
+        time.sleep(10)  # with 5s sometimes it's too slow to output what we expect/assert below..
+        proc.send_signal(signal.SIGINT)
+    t = threading.Thread(target=interrupt_proc, daemon=True)
+    t.start()
+    out = err = None
+    def communicate():
+        nonlocal out, err
+        out, err = proc.communicate()
+    communicate_thread = threading.Thread(target=communicate, daemon=True)
+    communicate_thread.start()  # use a communicate thread, given otherwise it might stay blocked ignoring the SIGINT
+    t.join()
+    communicate_thread.join(15)
+    proc.terminate()  # in case of
+    proc.wait(3)  # in case of
+    proc.kill()  # in case of
+    assert proc.returncode == 0
+    assert isinstance(out, bytes)
+    output = out.decode()
+    print(output)
+    assert f"Diamond triangle config {diamond_config_path.as_posix()!r} not a file" in output
+    assert f"Using setting ini file: {settings_ini_path.as_posix()!r}" in output
+    #
+    assert "Alogus hardware or hardware support not found. Using emulation interface." in output
+    # etc...
