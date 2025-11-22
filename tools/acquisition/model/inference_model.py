@@ -62,6 +62,10 @@ def _pool_init(log_dict_cfg):
     logger.info("Initialized pool worker")
 
 
+class InferenceIncorrectStatus(RuntimeError):
+    """For when in analysis but inference change status"""
+
+
 class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
     def __init__(self,
@@ -215,6 +219,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             target=self._feed_intersession_analysis,
             args=(intersession_block,),
             name="feed_intersession_analysis",
+            daemon=True,
         )
         # but then, wait again a bit of more time.
         # this is to give some time to the monitor data queue thread, to get/detect the end of recording in progress,
@@ -514,20 +519,21 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # see _put_intersession_frame().
         try:
             self.__feed_intersession_analysis(intersession_block)
+        except InferenceIncorrectStatus as err:
+            got_error = err
         except Exception as err:
             logger.exception("_feed_intersession_analysis: error: %s", err)
-            EventManager.default().post_event_content(ApiEventKind.intersessionSegmentationError, context=str(err))
             got_error = err
             # do not use anymore InferenceCommandMessageKind.ProcessLive
             # self._send_message(InferenceCommandMessageKind.ProcessLive)
-            # intersession_block.configuration.complete(intersession_block.configuration.nonce, False)
             # given we send EOF_OFFLINE_PROCESSING in the following finally clause,
             # the callback is will be done by the monitor data thread instead.
         else:
             got_error = None
 
         #
-        if got_error is not None or self._status not in {InferenceStatus.live, InferenceStatus.intersession}:
+        if got_error is not None:
+            EventManager.default().post_event_content(ApiEventKind.intersessionSegmentationError, context=str(got_error))
             logger.error(f"feed_intersession_analysis stopped given error=%s status=%s", got_error, self._status)
             intersession_block.configuration.complete(intersession_block.configuration.nonce, False)
             self._intersession_block = None
@@ -574,7 +580,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         def check_correct_status():
             cur_status = self._status
             if cur_status not in correct_inference_status:
-                raise RuntimeError(f"not correct status: {cur_status}")
+                raise InferenceIncorrectStatus(f"not correct status: {cur_status}")
         #
         perf_timeout = time.perf_counter() + 15  # intersession_wait_time is too small
         # the pose process and data monitor thread have some delay between them,
