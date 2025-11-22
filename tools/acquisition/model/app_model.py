@@ -801,7 +801,7 @@ class AppModel(ObservableObject):
         animals = []
 
         if self._preferences.animal_location is None or len(self._preferences.animal_location) == 0:
-            default_location = Path.home().joinpath("Documents").joinpath("RawDataLocal").joinpath("Animals")
+            default_location = Path.home().joinpath("Documents/RawDataLocal/Animals")
 
             try:
                 default_location.mkdir(parents=True)
