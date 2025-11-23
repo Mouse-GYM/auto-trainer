@@ -556,8 +556,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @pellet_delivery_enabled.setter
     def pellet_delivery_enabled(self, value: bool):
-        self._pellet_delivery_enabled = self._on_property_changed(BehaviorAlgoProps.PELLET_DELIVERY_ENABLED,
-                                                                  value, self._pellet_delivery_enabled)
+        prev, self._pellet_delivery_enabled = self._pellet_delivery_enabled, value
+        self._on_property_changed(BehaviorAlgoProps.PELLET_DELIVERY_ENABLED, value, prev)
 
     @property
     def pellet_cover_enabled(self):
@@ -565,8 +565,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @pellet_cover_enabled.setter
     def pellet_cover_enabled(self, value: bool):
-        self._pellet_cover_enabled = self._on_property_changed(BehaviorAlgoProps.PELLET_COVER_ENABLED,
-                                                               value, self._pellet_cover_enabled)
+        prev, self._pellet_cover_enabled = self._pellet_cover_enabled, value
+        self._on_property_changed(BehaviorAlgoProps.PELLET_COVER_ENABLED, value, prev)
 
     @property
     def intersession_enabled(self):
@@ -574,8 +574,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @intersession_enabled.setter
     def intersession_enabled(self, value: bool):
-        self._intersession_enabled = self._on_property_changed(BehaviorAlgoProps.INTERSESSION_ENABLED,
-                                                               value, self._intersession_enabled)
+        prev, self._intersession_enabled = self._intersession_enabled, value
+        self._on_property_changed(BehaviorAlgoProps.INTERSESSION_ENABLED, value, prev)
 
     @property
     def intersession_pellet_shift_enabled(self):
@@ -583,10 +583,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @intersession_pellet_shift_enabled.setter
     def intersession_pellet_shift_enabled(self, value: bool):
-        self._intersession_pellet_shift_enabled = self._on_property_changed(
-            BehaviorAlgoProps.INTERSESSION_PELLET_SHIFT_ENABLED,
-            value,
-            self._intersession_pellet_shift_enabled)
+        prev, self._intersession_pellet_shift_enabled = self._intersession_pellet_shift_enabled, value
+        self._on_property_changed(BehaviorAlgoProps.INTERSESSION_PELLET_SHIFT_ENABLED, value, prev)
 
     @property
     def head_fixation_enabled(self):
@@ -594,10 +592,10 @@ class BehaviorAlgorithm(ObservableObject):
 
     @head_fixation_enabled.setter
     def head_fixation_enabled(self, value: bool):
-        old_value, self._head_fixation_enabled = self._head_fixation_enabled, value
-        self._on_property_changed(BehaviorAlgoProps.HEAD_FIXATION_ENABLED, value, old_value)
-        if old_value != self._head_fixation_enabled:
-            logger.info(f"auto-clamp enabled changed to: {self._head_fixation_enabled}")
+        prev, self._head_fixation_enabled = self._head_fixation_enabled, value
+        if prev != self._head_fixation_enabled:
+            logger.info("auto-clamp enabled changed to: %s", self._head_fixation_enabled)
+            self._on_property_changed(BehaviorAlgoProps.HEAD_FIXATION_ENABLED, value, prev)
 
     @property
     def clean_raw_data_on_inactive_session(self):
@@ -613,10 +611,10 @@ class BehaviorAlgorithm(ObservableObject):
 
     @baseline_intensity.setter
     def baseline_intensity(self, value):
-        if value != self._baseline_intensity:
+        prev, self._baseline_intensity = self._baseline_intensity, value
+        if value != prev:
             EventManager.default().post_event_content(BehaviorEventKind.headfixBaselineChanged, context=value)
-            self._baseline_intensity = self._on_property_changed(BehaviorAlgoProps.BASELINE_INTENSITY,
-                                                                 value, self._baseline_intensity)
+            self._on_property_changed(BehaviorAlgoProps.BASELINE_INTENSITY, value, prev)
 
     @property
     def auto_clamp_intensity(self):
@@ -624,9 +622,10 @@ class BehaviorAlgorithm(ObservableObject):
 
     @auto_clamp_intensity.setter
     def auto_clamp_intensity(self, value):
-        self._auto_clamp_intensity = self._on_property_changed(BehaviorAlgoProps.AUTO_CLAMP_INTENSITY,
-                                                               value, self._auto_clamp_intensity)
-        EventManager.default().post_event_content(BehaviorEventKind.autoClampIntensityChanged, context=value)
+        prev, self._auto_clamp_intensity = self._auto_clamp_intensity, value
+        if value != prev:
+            self._on_property_changed(BehaviorAlgoProps.AUTO_CLAMP_INTENSITY, value, prev)
+            EventManager.default().post_event_content(BehaviorEventKind.autoClampIntensityChanged, context=value)
 
     @property
     def auto_clamp_release_tone_freq(self):
@@ -635,9 +634,10 @@ class BehaviorAlgorithm(ObservableObject):
 
     @auto_clamp_release_tone_freq.setter
     def auto_clamp_release_tone_freq(self, value):
-        self._auto_clamp_release_tone_freq = self._on_property_changed("auto_clamp_release_tone_freq", value,
-                                                                       self._auto_clamp_release_tone_freq)
-        EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseToneFreqChanged, context=value)
+        prev, self._auto_clamp_release_tone_freq = self._auto_clamp_release_tone_freq, value
+        if value != prev:
+            self._on_property_changed("auto_clamp_release_tone_freq", value, prev)
+            EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseToneFreqChanged, context=value)
 
     @property
     def auto_clamp_release_tone_delay(self):
@@ -645,9 +645,10 @@ class BehaviorAlgorithm(ObservableObject):
 
     @auto_clamp_release_tone_delay.setter
     def auto_clamp_release_tone_delay(self, value):
-        self._auto_clamp_release_tone_delay = self._on_property_changed("auto_clamp_release_tone_delay", value,
-                                                                        self._auto_clamp_release_tone_delay)
-        EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseDelayChanged, context=value)
+        prev, self._auto_clamp_release_tone_delay = self._auto_clamp_release_tone_delay, value
+        if value != prev:
+            self._on_property_changed("auto_clamp_release_tone_delay", value, prev)
+            EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseDelayChanged, context=value)
 
     @property
     def auto_clamp_release_load_count(self):
@@ -685,8 +686,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @presence_missing.setter
     def presence_missing(self, value):
-        self._presence_missing = self._on_property_changed(
-            BehaviorAlgoProps.PRESENCE_MISSING, value, self._presence_missing)
+        prev, self._presence_missing = self._presence_missing, value
+        self._on_property_changed(BehaviorAlgoProps.PRESENCE_MISSING, value, prev)
 
     @property
     def triangle_pellet_offset(self) -> Offset3DTuple:
@@ -761,8 +762,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @total_pellet_count.setter
     def total_pellet_count(self, value: int):
-        self._pellet_count_total = self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_COUNT,
-                                                           value, self._pellet_count_total)
+        prev, self._pellet_count_total = self._pellet_count_total, value
+        self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_COUNT, value, prev)
 
     @property
     def session_pellet_count(self) -> int:
@@ -770,9 +771,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @session_pellet_count.setter
     def session_pellet_count(self, value):
-        prev = self._pellet_count_session
-        self._pellet_count_session = self._on_property_changed(BehaviorAlgoProps.SESSION_PELLET_COUNT,
-                                                               value, self._pellet_count_session)
+        prev, self._pellet_count_session = self._pellet_count_session, value
+        self._on_property_changed(BehaviorAlgoProps.SESSION_PELLET_COUNT, value, prev)
         incr = value - prev
         if incr > 0:
             EventManager.default().post_event_content(BehaviorEventKind.sessionPelletIncrease, context=value)
@@ -798,8 +798,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @pellets_presented_day.setter
     def pellets_presented_day(self, value):
-        self._pellets_presented_day = self._on_property_changed(BehaviorAlgoProps.DAY_PELLET_PRESENTED,
-                                                                value, self._pellets_presented_day)
+        prev, self._pellets_presented_day = self._pellets_presented_day, value
+        self._on_property_changed(BehaviorAlgoProps.DAY_PELLET_PRESENTED, value, prev)
 
     @property
     def pellets_presented_total(self):
@@ -807,9 +807,9 @@ class BehaviorAlgorithm(ObservableObject):
 
     @pellets_presented_total.setter
     def pellets_presented_total(self, value):
-        prev = self._pellets_presented_total
-        self._pellets_presented_total = self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_PRESENTED, value, prev)
+        prev, self._pellets_presented_total = self._pellets_presented_total, value
         if prev != value:
+            self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_PRESENTED, value, prev)
             EventManager.default().post_event_content(BehaviorEventKind.pelletPresented, context=value)
 
     def increase_pellets_presented(self, quantity: int = 1):
@@ -826,8 +826,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @successful_reaches_day.setter
     def successful_reaches_day(self, value):
-        prev = self._successful_reaches_day
-        self._successful_reaches_day = self._on_property_changed(BehaviorAlgoProps.DAY_SUCCESSFUL_REACHES, value, prev)
+        prev, self._successful_reaches_day = self._successful_reaches_day, value
+        self._on_property_changed(BehaviorAlgoProps.DAY_SUCCESSFUL_REACHES, value, prev)
 
     @property
     def successful_reaches_total(self):
@@ -835,9 +835,9 @@ class BehaviorAlgorithm(ObservableObject):
 
     @successful_reaches_total.setter
     def successful_reaches_total(self, value):
-        prev = self._successful_reaches_total
-        self._successful_reaches_total = self._on_property_changed(BehaviorAlgoProps.TOTAL_SUCCESSFUL_REACHES, value, prev)
+        prev, self._successful_reaches_total = self._successful_reaches_total, value
         if prev != value:
+            self._on_property_changed(BehaviorAlgoProps.TOTAL_SUCCESSFUL_REACHES, value, prev)
             EventManager.default().post_event_content(BehaviorEventKind.pelletSuccessfulReach, context=value)
 
     def increase_successful_reaches(self, quantity: int = 1):

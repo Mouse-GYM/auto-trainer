@@ -231,19 +231,22 @@ class BehaviorContent(ContentWidget):
         self._behavior_model.use_current_head_magnet_position_as_baseline()
 
     def _algorithm_property_changed(self, name, value, _):
-        if name == BehaviorAlgoProps.BASELINE_INTENSITY:
+        props = BehaviorAlgoProps
+        if name == props.BASELINE_INTENSITY:
             self._baseline_label.setText(f"{value}%")
-        elif name == BehaviorAlgoProps.DAY_PELLET_COUNT:
+        elif name == props.HEAD_FIXATION_ENABLED:
+            self._head_fixation_toggle.setChecked(value)
+        elif name == props.DAY_PELLET_COUNT:
             self._pellets_consumed_label.update_values(day=value)
-        elif name == BehaviorAlgoProps.TOTAL_PELLET_COUNT:
+        elif name == props.TOTAL_PELLET_COUNT:
             self._pellets_consumed_label.update_values(total=value)
-        elif name == BehaviorAlgoProps.DAY_PELLET_PRESENTED:
+        elif name == props.DAY_PELLET_PRESENTED:
             self._pellets_presented_label.update_values(day=value)
-        elif name == BehaviorAlgoProps.TOTAL_PELLET_PRESENTED:
+        elif name == props.TOTAL_PELLET_PRESENTED:
             self._pellets_presented_label.update_values(total=value)
-        elif name == BehaviorAlgoProps.DAY_SUCCESSFUL_REACHES:
+        elif name == props.DAY_SUCCESSFUL_REACHES:
             self._successful_reaches_label.update_values(day=value)
-        elif name == BehaviorAlgoProps.TOTAL_SUCCESSFUL_REACHES:
+        elif name == props.TOTAL_SUCCESSFUL_REACHES:
             self._successful_reaches_label.update_values(total=value)
 
     def _behavior_model_property_changed(self, name, value, _):

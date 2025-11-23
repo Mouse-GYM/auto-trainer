@@ -148,17 +148,15 @@ class PreferencesContent(QWidget):
         grid_layout.setHorizontalSpacing(10)
         main_layout.addLayout(grid_layout)
 
-        w = QWidget()
-        w.setMinimumHeight(5)
-        grid_layout.addWidget(w, cur_row, cur_col)
+        widget = QWidget()
+        widget.setMinimumHeight(5)
+        grid_layout.addWidget(widget, cur_row, cur_col)
         cur_row += 1
 
+        deliver_pellets_sub_widgets = []
         grid_layout.addWidget(QLabel("Deliver Pellets:"), cur_row, cur_col)
         toggle = self._pellet_delivery_toggle = QSwitch()
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        def pellet_delivery_state_changed(x: int):
-            algo.pellet_delivery_enabled = x != 0
-        toggle.stateChanged.connect(pellet_delivery_state_changed)
         toggle.setToolTip(
             "Enables pellet load-send-release cycles based on pellet detection and related factors.")
         toggle.setChecked(algo.pellet_delivery_enabled)
@@ -167,16 +165,27 @@ class PreferencesContent(QWidget):
         #
         grid_layout.addWidget(QLabel("Cover Pellets:"), cur_row, cur_col)
         toggle = self._pellet_cover_toggle = QSwitch()
+        deliver_pellets_sub_widgets.append(toggle)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def pellet_cover_toggle_state_changed(x: int):
             algo.pellet_cover_enabled = x != 0
-        toggle.stateChanged.connect(pellet_cover_toggle_state_changed)
         toggle.setChecked(algo.pellet_cover_enabled)
+        toggle.stateChanged.connect(pellet_cover_toggle_state_changed)
         toggle.setToolTip(
             "Covers the pellet when the mouse is not in the tunnel.  Release then generates a tone when the tunnel is "
             "entered.")
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
+        #
+        def pellet_delivery_state_changed(x: int):
+            enabled = x != 0
+            algo.pellet_delivery_enabled = enabled
+            for w in deliver_pellets_sub_widgets:
+                w.setEnabled(enabled)
+
+        self._pellet_delivery_toggle.stateChanged.connect(pellet_delivery_state_changed)
+        pellet_delivery_state_changed(int(algo.pellet_delivery_enabled))
+
         #
         grid_layout.addWidget(QLabel("Intersession Pellet Shift:"), cur_row, cur_col)
         toggle = self._allow_intersession_shift_toggle = QSwitch()
@@ -207,21 +216,17 @@ class PreferencesContent(QWidget):
         cur_row += 1
 
         #
+        use_triangle_pellet_distance_sub_widgets = []
         grid_layout.addWidget(QLabel("Use triangle-pellet distance for pellet too far detection:"), cur_row, cur_col)
-        self._use_triangle_pellet_distance = algo.use_triangle_pellet_distance_too_far
-        toggle = self._toggle_use_triangle_pellet_distance = QSwitch()
+        toggle = self._use_triangle_pellet_distance_toggle = QSwitch()
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        def use_triangle_pellet_distance_changed(value):
-            enabled = value != 0
-            prev, self._use_triangle_pellet_distance = self._use_triangle_pellet_distance, enabled
-            algo.use_triangle_pellet_distance_too_far = enabled
-        toggle.stateChanged.connect(use_triangle_pellet_distance_changed)
         toggle.setChecked(algo.use_triangle_pellet_distance_too_far)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         #
         grid_layout.addWidget(QLabel("Triangle-Pellet expected distance (mm):"), cur_row, cur_col)
         spinbox = self._triangle_pellet_expected_distance_spinbox = QDoubleSpinBox()
+        use_triangle_pellet_distance_sub_widgets.append(spinbox)
         spinbox.setRange(0, 100)
         spinbox.setValue(algo.triangle_pellet_expected_distance)
         def triangle_pellet_expected_distance_changed(value):
@@ -232,6 +237,7 @@ class PreferencesContent(QWidget):
         #
         grid_layout.addWidget(QLabel("Triangle-Pellet diff too far threshold (mm):"), cur_row, cur_col)
         spinbox = self._triangle_pellet_diff_too_far_threshold_spinbox = QDoubleSpinBox()
+        use_triangle_pellet_distance_sub_widgets.append(spinbox)
         spinbox.setRange(0, 20)
         spinbox.setValue(algo.triangle_pellet_diff_too_far_threshold)
         def triangle_pellet_diff_too_far_threshold_changed(value):
@@ -240,28 +246,35 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        w = QWidget()
-        w.setMinimumHeight(5)
-        w.setMaximumHeight(5)
-        grid_layout.addWidget(w, cur_row, cur_col)
+        def use_triangle_pellet_distance_changed(value):
+            enabled = value != 0
+            algo.use_triangle_pellet_distance_too_far = enabled
+            for w in use_triangle_pellet_distance_sub_widgets:
+                w.setEnabled(enabled)
+        self._use_triangle_pellet_distance_toggle.stateChanged.connect(use_triangle_pellet_distance_changed)
+        use_triangle_pellet_distance_changed(int(algo.use_triangle_pellet_distance_too_far))
+
+        #
+
+        widget = QWidget()
+        widget.setMinimumHeight(5)
+        widget.setMaximumHeight(5)
+        grid_layout.addWidget(widget, cur_row, cur_col)
         cur_row += 1
 
+        auto_close_gate_sub_widgets = []
         grid_layout.addWidget(QLabel("<b>Use Auto-close gate during intersession:</b>"), cur_row, cur_col)
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
-        toggle = QSwitch()
+        toggle = self._auto_close_gate_during_intersession_toggle = QSwitch()
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        def toggle_changed(value):
-            enabled = value != 0
-            auto_close_gate_cfg.enabled = enabled
-            spinbox_auto_close_gate_session_min_duration.setEnabled(enabled)
-            spinbox_auto_close_gate_after_cage_delay.setEnabled(enabled)
         toggle.setChecked(auto_close_gate_cfg.enabled)
-        toggle.stateChanged.connect(toggle_changed)
+
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
         grid_layout.addWidget(QLabel("session minimum duration (seconds):"), cur_row, cur_col)
-        spinbox = spinbox_auto_close_gate_session_min_duration = QDoubleSpinBox()
+        spinbox = QDoubleSpinBox()
+        auto_close_gate_sub_widgets.append(spinbox)
         spinbox.setRange(0, max(1_000_000, auto_close_gate_cfg.session_min_duration))
         spinbox.setDecimals(1)
         spinbox.setValue(auto_close_gate_cfg.session_min_duration)
@@ -272,7 +285,8 @@ class PreferencesContent(QWidget):
         cur_row += 1
 
         grid_layout.addWidget(QLabel("delay after cage enter to close (seconds):"), cur_row, cur_col)
-        spinbox = spinbox_auto_close_gate_after_cage_delay = QDoubleSpinBox()
+        spinbox = QDoubleSpinBox()
+        auto_close_gate_sub_widgets.append(spinbox)
         spinbox.setRange(0, 60)
         spinbox.setDecimals(1)
         spinbox.setValue(auto_close_gate_cfg.delay_after_cage_enter)
@@ -282,21 +296,28 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        spinbox_auto_close_gate_session_min_duration.setEnabled(auto_close_gate_cfg.enabled)
-        spinbox_auto_close_gate_after_cage_delay.setEnabled(auto_close_gate_cfg.enabled)
+        def toggle_changed(value):
+            enabled = value != 0
+            auto_close_gate_cfg.enabled = enabled
+            for w in auto_close_gate_sub_widgets:
+                w.setEnabled(enabled)
+        self._auto_close_gate_during_intersession_toggle.stateChanged.connect(toggle_changed)
+        toggle_changed(int(auto_close_gate_cfg.enabled))
 
         # right part:
         cur_row = 0
         cur_col = 2
 
-        w = QWidget()
-        w.setMinimumHeight(5)
-        grid_layout.addWidget(w, cur_row, cur_col)
+        widget = QWidget()
+        widget.setMinimumHeight(5)
+        grid_layout.addWidget(widget, cur_row, cur_col)
         cur_row += 1
 
         # pelletDelivery:maxPelletMissingSeconds
         grid_layout.addWidget(QLabel("Pellet missing seconds:"), cur_row, cur_col)
         spinbox = self._max_pellet_missing_seconds = QDoubleSpinBox()
+        spinbox.setToolTip("Delay pellet missing after which load pellet can be executed")
+        deliver_pellets_sub_widgets.append(spinbox)
         def max_pellet_missing_seconds_changed(value):
             algo.pellet_missing_time = value
         spinbox.setValue(algo.pellet_missing_time)
@@ -307,10 +328,11 @@ class PreferencesContent(QWidget):
         # pelletDelivery:pelletHandUncoverDistance [1]
         grid_layout.addWidget(QLabel("Pellet-hand minimum distance:"), cur_row, cur_col)
         toggle = self._toggle_pellet_hand_uncover_distance = QSwitch()
+        toggle.setToolTip("Pellet-hand distance below which cover is released")
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         toggle.setChecked(algo.pellet_hand_uncover_distance is not None)
         spin_box_pellet_hand_uncover_dist = self._pellet_hand_uncover_distance = QDoubleSpinBox()
-        pellet_hand_uncover_label = QLabel("Pellet hand uncover distance (mm) :")
+        pellet_hand_uncover_label = QLabel("Pellet-hand uncover distance (mm) :")
         def toggle_pellet_hand_uncover_distance_changed(value: int):
             enabled = value != 0
             if enabled:
@@ -319,8 +341,6 @@ class PreferencesContent(QWidget):
             else:
                 algo.pellet_hand_uncover_distance = None
             spin_box_pellet_hand_uncover_dist.setEnabled(enabled)
-            spin_box_pellet_hand_uncover_dist.setVisible(enabled)
-            pellet_hand_uncover_label.setVisible(enabled)
 
         toggle.stateChanged.connect(toggle_pellet_hand_uncover_distance_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
@@ -341,20 +361,24 @@ class PreferencesContent(QWidget):
             toggle_pellet_hand_uncover_distance_changed(0)
         cur_row += 1
 
-        w = QWidget()
-        w.setMinimumHeight(5)
-        w.setMaximumHeight(5)
-        grid_layout.addWidget(w, cur_row, cur_col)
+        widget = QWidget()
+        widget.setMinimumHeight(5)
+        widget.setMaximumHeight(5)
+        grid_layout.addWidget(widget, cur_row, cur_col)
         cur_row += 1
 
         # headClamp: autoClampReleaseToneFreq
+        auto_clamp_sub_widgets = []
         label = QLabel("<b>Auto-Clamp:</b>")
         grid_layout.addWidget(label, cur_row, cur_col)
+        toggle = self._auto_clamp_enabled_toggle = QSwitch()
+        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
-
         #
         grid_layout.addWidget(QLabel("Threshold:"), cur_row, cur_col)
         spinbox = self._auto_clamp_threshold_spinbox = QSpinBox(None)
+        auto_clamp_sub_widgets.append(spinbox)
         spinbox.setValue(analysis.headbar_pressure_monitor.load_cell_engaged_threshold)
         spinbox.setMinimum(0)
         spinbox.setMaximum(1023)
@@ -369,6 +393,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("Release tone freq (Hz) :"), cur_row, cur_col)
         spinbox = self._auto_clamp_release_tone_freq = QSpinBox()
+        auto_clamp_sub_widgets.append(spinbox)
         def auto_clamp_release_tone_freq_changed(value):
             algo.auto_clamp_release_tone_freq = value
         spinbox.setMinimum(0)
@@ -381,6 +406,7 @@ class PreferencesContent(QWidget):
         # headClamp:autoClampReleaseToneDelay
         grid_layout.addWidget(QLabel("Release tone delay (second) :"), cur_row, cur_col)
         spinbox = self._auto_clamp_release_tone_delay = QDoubleSpinBox()
+        auto_clamp_sub_widgets.append(spinbox)
         def auto_clamp_release_tone_delay_changed(value):
             algo.auto_clamp_release_tone_delay = value
         spinbox.setValue(algo.auto_clamp_release_tone_delay)
@@ -391,6 +417,7 @@ class PreferencesContent(QWidget):
         # headClamp:autoClampNoActivityReleaseDelay
         grid_layout.addWidget(QLabel("No-activity release delay (second) :"), cur_row, cur_col)
         spinbox = self._auto_clamp_no_activity_release_delay = QDoubleSpinBox()
+        auto_clamp_sub_widgets.append(spinbox)
         def auto_clamp_no_activity_release_delay_changed(value):
             algo.auto_clamp_no_activity_release_delay = value
         spinbox.setValue(algo.auto_clamp_no_activity_release_delay)
@@ -401,6 +428,7 @@ class PreferencesContent(QWidget):
         # headClamp:autoClampReleaseLoadCount
         grid_layout.addWidget(QLabel("Release load count:"), cur_row, cur_col)
         spinbox = self._auto_clamp_release_load_count = QSpinBox()
+        auto_clamp_sub_widgets.append(spinbox)
         spinbox.setMinimum(0)
         spinbox.setMaximum(1_000_000)
         def auto_clamp_release_load_count_changed(value):
@@ -409,6 +437,17 @@ class PreferencesContent(QWidget):
         spinbox.valueChanged.connect(auto_clamp_release_load_count_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
+
+        # auto-clamp enabled:
+        def toggle_changed(value):
+            enabled = value != 0
+            algo.head_fixation_enabled = enabled
+            for w in auto_clamp_sub_widgets:
+                w.setEnabled(enabled)
+
+        self._auto_clamp_enabled_toggle.setChecked(algo.head_fixation_enabled)
+        self._auto_clamp_enabled_toggle.stateChanged.connect(toggle_changed)
+        toggle_changed(int(algo.head_fixation_enabled))  # ensure all are set
 
         #
         tab = QWidget(None)
@@ -503,51 +542,6 @@ class PreferencesContent(QWidget):
             self._remove_raw_data_when_inactive_session_changed)
         form_layout.addRow("Remove saved videos when animal not seen:", self._checkbox_remove_raw_data_inactive_session)
 
-        form_layout.addRow("<b>TopCam Presence:</b>", QWidget())
-
-        spinbox = self._presence_sum_percent_threshold_spinbox = QDoubleSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        spinbox.setRange(0, 100)
-        spinbox.setSingleStep(0.1)
-        spinbox.setDecimals(1)
-        spinbox.setValue(model.top_camera_presence_detection.pc_threshold)
-        def value_changed(value: float):
-            model.top_camera_presence_detection.pc_threshold = value
-        spinbox.valueChanged.connect(value_changed)
-        form_layout.addRow("% threshold:", spinbox)
-
-        spinbox = QDoubleSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        spinbox.setRange(0, 100)
-        spinbox.setSingleStep(0.1)
-        spinbox.setDecimals(1)
-        spinbox.setValue(model.top_camera_presence_detection.pc_high_exclude_threshold)
-        def value_changed(value: float):
-            model.top_camera_presence_detection.pc_high_exclude_threshold = value
-        spinbox.valueChanged.connect(value_changed)
-        form_layout.addRow("high-% exclude threshold:", spinbox)
-
-        spinbox = QSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        spinbox.setRange(0, 255)
-        spinbox.setSingleStep(1)
-        spinbox.setValue(model.top_camera_presence_detection.mask_lower_zero)
-        def value_changed(value: float):
-            model.top_camera_presence_detection.mask_lower_zero = value
-        spinbox.valueChanged.connect(value_changed)
-        form_layout.addRow("Mask Lower Zero:", spinbox)
-
-        spinbox = QDoubleSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        spinbox.setRange(0, 100)
-        spinbox.setSingleStep(0.1)
-        spinbox.setDecimals(1)
-        spinbox.setValue(model.top_camera_presence_detection.max_delay_skip_threshold)
-        def value_changed(value: float):
-            model.top_camera_presence_detection.max_delay_skip_threshold = value
-        spinbox.valueChanged.connect(value_changed)
-        form_layout.addRow("Max Delay Skip Seconds:", spinbox)
-
         tab = QWidget(None)
         tab.setLayout(form_layout)
 
@@ -558,14 +552,18 @@ class PreferencesContent(QWidget):
         analysis = model.analysis
         load_cell_monitor = analysis.load_cell_monitor
 
-        main_layout = QVBoxLayout()
-        main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        top_layout = QHBoxLayout()
+
+        left_layout = QVBoxLayout()
+        top_layout.addLayout(left_layout)
+
+        left_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
         grid_layout = QGridLayout()
         grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         grid_layout.setSpacing(4)
         grid_layout.setHorizontalSpacing(10)
-        main_layout.addLayout(grid_layout)
+        left_layout.addLayout(grid_layout)
 
         cur_row = 0
         cur_col = 0
@@ -668,8 +666,57 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(line_edit, cur_row, cur_col + 1)
         cur_row += 1
 
+        right_layout = QFormLayout()
+
+        right_layout.addRow("<b>TopCam Presence:</b>", QWidget())
+
+        spinbox = self._presence_sum_percent_threshold_spinbox = QDoubleSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setRange(0, 100)
+        spinbox.setSingleStep(0.1)
+        spinbox.setDecimals(1)
+        spinbox.setValue(model.top_camera_presence_detection.pc_threshold)
+        def value_changed(value: float):
+            model.top_camera_presence_detection.pc_threshold = value
+        spinbox.valueChanged.connect(value_changed)
+        right_layout.addRow("% threshold:", spinbox)
+
+        spinbox = QDoubleSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setRange(0, 100)
+        spinbox.setSingleStep(0.1)
+        spinbox.setDecimals(1)
+        spinbox.setValue(model.top_camera_presence_detection.pc_high_exclude_threshold)
+        def value_changed(value: float):
+            model.top_camera_presence_detection.pc_high_exclude_threshold = value
+        spinbox.valueChanged.connect(value_changed)
+        right_layout.addRow("high-% exclude threshold:", spinbox)
+
+        spinbox = QSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setRange(0, 255)
+        spinbox.setSingleStep(1)
+        spinbox.setValue(model.top_camera_presence_detection.mask_lower_zero)
+        def value_changed(value: float):
+            model.top_camera_presence_detection.mask_lower_zero = value
+        spinbox.valueChanged.connect(value_changed)
+        right_layout.addRow("Mask Lower Zero:", spinbox)
+
+        spinbox = QDoubleSpinBox()
+        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        spinbox.setRange(0, 100)
+        spinbox.setSingleStep(0.1)
+        spinbox.setDecimals(1)
+        spinbox.setValue(model.top_camera_presence_detection.max_delay_skip_threshold)
+        def value_changed(value: float):
+            model.top_camera_presence_detection.max_delay_skip_threshold = value
+        spinbox.valueChanged.connect(value_changed)
+        right_layout.addRow("Max Delay Skip Seconds:", spinbox)
+
+        top_layout.addLayout(right_layout)
+
         tab = QWidget(None)
-        tab.setLayout(main_layout)
+        tab.setLayout(top_layout)
         tab.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         return tab
@@ -699,22 +746,19 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 0
 
+        audio_load_cell_sub_widgets = []
+
         label = QLabel("<b>Use Audio & Load Cell Thrashing Alarm:</b>")
         grid_layout.addWidget(label, cur_row, cur_col)
-        toggle = QSwitch()
+        toggle = self._use_audio_load_cell_thrashing_toggle = QSwitch()
         toggle.setChecked(alarm_cfg.use_audio_load_cell_thrash)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        def toggle_changed(value):
-            toggled = value != 0
-            cfg = copy.deepcopy(alarm_monitor.config)
-            cfg.use_audio_load_cell_thrash = toggled
-            alarm_monitor.config = cfg
-        toggle.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
         grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
         toggle = QSwitch()
+        audio_load_cell_sub_widgets.append(toggle)
         toggle.setChecked(alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume)
         def toggle_changed(value):
             toggled = value != 0
@@ -727,6 +771,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("Thrash aggregate delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
+        audio_load_cell_sub_widgets.append(spinbox)
         spinbox.setRange(0, 60)
         spinbox.setDecimals(1)
         spinbox.setValue(alarm_cfg.audio_load_cell_thrash_aggregate_delay)
@@ -739,6 +784,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("LoadCell thrash % time:"), cur_row, cur_col)
         spinbox = QSpinBox()
+        audio_load_cell_sub_widgets.append(spinbox)
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.load_cell_thrash_percent_on)
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -750,6 +796,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("LoadCell thrash count:"), cur_row, cur_col)
         spinbox = QSpinBox()
+        audio_load_cell_sub_widgets.append(spinbox)
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.load_cell_thrash_count)
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -761,6 +808,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("Audio thrash % time:"), cur_row, cur_col)
         spinbox = QSpinBox()
+        audio_load_cell_sub_widgets.append(spinbox)
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.audio_thrash_percent_on)
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -772,6 +820,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("Audio thrash count:"), cur_row, cur_col)
         spinbox = QSpinBox()
+        audio_load_cell_sub_widgets.append(spinbox)
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.audio_thrash_count)
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -781,30 +830,37 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        w = QWidget()
-        w.setMinimumHeight(5)
-        grid_layout.addWidget(w, cur_row, cur_col)
+        def toggle_changed(value):
+            toggled = value != 0
+            for w in audio_load_cell_sub_widgets:
+                w.setEnabled(toggled)
+            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg.use_audio_load_cell_thrash = toggled
+            alarm_monitor.config = cfg
+        self._use_audio_load_cell_thrashing_toggle.stateChanged.connect(toggle_changed)
+        toggle_changed(int(alarm_cfg.use_audio_load_cell_thrash))
+
+        widget = QWidget()
+        widget.setMinimumHeight(5)
+        grid_layout.addWidget(widget, cur_row, cur_col)
         cur_row += 1
+
+        animal_missing_sub_widgets = []
 
         label = QLabel("<b>Use Animal Missing Alarm:</b>")
         tooltip_txt = "When not seen in cage after exit tunnel"
         label.setToolTip(tooltip_txt)
         grid_layout.addWidget(label, cur_row, cur_col)
-        toggle = QSwitch()
+        toggle = self._use_animal_missing_toggle = QSwitch()
         toggle.setToolTip(tooltip_txt)
         toggle.setChecked(alarm_cfg.use_presence_missing_after_exit_tunnel)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        def toggle_changed(value):
-            toggled = value != 0
-            cfg = copy.deepcopy(alarm_monitor.config)
-            cfg.use_presence_missing_after_exit_tunnel = toggled
-            alarm_monitor.config = cfg
-        toggle.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
         grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
         toggle = QSwitch()
+        animal_missing_sub_widgets.append(toggle)
         toggle.setChecked(alarm_cfg.auto_resume_on_presence_seen_after_exit_tunnel)
         def toggle_changed(value):
             toggled = value != 0
@@ -817,6 +873,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("Missing delay after exit tunnel (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
+        animal_missing_sub_widgets.append(spinbox)
         spinbox.setRange(0, 120)
         spinbox.setDecimals(1)
         spinbox.setValue(alarm_cfg.tunnel_to_cage_presence_missing_delay)
@@ -827,27 +884,34 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
+        def toggle_changed(value):
+            toggled = value != 0
+            for w in animal_missing_sub_widgets:
+                w.setEnabled(toggled)
+            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg.use_presence_missing_after_exit_tunnel = toggled
+            alarm_monitor.config = cfg
+        self._use_animal_missing_toggle.stateChanged.connect(toggle_changed)
+        toggle_changed(int(alarm_cfg.use_presence_missing_after_exit_tunnel))
+
+
         # right side:
 
         cur_row = 0
         cur_col = 2
 
+        use_external_doors_sub_widgets = []
         grid_layout.addWidget(QLabel("<b>Use External Doors Open:</b>"), cur_row, cur_col)
-        toggle = QSwitch()
+        toggle = self._use_external_doors_open_toggle = QSwitch()
         toggle.setToolTip(tooltip_txt)
         toggle.setChecked(alarm_cfg.use_external_doors_open)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        def toggle_changed(value):
-            toggled = value != 0
-            cfg = copy.deepcopy(alarm_monitor.config)
-            cfg.use_external_doors_open = toggled
-            alarm_monitor.config = cfg
-        toggle.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
         grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
         toggle = QSwitch()
+        use_external_doors_sub_widgets.append(toggle)
         toggle.setChecked(alarm_cfg.auto_resume_on_external_doors_close)
         def toggle_changed(value):
             toggled = value != 0
@@ -860,6 +924,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("Trigger Open delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
+        use_external_doors_sub_widgets.append(spinbox)
         spinbox.setRange(0, 3600)
         spinbox.setDecimals(1)
         spinbox.setValue(analysis.external_doors_monitor.config.trigger_open_delay)
@@ -870,6 +935,16 @@ class PreferencesContent(QWidget):
         spinbox.valueChanged.connect(value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
+
+        def toggle_changed(value):
+            toggled = value != 0
+            for w in use_external_doors_sub_widgets:
+                w.setEnabled(toggled)
+            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg.use_external_doors_open = toggled
+            alarm_monitor.config = cfg
+        self._use_external_doors_open_toggle.stateChanged.connect(toggle_changed)
+        toggle_changed(int(alarm_cfg.use_external_doors_open))
 
         tab = QWidget(None)
         tab.setLayout(main_layout)
