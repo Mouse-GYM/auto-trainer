@@ -782,10 +782,15 @@ class AppModel(ObservableObject):
             logger.warning("Handle process messages thread still alive ; closing queue")
         self._multiproc_msg_queue.close()
 
-        mp_mgr = self._mp_manager
-        logger.debug("shutting down multiprocess manager %s", mp_mgr)
-        mp_mgr.shutdown()
-        mp_mgr.join()
+        # somehow if many AppModel are created (like in test cases), this makes the ones following an on_close on any
+        # of them to fails hardly. MP manager looks be a singleton per python process so it might be smth related.
+        # commenting to prevent this bad effect for now.
+        # TODO: could investigate to see if can close it or not, might be at cli main() level is where to do
+        # mp_mgr = self._mp_manager
+        # logger.debug("shutting down multiprocess manager %s", mp_mgr)
+        # mp_mgr.shutdown()
+        # mp_mgr.join()
+
 
         self.save_configuration()
 
@@ -793,7 +798,7 @@ class AppModel(ObservableObject):
         animals = []
 
         if self._preferences.animal_location is None or len(self._preferences.animal_location) == 0:
-            default_location = Path.home().joinpath("Documents").joinpath("RawDataLocal").joinpath("Animals")
+            default_location = Path.home().joinpath("Documents/RawDataLocal/Animals")
 
             try:
                 default_location.mkdir(parents=True)

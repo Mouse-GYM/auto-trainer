@@ -1,6 +1,7 @@
 import dataclasses
 import enum
 import math
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -10,8 +11,7 @@ from typing_extensions import Self
 import numpy
 import yaml
 
-from autotrainer.core import Offset3DTuple, get_verbose_logger
-
+from autotrainer.core import Offset3DTuple, get_verbose_logger, SystemConfiguration
 
 logger = get_verbose_logger()
 
@@ -24,13 +24,18 @@ flips_inference_diamond = Offset3DTuple(-1, -1, 1)
 flips_motor_diamond = flips_inference_motor * flips_inference_diamond
 
 
+DEFAULT_DIAMOND_TRIANGLE_CONFIG_PATH = Path(
+    os.getenv("AUTOTRAINER_DIAMOND_TRIANGLE_CONFIG", "~/Autotrainer/diamond_triangle_offset.yaml")
+).expanduser()
+
+
 # keeping top level atm, given not quite sure where to put
 @dataclasses.dataclass
 class DiamondTriangleOffsetConfig:
     used_position: Offset3DTuple
     measured_offset: Offset3DTuple
 
-    DEFAULT_CONFIG_PATH: ClassVar = Path("~/Autotrainer/diamond_triangle_offset.yaml")
+    DEFAULT_CONFIG_PATH: ClassVar = DEFAULT_DIAMOND_TRIANGLE_CONFIG_PATH
 
     def __init__(self, *, used_position, measured_offset):
         super().__init__()

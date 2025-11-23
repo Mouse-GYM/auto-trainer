@@ -256,7 +256,7 @@ class BehaviorAlgorithm(ObservableObject):
         cover_error_min_distance_threshold: float = 2,  # millimeter
         release_error_min_distance_threshold: float = 2,  # millimeter
         cover_release_min_duration_threshold: float = 3,  # seconds
-        diamond_triangle_offset_config_path: Optional[Path] = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH,
+        diamond_triangle_offset_config_path: Optional[Path] = None,
         topcam_presence: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__(event_names=(
@@ -341,6 +341,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._topcam_presence: Optional[PresenceDetectionAttrs] = topcam_presence
         self._presence_missing = False
 
+        if diamond_triangle_offset_config_path is None:
+            diamond_triangle_offset_config_path = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH
         self._diamond_triangle_offset_config_path = diamond_triangle_offset_config_path
         self._diamond_triangle_offset_config = DiamondTriangleOffsetConfig.load_config(
             self._diamond_triangle_offset_config_path

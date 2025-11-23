@@ -1,6 +1,7 @@
 import logging
 import sys
 from pathlib import Path
+from typing import Optional, Union
 
 from PySide6.QtCore import QCoreApplication, QSettings
 
@@ -32,16 +33,22 @@ class UserPreferences(ObservableObject):
     REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION = "remove_raw_data_when_inactive_session"
     MEASUREMENT_GRAPH = "measurement_graph"
 
-    def __init__(self):
+    def __init__(self, *, settings_file_path: Optional[Path] = None):
         super().__init__()
 
+        settings_args = [] if settings_file_path is None else [settings_file_path.as_posix()]
         if sys.platform.startswith("win"):
-            settings = self._settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "Colorado", "Auto Trainer")
+            settings_args.extend((QSettings.IniFormat, QSettings.UserScope, "Colorado", "Auto Trainer"))
+            settings = self._settings = QSettings(*settings_args)
         else:
             QCoreApplication.setOrganizationName("Colorado")
             QCoreApplication.setOrganizationDomain("colorado.edu")
             QCoreApplication.setApplicationName("Auto Trainer")
-            settings = self._settings = QSettings()
+            # IniFormat is required for the settings_file_path to be effective,
+            # otherwise it's prepended with XDG_CONFIG_DIR :
+            if settings_file_path is not None:
+                settings_args.append(QSettings.IniFormat)
+            settings = self._settings = QSettings(*settings_args)
 
         logger.verbose("Using setting ini file: %r", settings.fileName())
 
@@ -83,10 +90,11 @@ class UserPreferences(ObservableObject):
         return self._configuration_location
 
     @configuration_location.setter
-    def configuration_location(self, value: str) -> None:
-        self._configuration_location = self._on_property_changed(self.CONFIGURATION_LOCATION, value,
-                                                                 self._configuration_location)
-        self._settings.setValue("system/configuration_location", self._configuration_location)
+    def configuration_location(self, value: Union[str, Path]) -> None:
+        value = Path(value).as_posix()
+        prev, self._configuration_location = self._configuration_location, value
+        self._on_property_changed(self.CONFIGURATION_LOCATION, value, prev)
+        self._settings.setValue("system/configuration_location", value)
 
     @property
     def serial_number(self) -> str:
@@ -112,9 +120,11 @@ class UserPreferences(ObservableObject):
         return self._log_location
 
     @log_location.setter
-    def log_location(self, value: str) -> None:
-        self._log_location = self._on_property_changed(self.LOG_LOCATION, value, self.log_location)
-        self._settings.setValue("system/log_location", self._log_location)
+    def log_location(self, value: Union[str, Path]):
+        value = Path(value).as_posix()
+        prev, self._log_location = self._log_location, value
+        self._on_property_changed(self.LOG_LOCATION, value, prev)
+        self._settings.setValue("system/log_location", value)
 
     @property
     def selected_animal(self) -> str:
@@ -133,9 +143,11 @@ class UserPreferences(ObservableObject):
         return self._animal_location
 
     @animal_location.setter
-    def animal_location(self, value: str) -> None:
-        self._animal_location = self._on_property_changed(self.ANIMAL_LOCATION, value, self.animal_location)
-        self._settings.setValue("system/animal_location", self._animal_location)
+    def animal_location(self, value: Union[str, Path]):
+        value = Path(value).as_posix()
+        prev, self._animal_location = self._animal_location, value
+        self._on_property_changed(self.ANIMAL_LOCATION, value, prev)
+        self._settings.setValue("system/animal_location", value)
 
     @property
     def log_level(self) -> int:
