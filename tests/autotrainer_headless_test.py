@@ -23,6 +23,11 @@ headless_path = top_dir.joinpath("auto-trainer-headless.py")
 def config_dir(tmp_path):
     cfg_dir = tmp_path.joinpath("Autotrainer")
     cfg_dir.mkdir()
+    return cfg_dir
+
+
+@pytest.fixture
+def system_config(config_dir, tmp_path):
     config = SystemConfiguration()
     for cam_member in (CameraId.Left, CameraId.Right, CameraId.Web):
         params = dict(width=300, height=200)
@@ -30,8 +35,9 @@ def config_dir(tmp_path):
         cam.scheme = "random"
         cam.id = cam_member
         config.cameras.append(cam)
-    config.save_default(cfg_dir)
-    return cfg_dir
+    config.persistence.output_location = tmp_path.joinpath("Data").as_posix()
+    config.save_default(config_dir)
+    return config
 
 
 @pytest.fixture
@@ -78,7 +84,7 @@ def diamond_config_path(config_dir):
 
 
 @pytest.fixture
-def app_model(user_pref, calib_dir, diamond_config_path):
+def app_model(user_pref, calib_dir, diamond_config_path, system_config):
     # for now:
     BehaviorAlgorithm._no_handler_thread = True  # to be safe to start with
     #
@@ -97,13 +103,13 @@ def test_user_preferences(settings_ini_path, user_pref, config_dir):
     assert user_pref.selected_animal == "foobar"
 
 
-def test_load_config(app_model, config_dir, animals_dir, calib_dir, settings_ini_path):
+def test_load_config(app_model, config_dir, animals_dir, calib_dir, system_config):
     res = app_model.load_configuration()
     assert res is True
     assert app_model.left_camera.name == "left"
     assert app_model.right_camera.name == "right"
     assert app_model.top_camera.name == "web"
-    assert app_model.output_location == ""
+    assert app_model.output_location == system_config.persistence.output_location
     pref = app_model.preferences
     assert Path(pref.animal_location) == animals_dir
     assert Path(pref.configuration_location) == config_dir
@@ -127,8 +133,7 @@ def test_cli_help():
     assert "usage: auto-trainer-headless.py" in output
 
 
-# @pytest.mark.functional
-def test_launch_cli(config_dir, user_pref, calib_dir, diamond_config_path, config_file_path, settings_ini_path):
+def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, config_file_path, settings_ini_path):
     user_pref.save()  # do not forget ! otherwise default home config dirs/files are used
     env = os.environ.copy()
     env['AUTOTRAINER_DIAMOND_TRIANGLE_CONFIG'] = diamond_config_path.as_posix()  # same for this !
@@ -137,6 +142,7 @@ def test_launch_cli(config_dir, user_pref, calib_dir, diamond_config_path, confi
         "-c", config_file_path.as_posix(),
         "--preferences-file", settings_ini_path.as_posix(),
     ], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
+    # NB: for now we wait a fixed amount of time and then interrupt the app:
     def interrupt_proc():
         time.sleep(15)  # with 5s or event 10s sometimes it's too slow to output what we expect/assert below..
         proc.send_signal(signal.SIGINT)
