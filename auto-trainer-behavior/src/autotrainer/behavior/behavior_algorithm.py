@@ -859,6 +859,16 @@ class BehaviorAlgorithm(ObservableObject):
         if status is CoverServoStatus.OK:
             logger.notice("Set cover servo status to %s", status)
 
+    #
+
+    @property
+    def diamond_triangle_config(self) -> Optional[DiamondTriangleOffsetConfig]:
+        return self._diamond_triangle_offset_config
+
+    @diamond_triangle_config.setter
+    def diamond_triangle_config(self, value):
+        self._diamond_triangle_offset_config = value
+
     @property
     def diamond_triangle_drift(self) -> Optional[Offset3DTuple]:
         return self._diamond_triangle_drift
@@ -866,6 +876,18 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def diamond_triangle_offset_config_path(self) -> Path:
         return self._diamond_triangle_offset_config_path
+
+    def animal_pellet_to_motor(self, animal: AnimalSubject) -> Optional[Offset3DTuple]:
+        xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_z)
+        if not animal.is_pellet_dcs:
+            return xyz
+        cfg = self._diamond_triangle_offset_config
+        if cfg is None:
+            return None
+            # raise RuntimeError(f"Animal has pellet in DCS but no diamond-triangle config")
+        return cfg.diamond_to_motor(xyz)
+
+    #
 
     @property
     def auto_correct_motors_drift(self) -> bool:
@@ -1201,7 +1223,7 @@ class BehaviorAlgorithm(ObservableObject):
                 self._cover_servo_status = self._on_property_changed(
                     BehaviorAlgoProps.COVER_SERVO_STATUS, new_status, prev_status)
 
-    def reset_selected_animal(self, animal: AnimalSubject):
+    def reset_selected_animal_counts(self, animal: AnimalSubject):
         logger.verbose("Resetting counts for animal change to %s", animal)
         self.day_pellet_count = 0
         self.pellets_presented_day = 0

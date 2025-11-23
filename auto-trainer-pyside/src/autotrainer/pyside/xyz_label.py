@@ -25,6 +25,7 @@ class XYZQLabel(QLabel):
         x: Optional[float]=None,
         y: Optional[float]=None,
         z: Optional[float]=None,
+        suffix: Optional[str]=None,
     ):
         if xyz is not None and (x is not None or y is not None or z is not None):
             raise TypeError("Only accept xyz or x/y/z separated. not both")
@@ -38,7 +39,10 @@ class XYZQLabel(QLabel):
         else:
             new_xyz = cur_xyz.replace(x=x, y=y, z=z)
         self._xyz_values = new_xyz
-        self.setText(self.xyz_to_str(new_xyz, n_digits=self._n_digits))
+        txt = self.xyz_to_str(new_xyz, n_digits=self._n_digits)
+        if suffix:
+            txt = f"{txt}{suffix}"
+        self.setText(txt)
 
     @staticmethod
     def xyz_to_str(xyz: Optional[Offset3DTuple], *, n_digits: int = 1):
