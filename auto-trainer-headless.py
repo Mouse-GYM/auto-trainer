@@ -56,7 +56,6 @@ def main():
     except Exception as err:
         logger.exception("Fatal error: %s", err)
 
-    app_view_model.on_capture_stop()
     app_view_model.on_close()
 
     return exit_rc

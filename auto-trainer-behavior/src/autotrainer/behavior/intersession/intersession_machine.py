@@ -52,6 +52,11 @@ class IntersessionMachine(StateMachine):
     def project(self, project):
         self._project_info = project
 
+    def reset_to_idle(self):
+        self._detection_configuration = None
+        self._segmentation_configuration = None
+        self.state = IntersessionState.idle
+
     def after_enter_segmentation(self):
         prj = self._project_info
         segment_config = SegmentationConfiguration(nonce=secrets.token_hex(),

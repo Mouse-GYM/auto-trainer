@@ -62,6 +62,10 @@ def _pool_init(log_dict_cfg):
     logger.info("Initialized pool worker")
 
 
+class InferenceIncorrectStatus(RuntimeError):
+    """For when in analysis but inference change status"""
+
+
 class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
     def __init__(self,
@@ -215,6 +219,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             target=self._feed_intersession_analysis,
             args=(intersession_block,),
             name="feed_intersession_analysis",
+            daemon=True,
         )
         # but then, wait again a bit of more time.
         # this is to give some time to the monitor data queue thread, to get/detect the end of recording in progress,
@@ -308,10 +313,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         return True
 
     def stop(self):
+        if self._status in {InferenceStatus.stopped, InferenceStatus.stopping}:
+            return
         logger.debug("stopping..")
         proc = self._pose_process
+        self._set_status(InferenceStatus.stopping)
         if proc is not None:
-            self._set_status(InferenceStatus.stopping)
             self._send_message(InferenceCommandMessageKind.Terminate)
 
             logger.debug(f"<pellet> waiting for process termination")
@@ -351,6 +358,15 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             pool.join()
             logger.verbose("process pool joined and terminated %s", pool)
             self._process_pool = None
+
+        thread = self._offline_thread
+        if thread is not None:
+            thread.join(3)
+
+        # always:
+        self._intersession_block = None
+        self._offline_thread = None
+        self._intersession_detection = None
 
     def terminate(self):
         logger.debug("terminating..")
@@ -400,7 +416,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         )
 
     def _set_status(self, status: InferenceStatus):
-        self._status = self._on_property_changed(self.STATUS, status, self._status)
+        prev, self._status = self._status, status
+        self._on_property_changed(self.STATUS, status, prev)
 
     def _send_message(self, kind: InferenceCommandMessageKind, context: typing.Any = None):
         cmd_queue = self._inference_cmd_queue
@@ -502,17 +519,25 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # see _put_intersession_frame().
         try:
             self.__feed_intersession_analysis(intersession_block)
+        except InferenceIncorrectStatus as err:
+            got_error = err
         except Exception as err:
             logger.exception("_feed_intersession_analysis: error: %s", err)
-            EventManager.default().post_event_content(ApiEventKind.intersessionSegmentationError, context=str(err))
             got_error = err
             # do not use anymore InferenceCommandMessageKind.ProcessLive
             # self._send_message(InferenceCommandMessageKind.ProcessLive)
-            # intersession_block.configuration.complete(intersession_block.configuration.nonce, False)
             # given we send EOF_OFFLINE_PROCESSING in the following finally clause,
             # the callback is will be done by the monitor data thread instead.
         else:
             got_error = None
+
+        #
+        if got_error is not None:
+            EventManager.default().post_event_content(ApiEventKind.intersessionSegmentationError, context=str(got_error))
+            logger.error(f"feed_intersession_analysis stopped given error=%s status=%s", got_error, self._status)
+            intersession_block.configuration.complete(intersession_block.configuration.nonce, False)
+            self._intersession_block = None
+            return
         #
         # in any case sleep a bit to allow pose process to finishes consume:
         offline_q = self._offline_queue
@@ -551,6 +576,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         ]
         tot_skipped_frames = 0
         empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
+        correct_inference_status = {InferenceStatus.live, InferenceStatus.intersession}
+        def check_correct_status():
+            cur_status = self._status
+            if cur_status not in correct_inference_status:
+                raise InferenceIncorrectStatus(f"not correct status: {cur_status}")
         #
         perf_timeout = time.perf_counter() + 15  # intersession_wait_time is too small
         # the pose process and data monitor thread have some delay between them,
@@ -560,6 +590,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         while not self._data_monitor_proc.stop_recorded.wait(1):
             if time.perf_counter() > perf_timeout:
                 raise RuntimeError("timeout waiting for intersession stop_recorded event")
+            check_correct_status()
         self._data_monitor_proc.stop_recorded.clear()
         logger.notice("got stop_recorded")
 
@@ -573,6 +604,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         video_paths = [cams_paths[cdx][0] for cdx in range(n_cams)]
         logger.verbose("checking can open video files %s", video_paths)
         while True:
+            check_correct_status()
+
             for cdx, cam in enumerate(cams):
                 if cdx not in captures_d:
                     capture, frame_count = check_frame_count(video_paths[cdx])
@@ -653,6 +686,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             [] for _ in range(n_cams)
         ]
         while frame_idx < tot_frames_to_process:
+            check_correct_status()
 
             # skip frames already processed during live:
             for cdx, (fh, cam_capture, cur_ix, cur_cam_indices) in enumerate(zip(
@@ -718,7 +752,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                        frame_idx, intersession_block.frame_count,
                        tot_skipped_frames, cams_frame_idx, cams_sent_frame_count)
 
-    def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int, *, timeout: float = 15) -> bool:
+    def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int, *, timeout: float = 10) -> bool:
         ret, frame = capture.read()
         if not ret:
             logger.verbose("end of video at index %s", cam_index)

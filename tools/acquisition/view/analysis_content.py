@@ -26,7 +26,7 @@ _INACTIVE_LOAD_CELL_COLOR = _GRAY_COLOR_TUPLE
 
 
 def _render_offset_3d_value(value: Optional[Offset3DTuple]) -> str:
-    return "n/a" if value is None else ", ".join(f"{coord:.2f}" for coord in value)
+    return "n/a" if value is None else ", ".join(f"{coord:.1f}" for coord in value)
 
 
 @dataclasses.dataclass
@@ -265,7 +265,7 @@ class AnalysisContent(ContentWidget):
 
     def _star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         self.star_triangle_offset_changed.emit(
-            "n/a" if offset is None else f"{offset.distance:.2f} mm"
+            "n/a" if offset is None else f"{offset.distance:.1f} mm"
         )
 
     @staticmethod

@@ -525,6 +525,12 @@ class AppModel(ObservableObject):
 
         analysis = self._analysis
 
+        # first:
+        self._behavior.system_machine.intersession.reset_to_idle()
+        # to ensure clear state on start, previous segmentation/detection could have fails,
+        # and left behind their context.
+
+        # also:
         self._project_info = ProjectInfo(
             root=self.output_location,
             device_id=self._preferences.serial_number,
@@ -568,6 +574,8 @@ class AppModel(ObservableObject):
                 )
             else:
                 logger.warning("pellet disabled: left and right camera frame sizes do not match")
+        else:
+            self._inference_queue = None
 
         did_start = left_cam.on_prepare_capture(self._inference_queue)
 
@@ -756,7 +764,9 @@ class AppModel(ObservableObject):
         pass
 
     def on_close(self):
-        logger.debug("Closing app..")
+        logger.debug("AppModel.on_close")
+        self.on_capture_stop()  # ensure
+
         self._preferences.save()
 
         if self._inference is not None:
@@ -836,6 +846,17 @@ class AppModel(ObservableObject):
                                 self._project_info.get_metadata_file(-1, when=now),
                                 self._project_info.session)
 
+    def _update_status_text_overlay(self):
+        parts = []
+        cur_inf_status = self._inference.status
+        is_running = cur_inf_status in {InferenceStatus.live, InferenceStatus.intersession}
+        if not is_running:
+            parts.append(f"Inference: {cur_inf_status}")
+        cur_inter_state = self._behavior.system_machine.intersession.state
+        if cur_inter_state != IntersessionState.idle:
+            parts.append(f"Intersession: {cur_inter_state}")
+        self._left_camera.text_overlay = None if len(parts) == 0 else "\n".join(parts)
+
     def _set_animal_base_positions_and_send_to_deliver(self, animal: AnimalSubject):
         xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_z)
         logger.verbose("Setting animal base positions and sending to %s is_pellet_dcs=%s",
@@ -880,11 +901,7 @@ class AppModel(ObservableObject):
 
     def _on_behavior_algo_property_changed(self, name: str, value, _):
         if name == BehaviorAlgoProps.INTERSESSION_STATE:
-            left_cam = self._left_camera
-            if value != IntersessionState.idle:
-                left_cam.text_overlay = f"Intersession: {value}"
-            else:
-                left_cam.text_overlay = None
+            self._update_status_text_overlay()
             return
         #
         animal = self._selected_animal
@@ -934,21 +951,11 @@ class AppModel(ObservableObject):
 
     def _on_inference_property_changed(self, name: str, new_value, _):
         if name == InferenceModel.STATUS:
-            algo = self._behavior.algorithm
             new_is_live = new_value == InferenceStatus.live
             left_cam = self._left_camera
             left_cam.display_dots_detection = new_is_live
             self._right_camera.display_dots_detection = new_is_live
-            if new_is_live:
-                if algo.intersession_state == IntersessionState.idle:
-                    left_cam.text_overlay = None
-                else:
-                    left_cam.text_overlay = f"Intersession: {algo.intersession_state}"
-            else:
-                if algo.intersession_state == IntersessionState.idle:
-                    left_cam.text_overlay = f"Inference: {new_value}"
-                else:
-                    left_cam.text_overlay = f"Intersession: {algo.intersession_state}"
+            self._update_status_text_overlay()
 
     def _on_training_plan_property_changed(self, name, value, _):
         if name == "current_phase":
