@@ -435,8 +435,8 @@ class SystemMachine(StateMachine):
             return
         algo = self._algorithm
         check_cover_distance = not algo.is_in_session and (
-                (pellet_machine.state == PelletState.monitoring and algo.pellet_cover_enabled)
-                or (pellet_machine.state == PelletState.covering)
+            (pellet_machine.state == PelletState.monitoring and algo.can_cover_pellet())
+            or (pellet_machine.state == PelletState.covering)
         )
         if check_cover_distance:
             algo.handle_cover_pellet_offset(offset)
@@ -580,7 +580,7 @@ class SystemMachine(StateMachine):
                     pellet_dev.send_pellet()  # better done.. so to be on correct position
                     #  for following send_retract (which is a relative move):
                     pellet_dev.send_retract()
-                if algo.pellet_cover_enabled:
+                if algo.can_cover_pellet():
                     pellet_dev.cover_pellet()
             else:
                 tunnel_dev.open_tunnel_gate()
