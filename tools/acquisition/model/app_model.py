@@ -837,7 +837,7 @@ class AppModel(ObservableObject):
                                 self._project_info.session)
 
     def _set_animal_base_positions_and_send_to_deliver(self, animal: AnimalSubject):
-        xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_y)
+        xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_z)
         logger.verbose("Setting animal base positions and sending to %s is_pellet_dcs=%s",
                        xyz.humanize(n_digits=1), animal.is_pellet_dcs)
         algo = self._behavior.algorithm
