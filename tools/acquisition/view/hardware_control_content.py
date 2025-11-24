@@ -104,8 +104,8 @@ class HardwareControlContent(ContentWidget):
         spinbox.setMaximum(100)
         spinbox.setWrapping(False)
         button = self._head_magnet_move_button = QPushButton("Move")
-        def clicked(_get_value=spinbox.value):
-            self._hardware_model.update_head_magnet_intensity(_get_value())
+        def clicked():
+            self._hardware_model.update_head_magnet_intensity(self._head_magnet_position_spinbox.value())
         button.clicked.connect(clicked)
 
         right_layout = QHBoxLayout()
