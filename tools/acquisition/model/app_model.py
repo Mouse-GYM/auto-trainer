@@ -355,6 +355,8 @@ class AppModel(ObservableObject):
         if animal is None:
             self.training_plan = None
         else:
+            logger.debug("animal pellet=%s is_dcs=%s",
+                         (animal.pellet_x, animal.pellet_y, animal.pellet_z), animal.is_pellet_dcs)
             algo = self._behavior.algorithm
             algo.baseline_intensity = animal.baseline_magnet_intensity
             algo.reset_selected_animal_counts(animal)
@@ -835,7 +837,7 @@ class AppModel(ObservableObject):
                                 self._project_info.session)
 
     def _set_animal_base_positions_and_send_to_deliver(self, animal: AnimalSubject):
-        xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_y)
+        xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_z)
         logger.verbose("Setting animal base positions and sending to %s is_pellet_dcs=%s",
                        xyz.humanize(n_digits=1), animal.is_pellet_dcs)
         algo = self._behavior.algorithm
@@ -847,7 +849,9 @@ class AppModel(ObservableObject):
             self._save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
         if animal.is_pellet_dcs:
             assert cfg is not None
+            _xyz = xyz
             xyz = cfg.diamond_to_motor(xyz)
+            logger.verbose("converted %s to %s", _xyz.humanize(), xyz.humanize())
         else:
             if cfg is not None:
                 assert not animal.is_pellet_dcs
