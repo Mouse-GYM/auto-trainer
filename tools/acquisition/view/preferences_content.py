@@ -167,17 +167,26 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 0
         grid_layout = QGridLayout()
-        def add_empty():
+        def add_empty(min_width=0, min_height=0):
             nonlocal cur_row, cur_col
             empty = QWidget()
-            empty.setMinimumHeight(4)
+            empty.setContentsMargins(min_width, min_height, 0, 0)
+            empty.setMinimumWidth(min_width)
+            empty.setMinimumHeight(min_height)
             grid_layout.addWidget(empty, cur_row, cur_col)
-            cur_row += 1
+            if min_width != 0:
+                cur_col += 1
+            if min_height != 0:
+                cur_row += 1
+        add_height_separator = lambda: add_empty(min_height=6)
+        add_width_separator = lambda: add_empty(min_width=6)
 
         grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         grid_layout.setSpacing(4)
         grid_layout.setHorizontalSpacing(10)
         main_layout.addLayout(grid_layout)
+
+        add_empty(min_height=4)
 
         grid_layout.addWidget(QLabel("Deliver Pellets:"), cur_row, cur_col)
         toggle = self._deliver_pellet_toggle = QSwitch()
@@ -269,7 +278,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
-        add_empty()
+        add_height_separator()
         grid_layout.addWidget(QLabel("Intersession Pellet Shift:"), cur_row, cur_col)
         toggle = self._allow_intersession_shift_toggle = QSwitch()
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -299,7 +308,7 @@ class PreferencesContent(QWidget):
         cur_row += 1
 
         #
-        add_empty()
+        add_height_separator()
         grid_layout.addWidget(QLabel("<b>Triangle-pellet distance for pellet too far detection:</b>"), cur_row, cur_col)
         toggle = self._use_triangle_pellet_distance_toggle = QSwitch()
         add_enabled_state(lambda: self._use_triangle_pellet_distance_toggle.setEnabled(self._inference_enabled_toggle.isChecked()))
@@ -318,7 +327,7 @@ class PreferencesContent(QWidget):
         add_enabled_state(lambda s=spinbox, t=self._use_triangle_pellet_distance_toggle:
             s.setEnabled(t.isEnabled() and t.isChecked())
         )
-        spinbox.setRange(0, 100)
+        spinbox.setRange(0, 99)
         spinbox.setValue(algo.triangle_pellet_expected_distance)
         def triangle_pellet_expected_distance_changed(value):
             algo.triangle_pellet_expected_distance = value
@@ -340,7 +349,7 @@ class PreferencesContent(QWidget):
         cur_row += 1
 
         #
-        add_empty()
+        add_height_separator()
         grid_layout.addWidget(QLabel("<b>Auto-close gate during intersession:</b>"), cur_row, cur_col)
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
         toggle = self._auto_close_gate_during_intersession_toggle = QSwitch()
@@ -386,17 +395,13 @@ class PreferencesContent(QWidget):
         # right part:
         cur_row = 0
         cur_col = 2
-        # add_empty()
-        e = QWidget()
-        e.setContentsMargins(8, 0, 0, 0)
-        grid_layout.addWidget(e, cur_row, cur_col)
-        cur_col += 1
+
+        add_empty(min_width=4, min_height=4)
 
         # headClamp: autoClampReleaseToneFreq
         label = QLabel("<b>Auto-Clamp:</b>")
         grid_layout.addWidget(label, cur_row, cur_col)
         toggle = self._auto_clamp_enabled_toggle = QSwitch()
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         toggle.setChecked(algo.head_fixation_enabled)
         # auto-clamp enabled:
         def toggle_changed(value):
@@ -471,6 +476,16 @@ class PreferencesContent(QWidget):
         # to enable/disable the inference dependant sub-widgets:
         refresh_enabled_states()
 
+        for r_idx in range(grid_layout.rowCount()):
+            for c_idx in range(grid_layout.columnCount()):
+                i = grid_layout.itemAtPosition(r_idx, c_idx)
+                if i is not None:
+                    w = i.widget()
+                    if isinstance(w, QSwitch):
+                        w.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+                    elif isinstance(w, (QSpinBox, QDoubleSpinBox)):
+                        # w.setAlignment(Qt.AlignmentFlag.AlignRight)
+                        w.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         #
         tab = QWidget()
         tab.setLayout(main_layout)
