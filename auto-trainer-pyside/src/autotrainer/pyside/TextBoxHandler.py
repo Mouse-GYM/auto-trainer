@@ -13,7 +13,7 @@ class TextBoxHandler(logging.Handler):
         super().__init__()
         self.emitter = QSignaler()
         self.text_edit = text_edit
-        self.emitter.log_message.connect(lambda t: self.text_edit.appendPlainText(t))
+        self.emitter.log_message.connect(self.text_edit.appendPlainText)
 
     def emit(self, record):
         self.emitter.log_message.emit(self.format(record))

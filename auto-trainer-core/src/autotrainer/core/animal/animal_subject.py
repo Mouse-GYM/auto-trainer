@@ -1,12 +1,15 @@
 import dataclasses
 import json
 import logging
+import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Optional, Dict, Any, List
 from typing_extensions import Self
 
+from autotrainer.core import Offset3DTuple
 
 logger = logging.getLogger(__name__)
 
@@ -57,14 +60,15 @@ class AnimalTraining:
 class AnimalSubject:
     """A subject in an animal experiment."""
 
-    id: str = dataclasses.field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
+    id: str = None   # handled in post_init
 
     baseline_magnet_intensity: int = 0
 
-    pellet_x: int = 0
-    pellet_y: int = 0
-    pellet_z: int = 0
+    is_pellet_dcs: bool = False
+    pellet_x: float = 0
+    pellet_y: float = 0
+    pellet_z: float = 0
 
     training: AnimalTraining = dataclasses.field(default_factory=AnimalTraining)
 
@@ -88,14 +92,21 @@ class AnimalSubject:
                     animal = _load_old_format(data)
                 else:
                     reach = data.pop('reach')
-                    pellet_dev = reach.pop('pelletDevice')
+                    pellet_dev = reach.pop('pelletDevice', None)
+                    pellet_dcs = reach.pop('pelletDcs', None)
+                    if pellet_dcs is None:
+                        src = pellet_dev
+                    else:
+                        src = pellet_dcs
+                    pellet_x, pellet_y, pellet_z = src['x'], src['y'], src['z']
                     training = data.pop('training')
                     animal = AnimalSubject(
                         id=data.pop('id'),
                         name=data.pop('name'),
-                        pellet_x=pellet_dev.pop('x'),
-                        pellet_y=pellet_dev.pop('y'),
-                        pellet_z=pellet_dev.pop('z'),
+                        is_pellet_dcs=pellet_dcs is not None,
+                        pellet_x=pellet_x,
+                        pellet_y=pellet_y,
+                        pellet_z=pellet_z,
                         training=AnimalTraining(
                             current_protocol=training.pop('currentProtocol'),
                             protocols=training.pop('protocols'),
@@ -105,22 +116,28 @@ class AnimalSubject:
                 logger.error("Error loading animal subject from %s: %s", file_path, err)
                 return None
 
+        logger.debug("loaded animal id=%r name=%r pellet=%s is_dcs=%s",
+                     animal.id, animal.name, (pellet_x, pellet_y, pellet_z), animal.is_pellet_dcs)
+
         return animal
 
     def to_file(self, file_path: Path):
+        reach: Dict[str, Any] = {
+            "baselineMagnetIntensity": self.baseline_magnet_intensity,
+        }
+        key = "pelletDcs" if self.is_pellet_dcs else "pelletDevice"
+        reach[key] = {'x': self.pellet_x, 'y': self.pellet_y, 'z': self.pellet_z}
         data = {
             "id": self.id,
             "name": self.name,
-            "reach": {
-                "baselineMagnetIntensity": self.baseline_magnet_intensity,
-                "pelletDevice": {'x': self.pellet_x, 'y': self.pellet_y, 'z': self.pellet_z},
-                "pelletDcs": None,
-            },
+            "reach": reach,
             "training": {
                 'currentProtocol': self.training.current_protocol,
                 'protocols': self.training.protocols,
             },
         }
-        logger.info("Saving %s to %s", self.name, file_path.as_posix())
-        with file_path.open("w") as fh:
+        xyz = Offset3DTuple(self.pellet_x, self.pellet_y, self.pellet_z)
+        logger.debug("Saving %s to %s ; xyz=%s", self.name, file_path.as_posix(), xyz.humanize())
+        with NamedTemporaryFile("w", delete=False, dir=file_path.parent) as fh:
             json.dump(data, fh, indent=4)
+        os.replace(fh.name, file_path)

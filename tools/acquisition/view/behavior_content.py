@@ -48,7 +48,12 @@ class BehaviorContent(ContentWidget):
         hbox_main_layout.setContentsMargins(4, 4, 4, 4)
         hbox_main_layout.setSpacing(16)
 
+        left_main_layout = QVBoxLayout()
+        left_main_layout.setContentsMargins(0, 0, 0, 0)
+        left_main_layout.setSpacing(0)
+
         left_layout = self._left_layout = QGridLayout()
+        left_main_layout.addLayout(left_layout)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setHorizontalSpacing(8)
         left_layout.setVerticalSpacing(4)
@@ -67,6 +72,10 @@ class BehaviorContent(ContentWidget):
         label.setContentsMargins(0, 0, 0, 4)
         left_layout.addWidget(label, left_cur_row, 0)
         left_cur_row += 1
+
+        # allows to not have the behavior content constantly resize on width when any of the states below changes
+        left_layout.setColumnMinimumWidth(1, 90)
+        # left_layout.setColumnStretch(1, 1)
 
         left_layout.addWidget(QLabel("System:"), left_cur_row, 0)
         label = self._system_machine_state_label = QLabel(self._behavior_model.system_machine.state)
@@ -106,8 +115,10 @@ class BehaviorContent(ContentWidget):
         left_layout.addWidget(self._baseline_label, left_cur_row, 1)
         left_cur_row += 1
         button = self._make_baseline_button = QPushButton("Make Current Position Baseline")
+        button.setContentsMargins(0, 0, 0, 0)
+        button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
         button.clicked.connect(self._make_position_baseline)
-        left_layout.addWidget(button, left_cur_row, 0)
+        left_main_layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         #
 
         right_cur_row = 0
@@ -154,7 +165,7 @@ class BehaviorContent(ContentWidget):
 
         #
 
-        hbox_main_layout.addLayout(left_layout)
+        hbox_main_layout.addLayout(left_main_layout)
         hbox_main_layout.addLayout(right_layout)
 
         #
@@ -231,19 +242,22 @@ class BehaviorContent(ContentWidget):
         self._behavior_model.use_current_head_magnet_position_as_baseline()
 
     def _algorithm_property_changed(self, name, value, _):
-        if name == BehaviorAlgoProps.BASELINE_INTENSITY:
+        props = BehaviorAlgoProps
+        if name == props.BASELINE_INTENSITY:
             self._baseline_label.setText(f"{value}%")
-        elif name == BehaviorAlgoProps.DAY_PELLET_COUNT:
+        elif name == props.HEAD_FIXATION_ENABLED:
+            self._head_fixation_toggle.setChecked(value)
+        elif name == props.DAY_PELLET_COUNT:
             self._pellets_consumed_label.update_values(day=value)
-        elif name == BehaviorAlgoProps.TOTAL_PELLET_COUNT:
+        elif name == props.TOTAL_PELLET_COUNT:
             self._pellets_consumed_label.update_values(total=value)
-        elif name == BehaviorAlgoProps.DAY_PELLET_PRESENTED:
+        elif name == props.DAY_PELLET_PRESENTED:
             self._pellets_presented_label.update_values(day=value)
-        elif name == BehaviorAlgoProps.TOTAL_PELLET_PRESENTED:
+        elif name == props.TOTAL_PELLET_PRESENTED:
             self._pellets_presented_label.update_values(total=value)
-        elif name == BehaviorAlgoProps.DAY_SUCCESSFUL_REACHES:
+        elif name == props.DAY_SUCCESSFUL_REACHES:
             self._successful_reaches_label.update_values(day=value)
-        elif name == BehaviorAlgoProps.TOTAL_SUCCESSFUL_REACHES:
+        elif name == props.TOTAL_SUCCESSFUL_REACHES:
             self._successful_reaches_label.update_values(total=value)
 
     def _behavior_model_property_changed(self, name, value, _):

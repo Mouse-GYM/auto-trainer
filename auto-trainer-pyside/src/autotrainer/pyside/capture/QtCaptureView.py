@@ -16,6 +16,7 @@ from .QtCaptureSettings import QCaptureSettings
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from ..StackedContent import StackedLayout
+from ..content_widget import InvokeMethod
 
 logger = get_verbose_logger(__name__)
 
@@ -134,10 +135,13 @@ class QCaptureView(QWidget):
 
     def set_text_overlay(self, value):
         self._text_overlay = value
-        # logger.verbose("got new text overlay: %r", value)
+        self._is_frame_dirty = True
+        InvokeMethod(self.update_image)
+        logger.debug("got new text overlay: %r", value)
 
     def set_display_dots_detection(self, value):
         self._display_dots_detection = value
+        self._is_frame_dirty = True
 
     def set_is_capture_active(self, is_active: bool):
         self._camera.setEnabled(not is_active)

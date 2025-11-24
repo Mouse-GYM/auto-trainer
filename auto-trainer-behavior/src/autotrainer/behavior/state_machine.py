@@ -40,9 +40,9 @@ class StateMachine:
 
     @state.setter
     def state(self, new_value):
-        if new_value == self._state:
-            return
         old_value, self._state = self._state, new_value
+        if new_value == old_value:
+            return
         logger.verbose("%s state changed: %s -> %s", self.__class__.__name__, old_value, new_value)
         self._events.state_changed(old_value, new_value)
         self._events.property_changed(StateMachine.Properties.STATE_PROPERTY, new_value, old_value)

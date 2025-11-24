@@ -1,7 +1,7 @@
 import multiprocessing
 from typing import Optional, Callable
 
-from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm
+from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, SystemState, IntersessionState
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
@@ -130,6 +130,12 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
 
     def on_prepare_capture(self):
         self._system_machine.project = self._project
+        self._system_machine.state = SystemState.cage  # forced,
+        self._system_machine.intersession.state = IntersessionState.idle
+        # if acquisition is/was stopped during an intersession analysis,
+        # then it's left on intersession+(segmentation | detection) state..
+        # which further prevent everything after.
+        # todo: try have intersession stop "normally" too
 
     def use_current_head_magnet_position_as_baseline(self):
         if self._hardware_model.head_magnet_intensity is not None:

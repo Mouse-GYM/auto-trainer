@@ -4,6 +4,7 @@ import time
 import sys
 import argparse
 import faulthandler
+from pathlib import Path
 from multiprocessing import set_start_method
 
 
@@ -17,7 +18,8 @@ def main():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-c", "--configuration", help="configuration file", default=None, type=str)
+    parser.add_argument("-c", "--configuration", help="configuration file", default=None, type=Path)
+    parser.add_argument("--preferences-file", help="user preference ini file", default=None, type=Path)
 
     args = parser.parse_args()
     configuration = args.configuration
@@ -25,7 +27,7 @@ def main():
     if configuration and not os.path.exists(configuration):
         return -1
 
-    preferences = UserPreferences()
+    preferences = UserPreferences(settings_file_path=args.preferences_file)
 
     get_console_handler().setLevel(preferences.log_level)
 
@@ -54,7 +56,6 @@ def main():
     except Exception as err:
         logger.exception("Fatal error: %s", err)
 
-    app_view_model.on_capture_stop()
     app_view_model.on_close()
 
     return exit_rc
