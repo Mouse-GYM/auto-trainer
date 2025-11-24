@@ -8,7 +8,7 @@ from typing import Optional, Tuple, Dict, Union
 
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor)
-from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
+from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol, DiamondTriangleOffsetConfig
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 StepperConfig, ServoConfig)
@@ -37,7 +37,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     DEVICE_ACK_TIMEOUT_ENGAGED = "device_ack_timeout_engaged"
 
-    def __init__(self, message_handler: MessageHandler):
+    SEND_X = "send_x"
+    SEND_Y = "send_y"
+    SEND_Z = "send_z"
+    SEND_XYZ = "send_xyz"
+
+    def __init__(
+        self, message_handler: MessageHandler,
+    ):
         super().__init__()
 
         self._device: Optional[DeviceConnectionProtocol] = None
@@ -60,7 +67,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._last_set_coordinates = _nans_offset3dTuple  # what we've SET
 
         # what the motors report they've been SET (with possible drift corrected)
-        self._send_coordinates = _nans_offset3dTuple
+        self._motor_send_coordinates = _nans_offset3dTuple
 
         self._front_door_open: bool = False
         self._slide_door_open: bool = False
@@ -89,30 +96,30 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @property
     def send_x(self):
-        return self._send_coordinates.x
+        return self._motor_send_coordinates.x
 
     @send_x.setter
     def send_x(self, value):
-        prev, self._send_coordinates = self._send_coordinates, self._send_coordinates.replace(x=value)
-        self._on_property_changed("send_x", value, prev.x)
+        prev, self._motor_send_coordinates = self._motor_send_coordinates, self._motor_send_coordinates.replace(x=value)
+        self._on_property_changed(self.SEND_X, value, prev.x)
 
     @property
     def send_y(self):
-        return self._send_coordinates.y
+        return self._motor_send_coordinates.y
 
     @send_y.setter
     def send_y(self, value):
-        prev, self._send_coordinates = self._send_coordinates, self._send_coordinates.replace(y=value)
-        self._on_property_changed("send_y", value, prev.y)
+        prev, self._motor_send_coordinates = self._motor_send_coordinates, self._motor_send_coordinates.replace(y=value)
+        self._on_property_changed(self.SEND_Y, value, prev.y)
 
     @property
     def send_z(self):
-        return self._send_coordinates.z
+        return self._motor_send_coordinates.z
 
     @send_z.setter
     def send_z(self, value):
-        prev, self._send_coordinates = self._send_coordinates, self._send_coordinates.replace(z=value)
-        self._on_property_changed("send_z", value, prev.z)
+        prev, self._motor_send_coordinates = self._motor_send_coordinates, self._motor_send_coordinates.replace(z=value)
+        self._on_property_changed(self.SEND_Z, value, prev.z)
 
     @property
     def front_door_open(self):
@@ -169,7 +176,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         else:
             if math.isnan(prev_value):
                 err_msg = (
-                    f"Cannot SET axis with relative value when SET not already called/initialized with absolute value"
+                    "Cannot SET axis with relative value"
+                    " when SET not already called/initialized with absolute value"
                 )
                 raise ValueError(err_msg)
             new_value = prev_value + value

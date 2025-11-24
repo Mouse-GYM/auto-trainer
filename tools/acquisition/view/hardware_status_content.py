@@ -3,11 +3,17 @@ from functools import partial
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import QVBoxLayout, QLabel, QHBoxLayout, QWidget, QGridLayout, QFormLayout, QSizePolicy
 
-from autotrainer.core import MessageHandler
+from autotrainer.core import MessageHandler, Offset3DTuple
+from autotrainer.core.logging import get_verbose_logger
 
 from autotrainer.pyside import CardWidget
 from autotrainer.pyside.content_widget import ContentWidget
 from autotrainer.pyside.xyz_label import XYZQLabel
+
+from tools.acquisition.model.app_model import AppModel
+
+
+logger = get_verbose_logger(__name__)
 
 
 class HardwareStatusContent(ContentWidget):
@@ -22,15 +28,16 @@ class HardwareStatusContent(ContentWidget):
     load_arm_changed = Signal(float, name="load_arm_changed")
     cover_arm_changed = Signal(float, name="cover_arm_changed")
 
-    def __init__(self, message_handler: MessageHandler):
+    def __init__(self, app_model: AppModel):
         super().__init__()
 
-        self._model = message_handler
+        self._app_model = app_model
+        self._message_handler = app_model.message_handler
 
         self._card_widget = CardWidget(title="Hardware Status")
         # self._card_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        self._model.property_changed += self._model_property_changed
+        self._message_handler.property_changed += self._model_property_changed
 
         content_layout = QVBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -61,13 +68,15 @@ class HardwareStatusContent(ContentWidget):
         cur_row += 1
 
         layout.addWidget(QLabel("XYZ (mm):"), cur_row, cur_col)
-        self._pellet_xyz = XYZQLabel()
-        layout.addWidget(self._pellet_xyz, cur_row, cur_col + 1)
+        label = self._pellet_xyz = XYZQLabel()
+        label.setObjectName("PelletXYZ")
+        layout.addWidget(label, cur_row, cur_col + 1)
         cur_row += 1
 
         layout.addWidget(QLabel("Send XYZ (mm):"), cur_row, cur_col)
-        self._send_pellet_xyz = XYZQLabel()
-        layout.addWidget(self._send_pellet_xyz, cur_row, cur_col + 1)
+        label = self._send_pellet_xyz = XYZQLabel()
+        label.setObjectName("SendXYZ")
+        layout.addWidget(label, cur_row, cur_col + 1)
         cur_row += 1
 
         layout.addWidget(QLabel("Load Arm (\u00b0):"), cur_row, cur_col)
@@ -97,8 +106,24 @@ class HardwareStatusContent(ContentWidget):
         self.setLayout(layout)
         # self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Expanding)
 
-        def xyz_update(xyz_label: XYZQLabel, coord, value):
-            xyz_label.update_coordinate(**{coord: value})
+        def xyz_update(xyz_label: XYZQLabel, coord: str, value):
+            # logger.debug("xyz_update: %s %s -> %s", xyz_label.objectName(), coord, value)
+            # NB: this function is called repeatedly over and over again,
+            # at the freq of the motor-status CAN/system messages.
+            algo = app_model.behavior.algorithm
+            cfg = algo.diamond_triangle_config
+            coord_idx = "xyz".index(coord)
+            assert coord_idx in (0, 1, 2)
+            t = [0, 0, 0]
+            # NB: atm the coordinate systems are presumed to be all perpendicular one to another.
+            # i.e. we suppose that a change to coordinate X won't change any of Y and Z coordinates,
+            # and same for Y and Z respectively.
+            t[coord_idx] = value
+            motor_coord = Offset3DTuple(*t)
+            diamond_coord = motor_coord if cfg is None else cfg.motor_to_diamond(motor_coord)
+            diamond_coord_value = getattr(diamond_coord, coord)
+            suffix = " @ MotorCoordSystem" if cfg is None else None
+            xyz_label.update_coordinate(**{coord: diamond_coord_value}, suffix=suffix)
 
         self.head_magnet_changed.connect(lambda x: self._head_magnet.setText(str(round(x, 1))))
         self.pellet_x_changed.connect(partial(xyz_update, self._pellet_xyz, "x"))
@@ -115,16 +140,21 @@ class HardwareStatusContent(ContentWidget):
         # rather than direct set/update.
         if property_name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
             self.head_magnet_changed.emit(value)
+
         elif property_name == MessageHandler.STEPPER_X_PROPERTY:
             self.pellet_x_changed.emit(value.position)
             self.send_x_changed.emit(value.send_position)
+
         elif property_name == MessageHandler.STEPPER_Y_PROPERTY:
             self.pellet_y_changed.emit(value.position)
             self.send_y_changed.emit(value.send_position)
+
         elif property_name == MessageHandler.STEPPER_Z_PROPERTY:
             self.pellet_z_changed.emit(value.position)
             self.send_z_changed.emit(value.send_position)
+
         elif property_name == MessageHandler.LOAD_ARM_ANGLE_PROPERTY:
             self.load_arm_changed.emit(value)
+
         elif property_name == MessageHandler.COVER_ARM_ANGLE_PROPERTY:
             self.cover_arm_changed.emit(value)

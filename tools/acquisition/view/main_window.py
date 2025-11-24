@@ -3,7 +3,7 @@ import threading
 import time
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize
 from PySide6.QtGui import QAction, QIcon, QKeySequence
@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessa
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout)
 import qtawesome as qta
 
-from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject
+from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.pose_elements import SceneElement
@@ -49,59 +49,64 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__(None)
 
         self._app = app
-
         self._is_dev = is_dev
-
         self._preferences = user_preferences
         self._update_log_level(self._preferences.log_level)
-
-        app_model = self._app_model = AppModel(self._preferences, app_version)
-        try:
-            app_model.load_configuration(configuration)
-        except Exception as err:
-            app_model.on_close()
-            raise RuntimeError(f"Could not load config: {err}") from err
-
-        self._training_plan_index_by_plan_id = {
-            plan.plan_id: idx
-            for idx, plan in enumerate(app_model.training_plans)
-        }
-        self._training_plans_count = len(app_model.training_plans)
-
         self._title = f"Auto Trainer - Acquisition v{app_version}"
 
         self.setWindowTitle(self._title)
 
-        self.main_content = MainContent(app_model)
-        # self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
+        self._open_dialogs = []
+        self._training_plan_index_by_plan_id: Dict[Optional[str], int] = {}
+
+        app_model = self._app_model = AppModel(self._preferences, app_version)
 
         self.setContentsMargins(0, 0, 0, 0)
-        self.setCentralWidget(self.main_content)
-        self.centralWidget().layout().setContentsMargins(0, 0, 0, 0)
+
+        self.main_content = MainContent(app_model)
 
         self._create_actions()
         self._configure_menubar()
         self._configure_toolbar()
         self._configure_statusbar()
 
+        self.setCentralWidget(self.main_content)
+        self.centralWidget().layout().setContentsMargins(0, 0, 0, 0)
         # self.setMaximumSize(1880, 1080)
 
-        self._open_dialogs = []
+        app_model.configuration_loaded_event += self._on_app_model_configuration_loaded
+
+        try:
+            app_model.load_configuration(configuration)
+        except Exception as err:
+            app_model.on_error(f"Could not load system config {configuration}", str(err))
+            app_model.on_close()
+            raise RuntimeError(f"Could not load config: {err}") from err
 
         app_model.property_changed += self._app_model_property_changed
         app_model.on_error += self._show_error
         app_model.inference.property_changed += self._inference_property_changed
         # app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
         user_preferences.property_changed += self._preferences_property_changed
-
+        self.running_status_changed.connect(self._set_start_or_stop)
         #
         self._reload_animals(self._app_model.animals)
-        #
-        self.running_status_changed.connect(self._set_start_or_stop)
+
 
     @property
     def app_model(self) -> AppModel:
         return self._app_model
+
+    def _add_box_to_open_dialogs(self, box: QMessageBox):
+        self._open_dialogs.append(box)
+        def close_event(event, orig_close_event=box.closeEvent):
+            try:
+                self._open_dialogs.remove(box)
+            except ValueError:
+                pass
+            orig_close_event(event)
+            event.accept()
+        box.closeEvent = close_event
 
     def _set_start_or_stop(self, started: bool):
         self.main_content.set_is_capture_active(started)
@@ -192,7 +197,8 @@ class MainWindow(QMainWindow):
                 "Could not get enough or data at all,\n"
                 "please send pellet to make triangle visible in both cameras,\n"
                 "then you can retry after.")
-            box.setIcon(QMessageBox.Critical)
+            box.setIcon(QMessageBox.Icon.Critical)
+
             self._open_dialogs.append(box)
 
             def remove():
@@ -203,7 +209,7 @@ class MainWindow(QMainWindow):
                 except ValueError:  # safer
                     pass
 
-            retry_button = box.addButton("Retry calibration", QMessageBox.AcceptRole)
+            retry_button = box.addButton("Retry calibration", QMessageBox.ButtonRole.AcceptRole)
             retry_button.clicked.connect(lambda: self.on_calibrate_diamond_triangle(True))
             retry_button.clicked.connect(remove)
             #
@@ -241,7 +247,7 @@ class MainWindow(QMainWindow):
             return
         app_model = self._app_model
         algo = app_model.behavior.algorithm
-        current_save_path = save_path = algo.diamond_triangle_offset_config_path.expanduser()
+        save_path = algo.diamond_triangle_offset_config_path.expanduser()
         if save_path.exists():
             file_path: Optional[str] = None
 
@@ -264,23 +270,27 @@ class MainWindow(QMainWindow):
                 return
             save_path = Path(file_path)
 
-        else:
-            QMessageBox.information(self, "Information",
-                                    f"Successfully computed values for diamond-triangle position & offset.\n"
-                                    f"\nSaving to {save_path.as_posix()}\n\n"
-                                    f"If feature is enabled in configuration then values will be used and applied on "
-                                    f"next sessions.",
-                                    QMessageBox.Ok,
-                                    )
+        # always:
+        QMessageBox.information(self, "Information",
+                                f"Successfully computed values for diamond-triangle position & offset.\n"
+                                f"\nSaving to {save_path.as_posix()}\n\n"
+                                f"Calibration is being used immediately by now.",
+                                QMessageBox.Ok,
+                                )
         new_cfg = DiamondTriangleOffsetConfig(
             used_position=list(avg_pos),
             measured_offset=list(avg_offset),
         )
         logger.success("Saving new config to %s", save_path.as_posix())
         new_cfg.to_file(save_path)
-        # if save_path == current_save_path:
-        #    set to current algo _diamond_triangle_offset_config
-        # is not needed, given it's read on each session start
+        #
+        app_model = self._app_model
+        algo = app_model.behavior.algorithm
+        algo.diamond_triangle_config = new_cfg
+        animal = app_model.selected_animal
+        # to ensure animal will gets its x/y/z in DCS
+        app_model.selected_animal = None
+        app_model.selected_animal = animal
 
     def _make_calib_run(self, calib_duration: float = DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
         logger.notice("Starting diamond-triangle calibration .. duration=%.1f second(s)", calib_duration)
@@ -355,6 +365,20 @@ class MainWindow(QMainWindow):
 
     def on_activated(self):
         EventManager.default()
+        app_model = self._app_model
+        algo = app_model.behavior.algorithm
+        if algo.diamond_triangle_config is None:
+            box = QMessageBox()
+            box.setWindowTitle("No Diamond-Triangle config")
+            # box.setModal(True)
+            box.setText(
+                f"\n{algo.diamond_triangle_offset_config_path} is missing,\n\n"
+                "Once application will be running:\n\n"
+                "1) Using Hardware Control Set + Send buttons: move the triangle near the desired deliver position\n\n"
+                "2) Execute a new calibration via menu Tools -> Calibrate Coordinate System\n\n")
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.show()
+            self._add_box_to_open_dialogs(box)
         self.main_content.on_activated()
 
     def closeEvent(self, event):
@@ -535,29 +559,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(label)
         combo = self._training_plan_combo = QComboBox()
-        def add_plans():
-            for plan_index, plan in enumerate(app_model.training_plans):
-                combo.addItem(plan.name, userData=plan.plan_id)
-                combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
-        add_plans()
-        empty_txt = "" if self._training_plans_count > 0 else " " * 64
-        combo.addItem(empty_txt, userData=None)  # put it last
-        tooltip_txt = (
-            "Select a training protocol" if self._training_plans_count > 0
-            else "There are no training protocols in the Autotrainer folder"
-        )
-        combo.setItemData(self._training_plans_count, tooltip_txt, Qt.ToolTipRole)
-        def set_animal_plan():
-            selected_animal = self._app_model.selected_animal
-            if selected_animal is not None:
-                plan_id = selected_animal.training.current_protocol
-                if plan_id is not None:
-                    plan_combo_index = self._training_plan_index_by_plan_id.get(plan_id, None)
-                    if plan_combo_index is None:
-                        logger.warning("Animal has current protocol %r but no such protocol found", plan_id)
-                    else:
-                        combo.setCurrentIndex(plan_combo_index)
-        set_animal_plan()
+        app_model = self._app_model
 
         layout.addWidget(combo)
         def index_changed(_):
@@ -575,7 +577,7 @@ class MainWindow(QMainWindow):
             plan = self._app_model.get_training_plan_by_id(None if animal is None else animal.training.current_protocol)
             training_plan_idx = None if plan is None else self._training_plan_index_by_plan_id.get(plan.plan_id)
             if training_plan_idx is None:
-                training_plan_idx = self._training_plans_count
+                training_plan_idx = self._training_plan_index_by_plan_id.get(None, -1)
             self._training_plan_combo.setCurrentIndex(training_plan_idx)
             self.main_content.training_plan_changed.emit(plan)
             self._refresh_prev_next_phases()
@@ -706,6 +708,7 @@ class MainWindow(QMainWindow):
         props = self._app_model.Props
         if name == props.ANIMALS:
             self._reload_animals(value)
+
         elif name == props.SELECTED_ANIMAL:
             animal_dropdown = self._animal_dropdown
             animal_dropdown.blockSignals(True)
@@ -716,7 +719,6 @@ class MainWindow(QMainWindow):
                 index = self._animal_dropdown.findText(value.name)
                 if index != -1:
                     self._animal_dropdown.setCurrentIndex(index)
-                    # self._animal_changed(None)  # this will also update/set the toolbar display animal plan/protocol
             animal_dropdown.blockSignals(False)
             self._refresh_prev_next_phases()
 
@@ -748,29 +750,85 @@ class MainWindow(QMainWindow):
         )
 
         # prevent on_animal_changed event:
-        self._animal_dropdown.blockSignals(True)
-        self._animal_dropdown.clear()
+        combo = self._animal_dropdown
+        combo.blockSignals(True)
+        combo.clear()
         for idx, animal in enumerate(animals):
-            self._animal_dropdown.addItem(animal.name, animal.id)
-        self._animal_dropdown.blockSignals(False)
+            combo.addItem(animal.name, animal.id)
+        combo.blockSignals(False)
 
         # we set the good one here:
         if find_animal_name is not None:
-            index = self._animal_dropdown.findText(find_animal_name)
+            index = combo.findText(find_animal_name)
             if index != -1:
-                self._animal_dropdown.setCurrentIndex(index)
+                combo.setCurrentIndex(index)
         else:
-            self._animal_dropdown.setCurrentIndex(-1)
+            combo.setCurrentIndex(-1)
 
     @staticmethod
     def _update_log_level(value: int):
         # controlled via console and file handlers now
         get_console_handler().setLevel(value)
 
-    def _inference_property_changed(self, name: str, new_value, old_value):
+    def _inference_property_changed(self, name: str, value, old_value):
         inference = self._app_model.inference
         if name == inference.STATUS:
-            self.calib_diamond_triangle_action.setEnabled(new_value == InferenceStatus.live)
+            self.calib_diamond_triangle_action.setEnabled(value == InferenceStatus.live)
+            if value == InferenceStatus.live:
+                app_model = self._app_model
+                algo = app_model.behavior.algorithm
+                if algo.diamond_triangle_config is None:
+                    def show_msg_box():
+                        box = QMessageBox()
+                        box.setWindowTitle("No Diamond-Triangle config")
+                        # box.setModal(True)
+                        box.setText(
+                            f"\n{algo.diamond_triangle_offset_config_path} is missing,\n\n"
+                            "Now that application is running:\n\n"
+                            "1) Using Hardware Control Set + Send buttons: move the triangle near the desired deliver position\n\n"
+                            "2) Then, execute a calibration via menu Tools -> Calibrate Coordinate System\n\n")
+                        box.setIcon(QMessageBox.Icon.Warning)
+                        box.show()
+                        self._add_box_to_open_dialogs(box)
+                    InvokeMethod(show_msg_box)
 
     def _behavior_algo_property_changed(self, name, value, _):
         pass
+
+    def _set_training_plans(self):
+        app_model = self._app_model
+        combo = self._training_plan_combo
+        combo.blockSignals(True)
+        combo.clear()
+        plans = app_model.training_plans
+        has_some = len(plans) > 0
+        empty_txt = "" if has_some else " " * 64
+        tooltip_txt = (
+            "Select a training protocol" if has_some
+            else "There are no training protocols in the Autotrainer folder"
+        )
+        combo_indices_map = self._training_plan_index_by_plan_id = {
+            plan.plan_id: idx
+            for idx, plan in enumerate(plans)
+        }
+        for plan_index, plan in enumerate(plans):
+            combo.addItem(plan.name, userData=plan.plan_id)
+            combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
+        combo.addItem(empty_txt, userData=None)  # put it last
+        combo_indices_map[None] = len(plans)
+        combo.setItemData(len(plans), tooltip_txt, Qt.ToolTipRole)
+        combo.blockSignals(False)
+        animal = app_model.selected_animal
+        if animal is None:
+            combo.setCurrentIndex(len(plans))
+            return
+        plan_id = animal.training.current_protocol
+        if plan_id is not None:
+            plan_combo_index = self._training_plan_index_by_plan_id.get(plan_id, None)
+            if plan_combo_index is None:
+                logger.warning("Animal has current protocol %r but no such protocol found", plan_id)
+            else:
+                combo.setCurrentIndex(plan_combo_index)
+
+    def _on_app_model_configuration_loaded(self, config):
+        self._set_training_plans()

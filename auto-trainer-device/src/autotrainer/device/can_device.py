@@ -166,7 +166,7 @@ class CanDevice(Device):
 
         if not HAVE_CAN_DEVICE:
             logger.warning(
-                "Alogus hardware or hardware support not found.  Using emulation interface.")
+                "Alogus hardware or hardware support not found. Using emulation interface.")
 
         self._init_handlers()
 
