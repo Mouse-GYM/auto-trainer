@@ -242,8 +242,10 @@ class PreferencesContent(QWidget):
         def toggle_pellet_hand_uncover_distance_changed(value: int):
             enabled = value != 0
             if enabled:
-                value = algo.pellet_hand_uncover_distance = PelletDeliveryConfiguration.pellet_hand_uncover_distance or 10
+                value = PelletDeliveryConfiguration.pellet_hand_uncover_distance or 10
                 self._pellet_hand_uncover_distance_spinbox.setValue(value)
+            else:
+                algo.pellet_hand_uncover_distance = None
             refresh_enabled_states()
         toggle.stateChanged.connect(toggle_pellet_hand_uncover_distance_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
