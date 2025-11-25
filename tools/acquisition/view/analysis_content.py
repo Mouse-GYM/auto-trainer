@@ -164,15 +164,19 @@ class AnalysisContent(ContentWidget):
 
         # Footer
         self._footer = QWidget()
-        # self._footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self._footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self._footer.setContentsMargins(0, 0, 0, 0)
 
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
-        layout.addWidget(QLabel("Load Cell Threshold (g):"))
+        label = QLabel("Load Cell Threshold (g):")
+        label.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(label)
         spinbox = self._load_cell_engaged_threshold_spinbox = QDoubleSpinBox()
+        spinbox.setContentsMargins(0, 0, 0, 0)
+        spinbox.setMaximumHeight(25)
         spinbox.setDecimals(1)
         spinbox.setSingleStep(1)
         spinbox.setRange(0, 100)
@@ -184,14 +188,9 @@ class AnalysisContent(ContentWidget):
 
         self._footer.setLayout(layout)
 
-        self._stack_layout = StackedLayout()
-        self._stack_layout.addWidget(self._footer)
-
-        widget = QWidget()
-        widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        widget.setLayout(self._stack_layout)
-
-        self._card_widget.footer.setContent(widget)
+        self._card_widget.footer.setContent(self._footer)
+        # default CardWidget.footer layout margins are too big
+        self._card_widget.footer.layout().setContentsMargins(4, 0, 0, 0)
 
         # Final layout
         layout = QVBoxLayout()
