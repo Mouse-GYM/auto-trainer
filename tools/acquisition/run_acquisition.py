@@ -6,11 +6,14 @@ import sys
 import verboselogs
 from PySide6 import QtGui
 
+from autotrainer.core import EventManager
 from autotrainer.core.event import try_register_api_event_plugin
 from autotrainer.core.logging import (get_verbose_logger, MULTIPROC_LOG_FORMAT, PreciseTimeFormatter, DateTimeFormats,
                                       get_log_queue_listener, thread_id_filter, get_console_handler, get_root_handler,
                                       get_log_queue_handler, repr_logger, repr_all_loggers)
 from autotrainer.pyside import CardHeader
+
+from autotrainer.behavior import BehaviorAlgorithm
 
 logger = get_verbose_logger(__name__)
 
@@ -113,7 +116,7 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     app = QApplication(sys.argv)
 
-    app.setStyle("Fusion")
+    # app.setStyle("Fusion")
 
     if not verify_configuration(configuration):
         return -1
@@ -127,14 +130,18 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     verify_log_location(preferences.log_location, preferences.serial_number)
 
-    try_register_api_event_plugin()
+    event_manager = EventManager.default()
+    plugin = try_register_api_event_plugin()
 
     window = MainWindow(app, preferences, configuration, "2.0.1", is_dev)
+    if plugin is not None:
+        window.app_model.rpc_service = plugin.service
 
     # conveniently allow close/exit app with SIGINT (ctrl-c) :
     def handle_sigint(signum, frame):
         logger.notice("Got signal %s ; closing window..", signum)
-        window.close()
+        # window.close()
+        app.exit(0)
 
     signal.signal(signal.SIGINT, handle_sigint)
 
@@ -146,4 +153,10 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     app.aboutToQuit.connect(window.close)
 
-    return app.exec()
+    logger.info("Executing app now ..")
+    try:
+        return app.exec()
+    finally:
+        logger.verbose("Closing event manager ..")
+        BehaviorAlgorithm.close_algorithm_handler()
+        event_manager.close()
