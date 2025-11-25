@@ -115,8 +115,8 @@ class HardwareStatusContent(ContentWidget):
             coord_idx = "xyz".index(coord)
             assert coord_idx in (0, 1, 2)
             t = [0, 0, 0]
-            # NB: atm the coordinate systems are presumed to be all perpendicular one to another.
-            # i.e. we suppose that a change to coordinate X won't change any of Y and Z coordinates,
+            # NB: atm the coordinate systems are presumed to have all their **same axis** parallel one to another.
+            # i.e. we suppose that a change to X in one coordinate system won't change the value of Y and Z in the other coordinate system,
             # and same for Y and Z respectively.
             t[coord_idx] = value
             motor_coord = Offset3DTuple(*t)
