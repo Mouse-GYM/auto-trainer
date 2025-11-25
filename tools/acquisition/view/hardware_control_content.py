@@ -156,7 +156,7 @@ class HardwareControlContent(ContentWidget):
             range_label = QLabel()
             set_button = QPushButton("Set")
             set_button.clicked.connect(partial(set_xyz, coord))
-            sub_layout.addWidget(QLabel(f"Pellet {coord.upper()}:"), row, col)
+            sub_layout.addWidget(QLabel(f"{coord.upper()} :"), row, col)
             sub_layout.addWidget(pos, row, col + 1)
             sub_layout.addWidget(range_label, row, col + 2)
             sub_layout.addWidget(set_button, row, col + 3)
