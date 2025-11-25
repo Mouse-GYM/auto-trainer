@@ -71,27 +71,29 @@ class AlarmContent(ContentWidget):
         label.setContentsMargins(0, 0, 0, 4)
         form_layout_alarms.addRow(label, None)
 
-        def on_use_changed(do_use, *, lbl):
-            lbl.setStyleSheet("" if do_use else "color: gray")
+        def on_use_changed(do_use: bool, *, lbl: QLabel, ico: StatusIcon):
+            new_style = "" if do_use else "color: gray"
+            lbl.setStyleSheet(new_style)
+            ico.setStyleSheet(new_style)
 
-        icon = self._mouse_thrashing_status = StatusIcon.alarmIcon()
+        icon = self._mouse_thrashing_status = StatusIcon.alarmIcon2()
         label = self._mouse_thrashing_label = QLabel("Thrashing:")
         form_layout_alarms.addRow(label, icon)
-        self.use_load_cell_audio_thrash_changed.connect(partial(on_use_changed, lbl=label))
+        self.use_load_cell_audio_thrash_changed.connect(partial(on_use_changed, lbl=label, ico=icon))
         self.use_load_cell_audio_thrash_changed.emit(emergency_alarm_cfg.use_audio_load_cell_thrash)
         self.load_cell_audio_thrash_changed.connect(icon.setStatus)
 
-        icon = self._in_cage_after_tunnel_status = StatusIcon.alarmIcon()
+        icon = self._in_cage_after_tunnel_status = StatusIcon.alarmIcon2()
         label = self._in_cage_after_tunnel_label = QLabel("Mouse Missing:")
         form_layout_alarms.addRow(label, icon)
-        self.use_presence_in_cage_after_exit_tunnel_changed.connect(partial(on_use_changed, lbl=label))
+        self.use_presence_in_cage_after_exit_tunnel_changed.connect(partial(on_use_changed, lbl=label, ico=icon))
         self.use_presence_in_cage_after_exit_tunnel_changed.emit(emergency_alarm_cfg.use_presence_missing_after_exit_tunnel)
         self.presence_in_cage_after_exit_tunnel_changed.connect(icon.setStatus)
 
-        icon = self._external_door_status = StatusIcon.alarmIcon()
+        icon = self._external_door_status = StatusIcon.alarmIcon2()
         label = self._external_door_label = QLabel("External doors:")
         form_layout_alarms.addRow(label, icon)
-        self.use_external_door_changed.connect(partial(on_use_changed, lbl=label))
+        self.use_external_door_changed.connect(partial(on_use_changed, lbl=label, ico=icon))
         self.use_external_door_changed.emit(emergency_alarm_cfg.use_external_doors_open)
         self.external_door_status_changed.connect(icon.setStatus)
 
