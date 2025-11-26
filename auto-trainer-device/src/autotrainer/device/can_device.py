@@ -587,7 +587,10 @@ class CanDevice(Device):
             if cmd_thread.is_alive():
                 cmd_queue.put(None)
             cmd_thread.join(3)
+            if cmd_thread.is_alive():
+                logger.warning("%s still alive", cmd_thread)
             self._commands_handler_thread = None
+            # cmd_queue.join()  # not totally necessary here
 
     def _start_sequence(self, movements: MotorSteps):
         """

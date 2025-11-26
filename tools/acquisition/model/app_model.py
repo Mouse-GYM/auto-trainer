@@ -37,7 +37,7 @@ from autotrainer.video import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, InferenceStatus
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
-from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode
+from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol
 
 from autotrainer.training import TrainingPlan, TrainingPhase
 
@@ -81,6 +81,10 @@ class AppModel(ObservableObject):
         app_version: str = "",
         *,
         calib_dir: Optional[Path] = None,
+        sensor_analysis: Optional[SensorAnalysis] = None,
+        inference_model: Optional[InferenceProtocol] = None,
+        system_message_handler: Optional[SystemMessageHandler] = None,
+
     ):
         super().__init__(('on_error', 'configuration_loaded_event'))
 
@@ -129,10 +133,10 @@ class AppModel(ObservableObject):
         self._system_message_queue = queue.Queue()  # only dedicated to CAN bus messages reading/handling
         # so: using a multiprocess queue instead, would allow to put the CAN connection thread into a dedicated process,
         # also giving more space/freedom for the main/UI process python GIL acquire/release.
-        sensor_analysis = self._analysis = SensorAnalysis(topcam_presence=self._top_camera_presence_detection)
+        sensor_analysis = self._analysis = SensorAnalysis(topcam_presence=self._top_camera_presence_detection) if sensor_analysis is None else sensor_analysis
         #
         self._system_message_handler = SystemMessageHandler(self._system_message_queue,
-                                                            sensor_analysis=sensor_analysis)
+                                                            sensor_analysis=sensor_analysis) if system_message_handler is None else system_message_handler
         self._system_message_handler.start()
 
         self._hardware = HardwareModel(self._system_message_handler)
@@ -172,7 +176,7 @@ class AppModel(ObservableObject):
             cam_offsets=cam_offsets,
         )
 
-        self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir)
+        self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir) if inference_model is None else inference_model
 
         #
 
@@ -503,9 +507,9 @@ class AppModel(ObservableObject):
         if not name or len(name) == 0:
             return
 
-        animal = [x for x in self._animals if x.name == name]
+        matching_animals = [x for x in self._animals if x.name == name]
 
-        if len(animal) == 0:
+        if len(matching_animals) == 0:
             logger.info("Adding new animal name=%s", name)
             animal = AnimalSubject(name=name)
             self._save_animal_metadata(animal)
@@ -516,10 +520,11 @@ class AppModel(ObservableObject):
             self._animals = None
             self.animals = animals
         else:
-            animal = animal[0]
+            animal = matching_animals[0]
 
         if select:
             self.selected_animal = animal
+        return animal
 
     def on_capture_start(self) -> bool:
 

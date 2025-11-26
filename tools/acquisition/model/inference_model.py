@@ -396,12 +396,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             msg_thread.join()
             self._msg_thread = None
 
-        logger.verbose("closing mp queues")
-        for mp_q in (data_monitor_cmd_queue, self._data_queue, self._inference_cmd_queue, msg_queue):
-            if mp_q is not None:
-                clear_queue(mp_q, log_dumped=True)
-                logger.debug("closing %s size=%s", mp_q, mp_q.qsize())
-                mp_q.close()
+            logger.verbose("closing mp queues")
+            for mp_q in (data_monitor_cmd_queue, self._data_queue, self._inference_cmd_queue, msg_queue):
+                if mp_q is not None:
+                    clear_queue(mp_q, log_dumped=True)
+                    logger.debug("closing %s size=%s", mp_q, mp_q.qsize())
+                    mp_q.close()
 
     def load_configuration(self, configuration: InferenceConfiguration):
         self.model_location = configuration.pose_model_location

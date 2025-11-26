@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from .conftest import MockSystemMachine
+from top_fixtures import MockSystemMachine
 
 
 from autotrainer.core import HeadbarPressureMonitor
@@ -239,9 +239,8 @@ class TestAutoClamp(MockSystemMachine):
     @pytest.mark.parametrize("head_fixation_enabled", [True, False])
     @pytest.mark.parametrize("release_delay", [0.5, 0.1])
     @pytest.mark.parametrize("start_session", [False, True])
-    def test_with_analysis_pressure_prop_changed(self, state, intensities, hbp_engaged, head_fixation_enabled,
+    def test_with_analysis_pressure_prop_changed(self, machine, state, intensities, hbp_engaged, head_fixation_enabled,
                                                  release_delay, start_session, mocker):
-        machine = self.machine
         machine.state = state
         algo = machine.algorithm
 

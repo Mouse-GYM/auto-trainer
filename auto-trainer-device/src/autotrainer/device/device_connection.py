@@ -115,8 +115,12 @@ class DeviceConnection(DeviceConnectionProtocol):
         allocated with be terminated and disposed.
         """
         # TODO provide a mechanism for the caller to be notified when disconnection is complete.
-        if self._cmd_queue is not None:
-            self._cmd_queue.put((_REQUEST_DISCONNECT, None, None))
+        cmd_queue = self._cmd_queue
+        if cmd_queue is not None:
+            cmd_queue.put((_REQUEST_DISCONNECT, None, None))
+        dev = self._device
+        if dev is not None:
+            dev.disconnect()
 
     def send_message(self, kind: int, data: object = None, context: object = None):
         """Send a command/message to the device (writer-thread)"""
