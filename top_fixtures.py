@@ -110,6 +110,12 @@ def system_msg_queue():
     q = queue.Queue()
     yield q
     logging.info("system msg qsize after use: %s", q.qsize())
+    while True:
+        try:
+            q.get_nowait()
+            q.task_done()
+        except queue.Empty:
+            break
     q.join()
 
 
