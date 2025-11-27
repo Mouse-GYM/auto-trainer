@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 
-from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode
+from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode, SystemState
 from autotrainer.core import AnimalSubject
 from autotrainer.device import MotorConfigurationFile
 from autotrainer.inference import InferenceStatus
@@ -86,14 +86,20 @@ class TestTrainingPlan(MockSystemMachine):
         print(app_model)
         algo = app_model.behavior.algorithm
         animal = self._animal
+        # animal.training.current_protocol =
         assert app_model.load_configuration() is True
         algo.intersession_enabled = True
-        app_model.on_capture_start()
         app_model.training_mode = TrainingMode.MANUAL_AND_PROTOCOL
         app_model.training_plan = plan
+        app_model.on_capture_start()
         print(app_model)
+        self.make_load_cell_active()
         machine.enter_tunnel(reason="manual")
+        self.make_recording_aged_enough()
         self.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
-        machine.exit_tunnel(reason="manual")
-        # app_model.behavior.system_machine.intersession.
         assert algo.pellet_recently_seen
+        self.make_load_cell_inactive()
+        machine.exit_tunnel(reason="manual")
+        assert machine.state == SystemState.cage
+        app_model.hardware.send_home()
+
