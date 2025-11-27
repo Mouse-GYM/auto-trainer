@@ -37,7 +37,7 @@ from autotrainer.video import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, InferenceStatus
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
-from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol
+from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine
 
 from autotrainer.training import TrainingPlan, TrainingPhase
 
@@ -84,7 +84,7 @@ class AppModel(ObservableObject):
         sensor_analysis: Optional[SensorAnalysis] = None,
         inference_model: Optional[InferenceProtocol] = None,
         system_message_handler: Optional[SystemMessageHandler] = None,
-
+        system_machine: Optional[SystemMachine] = None,
     ):
         super().__init__(('on_error', 'configuration_loaded_event'))
 
@@ -186,6 +186,7 @@ class AppModel(ObservableObject):
         self._behavior = BehaviorModel(
             self._system_message_handler, self._analysis, self._hardware, self._inference,
             topcam_presence=self._top_camera_presence_detection,
+            system_machine=system_machine,
         )
 
         self._output_location = ""
