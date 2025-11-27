@@ -1,3 +1,4 @@
+import contextlib
 import copy
 import threading
 from pathlib import Path
@@ -9,6 +10,7 @@ from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgor
 from autotrainer.core import AnimalSubject
 from autotrainer.device import MotorConfigurationFile
 from autotrainer.inference import InferenceStatus
+from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.inference_model import InferenceModel
@@ -75,6 +77,7 @@ class TestTrainingPlan(MockSystemMachine):
             sensor_analysis=msg_handler.analysis,
             inference_model=machine._inference,
             calib_dir=calib_dir,
+            system_machine=machine,
         )
         self._animal = app_model.add_animal("mouse1", select=True)
         app_model.training_plans.append(plan)
@@ -93,13 +96,35 @@ class TestTrainingPlan(MockSystemMachine):
         app_model.training_plan = plan
         app_model.on_capture_start()
         print(app_model)
-        self.make_load_cell_active()
+        # self.make_load_cell_active()
+        for _ in range(2):
+            result = IntersessionResponse(
+                food_consumed=2,
+                pellet_x=1,
+                pellets_presented=4,
+                successful_reaches=3,
+            )
+            self._make_session(app_model, machine, result)
+
+        assert algo.total_pellet_count == 2 * result.food_consumed
+        assert algo.successful_reaches_total == 2 * result.successful_reaches
+
+    def _make_session(self, app_model, machine, analysis_result):
+        algo = app_model.behavior.algorithm
         machine.enter_tunnel(reason="manual")
+        assert machine.state == SystemState.tunnel
         self.make_recording_aged_enough()
         self.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
         assert algo.pellet_recently_seen
-        self.make_load_cell_inactive()
-        machine.exit_tunnel(reason="manual")
-        assert machine.state == SystemState.cage
+        # self.make_load_cell_inactive()
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(self.mock_perform_segmentation())
+            machine.exit_tunnel(reason="manual")
+            stack.enter_context(self.mock_perform_detection())
+            self.mock_complete_segmentation(True)
+            machine._inference.detection_result_ready(analysis_result)
+            self.mock_complete_detection(True)
+            assert machine.state == SystemState.cage
+
         app_model.hardware.send_home()
 
