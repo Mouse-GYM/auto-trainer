@@ -65,7 +65,7 @@ class TestTrainingPlan(MockSystemMachine):
         pass
 
     @pytest.fixture()
-    def app_model(self, machine, user_pref, system_msg_handler, system_config, plan):
+    def app_model(self, machine, user_pref, system_msg_handler, system_config, plan, calib_dir):
         machine._msg_handler = system_msg_handler
         user_pref.save()
         msg_handler = machine._msg_handler
@@ -74,6 +74,7 @@ class TestTrainingPlan(MockSystemMachine):
             system_message_handler=msg_handler,
             sensor_analysis=msg_handler.analysis,
             inference_model=machine._inference,
+            calib_dir=calib_dir,
         )
         self._animal = app_model.add_animal("mouse1", select=True)
         app_model.training_plans.append(plan)

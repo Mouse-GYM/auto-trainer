@@ -72,7 +72,7 @@ def user_pref(tmp_path, config_dir, animals_dir, settings_ini_path):
 
 
 @pytest.fixture
-def calib_dir(config_dir):
+def calib_dir():
     # could be todo: copy it top-level, or generate new temporary one as above for system config.
     return top_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
 
