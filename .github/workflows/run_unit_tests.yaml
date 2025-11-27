@@ -42,7 +42,7 @@ jobs:
       - name: Test with pytest
         run: |
           export PYTEST_ADDOPTS="--color=yes"
-          coverage run -m pytest -v -s ${{ github.event.inputs.pytest_extra_args }}
+          coverage run -m pytest -v -s ${{ github.event.inputs.pytest_extra_args }} -k training_plan --log-cli-level=DEBUG
       - name: Coverage
         run: |
           coverage html
