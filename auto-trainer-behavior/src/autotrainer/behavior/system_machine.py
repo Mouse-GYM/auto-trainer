@@ -665,7 +665,7 @@ class SystemMachine(StateMachine):
                                     (shift_xyz[1], dev.set_y, BehaviorEventKind.intersessionShiftY),
                                     (shift_xyz[2], dev.set_z, BehaviorEventKind.intersessionShiftZ)):
                 if val != 0:
-                    meth(val, absolute=False)
+                    meth(val, absolute=False, sender="processed_shift_xyz")
                     EventManager.default().post_event_content(kind, context=val)
                 else:
                     logger.debug("%s == 0 ; skip", kind)
