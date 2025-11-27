@@ -116,7 +116,7 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     app = QApplication(sys.argv)
 
-    # app.setStyle("Fusion")
+    app.setStyle("Fusion")
 
     if not verify_configuration(configuration):
         return -1
