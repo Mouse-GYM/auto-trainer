@@ -15,7 +15,9 @@ on:
         required: true
         default: '-k training_plan --log-cli-level=DEBUG'
         type: string
-
+concurrency:  # allow cancel if new commit pushed
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build-and-test:
     name: Setup env. and run tests
