@@ -625,7 +625,7 @@ class MainWindow(QMainWindow):
 
         if self._is_dev:
             self.addToolBarBreak()
-            toolbar = QToolBar("Dev Toolbar")
+            toolbar = self._dev_toolbar = QToolBar("Dev Toolbar")
             toolbar.setContentsMargins(0, 0, 0, 0)
             self.addToolBar(toolbar)
             toolbar.setFloatable(False)
@@ -637,7 +637,11 @@ class MainWindow(QMainWindow):
             toolbar.addAction(self.mouse_near_pellet_action)
             toolbar.addAction(self.detection_results_action)
             widget = QWidget()
+            widget.setContentsMargins(4, 0, 0, 0)
+            self._internal_analysis_widget_toolbar = toolbar.addWidget(widget)
+            self._internal_analysis_widget_toolbar.setVisible(False)
             hbox = QHBoxLayout(widget)
+            hbox.setContentsMargins(0, 0, 0, 0)
             label = QLabel("P:")
             label.setToolTip("Pellets Presented")
             hbox.addWidget(label)
@@ -656,7 +660,6 @@ class MainWindow(QMainWindow):
             spinbox = self._internal_pellet_consumed_spinbox = QSpinBox()
             spinbox.setToolTip(label.toolTip())
             hbox.addWidget(spinbox)
-            toolbar.addWidget(widget)
             hbox.addWidget(QLabel("Shift:"))
             spinbox = self._internal_shift_x_spinbox = QDoubleSpinBox()
             spinbox.setToolTip("X shift")
@@ -756,7 +759,7 @@ class MainWindow(QMainWindow):
     def _internal_detection_result(self):
         inference = self._app_model.behavior.system_machine.intersession._inference
         is_checked = self.detection_results_action.isChecked()
-        logger.debug("internal_detection_result checked=%s", is_checked)
+        self._internal_analysis_widget_toolbar.setVisible(is_checked)
         if is_checked:
             self._orig_inference_feed = inference._feed_intersession_analysis_execute
             self._orig_inference_process = inference._intersession_process_execute
