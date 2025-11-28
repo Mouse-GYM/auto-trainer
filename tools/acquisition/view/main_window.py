@@ -473,7 +473,7 @@ class MainWindow(QMainWindow):
 
         action = self.detection_results_action = QAction("Detection-Result", self)
         action.setCheckable(True)
-        action.triggered.connect(self._internal_detection_result)
+        action.triggered.connect(self._internal_detection_result_toggle)
 
         action = self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
         action.triggered.connect(lambda: self._show_preferences())
@@ -627,6 +627,7 @@ class MainWindow(QMainWindow):
             self.addToolBarBreak()
             toolbar = self._dev_toolbar = QToolBar("Dev Toolbar")
             toolbar.setContentsMargins(0, 0, 0, 0)
+            # toolbar.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
             self.addToolBar(toolbar)
             toolbar.setFloatable(False)
             toolbar.setMovable(False)
@@ -641,7 +642,6 @@ class MainWindow(QMainWindow):
             self._internal_analysis_widget_toolbar = toolbar.addWidget(widget)
             self._internal_analysis_widget_toolbar.setVisible(False)
             hbox = QHBoxLayout(widget)
-            hbox.setContentsMargins(0, 0, 0, 0)
             label = QLabel("P:")
             label.setToolTip("Pellets Presented")
             hbox.addWidget(label)
@@ -676,6 +676,14 @@ class MainWindow(QMainWindow):
             spinbox.setRange(-10, 10)
             spinbox.setDecimals(1)
             hbox.addWidget(spinbox)
+            # for i in range(hbox.count()):
+            #     w = hbox.itemAt(i).widget()
+            #     # w.setContentsMargins(0, 0, 0, 0)
+            #     # w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+            # unnecessary with:
+            hbox.setContentsMargins(0, 0, 0, 0)
+            # plus:
+            toolbar.setMaximumHeight(toolbar.minimumSizeHint().height())
 
     def _configure_statusbar(self):
         self._status_label = QLabel("")
@@ -756,7 +764,7 @@ class MainWindow(QMainWindow):
             algo.pellet_hands_min_distance = new_val
             logger.debug("set pellet_hands_min_distance to %s", new_val)
 
-    def _internal_detection_result(self):
+    def _internal_detection_result_toggle(self):
         inference = self._app_model.behavior.system_machine.intersession._inference
         is_checked = self.detection_results_action.isChecked()
         self._internal_analysis_widget_toolbar.setVisible(is_checked)
