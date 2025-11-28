@@ -7,6 +7,7 @@ from unittest import mock
 import pytest
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode, SystemState
+from autotrainer.behavior.behavior_algorithm import ShiftXYZBufferHandler
 from autotrainer.core import AnimalSubject
 from autotrainer.device import MotorConfigurationFile
 from autotrainer.inference import InferenceStatus
@@ -60,15 +61,30 @@ class TestTrainingPlan(MockSystemMachine):
         )
         self._animal = app_model.add_animal("mouse1", select=True)
         app_model.training_plans.append(plan)
-        yield app_model
-        app_model.on_capture_stop()
-        app_model.on_close()
+        try:
+            yield app_model
+        finally:
+            app_model.on_capture_stop()
+            app_model.on_close()
 
-    def test_training_plan(self, app_model, user_pref, machine, plan):
+    def test_training_plan(self, app_model, user_pref, machine, plan, caplog):
+        try:
+            self._test_training_plan(app_model, user_pref, machine, plan, caplog)
+        finally:
+            # NB: for some reason the last finally: above in app_model() fixture isn't called
+            # when this test case fails for any reason. pytest seems to be stuck in some loop post-analysis code,
+            # but before teardown, related to/with tmpdir fixture.. maybe the files we are possibly writing in it
+            # are preventing pytest failure completion code to finish and put it in a kind of infinite loop state.
+            app_model.on_capture_stop()
+            app_model.on_close()
+
+    def _test_training_plan(self, app_model, user_pref, machine, plan, caplog):
         algo = app_model.behavior.algorithm
 
         assert app_model.load_configuration() is True
 
+        shift_xyz_buffer_handler = ShiftXYZBufferHandler(size=2)
+        algo.shift_xyz_handler.set_handle_new_shift_xyz(shift_xyz_buffer_handler)
         algo.intersession_enabled = True
         app_model.training_mode = TrainingMode.MANUAL_AND_PROTOCOL
         app_model.training_plan = plan  # this also sets it as current_protocol on current selected animal
@@ -77,11 +93,16 @@ class TestTrainingPlan(MockSystemMachine):
         result = IntersessionResponse(
             food_consumed=2,
             pellet_x=1,
+            pellet_y=0.5,
             pellets_presented=4,
             successful_reaches=3,
         )
         for _ in range(2):
+            assert "Received processed shift xyz: (1.0, 0.5, 0.0)" not in caplog.text
+            caplog.clear()
             self._make_session(app_model, machine, result)
+
+        assert "Received processed shift xyz: (1.0, 0.5, 0.0)" in caplog.text
 
         assert algo.total_pellet_count == 2 * result.food_consumed
         assert algo.successful_reaches_total == 2 * result.successful_reaches

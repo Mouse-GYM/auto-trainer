@@ -108,31 +108,37 @@ def inference(pose_algo):
 @pytest.fixture
 def system_msg_queue():
     q = queue.Queue()
-    yield q
-    logging.info("system msg qsize after use: %s", q.qsize())
-    while True:
-        try:
-            q.get_nowait()
-            q.task_done()
-        except queue.Empty:
-            break
-    q.join()
+    try:
+        yield q
+    finally:
+        logging.info("system msg qsize after use: %s", q.qsize())
+        while True:
+            try:
+                q.get_nowait()
+                q.task_done()
+            except queue.Empty:
+                break
+        q.join()
 
 
 @pytest.fixture
 def sensor_analysis():
     s = SensorAnalysis()
-    yield s
+    try:
+        yield s
+    finally:
+        s.stop()
 
 
 @pytest.fixture
 def system_msg_handler(system_msg_queue, sensor_analysis):
-    # now/atm unused
     handler = SystemMessageHandler(system_msg_queue, sensor_analysis=sensor_analysis)
     handler.start()
-    yield handler
-    handler.request_terminate()
-    handler.wait_terminated()
+    try:
+        yield handler
+    finally:
+        handler.request_terminate()
+        handler.wait_terminated()
 
 
 @pytest.fixture
