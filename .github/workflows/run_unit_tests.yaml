@@ -49,8 +49,10 @@ jobs:
       - name: Test with pytest
         run: |
           export PYTEST_ADDOPTS="--color=yes"
+          export COVERAGE_PROCESS_START="$PWD/.coveragerc"
           coverage run -m pytest -v -s ${{ github.event.inputs.pytest_extra_args }}
       - name: Coverage
         run: |
+          coverage combine
           coverage html
           coverage report
