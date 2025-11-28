@@ -65,23 +65,22 @@ class TestTrainingPlan(MockSystemMachine):
         app_model.on_close()
 
     def test_training_plan(self, app_model, user_pref, machine, plan):
-        print(app_model)
         algo = app_model.behavior.algorithm
-        animal = self._animal
-        # animal.training.current_protocol =
+
         assert app_model.load_configuration() is True
+
         algo.intersession_enabled = True
         app_model.training_mode = TrainingMode.MANUAL_AND_PROTOCOL
-        app_model.training_plan = plan
+        app_model.training_plan = plan  # this also sets it as current_protocol on current selected animal
         app_model.on_capture_start()
-        print(app_model)
+
+        result = IntersessionResponse(
+            food_consumed=2,
+            pellet_x=1,
+            pellets_presented=4,
+            successful_reaches=3,
+        )
         for _ in range(2):
-            result = IntersessionResponse(
-                food_consumed=2,
-                pellet_x=1,
-                pellets_presented=4,
-                successful_reaches=3,
-            )
             self._make_session(app_model, machine, result)
 
         assert algo.total_pellet_count == 2 * result.food_consumed
