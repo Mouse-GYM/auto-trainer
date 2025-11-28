@@ -15,14 +15,6 @@ from autotrainer.core import Offset3DTuple, get_verbose_logger, SystemConfigurat
 
 logger = get_verbose_logger()
 
-# 3 coordinate systems,
-# but each has some axis direction difference (when one increases, the other decreases)
-flips_inference_motor = Offset3DTuple(1, -1, 1)
-flips_inference_diamond = Offset3DTuple(-1, -1, 1)
-
-# defining flips between motor and diamond with flips between motor and inference * flips between inference and diamond:
-flips_motor_diamond = flips_inference_motor * flips_inference_diamond
-
 
 DEFAULT_DIAMOND_TRIANGLE_CONFIG_PATH = Path(
     os.getenv("AUTOTRAINER_DIAMOND_TRIANGLE_CONFIG", "~/Autotrainer/diamond_triangle_offset.yaml")
@@ -36,6 +28,14 @@ class DiamondTriangleOffsetConfig:
     measured_offset: Offset3DTuple
 
     DEFAULT_CONFIG_PATH: ClassVar = DEFAULT_DIAMOND_TRIANGLE_CONFIG_PATH
+
+    # 3 coordinate systems,
+    # but each has some axis direction difference (when one increases, the other decreases)
+    flips_inference_motor = Offset3DTuple(1, -1, 1)
+    flips_inference_diamond = Offset3DTuple(-1, -1, 1)
+
+    # defining flips between motor and diamond with flips between motor and inference * flips between inference and diamond:
+    flips_motor_diamond = flips_inference_motor * flips_inference_diamond
 
     def __init__(self, *, used_position, measured_offset):
         super().__init__()
@@ -56,6 +56,7 @@ class DiamondTriangleOffsetConfig:
 
     @property
     def reference_corrected_offset(self):
+        # unused
         return self.measured_offset - self.used_position  # subtract used_position, to have common 0
 
     @classmethod
@@ -74,26 +75,26 @@ class DiamondTriangleOffsetConfig:
     def inference_to_motor(self, inference_xyz: Offset3DTuple) -> Offset3DTuple:
         """Transform an inference "offset" coordinate (which is """
         return (
-            flips_inference_motor * (self.measured_offset - inference_xyz)
+            self.flips_inference_motor * (self.measured_offset - inference_xyz)
             + self.used_position
         )
 
     def motor_to_inference(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
         return (
             self.measured_offset
-            - flips_inference_motor * (motor_xyz - self.used_position)
+            - self.flips_inference_motor * (motor_xyz - self.used_position)
         )
 
     def motor_to_diamond(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
         return (
-            flips_inference_diamond * self.measured_offset
-            - flips_motor_diamond * (motor_xyz - self.used_position)
+            self.flips_inference_diamond * self.measured_offset
+            - self.flips_motor_diamond * (motor_xyz - self.used_position)
         )
 
     def diamond_to_motor(self, diamond_xyz: Offset3DTuple) -> Offset3DTuple:
         return (
-            flips_inference_diamond * self.measured_offset - diamond_xyz
-        ) * flips_motor_diamond + self.used_position
+            self.flips_inference_diamond * self.measured_offset - diamond_xyz
+        ) * self.flips_motor_diamond + self.used_position
 
 
 @dataclass
