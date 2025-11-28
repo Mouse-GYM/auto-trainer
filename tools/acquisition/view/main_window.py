@@ -1,6 +1,7 @@
 import dataclasses
 import threading
 import time
+from functools import partial
 from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Dict
@@ -8,7 +9,8 @@ from typing import List, Optional, Dict
 from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
-                               QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout)
+                               QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
+                               QSpinBox, QDoubleSpinBox)
 import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration
@@ -20,11 +22,13 @@ from autotrainer.inference import InferenceStatus, PoseResponse
 
 from autotrainer.behavior import DiamondTriangleOffsetConfig, TrainingMode
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.pyside.content_widget import InvokeMethod
 
 from autotrainer.training import TrainingPlan
 
 from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
 from tools.acquisition.view.preferences_dialog import PreferencesDialog
@@ -47,6 +51,9 @@ class MainWindow(QMainWindow):
     def __init__(self, app: QApplication, user_preferences: UserPreferences, configuration: str = None,
                  app_version: str = "", is_dev: bool = False):
         super(MainWindow, self).__init__(None)
+
+        self._orig_inference_feed = None
+        self._orig_inference_process = None
 
         self._app = app
         self._is_dev = is_dev
@@ -464,6 +471,10 @@ class MainWindow(QMainWindow):
         action = self.mouse_near_pellet_action = QAction("Hands near pellet", self)
         action.triggered.connect(self._internal_mouse_near_pellet)
 
+        action = self.detection_results_action = QAction("Detection-Result", self)
+        action.setCheckable(True)
+        action.triggered.connect(self._internal_detection_result)
+
         action = self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
         action.triggered.connect(lambda: self._show_preferences())
 
@@ -624,6 +635,44 @@ class MainWindow(QMainWindow):
             toolbar.addAction(self.pellet_seen_action)
             toolbar.addAction(self.mouse_seen_action)
             toolbar.addAction(self.mouse_near_pellet_action)
+            toolbar.addAction(self.detection_results_action)
+            widget = QWidget()
+            hbox = QHBoxLayout(widget)
+            label = QLabel("P:")
+            label.setToolTip("Pellets Presented")
+            hbox.addWidget(label)
+            spinbox = self._internal_pellet_presented_spinbox = QSpinBox()
+            spinbox.setToolTip(label.toolTip())
+            hbox.addWidget(spinbox)
+            label = QLabel("R:")
+            label.setToolTip("Pellets Reached")
+            hbox.addWidget(label)
+            spinbox = self._internal_pellet_reached_spinbox = QSpinBox()
+            spinbox.setToolTip(label.toolTip())
+            hbox.addWidget(spinbox)
+            label = QLabel("C:")
+            label.setToolTip("Pellets Consumed")
+            hbox.addWidget(label)
+            spinbox = self._internal_pellet_consumed_spinbox = QSpinBox()
+            spinbox.setToolTip(label.toolTip())
+            hbox.addWidget(spinbox)
+            toolbar.addWidget(widget)
+            hbox.addWidget(QLabel("Shift:"))
+            spinbox = self._internal_shift_x_spinbox = QDoubleSpinBox()
+            spinbox.setToolTip("X shift")
+            spinbox.setRange(-10, 10)
+            spinbox.setDecimals(1)
+            hbox.addWidget(spinbox)
+            spinbox = self._internal_shift_y_spinbox = QDoubleSpinBox()
+            spinbox.setToolTip("Y shift")
+            spinbox.setRange(-10, 10)
+            spinbox.setDecimals(1)
+            hbox.addWidget(spinbox)
+            spinbox = self._internal_shift_z_spinbox = QDoubleSpinBox()
+            spinbox.setToolTip("Z shift")
+            spinbox.setRange(-10, 10)
+            spinbox.setDecimals(1)
+            hbox.addWidget(spinbox)
 
     def _configure_statusbar(self):
         self._status_label = QLabel("")
@@ -649,9 +698,39 @@ class MainWindow(QMainWindow):
         elif name == "remove_raw_data_when_inactive_session":
             self._app_model.behavior.algorithm.clean_raw_data_on_inactive_session = value
 
+    @staticmethod
+    def _simulate_intersession_process(*args, fake_result, **kwargs):
+        # NB: must be static method given it's executed in a sub-process, so must no get the whole main-window
+        # instance tried to be serialized (would most likely fails/error) !
+        logger.verbose("Simulate intersession process: %s", fake_result)
+        time.sleep(0.5)
+        return fake_result
+
     def _internal_simulate_trigger(self):
         is_checked = self.capture_trigger_action.isChecked()
-        load_cell_monitor = self._app_model.analysis.load_cell_monitor
+        app_model = self._app_model
+        load_cell_monitor = app_model.analysis.load_cell_monitor
+        if not is_checked:
+            use_fake_results = self.detection_results_action.isChecked()
+            if use_fake_results:
+                inference = app_model.behavior.system_machine.intersession._inference
+                def feed(intersession_block):
+                    logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
+                    inference._data_monitor_proc.stop_recorded.wait()
+                    logger.debug("got stop recorded")
+                    inference._data_monitor_proc.stop_recorded.clear()
+                    intersession_block.frame_count = 42
+                    time.sleep(0.5)
+                inference._feed_intersession_analysis_execute = feed
+                res = IntersessionResponse(
+                    pellets_presented=self._internal_pellet_presented_spinbox.value(),
+                    successful_reaches=self._internal_pellet_reached_spinbox.value(),
+                    food_consumed=self._internal_pellet_consumed_spinbox.value(),
+                    pellet_x=self._internal_shift_x_spinbox.value(),
+                    pellet_y=self._internal_shift_y_spinbox.value(),
+                    pellet_z=self._internal_shift_z_spinbox.value(),
+                )
+                inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
         load_cell_monitor.force_engaged(is_checked)
         load_cell_monitor.is_engaged = is_checked
 
@@ -673,6 +752,17 @@ class MainWindow(QMainWindow):
             new_val = uncover_dist - 0.1
             algo.pellet_hands_min_distance = new_val
             logger.debug("set pellet_hands_min_distance to %s", new_val)
+
+    def _internal_detection_result(self):
+        inference = self._app_model.behavior.system_machine.intersession._inference
+        is_checked = self.detection_results_action.isChecked()
+        logger.debug("internal_detection_result checked=%s", is_checked)
+        if is_checked:
+            self._orig_inference_feed = inference._feed_intersession_analysis_execute
+            self._orig_inference_process = inference._intersession_process_execute
+        else:
+            inference._feed_intersession_analysis_execute = self._orig_inference_feed
+            inference._intersession_process_execute = self._orig_inference_process
 
     def notes_changed(self, value: str):
         self._app_model.notes = value

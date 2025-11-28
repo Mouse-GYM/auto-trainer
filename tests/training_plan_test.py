@@ -40,27 +40,6 @@ def plan(_plan):
     return copy.deepcopy(_plan)
 
 
-@pytest.fixture
-def machine2(project_info, tunnel_device, pellet_device, inference_model, sensor_analysis):
-    # prevents some test to fail due to handling function in dedicated thread
-    BehaviorAlgorithm._no_handler_thread = True
-    #
-    def check_pres_missing(delay, func):
-        m = mock.create_autospec(threading.Timer)
-        return m
-    with mock.patch(f"{SystemMachine.__module__}._check_missing_timer", new=check_pres_missing):
-        machine = SystemMachine(
-            tunnel_device=tunnel_device,
-            pellet_device=pellet_device,
-            analysis=sensor_analysis,
-            inference=inference_model,
-            project_info=project_info,
-        )
-        machine.algorithm.capture_status = CaptureProcessStatus.RUNNING
-        machine.algorithm.pellet_hand_uncover_distance = None  # disabled
-        yield machine
-
-
 class TestTrainingPlan(MockSystemMachine):
 
     def setup_method(self, test_method):
@@ -96,7 +75,6 @@ class TestTrainingPlan(MockSystemMachine):
         app_model.training_plan = plan
         app_model.on_capture_start()
         print(app_model)
-        # self.make_load_cell_active()
         for _ in range(2):
             result = IntersessionResponse(
                 food_consumed=2,
@@ -112,6 +90,7 @@ class TestTrainingPlan(MockSystemMachine):
     def _make_session(self, app_model, machine, analysis_result):
         algo = app_model.behavior.algorithm
         machine.enter_tunnel(reason="manual")
+        # self.make_load_cell_active()
         assert machine.state == SystemState.tunnel
         self.make_recording_aged_enough()
         self.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
