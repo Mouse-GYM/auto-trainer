@@ -644,7 +644,7 @@ class SystemMachine(StateMachine):
             # this will trigger a new start session if mouse still there
             self._analysis.load_cell_monitor.is_engaged = False
 
-    @BehaviorAlgorithm.relay_func(wait=False)
+    @BehaviorAlgorithm.relay_func(wait=True)
     def _handle_detection_result(self, res: IntersessionResponse):
         algo = self._algorithm
         if res.food_consumed > 0:
