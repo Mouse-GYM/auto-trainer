@@ -140,7 +140,6 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
     # conveniently allow close/exit app with SIGINT (ctrl-c) :
     def handle_sigint(signum, frame):
         logger.notice("Got signal %s ; closing window..", signum)
-        # window.close()
         app.exit(0)
 
     signal.signal(signal.SIGINT, handle_sigint)
@@ -151,12 +150,17 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     window.on_activated()
 
-    app.aboutToQuit.connect(window.close)
+    def finish():
+        # NB: close everything before window close,
+        # this ensure help prevent access, by some background thread(s), to UI elements when the window has already
+        # been closed, which if can/will trigger segfault/app crash (and possibly leave behind background MP handler process(es) alive)
+        logger.verbose("Closing event manager and behavior algo thread handler..")
+        event_manager.close()
+        BehaviorAlgorithm.close_algorithm_handler()
+        logger.debug("Closing window ..")
+        window.close()
+
+    app.aboutToQuit.connect(finish)
 
     logger.info("Executing app now ..")
-    try:
-        return app.exec()
-    finally:
-        logger.verbose("Closing event manager ..")
-        BehaviorAlgorithm.close_algorithm_handler()
-        event_manager.close()
+    return app.exec()
