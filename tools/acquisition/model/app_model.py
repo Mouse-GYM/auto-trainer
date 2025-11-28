@@ -784,7 +784,7 @@ class AppModel(ObservableObject):
         for camera in self._cameras:
             camera.on_close()
 
-        EventManager.default().close()
+        EventManager.try_close_default()
 
         self.hardware.disconnect()
 
@@ -809,7 +809,6 @@ class AppModel(ObservableObject):
         # logger.debug("shutting down multiprocess manager %s", mp_mgr)
         # mp_mgr.shutdown()
         # mp_mgr.join()
-
 
         self.save_configuration()
 
