@@ -798,7 +798,8 @@ class AppModel(ObservableObject):
         self._handle_proc_msg_thread.join(5)
         if self._handle_proc_msg_thread.is_alive():
             logger.warning("Handle process messages thread still alive ; closing queue")
-        self._multiproc_msg_queue.close()
+        # self._multiproc_msg_queue.close()
+        # do not close to allow multiple on_close() calls.
 
         # somehow if many AppModel are created (like in test cases), this makes the ones following an on_close on any
         # of them to fails hardly. MP manager looks be a singleton per python process so it might be smth related.
