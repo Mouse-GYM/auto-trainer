@@ -518,7 +518,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # if pose process goes away (when exit) then this will hang up to timeout: currently 15s,
         # see _put_intersession_frame().
         try:
-            self.__feed_intersession_analysis(intersession_block)
+            self._feed_intersession_analysis_execute(intersession_block)
         except InferenceIncorrectStatus as err:
             got_error = err
         except Exception as err:
@@ -561,7 +561,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # self._intersession_block = None
         # it is/must be done by monitor data thread
 
-    def __feed_intersession_analysis(self, intersession_block: IntersessionBlock):
+    def _feed_intersession_analysis_execute(self, intersession_block: IntersessionBlock):
         offline_q = self._offline_queue
         cams = (self._project.camera_1, self._project.camera_2)
         n_cams = len(cams)
@@ -762,6 +762,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._offline_queue.put_block(frame, cam_index, frame_idx, timeout=timeout, sleep_retry=0.025)
         return True
 
+    @staticmethod
+    def _intersession_process_execute(*args, **kwargs):
+        return intersession_process(*args, **kwargs)
+
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
         project = project.to_local_value()  # get local ref to current project infos,
         detection_config = intersession_detection.configuration
@@ -771,7 +775,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
         try:
             async_res = self._process_pool.apply_async(
-                intersession_process,
+                self._intersession_process_execute,
                 args=(project,),
                 kwds=dict(calib_dir=self._calib_dir),
             )
