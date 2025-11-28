@@ -787,9 +787,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         else:
             processed_ok = True
 
-        intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
-        # NB: triggering/calling the "complete" of the detection BEFORE trigger the detection_result_ready below,
-
         if processed_ok:
             self.detection_result_ready(result)
+
+        intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
+
         self._intersession_detection = None
