@@ -212,6 +212,10 @@ class ShiftXYZHandler(ObservableObject):
 
     #
 
+    @property
+    def handle_new_shift_xyz_func(self) -> Optional[Union[ShiftXYZCallbackHandlerT]]:
+        return self._handle_new_shift_xyz_func
+
     def set_handle_new_shift_xyz(self, func: ShiftXYZCallbackHandlerT):
         self._handle_new_shift_xyz_func = func
 
