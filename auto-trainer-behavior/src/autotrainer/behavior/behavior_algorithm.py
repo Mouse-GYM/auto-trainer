@@ -972,7 +972,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_pellet_count = 0
 
     def can_cover_pellet(self):
-        return self.pellet_cover_enabled
+        return self.pellet_delivery_enabled and self.pellet_cover_enabled
 
     @property
     def pellet_seen_age(self) -> float:
@@ -994,7 +994,7 @@ class BehaviorAlgorithm(ObservableObject):
     def can_release_pellet(self) -> bool:
         # self._check_date()
 
-        if self.pellet_cover_enabled:
+        if self.can_cover_pellet():
             if self._is_in_session:
                 return (
                     self._capture_status == CaptureProcessStatus.RECORDING

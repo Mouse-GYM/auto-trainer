@@ -343,7 +343,7 @@ class PelletMachine(StateMachine):
                 log_could_retry_shortly()
 
         elif cur_state == PelletState.sending:
-            if algo.pellet_cover_enabled:
+            if algo.can_cover_pellet():
                 reason = "release_when_sent_cover_enabled"
                 if self.can_use_pellet_command():
                     logit()

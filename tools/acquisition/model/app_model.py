@@ -921,6 +921,9 @@ class AppModel(ObservableObject):
         if animal is None:
             return
         if name in {'set_x', 'set_y', 'set_z'}:
+            # only when manual:
+            if self._training_mode != TrainingMode.MANUAL:
+                return
             hardware = self._hardware
             coord = name[-1]
             coord_idx = "xyz".index(coord)
@@ -941,11 +944,19 @@ class AppModel(ObservableObject):
                 animal.is_pellet_dcs = True
                 xyz = cfg.motor_to_diamond(xyz)
             pellet_dcs_changed = changed
-
-            animal.pellet_x = xyz.x
-            animal.pellet_y = xyz.y
-            animal.pellet_z = xyz.z
-            changed |= xyz != orig_xyz
+            # only update same animal coordinate,
+            # we are supposing the all same axis in the 2 coordinate system are parallel :
+            if coord == 'x':
+                prev, animal.pellet_x = animal.pellet_x, xyz.x
+                new = xyz.x
+            elif coord == 'y':
+                prev, animal.pellet_y = animal.pellet_y, xyz.y
+                new = xyz.y
+            else:
+                assert coord == 'z'
+                prev, animal.pellet_z = animal.pellet_z, xyz.z
+                new = xyz.z
+            changed |= new != prev
             if changed:
                 self._save_animal_metadata(animal, sender=f"hardware_{name}", backup_previous=pellet_dcs_changed)
 
