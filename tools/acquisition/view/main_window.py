@@ -52,8 +52,8 @@ class MainWindow(QMainWindow):
                  app_version: str = "", is_dev: bool = False):
         super(MainWindow, self).__init__(None)
 
-        self._orig_inference_feed = None
-        self._orig_inference_process = None
+        self._orig_inference_analysis_feed = None
+        self._orig_inference_analysis_process = None
 
         self._app = app
         self._is_dev = is_dev
@@ -769,11 +769,11 @@ class MainWindow(QMainWindow):
         is_checked = self.detection_results_action.isChecked()
         self._internal_analysis_widget_toolbar.setVisible(is_checked)
         if is_checked:
-            self._orig_inference_feed = inference._feed_intersession_analysis_execute
-            self._orig_inference_process = inference._intersession_process_execute
+            self._orig_inference_analysis_feed = inference._feed_intersession_analysis_execute
+            self._orig_inference_analysis_process = inference._intersession_process_execute
         else:
-            inference._feed_intersession_analysis_execute = self._orig_inference_feed
-            inference._intersession_process_execute = self._orig_inference_process
+            inference._feed_intersession_analysis_execute = self._orig_inference_analysis_feed
+            inference._intersession_process_execute = self._orig_inference_analysis_process
 
     def notes_changed(self, value: str):
         self._app_model.notes = value
