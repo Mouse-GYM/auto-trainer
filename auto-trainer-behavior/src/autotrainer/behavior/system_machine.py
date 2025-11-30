@@ -490,7 +490,6 @@ class SystemMachine(StateMachine):
             return
         #
         self._handle_pellet_hands_offsets(response)
-        #
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     @BehaviorAlgorithm.relay_func
