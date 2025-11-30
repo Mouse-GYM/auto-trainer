@@ -490,7 +490,6 @@ class SystemMachine(StateMachine):
             return
         #
         self._handle_pellet_hands_offsets(response)
-        #
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     @BehaviorAlgorithm.relay_func
@@ -675,7 +674,7 @@ class SystemMachine(StateMachine):
             if val != 0:
                 val *= cfg.flips_inference_motor[idx]
                 logger.debug("applying %s with %.1f", kind, val)
-                meth(val, absolute=False)
+                meth(val, absolute=False, sender="processed_shift_xyz")
                 EventManager.default().post_event_content(kind, context=val)
             else:
                 logger.debug("%s == 0 ; skip", kind)

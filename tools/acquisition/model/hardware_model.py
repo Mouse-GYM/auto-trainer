@@ -169,7 +169,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._send_with_token(self._device, SystemCommandKind.UPDATE_SCALE_TARE)
 
     def _set_axis(self, value: float, *, absolute: bool = True,
-                  system_set_cmd: SystemCommandKind, coord_idx: int) -> Optional[UUID]:
+                  system_set_cmd: SystemCommandKind, coord_idx: int, sender: str="NA") -> Optional[UUID]:
+        coord = "xyz"[coord_idx]
+        logger.verbose("Sender=%s : SET_%s value=%.1f absolute=%s", sender, coord.upper(), value, absolute)
         prev_value = self._last_set_coordinates[coord_idx]
         if absolute:
             new_value = value
@@ -192,14 +194,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._send_with_token(self._device, system_set_cmd,
                                      SystemDataArgsKwargs(value, relative=not absolute))
 
-    def set_x(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
-        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_X, coord_idx=0)
+    def set_x(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_X, coord_idx=0, sender=sender)
 
-    def set_y(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
-        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Y, coord_idx=1)
+    def set_y(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Y, coord_idx=1, sender=sender)
 
-    def set_z(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
-        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Z, coord_idx=2)
+    def set_z(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Z, coord_idx=2, sender=sender)
 
     def _move_axis(self, value: float, *, absolute: bool = True,
                    system_move_cmd: SystemCommandKind, coord_idx: int) -> Optional[UUID]:

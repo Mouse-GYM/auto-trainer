@@ -135,7 +135,7 @@ class HardwareControlContent(ContentWidget):
                 xyz = cfg.diamond_to_motor(xyz)
             value = xyz[coord_idx]
             meth = getattr(self._hardware_model, f"set_{coord}")
-            meth(value)
+            meth(value, sender="UI-Set-Button")
 
         sub_layout = QGridLayout()
         sub_layout.setContentsMargins(0, 0, 0, 0)

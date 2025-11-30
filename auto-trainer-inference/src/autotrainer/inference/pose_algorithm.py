@@ -103,8 +103,6 @@ class PoseResponse:
         """Return the 3d offsets between part1 and part2,
         if none exist/is available return None instead
         """
-        if not (self.is_part_seen(part1) and self.is_part_seen(part2)):
-            return None
         value = self.parts_3d_offsets.get(part1, {}).get(part2, None)
         if value is None:
             value = self.parts_3d_offsets.get(part2, {}).get(part1, None)
@@ -421,10 +419,15 @@ class PoseAlgorithm(ObservableObject):
                 for frames in selected_cams_frames
             ))
             for part1, part2 in pairs_3d_offsets:
-                loc1 = locations_3d[part1] = Offset3DTuple(df_3d[part1].iloc[-1, 0:3])  # last frame, 3 first columns (x, y, z)
-                loc2 = locations_3d[part2] = Offset3DTuple(df_3d[part2].iloc[-1, 0:3])
-                parts_3d_offsets[part1][part2] = tuple(loc1 - loc2)
-                # check of parts confidence level is handled in PoseResponse.get_parts_3d_offset()
+                if parts_flag_3.get(part1):
+                    loc1 = locations_3d[part1] = Offset3DTuple(
+                        df_3d[part1].iloc[-1, 0:3])  # last frame, 3 first columns (x, y, z)
+                else:
+                    loc1 = None
+                if parts_flag_3.get(part2):
+                    loc2 = locations_3d[part2] = Offset3DTuple(df_3d[part2].iloc[-1, 0:3])
+                    if loc1 is not None:
+                        parts_3d_offsets[part1][part2] = tuple(loc1 - loc2)
 
         response = PoseResponse(
             sequence=self._sequence,
