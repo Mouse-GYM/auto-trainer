@@ -13,7 +13,7 @@ on:
       pytest_extra_args:
         description: 'Extra args for pytest'
         required: true
-        default: '-k training_plan --log-cli-level=DEBUG'
+        default: ''
         type: string
 concurrency:  # allow cancel if new commit pushed
   group: ${{ github.workflow }}-${{ github.ref }}
