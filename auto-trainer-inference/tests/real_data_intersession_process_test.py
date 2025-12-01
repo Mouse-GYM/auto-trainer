@@ -19,7 +19,7 @@ import pytest
 this_dir = Path(__file__).parent.resolve()
 
 
-def deep_almost_equal(obj1, obj2, places=3, delta=None):
+def assert_deep_almost_equal(obj1, obj2, *, places=3, delta=None):
     if dataclasses.is_dataclass(obj1):
         obj1 = dataclasses.asdict(obj1)
     if dataclasses.is_dataclass(obj2):
@@ -34,7 +34,7 @@ def deep_almost_equal(obj1, obj2, places=3, delta=None):
     elif isinstance(obj1, dict) and isinstance(obj2, dict):
         assert set(obj1) == set(obj2)
         for key in obj1:
-            if not deep_almost_equal(obj1[key], obj2[key], places, delta):
+            if not assert_deep_almost_equal(obj1[key], obj2[key], places=places, delta=delta):
                 return False
         return True
     elif isinstance(obj1, (tuple, list)) and isinstance(obj2, (tuple, list)):
@@ -42,7 +42,7 @@ def deep_almost_equal(obj1, obj2, places=3, delta=None):
         if len(obj1) != len(obj2):
             return False
         for item1, item2 in zip(obj1, obj2):
-            if not deep_almost_equal(item1, item2, places, delta):
+            if not assert_deep_almost_equal(item1, item2, places=places, delta=delta):
                 return False
         return True
     else:
@@ -52,13 +52,16 @@ def deep_almost_equal(obj1, obj2, places=3, delta=None):
 
 def assert_pose_response_almost_equal(
     r1: PoseResponse, r2: PoseResponse,
-    *, loc_delta=6, loc3d_delta=1.5, off_delta=1.5
+    *,
+    loc_delta=5,  # pixels
+    loc3d_delta=0.25,  # mm
+    off_delta=0.5,  # mm
 ):
     assert r1.sequence == r2.sequence
     assert r1.parts_flags == r2.parts_flags
-    deep_almost_equal(r1.locations, r2.locations, delta=loc_delta)
-    deep_almost_equal(r1.locations_3d, r2.locations_3d, delta=loc3d_delta)
-    deep_almost_equal(r1.parts_3d_offsets, r2.parts_3d_offsets, delta=off_delta)
+    assert_deep_almost_equal(r1.locations, r2.locations, delta=loc_delta)
+    assert_deep_almost_equal(r1.locations_3d, r2.locations_3d, delta=loc3d_delta)
+    assert_deep_almost_equal(r1.parts_3d_offsets, r2.parts_3d_offsets, delta=off_delta)
 
 
 @pytest.fixture
@@ -84,7 +87,7 @@ def test_fp_and_xp_not_same(project_info, caplog):
     assert "Correcting expected_frame_count from " in caplog.text
     assert isinstance(res, IntersessionResponse)
     assert res.food_consumed == 0
-    assert res.pellets_presented == 0
+    assert res.pellets_presented == 1
     assert res.successful_reaches == 0
 
 
@@ -105,16 +108,27 @@ def test_index_error(project_info, caplog):
     # TODO: fix underlying issue
 
 
+agx001_20251015_15_expected_result = IntersessionResponse(
+    pellet_x=-1, pellet_y=1, pellet_z=1,
+    food_consumed=0, successful_reaches=0, pellets_presented=1,
+)
+
+
+def test_intersession_process_agx001_20251015_15(agx001_20251015_15):
+    res = intersession_process(
+        agx001_20251015_15,
+        calib_dir=this_dir.joinpath("4mm_6r_8c_4x"),
+    )
+    assert res == agx001_20251015_15_expected_result
+
+
 @pytest.mark.bench
 def test_intersession_process_bench_agx001_20251015_15(agx001_20251015_15, benchmark):
     res =  benchmark(lambda: intersession_process(
         agx001_20251015_15,
         calib_dir=this_dir.joinpath("4mm_6r_8c_4x"),
     ))
-    assert res == IntersessionResponse(
-        pellet_x=-1, pellet_y=1, pellet_z=0,
-        food_consumed=0, successful_reaches=0, pellets_presented=1,
-    )
+    assert res == agx001_20251015_15_expected_result
 
 
 @pytest.mark.parametrize("frames_per_batch_per_cam,select_frames_method", [

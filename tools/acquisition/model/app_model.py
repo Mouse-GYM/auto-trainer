@@ -314,7 +314,7 @@ class AppModel(ObservableObject):
         return self._inference
 
     @property
-    def hardware(self):
+    def hardware(self) -> HardwareModel:
         return self._hardware
 
     @property

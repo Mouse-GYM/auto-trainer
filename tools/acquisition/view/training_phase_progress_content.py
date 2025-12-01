@@ -103,7 +103,7 @@ class TrainingPhaseProgressContent(CardWidget):
             main_layout.addWidget(side_widget)
 
     def set_training_phase_progress(self, phase: Optional[TrainingPhase]):
-        logger.verbose("Setting training plan to %s", phase)
+        logger.verbose("Setting training phase to %s", phase)
         if phase is None:
             for label in (
                 self._started_label,

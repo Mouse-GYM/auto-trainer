@@ -23,21 +23,21 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     def last_position(self) -> Optional[Offset3DTuple]:
         """Given the last actual position"""
 
-    def set_x(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
+    def set_x(self, value: float, *, absolute: bool = True, sender: str = "NA") -> Optional[UUID]:
         """
         Change the X stepper location and set it as the X-axis pellet release location.
 
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def set_y(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
+    def set_y(self, value: float, *, absolute: bool = True, sender: str = "NA") -> Optional[UUID]:
         """
         Change the Y stepper location and set it as the Y-axis pellet release location.
 
         :return: A token to expect from the device message handler when the request is complete.
         """
 
-    def set_z(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
+    def set_z(self, value: float, *, absolute: bool = True, sender: str = "NA") -> Optional[UUID]:
         """
         Change the Z stepper location and set it as the Z-axis pellet release location.
 

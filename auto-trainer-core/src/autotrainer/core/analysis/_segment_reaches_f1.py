@@ -17,9 +17,11 @@ def segment_reaches_f11(
     pellet_x_vals = pellet_xyz_p['x'].values
     pellet_y_vals = pellet_xyz_p['y'].values
     pellet_z_vals = pellet_xyz_p['z'].values
-    dist_p = np.sqrt((pellet_x_vals - pellet_home[0])**2+
-                         (pellet_y_vals - pellet_home[1])**2+
-                         (pellet_z_vals - pellet_home[2])**2)
+    dist_p = np.sqrt(
+          (pellet_x_vals - pellet_home[0]) ** 2
+        + (pellet_y_vals - pellet_home[1]) ** 2
+        + (pellet_z_vals - pellet_home[2]) ** 2
+    )
 
     triangle_xyz_p = df_3d['Triangle']
     # triangle_p = triangle_xyz_p['p']
@@ -87,26 +89,31 @@ def segment_reaches_f11(
     count = 0
     pellet_state = 0 # 0 is lost, 1 is placed
     pellet_events = []
+
+    #
+
     for dp, st, tpX, tpY, tpZ, pp in zip(dist_p, dist_st, dist_tpX, dist_tpY, dist_tpZ, pellet_p):
         frm_counter += 1
-        # if p == 1:
-        #     print(f"{p_dist} - {frm_counter}")
+        if debug >= 3:
+            print(f"{frm_counter} > {dp=} {st} {tpX} {tpX} {tpY} {tpZ}")
+
         if pellet_state == 0: # Searching for placement
             testA = dp <= min_dist_from_orig
             testB = pp == 1 # is the pellet detected in frame
             testC = st > 12 or np.isnan(st) # was the cover open or not installed?
-            testDx = (3.5 < tpX < 4.5) and not np.isnan(tpX)
+            testDx = (2 < tpX < 4.5) and not np.isnan(tpX)
             testDy = (1 < tpY < 5) and not np.isnan(tpY)
-            testDz = (3 < tpZ < 4) and not np.isnan(tpZ)
+            testDz = (1.5 < tpZ < 4) and not np.isnan(tpZ)
             testD = testDx and testDy and testDz # was the pellet a correct distance from the triangle?
-            # x 3.5 : 4.5
-            # y 1 : 5
-            # z 3 : 4
 
             if testA and testB and testC and testD:
                 count += 1
             else:
-                count = 0
+                if count != 0:
+                    if debug >= 1:
+                        print(f"tests failed: {count}: {testA=} {testB=} {testC=} {testD=} ; {testDx} {testDy} {testDz}")
+                    count = 0
+
                 frame_at_count_begin = frm_counter
 
             if count >= n_frames_2_place:
@@ -124,6 +131,8 @@ def segment_reaches_f11(
             if dp > min_dist_from_orig or pp == 0:
                 count += 1
             else:
+                if debug >= 1:
+                    print(f"state==1: {count=} ; {dp} > {min_dist_from_orig} ; {pp=}")
                 count = 0
                 frame_at_count_begin = frm_counter
 
@@ -148,7 +157,7 @@ def segment_reaches_f11(
                 else:
                     pellet_dict['method'] = 'other'
                     pellet_dict['outcome'] = 'dropped'
-                if debug == 1:
+                if debug >= 1:
                     print(f"Right hand : {dist_hvpp_R[frame_at_count_begin]} at {frame_at_count_begin}")
                     print(f"Left hand : {dist_hvpp_L[frame_at_count_begin]}")
                     print(f"Tongue : {dist_tvpp[frame_at_count_begin]}")
