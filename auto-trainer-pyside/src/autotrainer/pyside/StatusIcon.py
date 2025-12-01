@@ -24,11 +24,6 @@ class StatusIcon(QLabel):
                           parent=parent)
 
     @staticmethod
-    def alarmIcon2(size: int = 18, parent=None):
-        return StatusIcon(on_icon='fa5s.bell', off_icon='fa5.bell', on_color='red', off_color='gray', size=size,
-                          parent=parent)
-
-    @staticmethod
     def doorIcon(size: int = 18, parent=None):
         return StatusIcon(on_icon='fa5s.door-open', off_icon='fa5s.door-closed', on_color='red', off_color='black',
                           size=size, parent=parent)
