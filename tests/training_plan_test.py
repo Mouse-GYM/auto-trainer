@@ -137,6 +137,23 @@ class TestTrainingPlan(MockSystemMachine):
         assert algo.successful_reaches_total == sum(r.successful_reaches for r in results)
         assert algo.pellets_presented_total == sum(r.pellets_presented for r in results)
 
+        prev_phase = plan.current_phase
+        #
+        results = [
+            IntersessionResponse(
+                pellets_presented=3,
+                successful_reaches=3,
+                food_consumed=3,
+                pellet_x=1,
+                pellet_y=0.5,
+                pellet_z=0.5,
+            ),
+        ]
+        caplog.clear()
+        self._make_session(app_model, machine, results[0])
+        assert plan.current_phase != prev_phase
+        # TODO: TBC... assert phase action(s)
+
     def _make_session(self, app_model, machine, analysis_result):
         algo = app_model.behavior.algorithm
         machine.enter_tunnel(reason="manual")
