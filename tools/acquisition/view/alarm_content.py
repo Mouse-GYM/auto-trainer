@@ -108,11 +108,11 @@ class AlarmContent(ContentWidget):
         label.setContentsMargins(0, 0, 0, 4)
         form_layout_detectors.addRow(label, None)
 
-        self._load_cell_thrash_status = StatusIcon.alarmIcon()
+        self._load_cell_thrash_status = StatusIcon.alarmIcon2()
         form_layout_detectors.addRow("Load Cell Thrash:", self._load_cell_thrash_status)
         self.load_cell_thrashing_changed.connect(self._load_cell_thrash_status.setStatus)
 
-        self._audio_spectrum_status = StatusIcon.alarmIcon()
+        self._audio_spectrum_status = StatusIcon.alarmIcon2()
         form_layout_detectors.addRow("Audio:", self._audio_spectrum_status)
         self.audio_thrashing_changed.connect(self._audio_spectrum_status.setStatus)
 
@@ -125,12 +125,12 @@ class AlarmContent(ContentWidget):
         self.slide_door_changed.connect(self._slide_door_status.setStatus)
 
         if GlobalAnimalPresenceMonitor.feature_enabled:
-            icon = self._animal_missing_status = StatusIcon.alarmIcon()
+            icon = self._animal_missing_status = StatusIcon.alarmIcon2()
             label = self._animal_missing_label = QLabel("Animal Immobile:")
             form_layout_detectors.addRow(label, icon)
             self.global_animal_presence_changed.connect(icon.setStatus)
 
-        icon = self._device_ack_timeout_status = StatusIcon.alarmIcon()
+        icon = self._device_ack_timeout_status = StatusIcon.alarmIcon2()
         form_layout_detectors.addRow("Device Ack Timeout:", icon)
         self.device_ack_timeout_changed.connect(icon.setStatus)
 
