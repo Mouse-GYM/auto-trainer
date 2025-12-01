@@ -448,6 +448,20 @@ class AppModel(ObservableObject):
     def training_plans(self) -> List[TrainingPlan]:
         return self._training_plans
 
+    @training_plans.setter
+    def training_plans(self, value):
+        prev_plan = self._training_plan
+        self._training_plans = value
+        self._training_plan_by_plan_id = {
+            plan.plan_id: plan
+            for idx, plan in enumerate(self._training_plans)
+        }
+        if prev_plan is not None:
+            self.training_plan = None  # detach current
+            if prev_plan.plan_id in self._training_plan_by_plan_id:
+                # reattach with new value:
+                self.training_plan = self._training_plan_by_plan_id[prev_plan.plan_id]
+
     def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
         if plan_id is None:
             return None
@@ -742,12 +756,8 @@ class AppModel(ObservableObject):
         # only at the end:
         self._loaded_configuration = configuration
 
-        self._training_plans = load_training_plans(
-            Path(self._preferences.configuration_location).joinpath("training/protocols"))
-        self._training_plan_by_plan_id = {
-            plan.plan_id: plan
-            for idx, plan in enumerate(self._training_plans)
-        }
+        plans = load_training_plans(Path(self._preferences.configuration_location).joinpath("training/protocols"))
+        self.training_plans = plans
 
         # and:
         self._load_animals()

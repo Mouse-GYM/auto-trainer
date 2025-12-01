@@ -90,7 +90,7 @@ def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, co
     assert proc.returncode == 0
     assert isinstance(out, bytes)
     output = out.decode()
-    print(output)
+    # print(output)
     assert f"Loading diamond-triangle file {diamond_config_path.as_posix()!r}"
     assert f"Using setting ini file: {settings_ini_path.as_posix()!r}" in output
     assert "Alogus hardware or hardware support not found. Using emulation interface." in output

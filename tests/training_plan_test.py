@@ -1,6 +1,8 @@
 import contextlib
 import copy
+import logging
 import threading
+import time
 from pathlib import Path
 from unittest import mock
 
@@ -31,14 +33,14 @@ def inference_model(pose_algo):
 
 
 @pytest.fixture(scope="session")
-def _plan():
+def training_plans():
     plans = load_training_plans(this_dir.joinpath("training/protocols"))
-    return plans[0]
+    return plans
 
 
 @pytest.fixture()
-def plan(_plan):
-    return copy.deepcopy(_plan)
+def plan(training_plans):
+    return copy.deepcopy(training_plans[0])
 
 
 class TestTrainingPlan(MockSystemMachine):
@@ -60,7 +62,7 @@ class TestTrainingPlan(MockSystemMachine):
             system_machine=machine,
         )
         self._animal = app_model.add_animal("mouse1", select=True)
-        app_model.training_plans.append(plan)
+        app_model.training_plans = [plan]
         try:
             yield app_model
         finally:
@@ -79,33 +81,61 @@ class TestTrainingPlan(MockSystemMachine):
             app_model.on_close()
 
     def _test_training_plan(self, app_model, user_pref, machine, plan, caplog):
+        caplog.set_level(logging.DEBUG)  # REQUIRED to ensure we collect/see all the logs we want to assert on,
+        # see below
+
         algo = app_model.behavior.algorithm
 
         assert app_model.load_configuration() is True
 
-        shift_xyz_buffer_handler = ShiftXYZBufferHandler(size=2)
+        shift_xyz_buffer_handler = ShiftXYZBufferHandler(size=2)  # will also check this
         algo.shift_xyz_handler.set_handle_new_shift_xyz(shift_xyz_buffer_handler)
         algo.intersession_enabled = True
-        app_model.training_mode = TrainingMode.MANUAL_AND_PROTOCOL
+        app_model.training_mode = TrainingMode.AUTOMATIC
         app_model.training_plan = plan  # this also sets it as current_protocol on current selected animal
         app_model.on_capture_start()
 
-        result = IntersessionResponse(
-            food_consumed=2,
-            pellet_x=1,
-            pellet_y=0.5,
-            pellets_presented=4,
-            successful_reaches=3,
-        )
-        for _ in range(2):
-            assert "Received processed shift xyz: (1.0, 0.5, 0.0)" not in caplog.text
+        plan_start_phase = plan.current_phase
+
+        assert plan_start_phase.advance_predicate.evaluate(plan_start_phase, plan._system_context) is False
+        # NB:
+        results = [
+            IntersessionResponse(
+                pellets_presented=3,
+                successful_reaches=2,
+                food_consumed=1,
+                pellet_x=1,
+                pellet_y=0.5,
+                pellet_z=0.5,
+            ),
+            IntersessionResponse(
+                pellets_presented=3,
+                successful_reaches=2,
+                food_consumed=2,
+                pellet_x=2,
+                pellet_y=-0.5,
+                pellet_z=-1,
+            ),
+        ]
+
+        for session_idx in range(2):
+            assert "Received processed shift xyz: " not in caplog.text
+            assert plan.current_phase == plan_start_phase
             caplog.clear()
-            self._make_session(app_model, machine, result)
+            self._make_session(app_model, machine, results[session_idx])
+            if session_idx == 0:
+                assert plan.current_phase == plan_start_phase
+                assert plan_start_phase.advance_predicate.evaluate(plan_start_phase, plan._system_context) is False
 
-        assert "Received processed shift xyz: (1.0, 0.5, 0.0)" in caplog.text
+        assert plan_start_phase.advance_predicate.evaluate(plan_start_phase, plan._system_context) is True
+        assert plan.current_phase != plan_start_phase, "the phase should have advanced"
 
-        assert algo.total_pellet_count == 2 * result.food_consumed
-        assert algo.successful_reaches_total == 2 * result.successful_reaches
+        assert "Received processed shift xyz: (1.5, 0.0, -0.2)" in caplog.text, \
+            "should be the avg/mean of the 2 previous sessions"
+
+        assert algo.total_pellet_count == sum(r.food_consumed for r in results)
+        assert algo.successful_reaches_total == sum(r.successful_reaches for r in results)
+        assert algo.pellets_presented_total == sum(r.pellets_presented for r in results)
 
     def _make_session(self, app_model, machine, analysis_result):
         algo = app_model.behavior.algorithm
