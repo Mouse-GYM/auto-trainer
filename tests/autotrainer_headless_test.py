@@ -9,9 +9,6 @@ import pytest
 
 from pathlib import Path
 
-from autotrainer.behavior import DiamondTriangleOffsetConfig, BehaviorAlgorithm
-from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
-from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
 
 
@@ -65,6 +62,7 @@ def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, co
     user_pref.save()  # do not forget ! otherwise default home config dirs/files are used
     env = os.environ.copy()
     env['AUTOTRAINER_DIAMOND_TRIANGLE_CONFIG'] = diamond_config_path.as_posix()  # same for this !
+    env['AUTOTRAINER_FORCE_CAN_EMULATION_IFACE'] = "1"
     proc = subprocess.Popen([
         sys.executable, headless_path,
         "-c", config_file_path.as_posix(),
