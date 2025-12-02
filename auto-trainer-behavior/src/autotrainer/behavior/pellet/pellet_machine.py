@@ -295,7 +295,7 @@ class PelletMachine(StateMachine):
 
         # Always arrest to the retract position during intersession.
         if algo.system_state == SystemState.intersession:
-            if self.state != PelletState.retract:
+            if cur_state != PelletState.retract:
                 covering_retrying = False
                 if algo.can_cover_pellet():
                     reason = "cover_pellet_before_retract_when_intersession"
