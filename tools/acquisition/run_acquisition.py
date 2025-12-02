@@ -150,7 +150,7 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     window.on_activated()
 
-    def finish():
+    def finish(orig_close=window.close):
         # NB: close everything before window close,
         # this ensure help prevent access, by some background thread(s), to UI elements when the window has already
         # been closed, which if can/will trigger segfault/app crash (and possibly leave behind background MP handler process(es) alive)
@@ -158,9 +158,10 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
         event_manager.close()
         BehaviorAlgorithm.close_algorithm_handler()
         logger.debug("Closing window ..")
-        window.close()
+        orig_close()
 
     app.aboutToQuit.connect(finish)
+    window.close = finish
 
     logger.info("Executing app now ..")
     return app.exec()
