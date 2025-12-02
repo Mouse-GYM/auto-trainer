@@ -798,7 +798,7 @@ class AppModel(ObservableObject):
         for camera in self._cameras:
             camera.on_close()
 
-        EventManager.default().close()
+        EventManager.try_close_default()
 
         self.hardware.disconnect()
 
@@ -814,6 +814,8 @@ class AppModel(ObservableObject):
             logger.warning("Handle process messages thread still alive ; closing queue")
         self._multiproc_msg_queue.close()
 
+        self._behavior.system_machine.cancel_timers()
+
         # somehow if many AppModel are created (like in test cases), this makes the ones following an on_close on any
         # of them to fails hardly. MP manager looks be a singleton per python process so it might be smth related.
         # commenting to prevent this bad effect for now.
@@ -822,7 +824,6 @@ class AppModel(ObservableObject):
         # logger.debug("shutting down multiprocess manager %s", mp_mgr)
         # mp_mgr.shutdown()
         # mp_mgr.join()
-
 
         self.save_configuration()
 
