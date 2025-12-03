@@ -74,6 +74,8 @@ class AppModel(ObservableObject):
         TRAINING_MODE = 'training_mode'
         TRAINING_PLAN = "training_plan"
         TRAINING_PHASE = "training_plan.current_phase"
+        TRAINING_PLAN_PROP = 'training_plan_prop'
+        TRAINING_PHASE_PROP = 'training_phase_prop'
 
     def __init__(
         self,
@@ -208,6 +210,7 @@ class AppModel(ObservableObject):
 
         self._selected_animal: Optional[AnimalSubject] = None
         self._attached_plan: Optional[TrainingPlan] = None
+        self._attached_phase: Optional[TrainingPhase] = None
         self._attached_animal: Optional[AnimalSubject] = None
 
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
@@ -474,12 +477,6 @@ class AppModel(ObservableObject):
             logger.warning("Unknown plan_id: %s", plan_id)
             return None
         # plan = copy.deepcopy(plan)  # always, so that different mouses won't share same plan instance
-        animal = self._selected_animal
-        if animal is not None:
-            prog = animal.training.get_plan_progress(plan.plan_id)
-            if prog is not None:
-                logger.debug("%s: deserializing plan progress: %s", animal, prog)
-                plan.deserialize_progress(prog)
         return plan
 
     def _attach_training_plan(self, plan: TrainingPlan):
@@ -492,6 +489,10 @@ class AppModel(ObservableObject):
                 logger.verbose("Plan %s already attached", plan.plan_id)
                 return
             self._detach_training_plan()
+        prog = animal.training.get_plan_progress(plan.plan_id)
+        if prog is not None:
+            logger.debug("%s: deserializing plan progress: %s", animal, prog)
+            plan.deserialize_progress(prog)
         logger.success("Animal %s: attaching plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
         plan.is_automatic = self._training_mode == TrainingMode.AUTOMATIC
         plan.behavior_algorithm = algo
@@ -500,6 +501,10 @@ class AppModel(ObservableObject):
         self._attached_plan = plan
         self._attached_animal = animal
         plan.property_changed += self._on_training_plan_property_changed  # first, to be sure get everything
+        phase = plan.current_phase
+        if phase is not None:
+            phase.property_changed += self._on_training_phase_property_changed
+            self._attached_phase = phase
         plan.resume()
 
     def _detach_training_plan(self):
@@ -513,6 +518,10 @@ class AppModel(ObservableObject):
         animal.training.set_plan_progress(plan.plan_id, prog)
         plan.property_changed -= self._on_training_plan_property_changed  # last
         plan.behavior_algorithm = plan.pellet_device = plan.tunnel_device = None
+        phase = self._attached_phase
+        if phase is not None:
+            phase.property_changed -= self._on_training_phase_property_changed
+            self._attached_phase = phase
         self._attached_plan = None
         self._attached_animal = None
         self._save_animal_metadata(animal, sender="detach_plan")
@@ -985,10 +994,17 @@ class AppModel(ObservableObject):
             self._update_status_text_overlay()
 
     def _on_training_plan_property_changed(self, name, value, _):
+        logger.debug("plan prop: %s -> %s", name, value)
         if name == "current_phase":
             if value is not None:
                 assert isinstance(value, TrainingPhase)
             self.property_changed(self.Props.TRAINING_PHASE, value, _)
+        else:
+            self.property_changed(self.Props.TRAINING_PLAN_PROP, (name, value), _)
+
+    def _on_training_phase_property_changed(self, name, value, _):
+        logger.debug("phase prop: %s -> %s", name, value)
+        self.property_changed(self.Props.TRAINING_PHASE_PROP, (name, value), _)
 
     def _save_animal_metadata(self, animal: AnimalSubject, *, backup_previous: bool = False, sender: str="na"):
         prev_animals = self._animals  # in case _animals content is copied, we reset it to current animal

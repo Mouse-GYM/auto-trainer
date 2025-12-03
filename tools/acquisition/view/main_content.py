@@ -399,6 +399,8 @@ class MainContent(ContentWidget):
             if phase != value:
                 raise RuntimeError("plan phase != new phase: %s", phase, value)
             self.training_plan_changed.emit(app_model.training_plan)
+        elif name in {props.TRAINING_PLAN_PROP, props.TRAINING_PHASE_PROP}:
+            self.training_plan_changed.emit(app_model.training_plan)
 
     def _behavior_algo_property_changed(self, name, value, _):
         pass  # currently unused
