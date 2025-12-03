@@ -79,7 +79,7 @@ class EmergencyAlarmMonitor(BaseDetector):
     @audio_load_cell_thrashing_engaged.setter
     def audio_load_cell_thrashing_engaged(self, value):
         prev, self._audio_load_cell_thrashing_engaged = self._audio_load_cell_thrashing_engaged, value
-        self.property_changed(self.AUDIO_LOAD_CELL_THRASHING_ENGAGED, value, prev)
+        self._on_property_changed(self.AUDIO_LOAD_CELL_THRASHING_ENGAGED, value, prev)
 
     @property
     def presence_in_cage_after_exit_tunnel_engaged(self):
@@ -88,7 +88,7 @@ class EmergencyAlarmMonitor(BaseDetector):
     @presence_in_cage_after_exit_tunnel_engaged.setter
     def presence_in_cage_after_exit_tunnel_engaged(self, value):
         prev, self._presence_in_cage_after_exit_tunnel_engaged = self._presence_in_cage_after_exit_tunnel_engaged, value
-        self.property_changed(self.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED, value, prev)
+        self._on_property_changed(self.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED, value, prev)
 
     #
     def _expire_audio_load_cell(self, perf_now):

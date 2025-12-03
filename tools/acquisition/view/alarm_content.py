@@ -1,6 +1,7 @@
 from functools import partial
 
 from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QPalette, QColor
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QFormLayout, QSizePolicy, QScrollArea, QWidget, QHBoxLayout, QLayout
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
@@ -71,27 +72,53 @@ class AlarmContent(ContentWidget):
         label.setContentsMargins(0, 0, 0, 4)
         form_layout_alarms.addRow(label, None)
 
-        def on_use_changed(do_use, *, lbl):
-            lbl.setStyleSheet("" if do_use else "color: gray")
+        def make_icon(size: int = 18, off_color: str = "black", name: str = "NA"):
+            ico = StatusIcon(on_icon='fa5s.bell', off_icon='fa5.bell', on_color='red', off_color=off_color, size=size, name=name)
+            return ico
 
-        icon = self._mouse_thrashing_status = StatusIcon.alarmIcon()
-        label = self._mouse_thrashing_label = QLabel("Thrashing:")
+        make_alarm_icon = lambda name: StatusIcon(
+            on_icon='fa5s.bell',
+            on_disabled_icon='fa5.bell',
+            off_icon='fa5.bell',
+            off_disabled_icon='fa5.bell',
+            on_color='red',
+            on_disabled_color='red',
+            off_color='black',
+            off_disabled_color='gray',
+            name=name,
+        )
+        make_detector_icon = partial(make_icon, off_color="black")
+
+        def make_label(txt: str) -> QLabel:
+            lbl = QLabel(txt)
+            palette = lbl.palette()
+            palette.setColor(QPalette.ColorGroup.Active, QPalette.ColorRole.WindowText, QColor("black"))
+            palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor("gray"))
+            # NB: Inactive != Disabled, later has to be used. Same for WindowText vs Text roles.
+            lbl.setPalette(palette)
+            return lbl
+
+        icon = self._mouse_thrashing_status = make_alarm_icon("alarm-thrashing")
+        label = self._mouse_thrashing_label = make_label("Thrashing:")
         form_layout_alarms.addRow(label, icon)
-        self.use_load_cell_audio_thrash_changed.connect(partial(on_use_changed, lbl=label))
+        self.use_load_cell_audio_thrash_changed.connect(label.setEnabled)
+        self.use_load_cell_audio_thrash_changed.connect(icon.setInUse)
         self.use_load_cell_audio_thrash_changed.emit(emergency_alarm_cfg.use_audio_load_cell_thrash)
         self.load_cell_audio_thrash_changed.connect(icon.setStatus)
 
-        icon = self._in_cage_after_tunnel_status = StatusIcon.alarmIcon()
-        label = self._in_cage_after_tunnel_label = QLabel("Mouse Missing:")
+        icon = self._in_cage_after_tunnel_status = make_alarm_icon("alarm-missing")
+        label = self._in_cage_after_tunnel_label = make_label("Mouse Missing:")
         form_layout_alarms.addRow(label, icon)
-        self.use_presence_in_cage_after_exit_tunnel_changed.connect(partial(on_use_changed, lbl=label))
+        self.use_presence_in_cage_after_exit_tunnel_changed.connect(label.setEnabled)
+        self.use_presence_in_cage_after_exit_tunnel_changed.connect(icon.setInUse)
         self.use_presence_in_cage_after_exit_tunnel_changed.emit(emergency_alarm_cfg.use_presence_missing_after_exit_tunnel)
         self.presence_in_cage_after_exit_tunnel_changed.connect(icon.setStatus)
 
-        icon = self._external_door_status = StatusIcon.alarmIcon()
-        label = self._external_door_label = QLabel("External doors:")
+        icon = self._external_door_status = make_alarm_icon("alarm-ext-doors")
+        label = self._external_door_label = make_label("External doors:")
         form_layout_alarms.addRow(label, icon)
-        self.use_external_door_changed.connect(partial(on_use_changed, lbl=label))
+        self.use_external_door_changed.connect(label.setEnabled)
+        self.use_external_door_changed.connect(icon.setInUse)
         self.use_external_door_changed.emit(emergency_alarm_cfg.use_external_doors_open)
         self.external_door_status_changed.connect(icon.setStatus)
 
@@ -106,29 +133,29 @@ class AlarmContent(ContentWidget):
         label.setContentsMargins(0, 0, 0, 4)
         form_layout_detectors.addRow(label, None)
 
-        self._load_cell_thrash_status = StatusIcon.alarmIcon()
+        self._load_cell_thrash_status = make_detector_icon(name="det-load-cell-thrash")
         form_layout_detectors.addRow("Load Cell Thrash:", self._load_cell_thrash_status)
         self.load_cell_thrashing_changed.connect(self._load_cell_thrash_status.setStatus)
 
-        self._audio_spectrum_status = StatusIcon.alarmIcon()
+        self._audio_spectrum_status = make_detector_icon(name="det-audio")
         form_layout_detectors.addRow("Audio:", self._audio_spectrum_status)
         self.audio_thrashing_changed.connect(self._audio_spectrum_status.setStatus)
 
-        self._front_door_status = StatusIcon.doorIcon()
+        self._front_door_status = StatusIcon.doorIcon(name="det-front-door")
         form_layout_detectors.addRow("Front Door:", self._front_door_status)
         self.front_door_changed.connect(self._front_door_status.setStatus)
 
-        self._slide_door_status = StatusIcon.doorIcon()
+        self._slide_door_status = StatusIcon.doorIcon(name="det-slide-door")
         form_layout_detectors.addRow("Sliding Door:", self._slide_door_status)
         self.slide_door_changed.connect(self._slide_door_status.setStatus)
 
         if GlobalAnimalPresenceMonitor.feature_enabled:
-            icon = self._animal_missing_status = StatusIcon.alarmIcon()
+            icon = self._animal_missing_status = make_detector_icon(name="det-immobile")
             label = self._animal_missing_label = QLabel("Animal Immobile:")
             form_layout_detectors.addRow(label, icon)
             self.global_animal_presence_changed.connect(icon.setStatus)
 
-        icon = self._device_ack_timeout_status = StatusIcon.alarmIcon()
+        icon = self._device_ack_timeout_status = make_detector_icon(name="det-device-ack")
         form_layout_detectors.addRow("Device Ack Timeout:", icon)
         self.device_ack_timeout_changed.connect(icon.setStatus)
 
@@ -180,12 +207,13 @@ class AlarmContent(ContentWidget):
         if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
             self.audio_thrashing_changed.emit(new_value)
 
-    def _alarm_monitor_property_changed(self,  name, value, _):
+    def _alarm_monitor_property_changed(self,  name, value, old_value):
         p = EmergencyAlarmMonitor
+        logger.debug("got %s -> %s (was %s)", name, value, old_value)
         if name == p.CONFIG:
             assert isinstance(value, EmergencyAlarmConfiguration)
-            self.use_presence_in_cage_after_exit_tunnel_changed.emit(value.use_presence_missing_after_exit_tunnel)
             self.use_load_cell_audio_thrash_changed.emit(value.use_audio_load_cell_thrash)
+            self.use_presence_in_cage_after_exit_tunnel_changed.emit(value.use_presence_missing_after_exit_tunnel)
             self.use_external_door_changed.emit(value.use_external_doors_open)
         elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
             self.presence_in_cage_after_exit_tunnel_changed.emit(value)
