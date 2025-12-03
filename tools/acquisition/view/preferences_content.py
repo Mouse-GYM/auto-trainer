@@ -870,9 +870,10 @@ class PreferencesContent(QWidget):
             toggled = value != 0
             for w in audio_load_cell_sub_widgets:
                 w.setEnabled(toggled)
-            cfg = copy.deepcopy(alarm_monitor.config)
-            cfg.use_audio_load_cell_thrash = toggled
-            alarm_monitor.config = cfg
+            if toggled != alarm_monitor.config.use_audio_load_cell_thrash:
+                cfg = copy.deepcopy(alarm_monitor.config)
+                cfg.use_audio_load_cell_thrash = toggled
+                alarm_monitor.config = cfg
         self._use_audio_load_cell_thrashing_toggle.stateChanged.connect(toggle_changed)
         toggle_changed(int(alarm_cfg.use_audio_load_cell_thrash))
 
@@ -924,12 +925,12 @@ class PreferencesContent(QWidget):
             toggled = value != 0
             for w in animal_missing_sub_widgets:
                 w.setEnabled(toggled)
-            cfg = copy.deepcopy(alarm_monitor.config)
-            cfg.use_presence_missing_after_exit_tunnel = toggled
-            alarm_monitor.config = cfg
+            if toggled != alarm_monitor.config.use_presence_missing_after_exit_tunnel:
+                cfg = copy.deepcopy(alarm_monitor.config)
+                cfg.use_presence_missing_after_exit_tunnel = toggled
+                alarm_monitor.config = cfg
         self._use_animal_missing_toggle.stateChanged.connect(toggle_changed)
         toggle_changed(int(alarm_cfg.use_presence_missing_after_exit_tunnel))
-
 
         # right side:
 
@@ -976,9 +977,10 @@ class PreferencesContent(QWidget):
             toggled = value != 0
             for w in use_external_doors_sub_widgets:
                 w.setEnabled(toggled)
-            cfg = copy.deepcopy(alarm_monitor.config)
-            cfg.use_external_doors_open = toggled
-            alarm_monitor.config = cfg
+            if toggled != alarm_monitor.config.use_external_doors_open:
+                cfg = copy.deepcopy(alarm_monitor.config)
+                cfg.use_external_doors_open = toggled
+                alarm_monitor.config = cfg
         self._use_external_doors_open_toggle.stateChanged.connect(toggle_changed)
         toggle_changed(int(alarm_cfg.use_external_doors_open))
 

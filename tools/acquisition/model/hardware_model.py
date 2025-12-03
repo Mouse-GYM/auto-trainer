@@ -127,8 +127,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @front_door_open.setter
     def front_door_open(self, value: bool):
-        self._front_door_open = self._on_property_changed(HardwareModel.FRONT_DOOR_PROPERTY, value,
-                                                          self._front_door_open)
+        prev, self._front_door_open = self._front_door_open, value
+        self._on_property_changed(HardwareModel.FRONT_DOOR_PROPERTY, value, prev)
 
     @property
     def slide_door_open(self):
@@ -136,8 +136,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @slide_door_open.setter
     def slide_door_open(self, value: bool):
-        self._slide_door_open = self._on_property_changed(HardwareModel.SLIDE_DOOR_PROPERTY, value,
-                                                          self._slide_door_open)
+        prev, self._slide_door_open = self._slide_door_open, value
+        self._on_property_changed(HardwareModel.SLIDE_DOOR_PROPERTY, value, prev)
 
     @property
     def head_magnet_intensity(self) -> Optional[float]:

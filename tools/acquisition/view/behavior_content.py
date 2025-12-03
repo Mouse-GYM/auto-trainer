@@ -61,7 +61,7 @@ class BehaviorContent(ContentWidget):
 
         right_layout = self._right_layout = QGridLayout()
         right_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setHorizontalSpacing(8)
+        right_layout.setHorizontalSpacing(8)
         right_layout.setVerticalSpacing(4)
         right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
@@ -123,10 +123,8 @@ class BehaviorContent(ContentWidget):
 
         right_cur_row = 0
         label = QLabel("<b>Pellet Counts</b>")
-        label.setContentsMargins(0, 0, 0, 4)
         right_layout.addWidget(label, right_cur_row, 0)
         label = QLabel("<b>day / total</b>")
-        label.setContentsMargins(0, 0, 0, 4)
         right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1
 
@@ -150,7 +148,6 @@ class BehaviorContent(ContentWidget):
         right_layout.addWidget(label, right_cur_row, 0)
         label = QLabel("<b>mm</b>")
         label.setContentsMargins(0, 8, 0, 4)
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1
 
@@ -162,6 +159,13 @@ class BehaviorContent(ContentWidget):
         right_layout.addWidget(QLabel("Prev. processed:"), right_cur_row, 0)
         label = self._prev_processed_pellet_shift_label = XYZQLabel()
         right_layout.addWidget(label, right_cur_row, 1)
+
+        for r_idx in range(right_layout.rowCount()):
+            i = right_layout.itemAtPosition(r_idx, 1)
+            if i:
+                w = i.widget()
+                if isinstance(w, (QLabel, )):
+                    w.setAlignment(Qt.AlignmentFlag.AlignRight)
 
         #
 
