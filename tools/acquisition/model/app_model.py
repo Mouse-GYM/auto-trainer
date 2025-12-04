@@ -474,10 +474,10 @@ class AppModel(ObservableObject):
     def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
         if plan_id is None:
             return None
-        attached = self._attached_plan
-        if attached is not None and attached.plan_id == plan_id:
-            logger.debug("get_training_plan_by_id: reusing attached: %s", attached)
-            return attached
+        # attached = self._attached_plan
+        # if attached is not None and attached.plan_id == plan_id:
+        #     logger.debug("get_training_plan_by_id: reusing attached: %s", attached)
+        #     return attached
         plan = self._training_plan_by_plan_id.get(plan_id)
         if plan is None:
             logger.warning("Unknown plan_id: %s", plan_id)
@@ -505,8 +505,10 @@ class AppModel(ObservableObject):
         if prog is not None:
             logger.debug("%s: deserializing plan progress: %s", animal, prog)
             plan.deserialize_progress(prog)
-        logger.success("Animal %s: attaching to plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
-        plan.is_automatic = self._training_mode == TrainingMode.AUTOMATIC
+        auto = self._training_mode == TrainingMode.AUTOMATIC
+        logger.success("Animal %s: attaching auto=%s to plan %s (%s) ..",
+                       animal.name, auto, plan.plan_id, hex(id(plan)))
+        plan.is_automatic = auto
         plan.behavior_algorithm = algo
         plan.pellet_device = self._hardware
         plan.tunnel_device = self._hardware
