@@ -91,6 +91,10 @@ class TrainingPlansFSEventHandler(PatternMatchingEventHandler):
         logger.debug(f"File moved from {event.src_path} to {event.dest_path}")
         self._reload_app_model_plans()
 
+    def on_closed(self, event: FileSystemEvent) -> None:
+        logger.debug(f"File close from {event.src_path} to {event.dest_path}")
+        self._reload_app_model_plans()
+
 
 class AppModel(ObservableObject):
 
