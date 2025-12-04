@@ -388,7 +388,7 @@ class AppModel(ObservableObject):
             return
         if value == TrainingMode.MANUAL:
             self._detach_training_plan()
-        else:
+        elif self._selected_animal is not None:  # animal might be not active/created yet
             plan = self._training_plan
             if plan is not None and self._attached_plan is None:
                 self._attach_training_plan(plan)
@@ -482,7 +482,10 @@ class AppModel(ObservableObject):
     def _attach_training_plan(self, plan: TrainingPlan):
         algo = self._behavior.algorithm
         animal = self._selected_animal
-        assert animal is not None
+        if animal is None:
+            # if animal not created yet
+            return
+        assert isinstance(animal, AnimalSubject)
         attached = self._attached_plan
         if attached is not None:
             if attached.plan_id == plan.plan_id and animal == self._attached_animal:
@@ -501,35 +504,44 @@ class AppModel(ObservableObject):
         self._attached_plan = plan
         self._attached_animal = animal
         plan.property_changed += self._on_training_plan_property_changed  # first, to be sure get everything
-        phase = plan.current_phase
+        plan.progress_updated += self._on_training_plan_progress_updated
+        self._attach_training_phase(plan.current_phase)
+        plan.resume()
+
+    def _attach_training_phase(self, phase: Optional[TrainingPhase]):
+        self._detach_training_phase()  # always
+        self._attached_phase = phase
         if phase is not None:
             phase.property_changed += self._on_training_phase_property_changed
-            self._attached_phase = phase
-        plan.resume()
 
     def _detach_training_plan(self):
         plan = self._attached_plan
         if plan is None:
             return
-        prog = plan.serialize_progress()
-        animal = self._attached_animal
-        assert animal is not None
-        logger.notice("%s: detaching from plan %s (%s)", animal.name, plan.plan_id, hex(id(plan)))
-        animal.training.set_plan_progress(plan.plan_id, prog)
-        plan.property_changed -= self._on_training_plan_property_changed  # last
+        self._detach_training_phase()
+        plan.property_changed -= self._on_training_plan_property_changed
+        plan.progress_updated -= self._on_training_plan_progress_updated
         plan.behavior_algorithm = plan.pellet_device = plan.tunnel_device = None
+        animal = self._attached_animal
+        assert isinstance(animal, AnimalSubject)
+        logger.notice("%s: detaching from plan %s (%s)", animal.name, plan.plan_id, hex(id(plan)))
+        self._attached_plan = None
+        self._attached_animal = None
+        prog = plan.serialize_progress()
+        animal.training.set_plan_progress(plan.plan_id, prog)
+        self._save_animal_metadata(animal, sender="detach_plan")
+
+    def _detach_training_phase(self):
         phase = self._attached_phase
         if phase is not None:
             phase.property_changed -= self._on_training_phase_property_changed
-            self._attached_phase = phase
-        self._attached_plan = None
-        self._attached_animal = None
-        self._save_animal_metadata(animal, sender="detach_plan")
+            self._attached_phase = None
+
     #
 
-    def add_animal(self, name: str, select: bool = False):
+    def add_animal(self, name: str, select: bool = False) -> Optional[AnimalSubject]:
         if not name or len(name) == 0:
-            return
+            return None
 
         matching_animals = [x for x in self._animals if x.name == name]
 
@@ -998,9 +1010,20 @@ class AppModel(ObservableObject):
         if name == "current_phase":
             if value is not None:
                 assert isinstance(value, TrainingPhase)
+            self._attach_training_phase(value)
             self.property_changed(self.Props.TRAINING_PHASE, value, _)
         else:
             self.property_changed(self.Props.TRAINING_PLAN_PROP, (name, value), _)
+
+    def _on_training_plan_progress_updated(self):
+        plan = self._attached_plan
+        logger.debug("plan %s progress updated", plan.plan_id)
+        prog = plan.serialize_progress()
+        animal = self._attached_animal
+        assert animal is not None
+        animal.training.set_plan_progress(plan.plan_id, prog)
+        self._save_animal_metadata(animal, sender="plan-progress-updated")
+        self.property_changed(self.Props.TRAINING_PLAN_PROP, None, None)
 
     def _on_training_phase_property_changed(self, name, value, _):
         logger.debug("phase prop: %s -> %s", name, value)
