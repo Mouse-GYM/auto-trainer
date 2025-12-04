@@ -591,7 +591,7 @@ class MainWindow(QMainWindow):
             self._training_plan_combo.blockSignals(True)
             self._training_plan_combo.setCurrentIndex(training_plan_idx)
             self._training_plan_combo.blockSignals(False)
-            self.main_content.training_plan_changed.emit(self._app_model.attached_plan)
+            self.main_content.training_plan_changed.emit(self._app_model.training_plan)
             self._refresh_prev_next_phases()
 
         update_training_mode(self._app_model.training_mode)
@@ -794,7 +794,7 @@ class MainWindow(QMainWindow):
             self._app_model.selected_animal = animal
 
     def _refresh_prev_next_phases(self):
-        attached = self._app_model.attached_plan
+        attached = self._app_model.training_plan
         if attached is None or self._app_model.training_mode != TrainingMode.MANUAL_AND_PROTOCOL:
             self.previous_training_phase_action.setVisible(False)
             self.next_training_phase_action.setVisible(False)

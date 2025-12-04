@@ -390,11 +390,11 @@ class AppModel(ObservableObject):
         if prev == value:
             return
         if value == TrainingMode.MANUAL:
-            self._detach_training_plan()
+            self._detach_training_plan()  # = None
         elif self._selected_animal is not None:  # animal might be not active/created yet
-            plan = self._training_plan
-            if plan is not None and self._attached_plan is None:
-                self._attach_training_plan(plan)
+            self._detach_training_plan()
+            animal = self._selected_animal
+            self.training_plan = self.get_training_plan_by_id(None if animal is None else animal.training.current_protocol)
         self._on_property_changed(self.Props.TRAINING_MODE, value, prev)
 
     @property
@@ -465,11 +465,11 @@ class AppModel(ObservableObject):
             for idx, plan in enumerate(self._training_plans)
         }
         self.property_changed(self.Props.TRAINING_PLANS, value, None)
-        if prev_plan is not None:
-            self.training_plan = None  # detach current
-            if prev_plan.plan_id in self._training_plan_by_plan_id:
-                # reattach with new value:
-                self.training_plan = self._training_plan_by_plan_id[prev_plan.plan_id]
+        # if prev_plan is not None:
+        #     self.training_plan = None  # detach current
+        #     if prev_plan.plan_id in self._training_plan_by_plan_id:
+        #         # reattach with new value:
+        #         self.training_plan = self._training_plan_by_plan_id[prev_plan.plan_id]
 
     def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
         if plan_id is None:
