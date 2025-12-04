@@ -477,7 +477,7 @@ class AppModel(ObservableObject):
         if plan is None:
             logger.warning("Unknown plan_id: %s", plan_id)
             return None
-        # plan = copy.deepcopy(plan)  # always, so that different mouses won't share same plan instance
+        plan = copy.deepcopy(plan)  # always, so that different mouses won't share same plan instance
         return plan
 
     def _attach_training_plan(self, plan: TrainingPlan):
@@ -497,7 +497,7 @@ class AppModel(ObservableObject):
         if prog is not None:
             logger.debug("%s: deserializing plan progress: %s", animal, prog)
             plan.deserialize_progress(prog)
-        logger.success("Animal %s: attaching plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
+        logger.success("Animal %s: attaching to plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
         plan.is_automatic = self._training_mode == TrainingMode.AUTOMATIC
         plan.behavior_algorithm = algo
         plan.pellet_device = self._hardware
