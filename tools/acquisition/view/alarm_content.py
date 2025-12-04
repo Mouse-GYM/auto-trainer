@@ -184,9 +184,10 @@ class AlarmContent(ContentWidget):
         analysis = app_model.analysis
         analysis.load_cell_monitor.property_changed += self._load_cell_property_changed
         analysis.audio_thrashing_monitor.property_changed += self._audio_thrashing_property_changed
-        analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
         analysis.global_animal_presence_monitor.property_changed += self._global_animal_presence_property_changed
-        analysis.external_doors_monitor.property_changed += self._ext_door_property_changed
+        # emergency alarm controls 3 sub-alarms:
+        analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
+        # analysis.external_doors_monitor.property_changed += self._ext_door_property_changed
 
     def set_is_capture_active(self, is_editable: bool):
         self._card_widget.setEnabled(is_editable)
@@ -207,23 +208,41 @@ class AlarmContent(ContentWidget):
         if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
             self.audio_thrashing_changed.emit(new_value)
 
-    def _alarm_monitor_property_changed(self,  name, value, old_value):
+    def _alarm_monitor_property_changed(self, name, value, old_value):
         p = EmergencyAlarmMonitor
         logger.debug("got %s -> %s (was %s)", name, value, old_value)
+        alarm_monitor = self._app_model.analysis.emergency_alarm_monitor
+        is_pause_emergency = self._app_model.behavior.algorithm.algo_paused
+        cfg = alarm_monitor.config
         if name == p.CONFIG:
             assert isinstance(value, EmergencyAlarmConfiguration)
             self.use_load_cell_audio_thrash_changed.emit(value.use_audio_load_cell_thrash)
             self.use_presence_in_cage_after_exit_tunnel_changed.emit(value.use_presence_missing_after_exit_tunnel)
             self.use_external_door_changed.emit(value.use_external_doors_open)
+
+        elif name == p.IS_ENGAGED:
+            if not value:
+                mon = alarm_monitor
+                changed = self._alarm_monitor_property_changed
+                changed(p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED, mon.presence_in_cage_after_exit_tunnel_engaged, None)
+                changed(p.AUDIO_LOAD_CELL_THRASHING_ENGAGED, mon.audio_load_cell_thrashing_engaged, None)
+                changed(p.EXT_DOORS_OPEN_ENGAGED, mon.ext_doors_open_engaged, None)
+
         elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
+            if not value and is_pause_emergency and not cfg.auto_resume_on_presence_seen_after_exit_tunnel:
+                return
             self.presence_in_cage_after_exit_tunnel_changed.emit(value)
+
         elif name == p.AUDIO_LOAD_CELL_THRASHING_ENGAGED:
+            if not value and is_pause_emergency and not cfg.auto_resume_on_audio_load_cell_thrash_resume:
+                return
             self.load_cell_audio_thrash_changed.emit(value)
+
+        elif name == p.EXT_DOORS_OPEN_ENGAGED:
+            if not value and is_pause_emergency and not cfg.auto_resume_on_external_doors_close:
+                return
+            self.external_door_status_changed.emit(value)
 
     def _global_animal_presence_property_changed(self, name, value, _):
         if name == "is_engaged":
             self.global_animal_presence_changed.emit(value)
-
-    def _ext_door_property_changed(self, name, value, _):
-        if name == "is_engaged":
-            self.external_door_status_changed.emit(value)
