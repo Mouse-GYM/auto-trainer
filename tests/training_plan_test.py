@@ -35,7 +35,7 @@ def inference_model(pose_algo):
 @pytest.fixture(scope="session")
 def training_plans():
     plans = load_training_plans(this_dir.joinpath("training/protocols"))
-    return plans
+    return list(plans.values())
 
 
 @pytest.fixture()

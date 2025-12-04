@@ -557,11 +557,10 @@ class MainWindow(QMainWindow):
                           # this is because it's a typed str-subclass enum.
                           )
 
-        def index_changed(_):
+        def training_mode_index_changed(_):
             selected_mode = self._training_mode_combo.currentData()[0]  # unpack from tuple, see above.
-            app_model.reload_training_plans()
             app_model.training_mode = selected_mode
-        combo.currentIndexChanged.connect(index_changed)
+        combo.currentIndexChanged.connect(training_mode_index_changed)
 
         label = QLabel("Protocol:")
         label.setContentsMargins(8, 0, 0, 0)
@@ -573,14 +572,13 @@ class MainWindow(QMainWindow):
         combo = self._training_plan_combo = QComboBox()
         layout.addWidget(combo)
 
-        def index_changed(_):
+        def training_plan_index_changed(_):
             plan_id = self._training_plan_combo.currentData()
-            app_model.reload_training_plans()
             selected_plan: Optional[TrainingPlan] = app_model.get_training_plan_by_id(plan_id)
             logger.debug("plan changed: %s -> %s", plan_id, selected_plan)
             app_model.training_plan = selected_plan
 
-        combo.currentIndexChanged.connect(index_changed)
+        combo.currentIndexChanged.connect(training_plan_index_changed)
 
         def update_training_mode(training_mode):
             logger.debug("Updating training_mode to %s", training_mode)
@@ -591,7 +589,8 @@ class MainWindow(QMainWindow):
             self._training_plan_combo.blockSignals(True)
             self._training_plan_combo.setCurrentIndex(training_plan_idx)
             self._training_plan_combo.blockSignals(False)
-            self.main_content.training_plan_changed.emit(self._app_model.training_plan)
+            # self.main_content.training_plan_changed.emit(self._app_model.training_plan)
+            self._app_model.training_mode = training_mode
             self._refresh_prev_next_phases()
 
         update_training_mode(self._app_model.training_mode)
@@ -780,21 +779,18 @@ class MainWindow(QMainWindow):
         self._app_model.notes = value
 
     def _add_animal(self):
-        self._app_model.reload_training_plans()
         self._app_model.add_animal(self._animal_dropdown.currentText(), select=True)
 
     def _animal_changed(self, _):
-        self._app_model.reload_training_plans()
         if self._animal_dropdown.currentIndex() == -1:
             self._app_model.selected_animal = None
         else:
             animal_id = self._animal_dropdown.currentData()
             animal: AnimalSubject = self._app_model.get_animal_by_id(animal_id)
-            # logger.debug("animal: %s", dataclasses.asdict(animal))
             self._app_model.selected_animal = animal
 
     def _refresh_prev_next_phases(self):
-        attached = self._app_model.training_plan
+        attached = self._app_model.attached_plan
         if attached is None or self._app_model.training_mode != TrainingMode.MANUAL_AND_PROTOCOL:
             self.previous_training_phase_action.setVisible(False)
             self.next_training_phase_action.setVisible(False)

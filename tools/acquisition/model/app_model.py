@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Callable, Any
 
 import yaml
+from watchdog.events import FileSystemEventHandler, FileSystemEvent, PatternMatchingEventHandler
+from watchdog.observers import Observer
 
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
@@ -45,7 +47,7 @@ from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
-from tools.acquisition.model.training_plan import load_training_plans
+from tools.acquisition.model.training_plan import load_training_plans, load_training_plan_from_path
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
@@ -58,6 +60,36 @@ _recording_age_enough_timer = make_daemon_timer
 
 def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
+
+
+class TrainingPlansFSEventHandler(PatternMatchingEventHandler):
+
+    def __init__(self, app_model: "AppModel"):
+        super().__init__(patterns=["*.json"])
+        self._app_model = app_model
+
+    def _reload_app_model_plans(self):
+        self._app_model.reload_training_plans()
+
+    # def on_any_event(self, event: FileSystemEvent) -> None:
+    #     logger.debug("Any Event: %s", event.dest_path)
+    #     self._reload_app_model_plans()
+
+    def on_created(self, event):
+        logger.debug(f"File created: {event.src_path}")
+        self._reload_app_model_plans()
+
+    def on_modified(self, event):
+        logger.debug(f"File modified: {event.src_path}")
+        self._reload_app_model_plans()
+
+    def on_deleted(self, event):
+        logger.debug(f"File deleted: {event.src_path}")
+        self._reload_app_model_plans()
+
+    def on_moved(self, event):
+        logger.debug(f"File moved from {event.src_path} to {event.dest_path}")
+        self._reload_app_model_plans()
 
 
 class AppModel(ObservableObject):
@@ -185,6 +217,7 @@ class AppModel(ObservableObject):
 
         self._training_plans: List[TrainingPlan] = []
         self._training_plan_by_plan_id: Dict[str, TrainingPlan] = {}
+        self._plans_by_path: Dict[Path, TrainingPlan] = {}
 
         self._behavior = BehaviorModel(
             self._system_message_handler, self._analysis, self._hardware, self._inference,
@@ -220,6 +253,10 @@ class AppModel(ObservableObject):
         self._behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
         preferences.property_changed += self._on_preferences_property_changed
         self._inference.property_changed += self._on_inference_property_changed
+
+        self._plans_files_event_handler = TrainingPlansFSEventHandler(self)
+        self._plans_files_observer = Observer()
+        self._plans_files_observer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_release_pellet(self):
@@ -390,11 +427,20 @@ class AppModel(ObservableObject):
         if prev == value:
             return
         if value == TrainingMode.MANUAL:
-            self._detach_training_plan()  # = None
-        elif self._selected_animal is not None:  # animal might be not active/created yet
             self._detach_training_plan()
+        else:
             animal = self._selected_animal
-            self.training_plan = self.get_training_plan_by_id(None if animal is None else animal.training.current_protocol)
+            if animal is None:  # animal might be not active/created yet
+                self._detach_training_plan()
+            else:
+                attached = self._attached_plan
+                if attached is not None:
+                    is_auto = value == TrainingMode.AUTOMATIC
+                    logger.info("Updating plan is_automatic to %s", is_auto)
+                    attached.is_automatic = is_auto
+                else:
+                    # this will also attach to it (given current mode != manual):
+                    self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
         self._on_property_changed(self.Props.TRAINING_MODE, value, prev)
 
     @property
@@ -458,12 +504,18 @@ class AppModel(ObservableObject):
 
     @training_plans.setter
     def training_plans(self, value):
-        prev_plan = self._training_plan
         self._training_plans = value
         self._training_plan_by_plan_id = {
             plan.plan_id: plan
             for idx, plan in enumerate(self._training_plans)
         }
+        self._detach_training_plan()  # always
+        animal = self._selected_animal
+        if animal is not None:
+            plan_id = animal.training.current_protocol
+            if plan_id is not None:
+                logger.info("reattaching %s to animal", plan_id)
+                self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
         self.property_changed(self.Props.TRAINING_PLANS, value, None)
 
     def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
@@ -473,7 +525,12 @@ class AppModel(ObservableObject):
         if plan is None:
             logger.warning("Unknown plan_id: %s", plan_id)
             return None
-        return plan
+        for available_path, available_plan in self._plans_by_path.items():
+            if available_plan.plan_id == plan.plan_id:
+                # ensure any caller gets a fresh instance
+                return load_training_plan_from_path(available_path)
+        logger.warning("Plan %s not anymore available", plan.plan_id)
+        return None
 
     def _attach_training_plan(self, plan: TrainingPlan):
         algo = self._behavior.algorithm
@@ -718,6 +775,10 @@ class AppModel(ObservableObject):
 
         self._is_recording_trigger = False
 
+    def _get_plans_dir(self):
+        plans_path = Path(self._preferences.configuration_location).joinpath("training/protocols")
+        return plans_path
+
     def load_configuration(self, location: Optional[str] = None):
         p_location = Path(location or "")
         if not location or not p_location.is_file():
@@ -776,18 +837,30 @@ class AppModel(ObservableObject):
         # only at the end:
         self._loaded_configuration = configuration
 
-        self.reload_training_plans()
+        plans_path = self._get_plans_dir()
+        self.reload_training_plans(plans_path)
 
         # and:
         self._load_animals()
 
         self.configuration_loaded_event(configuration)
 
+        observer = self._plans_files_observer
+        observer.stop()
+        observer.join(2)
+        observer = self._plans_files_observer = Observer()
+        observer.schedule(self._plans_files_event_handler, path=plans_path, recursive=False)
+        observer.start()
+        logger.debug("started FS monitoring of %s", plans_path)
+
         return True
 
-    def reload_training_plans(self):
-        plans = load_training_plans(Path(self._preferences.configuration_location).joinpath("training/protocols"))
-        self.training_plans = plans
+    def reload_training_plans(self, dir_path: Optional[Path] = None):
+        if dir_path is None:
+            dir_path = self._get_plans_dir()
+        plans = load_training_plans(dir_path)
+        self._plans_by_path = plans
+        self.training_plans = list(plans.values())
 
     def save_configuration(self):
         if self._loaded_configuration is None:
