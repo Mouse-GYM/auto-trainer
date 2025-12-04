@@ -586,7 +586,9 @@ class MainWindow(QMainWindow):
             self._widget_training_plan_action.setVisible(training_mode != TrainingMode.MANUAL)
             plan = self._app_model.attached_plan
             training_plan_idx = self._training_plan_index_by_plan_id.get(None if plan is None else plan.plan_id, -1)
+            self._training_plan_combo.blockSignals(True)
             self._training_plan_combo.setCurrentIndex(training_plan_idx)
+            self._training_plan_combo.blockSignals(False)
             self.main_content.training_plan_changed.emit(plan)
             self._refresh_prev_next_phases()
 
