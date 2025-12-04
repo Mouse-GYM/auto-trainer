@@ -792,7 +792,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_prev_next_phases(self):
         attached = self._app_model.attached_plan
-        if attached is None or self._app_model.training_mode == TrainingMode.MANUAL:
+        if attached is None or self._app_model.training_mode != TrainingMode.MANUAL_AND_PROTOCOL:
             self.previous_training_phase_action.setVisible(False)
             self.next_training_phase_action.setVisible(False)
             return
