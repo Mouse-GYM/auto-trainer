@@ -414,6 +414,7 @@ class AppModel(ObservableObject):
             self._detach_training_plan()
             new_plan_id = None if value is None else value.plan_id
             prev_plan_id, animal.training.current_protocol = animal.training.current_protocol, new_plan_id
+            logger.debug("training_plan attach: animal prev_plan=%s new=%s", prev_plan_id, new_plan_id)
             if new_plan_id != prev_plan_id:
                 self._save_animal_metadata(animal, sender="animal_current_plan_changed")
         if value is None:
