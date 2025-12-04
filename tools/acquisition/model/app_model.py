@@ -335,7 +335,8 @@ class AppModel(ObservableObject):
 
     @animals.setter
     def animals(self, value: List[AnimalSubject]):
-        self._animals = self._on_property_changed(self.Props.ANIMALS, value, self._animals)
+        prev, self._animals = self._animals, value
+        self._on_property_changed(self.Props.ANIMALS, value, prev)
 
     def get_animal_by_id(self, animal_id) -> Optional[AnimalSubject]:
         for animal in self._animals:
