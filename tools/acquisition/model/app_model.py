@@ -73,6 +73,7 @@ class AppModel(ObservableObject):
         NOTES = "notes"
         TRAINING_MODE = 'training_mode'
         TRAINING_PLAN = "training_plan"
+        TRAINING_PLANS = 'training_plans'
         TRAINING_PHASE = "training_plan.current_phase"
         TRAINING_PLAN_PROP = 'training_plan_prop'
         TRAINING_PHASE_PROP = 'training_phase_prop'
@@ -372,7 +373,8 @@ class AppModel(ObservableObject):
             if self._training_mode == TrainingMode.MANUAL:
                 # only set animal base position if manual training mode
                 self._set_animal_base_positions_and_send_to_deliver(animal)
-            self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
+            else:
+                self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
 
         self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
         self._preferences.selected_animal = "" if animal is None else animal.name
@@ -388,8 +390,7 @@ class AppModel(ObservableObject):
         if prev == value:
             return
         if value == TrainingMode.MANUAL:
-            pass  # do nothing
-            # self._detach_training_plan()
+            self._detach_training_plan()
         elif self._selected_animal is not None:  # animal might be not active/created yet
             plan = self._training_plan
             if plan is not None and self._attached_plan is None:
@@ -418,6 +419,7 @@ class AppModel(ObservableObject):
             logger.debug("training_plan attach: animal prev_plan=%s new=%s", prev_plan_id, new_plan_id)
             if new_plan_id != prev_plan_id:
                 self._save_animal_metadata(animal, sender="animal_current_plan_changed")
+        # self._reload_training_plans()
         if value is None:
             self._detach_training_plan()  # always
         elif animal is not None:
@@ -462,6 +464,7 @@ class AppModel(ObservableObject):
             plan.plan_id: plan
             for idx, plan in enumerate(self._training_plans)
         }
+        self.property_changed(self.Props.TRAINING_PLANS, value, None)
         if prev_plan is not None:
             self.training_plan = None  # detach current
             if prev_plan.plan_id in self._training_plan_by_plan_id:
@@ -479,8 +482,11 @@ class AppModel(ObservableObject):
         if plan is None:
             logger.warning("Unknown plan_id: %s", plan_id)
             return None
-        plan = copy.deepcopy(plan)  # always, so that different mouses won't share same plan instance
-        return plan
+        plan_after = self._training_plan_by_plan_id.get(plan_id)
+        if plan_after is None:
+            logger.warning("plan_id %s: not anymore available", plan.plan_id)
+            return None
+        return plan_after
 
     def _attach_training_plan(self, plan: TrainingPlan):
         algo = self._behavior.algorithm
@@ -677,8 +683,9 @@ class AppModel(ObservableObject):
             # forcing manual so:
             self.training_mode = TrainingMode.MANUAL
         else:
-            if plan is not None and self._training_mode != TrainingMode.MANUAL:
-                self._attach_training_plan(plan)
+            self.training_plan = plan
+            # if plan is not None and self._training_mode != TrainingMode.MANUAL:
+            #     self._attach_training_plan(plan)
 
         if self._attached_animal is None and animal is not None:
             self._set_animal_base_positions_and_send_to_deliver(animal)
@@ -780,8 +787,7 @@ class AppModel(ObservableObject):
         # only at the end:
         self._loaded_configuration = configuration
 
-        plans = load_training_plans(Path(self._preferences.configuration_location).joinpath("training/protocols"))
-        self.training_plans = plans
+        self.reload_training_plans()
 
         # and:
         self._load_animals()
@@ -789,6 +795,10 @@ class AppModel(ObservableObject):
         self.configuration_loaded_event(configuration)
 
         return True
+
+    def reload_training_plans(self):
+        plans = load_training_plans(Path(self._preferences.configuration_location).joinpath("training/protocols"))
+        self.training_plans = plans
 
     def save_configuration(self):
         if self._loaded_configuration is None:

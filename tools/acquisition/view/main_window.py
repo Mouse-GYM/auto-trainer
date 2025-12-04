@@ -559,7 +559,8 @@ class MainWindow(QMainWindow):
 
         def index_changed(_):
             selected_mode = self._training_mode_combo.currentData()[0]  # unpack from tuple, see above.
-            self._app_model.training_mode = selected_mode
+            app_model.reload_training_plans()
+            app_model.training_mode = selected_mode
         combo.currentIndexChanged.connect(index_changed)
 
         label = QLabel("Protocol:")
@@ -570,21 +571,21 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(label)
         combo = self._training_plan_combo = QComboBox()
-        app_model = self._app_model
-
         layout.addWidget(combo)
+
         def index_changed(_):
             plan_id = self._training_plan_combo.currentData()
-            selected_plan: Optional[TrainingPlan] = self._app_model.get_training_plan_by_id(plan_id)
+            app_model.reload_training_plans()
+            selected_plan: Optional[TrainingPlan] = app_model.get_training_plan_by_id(plan_id)
             logger.debug("plan changed: %s -> %s", plan_id, selected_plan)
-            self._app_model.training_plan = selected_plan
+            app_model.training_plan = selected_plan
 
         combo.currentIndexChanged.connect(index_changed)
 
         def update_training_mode(training_mode):
             logger.debug("Updating training_mode to %s", training_mode)
             self._widget_training_plan_action.setVisible(training_mode != TrainingMode.MANUAL)
-            plan = self._app_model.attached_plan
+            plan = app_model.attached_plan
             training_plan_idx = self._training_plan_index_by_plan_id.get(None if plan is None else plan.plan_id, -1)
             self._training_plan_combo.blockSignals(True)
             self._training_plan_combo.setCurrentIndex(training_plan_idx)
@@ -778,9 +779,11 @@ class MainWindow(QMainWindow):
         self._app_model.notes = value
 
     def _add_animal(self):
+        self._app_model.reload_training_plans()
         self._app_model.add_animal(self._animal_dropdown.currentText(), select=True)
 
     def _animal_changed(self, _):
+        self._app_model.reload_training_plans()
         if self._animal_dropdown.currentIndex() == -1:
             self._app_model.selected_animal = None
         else:
@@ -836,6 +839,9 @@ class MainWindow(QMainWindow):
             self._training_plan_combo.setCurrentIndex(index)
             self._training_plan_combo.blockSignals(False)
             self._refresh_prev_next_phases()
+
+        elif name == props.TRAINING_PLANS:
+            self._set_training_plans()
 
         elif name == props.TRAINING_PHASE:
             self._refresh_prev_next_phases()
@@ -920,15 +926,22 @@ class MainWindow(QMainWindow):
         combo.blockSignals(False)
         animal = app_model.selected_animal
         if animal is None:
+            combo.blockSignals(True)  # required to not induce loop
             combo.setCurrentIndex(len(plans))
+            combo.blockSignals(False)  # required to not induce loop
             return
         plan_id = animal.training.current_protocol
-        if plan_id is not None:
+        combo.blockSignals(True)  # required to not induce loop
+        if plan_id is None:
+            combo.setCurrentIndex(len(plans))
+        else:
             plan_combo_index = self._training_plan_index_by_plan_id.get(plan_id, None)
             if plan_combo_index is None:
                 logger.warning("Animal has current protocol %r but no such protocol found", plan_id)
+                combo.setCurrentIndex(len(plans))
             else:
                 combo.setCurrentIndex(plan_combo_index)
+        combo.blockSignals(False)  # required to not induce loop
 
     def _on_app_model_configuration_loaded(self, config):
         self._set_training_plans()
