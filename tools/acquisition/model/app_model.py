@@ -465,28 +465,15 @@ class AppModel(ObservableObject):
             for idx, plan in enumerate(self._training_plans)
         }
         self.property_changed(self.Props.TRAINING_PLANS, value, None)
-        # if prev_plan is not None:
-        #     self.training_plan = None  # detach current
-        #     if prev_plan.plan_id in self._training_plan_by_plan_id:
-        #         # reattach with new value:
-        #         self.training_plan = self._training_plan_by_plan_id[prev_plan.plan_id]
 
     def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
         if plan_id is None:
             return None
-        # attached = self._attached_plan
-        # if attached is not None and attached.plan_id == plan_id:
-        #     logger.debug("get_training_plan_by_id: reusing attached: %s", attached)
-        #     return attached
         plan = self._training_plan_by_plan_id.get(plan_id)
         if plan is None:
             logger.warning("Unknown plan_id: %s", plan_id)
             return None
-        plan_after = self._training_plan_by_plan_id.get(plan_id)
-        if plan_after is None:
-            logger.warning("plan_id %s: not anymore available", plan.plan_id)
-            return None
-        return plan_after
+        return plan
 
     def _attach_training_plan(self, plan: TrainingPlan):
         algo = self._behavior.algorithm
