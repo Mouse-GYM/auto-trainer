@@ -388,7 +388,8 @@ class AppModel(ObservableObject):
         if prev == value:
             return
         if value == TrainingMode.MANUAL:
-            self._detach_training_plan()
+            pass  # do nothing
+            # self._detach_training_plan()
         elif self._selected_animal is not None:  # animal might be not active/created yet
             plan = self._training_plan
             if plan is not None and self._attached_plan is None:
