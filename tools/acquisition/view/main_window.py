@@ -584,11 +584,8 @@ class MainWindow(QMainWindow):
         def update_training_mode(training_mode):
             logger.debug("Updating training_mode to %s", training_mode)
             self._widget_training_plan_action.setVisible(training_mode != TrainingMode.MANUAL)
-            animal = app_model.selected_animal
-            plan = self._app_model.get_training_plan_by_id(None if animal is None else animal.training.current_protocol)
-            training_plan_idx = None if plan is None else self._training_plan_index_by_plan_id.get(plan.plan_id)
-            if training_plan_idx is None:
-                training_plan_idx = self._training_plan_index_by_plan_id.get(None, -1)
+            plan = self._app_model.attached_plan
+            training_plan_idx = self._training_plan_index_by_plan_id.get(None if plan is None else plan.plan_id, -1)
             self._training_plan_combo.setCurrentIndex(training_plan_idx)
             self.main_content.training_plan_changed.emit(plan)
             self._refresh_prev_next_phases()
