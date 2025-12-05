@@ -75,8 +75,8 @@ class TrainingPlansFSEventHandler(PatternMatchingEventHandler):
         match = lambda p: False if p is None else p.lower().endswith(".json")
         logger.debug("Any Event[%s]: %s -> %s", event.event_type, event.src_path, event.dest_path)
         if (
-               (event.event_type in {'closed', 'deleted'} and match(event.src_path))
-            or (event.event_type in {'moved',} and (match(event.dest_path) or match(event.src_path)))
+               (event.event_type in {'created', 'closed', 'deleted'} and match(event.src_path))
+            or (event.event_type == 'moved' and (match(event.dest_path) or match(event.src_path)))
         ):
             self._reload_app_model_plans()
 
@@ -126,6 +126,8 @@ class AppModel(ObservableObject):
         self._training_mode = TrainingMode.MANUAL
         self._training_plan: Optional[TrainingPlan] = None
         self._training_plan_animal: Optional[AnimalSubject] = None
+        self._acquisition_started = False
+        self._reload_plans_needed = False
 
         mp_ctx = get_mp_ctx()
 
@@ -516,8 +518,8 @@ class AppModel(ObservableObject):
         for available_path, available_plan in self._plans_by_path.items():
             if available_plan.plan_id == plan.plan_id:
                 # ensure any caller gets a fresh instance
-                # return copy.deepcopy(available_plan)
-                return load_training_plan_from_path(available_path)
+                return copy.deepcopy(available_plan)
+                # return load_training_plan_from_path(available_path)
         logger.warning("Plan %s not anymore available", plan.plan_id)
         return None
 
@@ -607,6 +609,8 @@ class AppModel(ObservableObject):
         return animal
 
     def on_capture_start(self) -> bool:
+
+        self._acquisition_started = True
 
         analysis = self._analysis
 
@@ -727,6 +731,19 @@ class AppModel(ObservableObject):
 
     def on_capture_stop(self):
         logger.debug("AppModel.on_capture_stop")
+        try:
+            self._capture_stop()
+        finally:
+            # always:
+            self._is_recording_trigger = False
+            self._acquisition_started = False  # must be set before try reload training plans, given checked in it
+            analysis = self._analysis
+            analysis.project_info = None
+            if self._reload_plans_needed:
+                self._reload_plans_needed = False
+                self.reload_training_plans()
+
+    def _capture_stop(self):
 
         self._detach_training_plan()  # always
 
@@ -757,10 +774,6 @@ class AppModel(ObservableObject):
             if camera.is_primary:
                 logger.verbose("stopping capture to %s", camera.name)
                 camera.on_capture_stop()
-
-        analysis.project_info = None
-
-        self._is_recording_trigger = False
 
     def _get_plans_dir(self):
         plans_path = Path(self._preferences.configuration_location).joinpath("training/protocols")
@@ -844,9 +857,20 @@ class AppModel(ObservableObject):
         return True
 
     def reload_training_plans(self, dir_path: Optional[Path] = None):
+        if self._acquisition_started:
+            logger.notice("delaying reload training plans given acquisition started")
+            self._reload_plans_needed = True
+            return
         if dir_path is None:
             dir_path = self._get_plans_dir()
-        plans = load_training_plans(dir_path)
+        try:
+            plans = load_training_plans(dir_path)
+        except Exception as err:
+            logger.exception("Could not load plans from %s: %s", dir_path, err)
+            self.on_error("Reload training protocols error",
+                          f"Could not reload plans from {dir_path.as_posix()}:\n\n"
+                          f"{err}\n\nPrevious plans are retained.")
+            return
         self._plans_by_path = plans
         self.training_plans = list(plans.values())
 

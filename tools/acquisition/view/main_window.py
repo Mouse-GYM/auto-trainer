@@ -68,25 +68,27 @@ class MainWindow(QMainWindow):
 
         app_model = self._app_model = AppModel(self._preferences, app_version)
 
-        self.setContentsMargins(0, 0, 0, 0)
+        try:
+            self.setContentsMargins(0, 0, 0, 0)
 
-        self.main_content = MainContent(app_model)
+            self.main_content = MainContent(app_model)
 
-        self._create_actions()
-        self._configure_menubar()
-        self._configure_toolbar()
-        self._configure_statusbar()
+            self._create_actions()
+            self._configure_menubar()
+            self._configure_toolbar()
+            self._configure_statusbar()
 
-        self.setCentralWidget(self.main_content)
-        self.centralWidget().layout().setContentsMargins(0, 0, 0, 0)
-        # self.setMaximumSize(1880, 1080)
+            self.setCentralWidget(self.main_content)
+            self.centralWidget().layout().setContentsMargins(0, 0, 0, 0)
+            # self.setMaximumSize(1880, 1080)
+        except Exception as err:
+            app_model.on_close()
+            raise RuntimeError(f"Error setting up UI: {err}") from err
 
         app_model.configuration_loaded_event += self._on_app_model_configuration_loaded
-
         try:
             app_model.load_configuration(configuration)
         except Exception as err:
-            app_model.on_error(f"Could not load system config {configuration}", str(err))
             app_model.on_close()
             raise RuntimeError(f"Could not load config: {err}") from err
 
@@ -148,6 +150,7 @@ class MainWindow(QMainWindow):
                     started = False
                 if started:
                     self._status_label.setText("")
+                    self._acquisition_started = True
                 else:
                     self._status_label.setText("Startup failed")
                     self.running_status_changed.emit(False)
@@ -160,6 +163,7 @@ class MainWindow(QMainWindow):
                 app_model.on_capture_stop()
                 self.run_action.setEnabled(True)
                 self._status_label.setText("")
+                self._acquisition_started = False
             threading.Thread(target=doit, daemon=True).start()
 
     def on_previous_plan_phase(self):
@@ -697,11 +701,14 @@ class MainWindow(QMainWindow):
         self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
 
-    def _show_error(self, title: str, message: str):
+    def __show_error(self, title: str, message: str):
         dlg = QMessageBox(self)
         dlg.setWindowTitle(title)
         dlg.setText(message)
         dlg.exec()
+
+    def _show_error(self, title: str, message: str):
+        InvokeMethod(self.__show_error, title, message)
 
     def _preferences_property_changed(self, name, value, _):
         if name == "log_level":
