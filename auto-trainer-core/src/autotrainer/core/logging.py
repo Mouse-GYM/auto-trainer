@@ -49,6 +49,9 @@ _limit_loggers_level = {
     },
     'h5py': {
         'level': 'INFO'
+    },
+    'watchdog': {
+        'level': 'INFO'
     }
 }
 

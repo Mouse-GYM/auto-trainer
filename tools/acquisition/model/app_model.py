@@ -71,29 +71,14 @@ class TrainingPlansFSEventHandler(PatternMatchingEventHandler):
     def _reload_app_model_plans(self):
         self._app_model.reload_training_plans()
 
-    # def on_any_event(self, event: FileSystemEvent) -> None:
-    #     logger.debug("Any Event: %s", event.dest_path)
-    #     self._reload_app_model_plans()
-
-    def on_created(self, event):
-        logger.debug(f"File created: {event.src_path}")
-        self._reload_app_model_plans()
-
-    def on_modified(self, event):
-        logger.debug(f"File modified: {event.src_path}")
-        self._reload_app_model_plans()
-
-    def on_deleted(self, event):
-        logger.debug(f"File deleted: {event.src_path}")
-        self._reload_app_model_plans()
-
-    def on_moved(self, event):
-        logger.debug(f"File moved from {event.src_path} to {event.dest_path}")
-        self._reload_app_model_plans()
-
-    def on_closed(self, event: FileSystemEvent) -> None:
-        logger.debug(f"File close from {event.src_path} to {event.dest_path}")
-        self._reload_app_model_plans()
+    def on_any_event(self, event: FileSystemEvent) -> None:
+        match = lambda p: False if p is None else p.lower().endswith(".json")
+        logger.debug("Any Event[%s]: %s -> %s", event.event_type, event.src_path, event.dest_path)
+        if (
+               (event.event_type in {'closed', 'deleted'} and match(event.src_path))
+            or (event.event_type in {'moved',} and (match(event.dest_path) or match(event.src_path)))
+        ):
+            self._reload_app_model_plans()
 
 
 class AppModel(ObservableObject):
