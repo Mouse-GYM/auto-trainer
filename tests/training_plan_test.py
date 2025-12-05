@@ -149,24 +149,43 @@ class TestTrainingPlan(MockSystemMachine):
 
         prev_phase = plan.current_phase
         #
-        results = [
-            IntersessionResponse(
-                pellets_presented=3,
-                successful_reaches=3,
-                food_consumed=3,
-                pellet_x=1,
-                pellet_y=0.5,
-                pellet_z=0.5,
-            ),
-        ]
+        result = IntersessionResponse(
+            pellets_presented=3,
+            successful_reaches=3,
+            food_consumed=3,
+            pellet_x=1,
+            pellet_y=0.5,
+            pellet_z=0.5,
+        )
         caplog.clear()
-        self._make_session(app_model, machine, results[0])
+        self._make_session(app_model, machine, result)
         assert plan.current_phase != prev_phase
+        #
+        return
+        #
+        # following currently trigger
+        #   File "/home/agx007/dev-greg/auto-trainer-training/src/autotrainer/training/training_action.py", line 130, in evaluate
+        #     if context.progress.pellets_consumed - self.pellet_start > self.pellet_delta:
+        #   TypeError: unsupported operand type(s) for -: 'int' and 'NoneType'
+        result = IntersessionResponse(
+            pellets_presented=3,
+            successful_reaches=3,
+            food_consumed=3,
+            pellet_x=1,
+            pellet_y=0.5,
+            pellet_z=0.5,
+        )
+        caplog.clear()
+        self._make_session(app_model, machine, result)
+        assert plan.current_phase != prev_phase
+        #
+
         # TODO: TBC... assert phase action(s)
 
     def _make_session(self, app_model, machine, analysis_result):
         algo = app_model.behavior.algorithm
         machine.enter_tunnel(reason="manual")
+        self._load_cell._is_engaged = True
         # self.make_load_cell_active()
         assert machine.state == SystemState.tunnel
         self.make_recording_aged_enough()
@@ -175,6 +194,7 @@ class TestTrainingPlan(MockSystemMachine):
         # self.make_load_cell_inactive()
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())
+            self._load_cell._is_engaged = False
             machine.exit_tunnel(reason="manual")
             stack.enter_context(self.mock_perform_detection())
             self.mock_complete_segmentation(True)

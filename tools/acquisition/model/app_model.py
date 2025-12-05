@@ -537,13 +537,17 @@ class AppModel(ObservableObject):
                 return
             self._detach_training_plan()
         prog = animal.training.get_plan_progress(plan.plan_id)
+        # if prog is None:
+        #     logger.debug("plan first use, using plan.serialize_progress")
+        #     prog = plan.serialize_progress()
+        # do we ?
         if prog is not None:
             logger.debug("%s: deserializing plan progress: %s", animal, prog)
             plan.deserialize_progress(prog)
-        auto = self._training_mode == TrainingMode.AUTOMATIC
+        is_auto = self._training_mode == TrainingMode.AUTOMATIC
         logger.success("Animal %s: attaching auto=%s to plan %s (%s) ..",
-                       animal.name, auto, plan.plan_id, hex(id(plan)))
-        plan.is_automatic = auto
+                       animal.name, is_auto, plan.plan_id, hex(id(plan)))
+        plan.is_automatic = is_auto
         plan.behavior_algorithm = algo
         plan.pellet_device = self._hardware
         plan.tunnel_device = self._hardware
@@ -838,7 +842,7 @@ class AppModel(ObservableObject):
         self._loaded_configuration = configuration
 
         plans_path = self._get_plans_dir()
-        self.reload_training_plans(plans_path)
+        self.reload_training_plans(plans_path, reraise_on_error=True)
 
         # and:
         self._load_animals()
@@ -856,7 +860,7 @@ class AppModel(ObservableObject):
 
         return True
 
-    def reload_training_plans(self, dir_path: Optional[Path] = None):
+    def reload_training_plans(self, dir_path: Optional[Path] = None, *, reraise_on_error: bool=False):
         if self._acquisition_started:
             logger.notice("delaying reload training plans given acquisition started")
             self._reload_plans_needed = True
@@ -866,6 +870,8 @@ class AppModel(ObservableObject):
         try:
             plans = load_training_plans(dir_path)
         except Exception as err:
+            if reraise_on_error:
+                raise RuntimeError(f"Could not load training plans: {err}") from None
             logger.exception("Could not load plans from %s: %s", dir_path, err)
             self.on_error("Reload training protocols error",
                           f"Could not reload plans from {dir_path.as_posix()}:\n\n"
