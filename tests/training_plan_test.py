@@ -1,5 +1,6 @@
 import contextlib
 import copy
+import dataclasses
 import logging
 import threading
 import time
@@ -25,11 +26,20 @@ this_dir = Path(__file__).parent.resolve()
 
 @pytest.fixture
 def inference_model(pose_algo):
+    # unused atm
     inference = InferenceModel(pose_algo)
     inference._status = InferenceStatus.live
     yield inference
     inference.terminate()
-    # inference.terminate()
+
+
+def test_can_copy_deepcopy_training_plan():
+    plans = list(load_training_plans(this_dir.joinpath("training/protocols")).values())
+    p1 = plans[0]
+    p2 = copy.deepcopy(p1)
+    assert p1 != p2
+    assert p1.plan_id == p2.plan_id
+    assert p1.to_dict() == p2.to_dict()
 
 
 class TestTrainingPlan(MockSystemMachine):
@@ -44,8 +54,6 @@ class TestTrainingPlan(MockSystemMachine):
         dst_dir.mkdir(parents=True, exist_ok=True)
         for p in this_dir.joinpath("training/protocols").glob("*.json"):
             dst_dir.joinpath(p.name).write_bytes(p.read_bytes())
-        plans = load_training_plans(dst_dir)
-        return list(plans.values())
 
     @pytest.fixture()
     def app_model(self, machine, user_pref, system_msg_handler, system_config, calib_dir, training_plans):
@@ -90,10 +98,13 @@ class TestTrainingPlan(MockSystemMachine):
         algo.shift_xyz_handler.set_handle_new_shift_xyz(shift_xyz_buffer_handler)
         algo.intersession_enabled = True
         app_model.training_mode = TrainingMode.AUTOMATIC
-        app_model.training_plan = app_model.training_plans[0]  # this also sets it as current_protocol on current selected animal
+        plan = app_model.training_plans[0]
+        app_model.training_plan = app_model.get_training_plan_by_id(plan.plan_id)  # this also sets it as current_protocol on current selected animal
         app_model.on_capture_start()
-
+        # NB: we have to re-obtain a new ref to the current training_plan,
+        # this is because during capture_start() it's reloaded freshly from file.
         plan = app_model.training_plan
+
         plan_start_phase = plan.current_phase
 
         assert plan_start_phase.advance_predicate.evaluate(plan_start_phase, plan._system_context) is False

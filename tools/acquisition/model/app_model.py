@@ -517,8 +517,6 @@ class AppModel(ObservableObject):
             if available_plan.plan_id == plan.plan_id:
                 # ensure any caller gets a fresh instance
                 # return copy.deepcopy(available_plan)
-                # NB: copy.deepcopy now fails with :
-                # E           TypeError: Pickling an AuthenticationString object is disallowed for security reasons
                 return load_training_plan_from_path(available_path)
         logger.warning("Plan %s not anymore available", plan.plan_id)
         return None
