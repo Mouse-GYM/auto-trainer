@@ -454,7 +454,6 @@ class AppModel(ObservableObject):
             logger.debug("training_plan attach: animal prev_plan=%s new=%s", prev_plan_id, new_plan_id)
             if new_plan_id != prev_plan_id:
                 self._save_animal_metadata(animal, sender="animal_current_plan_changed")
-        # self._reload_training_plans()
         if value is None:
             self._detach_training_plan()  # always
         elif animal is not None:
@@ -517,6 +516,9 @@ class AppModel(ObservableObject):
         for available_path, available_plan in self._plans_by_path.items():
             if available_plan.plan_id == plan.plan_id:
                 # ensure any caller gets a fresh instance
+                # return copy.deepcopy(available_plan)
+                # NB: copy.deepcopy now fails with :
+                # E           TypeError: Pickling an AuthenticationString object is disallowed for security reasons
                 return load_training_plan_from_path(available_path)
         logger.warning("Plan %s not anymore available", plan.plan_id)
         return None
@@ -719,8 +721,6 @@ class AppModel(ObservableObject):
             self.training_mode = TrainingMode.MANUAL
         else:
             self.training_plan = plan
-            # if plan is not None and self._training_mode != TrainingMode.MANUAL:
-            #     self._attach_training_plan(plan)
 
         if self._attached_animal is None and animal is not None:
             self._set_animal_base_positions_and_send_to_deliver(animal)
@@ -838,9 +838,10 @@ class AppModel(ObservableObject):
         observer.stop()
         observer.join(2)
         observer = self._plans_files_observer = Observer()
-        observer.schedule(self._plans_files_event_handler, path=plans_path, recursive=False)
+        logger.debug("starting FS monitoring of %s", plans_path)
+        plans_path.mkdir(parents=True, exist_ok=True)  # observer requires the path/dir to exists, otherwise exception
+        observer.schedule(self._plans_files_event_handler, path=plans_path.resolve(), recursive=False)
         observer.start()
-        logger.debug("started FS monitoring of %s", plans_path)
 
         return True
 

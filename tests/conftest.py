@@ -15,14 +15,14 @@ top_dir = this_dir.parent  # supposed be the repo top/root dir
 
 
 @pytest.fixture
-def config_dir(tmp_path):
+def trainer_config_dir(tmp_path):
     cfg_dir = tmp_path.joinpath("Autotrainer")
     cfg_dir.mkdir()
     return cfg_dir
 
 
 @pytest.fixture
-def system_config(config_dir, tmp_path):
+def system_config(trainer_config_dir, tmp_path):
     config = SystemConfiguration()
     for cam_member in (CameraId.Left, CameraId.Right, CameraId.Web):
         params = dict(width=300, height=200)
@@ -31,13 +31,13 @@ def system_config(config_dir, tmp_path):
         cam.id = cam_member
         config.cameras.append(cam)
     config.persistence.output_location = tmp_path.joinpath("Data").as_posix()
-    config.save_default(config_dir)
+    config.save_default(trainer_config_dir)
     return config
 
 
 @pytest.fixture
-def config_file_path(config_dir):
-    return config_dir.joinpath(SystemConfiguration.make_default_yaml_config_path(config_dir))
+def config_file_path(trainer_config_dir):
+    return trainer_config_dir.joinpath(SystemConfiguration.make_default_yaml_config_path(trainer_config_dir))
 
 
 @pytest.fixture(autouse=True)
@@ -61,9 +61,9 @@ def settings_ini_path(tmp_path):
 
 
 @pytest.fixture
-def user_pref(tmp_path, config_dir, animals_dir, settings_ini_path):
+def user_pref(tmp_path, trainer_config_dir, animals_dir, settings_ini_path):
     pref = UserPreferences(settings_file_path=settings_ini_path)
-    pref.configuration_location = config_dir
+    pref.configuration_location = trainer_config_dir
     pref.animal_location = animals_dir
     p = tmp_path.joinpath("logs")
     p.mkdir()

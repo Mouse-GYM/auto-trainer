@@ -17,18 +17,18 @@ headless_path = top_dir.joinpath("auto-trainer-headless.py")
 
 
 
-def test_user_preferences(settings_ini_path, user_pref, config_dir):
+def test_user_preferences(settings_ini_path, user_pref, trainer_config_dir):
     assert Path(user_pref._settings.fileName()) == settings_ini_path
     assert not settings_ini_path.exists()
     user_pref.selected_animal = "foobar"
     user_pref.save()
     assert settings_ini_path.exists()
     user_pref = UserPreferences(settings_file_path=settings_ini_path)
-    assert Path(user_pref.configuration_location) == config_dir
+    assert Path(user_pref.configuration_location) == trainer_config_dir
     assert user_pref.selected_animal == "foobar"
 
 
-def test_load_config(app_model, config_dir, animals_dir, calib_dir, system_config):
+def test_load_config(app_model, trainer_config_dir, animals_dir, calib_dir, system_config):
     res = app_model.load_configuration()
     assert res is True
     assert app_model.left_camera.name == "left"
@@ -37,7 +37,7 @@ def test_load_config(app_model, config_dir, animals_dir, calib_dir, system_confi
     assert app_model.output_location == system_config.persistence.output_location
     pref = app_model.preferences
     assert Path(pref.animal_location) == animals_dir
-    assert Path(pref.configuration_location) == config_dir
+    assert Path(pref.configuration_location) == trainer_config_dir
 
     # ...
 
