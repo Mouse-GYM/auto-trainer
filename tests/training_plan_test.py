@@ -161,7 +161,7 @@ class TestTrainingPlan(MockSystemMachine):
         self._make_session(app_model, machine, result)
         assert plan.current_phase != prev_phase
         #
-        return
+        # return
         #
         # following currently trigger
         #   File "/home/agx007/dev-greg/auto-trainer-training/src/autotrainer/training/training_action.py", line 130, in evaluate

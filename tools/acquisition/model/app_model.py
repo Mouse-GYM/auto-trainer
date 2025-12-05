@@ -518,8 +518,8 @@ class AppModel(ObservableObject):
         for available_path, available_plan in self._plans_by_path.items():
             if available_plan.plan_id == plan.plan_id:
                 # ensure any caller gets a fresh instance
-                return copy.deepcopy(available_plan)
-                # return load_training_plan_from_path(available_path)
+                # return copy.deepcopy(available_plan)
+                return load_training_plan_from_path(available_path)
         logger.warning("Plan %s not anymore available", plan.plan_id)
         return None
 

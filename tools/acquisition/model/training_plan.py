@@ -21,7 +21,11 @@ def load_training_plans(dir_path: Path) -> Dict[Path, TrainingPlan]:
     for path in files:
         plans[path] = load_training_plan_from_path(path)
     phase_ids = {}
+    plan_ids = {}
     for path, plan in plans.items():
+        prev_path, prev_plan = plan_ids.setdefault(plan.plan_id, (path, plan))
+        if path != prev_path:
+            raise RuntimeError(f"duplicated plan_id {plan.plan_id} in {path} vs {prev_path}")
         for phase in plan.phases:
             prev_path, prev_phase = phase_ids.setdefault(phase.phase_id, (path, phase))
             if path != prev_path:
