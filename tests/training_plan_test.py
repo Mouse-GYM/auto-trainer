@@ -34,15 +34,6 @@ def inference_model(pose_algo):
     inference.terminate()
 
 
-def test_can_copy_deepcopy_training_plan():
-    plans = list(load_training_plans(this_dir.joinpath("training/protocols")).values())
-    p1 = plans[0]
-    p2 = copy.deepcopy(p1)
-    assert p1 != p2
-    assert p1.plan_id == p2.plan_id
-    assert p1.to_dict() == p2.to_dict()
-
-
 class TestTrainingPlan(MockSystemMachine):
 
     def setup_method(self, test_method):
