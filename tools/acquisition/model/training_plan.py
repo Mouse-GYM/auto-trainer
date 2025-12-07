@@ -1,6 +1,6 @@
-
+import json
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Any
 
 from autotrainer.core.logging import get_verbose_logger
 
@@ -10,26 +10,37 @@ from autotrainer.training import TrainingPlan
 logger = get_verbose_logger(__name__)
 
 
-def load_training_plan_from_path(path: Path):
-    return TrainingPlan.from_json_file(path)
+def get_plan_id(dct: Dict) -> str:
+    return dct['planId']
 
 
-def load_training_plans(dir_path: Path) -> Dict[Path, TrainingPlan]:
+def get_phase_id(dct: Dict) -> str:
+    return dct['phaseId']
+
+
+def load_training_plans(dir_path: Path) -> Dict[Path, Dict[str, Any]]:
     files = list(dir_path.glob("*.json"))
-    plans: Dict[Path, TrainingPlan] = {}
+    plans: Dict[Path, Dict] = {}
     logger.verbose("Loading training plans: %s", files)
     for path in files:
-        plans[path] = load_training_plan_from_path(path)
+        try:
+            with path.open("r") as fh:
+                plans[path] = json.load(fh)
+        except Exception as err:
+            logger.error("Could not load plan %s: %s", path, err)
+            raise
     phase_ids = {}
     plan_ids = {}
     for path, plan in plans.items():
-        prev_path, prev_plan = plan_ids.setdefault(plan.plan_id, (path, plan))
+        plan_id = get_plan_id(plan)
+        prev_path, prev_plan = plan_ids.setdefault(plan_id, (path, plan))
         if path != prev_path:
-            raise RuntimeError(f"duplicated plan_id {plan.plan_id} in {path} vs {prev_path}")
-        for phase in plan.phases:
-            prev_path, prev_phase = phase_ids.setdefault(phase.phase_id, (path, phase))
+            raise RuntimeError(f"duplicated plan_id {plan_id} in {path} vs {prev_path}")
+        for phase in plan['phases']:
+            phase_id = get_phase_id(phase)
+            prev_path, prev_phase = phase_ids.setdefault(phase_id, (path, phase))
             if path != prev_path:
-                raise RuntimeError(f"Duplicated phase_id: {phase.phase_id} in path {path} vs {prev_path}")
+                raise RuntimeError(f"Duplicated phase_id: {phase_id} in path {path} vs {prev_path}")
             if id(prev_phase) != id(phase):
-                raise RuntimeError(f"Duplicated phase_id: {phase.phase_id} in path {path}: {prev_phase} vs {phase}")
+                raise RuntimeError(f"Duplicated phase_id: {phase_id} in path {path}: {prev_phase} vs {phase}")
     return plans

@@ -47,7 +47,7 @@ from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
-from tools.acquisition.model.training_plan import load_training_plans, load_training_plan_from_path
+from tools.acquisition.model.training_plan import load_training_plans, get_plan_id
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
@@ -206,9 +206,9 @@ class AppModel(ObservableObject):
 
         #
 
-        self._training_plans: List[TrainingPlan] = []
-        self._training_plan_by_plan_id: Dict[str, TrainingPlan] = {}
-        self._plans_by_path: Dict[Path, TrainingPlan] = {}
+        self._training_plans: List[Dict] = []
+        self._training_plan_by_plan_id: Dict[str, Dict] = {}
+        self._plans_by_path: Dict[Path, Dict[str, Any]] = {}
 
         self._behavior = BehaviorModel(
             self._system_message_handler, self._analysis, self._hardware, self._inference,
@@ -489,14 +489,14 @@ class AppModel(ObservableObject):
         self._notes = self._on_property_changed(self.Props.NOTES, value, self._notes)
 
     @property
-    def training_plans(self) -> List[TrainingPlan]:
+    def training_plans(self) -> List[Dict]:
         return self._training_plans
 
     @training_plans.setter
     def training_plans(self, value):
         self._training_plans = value
         self._training_plan_by_plan_id = {
-            plan.plan_id: plan
+            get_plan_id(plan): plan
             for idx, plan in enumerate(self._training_plans)
         }
         self._detach_training_plan()  # always
@@ -515,12 +515,12 @@ class AppModel(ObservableObject):
         if plan is None:
             logger.warning("Unknown plan_id: %s", plan_id)
             return None
+        pid = get_plan_id(plan)
         for available_path, available_plan in self._plans_by_path.items():
-            if available_plan.plan_id == plan.plan_id:
-                # ensure any caller gets a fresh instance
-                # return copy.deepcopy(available_plan)
-                return load_training_plan_from_path(available_path)
-        logger.warning("Plan %s not anymore available", plan.plan_id)
+            if get_plan_id(available_plan) == pid:
+                # ensure any caller gets a fresh instance, without need re-read from disk:
+                return TrainingPlan.from_dict(copy.deepcopy(available_plan))
+        logger.warning("Plan %s not anymore available", pid)
         return None
 
     def _attach_training_plan(self, plan: TrainingPlan):

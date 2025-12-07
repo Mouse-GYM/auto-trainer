@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 from pathlib import Path
+from typing import Optional
 from unittest import mock
 
 import pytest
@@ -18,7 +19,7 @@ from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.inference_model import InferenceModel
-from tools.acquisition.model.training_plan import load_training_plans
+from tools.acquisition.model.training_plan import load_training_plans, get_plan_id
 from top_fixtures import MockSystemMachine
 
 this_dir = Path(__file__).parent.resolve()
@@ -98,12 +99,12 @@ class TestTrainingPlan(MockSystemMachine):
         algo.shift_xyz_handler.set_handle_new_shift_xyz(shift_xyz_buffer_handler)
         algo.intersession_enabled = True
         app_model.training_mode = TrainingMode.AUTOMATIC
-        plan = app_model.training_plans[0]
-        app_model.training_plan = app_model.get_training_plan_by_id(plan.plan_id)  # this also sets it as current_protocol on current selected animal
         app_model.on_capture_start()
-        # NB: we have to re-obtain a new ref to the current training_plan,
-        # this is because during capture_start() it's reloaded freshly from file.
-        plan = app_model.training_plan
+
+        plan = app_model.get_training_plan_by_id(get_plan_id(app_model.training_plans[0]))
+        animal = app_model.selected_animal
+        animal.training.current_protocol = plan.plan_id
+        app_model.training_plan = plan
 
         plan_start_phase = plan.current_phase
 
@@ -161,12 +162,7 @@ class TestTrainingPlan(MockSystemMachine):
         self._make_session(app_model, machine, result)
         assert plan.current_phase != prev_phase
         #
-        # return
-        #
-        # following currently trigger
-        #   File "/home/agx007/dev-greg/auto-trainer-training/src/autotrainer/training/training_action.py", line 130, in evaluate
-        #     if context.progress.pellets_consumed - self.pellet_start > self.pellet_delta:
-        #   TypeError: unsupported operand type(s) for -: 'int' and 'NoneType'
+        prev_phase = plan.current_phase
         result = IntersessionResponse(
             pellets_presented=3,
             successful_reaches=3,
@@ -177,24 +173,29 @@ class TestTrainingPlan(MockSystemMachine):
         )
         caplog.clear()
         self._make_session(app_model, machine, result)
-        assert plan.current_phase != prev_phase
-        #
-
+        assert plan.current_phase == prev_phase, "3rd phase requires Hands near pellet seen < threshold"
+        result.pellets_presented = result.successful_reaches = result.food_consumed = 8
+        self._make_session(app_model, machine, result, hands_min_dist=0.001)
+        # not working yet:
+        # assert plan.current_phase != prev_phase, "3rd phase requires Hands near pellet seen < threshold"
         # TODO: TBC... assert phase action(s)
 
-    def _make_session(self, app_model, machine, analysis_result):
+    def _make_session(self, app_model, machine, analysis_result, *,
+                      hands_min_dist: Optional[float]=None):
         algo = app_model.behavior.algorithm
         machine.enter_tunnel(reason="manual")
         self._load_cell._is_engaged = True
         # self.make_load_cell_active()
         assert machine.state == SystemState.tunnel
-        self.make_recording_aged_enough()
+        # self.make_recording_aged_enough()
+        if hands_min_dist is not None:
+            algo.pellet_hands_min_distance = hands_min_dist
         self.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
         assert algo.pellet_recently_seen
         # self.make_load_cell_inactive()
+        self._load_cell._is_engaged = False
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())
-            self._load_cell._is_engaged = False
             machine.exit_tunnel(reason="manual")
             stack.enter_context(self.mock_perform_detection())
             self.mock_complete_segmentation(True)
@@ -202,5 +203,6 @@ class TestTrainingPlan(MockSystemMachine):
             self.mock_complete_detection(True)
             assert machine.state == SystemState.cage
 
-        app_model.hardware.send_home()
+        assert machine.state == SystemState.cage  # still ofc.
+        # app_model.hardware.send_home()
 
