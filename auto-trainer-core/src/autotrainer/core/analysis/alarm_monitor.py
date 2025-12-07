@@ -32,7 +32,7 @@ class EmergencyAlarmMonitor(BaseDetector):
     CONFIG = "config"
     PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED = "presence_in_cage_after_exit_tunnel_engaged"
     AUDIO_LOAD_CELL_THRASHING_ENGAGED = "audio_load_cell_thrashing_engaged"
-    # DOORS_OPEN_ENGAGED = "doors_open_engaged"
+    EXT_DOORS_OPEN_ENGAGED = "ext_doors_open_engaged"
 
     def __init__(
         self,
@@ -89,6 +89,15 @@ class EmergencyAlarmMonitor(BaseDetector):
     def presence_in_cage_after_exit_tunnel_engaged(self, value):
         prev, self._presence_in_cage_after_exit_tunnel_engaged = self._presence_in_cage_after_exit_tunnel_engaged, value
         self._on_property_changed(self.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED, value, prev)
+
+    @property
+    def ext_doors_open_engaged(self):
+        return self._ext_doors_open_engaged
+
+    @ext_doors_open_engaged.setter
+    def ext_doors_open_engaged(self, value):
+        prev, self._ext_doors_open_engaged = self._ext_doors_open_engaged, value
+        self._on_property_changed(self.EXT_DOORS_OPEN_ENGAGED, value, prev)
 
     #
     def _expire_audio_load_cell(self, perf_now):
@@ -178,14 +187,14 @@ class EmergencyAlarmMonitor(BaseDetector):
         reasons = set()
         #
         self.audio_load_cell_thrashing_engaged = self._check_audio_load_cell(perf_now)
-        if self.audio_load_cell_thrashing_engaged and cfg.use_audio_load_cell_thrash:
+        if self._audio_load_cell_thrashing_engaged and cfg.use_audio_load_cell_thrash:
             reasons.add(EmergencyReason.MOUSE_THRASHING)
         #
         self.presence_in_cage_after_exit_tunnel_engaged = self._check_pres_after_exit_tunnel_missing(perf_now)
-        if self.presence_in_cage_after_exit_tunnel_engaged and cfg.use_presence_missing_after_exit_tunnel:
+        if self._presence_in_cage_after_exit_tunnel_engaged and cfg.use_presence_missing_after_exit_tunnel:
             reasons.add(EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL)
         #
-        self._ext_doors_open_engaged = self._external_doors_monitor.is_engaged
+        self.ext_doors_open_engaged = self._external_doors_monitor.is_engaged
         if self._ext_doors_open_engaged and cfg.use_external_doors_open:
             reasons.add(EmergencyReason.DOORS_OPEN)
         #
