@@ -384,12 +384,12 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         logger.debug("MainWindow.closeEvent: %s", event)
         self._timer_calibrate.cancel()
+        self._app_model.on_close()  # close app_model before all/any window/GUI parts/elements
         self.main_content.close()
         dialogs = self._open_dialogs
         self._open_dialogs = []
         for dialog in dialogs:
             dialog.close()
-        self._app_model.on_close()
         event.accept()
 
     def moveEvent(self, e):

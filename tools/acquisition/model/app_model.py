@@ -12,7 +12,7 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List, Dict, Callable, Any
+from typing import Optional, List, Dict, Callable, Any, Union
 
 import yaml
 
@@ -40,6 +40,9 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode
 
 from autotrainer.training import TrainingPlan, TrainingPhase
+
+from autotrainer.api import RpcService, ApiCommandRequest, ApiCommandRequestResponse, ApiCommandReqeustResult
+from autotrainer.api.rpc_service import ApiCommand, ApiCommandRequestErrorKind
 
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
@@ -204,6 +207,8 @@ class AppModel(ObservableObject):
         self._selected_animal: Optional[AnimalSubject] = None
         self._attached_plan: Optional[TrainingPlan] = None
         self._attached_animal: Optional[AnimalSubject] = None
+
+        self._rpc_service: Optional[RpcService] = None
 
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
@@ -438,6 +443,21 @@ class AppModel(ObservableObject):
     @notes.setter
     def notes(self, value: str):
         self._notes = self._on_property_changed(self.Props.NOTES, value, self._notes)
+
+    @property
+    def rpc_service(self) -> Optional[RpcService]:
+        return self._rpc_service
+
+    @rpc_service.setter
+    def rpc_service(self, value: Optional[RpcService]):
+        prev, self._rpc_service = self._rpc_service, value
+        if value == prev:
+            return
+        logger.info("Updating rpc service to %s", value)
+        if prev is not None:
+            prev.command_request_delegate = None
+        if value is not None:
+            value.command_request_delegate = self._handle_rpc_service_command
 
     @property
     def training_plans(self) -> List[TrainingPlan]:
@@ -778,7 +798,7 @@ class AppModel(ObservableObject):
         for camera in self._cameras:
             camera.on_close()
 
-        EventManager.default().close()
+        EventManager.try_close_default()
 
         self.hardware.disconnect()
 
@@ -794,6 +814,8 @@ class AppModel(ObservableObject):
             logger.warning("Handle process messages thread still alive ; closing queue")
         self._multiproc_msg_queue.close()
 
+        self._behavior.system_machine.cancel_timers()
+
         # somehow if many AppModel are created (like in test cases), this makes the ones following an on_close on any
         # of them to fails hardly. MP manager looks be a singleton per python process so it might be smth related.
         # commenting to prevent this bad effect for now.
@@ -802,7 +824,6 @@ class AppModel(ObservableObject):
         # logger.debug("shutting down multiprocess manager %s", mp_mgr)
         # mp_mgr.shutdown()
         # mp_mgr.join()
-
 
         self.save_configuration()
 
@@ -1034,3 +1055,63 @@ class AppModel(ObservableObject):
                 yaml.dump(out, file, Dumper=SystemConfigurationDumper, sort_keys=False)
         except Exception as ex:
             logger.error(ex)
+
+    def _handle_rpc_service_command(self, request: ApiCommandRequest) -> ApiCommandRequestResponse:
+        logger.notice("Received RPC command: %s ; nonce=%s", request.command, request.nonce)
+        logger.debug("RPC cmd=%s custom=%s data=%s", request.command, request.custom_command, request.data)
+        try:
+            rsp = self.__handle_rpc_service_command(request)
+            if isinstance(rsp, ApiCommandRequestResponse):
+                assert rsp.nonce == request.nonce
+            elif rsp in {None, True, False}:  # to not have to create/return it for all possible request
+                rsp = ApiCommandRequestResponse(
+                    nonce=request.nonce,
+                    command=request.command,
+                    result=ApiCommandReqeustResult.SUCCESS if rsp != False else ApiCommandReqeustResult.FAILED,
+                    error_kind=ApiCommandRequestErrorKind.NONE if rsp != False else ApiCommandRequestErrorKind.COMMAND_ERROR,
+                    error_message=None if rsp != False else f"Command request {request.command} failed"
+                )
+            else:
+                logger.critical("Rpc request %s : unexpected __handle_rpc_service_command() return value: %r",
+                                request.command, rsp)
+                rsp = ApiCommandRequestResponse(
+                    nonce=request.nonce,
+                    command=request.command,
+                    result=ApiCommandReqeustResult.FAILED,
+                    error_kind=ApiCommandRequestErrorKind.SYSTEM_ERROR,
+                    error_message="Command request returned invalid return value"
+                )
+        except Exception as err:
+            logger.exception("Rpc Command %s exception: %s", request.command, err)
+            rsp = ApiCommandRequestResponse(
+                nonce=request.nonce,
+                command=request.command,
+                result=ApiCommandReqeustResult.EXCEPTION,
+                error_kind=ApiCommandRequestErrorKind.COMMAND_ERROR,
+                error_message=f"Failed executing {request.command}: {err}",
+            )
+        return rsp
+
+    def __handle_rpc_service_command(self, request: ApiCommandRequest) -> Optional[Union[bool, ApiCommandRequestResponse]]:
+        cmd = request.command
+        rsp = None  # let caller handle it
+        if cmd == ApiCommand.START_ACQUISITION:
+            return self.on_capture_start()
+        elif cmd == ApiCommand.STOP_ACQUISITION:
+            return self.on_capture_stop()
+        elif cmd == ApiCommand.EMERGENCY_STOP:
+            return self._behavior.emergency_stop(source="RpcService")
+        elif cmd == ApiCommand.EMERGENCY_RESUME:
+            return self._behavior.emergency_resume(source="RpcService")
+        elif cmd == ApiCommand.USER_DEFINED:
+            logger.verbose("TODO")
+        elif cmd == ApiCommand.NONE:
+            pass
+        else:
+            rsp = ApiCommandRequestResponse(
+                nonce=request.nonce,
+                command=cmd,
+                error_kind=ApiCommandRequestErrorKind.COMMAND_ERROR,
+                error_message=f"Unknown/Unhandled request command: {cmd!r}"
+            )
+        return rsp

@@ -33,32 +33,51 @@ class EventManager:
 
     _instance: "EventManager"
 
+    @staticmethod
+    def _remove_cls_instance():
+        try:
+            del EventManager._instance
+        except AttributeError:
+            pass
 
-    @classmethod
-    def default(cls) -> Self:
+    @staticmethod
+    def default() -> "EventManager":
         """
         Creates (if needed) and returns the default instance.
         """
+        cls = EventManager
         if not hasattr(cls, "_instance"):
-            cls._instance = cls("EventManagerInstance")
-            cls._instance.register_plugin(LoggerEventPlugin())
-            cls._instance.register_plugin(FileEventPlugin())
+            instance = cls("EventManagerInstance")
+            instance.register_plugin(LoggerEventPlugin())
+            instance.register_plugin(FileEventPlugin())
+            cls._instance = instance
         return cls._instance
 
-    @classmethod
-    def try_close_default(cls):
+    @staticmethod
+    def try_close_default():
         """
         Close the default instance if it exists.  Do not spin one up just to check (e.g.,
         EventManager.default().close() if one was never created).
         """
-        if hasattr(cls, "_instance"):
-            cls._instance.close()
+        cls = EventManager
+        cls_inst = getattr(cls, "_instance", None)
+        if cls_inst is not None:
+            cls_inst.close()
+            cls._remove_cls_instance()
+
+    def __del__(self):
+        # in case of
+        cls_inst = getattr(EventManager, "_instance", None)
+        if cls_inst is self:
+            self.try_close_default()
+        else:
+            self.close()
 
     def __init__(self, key=""):
         if key != "EventManagerInstance":
             raise Exception("Use EventManager.default() to access and instance.")
 
-        self._plugins: List[EventManagerPlugin] = list()
+        self._plugins: List[EventManagerPlugin] = []
 
         self._project_info = None
 
@@ -138,6 +157,7 @@ class EventManager:
         only be called when the application or script is closing or otherwise finished with the event manager as an
         instance, including the `default` cannot be restarted.
         """
+        cls_inst = getattr(EventManager, "_instance", None)
         for plugin in self._plugins:
             plugin.set_enable(False)
         wt = self._write_thread
@@ -158,6 +178,8 @@ class EventManager:
                 except Empty:
                     break
             wq.join()
+        if cls_inst is self:
+            self._remove_cls_instance()
 
     def post_event_content(self, kind: int, context: Optional[object] = None, when: Optional[datetime] = None,
                            index: int = None):
@@ -228,6 +250,7 @@ class EventManager:
                 # Workaround or current Jetson behavior w/ queue.get(timeout=).
                 info = self._write_queue.get(timeout=0.5)
                 if info is None:
+                    logger.verbose("got exit sentinel, exiting main loop")
                     self._write_queue.task_done()
                     break
             except Empty:
@@ -267,7 +290,6 @@ class EventManager:
 
         for plugin in self._plugins:
             plugin.close()
-
 
     def _process_event(self, info: EventInfo, repeat_count: int = 0):
         for plugin in self._plugins:

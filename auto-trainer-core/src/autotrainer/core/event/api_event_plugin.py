@@ -25,6 +25,10 @@ class ApiEventPlugin(EventManagerPlugin):
         self._options = options
         self._service: Optional[RpcService] = None
 
+    @property
+    def service(self) -> RpcService:
+        return self._service
+
     def set_project(self, project: Optional[ProjectInfo]) -> None:
         pass
 
