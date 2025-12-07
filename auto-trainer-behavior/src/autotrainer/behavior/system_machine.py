@@ -125,6 +125,15 @@ class SystemMachine(StateMachine):
         intersession_machine.events.state_changed += self._intersession_state_changed
         algo.relay_transitions(intersession_machine)
 
+    def cancel_timers(self):
+        for timer in (
+            self._timer_consider_end_session,
+            self._timer_consider_close_gate,
+            self._timer_auto_clamp_disengage,
+        ):
+            if not timer.finished.is_set():
+                logger.debug("cancelling timer %s", timer)
+                timer.cancel()
 
     @property
     def algorithm(self) -> BehaviorAlgorithm:

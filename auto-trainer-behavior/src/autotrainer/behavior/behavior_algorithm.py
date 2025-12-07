@@ -441,7 +441,7 @@ class BehaviorAlgorithm(ObservableObject):
             if event is not None:
                 event.set()
             input_queue.task_done()
-        logger.debug("Exiting")
+        logger.debug("Exiting ; left queue_size=%s", input_queue.qsize())
 
     @classmethod
     def relay_transitions(cls, machine_transitions: Any):
@@ -1252,15 +1252,16 @@ class BehaviorAlgorithm(ObservableObject):
             self._today = today
             self._start_day()
 
-#
-
-def _close_algo_handler():
-    handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue  # noqa
-    if handler_queue is not None:
-        BehaviorAlgorithm._handler_thread_queue = (threading.main_thread(), None)
-        handler_queue.put(None)
-        handler_thread.join()
+    @staticmethod
+    def close_algorithm_handler():
+        handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue  # noqa
+        if handler_queue is not None:
+            BehaviorAlgorithm._handler_thread_queue = (threading.main_thread(), None)
+            handler_queue.put(None)
+            handler_thread.join()
+            logger.info("Closed algorithm thread handler")
 
 
 import atexit
-atexit.register(_close_algo_handler)
+
+atexit.register(BehaviorAlgorithm.close_algorithm_handler)

@@ -29,6 +29,7 @@ from autotrainer.training import TrainingPlan
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.inference_model import InferenceModel
+from tools.acquisition.model.training_plan import get_plan_id
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
 from tools.acquisition.view.preferences_dialog import PreferencesDialog
@@ -395,12 +396,12 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         logger.debug("MainWindow.closeEvent: %s", event)
         self._timer_calibrate.cancel()
+        self._app_model.on_close()  # close app_model before all/any window/GUI parts/elements
         self.main_content.close()
         dialogs = self._open_dialogs
         self._open_dialogs = []
         for dialog in dialogs:
             dialog.close()
-        self._app_model.on_close()
         event.accept()
 
     def moveEvent(self, e):
@@ -917,13 +918,15 @@ class MainWindow(QMainWindow):
             "Select a training protocol" if has_some
             else "There are no training protocols in the Autotrainer folder"
         )
+        combo_indices_map: Dict[Optional[str], int]
         combo_indices_map = self._training_plan_index_by_plan_id = {
-            plan.plan_id: idx
+            get_plan_id(plan): idx
             for idx, plan in enumerate(plans)
         }
         for plan_index, plan in enumerate(plans):
-            combo.addItem(plan.name, userData=plan.plan_id)
-            combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
+            # plan = TrainingPlan.from_dict(plan, no_transition=True)
+            combo.addItem(plan['name'], userData=get_plan_id(plan))
+            combo.setItemData(plan_index, plan['description'], Qt.ToolTipRole)
         combo.addItem(empty_txt, userData=None)  # put it last
         combo_indices_map[None] = len(plans)
         combo.setItemData(len(plans), tooltip_txt, Qt.ToolTipRole)

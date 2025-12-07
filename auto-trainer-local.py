@@ -23,7 +23,7 @@ def main():
     allow_emulation = args.allow_can_emulation.lower() in {"true", "yes", "1"}
 
     exit_val = run_acquisition(args.configuration, args.dev, allow_emulation)
-    (logger.success if exit_val in (0, None) else logger.error)("acquisition finished ; exit_val=%s", exit_val)
+    (logger.success if exit_val in (0, None) else logger.error)("application finished ; exit_val=%s", exit_val)
     return exit_val
 
 
