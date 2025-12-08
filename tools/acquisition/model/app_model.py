@@ -568,9 +568,8 @@ class AppModel(ObservableObject):
         logger.success("Animal %s: attaching auto=%s to plan %s (%s) ..",
                        animal.name, is_auto, plan.plan_id, hex(id(plan)))
         plan.is_automatic = is_auto
-        plan.behavior_algorithm = algo
-        plan.pellet_device = self._hardware
-        plan.tunnel_device = self._hardware
+        pellet_dev = tunnel_dev = self._hardware
+        plan.attach(algo, pellet_dev, tunnel_dev)
         self._attached_plan = plan
         self._attached_animal = animal
         plan.property_changed += self._on_training_plan_property_changed  # first, to be sure get everything
@@ -591,10 +590,10 @@ class AppModel(ObservableObject):
         self._detach_training_phase()
         plan.property_changed -= self._on_training_plan_property_changed
         plan.progress_updated -= self._on_training_plan_progress_updated
-        plan.behavior_algorithm = plan.pellet_device = plan.tunnel_device = None
         animal = self._attached_animal
         assert isinstance(animal, AnimalSubject)
         logger.notice("%s: detaching from plan %s (%s)", animal.name, plan.plan_id, hex(id(plan)))
+        plan.detach()
         self._attached_plan = None
         self._attached_animal = None
         prog = plan.serialize_progress()
