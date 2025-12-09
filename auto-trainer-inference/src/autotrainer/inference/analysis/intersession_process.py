@@ -52,7 +52,7 @@ def intersession_process(
         center_method=center_method,
         available_shift_xyz=AvailableShiftXYZ,
         df_3d=centered_df_3d,
-        debug=_segment_reach_debug,
+        debug=int(os.getenv("AUTOTRAINER_SEGMENT_REACH_DEBUG", 0)),
     )
     logger.success("process intersession pose data complete %s", results_dict)
     return IntersessionResponse(
