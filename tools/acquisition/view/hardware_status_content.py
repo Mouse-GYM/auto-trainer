@@ -3,6 +3,7 @@ from functools import partial
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import QVBoxLayout, QLabel, QHBoxLayout, QWidget, QGridLayout, QFormLayout, QSizePolicy
 
+from autotrainer.behavior import DiamondTriangleOffsetConfig
 from autotrainer.core import MessageHandler, Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 
@@ -120,8 +121,17 @@ class HardwareStatusContent(ContentWidget):
             # and same for Y and Z respectively.
             t[coord_idx] = value
             motor_coord = Offset3DTuple(*t)
-            diamond_coord = motor_coord if cfg is None else cfg.motor_to_diamond(motor_coord)
-            diamond_coord_value = getattr(diamond_coord, coord)
+            if cfg is None:
+                displayed_coord = motor_coord
+            else:
+                displayed_coord = cfg.motor_to_diamond(motor_coord)
+                logger.debug("%s: @motor=%s @inference=%s @diamond=%s",
+                             xyz_label.objectName(),
+                             motor_coord.humanize(),
+                             cfg.motor_to_inference(motor_coord).humanize(),
+                             displayed_coord.humanize(),
+                             )
+            diamond_coord_value = getattr(displayed_coord, coord)
             suffix = " @ MotorCoordSystem" if cfg is None else None
             xyz_label.update_coordinate(**{coord: diamond_coord_value}, suffix=suffix)
 

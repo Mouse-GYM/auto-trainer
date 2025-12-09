@@ -1169,8 +1169,8 @@ class BehaviorAlgorithm(ObservableObject):
             logger.info(
                 "Motor mean drift: %s ; min=%s max=%s n_vals=%s",
                 new_drift.humanize(n_digits=3),
-                min(values, key=lambda v: v.distance).humanize(n_digits=1),
-                max(values, key=lambda v: v.distance).humanize(n_digits=1),
+                min(values, key=lambda v: v.distance).humanize(),
+                max(values, key=lambda v: v.distance).humanize(),
                 len(values),
             )
         else:

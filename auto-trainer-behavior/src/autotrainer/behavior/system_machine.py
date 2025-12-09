@@ -497,7 +497,8 @@ class SystemMachine(StateMachine):
         #
         algo = self._algorithm
         if algo.is_in_session and not algo.session_mouse_seen and response.mouse_seen:
-            logger.verbose("session first mouse_seen: parts=%s locations=%s", response.parts_flags, response.locations)
+            logger.verbose("session first mouse_seen: parts=%s locations=%s 3d=%s",
+                           response.parts_flags, response.locations, response.locations_3d)
         #
         algo.triangle_seen(response.triangle_seen)
         algo.diamond_seen(response.diamond_seen)
@@ -710,7 +711,7 @@ class SystemMachine(StateMachine):
         algo.shift_xyz_handler.put_new_shift_xyz(shift_xyz)
 
     def _handle_processed_shift_xyz(self, shift_xyz: Offset3DTuple):
-        logger.verbose("Received processed shift xyz: %s", shift_xyz.humanize(n_digits=1))
+        logger.verbose("Received processed shift xyz: %s", shift_xyz.humanize())
         dev = self._pellet_device
         algo = self.algorithm
         if dev is None or not algo.intersession_pellet_shift_enabled:

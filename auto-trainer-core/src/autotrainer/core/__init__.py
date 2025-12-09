@@ -98,7 +98,7 @@ class Offset3DTuple(_Offset3DTuple):
             self.z if z is None else z,
         )
 
-    def humanize(self, n_digits: int = 2):
+    def humanize(self, n_digits: int = 1):
         x, y, z = self
         return f"({x:.0{n_digits}f}, {y:.0{n_digits}f}, {z:.0{n_digits}f})"
 
