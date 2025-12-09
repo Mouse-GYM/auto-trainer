@@ -125,12 +125,12 @@ class HardwareStatusContent(ContentWidget):
                 displayed_coord = motor_coord
             else:
                 displayed_coord = cfg.motor_to_diamond(motor_coord)
-                logger.debug("%s: @motor=%s @inference=%s @diamond=%s",
-                             xyz_label.objectName(),
-                             motor_coord.humanize(),
-                             cfg.motor_to_inference(motor_coord).humanize(),
-                             displayed_coord.humanize(),
-                             )
+                # logger.debug("%s: @motor=%s @inference=%s @diamond=%s",
+                #              xyz_label.objectName(),
+                #              motor_coord.humanize(),
+                #              cfg.motor_to_inference(motor_coord).humanize(),
+                #              displayed_coord.humanize(),
+                #              )
             diamond_coord_value = getattr(displayed_coord, coord)
             suffix = " @ MotorCoordSystem" if cfg is None else None
             xyz_label.update_coordinate(**{coord: diamond_coord_value}, suffix=suffix)
