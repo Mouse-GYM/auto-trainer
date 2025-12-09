@@ -39,28 +39,29 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         inference: InferenceProtocol,
         *,
         topcam_presence: Optional[PresenceDetectionAttrs] = None,
+        system_machine: Optional[SystemMachine] = None,
     ):
         super().__init__(("emergency_stopped", "emergency_resumed"))
 
         self._analysis = analysis
 
-        self._system_machine = SystemMachine(
+        system_machine = self._system_machine = SystemMachine(
             msg_handler=msg_handler,
             analysis=analysis,
             tunnel_device=hardware_model,
             pellet_device=hardware_model,
             inference=inference,
             topcam_presence=topcam_presence,
-        )
+        ) if system_machine is None else system_machine
 
         self._project: Optional[ProjectInfo] = None
-        self._is_intersession_enabled = self._system_machine.algorithm.intersession_enabled
+        self._is_intersession_enabled = system_machine.algorithm.intersession_enabled
         self._hardware_model = hardware_model
         #
         self._source_algo_paused = "na"
         #
-        self._system_machine.algorithm.property_changed += self._on_algorithm_property_changed
-        self._system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
+        system_machine.algorithm.property_changed += self._on_algorithm_property_changed
+        system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
 
         @BehaviorAlgorithm.relay_func(wait=False)
@@ -121,7 +122,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         config.headbar_pressure = analysis.headbar_pressure_monitor.save_configuration()
         config.audio = analysis.audio_thrashing_monitor.config
         config.emergency_alarm = analysis.emergency_alarm_monitor.config
-        config.topcam_presence_detection = algo.top_camera_presence_detection.to_config()
+        config.topcam_presence_detection = None if algo.top_camera_presence_detection is None else algo.top_camera_presence_detection.to_config()
         config.global_animal_presence = analysis.global_animal_presence_monitor.config
         config.external_doors = analysis.external_doors_monitor.config
         logger.debug("config.external_doors=%s", config.external_doors)
