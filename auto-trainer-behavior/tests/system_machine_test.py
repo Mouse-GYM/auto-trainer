@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import math
 from itertools import chain
 from pathlib import Path
 from threading import Timer
@@ -63,7 +64,7 @@ def test_enter_exit_tunnel(mock_system, machine):
     ]
 
 
-def test_no_session_without_pellet(mock_system, machine):
+def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     pellet_machine = machine._pellet_machine
     assert isinstance(pellet_machine, PelletMachine)
 
@@ -104,19 +105,35 @@ def test_no_session_without_pellet(mock_system, machine):
     pellet_ack_received()
 
     assert mock_system.pellet_state_trans == [PelletState.sending]
+    assert not math.isinf(pellet_machine.pellet_send_begin_age)
+    assert math.isinf(pellet_machine.pellet_send_end_age)
+    assert pellet_machine.pellet_send_end_age > pellet_machine.pellet_send_begin_age
 
-    mock_system.make_load_cell_active()
+    pellet_ack_received()
+
+    assert not math.isinf(pellet_machine.pellet_send_begin_age)
+    assert not math.isinf(pellet_machine.pellet_send_end_age)
+    assert pellet_machine.pellet_send_end_age < pellet_machine.pellet_send_begin_age
+
+    # mock_system.make_load_cell_active()
+    machine._analysis.load_cell_monitor.is_engaged = True
+
+    pellet_ack_received()
 
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage, SystemState.tunnel]
-    assert mock_system.pellet_state_trans == [PelletState.sending]
+    assert mock_system.pellet_state_trans == [PelletState.sending, PelletState.covering]
 
     assert machine.algorithm.is_in_session is True
 
     mock_system.make_load_cell_inactive()
 
+    assert machine.algorithm.is_in_session is False
+
     assert mock_system.machine_state_trans == 2 * [SystemState.tunnel, SystemState.cage]
     # Acknowledge send command -> should go to releasing.
     pellet_ack_received()
+
+    assert machine.algorithm.is_in_session is False
 
     mock_system.make_load_cell_active()
     mock_system.make_recording_aged_enough()

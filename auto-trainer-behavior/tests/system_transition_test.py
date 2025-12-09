@@ -8,10 +8,10 @@ from unittest import mock
 import pytest
 from transitions import MachineError
 
-from autotrainer.behavior import SystemState
+from autotrainer.behavior import SystemState, SystemMachine
 
 
-def test_enter_exit_transitions(machine, mock_system):
+def test_enter_exit_transitions(machine: SystemMachine, mock_system):
     # Current code assumes intersession analysis is off by default.  Flag if that changes and we forget to update
     # assumptions.
     assert machine.algorithm.intersession_enabled is False
@@ -34,7 +34,7 @@ def test_enter_exit_transitions(machine, mock_system):
 
     machine.algorithm.intersession_enabled = True
 
-    machine.enter_tunnel()
+    machine._analysis.load_cell_monitor.is_engaged = True
 
     assert machine.state == SystemState.tunnel
 

@@ -71,7 +71,8 @@ class PoseResponse:
 
     @property
     def diamond_seen(self):
-        return self.is_part_seen(SceneElement.Diamond)
+        p_flags = self.parts_flags
+        return p_flags[0][SceneElement.Diamond] or p_flags[1][SceneElement.Diamond]
 
     @property
     def triangle_seen(self):

@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import multiprocessing
+import os
 import pickle
 import queue
 import threading
@@ -730,13 +731,26 @@ class AppModel(ObservableObject):
         else:
             logger.info("using configuration from %r", file_path.as_posix())
 
+        prebuffer_duration = 0
+
         if (camera := configuration.get_camera(CameraId.Left)) is not None:
             self._left_camera.load_configuration(camera)
+            prebuffer_duration = camera.record_prebuffer_duration
         if (camera := configuration.get_camera(CameraId.Right)) is not None:
             self._right_camera.load_configuration(camera)
+            if camera.record_prebuffer_duration != prebuffer_duration:
+                logger.warning("left & right cameras don't have same record_prebuffer_duration: %s vs %s",
+                               camera.record_prebuffer_duration, prebuffer_duration)
+            prebuffer_duration = max(prebuffer_duration, camera.record_prebuffer_duration)
         if (camera := configuration.get_camera(CameraId.Web)) is not None:
             camera.record_prebuffer_duration = 0  # force for now ; so to not keep a buffer for nothing in topcam
             self._top_camera.load_configuration(camera)
+
+        if prebuffer_duration > 0:
+            prebuffer_duration *= float(os.getenv("AUTOTRAINER_PREBUFFER_SCALE", "1"))
+
+        logger.verbose("Will use algo record_prebuffer_duration=%.1f seconds", prebuffer_duration)
+        self._behavior.algorithm.record_prebuffer_duration = prebuffer_duration
 
         self.inference.load_configuration(configuration.inference)
 

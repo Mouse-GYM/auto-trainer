@@ -375,6 +375,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
             if prev_mode != mode:
                 logger.verbose("Detected inference mode change -> %s frames=%s", mode, frames_indices)
+                if mode == InferenceMode.Live:
+                    skip_next_pose_data = 3
 
             if mode == InferenceMode.Live:
                 perf_now = time.perf_counter()

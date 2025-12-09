@@ -6,7 +6,7 @@ mocks or real interfaces.
 import logging
 from functools import partial
 
-from autotrainer.behavior import PelletMachine, PelletState
+from autotrainer.behavior import PelletMachine, PelletState, SystemMachine, SystemState
 from .conftest import property_value_save_transitions
 
 
@@ -60,14 +60,18 @@ def assert_covered_was_released(machine: PelletMachine) -> None:
     assert machine.state == PelletState.monitoring
 
 
-def test_covered_load_cycle(mock_system, machine):
+def test_covered_load_cycle(mock_system, machine: SystemMachine):
     pellet_m = machine.pellet
     # pellet_m = PelletMachine()
 
     assert_load_cycle(pellet_m, should_release=False)
 
     # Forcibly start a session for testing purposes.  This would normally occur at the system state level.
-    pellet_m.algorithm.start_session()
+    # pellet_m.algorithm.start_session()
+    machine._analysis.load_cell_monitor.is_engaged = True
+
+    assert machine.state == SystemState.tunnel
+    assert machine.algorithm.is_in_session
 
     mock_system.make_recording_aged_enough()
 
@@ -76,14 +80,22 @@ def test_covered_load_cycle(mock_system, machine):
 
     assert pellet_m.state == PelletState.monitoring
 
-    pellet_m.algorithm.end_session()
+    machine._analysis.load_cell_monitor.is_engaged = False
+    # pellet_m.algorithm.end_session()
+
+    assert machine.state == SystemState.cage
+    assert not machine.algorithm.is_in_session
 
     pellet_m._pellet_device_ack_received(pellet_m._api_status_token)
 
     # Should return to covered at end of session
     assert pellet_m.state == PelletState.covering
 
-    pellet_m.algorithm.start_session()
+    # pellet_m.algorithm.start_session()
+    machine._analysis.load_cell_monitor.is_engaged = True
+
+    assert machine.state == SystemState.tunnel
+    assert machine.algorithm.is_in_session
 
     mock_system.make_recording_aged_enough()
 
@@ -97,7 +109,11 @@ def test_covered_load_cycle(mock_system, machine):
 
     assert_load_cycle(pellet_m, should_release=True)
 
-    pellet_m.algorithm.end_session()
+    # pellet_m.algorithm.end_session()
+    machine._analysis.load_cell_monitor.is_engaged = False
+
+    assert machine.state == SystemState.cage
+    assert not machine.algorithm.is_in_session
 
     pellet_m._pellet_device_ack_received(pellet_m._api_status_token)
 

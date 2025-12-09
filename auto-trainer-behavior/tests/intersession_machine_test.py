@@ -38,7 +38,7 @@ def test_intersession(
         mock.call(detection_cfg)
     ]
 
-    detection_cfg.complete(segment_cfg.nonce, True)
+    detection_cfg.complete(detection_cfg.nonce, True)
 
     assert intersession.state == IntersessionState.idle
     assert mock_system.intersession_state_trans == [
