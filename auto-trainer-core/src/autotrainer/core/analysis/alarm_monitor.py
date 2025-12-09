@@ -59,6 +59,10 @@ class EmergencyAlarmMonitor(BaseDetector):
         load_cell_monitor.property_changed += self._load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._audio_prop_changed
 
+    def _start(self):
+        super()._start()
+        self._engaged_reasons.clear()
+
     @property
     def config(self) -> EmergencyAlarmConfiguration:
         return self._config
@@ -282,5 +286,5 @@ class EmergencyAlarmMonitor(BaseDetector):
             self.check_state()
 
     def _ext_doors_prop_changed(self, name, value, _):
-        if name == "is_engaged":
+        if name == ExternalDoorsMonitor.IS_ENGAGED:
             self.check_state()
