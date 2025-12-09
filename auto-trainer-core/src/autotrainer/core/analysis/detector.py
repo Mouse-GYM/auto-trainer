@@ -64,7 +64,7 @@ class BaseDetector(ObservableObject):
                 self._cur_timer.cancel()
 
     def _start(self):
-        pass
+        """Allow any sub-class to customize its start procedure. super() should be called."""
 
     def start(self):
         with self._lock:
@@ -72,6 +72,7 @@ class BaseDetector(ObservableObject):
                 return
             logger.verbose("%s: starting monitor", self.__class__.__name__)
             self._enabled = True
+            self.is_engaged = False  # force reset "engaged" to False
             self._t_started = time.perf_counter()
             self._start()
             self._make_new_timer(0.01)
