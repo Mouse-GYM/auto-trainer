@@ -773,12 +773,36 @@ class MainWindow(QMainWindow):
             logger.debug("set pellet_hands_min_distance to %s", new_val)
 
     def _internal_detection_result_toggle(self):
-        inference = self._app_model.behavior.system_machine.intersession._inference
+        app_model = self._app_model
+        inference = app_model.behavior.system_machine.intersession._inference
         is_checked = self.detection_results_action.isChecked()
         self._internal_analysis_widget_toolbar.setVisible(is_checked)
         if is_checked:
             self._orig_inference_analysis_feed = inference._feed_intersession_analysis_execute
             self._orig_inference_analysis_process = inference._intersession_process_execute
+            inference = app_model.behavior.system_machine.intersession._inference
+
+            def simulate_feed_intersession(intersession_block):
+                logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
+                inference._data_monitor_proc.stop_recorded.wait(5)
+                logger.debug("got stop recorded")
+                inference._data_monitor_proc.stop_recorded.clear()
+                intersession_block.frame_count = 42
+                #
+                res = IntersessionResponse(
+                    pellets_presented=self._internal_pellet_presented_spinbox.value(),
+                    successful_reaches=self._internal_pellet_reached_spinbox.value(),
+                    food_consumed=self._internal_pellet_consumed_spinbox.value(),
+                    pellet_x=self._internal_shift_x_spinbox.value(),
+                    pellet_y=self._internal_shift_y_spinbox.value(),
+                    pellet_z=self._internal_shift_z_spinbox.value(),
+                )
+                inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
+                logger.debug("Patched inference._intersession_process_execute with simulate one: %s", res)
+                time.sleep(1.5)
+
+            inference._feed_intersession_analysis_execute = simulate_feed_intersession
+
         else:
             inference._feed_intersession_analysis_execute = self._orig_inference_analysis_feed
             inference._intersession_process_execute = self._orig_inference_analysis_process
