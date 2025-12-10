@@ -666,6 +666,8 @@ class SystemMachine(StateMachine):
                 remains = 0.2
         else:
             remains = algo.record_prebuffer_duration - send_end_age
+        if algo.pellet_state != PelletState.monitoring:
+            return
         if remains > 0:
             timer = make_daemon_timer(remains, partial(self._consider_start_session, reason=reason))
             self._timer_consider_start_session = timer
