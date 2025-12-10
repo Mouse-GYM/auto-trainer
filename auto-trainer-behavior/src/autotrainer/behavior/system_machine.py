@@ -166,7 +166,7 @@ class SystemMachine(StateMachine):
         logger.debug("before_enter_tunnel: pellet_state=%s", pellet_state)
 
     def after_enter_tunnel(self, *, reason: str = "NA"):
-        self._pre_consider_start_session(reason=reason)
+        self._consider_start_session(reason=reason)
 
         if self._analysis is not None:
             self._evaluate_auto_clamp(self._analysis.headbar_pressure_monitor.is_engaged)
@@ -616,6 +616,7 @@ class SystemMachine(StateMachine):
     @BehaviorAlgorithm.relay_func
     def _pellet_loading(self):
         self._timer_auto_clamp_disengage.cancel()
+        self._timer_consider_start_session.cancel()  # we will get a pellet_loaded event once it's finished
         self._disengage_auto_clamp_load_count += 1
         algo = self._algorithm
         if self._disengage_auto_clamp_load_count >= algo.auto_clamp_release_load_count:
@@ -640,19 +641,18 @@ class SystemMachine(StateMachine):
         self._algorithm.intersession_state = new_value
 
     def _pellet_sent(self):
-        if self._state == SystemState.tunnel and not self._algorithm.is_in_session:
-            self._pre_consider_start_session(reason="pellet-sent-and-in-tunnel-and-not-in-session")
+        self._consider_start_session(reason="pellet-sent-and-in-tunnel-and-not-in-session")
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _pre_consider_start_session(self, reason: str = "NA"):
-        self._timer_consider_start_session.cancel()
+    def _consider_start_session(self, reason: str = "NA"):
+        self._timer_consider_start_session.cancel()  # in case of
         perf_now = time.perf_counter()
         algo = self._algorithm
         pellet_machine = self._pellet_machine
         send_begin_age = pellet_machine.get_send_begin_age(perf_now)
         send_end_age = pellet_machine.get_send_end_age(perf_now)
         logger.debug(
-            "_pre_consider_start_session: state=%s pellet-state=%s recently_seen=%s send_being_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
+            "consider_start_session: state=%s pellet-state=%s recently_seen=%s send_being_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
             self._state, self._pellet_machine.state, algo.pellet_recently_seen, send_begin_age, send_end_age, algo.capture_status_age)
         if not (self._state == SystemState.tunnel and not algo.is_in_session and self._analysis.load_cell_monitor.is_engaged):
             return
@@ -667,11 +667,11 @@ class SystemMachine(StateMachine):
         else:
             remains = algo.record_prebuffer_duration - send_end_age
         if remains > 0:
-            timer = make_daemon_timer(remains, partial(self._pre_consider_start_session, reason=reason))
+            timer = make_daemon_timer(remains, partial(self._consider_start_session, reason=reason))
             self._timer_consider_start_session = timer
             timer.start()
             return
-        if algo.start_session(reason=f"consider-start-session-{reason}"):
+        if algo.start_session(reason=reason):
             self._update_magnet_position(algo.baseline_intensity)
 
     @BehaviorAlgorithm.relay_func(wait=False)
