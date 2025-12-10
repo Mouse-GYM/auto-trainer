@@ -722,7 +722,7 @@ class MainWindow(QMainWindow):
         # NB: must be static method given it's executed in a sub-process, so must no get the whole main-window
         # instance tried to be serialized (would most likely fails/error) !
         logger.verbose("Simulate intersession process: %s", fake_result)
-        time.sleep(0.5)
+        time.sleep(1.5)
         return fake_result
 
     def _internal_simulate_trigger(self):
@@ -739,7 +739,7 @@ class MainWindow(QMainWindow):
                     logger.debug("got stop recorded")
                     inference._data_monitor_proc.stop_recorded.clear()
                     intersession_block.frame_count = 42
-                    time.sleep(0.5)
+                    time.sleep(1.5)
                 inference._feed_intersession_analysis_execute = feed
                 res = IntersessionResponse(
                     pellets_presented=self._internal_pellet_presented_spinbox.value(),
