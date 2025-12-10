@@ -657,15 +657,20 @@ class SystemMachine(StateMachine):
         if not math.isinf(send_begin_age) and send_begin_age < send_end_age:
             # wait pellet-sent, no need further timer.
             return
-        if not algo.pellet_recently_seen:
-            # pellet not seen, if enabled a pellet-load will be executed once pellet_missing_time elapsed,
-            remains = min(0.2, algo.pellet_missing_time - algo.get_pellet_seen_age(perf_now))  # ensure some minimum time before recheck
-            if remains <= 0:
-                remains = 0.2
-        else:
-            remains = algo.record_prebuffer_duration - send_end_age
         if pellet_machine.state not in {PelletState.monitoring, PelletState.covering, PelletState.releasing}:
             return
+        if not algo.pellet_recently_seen:
+            # pellet not seen, if enabled a pellet-load will be executed once pellet_missing_time elapsed,
+            remains = min(0.1, algo.pellet_missing_time - algo.get_pellet_seen_age(perf_now))  # ensure some minimum time before recheck
+            if remains <= 0:
+                remains = 0.1
+        else:
+            if math.isinf(send_begin_age) and math.isinf(send_end_age):
+                remains = 0  # first session
+            elif algo.capture_status_age < send_end_age:
+                remains = 0.1
+            else:
+                remains = algo.record_prebuffer_duration - send_end_age
         if remains > 0:
             timer = make_daemon_timer(remains, partial(self._consider_start_session, reason=reason))
             self._timer_consider_start_session = timer
