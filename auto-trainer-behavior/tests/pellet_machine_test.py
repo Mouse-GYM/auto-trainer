@@ -400,7 +400,7 @@ def test_session_limit(mock_system, machine):
 def test_move_home_when_intersession(pellet_machine, pellet_state, pellet_seen, must_release):
     pellet_machine.state = pellet_state
     pellet_machine.algorithm.system_state = SystemState.intersession
-    pellet_machine._try_next_state(pellet_seen=pellet_seen, must_release=must_release)
+    pellet_machine.environment_changed(pellet_seen=pellet_seen, must_release=must_release)
     assert pellet_machine.state is PelletState.retract
 
 
@@ -410,7 +410,7 @@ def test_move_home_when_intersession(pellet_machine, pellet_state, pellet_seen, 
 def test_send_pellet_when_home(pellet_machine, system_state, pellet_seen, must_release):
     pellet_machine.state = PelletState.home
     pellet_machine.algorithm.system_state = system_state
-    pellet_machine._try_next_state(pellet_seen=pellet_seen, must_release=must_release)
+    pellet_machine.environment_changed(pellet_seen=pellet_seen, must_release=must_release)
     assert pellet_machine.state is PelletState.sending
 
 

@@ -178,7 +178,7 @@ class PelletMachine(StateMachine):
         return self._api_status_token is None
 
     def pellet_seen(self, seen: bool):
-        self._try_next_state(seen, caller="pellet_seen")
+        self.environment_changed(seen, caller="pellet_seen")
 
     # region Callbacks
     @BehaviorAlgorithm.relay_func
@@ -213,7 +213,7 @@ class PelletMachine(StateMachine):
                 # otherwise there is a retract pellet which is executed with next/following try_next_state.
         # execute try next state AFTER having applied motor drifts,
         # given next state will move/send the pellet back to deliver/SEND position
-        self._try_next_state(caller="session_ending")
+        self.environment_changed(caller="session_ending")
 
     def _move_retract(self):
         self._api_status_token = self._pellet_device.send_retract()
@@ -243,7 +243,8 @@ class PelletMachine(StateMachine):
             self._api_status_token_pellet_send = None
             self.events.pellet_sent()
 
-        self._try_next_state(caller="pellet_device_ack_received")
+        # nb: in live we could bypass this call : it's anyway called with live-inference pellet-seen callback..
+        self.environment_changed(caller="pellet_device_ack_received")
 
     @property
     def ack_age(self) -> float:
@@ -266,7 +267,7 @@ class PelletMachine(StateMachine):
     # endregion
 
     @BehaviorAlgorithm.relay_func
-    def _try_next_state(
+    def environment_changed(
         self,
         pellet_seen: bool = True,
         must_release: bool = False,
@@ -279,8 +280,6 @@ class PelletMachine(StateMachine):
         with self._algorithm.thread_lock:
             self.__try_next_state(pellet_seen, must_release,
                                   caller=caller, is_from_timer=from_timer)
-
-    environment_changed = _try_next_state  # remove 1 unnecessary stack level
 
     def __try_next_state(
         self,
