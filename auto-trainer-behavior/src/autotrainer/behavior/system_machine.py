@@ -643,36 +643,36 @@ class SystemMachine(StateMachine):
         if self._state == SystemState.tunnel and not self._algorithm.is_in_session:
             self._pre_consider_start_session(reason="pellet-sent-and-in-tunnel-and-not-in-session")
 
-    def _pre_consider_start_session(self, reason: str = "NA"):
-        algo = self._algorithm
-        sent_age = self._pellet_machine.pellet_send_end_age
-        send_begin_age = self._pellet_machine.pellet_send_begin_age
-        logger.debug(
-            "_pre_consider_start_session: state=%s pellet-state=%s send_being_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
-            self._state, self._pellet_machine.state, send_begin_age, sent_age, algo.capture_status_age)
-        if self._pellet_machine.state == PelletState.retract:
-            return
-        remains = algo.record_prebuffer_duration - self._pellet_machine.pellet_send_end_age
-        if remains <= 0:
-            self._consider_start_session(reason=reason)
-        else:
-            self._timer_consider_start_session.cancel()
-            timer = self._timer_consider_start_session = make_daemon_timer(remains, partial(self._consider_start_session, reason=reason))
-            timer.start()
-
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _consider_start_session(self, reason: str="NA"):
-        algo = self._algorithm
-        send_end_age = self._pellet_machine.pellet_send_end_age
-        send_begin_age = self._pellet_machine.pellet_send_begin_age
-        logger.notice("consider_start_session: state=%s pellet-state=%s send_being_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
-                      self._state, self._pellet_machine.state, send_begin_age, send_end_age, algo.capture_status_age)
-        if math.isinf(send_end_age) and not math.isinf(send_begin_age) or send_end_age > send_begin_age:
-            # pellet-send command was executed but not yet finished
+    def _pre_consider_start_session(self, reason: str = "NA"):
+        self._timer_consider_start_session.cancel()
+        perf_now = time.perf_counter()
+        algos = self._algorithm
+        pellet_machine = self._pellet_machine
+        send_begin_age = pellet_machine.get_send_begin_age(perf_now)
+        send_end_age = pellet_machine.get_send_end_age(perf_now)
+        logger.debug(
+            "_pre_consider_start_session: state=%s pellet-state=%s recently_seen=%s send_being_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
+            self._state, self._pellet_machine.state, algo.pellet_recently_seen, send_begin_age, send_end_age, algo.capture_status_age)
+        if not (self._state == SystemState.tunnel and not algo.is_in_session and self._analysis.load_cell_monitor.is_engaged):
             return
-        if self._state == SystemState.tunnel and not algo.is_in_session and self._analysis.load_cell_monitor.is_engaged:
-            if algo.start_session(reason=f"consider-start-session-{reason}"):
-                self._update_magnet_position(algo.baseline_intensity)
+        if not math.isinf(send_begin_age) and send_begin_age < send_end_age:
+            # wait pellet-sent, no need further timer.
+            return
+        if not algo.pellet_recently_seen:
+            # pellet not seen, if enabled a pellet-load will be executed once pellet_missing_time elapsed,
+            remains = min(0.2, algo.pellet_missing_time - algo.get_pellet_seen_age(perf_now))  # ensure some minimum time before recheck
+            if remains <= 0:
+                remains = 0.2
+        else:
+            remains = algo.record_prebuffer_duration - send_end_age
+        if remains > 0:
+            timer = make_daemon_timer(remains, partial(self._pre_consider_start_session, reason=reason))
+            self._timer_consider_start_session = timer
+            timer.start()
+            return
+        if algo.start_session(reason=f"consider-start-session-{reason}"):
+            self._update_magnet_position(algo.baseline_intensity)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     # called by a timer, so can use wait=False (to not always recreate event for the wait sync)
