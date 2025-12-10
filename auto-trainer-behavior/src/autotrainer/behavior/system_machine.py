@@ -647,7 +647,7 @@ class SystemMachine(StateMachine):
     def _pre_consider_start_session(self, reason: str = "NA"):
         self._timer_consider_start_session.cancel()
         perf_now = time.perf_counter()
-        algos = self._algorithm
+        algo = self._algorithm
         pellet_machine = self._pellet_machine
         send_begin_age = pellet_machine.get_send_begin_age(perf_now)
         send_end_age = pellet_machine.get_send_end_age(perf_now)
