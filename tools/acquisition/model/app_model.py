@@ -268,8 +268,10 @@ class AppModel(ObservableObject):
             # this is called via a timer, which are not necessarily very precise,
             # and to be safe on all side, do not check again, the actual age could even be slightly less than the
             # desired threshold (but very very near). So to not miss that case: do not "recheck"
-            self._behavior.system_machine.pellet.environment_changed(
-                pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-start-recording")
+            # if algo.can_release_pellet()
+            if algo.can_release_pellet():
+                self._behavior.system_machine.pellet.environment_changed(
+                    pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-start-recording")
         else:
             logger.verbose("consider_release_pellet but not in session")
 

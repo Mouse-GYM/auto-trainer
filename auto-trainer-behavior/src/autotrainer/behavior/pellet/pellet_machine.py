@@ -384,6 +384,8 @@ class PelletMachine(StateMachine):
             # if not algo.diamond_recently_seen:
             #     return
             if self.can_load_pellet():  # and algo.star_recently_seen  # should probably have
+                # condition should probably be : if not pellet_seen and diamond_seen and star_seen
+                # to have faster load (can_load_pellet checks on pellet recently seen)
                 reason = "load_pellet_when_not_seen_and_retract_or_loading"
                 logit()
                 self.load_pellet()
@@ -391,18 +393,18 @@ class PelletMachine(StateMachine):
                 if cur_state == PelletState.loading and pellet_seen:
                     algo.pellet_loaded()
                 # current state is either retract or loading (loaded),
-                # we can do a send_pellet() but ensure cover is as desired:
+                # we can do a send_pellet() but ensure covered(-or-released) is as desired, *before* sending :
                 if algo.can_release_pellet():
-                    reason = "release_then_send_pellet_when_loaded_or_retract"
+                    reason = "release_when_loaded_or_retract"
                     logit()
                     self.release_pellet()
                 elif algo.can_cover_pellet():
-                    reason = "cover_then_send_pellet_when_loaded_or_retract"
+                    reason = "cover_when_loaded_or_retract"
                     logit()
                     self.cover_pellet()
                 #
                 if algo.can_send_pellet():
-                    reason = "prerelease_when_load_or_retract"
+                    reason = "send_pellet_when_loaded_or_retract"
                     logit()
                     self._api_status_token = None  # otherwise cannot send pellet
                     self.send_pellet()
@@ -419,10 +421,6 @@ class PelletMachine(StateMachine):
                 log_could_retry_shortly()
 
         elif cur_state == PelletState.sending:
-            if not self.can_use_pellet_command():
-                return
-            if not algo.diamond_recently_seen:
-                return
             # if algo.can_load_pellet():
             #     self._state = PelletState.monitoring
             #     self.load_pellet()
@@ -441,9 +439,12 @@ class PelletMachine(StateMachine):
             reason = "monitor_when_sent"
             logit()
             self.monitor_pellet()
+            # could probably re-enter immediatelly this func/try_next_state with current passed args ..
 
         elif cur_state in {PelletState.covering, PelletState.releasing}:
+            # maybe not anymore necessary/needed
             self.monitor_pellet()
+            # could probably re-enter immediatelly this func/try_next_state with current passed args ..
             # if not pellet_seen:
             #     if algo.diamond_recently_seen:
             #         reason = "load_pellet_when_covered_and_pellet_not_seen"
@@ -473,11 +474,13 @@ class PelletMachine(StateMachine):
                 logit()
                 self.send_pellet()
                 self.monitor_pellet()
+                # could probably re-enter immediatelly this func/try_next_state with current passed args ..
             else:
                 log_could_retry_shortly()
 
         elif cur_state == PelletState.monitoring:
             if algo.system_state == SystemState.tunnel:
+                # this if block does not look anymore necessary.. as it's handled below for release case
                 if must_release and pellet_seen:  # pellet_seen check normally not necessary
                     reason = "release_when_in_tunnel_and_must_release"
                     # if self.can_use_pellet_command():  # normally not necessary
@@ -511,7 +514,7 @@ class PelletMachine(StateMachine):
             #                 self.load_pellet()
             #             else:
             #                 log_could_retry_shortly()
-            elif pellet_seen:
+            elif algo.pellet_recently_seen:  # pellet_seen:
                 if algo.can_release_pellet():
                     # NB: once released, keep released
                     if self._prev_covered_state is not False:
