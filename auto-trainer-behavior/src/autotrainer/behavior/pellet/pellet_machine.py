@@ -425,14 +425,15 @@ class PelletMachine(StateMachine):
                 else:
                     log_could_retry_shortly()
                 return
-            if algo.can_release_pellet() and self._prev_covered_state is not False:
-                reason = "release_pellet_in_monitoring"
-                if self.can_use_pellet_command():
-                    logit()
-                    self.release_pellet()
-                    self.monitor_pellet()
-                else:
-                    log_could_retry_shortly()
+            if algo.can_release_pellet():
+                if self._prev_covered_state is not False:
+                    reason = "release_pellet_in_monitoring"
+                    if self.can_use_pellet_command():
+                        logit()
+                        self.release_pellet()
+                        self.monitor_pellet()
+                    else:
+                        log_could_retry_shortly()
             elif algo.can_cover_pellet() and self._prev_covered_state is not True:
                 reason = "cover_pellet_in_monitoring"
                 if self.can_use_pellet_command():
