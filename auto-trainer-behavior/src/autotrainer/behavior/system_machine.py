@@ -649,8 +649,9 @@ class SystemMachine(StateMachine):
         pellet_machine = self._pellet_machine
         send_begin_age = pellet_machine.get_send_begin_age(perf_now)
         send_end_age = pellet_machine.get_send_end_age(perf_now)
-        logger.debug(
-            "consider_start_session: state=%s pellet-state=%s recently_seen=%s send_being_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
+        logger.verbose(
+            "consider_start_session: state=%s pellet-state=%s recently_seen=%s "
+            "send_being_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
             self._state, self._pellet_machine.state, algo.pellet_recently_seen, send_begin_age, send_end_age, algo.capture_status_age)
         if not (self._state == SystemState.tunnel and not algo.is_in_session and self._analysis.load_cell_monitor.is_engaged):
             return
