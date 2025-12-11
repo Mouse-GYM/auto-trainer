@@ -308,13 +308,14 @@ class BehaviorAlgorithm(ObservableObject):
         self._hands_near_pellet_seen = False
         self._triangle_seen = False
         self._triangle_last_seen = 0.0
-        self._diamond_last_seen = -math.inf
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
         self._use_triangle_pellet_distance_too_far = False
         self._triangle_pellet_diff_too_far_threshold: float = (
             PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold)
         self._triangle_pellet_expected_distance = PelletDeliveryConfiguration.triangle_pellet_expected_distance
+        self._diamond_last_seen = -math.inf
         self._next_diamond_triangle_log_report = time.perf_counter()
+        self._star_last_seen = -math.inf
 
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
@@ -693,6 +694,10 @@ class BehaviorAlgorithm(ObservableObject):
         return self._triangle_last_seen
 
     @property
+    def star_recently_seen(self) -> bool:
+        return time.perf_counter() - self._star_last_seen < self.limits.triangle_missing_time
+
+    @property
     def triangle_recently_seen(self) -> bool:
         return time.perf_counter() - self._triangle_last_seen < self.limits.triangle_missing_time
 
@@ -1051,6 +1056,10 @@ class BehaviorAlgorithm(ObservableObject):
     def diamond_seen(self, seen: bool):
         if seen:
             self._diamond_last_seen = time.perf_counter()
+
+    def star_seen(self, seen: bool):
+        if seen:
+            self._star_last_seen = time.perf_counter()
 
     def triangle_seen(self, seen: bool = True):
         if self._triangle_seen != seen:

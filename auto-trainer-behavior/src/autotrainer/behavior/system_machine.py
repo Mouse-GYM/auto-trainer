@@ -129,6 +129,7 @@ class SystemMachine(StateMachine):
 
     def cancel_timers(self):
         for timer in (
+            self._timer_consider_start_session,
             self._timer_consider_end_session,
             self._timer_consider_close_gate,
             self._timer_auto_clamp_disengage,
@@ -136,6 +137,10 @@ class SystemMachine(StateMachine):
             if not timer.finished.is_set():
                 logger.debug("cancelling timer %s", timer)
                 timer.cancel()
+        self._timer_consider_start_session = no_op_timer
+        self._timer_consider_end_session = no_op_timer
+        self._timer_consider_close_gate = no_op_timer
+        self._timer_auto_clamp_disengage = no_op_timer
 
     @property
     def algorithm(self) -> BehaviorAlgorithm:
@@ -475,8 +480,9 @@ class SystemMachine(StateMachine):
                 logger.spam("pellet_hands min distance: %.3f -> %.3f", prev_dist, min_dist)
             self._prev_pellet_hands_dist = min_dist
         #
-        if algo.hands_near_pellet_seen and not prev_hands_seen_near_pellet:
-            self._pellet_machine.environment_changed(caller="hands_seen_near_pellet")
+        # already handled by _algorithm_property_changed with HANDS_NEAR_PELLET_SEEN
+        # if algo.hands_near_pellet_seen and not prev_hands_seen_near_pellet:
+        #     self._pellet_machine.environment_changed(caller="hands_seen_near_pellet")
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pose_changed(self, response: PoseResponse):
@@ -502,6 +508,7 @@ class SystemMachine(StateMachine):
         #
         algo.triangle_seen(response.triangle_seen)
         algo.diamond_seen(response.diamond_seen)
+        algo.star_seen(response.star_seen)
         algo.pellet_seen(response.pellet_seen)
         algo.mouse_seen(response.mouse_seen)
         if not algo.pellet_delivery_enabled:

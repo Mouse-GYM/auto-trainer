@@ -116,9 +116,9 @@ class AnimalSubject:
                 logger.error("Error loading animal subject from %s: %s", file_path, err)
                 return None
 
-        logger.debug("loaded animal id=%r name=%r pellet=%s is_dcs=%s current_protocol=%s",
-                     animal.id, animal.name, (pellet_x, pellet_y, pellet_z), animal.is_pellet_dcs,
-                     animal.training.current_protocol)
+        logger.debug("loaded animal id=%r name=%r pellet=%s is_dcs=%s",
+                     animal.id, animal.name,
+                     (animal.pellet_x, animal.pellet_y, animal.pellet_z), animal.is_pellet_dcs)
 
         return animal
 
