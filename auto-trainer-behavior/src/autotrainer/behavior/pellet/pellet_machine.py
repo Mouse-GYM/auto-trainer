@@ -251,7 +251,7 @@ class PelletMachine(StateMachine):
         self._api_status_token = None
         perf_now = time.perf_counter()
         self._api_status_token_perf_c = perf_now
-        if self._state == PelletState.sending or self._api_status_token_pellet_send == token:
+        if self._api_status_token_pellet_send == token:
             self._send_end_perf_c = perf_now
             self._api_status_token_pellet_send = None
             self.events.pellet_sent()
