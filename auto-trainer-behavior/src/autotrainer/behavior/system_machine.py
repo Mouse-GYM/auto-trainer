@@ -475,8 +475,9 @@ class SystemMachine(StateMachine):
                 logger.spam("pellet_hands min distance: %.3f -> %.3f", prev_dist, min_dist)
             self._prev_pellet_hands_dist = min_dist
         #
-        if algo.hands_near_pellet_seen and not prev_hands_seen_near_pellet:
-            self._pellet_machine.environment_changed(caller="hands_seen_near_pellet")
+        # already handled by _algorithm_property_changed with HANDS_NEAR_PELLET_SEEN
+        # if algo.hands_near_pellet_seen and not prev_hands_seen_near_pellet:
+        #     self._pellet_machine.environment_changed(caller="hands_seen_near_pellet")
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pose_changed(self, response: PoseResponse):
