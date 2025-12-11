@@ -6,7 +6,6 @@ Created on Mon Sep 16 17:29:00 2024
 @author: agx001
 """
 
-import logging
 import os
 import pickle
 from pathlib import Path
@@ -17,14 +16,7 @@ import shutil
 import yaml
 import math
 
-
-from autotrainer.core.logging import get_verbose_logger
-
-
-logger = get_verbose_logger(__name__)
-
-
-def make_new_calibration(square_size, row_ct, col_ct, parent_dir):
+def make_new_calibration(square_size, row_ct, col_ct, over_x, parent_dir):
     """
     Creates a new directory for calibration with subdirectories for storing source videos.
 
@@ -32,6 +24,10 @@ def make_new_calibration(square_size, row_ct, col_ct, parent_dir):
     square_size (int): Size of the calibration square (in millimeters).
     row_ct (int): Number of rows in the calibration grid.
     col_ct (int): Number of columns in the calibration grid.
+    over_x: int
+        If the frames were sampled at a higher resolution than will be used for
+        normal acquisition, this is the x-fold oversampling factor
+
     parent_dir (str): Parent directory where the calibration folder will be created.
     
     The function will create:
@@ -44,7 +40,7 @@ def make_new_calibration(square_size, row_ct, col_ct, parent_dir):
     """
     
     # Create a descriptive directory name for the calibration
-    src_name = f'{square_size}mm_{row_ct}r_{col_ct}c'
+    src_name = f'{square_size}mm_{row_ct}r_{col_ct}c_{over_x}x'
     calibration_dir = os.path.join(parent_dir, src_name)
 
     # Check if the directory already exists to prevent overwriting
@@ -95,6 +91,7 @@ def get_calibration_info(file):
         size_ndx = src_name.index('mm')
         row_ndx = src_name.index('r')
         col_ndx = src_name.index('c')
+        x_ndx = src_name.index('x')
 
         # Extract and convert the square size (before 'mm')
         square_size = int(src_name[:size_ndx])
@@ -105,8 +102,11 @@ def get_calibration_info(file):
         # Extract and convert the column count (between 'r' and 'c')
         col_ct = int(src_name[row_ndx+2:col_ndx])
 
+        # Extract and convert the column count (between 'r' and 'c')
+        over_x = int(src_name[col_ndx+2:x_ndx])
+        
         # Return the extracted values
-        return square_size, row_ct, col_ct
+        return square_size, row_ct, col_ct, over_x
     
     except (ValueError, IndexError) as e:
         # If there is an issue with extracting data, such as missing 'mm', 'r', or 'c'
@@ -369,7 +369,7 @@ def average_chessboard_distance(corners, board_size):
     return average_distance
 
 def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
-                         alpha=1, quality=0.9, over_x=1, calibrate=False):
+                         alpha=1, quality=0.9, calibrate=False):
     """
     
     src_dir (str): Path created by make_new_calibration
@@ -390,15 +390,15 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
 
     quality: float
         Floating point number between 0 and 1 for qutomatic corner-finding quality assessment
-
-    over_x: int
-        If the frames were sampled at a higher resolution than will be used for
-        normal acquisition, this is the x-fold oversampling factor
         
     calibrate : bool
         Can be set to false while refining other variables
     
     """
+    
+    # Gather calib variables
+    square_size, cbrow, cbcol, over_x = get_calibration_info(src_dir)
+    cam_names = get_video_list(src_dir)
     
     metadata = {
     'alpha': alpha,
@@ -421,9 +421,6 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
         theta = math.atan((camLele-camRele) / (camLazi-camRazi))
         rotation_correction = math.degrees(theta)
 
-    # Gather calib variables
-    square_size, cbrow, cbcol = get_calibration_info(src_dir)
-    cam_names = get_video_list(src_dir)
     
     # Clear directories
     path_corners = os.path.join(src_dir,'corners')
@@ -508,8 +505,8 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
                     try:
                         corrected_c = refine_corners(gray, corners[c,0,:], window_size)
                         corrected_points.append([corrected_c])  # Maintain (1, 2) shape for each point
-                    except Exception as err:
-                        logger.warning(f"Index {index} - c {c} err=%s", err)
+                    except:
+                        print(f"Index {index} - c {c}")
                         keep_test = False
                 if keep_test:
                     # Convert corrected_points to a numpy array with shape (30, 1, 2)
