@@ -345,35 +345,10 @@ class PelletMachine(StateMachine):
             if not self.can_use_pellet_command():
                 # wait previous command is acked.
                 return
-            # if cur_state == PelletState.loading:
-                # intersession most likely launched given pellet gone -> load-pellet
             if algo.intersession_state == IntersessionState.segmentation:
                 # waiting inference is back
                 return
-            # if algo.can_load_pellet() and not pellet_seen and algo.diamond_recently_seen:  # and algo.star_seen
-            #     reason = "load_when_intersession_not_segmentation_pellet_not_seen"
-            #     logit()
-            #     self._state = PelletState.monitoring
-            #     self.load_pellet()
-            # elif cur_state != PelletState.retract:
-            #     if cur_state == PelletState.loading and pellet_seen:
-            #         # can happen on session ended because mouse moved out of tunnel,
-            #         algo.pellet_loaded()
-            #     # or once inference resume after a load-pellet which triggered an end-session:
-            #     if algo.can_cover_pellet():
-            #         reason = "cover_pellet_before_retract_when_intersession"
-            #         logit()
-            #         # Need monitoring state to be able to cover_pellet, atm,
-            #         # alternatively we could simply allow this states transition.
-            #         self._state = PelletState.monitoring  # given accepted state
-            #         self.cover_pellet()
-            #     # else:
-            #     #     reason = "release_pellet_before_retract_when_"
-            #     # could also decide to execute the move_retract before the cover_pellet.
-            #     reason = "move_retract_when_intersession"
-            #     logit()
-            #     self.move_retract()
-            return
+            # return
 
         if cur_state in {PelletState.loading, PelletState.retract}:
             if not self.can_use_pellet_command():
@@ -388,6 +363,7 @@ class PelletMachine(StateMachine):
                 logit()
                 self.load_pellet()
             else:
+                # either pellet is seen, or we don't know (might be not visible on cameras),
                 if cur_state == PelletState.loading and pellet_seen:
                     algo.pellet_loaded()
                 # current state is either retract or loading (loaded),
@@ -404,9 +380,10 @@ class PelletMachine(StateMachine):
                 if algo.can_send_pellet():
                     reason = "send_pellet_when_loaded_or_retract"
                     logit()
+                    # for api status token to None, from eventualy previous release/cover pellet
                     self._api_status_token = None  # otherwise cannot send pellet
                     self.send_pellet()
-                # then always:
+                # then always directly:
                 self.monitor_pellet()
 
         elif cur_state == PelletState.prerelease:
@@ -419,21 +396,6 @@ class PelletMachine(StateMachine):
                 log_could_retry_shortly()
 
         elif cur_state == PelletState.sending:
-            # if algo.can_load_pellet():
-            #     self._state = PelletState.monitoring
-            #     self.load_pellet()
-            # elif algo.can_cover_pellet():
-            #     reason = "cover_when_sent_cover_enabled"
-            #     logit()
-            #     self._state = PelletState.monitoring
-            #     self.cover_pellet()
-            #     self.monitor_pellet()
-            # elif algo.can_release_pellet():
-            #     reason = "uncover_when_sent_cover_disabled"
-            #     logit()
-            #     self._state = PelletState.monitoring
-            #     self.release_pellet()
-
             reason = "monitor_when_sent"
             logit()
             self.monitor_pellet()
@@ -442,28 +404,6 @@ class PelletMachine(StateMachine):
         elif cur_state in {PelletState.covering, PelletState.releasing}:
             # maybe not anymore necessary/needed
             self.monitor_pellet()
-            # could probably re-enter immediatelly this func/try_next_state with current passed args ..
-            # if not pellet_seen:
-            #     if algo.diamond_recently_seen:
-            #         reason = "load_pellet_when_covered_and_pellet_not_seen"
-            #         if self.can_load_pellet():
-            #             logit()
-            #             self.load_pellet()
-            #         else:
-            #             log_could_retry_shortly()
-            # else:
-            #     if algo.can_release_pellet():
-            #         reason = "release_pellet_when_seen_and_can_release"
-            #         if self.can_use_pellet_command():
-            #             logit()
-            #             self.release_pellet()
-            #         else:
-            #             log_could_retry_shortly()
-
-        # elif cur_state == PelletState.releasing:
-        #     reason = "monitor_when_released"
-        #     logit()
-        #     self.monitor_pellet()
 
         elif cur_state == PelletState.home:
             # not used
@@ -477,21 +417,21 @@ class PelletMachine(StateMachine):
                 log_could_retry_shortly()
 
         elif cur_state == PelletState.monitoring:
-            if algo.system_state == SystemState.tunnel:
-                # this if block does not look anymore necessary.. as it's handled below for release case
-                if must_release and pellet_seen:  # pellet_seen check normally not necessary
-                    reason = "release_when_in_tunnel_and_must_release"
-                    # if self.can_use_pellet_command():  # normally not necessary
-                        # and algo.can_release_pellet():
-                        # actually no need check algo.can_release_pellet(),
-                        # it's already done by next release_pellet() as a pre-condition of the defined trigger
-                        # in the pellet machine defined transitions.
-                    logit()
-                    self.release_pellet()
-                    self.monitor_pellet()
-                    # else:
-                    #     log_could_retry_shortly()
-                    return
+            # if algo.system_state == SystemState.tunnel:
+            #     # this if block does not look anymore necessary.. as it's handled below for release case
+            #     if must_release and pellet_seen:  # pellet_seen check normally not necessary
+            #         reason = "release_when_in_tunnel_and_must_release"
+            #         # if self.can_use_pellet_command():  # normally not necessary
+            #             # and algo.can_release_pellet():
+            #             # actually no need check algo.can_release_pellet(),
+            #             # it's already done by next release_pellet() as a pre-condition of the defined trigger
+            #             # in the pellet machine defined transitions.
+            #         logit()
+            #         self.release_pellet()
+            #         self.monitor_pellet()
+            #         # else:
+            #         #     log_could_retry_shortly()
+            #         return
 
             if ((not pellet_seen and algo.triangle_recently_seen)
                   or (pellet_seen and algo.triangle_recently_seen and algo.is_triangle_pellet_distance_too_far())
@@ -503,15 +443,6 @@ class PelletMachine(StateMachine):
                 else:
                     log_could_retry_shortly()
                 return
-            # else:
-            #     if (not pellet_seen or algo.is_triangle_pellet_distance_too_far()) and algo.triangle_recently_seen:
-            #         if algo.can_load_pellet():
-            #             reason = "load_pellet_in_monitoring"
-            #             if self.can_use_pellet_command():
-            #                 logit()
-            #                 self.load_pellet()
-            #             else:
-            #                 log_could_retry_shortly()
             elif algo.pellet_recently_seen:  # pellet_seen:
                 if algo.can_release_pellet():
                     # NB: once released, keep released
