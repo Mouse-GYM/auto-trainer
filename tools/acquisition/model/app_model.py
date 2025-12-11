@@ -227,14 +227,14 @@ class AppModel(ObservableObject):
             logger.verbose("consider_release_pellet: calling try_next_state ; "
                            "pellet_recently_seen=%s age=%.2f",
                            algo.pellet_recently_seen, algo.pellet_seen_age)
-            #   and algo.capture_status_age >= algo.recording_age_release_pellet_threshold:
             # this is called via a timer, which are not necessarily very precise,
             # and to be safe on all side, do not check again, the actual age could even be slightly less than the
             # desired threshold (but very very near). So to not miss that case: do not "recheck"
-            # if algo.can_release_pellet()
             if algo.can_release_pellet():
                 self._behavior.system_machine.pellet.environment_changed(
                     pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-start-recording")
+                # NB: this is not really necessary anymore as it's handled by pellet machine itself during monitoring now,
+                # but this makes the call faster, not waiting the next inference result passed to pellet machine environement changed
         else:
             logger.verbose("consider_release_pellet but not in session")
 
