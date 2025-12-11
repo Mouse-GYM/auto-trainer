@@ -6,6 +6,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler, EventManager, ApiEventKind)
+from autotrainer.core.analysis import EmergencyAlarmMonitor
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -63,14 +64,16 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         self._system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
 
-        @BehaviorAlgorithm.relay_func(wait=False)
-        def alarm_monitor_property_changed(name, value, _):
-            if name == "is_engaged":
-                if value:
-                    self.emergency_stop(f"alarm-monitor: {analysis.emergency_alarm_monitor.engaged_reasons}")
-                else:
-                    self.emergency_resume("alarm-monitor-resumed")
-        analysis.emergency_alarm_monitor.property_changed += alarm_monitor_property_changed
+        analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
+
+    @BehaviorAlgorithm.relay_func(wait=False)
+    def _alarm_monitor_property_changed(self, name, value, old_value):
+        logger.debug("alarm-mon: %s : %s -> %s", name, old_value, value)
+        if name == EmergencyAlarmMonitor.IS_ENGAGED:
+            if value:
+                self.emergency_stop(f"alarm-monitor: {self._analysis.emergency_alarm_monitor.engaged_reasons}")
+            else:
+                self.emergency_resume("alarm-monitor-resumed")
 
     @property
     def analysis(self) -> SensorAnalysis:
@@ -143,6 +146,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
 
     def emergency_stop(self, source: str):
         algo = self._system_machine.algorithm
+        logger.info("emergency_stop called: %s - current=%s", source, algo.algo_paused)
         if algo.algo_paused:
             return
         algo.algo_paused = True
@@ -152,6 +156,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
 
     def emergency_resume(self, source: str):
         algo = self._system_machine.algorithm
+        logger.info("emergency_resume called: %s - current=%s", source, algo.algo_paused)
         if not algo.algo_paused:
             return
         if self._source_algo_paused == "user-button" and source != "user-button":
