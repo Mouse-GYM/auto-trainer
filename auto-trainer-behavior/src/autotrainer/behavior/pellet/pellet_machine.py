@@ -222,6 +222,7 @@ class PelletMachine(StateMachine):
                 # NB: not entirely sure we need this here as it is.
                 #
         if algo.session_mouse_seen and self._state == PelletState.monitoring:
+            # sessions ended because exit tunnel most likely
             self.move_retract()
         # execute try next state AFTER having applied motor drifts,
         # given next state will move/send the pellet back to deliver/SEND position
@@ -379,7 +380,7 @@ class PelletMachine(StateMachine):
                 return
             if not algo.diamond_recently_seen:
                 return
-            if self.can_load_pellet():
+            if self.can_load_pellet():  # and algo.start_recently_seen
                 reason = "load_pellet_when_not_seen_and_retract_or_loading"
                 logit()
                 self._state = PelletState.monitoring
@@ -387,8 +388,17 @@ class PelletMachine(StateMachine):
             else:
                 if cur_state == PelletState.loading and pellet_seen:
                     algo.pellet_loaded()
-                #
-                if algo.can_cover_pellet():
+                # current state is either retract or loading (loaded),
+                # we can do a send_pellet() but ensure cover is as desired:
+                if algo.can_release_pellet():
+                    reason = "cover_send_pellet_when_loaded_or_retract"
+                    logit()
+                    self._state = PelletState.monitoring
+                    self.release_pellet()
+                    prev_token = self._api_status_token
+                    self._state = PelletState.home  # force, could be loading or retract too
+                    self._api_status_token = None  # otherwise cannot send pellet
+                elif algo.can_cover_pellet():
                     reason = "cover_send_pellet_when_loaded_or_retract"
                     logit()
                     self._state = PelletState.monitoring
@@ -406,7 +416,8 @@ class PelletMachine(StateMachine):
                 else:
                     if prev_token is not None:
                         self._api_status_token = prev_token
-                    self.monitor_pellet()
+                # then always:
+                self.monitor_pellet()
 
         elif cur_state == PelletState.prerelease:
             # now unused
@@ -484,7 +495,7 @@ class PelletMachine(StateMachine):
                         # in the pellet machine defined transitions.
                     logit()
                     self.release_pellet()
-                    self._state = PelletState.monitoring
+                    self.monitor_pellet()
                     # else:
                     #     log_could_retry_shortly()
                     return
@@ -516,7 +527,7 @@ class PelletMachine(StateMachine):
                         if self.can_use_pellet_command():
                             logit()
                             self.release_pellet()
-                            self._state = PelletState.monitoring
+                            self.monitor_pellet()
                         else:
                             log_could_retry_shortly()
                 elif algo.can_cover_pellet() and self._prev_covered_state is not True:
