@@ -129,6 +129,7 @@ class SystemMachine(StateMachine):
 
     def cancel_timers(self):
         for timer in (
+            self._timer_consider_start_session,
             self._timer_consider_end_session,
             self._timer_consider_close_gate,
             self._timer_auto_clamp_disengage,
@@ -136,6 +137,10 @@ class SystemMachine(StateMachine):
             if not timer.finished.is_set():
                 logger.debug("cancelling timer %s", timer)
                 timer.cancel()
+        self._timer_consider_start_session = no_op_timer
+        self._timer_consider_end_session = no_op_timer
+        self._timer_consider_close_gate = no_op_timer
+        self._timer_auto_clamp_disengage = no_op_timer
 
     @property
     def algorithm(self) -> BehaviorAlgorithm:
