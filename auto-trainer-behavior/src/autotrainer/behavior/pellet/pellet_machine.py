@@ -70,11 +70,12 @@ class PelletMachine(StateMachine):
 
         self._api_status_token = None
         self._api_status_token_pellet_send = None
-        self._prev_pellet_seen = None
         self._prev_covered_state = None  # False == released ; True == covered
         self._send_begin_perf_c = -math.inf
         self._send_end_perf_c = -math.inf
         self._api_status_token_perf_c = -math.inf
+        self._prev_pellet_load_perf_c = -math.inf
+        self._prev_notify_loaded_perf_c = -math.inf
 
         self.machine = Machine(
             model=[self],
@@ -106,6 +107,8 @@ class PelletMachine(StateMachine):
         if self._pellet_device is not None:
             self.events.pellet_loading()
             self._api_status_token = self._pellet_device.load_pellet()
+            if self._api_status_token is not None:
+                self._prev_pellet_load_perf_c = time.perf_counter()
             EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -278,6 +281,10 @@ class PelletMachine(StateMachine):
 
     # endregion
 
+    def _notify_pellet_loaded_ok(self):
+        self._prev_notify_loaded_perf_c = time.perf_counter()
+        self._algorithm.pellet_loaded()
+
     @BehaviorAlgorithm.relay_func
     def environment_changed(
         self,
@@ -340,31 +347,26 @@ class PelletMachine(StateMachine):
 
         cur_state = self.state
 
-        # Always arrest to the retract position during intersession.
         if algo.system_state == SystemState.intersession:
             if algo.intersession_state == IntersessionState.segmentation:
-                # waiting inference is back
+                # waiting inference is back, nothing we can do
                 return
 
         if cur_state in {PelletState.loading, PelletState.retract}:
             if not self.can_use_pellet_command():
                 # wait movement is finished
                 return
-            # should not be required:
-            # if not algo.diamond_recently_seen:
-            #     return
-            # this is going to be called at end of intersession after going to detection phases,
-            # basically when inference is live
-            if self.can_load_pellet():  # and algo.star_recently_seen  # should probably have
-                # condition should better be : if not pellet_seen and diamond_seen and star_seen
-                # to have faster load (can_load_pellet checks on pellet recently seen)
+            # this is going to be called at end of intersession after going to detection phase,
+            # basically when inference is back to live
+            if not pellet_seen and algo.diamond_recently_seen and algo.star_recently_seen:
                 reason = "load_pellet_when_not_seen_and_retract_or_loading"
                 logit()
                 self.load_pellet()
             else:
                 # either pellet is seen, or we don't know (might be not visible on cameras),
                 if cur_state == PelletState.loading and pellet_seen:
-                    algo.pellet_loaded()
+                    self._notify_pellet_loaded_ok()
+                    # algo.pellet_loaded()
                 # current state is either retract or loading (loaded),
                 # we can do a send_pellet() but ensure covered(-or-released) is as desired, *before* sending :
                 if algo.can_release_pellet():
@@ -388,16 +390,8 @@ class PelletMachine(StateMachine):
                 # then always directly:
                 self.monitor_pellet()
 
-        elif cur_state == PelletState.prerelease:
-            # now unused
-            reason = "send_pellet_when_prereleased"
-            if self.can_send_pellet():
-                logit()
-                self.send_pellet()
-            else:
-                log_could_retry_shortly()
-
         elif cur_state == PelletState.sending:
+            # normally not anymore ncessary
             reason = "monitor_when_sent"
             logit()
             self.monitor_pellet()
@@ -419,6 +413,8 @@ class PelletMachine(StateMachine):
                 log_could_retry_shortly()
 
         elif cur_state == PelletState.monitoring:
+            if pellet_seen and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
+                self._notify_pellet_loaded_ok()
             if ((not pellet_seen and algo.triangle_recently_seen)
                   or (pellet_seen and algo.triangle_recently_seen and algo.is_triangle_pellet_distance_too_far())
             ):
@@ -429,7 +425,6 @@ class PelletMachine(StateMachine):
                 else:
                     log_could_retry_shortly()
                 return
-            # elif algo.pellet_recently_seen:  # pellet_seen:
             if algo.can_release_pellet() and self._prev_covered_state is not False:
                 reason = "release_pellet_in_monitoring"
                 if self.can_use_pellet_command():

@@ -501,6 +501,7 @@ class SystemMachine(StateMachine):
         #
         algo.triangle_seen(response.triangle_seen)
         algo.diamond_seen(response.diamond_seen)
+        algo.star_seen(response.star_seen)
         algo.pellet_seen(response.pellet_seen)
         algo.mouse_seen(response.mouse_seen)
         if not algo.pellet_delivery_enabled:
