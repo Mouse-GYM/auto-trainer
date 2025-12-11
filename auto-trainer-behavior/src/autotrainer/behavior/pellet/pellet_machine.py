@@ -130,6 +130,7 @@ class PelletMachine(StateMachine):
 
     def after_load_pellet(self):
         if False:
+            # now handled in ack
             self._algorithm.pellet_loaded()
 
     def before_cover_pellet(self):
@@ -220,9 +221,11 @@ class PelletMachine(StateMachine):
                 # otherwise there is a retract pellet which is executed with next/following try_next_state.
                 # NB: not entirely sure we need this here as it is.
                 #
+        if algo.session_mouse_seen and self._state == PelletState.monitoring:
+            self.move_retract()
         # execute try next state AFTER having applied motor drifts,
         # given next state will move/send the pellet back to deliver/SEND position
-        self.environment_changed(caller="session_ending")
+        # self.environment_changed(caller="session_ending")
 
     def _move_retract(self):
         logger.debug("calling dev.send_retract()")
@@ -506,16 +509,18 @@ class PelletMachine(StateMachine):
             #             else:
             #                 log_could_retry_shortly()
             elif pellet_seen:
-                if algo.can_cover_pellet() and self._prev_covered_state is not True:
+                if algo.can_release_pellet():
+                    # NB: once released, keep released
+                    if self._prev_covered_state is not False:
+                        reason = "release_pellet_in_monitoring"
+                        if self.can_use_pellet_command():
+                            logit()
+                            self.release_pellet()
+                            self._state = PelletState.monitoring
+                        else:
+                            log_could_retry_shortly()
+                elif algo.can_cover_pellet() and self._prev_covered_state is not True:
                     reason = "cover_pellet_in_monitoring"
-                    if self.can_use_pellet_command():
-                        logit()
-                        self.cover_pellet()
-                        self._state = PelletState.monitoring
-                    else:
-                        log_could_retry_shortly()
-                elif algo.can_release_pellet() and self._prev_covered_state is not False:
-                    reason = "release_pellet_in_monitoring"
                     if self.can_use_pellet_command():
                         logit()
                         self.cover_pellet()
