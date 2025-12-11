@@ -652,17 +652,19 @@ class SystemMachine(StateMachine):
         send_begin_age = pellet_machine.get_send_begin_age(perf_now)
         send_end_age = pellet_machine.get_send_end_age(perf_now)
         logger.verbose(
-            "consider_start_session: state=%s pellet-state=%s recently_seen=%s "
-            "send_being_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
-            self._state, self._pellet_machine.state, algo.pellet_recently_seen, send_begin_age, send_end_age, algo.capture_status_age)
+            "consider_start_session: state=%s pellet-state=%s recently_seen=%s in_session=%s "
+            "send_begin_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
+            self._state, self._pellet_machine.state, algo.pellet_recently_seen, algo.is_in_session,
+            send_begin_age, send_end_age, algo.capture_status_age)
         if not (self._state == SystemState.tunnel and not algo.is_in_session and self._analysis.load_cell_monitor.is_engaged):
             return
         if not math.isinf(send_begin_age) and send_begin_age < send_end_age:
             # wait pellet-sent, no need further timer.
             return
-        if pellet_machine.state not in {PelletState.monitoring, PelletState.covering, PelletState.releasing}:
-            return
-        if not algo.pellet_recently_seen:
+        if pellet_machine.state != PelletState.monitoring:
+            # wait monitoring
+            remains = 0.1
+        elif not algo.pellet_recently_seen:
             # pellet not seen, if enabled a pellet-load will be executed once pellet_missing_time elapsed,
             remains = min(0.1, algo.pellet_missing_time - algo.get_pellet_seen_age(perf_now))  # ensure some minimum time before recheck
             if remains <= 0:
@@ -670,8 +672,8 @@ class SystemMachine(StateMachine):
         else:
             if math.isinf(send_begin_age) and math.isinf(send_end_age):
                 remains = 0  # first session
-            elif algo.capture_status_age < send_end_age:
-                remains = 0.1
+            # elif algo.capture_status_age < send_end_age:
+            #     remains = 0.1
             else:
                 remains = algo.record_prebuffer_duration - send_end_age
         if remains > 0:
