@@ -108,6 +108,7 @@ class PelletMachine(StateMachine):
             self._api_status_token = self._pellet_device.load_pellet()
             if self._api_status_token is not None:
                 self._prev_pellet_load_perf_c = time.perf_counter()
+                self._prev_covered_state = None
             EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
