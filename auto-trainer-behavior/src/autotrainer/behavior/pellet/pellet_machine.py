@@ -70,7 +70,8 @@ class PelletMachine(StateMachine):
 
         self._api_status_token = None
         self._api_status_token_pellet_send = None
-        self._prev_covered_state = None  # False == released ; True == covered
+        self._covered_state = None  # False == released ; True == covered ; None == unknown/none
+        self._prev_covered_state = None
         self._send_begin_perf_c = -math.inf
         self._send_end_perf_c = -math.inf
         self._prev_pellet_load_perf_c = -math.inf
@@ -108,7 +109,7 @@ class PelletMachine(StateMachine):
             self._api_status_token = self._pellet_device.load_pellet()
             if self._api_status_token is not None:
                 self._prev_pellet_load_perf_c = time.perf_counter()
-                self._prev_covered_state = None
+                self._covered_state = None
             EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -140,7 +141,7 @@ class PelletMachine(StateMachine):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.cover_pellet()
             if self._api_status_token is not None:
-                self._prev_covered_state = True
+                self._covered_state = True
             EventManager.default().post_event_content(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -149,7 +150,7 @@ class PelletMachine(StateMachine):
         if self._pellet_device is not None:
             self._api_status_token = self._pellet_device.release_pellet()
             if self._api_status_token is not None:
-                self._prev_covered_state = False
+                self._covered_state = False
             EventManager.default().post_event_content(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
@@ -322,12 +323,12 @@ class PelletMachine(StateMachine):
                 "try_next_state cur=%s from %s: %s -> in_session=%s pellet_seen=%s recently=%s triangle_recently_seen=%s "
                 "session_mouse_seen=%s session_pellet_count=%s must_release=%s "
                 "pellet_state=%s algo_system_state=%s intersession_state=%s "
-                "pellet_seen_age=%.1f" "sec hands_near_pellet_seen=%s"
+                "pellet_seen_age=%.1f" "sec hands_near_pellet_seen=%s covered_state=%s"
                 , cur_state, caller, reason, algo.is_in_session, pellet_seen,
                 algo.pellet_recently_seen, algo.triangle_recently_seen,
                 algo.session_mouse_seen, algo.session_pellet_count, must_release,
                 self._state, algo.system_state, algo.intersession_state,
-                algo.pellet_seen_age, algo.hands_near_pellet_seen,
+                algo.pellet_seen_age, algo.hands_near_pellet_seen, self._covered_state,
             )
 
         def log_could_retry_shortly():
@@ -420,8 +421,11 @@ class PelletMachine(StateMachine):
                 else:
                     log_could_retry_shortly()
                 return
+            if self._prev_covered_state is not self._covered_state:
+                logger.debug("covered_state: %s -> %s", self._prev_covered_state, self._covered_state)
+                self._prev_covered_state = self._covered_state
             if algo.can_release_pellet():
-                if self._prev_covered_state is not False:
+                if self._covered_state is not False:
                     # nb: keep this second if not grouped with the previous one,
                     # otherwise cover will continuously switch between covered and released.
                     reason = "release_pellet_in_monitoring"
@@ -431,7 +435,7 @@ class PelletMachine(StateMachine):
                         self.monitor_pellet()
                     else:
                         log_could_retry_shortly()
-            elif algo.can_cover_pellet() and self._prev_covered_state is not True:
+            elif algo.can_cover_pellet() and self._covered_state is not True:
                 reason = "cover_pellet_in_monitoring"
                 if self.can_use_pellet_command():
                     logit()
