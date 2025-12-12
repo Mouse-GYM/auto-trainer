@@ -1013,7 +1013,7 @@ class BehaviorAlgorithm(ObservableObject):
         return not self._algo_paused
 
     def can_load_pellet(self):
-        return self.pellet_delivery_enabled and not self.pellet_recently_seen and not self._algo_paused
+        return self._pellet_delivery_enabled and not self.pellet_recently_seen and not self._algo_paused
 
     def can_release_pellet(self) -> bool:
         # self._check_date()
@@ -1043,7 +1043,7 @@ class BehaviorAlgorithm(ObservableObject):
         # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_perform_intersession_analysis(self):
-        return self.intersession_enabled and self.session_mouse_seen
+        return self._intersession_enabled and self.session_mouse_seen
 
     #
 
@@ -1140,26 +1140,26 @@ class BehaviorAlgorithm(ObservableObject):
         # self.auto_close_gate_on_intersession_config = config.  # not saved yet to config
 
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
-        cfg.is_enabled = self.pellet_delivery_enabled
-        cfg.is_pellet_cover_enabled = self.pellet_cover_enabled
+        cfg.is_enabled = self._pellet_delivery_enabled
+        cfg.is_pellet_cover_enabled = self._pellet_cover_enabled
         cfg.max_pellet_missing_seconds = self.pellet_missing_time
         cfg.max_pellets_per_session = self.max_pellets_per_session
         cfg.max_pellets_per_day = self.max_pellets_per_day
         cfg.auto_correct_motors_drift = self._auto_correct_motors_drift
-        cfg.use_triangle_pellet_distance_too_far = self.use_triangle_pellet_distance_too_far
-        cfg.triangle_pellet_expected_distance = self.triangle_pellet_expected_distance
-        cfg.triangle_pellet_diff_too_far_threshold = self.triangle_pellet_diff_too_far_threshold
+        cfg.use_triangle_pellet_distance_too_far = self._use_triangle_pellet_distance_too_far
+        cfg.triangle_pellet_expected_distance = self._triangle_pellet_expected_distance
+        cfg.triangle_pellet_diff_too_far_threshold = self._triangle_pellet_diff_too_far_threshold
         cfg.pellet_hand_uncover_distance = self.pellet_hand_uncover_distance
 
     def _update_head_clamp_cfg(self, cfg: HeadClampConfiguration):
         cfg.min_baseline_intensity = self.min_baseline_intensity
         cfg.max_baseline_intensity = self.max_baseline_intensity
         cfg.baseline_intensity_increment = self.baseline_intensity_increment
-        cfg.auto_clamp_intensity = self.auto_clamp_intensity
-        cfg.auto_clamp_release_tone_freq = self.auto_clamp_release_tone_freq
-        cfg.auto_clamp_release_tone_delay = self.auto_clamp_release_tone_delay
-        cfg.auto_clamp_release_load_count = self.auto_clamp_release_load_count
-        cfg.auto_clamp_no_activity_release_delay = self.auto_clamp_no_activity_release_delay
+        cfg.auto_clamp_intensity = self._auto_clamp_intensity
+        cfg.auto_clamp_release_tone_freq = self._auto_clamp_release_tone_freq
+        cfg.auto_clamp_release_tone_delay = self._auto_clamp_release_tone_delay
+        cfg.auto_clamp_release_load_count = self._auto_clamp_release_load_count
+        cfg.auto_clamp_no_activity_release_delay = self._auto_clamp_no_activity_release_delay
 
     def update_configuration(self, configuration: BehaviorConfiguration):
         self._update_pellet_cfg(configuration.pellet_delivery)
