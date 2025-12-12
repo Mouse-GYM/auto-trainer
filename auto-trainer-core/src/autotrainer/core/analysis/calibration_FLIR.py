@@ -16,6 +16,13 @@ import shutil
 import yaml
 import math
 
+
+from autotrainer.core.logging import get_verbose_logger
+
+
+logger = get_verbose_logger(__name__)
+
+
 def make_new_calibration(square_size, row_ct, col_ct, over_x, parent_dir):
     """
     Creates a new directory for calibration with subdirectories for storing source videos.
@@ -67,6 +74,7 @@ def make_new_calibration(square_size, row_ct, col_ct, over_x, parent_dir):
     
     return calibration_dir
 
+
 def get_calibration_info(file):
     """
     Extracts calibration information from the folder name based on the format '{square_size}mm_{row_ct}r_{col_ct}c'.
@@ -82,11 +90,10 @@ def get_calibration_info(file):
 
     The folder name should be in the format '{square_size}mm_{row_ct}r_{col_ct}c'.
     """
-    
-    try:
-        # Extract the directory name from the provided file path
-        src_name = os.path.split(file)[1]
+    # Extract the directory name from the provided file path
+    src_name = os.path.split(file)[1]
 
+    try:
         # Find the index of key parts ('mm', 'r', and 'c') in the directory name
         size_ndx = src_name.index('mm')
         row_ndx = src_name.index('r')
@@ -108,10 +115,11 @@ def get_calibration_info(file):
         # Return the extracted values
         return square_size, row_ct, col_ct, over_x
     
-    except (ValueError, IndexError) as e:
+    except (ValueError, IndexError) as err:
         # If there is an issue with extracting data, such as missing 'mm', 'r', or 'c'
-        print(f"Error extracting calibration info from {src_name}: {e}")
-        return None
+        logger.error("Error extracting calibration info from %s: %s", src_name, err)
+        raise
+
 
 def get_video_list(src_dir):
     """
@@ -147,6 +155,7 @@ def get_video_list(src_dir):
 
     return video_files
 
+
 def adjust_gamma(image, gamma=1.0):
     """
     Adjusts the gamma of the given image.
@@ -164,6 +173,7 @@ def adjust_gamma(image, gamma=1.0):
 
     # Apply the gamma correction using the lookup table
     return cv2.LUT(image, table)
+
 
 def score_grid(points):
     """
@@ -305,7 +315,8 @@ def refine_corners(image, initial_corner, window_size):
     # Adjust the refined corner relative to the corner region
     refined_corner = (intersection_x + x - half_window, intersection_y + y - half_window)
     return refined_corner
-    
+
+
 def rotate_2D_points(points, angle_degrees):
     # Detect the input shape and data type
     original_shape = points.shape
@@ -330,6 +341,7 @@ def rotate_2D_points(points, angle_degrees):
     rotated_points = rotated_points.astype(original_dtype).reshape(original_shape)
 
     return rotated_points
+
 
 def average_chessboard_distance(corners, board_size):
     """
@@ -367,6 +379,7 @@ def average_chessboard_distance(corners, board_size):
     # Calculate the average distance
     average_distance = np.mean(total_distances)
     return average_distance
+
 
 def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
                          alpha=1, quality=0.9, calibrate=False):
@@ -491,7 +504,7 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
             ret, corners = cv2.findChessboardCorners(gray, (cbcol, cbrow), None)
             
             # If found, add object points, image points (after refining them)
-            if ret == True:
+            if ret:
                 mean_pix_dist = average_chessboard_distance(corners, (cbcol, cbrow))
                 window_size = int(round(mean_pix_dist*1.5))
                 
@@ -503,11 +516,11 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
                 # Iterate through each point and apply correction
                 for c in range(np.shape(corners)[0]):
                     try:
-                        corrected_c = refine_corners(gray, corners[c,0,:], window_size)
+                        corrected_c = refine_corners(gray, corners[c, 0, :], window_size)
                         corrected_points.append([corrected_c])  # Maintain (1, 2) shape for each point
-                    except:
-                        print(f"Index {index} - c {c}")
-                        keep_test = False
+                    except Exception as err:
+                        logger.exception(f"Index {index} - c {c} err=%s", err)
+                        # keep_test = False
                 if keep_test:
                     # Convert corrected_points to a numpy array with shape (30, 1, 2)
                     corners_refined = np.array(corrected_points)[:,:,:,0]
@@ -530,14 +543,13 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
             else:
                 keep_test = False
         
-        
-        if keep_test == True:
+        if keep_test:
             
             centers = list()
             for corners in corner_cams:
-                centers.append(round(np.mean(corners[:,:,0])))
-                centers.append(round(np.mean(corners[:,:,1])))
-                
+                centers.append(round(np.mean(corners[:, :, 0])))
+                centers.append(round(np.mean(corners[:, :, 1])))
+
             if centers == centers_prev:
                 # Simple method to avoid over-sampling portions of the calibration
                 # movie where the grid is not in motion
@@ -566,7 +578,7 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
                     new_height = int(img.shape[0] * over_x)
                     new_size = (new_width, new_height)
                     img = cv2.resize(img, new_size)
-                    img = cv2.drawChessboardCorners(img, (cbcol, cbrow), corners * over_x, ret)
+                    img = cv2.drawChessboardCorners(img, (cbcol, cbrow), corners * over_x, int(ret))
                     
                     filename = f"{cam}_{index}_corner.jpg"
                     cv2.imwrite(os.path.join(str(path_corners), filename), img)
@@ -699,10 +711,12 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
     else:
         print("Corners extracted!")
     
+
 def read_pickle(filename):
     """Read the pickle file"""
     with open(filename, "rb") as handle:
         return pickle.load(handle)
+
 
 def write_pickle(filename, data):
     """Write the pickle file"""

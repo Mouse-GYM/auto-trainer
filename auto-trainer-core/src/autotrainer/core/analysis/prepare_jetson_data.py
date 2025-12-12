@@ -467,7 +467,7 @@ def reorient_and_center(filtered_df_3d, centered_path_3d, src_dir, bpts, center_
     with open(metadata_path, 'r') as file:
         calib_metadata = yaml.safe_load(file)
 
-    square_size, _, _ = cal_flir.get_calibration_info(src_dir)
+    square_size, _, _, _ = cal_flir.get_calibration_info(src_dir)
     cam_names = cal_flir.get_video_list(src_dir)
 
     path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')

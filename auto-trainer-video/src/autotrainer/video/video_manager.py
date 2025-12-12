@@ -35,11 +35,13 @@ class VideoManager:
     @classmethod
     def open(cls):
         if _have_spin_cam:
+            logger.verbose("Starting SpinCam")
             SpinCam.start()
 
     @classmethod
     def close(cls):
         if _have_spin_cam:
+            logger.verbose("Stopping SpinCam")
             SpinCam.stop()
 
     @classmethod

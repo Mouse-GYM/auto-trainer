@@ -139,7 +139,7 @@ class ProjectInfo(_ProjectInfo):
         self._session = session
         if self._session is None and self._when is None:
             ctx = get_mp_ctx() if mp_manager is None else mp_manager
-            session_shared_obj = self._session = ctx.Value(ctypes.c_uint32, 1)
+            self._session = ctx.Value(ctypes.c_uint32, 1)
             # use the same lock for both session and when mp shared values:
             self._when = ctx.Value(ctypes.c_double,  # double required, not float !!
                                    _get_datetime_now().timestamp(),

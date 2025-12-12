@@ -113,10 +113,18 @@ class AppModel(ObservableObject):
         self._timer_recording_age_enough = _recording_age_enough_timer(0, lambda: None)
         # end not sure
 
+        self._barrier = mp_ctx.Barrier(2)
+        self._semaphore = mp_ctx.Semaphore(2)
+        for _ in range(2):
+            self._semaphore.acquire()  # pre-acquire all
+        event = mp_ctx.Event()
+
         self._left_camera = VideoCaptureModel("left", self._preferences, 0,
-                                              msg_queue=proc_msg_queue)
+                                              msg_queue=proc_msg_queue,
+                                              semaphore=self._semaphore, barrier=self._barrier, event=event)
         self._right_camera = VideoCaptureModel("right", self._preferences, 1,
-                                               msg_queue=proc_msg_queue)
+                                               msg_queue=proc_msg_queue,
+                                               semaphore=self._semaphore, barrier=self._barrier, event=event)
 
         self._top_camera_presence_detection = PresenceDetectionAttrs()
         self._top_camera = VideoCaptureModel("web", self._preferences, -1,
@@ -154,7 +162,7 @@ class AppModel(ObservableObject):
             with metadata_path.open() as fh:
                 self._calib_metadata = yaml.safe_load(fh)
 
-            square_size, _, _ = calibration_FLIR.get_calibration_info(calib_src_dir.as_posix())
+            square_size, _, _, _ = calibration_FLIR.get_calibration_info(calib_src_dir.as_posix())
             cam_names = calibration_FLIR.get_video_list(calib_src_dir.as_posix())
             path_offsets = calib_src_dir.joinpath('camera_offsets.pkl')
             with open(path_offsets, "rb") as fh:
@@ -265,7 +273,7 @@ class AppModel(ObservableObject):
                 if self._cameras[cam_idx].is_primary:
                     algo.capture_status = new_status  # first
                     self._timer_recording_age_enough.cancel()
-                    if new_status == CaptureProcessStatus.RECORDING:
+                    if new_status == CaptureProcessStatus.RECORDING and algo.is_in_session:
                         new_timer = self._timer_recording_age_enough = _recording_age_enough_timer(
                             algo.recording_age_release_pellet_threshold, self._consider_release_pellet
                         )
@@ -287,7 +295,7 @@ class AppModel(ObservableObject):
         return self._loaded_configuration
 
     @property
-    def project(self):
+    def project(self) -> Optional[ProjectInfo]:
         return self._project_info
 
     @property
@@ -541,17 +549,8 @@ class AppModel(ObservableObject):
         if select:
             self.selected_animal = animal
 
-    def on_capture_start(self) -> bool:
-
-        analysis = self._analysis
-
-        # first:
-        self._behavior.system_machine.intersession.reset_to_idle()
-        # to ensure clear state on start, previous segmentation/detection could have fails,
-        # and left behind their context.
-
-        # also:
-        self._project_info = ProjectInfo(
+    def make_project_info(self):
+        return ProjectInfo(
             root=self.output_location,
             device_id=self._preferences.serial_number,
             ensure_exists=True,
@@ -564,6 +563,18 @@ class AppModel(ObservableObject):
             # so using mp manager allows to put this ProjectInfo instance, along the shared values created via this
             # manager, to any of these already alive sub-processes, via a multiprocess.Queue().put() call/transfer.
         )
+
+    def on_capture_start(self) -> bool:
+
+        analysis = self._analysis
+
+        # first:
+        self._behavior.system_machine.intersession.reset_to_idle()
+        # to ensure clear state on start, previous segmentation/detection could have fails,
+        # and left behind their context.
+
+        # also:
+        self._project_info = self.make_project_info()
 
         # Now put the new project info to all "models" :
         for model in self._models:

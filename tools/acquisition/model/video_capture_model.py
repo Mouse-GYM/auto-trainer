@@ -14,7 +14,7 @@ import numpy
 from numpy import ndarray
 
 from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, ObservableObject, \
-    CameraConfiguration, CameraId, NotificationCenter, TriggerNotification, Notification
+    CameraConfiguration, CameraId, NotificationCenter, TriggerNotification, Notification, get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.project import ProjectInfo
 from autotrainer.core.video_detection import PresenceDetectionAttrs
@@ -25,7 +25,7 @@ from tools.acquisition.model.project_dependent_protocol import ProjectDependentP
 
 from tools.acquisition.model.user_preferences import UserPreferences
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 def create_camera_list():
@@ -64,11 +64,14 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self,
         name: str,
         preferences: UserPreferences = None,
-        inference_index: int = -1,
+        camera_index: int = -1,
         *,
         mp_ctx: Optional[BaseContext] = None,
         msg_queue: Optional[multiprocessing.Queue] = None,
         presence_detection: Optional[PresenceDetectionAttrs] = None,
+        barrier: Optional = None,
+        semaphore: Optional = None,
+        event: Optional = None,
     ):
         super().__init__()
 
@@ -79,9 +82,13 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
         self._id = CameraId.Left
 
+        self._barrier = barrier
+        self._semaphore = semaphore
+        self._event = event
+
         self._name = name
         self._preferences = preferences
-        self._inference_index = inference_index
+        self._camera_index = camera_index
         self._presence_detection = presence_detection
 
         self._camera_source: Optional[CaptureCameraAttrs] = None
@@ -128,6 +135,10 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._on_trigger)
 
         self._update_camera_source(self._camera_list[0])
+
+    @property
+    def capture_process_status(self) -> CaptureProcessStatus:
+        return CaptureProcessStatus(self._video_status.value)
 
     @property
     def project(self) -> ProjectInfo:
@@ -302,7 +313,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             camera = CaptureCameraAttrs(name=self._name, url=url)
 
             inference = None if network_queue is None else CaptureInferenceAttrs(
-                queue=network_queue, index=self._inference_index)
+                queue=network_queue, index=self._camera_index)
 
             capture_attrs = CaptureAttrs(
                 command_queue=self._video_command_queue,
@@ -311,12 +322,16 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 fps_image_queue=15 if self._preferences is None else self._preferences.live_feed_refresh_rate,
                 frame=self._video_frame_index,
                 camera=camera,
+                camera_index=self._camera_index,
                 inference=inference,
                 errors=self._errors,
                 presence_detection_attrs=self._presence_detection,
                 is_primary=self._is_primary,
                 msg_queue=self._msg_queue,
                 record_prebuffer_duration=self._cur_conf.record_prebuffer_duration,
+                semaphore=self._semaphore,
+                barrier=self._barrier,
+                event=self._event,
             )
 
             rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
@@ -331,12 +346,14 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
             logger.debug(f"<{self._name}> waiting for start acknowledgement")
 
+            p_before = time.perf_counter()
             if not self._wait_for_capture_status(CaptureProcessStatus.RUNNING, 5):
                 logger.error(f"<{self._name}> failed to receive start acknowledgement")
                 self._last_error = self._errors.value.decode()
                 self._video_capture.terminate()
                 self._video_capture = None
                 return False
+            logger.verbose("Now running, waited=%.3fs", time.perf_counter() - p_before)
 
         else:
             self._is_primary = False
@@ -362,7 +379,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         video_capture = self._video_capture
         if video_capture is not None:
             self._send_command(CaptureCommandKind.TERMINATE)
-            if self._wait_for_capture_status(CaptureProcessStatus.TERMINATED, 5):
+            if self._wait_for_capture_status(CaptureProcessStatus.TERMINATED, 15):
                 logger.debug(f"<{self._name}> video capture terminate acknowledged")
             else:
                 logger.error(f"<{self._name}> did not receive process terminates status")
@@ -476,12 +493,15 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             time.sleep(0.001)
         return True
 
+    def on_trigger_recording(self, record: bool):
+        if record:
+            self._send_command(CaptureCommandKind.ENABLE_RECORDING)
+        else:
+            self._send_command(CaptureCommandKind.DISABLE_RECORDING)
+
     def _on_trigger(self, notification: Notification):
         if self._video_capture is not None:
-            if notification.context:
-                self._send_command(CaptureCommandKind.ENABLE_RECORDING)
-            else:
-                self._send_command(CaptureCommandKind.DISABLE_RECORDING)
+            self.on_trigger_recording(notification.context)
 
     def _update_camera_source(self, cam: CaptureCameraAttrs):
         if cam is None or len(cam.url) == 0:
