@@ -745,7 +745,6 @@ class AppModel(ObservableObject):
                                camera.record_prebuffer_duration, prebuffer_duration)
             prebuffer_duration = max(prebuffer_duration, camera.record_prebuffer_duration)
         if (camera := configuration.get_camera(CameraId.Web)) is not None:
-            camera.record_prebuffer_duration = 0  # force for now ; so to not keep a buffer for nothing in topcam
             self._top_camera.load_configuration(camera)
 
         if prebuffer_duration > 0:
