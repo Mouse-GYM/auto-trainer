@@ -634,7 +634,7 @@ class SystemMachine(StateMachine):
 
         if algo.is_in_session and self._state != SystemState.intersession:
             prev_timer = self._timer_consider_end_session
-            if prev_timer == no_op_timer:
+            if prev_timer == no_op_timer or prev_timer.finished.is_set():
                 timer = self._timer_consider_end_session = _consider_end_session_timer(
                     self._delay_timer_consider_end_session,
                     partial(self._consider_end_session, reason="pellet_loading"))
@@ -645,6 +645,8 @@ class SystemMachine(StateMachine):
         algo = self._algorithm
         if algo.algo_paused:
             return
+        if new_value == PelletState.monitoring:
+            self._consider_start_session(reason="pellet-monitoring")
 
     def _intersession_state_changed(self, old_value, new_value):
         self._algorithm.intersession_state = new_value
@@ -665,15 +667,17 @@ class SystemMachine(StateMachine):
             "send_begin_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
             self._state, self._pellet_machine.state, algo.pellet_recently_seen, algo.is_in_session,
             send_begin_age, send_end_age, algo.capture_status_age)
-        if not (self._state == SystemState.tunnel and not algo.is_in_session and self._analysis.load_cell_monitor.is_engaged):
+        if not (
+            self._state == SystemState.tunnel
+            and not algo.is_in_session
+            and self._analysis.load_cell_monitor.is_engaged
+            and pellet_machine.state == PelletState.monitoring
+        ):
             return
         if not math.isinf(send_begin_age) and send_begin_age < send_end_age:
             # wait pellet-sent, no need further timer.
             return
-        if pellet_machine.state != PelletState.monitoring:
-            # wait monitoring
-            remains = 0.1
-        elif not algo.pellet_recently_seen:
+        if not algo.pellet_recently_seen:
             # pellet not seen, if enabled a pellet-load will be executed once pellet_missing_time elapsed,
             remains = min(0.1, algo.pellet_missing_time - algo.get_pellet_seen_age(perf_now))  # ensure some minimum time before recheck
             if remains <= 0:

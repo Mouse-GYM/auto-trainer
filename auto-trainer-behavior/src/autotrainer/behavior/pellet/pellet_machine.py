@@ -73,7 +73,6 @@ class PelletMachine(StateMachine):
         self._prev_covered_state = None  # False == released ; True == covered
         self._send_begin_perf_c = -math.inf
         self._send_end_perf_c = -math.inf
-        self._api_status_token_perf_c = -math.inf
         self._prev_pellet_load_perf_c = -math.inf
         self._prev_notify_loaded_perf_c = -math.inf
 
@@ -254,18 +253,13 @@ class PelletMachine(StateMachine):
 
         self._api_status_token = None
         perf_now = time.perf_counter()
-        self._api_status_token_perf_c = perf_now
-        if self._api_status_token_pellet_send == token:
+        if token == self._api_status_token_pellet_send:
             self._send_end_perf_c = perf_now
             self._api_status_token_pellet_send = None
             self.events.pellet_sent()
 
         # nb: in live we could bypass this call : it's anyway called with live-inference pellet-seen callback..
         self.environment_changed(caller="pellet_device_ack_received")
-
-    @property
-    def ack_age(self) -> float:
-        return time.perf_counter() - self._api_status_token_perf_c if self._api_status_token is None else math.nan
 
     def get_send_begin_age(self, perf_now: float):
         return perf_now - self._send_begin_perf_c
@@ -393,20 +387,20 @@ class PelletMachine(StateMachine):
                 self.monitor_pellet()
 
         elif cur_state == PelletState.sending:
-            # normally not anymore ncessary
+            # normally not anymore necessary, pellet-send is now immediatelly followed by pellet-monitor
             reason = "monitor_when_sent"
             logit()
             self.monitor_pellet()
             # could probably re-enter immediatelly this func/try_next_state with current passed args ..
 
         elif cur_state in {PelletState.covering, PelletState.releasing}:
-            # maybe not anymore necessary/needed
+            # maybe not anymore necessary/needed, same as above
             self.monitor_pellet()
 
         elif cur_state == PelletState.home:
-            # not used
+            # not used, could probably remove
             reason = "send_pellet_when_home"
-            if self.can_use_pellet_command():
+            if self.can_send_pellet():
                 logit()
                 self.send_pellet()
                 self.monitor_pellet()
@@ -427,14 +421,17 @@ class PelletMachine(StateMachine):
                 else:
                     log_could_retry_shortly()
                 return
-            if algo.can_release_pellet() and self._prev_covered_state is not False:
-                reason = "release_pellet_in_monitoring"
-                if self.can_use_pellet_command():
-                    logit()
-                    self.release_pellet()
-                    self.monitor_pellet()
-                else:
-                    log_could_retry_shortly()
+            if algo.can_release_pellet():
+                if self._prev_covered_state is not False:
+                    # nb: keep this second if not grouped with the previous one,
+                    # otherwise cover will continuously switch between covered and released.
+                    reason = "release_pellet_in_monitoring"
+                    if self.can_use_pellet_command():
+                        logit()
+                        self.release_pellet()
+                        self.monitor_pellet()
+                    else:
+                        log_could_retry_shortly()
             elif algo.can_cover_pellet() and self._prev_covered_state is not True:
                 reason = "cover_pellet_in_monitoring"
                 if self.can_use_pellet_command():
@@ -568,7 +565,7 @@ class PelletMachine(StateMachine):
 
         dict(
             trigger=release_pellet,
-            source=[PelletState.loading, PelletState.covering, PelletState.monitoring],
+            source=[PelletState.loading, PelletState.monitoring, PelletState.retract],
             dest=PelletState.releasing,
             before=before_release_pellet,
             conditions=can_release_pellet,
