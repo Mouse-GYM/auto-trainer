@@ -57,6 +57,7 @@ class HeadbarPressureMonitor(ObservableObject):
         self._rebuild_buffers()
 
         self._is_engaged = False
+        self._force_engaged = False
 
     @property
     def sample_rate(self) -> int:
@@ -89,12 +90,13 @@ class HeadbarPressureMonitor(ObservableObject):
 
     @property
     def is_engaged(self) -> bool:
-        return self._is_engaged
+        return self._is_engaged or self._force_engaged
 
     @is_engaged.setter
     def is_engaged(self, value):
         old_value, self._is_engaged = self._is_engaged, value
-        self._on_property_changed(self.IS_ENGAGED_PROPERTY, value, old_value)
+        if value != old_value:
+            self.property_changed(self.IS_ENGAGED_PROPERTY, value, old_value)
 
     def load_configuration(self, configuration: HeadbarPressureConfiguration):
         self.load_cell_engaged_threshold = configuration.threshold
@@ -128,14 +130,11 @@ class HeadbarPressureMonitor(ObservableObject):
                 is_engaged = True
                 break
 
+        self.is_engaged = is_engaged
         if is_engaged != self._is_engaged:
-            self._is_engaged = is_engaged
-            self.property_changed(HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, self._is_engaged, not self._is_engaged)
             EventManager.default().post_event_content(ApiEventKind.headbarPressureEngagedChanged,
                                                       context=self._is_engaged,
                                                       when=datetime.fromtimestamp(when), index=index)
-        self._is_engaged = is_engaged
-
         return is_engaged
 
     def _rebuild_buffers(self):
@@ -154,10 +153,5 @@ class HeadbarPressureMonitor(ObservableObject):
         """
         Primarily used for testing.  This will force the headbar pressure monitor to be engaged or not engaged.
         """
-        if engaged != self._is_engaged:
-            self._is_engaged = engaged
-            self.property_changed(HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, self._is_engaged, not self._is_engaged)
-            EventManager.default().post_event_content(ApiEventKind.headbarPressureEngagedChanged,
-                                                      context=self._is_engaged,
-                                                      when=datetime.fromtimestamp(time.time()),
-                                                      index=time.perf_counter_ns())
+        self._force_engaged = engaged
+        self.is_engaged = engaged
