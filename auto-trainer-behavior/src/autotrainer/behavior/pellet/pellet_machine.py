@@ -71,6 +71,7 @@ class PelletMachine(StateMachine):
         self._api_status_token = None
         self._api_status_token_pellet_send = None
         self._covered_state = None  # False == released ; True == covered ; None == unknown/none
+        self._prev_can_cover = None
         self._prev_covered_state = None
         self._send_begin_perf_c = -math.inf
         self._send_end_perf_c = -math.inf
@@ -431,7 +432,14 @@ class PelletMachine(StateMachine):
             if self._prev_covered_state is not self._covered_state:
                 logger.debug("covered_state: %s -> %s", self._prev_covered_state, self._covered_state)
                 self._prev_covered_state = self._covered_state
-            if not algo.can_cover_pellet() or algo.can_release_pellet():
+            can_cover = algo.can_cover_pellet()
+            can_release = algo.can_release_pellet()
+            if self._prev_can_cover is not can_cover:
+                logger.debug("can_cover: %s -> %s ; can_release=%s", self._prev_can_cover, can_cover,
+                             can_release)
+                self._prev_can_cover = can_cover
+
+            if not algo.can_cover_pellet() or can_release:
                 # NB: also having to use algo.can_cover_pellet(), given can_release_pellet() depends on conditions
                 if self._covered_state is not False:
                     # nb: keep this second if not grouped with the previous one,
