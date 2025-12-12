@@ -94,6 +94,7 @@ class HeadbarPressureMonitor(ObservableObject):
 
     @is_engaged.setter
     def is_engaged(self, value):
+        value = value or self._force_engaged
         old_value, self._is_engaged = self._is_engaged, value
         if value != old_value:
             self.property_changed(self.IS_ENGAGED_PROPERTY, value, old_value)
@@ -130,8 +131,10 @@ class HeadbarPressureMonitor(ObservableObject):
                 is_engaged = True
                 break
 
+        is_engaged |= self._force_engaged
+        prev_engaged = self._is_engaged
         self.is_engaged = is_engaged
-        if is_engaged != self._is_engaged:
+        if is_engaged != prev_engaged:
             EventManager.default().post_event_content(ApiEventKind.headbarPressureEngagedChanged,
                                                       context=self._is_engaged,
                                                       when=datetime.fromtimestamp(when), index=index)
