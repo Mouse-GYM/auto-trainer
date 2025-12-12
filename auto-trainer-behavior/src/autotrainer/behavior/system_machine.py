@@ -486,11 +486,12 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pose_changed(self, response: PoseResponse):
-        t_last = getattr(self, "_last_pose_changed_logged", 0)
-        p_now = time.perf_counter()
-        if p_now - t_last > 1:
-            logger.debug("pose_changed: %s", response)
-            self._last_pose_changed_logged = p_now
+        if __debug__:
+            t_last = getattr(self, "_last_pose_changed_logged", 0)
+            p_now = time.perf_counter()
+            if p_now - t_last >= 5:
+                logger.debug("pose_changed: %s", response)
+                self._last_pose_changed_logged = p_now
         self._handle_diamond_triangle_offset_changed(
             response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
 
