@@ -32,7 +32,7 @@ class PelletState(str, Enum):
 
 class PelletMachineEvents(StateMachineEvents):
     pellet_loading: Callable[[], None]
-    pellet_sending: Callable[[], None]
+    pellet_sending: Callable[[], None]  # now unused
     pellet_sent: Callable[[], None]
 
 
@@ -189,7 +189,7 @@ class PelletMachine(StateMachine):
         return self._api_status_token is None
 
     def pellet_seen(self, seen: bool):
-        self.environment_changed(seen, caller="pellet_seen")
+        self.environment_changed(seen, caller="pellet_seen", is_from_inference=True)
 
     # region Callbacks
     @BehaviorAlgorithm.relay_func
@@ -218,20 +218,20 @@ class PelletMachine(StateMachine):
             correct_drift = algo.auto_correct_motors_drift
             if drifts is not None and correct_drift:
                 dev.set_motors_drift(drifts)
-            if not (algo.session_mouse_seen and algo.intersession_enabled):
-                # force also a send_pellet, only if not gonna go to intersession
-                dev.send_pellet()
-                # otherwise there is a retract pellet which is executed with next/following try_next_state.
-                # NB: not entirely sure we need this here as it is.
-                #
-        if algo.session_mouse_seen and self._state == PelletState.monitoring:
-            # sessions ended because exit tunnel most likely
+        if not (algo.session_mouse_seen and algo.intersession_enabled):
+            # force also a send_pellet, only if not gonna go to intersession
+            self.send_pellet()
+            # otherwise there is a retract pellet which is executed with next/following try_next_state.
+            # NB: not entirely sure we need this here as it is.
+            #
+        elif algo.session_mouse_seen and self._state == PelletState.monitoring:
+            # sessions ended because exit tunnel, otherwise state would be load_pellet
             self.move_retract()
         # execute try next state AFTER having applied motor drifts,
         # given next state will move/send the pellet back to deliver/SEND position
         # self.environment_changed(caller="session_ending")
 
-    def _move_retract(self):
+    def _before_move_retract(self):
         self._api_status_token = self._pellet_device.send_retract()
 
     def _pellet_device_ack_received(self, token: Optional[str]):
@@ -289,12 +289,13 @@ class PelletMachine(StateMachine):
         *,
         caller: str = "not-provided",
         from_timer: bool = False,
+        is_from_inference: bool = False,
     ):
         # always use the thread lock, given this can be called from different threads at the same time,
         # so possibly completely intermixed/leaved, which we want to protect from, so:
         with self._algorithm.thread_lock:
             self.__try_next_state(pellet_seen, must_release,
-                                  caller=caller, is_from_timer=from_timer)
+                                  caller=caller, is_from_timer=from_timer, is_from_inference=is_from_inference)
 
     def __try_next_state(
         self,
@@ -303,6 +304,7 @@ class PelletMachine(StateMachine):
         *,
         caller: str,
         is_from_timer: bool = False,
+        is_from_inference: bool = False,
     ):
         cur_timer = self._cur_timer_try_next_state
         if cur_timer is not None:
@@ -344,7 +346,7 @@ class PelletMachine(StateMachine):
         cur_state = self.state
 
         if algo.system_state == SystemState.intersession:
-            if algo.intersession_state == IntersessionState.segmentation:
+            if algo.intersession_state == IntersessionState.segmentation and not is_from_inference:
                 # waiting inference is back, nothing we can do
                 return
 
@@ -365,35 +367,36 @@ class PelletMachine(StateMachine):
                     self._notify_pellet_loaded_ok()
                 # current state is either retract or loading (loaded),
                 # we can do a send_pellet() but ensure covered(-or-released) is as desired, *before* sending :
-                if algo.can_release_pellet():
-                    reason = "release_when_loaded_or_retract"
-                    logit()
-                    self.release_pellet()
-                elif algo.can_cover_pellet():
+                if algo.can_cover_pellet():
                     reason = "cover_when_loaded_or_retract"
                     logit()
                     self.cover_pellet()
+                else:
+                    reason = "release_when_loaded_or_retract"
+                    logit()
+                    self.release_pellet()
+
                 #
                 # even if pellet is not seen, send it to deliver,
-                # the end position of load-pellet sequence might not be visibile by camera,
-                # unless cannot send pellet (== algo paused for now)
-                if algo.can_send_pellet():
-                    reason = "send_pellet_when_loaded_or_retract"
-                    logit()
-                    # force api status token to None, from eventualy previous release/cover pellet
-                    self._api_status_token = None  # otherwise cannot send pellet
-                    self.send_pellet()
+                # the end position of load-pellet sequence might not be (entirely) visibile by camera,
+                reason = "send_pellet_when_loaded_or_retract"
+                logit()
+                # force api status token to None, from eventualy previous release/cover pellet actions.
+                self._api_status_token = None  # otherwise cannot send pellet
+                self.send_pellet()
                 # then always directly:
                 self.monitor_pellet()
 
         elif cur_state == PelletState.sending:
             # normally not anymore necessary, pellet-send is now immediatelly followed by pellet-monitor
+            logger.warning("%s: deprecated, should be followed by monitor_pellet", cur_state)
             reason = "monitor_when_sent"
             logit()
             self.monitor_pellet()
             # could probably re-enter immediatelly this func/try_next_state with current passed args ..
 
         elif cur_state in {PelletState.covering, PelletState.releasing}:
+            logger.warning("%s: deprecated, should be followed by send_pellet or monitor_pellet", cur_state)
             # maybe not anymore necessary/needed, same as above
             self.monitor_pellet()
 
@@ -409,8 +412,12 @@ class PelletMachine(StateMachine):
                 log_could_retry_shortly()
 
         elif cur_state == PelletState.monitoring:
+
+            # previous load-pellet could have missed to notify for pellet-loaded event,
+            # if/when pellet is not visible at end of load-pellet sequence. So have to recheck here:
             if pellet_seen and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
                 self._notify_pellet_loaded_ok()
+
             if ((not pellet_seen and algo.triangle_recently_seen)
                   or (pellet_seen and algo.triangle_recently_seen and algo.is_triangle_pellet_distance_too_far())
             ):
@@ -424,7 +431,8 @@ class PelletMachine(StateMachine):
             if self._prev_covered_state is not self._covered_state:
                 logger.debug("covered_state: %s -> %s", self._prev_covered_state, self._covered_state)
                 self._prev_covered_state = self._covered_state
-            if algo.can_release_pellet():
+            if not algo.can_cover_pellet() or algo.can_release_pellet():
+                # NB: also having to use algo.can_cover_pellet(), given can_release_pellet() depends on conditions
                 if self._covered_state is not False:
                     # nb: keep this second if not grouped with the previous one,
                     # otherwise cover will continuously switch between covered and released.
@@ -591,14 +599,14 @@ class PelletMachine(StateMachine):
         dict(
             trigger=move_retract,
             source=(
-                PelletState.loading,  # not sure
-                PelletState.sending,  # not sure
-                PelletState.releasing,
-                PelletState.prerelease,
-                PelletState.covering,
+                # PelletState.loading,  # not sure
+                # PelletState.sending,  # not sure
+                PelletState.releasing,  # could/should remove too
+                # PelletState.prerelease,  # unused
+                PelletState.covering,  # could/should remove too
                 PelletState.monitoring,
             ),
             dest=PelletState.retract,
-            after=_move_retract,
+            before=_before_move_retract,
         ),
     ])
