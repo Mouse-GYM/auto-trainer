@@ -122,6 +122,11 @@ class PreferencesContent(QWidget):
         states_refresh = []
         add_enabled_state = states_refresh.append
         def refresh_enabled_states():
+            pm = self._app_model.behavior.system_machine._pellet_machine
+            logger.debug("can_cover=%s can_release=%s can_send=%s can_load=%s can_analysis=%s pm.covered=%s",
+                         algo.can_cover_pellet(), algo.can_release_pellet(),
+                         algo.can_send_pellet(), algo.can_load_pellet(),
+                         algo.can_perform_intersession_analysis(), pm._covered_state)
             for r in states_refresh:
                 r()
 

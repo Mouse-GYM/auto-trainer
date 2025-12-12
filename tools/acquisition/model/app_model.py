@@ -849,7 +849,6 @@ class AppModel(ObservableObject):
                                camera.record_prebuffer_duration, prebuffer_duration)
             prebuffer_duration = max(prebuffer_duration, camera.record_prebuffer_duration)
         if (camera := configuration.get_camera(CameraId.Web)) is not None:
-            camera.record_prebuffer_duration = 0  # force for now ; so to not keep a buffer for nothing in topcam
             self._top_camera.load_configuration(camera)
 
         if prebuffer_duration > 0:
@@ -1029,21 +1028,21 @@ class AppModel(ObservableObject):
         logger.verbose("Setting animal base positions and sending to %s is_pellet_dcs=%s",
                        xyz.humanize(), animal.is_pellet_dcs)
         algo = self._behavior.algorithm
-        cfg = algo.diamond_triangle_config
-        if cfg is None and animal.is_pellet_dcs:
+        diamond_cfg = algo.diamond_triangle_config
+        if diamond_cfg is None and animal.is_pellet_dcs:
             logger.warning("loaded animal with pellet DCS, but no diamond-triangle config, forcing to 0")
             animal.is_pellet_dcs = False
             animal.pellet_x = animal.pellet_y = animal.pellet_z = 0
             self._save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
         if animal.is_pellet_dcs:
-            assert cfg is not None
+            assert diamond_cfg is not None
             _xyz = xyz
-            xyz = cfg.diamond_to_motor(xyz)
+            xyz = diamond_cfg.diamond_to_motor(xyz)
             logger.verbose("converted %s to %s", _xyz.humanize(), xyz.humanize())
         else:
-            if cfg is not None:
+            if diamond_cfg is not None:
                 assert not animal.is_pellet_dcs
-                save_xyz = cfg.motor_to_diamond(xyz)
+                save_xyz = diamond_cfg.motor_to_diamond(xyz)
                 logger.notice("Converting animal pellet XYZ to DCS: %s -> %s",
                               xyz.humanize(), save_xyz.humanize())
                 animal.pellet_x = save_xyz.x
@@ -1057,6 +1056,10 @@ class AppModel(ObservableObject):
         hardware.set_x(xyz.x)
         hardware.set_y(xyz.y)
         hardware.set_z(xyz.z)
+        if algo.can_cover_pellet():
+            hardware.cover_pellet()
+        else:
+            hardware.release_pellet()
         hardware.send_pellet()
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
