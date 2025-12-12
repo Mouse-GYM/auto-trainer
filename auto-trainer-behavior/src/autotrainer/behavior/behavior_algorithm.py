@@ -566,7 +566,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def pellet_cover_enabled(self):
-        return self._pellet_delivery_enabled and self._pellet_cover_enabled
+        return self._pellet_cover_enabled
 
     @pellet_cover_enabled.setter
     def pellet_cover_enabled(self, value: bool):
@@ -993,7 +993,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_pellet_count = 0
 
     def can_cover_pellet(self):
-        return self.pellet_cover_enabled and not self._algo_paused
+        return self._pellet_delivery_enabled and self._pellet_cover_enabled and not self._algo_paused
 
     def get_pellet_seen_age(self, perf_now: float):
         return perf_now - self._pellet_last_seen
