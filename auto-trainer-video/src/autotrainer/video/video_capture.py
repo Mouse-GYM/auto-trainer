@@ -344,13 +344,13 @@ class VideoCapture(Process):
                 try:
                     wait_barrier(timeout=t)
                 except BrokenBarrierError:
-                    logger.critical("multiproc network queue barrier broken")
+                    logger.critical("multiproc barrier broken")
                     raise
 
-            def primary_acquire(primary_sema=self._attrs.semaphore, event=self._attrs.event, camera_count=2,
-                                get_val=sema_get_value):
-                nonlocal primary_acquired_count, released
-                if is_primary:
+            if is_primary:
+                def primary_acquire(primary_sema=self._attrs.semaphore, event=self._attrs.event, camera_count=2,
+                                    get_val=sema_get_value):
+                    nonlocal primary_acquired_count, released
                     for _ in range(camera_count - primary_acquired_count - 1):
                         if primary_sema.acquire(timeout=0):
                             primary_acquired_count += 1
@@ -360,7 +360,26 @@ class VideoCapture(Process):
                                        primary_acquired_count, get_val())
                         event.set()
                     return primary_acquired_count == camera_count - 1
-                else:
+
+                def primary_release(primary_sema=self._attrs.semaphore, event=self._attrs.event,
+                                    get_val=sema_get_value):
+                    nonlocal primary_acquired_count, released
+                    # barrier eventually necessary if non-primary cams are doing sync_barrier before frame read
+                    # sync_barrier()
+                    __debug__ and logger.debug("acquiring %s times before release", primary_acquired_count)
+                    for _ in range(primary_acquired_count):
+                        primary_sema.acquire()  # ensure we clear after all other(s) cam(s) have released
+                    #
+                    __debug__ and logger.debug("primary clearing event ; sem_val=%s", get_val())
+                    # after the above acquire:
+                    event.clear()  # must also be after the before acquire. to ensure all cams get
+                    # a chance to see the event flag
+                    primary_acquired_count = 0
+                    __debug__ and logger.debug("primary released ; val=%s", get_val())
+
+            else:
+                def primary_acquire(primary_sema=self._attrs.semaphore, event=self._attrs.event):
+                    nonlocal released
                     if not released:
                         primary_sema.release()
                         __debug__ and logger.debug("sem released")
@@ -370,21 +389,8 @@ class VideoCapture(Process):
                         return True
                     return False
 
-            def primary_release(primary_sema=self._attrs.semaphore, event=self._attrs.event, get_val=sema_get_value):
-                nonlocal primary_acquired_count, released
-                if is_primary:
-                    # barrier eventually necessary if non-primary cams are doing sync_barrier before frame read
-                    # sync_barrier()
-                    __debug__ and logger.debug("acquiring %s times before release", primary_acquired_count)
-                    for _ in range(primary_acquired_count):
-                        primary_sema.acquire()  # ensure we clear after all other(s) cam(s) have released
-                    __debug__ and logger.debug("primary clearing event ; sem_val=%s", get_val())
-                    # after the above acquire:
-                    event.clear()  # must also be after the before acquire. to ensure all cams get
-                    # a chance to see the event flag
-                    primary_acquired_count = 0
-                    __debug__ and logger.debug("primary released ; val=%s", get_val())
-                else:
+                def primary_release(primary_sema=self._attrs.semaphore):
+                    nonlocal released
                     __debug__ and logger.debug("not primary releasing")
                     primary_sema.release()
                     # sync_barrier()
