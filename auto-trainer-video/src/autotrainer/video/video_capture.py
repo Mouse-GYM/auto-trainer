@@ -563,7 +563,7 @@ class VideoCapture(Process):
                 if vid_detection is not None:
                     vid_detection.update_frame(when, frame)
 
-                if not (self._is_record_active and record_start_frame_idx is not None):
+                if not (self._is_record_active and record_start_frame_idx is not None) and self._attrs.record_prebuffer_duration > 0:
                     update_frames_prebuffer(frame, when, perf_now_ns)
 
             except Exception as err:
