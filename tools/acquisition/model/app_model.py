@@ -621,6 +621,24 @@ class AppModel(ObservableObject):
                                   _failed_camera_template(camera.name, camera.last_error))
                 break
 
+        p_before = time.perf_counter()
+        p_timeout = p_before + 5
+
+        for camera in self._cameras:
+            p_now = time.perf_counter()
+            if not camera.is_primary:
+                if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, p_timeout - p_now):
+                    did_start = False
+                    self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
+                    break
+                logger.verbose("%s now running", camera.name)
+
+        if did_start:
+            for camera in self._cameras:
+                if not camera.is_primary:
+                    logger.info("Starting capture on %s", camera.name)
+                    camera.on_capture_start()
+
         if did_start:
             for camera in self._cameras:
                 if camera.is_primary:
@@ -638,10 +656,6 @@ class AppModel(ObservableObject):
 
         #
 
-        for camera in self._cameras:
-            if not camera.is_primary:
-                logger.info("Starting capture on %s", camera.name)
-                camera.on_capture_start()
         # time.sleep(0.001)  # better ensure non-primary cameras are started first,
         # if they rely on primary camera, they'll be triggered here after:
         for camera in self._cameras:

@@ -341,18 +341,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
             self._video_capture.start()
 
-            logger.debug(f"<{self._name}> waiting for start acknowledgement")
-
-            p_before = time.perf_counter()
-            if not self._wait_for_capture_status(CaptureProcessStatus.RUNNING, 5):
-                logger.error(f"<{self._name}> failed to receive start acknowledgement")
-                self._last_error = self._errors.value.decode()
-                self._video_capture.terminate()
-                self._video_capture = None
-                return False
-
-            logger.verbose("Now running, waited=%.3fs", time.perf_counter() - p_before)
-
         return True
 
     def on_capture_start(self):
@@ -374,7 +362,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         video_capture = self._video_capture
         if video_capture is not None:
             self._send_command(CaptureCommandKind.TERMINATE)
-            if self._wait_for_capture_status(CaptureProcessStatus.TERMINATED, 15):
+            if self.wait_for_capture_status(CaptureProcessStatus.TERMINATED, 15):
                 logger.debug(f"<{self._name}> video capture terminate acknowledged")
             else:
                 logger.error(f"<{self._name}> did not receive process terminates status")
@@ -481,10 +469,13 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                                    scheme=parsed.scheme, host=parsed.hostname, port=parsed.port or 0, path=path,
                                    params=params, record_prebuffer_duration=conf.record_prebuffer_duration)
 
-    def _wait_for_capture_status(self, expected: CaptureProcessStatus, timeout: int):
+    def wait_for_capture_status(self, expected: CaptureProcessStatus, timeout: float):
         perf_timeout = time.perf_counter() + timeout
+        logger.debug(f"<%s> waiting for start acknowledgement", self._name)
         while self._video_status.value != expected:
             if time.perf_counter() > perf_timeout:
+                self._last_error = self._errors.value.decode()
+                logger.error(f"<%s> failed to receive %s acknowledgement", self._name, expected)
                 return False
             time.sleep(0.001)
         return True
