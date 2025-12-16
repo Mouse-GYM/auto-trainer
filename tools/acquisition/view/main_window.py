@@ -657,7 +657,7 @@ class MainWindow(QMainWindow):
 
         def update_emergency_ui(is_toggled: bool, source: str):
             emergency_button.setText("Resume" if is_toggled else "Emergency")
-            self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED -Source: {source}" if is_toggled else self._title)
+            self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED - Source: {source}" if is_toggled else self._title)
             if source != "user-button":
                 emergency_button.setChecked(is_toggled)
 
