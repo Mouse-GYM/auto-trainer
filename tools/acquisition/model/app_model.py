@@ -604,8 +604,6 @@ class AppModel(ObservableObject):
                     name="inference_q",
                     mp_ctx=get_mp_ctx(),
                 )
-                self._inference.start(self._inference_queue)
-
             else:
                 logger.warning("pellet disabled: left and right camera frame sizes do not match")
         else:
@@ -654,6 +652,10 @@ class AppModel(ObservableObject):
         #
 
         algo = self._behavior.algorithm
+
+        if self._inference.is_enabled:
+            logger.info("Starting inference ..")
+            self._inference.start(self._inference_queue)
 
         logger.debug("connecting hardware ...")
         self._hardware.connect(self._system_message_handler.input_queue)

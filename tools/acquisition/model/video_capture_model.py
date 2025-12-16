@@ -307,9 +307,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             else:
                 url = self._camera_source.url + f"?name={self._name}"
 
-            properties = VideoManager.parse_params(url)
-            raw_primary = properties.get('primary', "").lower()
-            self._is_primary = raw_primary in {"true", "yes", "1"}
             camera = CaptureCameraAttrs(name=self._name, url=url)
 
             inference = None if network_queue is None else CaptureInferenceAttrs(
@@ -418,6 +415,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self.record_mode = VideoRecordMode(conf.record_mode)
         self.is_still_capture_enabled = conf.is_still_image_capture_enabled
         self.still_image_capture_interval = conf.still_image_capture_interval
+        self._is_primary = conf.params.get("primary")
 
         url = f"{conf.scheme}://{conf.host}"
 
