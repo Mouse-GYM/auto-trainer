@@ -224,9 +224,6 @@ def make_3d_calib(
             logger.info("%s: capture start ..", cam.name)
             cam.on_capture_start()
 
-        for cam in cameras:
-            cam.wait_for_capture_status(CaptureProcessStatus.RECORDING, timeout=5)
-
     def run():
         logger.notice("Running 3d calib ..")
 
