@@ -617,7 +617,7 @@ class AppModel(ObservableObject):
                 logger.info("Preparing capture on %s", camera.name)
                 did_start = camera.on_prepare_capture(self._inference_queue)
                 if not did_start:
-                    self.on_error("Primary Camera Process Failed",
+                    self.on_error("Camera Process Failed",
                                   _failed_camera_template(camera.name, camera.last_error))
                 break
 
@@ -627,7 +627,7 @@ class AppModel(ObservableObject):
                     logger.info("Preparing capture on %s", camera.name)
                     did_start = camera.on_prepare_capture(self._inference_queue)
                     if not did_start:
-                        self.on_error("Secondary Camera Process Failed",
+                        self.on_error("Camera Process Failed",
                                       _failed_camera_template(camera.name, camera.last_error))
                         break
 
