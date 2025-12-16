@@ -422,8 +422,8 @@ class VideoCapture(Process):
                     continue
 
                 # ensure primary capture first
-                # if not is_primary and cur_frame_idx == -1:
-                #     sync_barrier()
+                if not is_primary and cur_frame_idx == -1:
+                    sync_barrier()
 
                 frame, when = capture()
                 perf_now_ns = time.perf_counter_ns()
@@ -431,10 +431,10 @@ class VideoCapture(Process):
                     when_secs = when / 1e9
                     perf_now = perf_now_ns / 1e9
                     if cur_frame_idx == -1:
-                        # if is_primary:
-                        #     sync_barrier()
                         logger.info("%s: captured first frame ; when=%.4f perf_now=%.4f", self._name,
                                     when_secs, perf_now)
+                        if is_primary:
+                            sync_barrier()
                     else:
                         logger.debug("%s: got frame %s @ %.4f perf_now=%.4f", self._name, cur_frame_idx, when_secs, perf_now)
 

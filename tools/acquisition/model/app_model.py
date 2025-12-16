@@ -639,17 +639,17 @@ class AppModel(ObservableObject):
         #
 
         for camera in self._cameras:
-            if camera.is_primary:
+            if not camera.is_primary:
                 logger.info("Starting capture on %s", camera.name)
                 camera.on_capture_start()
         # time.sleep(0.001)  # better ensure non-primary cameras are started first,
         # if they rely on primary camera, they'll be triggered here after:
         for camera in self._cameras:
-            if not camera.is_primary:
+            if camera.is_primary:
                 logger.info("Starting capture on %s", camera.name)
                 camera.on_capture_start()
 
-        #
+        # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
 
         algo = self._behavior.algorithm
 
