@@ -348,6 +348,14 @@ class VideoCapture(Process):
                     raise
 
             if is_primary:
+                # NB : this is required to ensure the primary camera and all/any secondary cameras will have
+                # their start(or stop) recording synced.
+                # at the moment the start-recording is sent as async multiproc message from the main process to each camera,
+                # but this can so be received & processed unsyncly by the camera processes, possibly leading to one of them
+                # starting recording too early versus the other(s).
+                # These primary_acquire() + primary_release() ensure all cams will use the same frame, once all of them have
+                # received the multiproc message/command.
+                # TODO: investigate if using shared multiproc value would not be more ideal..
                 def primary_acquire(primary_sema=self._attrs.semaphore, event=self._attrs.event, camera_count=2,
                                     get_val=sema_get_value):
                     nonlocal primary_acquired_count, released
