@@ -113,7 +113,7 @@ class AppModel(ObservableObject):
         self._timer_recording_age_enough = _recording_age_enough_timer(0, lambda: None)
         # end not sure
 
-        self._barrier = mp_ctx.Barrier(2)
+        self._barrier = mp_ctx.Barrier(2)  # 2 for left + right cams
         self._semaphore = mp_ctx.Semaphore(2)
         for _ in range(2):
             self._semaphore.acquire()  # pre-acquire all
@@ -582,14 +582,15 @@ class AppModel(ObservableObject):
 
         analysis.project_info = self._project_info
 
+        self._save_project_metadata(self._project_info)
+
         self._behavior.on_prepare_capture()
 
         self._inference_queue = None
-        left_cam = self._left_camera
-        right_cam = self._right_camera
-        top_cam = self._top_camera
 
         if self._inference.is_enabled:
+            left_cam = self._left_camera
+            right_cam = self._right_camera
             shape_1 = left_cam.shape
             shape_2 = right_cam.shape
             if shape_1 == shape_2:
@@ -603,6 +604,8 @@ class AppModel(ObservableObject):
                     name="inference_q",
                     mp_ctx=get_mp_ctx(),
                 )
+                self._inference.start(self._inference_queue)
+
             else:
                 logger.warning("pellet disabled: left and right camera frame sizes do not match")
         else:
@@ -612,7 +615,8 @@ class AppModel(ObservableObject):
 
         did_start = True
         for camera in self._cameras:
-            if camera.is_primary:
+            if not camera.is_primary:
+                logger.info("Preparing capture on %s", camera.name)
                 did_start = camera.on_prepare_capture(self._inference_queue)
                 if not did_start:
                     self.on_error("Primary Camera Process Failed",
@@ -621,7 +625,8 @@ class AppModel(ObservableObject):
 
         if did_start:
             for camera in self._cameras:
-                if not camera.is_primary:
+                if camera.is_primary:
+                    logger.info("Preparing capture on %s", camera.name)
                     did_start = camera.on_prepare_capture(self._inference_queue)
                     if not did_start:
                         self.on_error("Secondary Camera Process Failed",
@@ -635,19 +640,15 @@ class AppModel(ObservableObject):
 
         #
 
-        self._save_project_metadata(self._project_info)
-
-        if self._inference.is_enabled:
-            self._inference.start(self._inference_queue)
-
-        #
-
         for camera in self._cameras:
             if camera.is_primary:
+                logger.info("Starting capture on %s", camera.name)
                 camera.on_capture_start()
-
+        # time.sleep(0.001)  # better ensure non-primary cameras are started first,
+        # if they rely on primary camera, they'll be triggered here after:
         for camera in self._cameras:
             if not camera.is_primary:
+                logger.info("Starting capture on %s", camera.name)
                 camera.on_capture_start()
 
         #
@@ -692,14 +693,14 @@ class AppModel(ObservableObject):
         self.hardware.disconnect()
 
         for camera in self._cameras:
-            if not camera.is_primary:
+            if camera.is_primary:
                 logger.verbose("notifying end to %s", camera.name)
                 camera.on_capture_notify_end()
 
-        time.sleep(0.01)
+        time.sleep(0.001)
 
         for camera in self._cameras:
-            if camera.is_primary:
+            if not camera.is_primary:
                 logger.verbose("notifying end to %s", camera.name)
                 camera.on_capture_notify_end()
 
