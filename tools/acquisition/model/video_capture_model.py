@@ -350,10 +350,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 self._video_capture.terminate()
                 self._video_capture = None
                 return False
-            logger.verbose("Now running, waited=%.3fs", time.perf_counter() - p_before)
 
-        else:
-            self._is_primary = False
+            logger.verbose("Now running, waited=%.3fs", time.perf_counter() - p_before)
 
         return True
 

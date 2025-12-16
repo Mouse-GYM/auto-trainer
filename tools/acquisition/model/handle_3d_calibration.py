@@ -137,7 +137,7 @@ def make_3d_calib(
     cameras: List[VideoCaptureModel] = []
     # put primary first:
     for camera in (left, right):
-        if camera.is_primary:
+        if not camera.is_primary:
             cameras.insert(0, camera)
         else:
             cameras.append(camera)
@@ -212,6 +212,8 @@ def make_3d_calib(
             )
             cam.load_configuration(new_cfg)
             cam.project = project
+
+        for cam in cameras:
             logger.info("%s: prepare capture ..", cam.name)
             cam.on_prepare_capture()
 
@@ -250,7 +252,6 @@ def make_3d_calib(
             logger.info("Requesting cameras stop recording")
             for cam in reversed(cameras):
                 cam.on_trigger_recording(False)
-
             wait_cams_capture_status(CaptureProcessStatus.RUNNING, 15)
 
     try:
