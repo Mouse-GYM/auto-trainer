@@ -401,7 +401,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self.record_mode = VideoRecordMode(conf.record_mode)
         self.is_still_capture_enabled = conf.is_still_image_capture_enabled
         self.still_image_capture_interval = conf.still_image_capture_interval
-        self._is_primary = conf.params.get("primary")
+        raw_primary = conf.params.get("primary") or "false"
+        self._is_primary = raw_primary.lower() in {"yes", "true", "1", "on"} if isinstance(raw_primary, str) else raw_primary is True
 
         url = f"{conf.scheme}://{conf.host}"
 
