@@ -362,7 +362,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         video_capture = self._video_capture
         if video_capture is not None:
             self._send_command(CaptureCommandKind.TERMINATE)
-            if self.wait_for_capture_status(CaptureProcessStatus.TERMINATED, 15):
+            if self.wait_for_capture_status(CaptureProcessStatus.TERMINATED, timeout=15):
                 logger.debug(f"<{self._name}> video capture terminate acknowledged")
             else:
                 logger.error(f"<{self._name}> did not receive process terminates status")
@@ -470,7 +470,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                                    scheme=parsed.scheme, host=parsed.hostname, port=parsed.port or 0, path=path,
                                    params=params, record_prebuffer_duration=conf.record_prebuffer_duration)
 
-    def wait_for_capture_status(self, expected: CaptureProcessStatus, timeout: float):
+    def wait_for_capture_status(self, expected: CaptureProcessStatus, *, timeout: float):
         perf_timeout = time.perf_counter() + timeout
         logger.debug(f"<%s> waiting for start acknowledgement", self._name)
         while self._video_status.value != expected:

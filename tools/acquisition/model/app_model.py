@@ -636,7 +636,7 @@ class AppModel(ObservableObject):
             for camera in self._cameras:
                 p_now = time.perf_counter()
                 if camera is not top_cam and camera.is_enabled:
-                    if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, p_timeout - p_now):
+                    if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=p_timeout - p_now):
                         did_start = False
                         self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
                         break

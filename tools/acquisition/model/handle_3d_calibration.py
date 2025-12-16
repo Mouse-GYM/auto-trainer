@@ -137,7 +137,7 @@ def make_3d_calib(
     cameras: List[VideoCaptureModel] = []
     # put primary first:
     for camera in (left, right):
-        if not camera.is_primary:
+        if camera.is_primary:
             cameras.insert(0, camera)
         else:
             cameras.append(camera)
@@ -218,8 +218,14 @@ def make_3d_calib(
             cam.on_prepare_capture()
 
         for cam in cameras:
+            cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
+
+        for cam in cameras:
             logger.info("%s: capture start ..", cam.name)
             cam.on_capture_start()
+
+        for cam in cameras:
+            cam.wait_for_capture_status(CaptureProcessStatus.RECORDING, timeout=5)
 
     def run():
         logger.notice("Running 3d calib ..")
