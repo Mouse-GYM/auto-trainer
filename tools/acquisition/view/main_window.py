@@ -1,5 +1,6 @@
 import collections
 import dataclasses
+import shutil
 import threading
 import time
 from itertools import chain
@@ -373,10 +374,11 @@ class MainWindow(QMainWindow):
         self.run_action.setEnabled(not is_toggled)
         if is_toggled:
             error = "Processing unfinished"
+            result_dir: Path = None
             def handle_3d_calib():
-                nonlocal error
+                nonlocal error, result_dir
                 try:
-                    make_3d_calib(self._app_model)
+                    result_dir = make_3d_calib(self._app_model)
                 except Exception as err:
                     logger.exception("3d-calib failed: %s", err)
                     error = err
@@ -387,14 +389,20 @@ class MainWindow(QMainWindow):
                 self.run_action.setEnabled(True)
                 self.make_3d_calib_action.setChecked(False)
                 self.make_3d_calib_action.setEnabled(True)
-
-                logger.verbose("3d-calib thread joined, result=%s", error)
-                prj = self._app_model.project
-
+                logger.verbose("3d-calib thread joined, error=%s", error)
                 if error is None:
+                    target = Path(self._preferences.configuration_location).joinpath("4mm_6r_8c_4x")
+                    if target.exists():
+                        rsp = QMessageBox.question(
+                            self,
+                            "3D calibration success", f"Calibration dir already exists, do you want overwrite ?",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                        if rsp != QMessageBox.StandardButton.Yes:
+                            return
+                    shutil.copytree(result_dir, target, dirs_exist_ok=True)
                     QMessageBox.information(
                         self,
-                        "3D calibration success", f"Result saved into {prj}", QMessageBox.StandardButton.Ok)
+                        "3D calibration success", f"Result saved into {target}", QMessageBox.StandardButton.Ok)
                 else:
                     QMessageBox.warning(self, "3D calibration failed", f"Error received: {error}", QMessageBox.StandardButton.Ok)
 

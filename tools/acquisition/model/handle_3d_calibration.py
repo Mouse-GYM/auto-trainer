@@ -129,7 +129,7 @@ def make_3d_calib(
     app_model: AppModel,
     cam_params: Optional[Dict[str, Any]] = None,
     record_mode: VideoRecordMode = VideoRecordMode.CONTINUOUS,
-):
+) -> Path:
     if cam_params is None:
         cam_params = default_params
     left = app_model.left_camera
@@ -275,12 +275,16 @@ def make_3d_calib(
         for camera, cam_cfg in zip(cameras, cams_before_cfg):
             camera.load_configuration(cam_cfg)
 
-    if failed is None:
-        for camera in cameras:
-            vp = Path(project.get_video_path(camera.name, allow_overwrite=True)[0])
-            target = src_dir.joinpath(f"source_videos/{camera.name}.mp4")
-            logger.verbose("%s -> %s", vp.as_posix(), target.as_posix())
-            vp.rename(target)
-        process_capture(src_dir.as_posix())
+    if failed is not None:
+        raise failed
 
+    for camera in cameras:
+        vp = Path(project.get_video_path(camera.name, allow_overwrite=True)[0])
+        target = src_dir.joinpath(f"source_videos/{camera.name}.mp4")
+        logger.verbose("%s -> %s", vp.as_posix(), target.as_posix())
+        vp.rename(target)
+
+    logger.notice("Processing capture in %s", src_dir)
+    process_capture(src_dir.as_posix())
     logger.success("Successfully processed capture")
+    return src_dir
