@@ -8,14 +8,15 @@ Created on Mon Sep 16 17:29:00 2024
 
 import os
 import pickle
-from pathlib import Path
-import cv2
-import numpy as np
-from sklearn.decomposition import PCA
 import shutil
 import yaml
 import math
+from pathlib import Path
+from typing import Tuple
 
+import cv2
+import numpy as np
+from sklearn.decomposition import PCA
 
 from autotrainer.core.logging import get_verbose_logger
 
@@ -75,7 +76,7 @@ def make_new_calibration(square_size, row_ct, col_ct, over_x, parent_dir):
     return calibration_dir
 
 
-def get_calibration_info(file):
+def get_calibration_info(file) -> Tuple[int, int, int, int]:
     """
     Extracts calibration information from the folder name based on the format '{square_size}mm_{row_ct}r_{col_ct}c'.
 

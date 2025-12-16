@@ -33,7 +33,7 @@ def calib_metadata(calib_dir_path):
 @pytest.fixture
 def pose_algo(calib_dir_path, stereo_params, calib_metadata):
     calib_info = calibration_FLIR.get_calibration_info(calib_dir_path.as_posix())
-    square_size, _, _ = calib_info
+    square_size = calib_info[0]
     return PoseAlgorithm(
         cam_names=["20241029_agx001_session002_left", "20241029_agx001_session002_right"],
         stereo_params=stereo_params,
