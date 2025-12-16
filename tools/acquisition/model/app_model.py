@@ -612,7 +612,7 @@ class AppModel(ObservableObject):
         did_start = True
         if did_start:
             for camera in self._cameras:
-                if not camera.is_primary and camera is not top_cam:
+                if not camera.is_primary and camera is not top_cam and camera.is_enabled:
                     logger.info("Preparing capture on %s", camera.name)
                     did_start = camera.on_prepare_capture(self._inference_queue)
                     if not did_start:
@@ -622,7 +622,7 @@ class AppModel(ObservableObject):
 
         if did_start:
             for camera in self._cameras:
-                if camera.is_primary and camera is not top_cam:
+                if camera.is_primary and camera is not top_cam and camera.is_enabled:
                     logger.info("Preparing capture on %s", camera.name)
                     did_start = camera.on_prepare_capture(self._inference_queue)
                     if not did_start:
@@ -632,10 +632,10 @@ class AppModel(ObservableObject):
 
         if did_start:
             p_before = time.perf_counter()
-            p_timeout = p_before + 5
+            p_timeout = p_before + 10
             for camera in self._cameras:
                 p_now = time.perf_counter()
-                if camera is not top_cam:
+                if camera is not top_cam and camera.is_enabled:
                     if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, p_timeout - p_now):
                         did_start = False
                         self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
@@ -644,12 +644,12 @@ class AppModel(ObservableObject):
 
         if did_start:
             for camera in self._cameras:
-                if camera is not top_cam:
+                if camera is not top_cam and camera.is_enabled:
                     logger.info("Starting capture on %s", camera.name)
                     camera.on_capture_start()
 
-        if did_start:
-            camera = top_cam
+        camera = top_cam
+        if did_start and camera.is_enabled:
             logger.info("Preparing capture on %s", camera.name)
             did_start = camera.on_prepare_capture()
             if not did_start:

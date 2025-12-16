@@ -9,6 +9,8 @@ import pytest
 
 from pathlib import Path
 
+import verboselogs
+
 from autotrainer.behavior import DiamondTriangleOffsetConfig, BehaviorAlgorithm
 from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
 from tools.acquisition.model.app_model import AppModel
@@ -30,7 +32,7 @@ def config_dir(tmp_path):
 def system_config(config_dir, tmp_path):
     config = SystemConfiguration()
     for cam_member in (CameraId.Left, CameraId.Right, CameraId.Web):
-        params = dict(width=300, height=200)
+        params = dict(width=300, height=200, primary="yes" if cam_member is CameraId.Left else "no")
         cam = CameraConfiguration(name=cam_member.name, params=params)
         cam.scheme = "random"
         cam.id = cam_member
@@ -65,6 +67,7 @@ def user_pref(tmp_path, config_dir, animals_dir, settings_ini_path):
     p = tmp_path.joinpath("logs")
     p.mkdir()
     pref.log_location = p
+    pref.log_level = int(verboselogs.VERBOSE)
     return pref
 
 
@@ -159,10 +162,13 @@ def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, co
     proc.terminate()  # in case of
     proc.wait(3)  # in case of
     proc.kill()  # in case of
+    if out is None:
+        out, err = proc.communicate()
     assert proc.returncode == 0
     assert isinstance(out, bytes)
     output = out.decode()
     print(output)
+    print(err.decode(), file=sys.stderr)
     assert f"Diamond triangle config {diamond_config_path.as_posix()!r} not a file" in output
     assert f"Using setting ini file: {settings_ini_path.as_posix()!r}" in output
     #
