@@ -183,15 +183,21 @@ def make_3d_calib(
         logger.info("Connecting to HW ..")
         hard.connect(app_model.message_handler.input_queue)
         token = hard.send_home()
-        hard.wait_pending_command_acked(token, timeout=60)
+        hard.wait_pending_command_acked(token, timeout=15)
+        #
+        logger.verbose("Setting start position")
+        key = None
+        for coord, value in start:
+            key = coord2m[coord](value)
+        hard.wait_pending_command_acked(key)
         #
         for cam, cfg in zip(cams, cams_before_cfg):
-            logger.info("Preparing cam %s", cam.name)
             params = cam_params.copy()
-            params["primary"] = cam is left
+            # params["primary"] = cam is left
+            logger.info("Preparing cam %s with params=%s", cam.name, params)
             new_cfg = dataclasses.replace(
                 cfg,
-                record_mode=VideoRecordMode.TRIGGER.value,
+                record_mode=VideoRecordMode.CONTINUOUS.value,
                 record_prebuffer_duration=0,
                 is_enabled=True,
                 is_record_enabled=True,
@@ -210,12 +216,6 @@ def make_3d_calib(
 
     def run():
         logger.notice("Running 3d calib ..")
-
-        logger.verbose("Setting start position")
-        key = None
-        for coord, value in start:
-            key = coord2m[coord](value)
-        hard.wait_pending_command_acked(key)
 
         max_requests = 1
         cur_requests = collections.deque(maxlen=max_requests)

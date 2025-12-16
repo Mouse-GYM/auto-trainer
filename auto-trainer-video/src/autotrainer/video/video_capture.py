@@ -408,7 +408,7 @@ class VideoCapture(Process):
                         cmd, context = get_command()
                         self._handle_command(cmd, context)
                     except queue.Empty:
-                        next_t_cmd_q = t_perf_now + 0.01  # no need check that often
+                        next_t_cmd_q = t_perf_now + 0.005  # no need check that often
                         # we now use mp barrier to sync when needed
                     except Exception as err:
                         logger.exception("Failure executing cmd %s: %s", cmd, err)
@@ -427,12 +427,15 @@ class VideoCapture(Process):
 
                 frame, when = capture()
                 perf_now_ns = time.perf_counter_ns()
-                if cur_frame_idx == -1:
-                    # if is_primary:
-                    #     sync_barrier()
+                if cur_frame_idx < 256:
+                    if cur_frame_idx == -1:
+                        # if is_primary:
+                        #     sync_barrier()
 
-                    logger.info("%s: captured first frame ; when=%s perf_now=%s", self,
-                                when, perf_now_ns)
+                        logger.info("%s: captured first frame ; when=%s perf_now=%s", self._name,
+                                    when, perf_now_ns)
+                    else:
+                        logger.debug("%s: got frame %s @ %s perf_now=%s", self._name, cur_frame_idx, when, perf_now_ns)
 
                 cur_frame_idx += 1
 
