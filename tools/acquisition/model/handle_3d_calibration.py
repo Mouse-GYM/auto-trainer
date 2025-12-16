@@ -215,10 +215,14 @@ def make_3d_calib(
 
         for cam in cameras:
             logger.info("%s: prepare capture ..", cam.name)
-            cam.on_prepare_capture()
+            if cam.is_primary:
+                cam.on_prepare_capture()
+                cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
 
         for cam in cameras:
-            cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
+            logger.info("%s: prepare capture ..", cam.name)
+            if not cam.is_primary:
+                cam.on_prepare_capture()
 
         for cam in cameras:
             logger.info("%s: capture start ..", cam.name)
