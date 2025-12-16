@@ -374,6 +374,7 @@ class VideoCapture(Process):
                     # after the above acquire:
                     event.clear()  # must also be after the before acquire. to ensure all cams get
                     # a chance to see the event flag
+                    sync_barrier()  # this sync_barrier also ensure this
                     primary_acquired_count = 0
                     __debug__ and logger.debug("primary released ; val=%s", get_val())
 
@@ -393,7 +394,7 @@ class VideoCapture(Process):
                     nonlocal released
                     __debug__ and logger.debug("not primary releasing")
                     primary_sema.release()
-                    # sync_barrier()
+                    sync_barrier()
                     __debug__ and logger.debug("not primary released")
                     released = False
 

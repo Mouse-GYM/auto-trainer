@@ -649,11 +649,6 @@ class AppModel(ObservableObject):
                     camera.on_capture_start()
 
         if did_start:
-            # for camera in self._cameras:
-            #     if camera.is_primary and camera is not top_cam:
-            #         logger.info("Starting capture on %s", camera.name)
-            #         camera.on_capture_start()
-
             camera = top_cam
             logger.info("Preparing capture on %s", camera.name)
             did_start = camera.on_prepare_capture()
