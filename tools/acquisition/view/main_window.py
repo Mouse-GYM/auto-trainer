@@ -689,10 +689,12 @@ class MainWindow(QMainWindow):
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
 
     def _show_error(self, title: str, message: str):
-        dlg = QMessageBox(self)
-        dlg.setWindowTitle(title)
-        dlg.setText(message)
-        dlg.exec()
+        def show_in_gui_thread(title=title, message=message):
+            dlg = QMessageBox(self)
+            dlg.setWindowTitle(title)
+            dlg.setText(message)
+            dlg.exec()
+        InvokeMethod(show_in_gui_thread)
 
     def _preferences_property_changed(self, name, value, _):
         if name == "log_level":
