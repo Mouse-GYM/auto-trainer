@@ -431,12 +431,12 @@ class VideoCapture(Process):
                     when_secs = when / 1e9
                     perf_now = perf_now_ns / 1e9
                     if cur_frame_idx == -1:
-                        logger.info("%s: captured first frame ; when=%.4f perf_now=%.4f", self._name,
+                        logger.info("%s: captured first frame ; cam_when=%.4f perf_now=%.4f", self._name,
                                     when_secs, perf_now)
                         # if is_primary:
                         #     sync_barrier()
                     else:
-                        logger.debug("%s: got frame %s @ %.4f perf_now=%.4f", self._name, cur_frame_idx, when_secs, perf_now)
+                        logger.debug("%s: got frame %s cam_when=%.4f perf_now=%.4f", self._name, cur_frame_idx, when_secs, perf_now)
 
                 cur_frame_idx += 1
 
@@ -456,7 +456,7 @@ class VideoCapture(Process):
                         record_start_frame_idx = cur_frame_idx - len(frames_prebuffer_list)
                         first_frame_when = when if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][1]
                         first_frame_perf_now = (perf_now_ns if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][2]) / 1e9
-                        logger.notice("Starting record with frame %s when_s=%.4f perf_now=%.4f ; prebuffer=%.1f (%s)",
+                        logger.notice("Starting record with frame %s cam_when=%.4f perf_now=%.4f ; prebuffer=%.1f (%s)",
                                       record_start_frame_idx, first_frame_when / 1e9, first_frame_perf_now,
                                       self._attrs.record_prebuffer_duration, len(frames_prebuffer_list))
                         #
