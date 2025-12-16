@@ -622,7 +622,6 @@ class AppModel(ObservableObject):
         if did_start:
             p_before = time.perf_counter()
             p_timeout = p_before + 5
-
             for camera in self._cameras:
                 p_now = time.perf_counter()
                 if not camera.is_primary and camera is not self._top_camera:
@@ -641,6 +640,11 @@ class AppModel(ObservableObject):
                         self.on_error("Camera Process Failed",
                                       _failed_camera_template(camera.name, camera.last_error))
                         break
+                    if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, 5):
+                        did_start = False
+                        self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
+                        break
+                    logger.verbose("%s now running", camera.name)
 
         if did_start:
             camera = self._top_camera
