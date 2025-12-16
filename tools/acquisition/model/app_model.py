@@ -612,7 +612,7 @@ class AppModel(ObservableObject):
         did_start = True
         if did_start:
             for camera in self._cameras:
-                if not camera.is_primary and camera is not top_cam and camera.is_enabled:
+                if camera.is_primary and camera is not top_cam and camera.is_enabled:
                     logger.info("Preparing capture on %s", camera.name)
                     did_start = camera.on_prepare_capture(self._inference_queue)
                     if not did_start:
@@ -622,7 +622,7 @@ class AppModel(ObservableObject):
 
         if did_start:
             for camera in self._cameras:
-                if camera.is_primary and camera is not top_cam and camera.is_enabled:
+                if not camera.is_primary and camera is not top_cam and camera.is_enabled:
                     logger.info("Preparing capture on %s", camera.name)
                     did_start = camera.on_prepare_capture(self._inference_queue)
                     if not did_start:
