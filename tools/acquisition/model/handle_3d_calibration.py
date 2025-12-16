@@ -234,9 +234,9 @@ def make_3d_calib(
             logger.info("Trigering recording")
             for cam in cameras:
                 cam.on_trigger_recording(True)
-        #
-        logger.notice("Waiting RECORDING on cams")
-        wait_cams_capture_status(CaptureProcessStatus.RECORDING, 5)
+
+            logger.notice("Waiting RECORDING on cams")
+            wait_cams_capture_status(CaptureProcessStatus.RECORDING, 5)
 
         logger.info("Now executing calib moves ..")
 
