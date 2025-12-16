@@ -428,14 +428,15 @@ class VideoCapture(Process):
                 frame, when = capture()
                 perf_now_ns = time.perf_counter_ns()
                 if cur_frame_idx < 256:
+                    when_secs = when / 1e9
+                    perf_now = perf_now_ns / 1e9
                     if cur_frame_idx == -1:
                         # if is_primary:
                         #     sync_barrier()
-
-                        logger.info("%s: captured first frame ; when=%s perf_now=%s", self._name,
-                                    when, perf_now_ns)
+                        logger.info("%s: captured first frame ; when=%.4f perf_now=%.4f", self._name,
+                                    when_secs, perf_now)
                     else:
-                        logger.debug("%s: got frame %s @ %s perf_now=%s", self._name, cur_frame_idx, when, perf_now_ns)
+                        logger.debug("%s: got frame %s @ %.4f perf_now=%.4f", self._name, cur_frame_idx, when_secs, perf_now)
 
                 cur_frame_idx += 1
 
@@ -455,8 +456,8 @@ class VideoCapture(Process):
                         record_start_frame_idx = cur_frame_idx - len(frames_prebuffer_list)
                         first_frame_when = when if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][1]
                         first_frame_perf_now = (perf_now_ns if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][2]) / 1e9
-                        logger.notice("Starting record with frame %s when=%s perf_now=%s ; prebuffer=%.1f (%s)",
-                                      record_start_frame_idx, first_frame_when, first_frame_perf_now,
+                        logger.notice("Starting record with frame %s when_s=%.4f perf_now=%.4f ; prebuffer=%.1f (%s)",
+                                      record_start_frame_idx, first_frame_when / 1e9, first_frame_perf_now,
                                       self._attrs.record_prebuffer_duration, len(frames_prebuffer_list))
                         #
                         self._record.first_frame_when = first_frame_when
@@ -506,8 +507,8 @@ class VideoCapture(Process):
                         if net_q is not None:
                             logger.verbose(
                                 "sending EOF_RECORDING frame indices to signify eof recording. "
-                                "last frame index: %s when=%s perf_now=%s",
-                                cur_frame_idx, when, time.perf_counter_ns())
+                                "last frame index: %s when=%.4f perf=%.4f",
+                                cur_frame_idx, when / 1e9, perf_now_ns / 1e9)
 
                             # time.sleep(0.2)
                             # this is to help ensure consumer has finished reading current frames that are already pushed
@@ -558,10 +559,6 @@ class VideoCapture(Process):
                         allow_overflow=False) == BufferResult.Ok
                     if did_put:
                         cnt_net_q_put += 1
-                    # TODO: we should probably pad the network(online) queue on inference mode changes:
-                    # effectively that queue is read by batch of frames.. so we should pad the missing frames in
-                    # currently started batch so that the reader won't get that/theses frame(s) some when later...
-                    # mixed with newest frames
 
                 if vid_detection is not None:
                     vid_detection.update_frame(when, frame)

@@ -14,7 +14,7 @@ from autotrainer.pyside.content_widget import InvokeMethod
 from autotrainer.video import VideoRecordMode, CaptureProcessStatus
 
 from tools.acquisition.model.app_model import AppModel
-
+from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = get_verbose_logger(__name__)
 
@@ -128,13 +128,20 @@ def process_capture(src_dir):
 def make_3d_calib(
     app_model: AppModel,
     cam_params: Optional[Dict[str, Any]] = None,
+    record_mode: VideoRecordMode = VideoRecordMode.CONTINUOUS,
 ):
     if cam_params is None:
         cam_params = default_params
     left = app_model.left_camera
     right = app_model.right_camera
-    cams = (left, right)
-    cams_before_cfg = tuple(cam.save_configuration() for cam in cams)
+    cameras: List[VideoCaptureModel] = []
+    # put primary first:
+    for camera in (left, right):
+        if camera.is_primary:
+            cameras.insert(0, camera)
+        else:
+            cameras.append(camera)
+    cams_before_cfg = tuple(camera.save_configuration() for camera in cameras)
     hard = app_model.hardware
     diamond_triangle_cfg = app_model.behavior.algorithm.diamond_triangle_config
     if diamond_triangle_cfg is None:
@@ -169,7 +176,7 @@ def make_3d_calib(
     def wait_cams_capture_status(capture_status: CaptureProcessStatus, timeout: float):
         p_before = time.perf_counter()
         p_timeout = p_before + timeout
-        for cam in cams:
+        for cam in cameras:
             while (cur_status := cam.capture_process_status) != capture_status:
                 if time.perf_counter() > p_timeout:
                     raise RuntimeError(f"Timeout waiting capture status {capture_status} on cam {cam.name}"
@@ -191,13 +198,13 @@ def make_3d_calib(
             key = coord2m[coord](value)
         hard.wait_pending_command_acked(key)
         #
-        for cam, cfg in zip(cams, cams_before_cfg):
+        for cam, cfg in zip(cameras, cams_before_cfg):
             params = cam_params.copy()
             # params["primary"] = cam is left
             logger.info("Preparing cam %s with params=%s", cam.name, params)
             new_cfg = dataclasses.replace(
                 cfg,
-                record_mode=VideoRecordMode.CONTINUOUS.value,
+                record_mode=record_mode,
                 record_prebuffer_duration=0,
                 is_enabled=True,
                 is_record_enabled=True,
@@ -208,11 +215,9 @@ def make_3d_calib(
             logger.info("%s: prepare capture ..", cam.name)
             cam.on_prepare_capture()
 
-        for cam in cams:
+        for cam in cameras:
             logger.info("%s: capture start ..", cam.name)
             cam.on_capture_start()
-
-        # wait_cams_capture_status(CaptureProcessStatus.RUNNING, 5)  # already done by on_prepare_capture()
 
     def run():
         logger.notice("Running 3d calib ..")
@@ -220,9 +225,10 @@ def make_3d_calib(
         max_requests = 1
         cur_requests = collections.deque(maxlen=max_requests)
         #
-        logger.info("Trigering recording")
-        for cam in cams:
-            cam.on_trigger_recording(True)
+        if record_mode == VideoRecordMode.TRIGGER:
+            logger.info("Trigering recording")
+            for cam in cameras:
+                cam.on_trigger_recording(True)
         #
         logger.notice("Waiting RECORDING on cams")
         wait_cams_capture_status(CaptureProcessStatus.RECORDING, 5)
@@ -238,14 +244,14 @@ def make_3d_calib(
         while len(cur_requests) > 0:
             hard.wait_pending_command_acked(cur_requests.popleft())
 
-        logger.info("Requesting cameras stop recording")
-
-        for cam in reversed(cams):
-            cam.on_trigger_recording(False)
-
         logger.success("executed %s moves", len(moves))
 
-        wait_cams_capture_status(CaptureProcessStatus.RUNNING, 15)
+        if record_mode == VideoRecordMode.TRIGGER:
+            logger.info("Requesting cameras stop recording")
+            for cam in reversed(cameras):
+                cam.on_trigger_recording(False)
+
+            wait_cams_capture_status(CaptureProcessStatus.RUNNING, 15)
 
     try:
         prepare()
@@ -256,22 +262,22 @@ def make_3d_calib(
     else:
         failed = None
     finally:
-        for cam in reversed(cams):
-            logger.info("%s: notify end cam", cam.name)
-            cam.on_capture_notify_end()
-        for cam in reversed(cams):
-            logger.info("%s: stopping cam", cam.name)
-            cam.on_capture_stop()
+        for camera in reversed(cameras):
+            logger.info("%s: notify end cam", camera.name)
+            camera.on_capture_notify_end()
+        for camera in reversed(cameras):
+            logger.info("%s: stopping cam", camera.name)
+            camera.on_capture_stop()
         hard.disconnect()
         wait_cams_capture_status(CaptureProcessStatus.TERMINATED, 5)
         logger.verbose("Resetting cams to previous config")
-        for cam, cam_cfg in zip(cams, cams_before_cfg):
-            cam.load_configuration(cam_cfg)
+        for camera, cam_cfg in zip(cameras, cams_before_cfg):
+            camera.load_configuration(cam_cfg)
 
     if failed is None:
-        for cam in cams:
-            vp = Path(project.get_video_path(cam.name, allow_overwrite=True)[0])
-            target = src_dir.joinpath(f"source_videos/{cam.name}.mp4")
+        for camera in cameras:
+            vp = Path(project.get_video_path(camera.name, allow_overwrite=True)[0])
+            target = src_dir.joinpath(f"source_videos/{camera.name}.mp4")
             logger.verbose("%s -> %s", vp.as_posix(), target.as_posix())
             vp.rename(target)
         process_capture(src_dir.as_posix())

@@ -608,33 +608,39 @@ class AppModel(ObservableObject):
         else:
             self._inference_queue = None
 
-        did_start = left_cam.on_prepare_capture(self._inference_queue)
+        #
 
-        if not did_start:
-            self.on_error("Camera Process Failed",
-                          _failed_camera_template(left_cam.name, left_cam.last_error))
+        did_start = True
+        for camera in self._cameras:
+            if camera.is_primary:
+                did_start = camera.on_prepare_capture(self._inference_queue)
+                if not did_start:
+                    self.on_error("Primary Camera Process Failed",
+                                  _failed_camera_template(camera.name, camera.last_error))
+                break
 
         if did_start:
-            did_start = did_start and right_cam.on_prepare_capture(self._inference_queue)
-            if not did_start:
-                self.on_error("Camera Process Failed",
-                              _failed_camera_template(right_cam.name, right_cam.last_error))
-
-        if did_start:
-            did_start = did_start and top_cam.on_prepare_capture()
-            if not did_start:
-                self.on_error("Camera Process Failed",
-                              _failed_camera_template(top_cam.name, top_cam.last_error))
+            for camera in self._cameras:
+                if not camera.is_primary:
+                    did_start = camera.on_prepare_capture(self._inference_queue)
+                    if not did_start:
+                        self.on_error("Secondary Camera Process Failed",
+                                      _failed_camera_template(camera.name, camera.last_error))
+                        break
 
         if not did_start:
             logger.error("failed to start all subprocesses")
             self.on_capture_stop()
             return False
 
+        #
+
         self._save_project_metadata(self._project_info)
 
         if self._inference.is_enabled:
             self._inference.start(self._inference_queue)
+
+        #
 
         for camera in self._cameras:
             if camera.is_primary:
@@ -644,12 +650,14 @@ class AppModel(ObservableObject):
             if not camera.is_primary:
                 camera.on_capture_start()
 
-        logger.debug("connecting hardware ...")
-        self._hardware.connect(self._system_message_handler.input_queue)
-        self._hardware.set_auto_correct_motor_drift(self._behavior.algorithm.auto_correct_motors_drift)
-        logger.info("finished connecting hardware")
+        #
 
         algo = self._behavior.algorithm
+
+        logger.debug("connecting hardware ...")
+        self._hardware.connect(self._system_message_handler.input_queue)
+        self._hardware.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)
+        logger.info("finished connecting hardware")
 
         if not algo.algo_paused:
             analysis.start()
