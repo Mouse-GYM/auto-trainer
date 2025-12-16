@@ -408,7 +408,7 @@ class VideoCapture(Process):
                         cmd, context = get_command()
                         self._handle_command(cmd, context)
                     except queue.Empty:
-                        next_t_cmd_q = t_perf_now + 0.02  # no need check that often
+                        next_t_cmd_q = t_perf_now + 0.05  # no need check that often
                         # we now use mp barrier to sync when needed
                     except Exception as err:
                         logger.exception("Failure executing cmd %s: %s", cmd, err)

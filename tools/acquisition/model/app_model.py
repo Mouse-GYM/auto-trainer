@@ -608,23 +608,34 @@ class AppModel(ObservableObject):
             self._inference_queue = None
 
         #
-
+        top_cam = self._top_camera
         did_start = True
-        for camera in self._cameras:
-            if not camera.is_primary and camera is not self._top_camera:
-                logger.info("Preparing capture on %s", camera.name)
-                did_start = camera.on_prepare_capture(self._inference_queue)
-                if not did_start:
-                    self.on_error("Camera Process Failed",
-                                  _failed_camera_template(camera.name, camera.last_error))
-                    break
+        if did_start:
+            for camera in self._cameras:
+                if not camera.is_primary and camera is not top_cam:
+                    logger.info("Preparing capture on %s", camera.name)
+                    did_start = camera.on_prepare_capture(self._inference_queue)
+                    if not did_start:
+                        self.on_error("Camera Process Failed",
+                                      _failed_camera_template(camera.name, camera.last_error))
+                        break
+
+        if did_start:
+            for camera in self._cameras:
+                if camera.is_primary and camera is not top_cam:
+                    logger.info("Preparing capture on %s", camera.name)
+                    did_start = camera.on_prepare_capture(self._inference_queue)
+                    if not did_start:
+                        self.on_error("Camera Process Failed",
+                                      _failed_camera_template(camera.name, camera.last_error))
+                        break
 
         if did_start:
             p_before = time.perf_counter()
             p_timeout = p_before + 5
             for camera in self._cameras:
                 p_now = time.perf_counter()
-                if not camera.is_primary and camera is not self._top_camera:
+                if camera is not top_cam:
                     if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, p_timeout - p_now):
                         did_start = False
                         self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
@@ -633,31 +644,24 @@ class AppModel(ObservableObject):
 
         if did_start:
             for camera in self._cameras:
-                if camera.is_primary:
-                    logger.info("Preparing capture on %s", camera.name)
-                    did_start = camera.on_prepare_capture(self._inference_queue)
-                    if not did_start:
-                        self.on_error("Camera Process Failed",
-                                      _failed_camera_template(camera.name, camera.last_error))
-                        break
-                    if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, 5):
-                        did_start = False
-                        self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
-                        break
-                    logger.verbose("%s now running", camera.name)
+                if camera is not top_cam:
+                    logger.info("Starting capture on %s", camera.name)
+                    camera.on_capture_start()
 
         if did_start:
-            camera = self._top_camera
+            # for camera in self._cameras:
+            #     if camera.is_primary and camera is not top_cam:
+            #         logger.info("Starting capture on %s", camera.name)
+            #         camera.on_capture_start()
+
+            camera = top_cam
             logger.info("Preparing capture on %s", camera.name)
             did_start = camera.on_prepare_capture()
             if not did_start:
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(camera.name, camera.last_error))
             else:
-                for camera in self._cameras:
-                    if not camera.is_primary:
-                        logger.info("Starting capture on %s", camera.name)
-                        camera.on_capture_start()
+                camera.on_capture_start()
 
         if not did_start:
             logger.error("failed to start all subprocesses")
@@ -665,14 +669,6 @@ class AppModel(ObservableObject):
             return False
 
         #
-
-        # time.sleep(0.001)  # better ensure non-primary cameras are started first,
-        # if they rely on primary camera, they'll be triggered here after:
-        for camera in self._cameras:
-            if camera.is_primary:
-                logger.info("Starting capture on %s", camera.name)
-                camera.on_capture_start()
-
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
 
         algo = self._behavior.algorithm
