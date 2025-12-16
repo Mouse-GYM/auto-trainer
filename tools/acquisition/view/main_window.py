@@ -116,15 +116,18 @@ class MainWindow(QMainWindow):
         self._training_plan_combo.setEnabled(stopped)
         self.edit_camera_settings_action.setEnabled(stopped)
         #
+        run_action = self.run_action
+        run_action.blockSignals(True)  # block signal to ensure we don't re-start/stop
+        run_action.setChecked(started)
+        run_action.blockSignals(False)
         if started:
             icon = qta.icon('ei.stop')
-            self.run_action.setText("Stop")
-            self.run_action.setIcon(icon)
+            run_action.setText("Stop")
+            run_action.setIcon(icon)
         else:
             icon = qta.icon('ei.play')
-            self.run_action.setChecked(False)
-            self.run_action.setText("Start")
-            self.run_action.setIcon(icon)
+            run_action.setText("Start")
+            run_action.setIcon(icon)
 
     def on_capture_start_stop(self, is_toggled):
         app_model = self._app_model
