@@ -95,7 +95,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._camera_properties = {}
 
         self._video_capture: Optional[VideoCapture] = None
-        self._video_reader = None
+        self._video_reader: Optional[VideoReader] = None
         self._video_reader_reset_event = None
         self._video_reader_stop_event = None
 
@@ -532,7 +532,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         reader = self._video_reader
         if reader is not None:
             self._video_reader_stop_event.set()
-            reader.join()
+            logger.debug("joining video reader")
+            reader.join(5)
             logger.debug("%s: joined video_reader", self.name)
             self._video_reader = None
 
