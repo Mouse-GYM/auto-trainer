@@ -5,6 +5,7 @@ import logging.config
 import multiprocessing
 import queue
 import sys
+import threading
 import time
 import os
 import signal
@@ -182,6 +183,7 @@ class VideoCapture(Process):
 
         self._project_info = project_info
         self._command_queue = attrs.command_queue
+        self._command_thread: Optional[threading.Thread] = None
         self._camera_idx = attrs.camera_index
         self._status = attrs.status
         self._image_queue: Optional[Union[Queue, FixedArrayQueue]] = attrs.image_queue
@@ -288,12 +290,31 @@ class VideoCapture(Process):
 
             logger.verbose("%s: video_detection: %s", self._name, self._video_detection)
 
+            self._command_thread = threading.Thread(target=self._command_handler, daemon=True, name="CommandHandler")
+            self._command_thread.start()
+
             return True
         except Exception as err:
             logger.exception("%s: Error during prepare to run: %s", self, err)
             self._set_status(CaptureProcessStatus.FAILED)
             self._set_error(err)
             return False
+
+    def _command_handler(self):
+        while True:
+            try:
+                raw = self._command_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            if raw is None:
+                self._is_capturing = False
+                self._is_running = False
+                break
+            try:
+                cmd, context = raw
+                self._handle_command(cmd, context)
+            except Exception as err:
+                logger.exception("Failure executing cmd %s: %s", raw, err)
 
     def _run_capture_loop(self) -> None:
         fault_count = 0
@@ -304,7 +325,6 @@ class VideoCapture(Process):
         net_q = self._network_queue
         record_start_frame_idx = None
         next_t_image_q = time.perf_counter()
-        next_t_cmd_q = next_t_image_q
         img_q = self._image_queue
         record_q_list = self._record_queue_list
         record_q = self._record_queue
@@ -312,7 +332,6 @@ class VideoCapture(Process):
         net_q_put = None if self._network_queue is None else self._network_queue.put
         net_q_idx = None if net_q_put is None else self._attrs.inference.index  # although is same than self._camera_idx
         image_queue_delay = self._image_queue_frame_delay
-        get_command = None if self._command_queue is None else self._command_queue.get_nowait
         empty_frame = numpy.zeros(self._record_properties.frame_size, dtype=numpy.uint8)
         vid_detection = self._video_detection
 
@@ -411,23 +430,10 @@ class VideoCapture(Process):
         while self._is_running:
             t_perf_now = time.perf_counter()
             try:
-                if get_command is not None and t_perf_now >= next_t_cmd_q:
-                    cmd = None
-                    try:
-                        cmd, context = get_command()
-                        self._handle_command(cmd, context)
-                    except queue.Empty:
-                        next_t_cmd_q = t_perf_now + 0.05  # no need check that often
-                        # we now use mp barrier to sync when needed
-                    except Exception as err:
-                        logger.exception("Failure executing cmd %s: %s", cmd, err)
-                    record_q_list = self._record_queue_list
-
                 if not self._is_capturing:
                     time.sleep(0.001)
                     record_start_frame_idx = None
                     record_q_list = self._record_queue_list = []
-                    next_t_cmd_q = t_perf_now  # force get on next turn
                     continue
 
                 # ensure primary capture first
@@ -602,6 +608,10 @@ class VideoCapture(Process):
                 video_detection.join()
                 self._video_detection = None
 
+            logger.debug("joining command thread")
+            self._command_queue.put(None)
+            self._command_thread.join()
+
         except Exception as err:
             logger.exception("%s: terminate capture loop error: %s", self, err)
             self._set_error(err)
@@ -619,7 +629,7 @@ class VideoCapture(Process):
             logger.warning("No handler for command %s", cmd)
         else:
             handler(context)
-        logger.debug("status: capturing=%s recording=%s", self._is_capturing, self._is_record_active)
+            logger.debug("status: capturing=%s recording=%s", self._is_capturing, self._is_record_active)
 
     def _user_terminate(self, _: object):
         self._is_running = False
