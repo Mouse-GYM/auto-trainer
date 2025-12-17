@@ -1,5 +1,6 @@
 import logging
 from enum import IntEnum
+from typing import Tuple
 
 import PySpin
 import numpy
@@ -84,6 +85,7 @@ class SpinCam(CameraBase):
         self._is_secondary = True
 
         self._pause_log = False
+        self._acquisition_started = False
 
     def __create(self, camera):
         self._camera = camera
@@ -168,6 +170,8 @@ class SpinCam(CameraBase):
     def init(self):
         self._camera.Init()
 
+        self._acquisition_started = False
+
         self._node_map = self._camera.GetNodeMap()
 
         if self._camera.Width.GetAccessMode() != PySpin.RW:
@@ -236,7 +240,8 @@ class SpinCam(CameraBase):
             self._configure_as_secondary()
             logger.info(f"<{self.name}> configured as secondary")
 
-        self._camera.BeginAcquisition()
+        # currently moved into capture:
+        # self._camera.BeginAcquisition()
 
     def end_capture(self):
         super().end_capture()
@@ -250,7 +255,16 @@ class SpinCam(CameraBase):
         elif self._is_secondary:
             self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
 
-    def capture(self) -> (numpy.ndarray, int):
+    def capture(self) -> Tuple[numpy.ndarray, int]:
+        if not self._acquisition_started:
+            self._acquisition_started = True
+            logger.info("Beginning acquisition")
+            self._camera.BeginAcquisition()
+            if self._is_primary:
+                self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
+                self._camera.LineSource.SetValue(PySpin.LineSource_Counter0Active)
+                self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
+
         image_result = self._camera.GetNextImage()
 
         image_converted = self._image_processor.Convert(image_result, PySpin.PixelFormat_Mono8)
@@ -312,10 +326,6 @@ class SpinCam(CameraBase):
         self._camera.TriggerSource.SetValue(PySpin.TriggerSource_Software)
         self._camera.TriggerOverlap.SetValue(PySpin.TriggerOverlap_Off)
         self._camera.TriggerMode.SetValue(PySpin.TriggerMode_On)
-
-        self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
-        self._camera.LineSource.SetValue(PySpin.LineSource_Counter0Active)
-        self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
 
     def _configure_as_secondary(self):
         self._camera.TriggerSource.SetValue(PySpin.TriggerSource_Line3)
