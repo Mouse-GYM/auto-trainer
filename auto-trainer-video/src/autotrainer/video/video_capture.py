@@ -442,18 +442,17 @@ class VideoCapture(Process):
 
                 frame, when = capture()
                 perf_now_ns = time.perf_counter_ns()
+                cur_frame_idx += 1
+
                 if cur_frame_idx < 256:
                     when_secs = when / 1e9
                     perf_now = perf_now_ns / 1e9
-                    if cur_frame_idx == -1:
-                        logger.info("%s: captured first frame ; cam_when=%.4f perf_now=%.4f", self._name,
-                                    when_secs, perf_now)
+                    if cur_frame_idx == 0:
+                        logger.info("captured first frame ; cam_when=%.4f perf_now=%.4f", when_secs, perf_now)
                         # if is_primary:
                         #     sync_barrier()
-                    else:
-                        logger.debug("%s: got frame %s cam_when=%.4f perf_now=%.4f", self._name, cur_frame_idx, when_secs, perf_now)
-
-                cur_frame_idx += 1
+                    elif cur_frame_idx % 2 == 0:
+                        logger.debug("got frame %s cam_when=%.4f perf_now=%.4f", cur_frame_idx, when_secs, perf_now)
 
                 if img_q is not None:
                     # image queue goes to GUI video reader frame, currently FixedArrayQueue

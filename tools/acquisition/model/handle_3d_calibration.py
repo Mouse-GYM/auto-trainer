@@ -184,6 +184,11 @@ def make_3d_calib(
     def prepare():
         logger.notice("Preparing ..")
         #
+        logger.info("Connecting to HW ..")
+        hard.connect(app_model.message_handler.input_queue)
+        token = hard.send_home()
+        hard.wait_pending_command_acked(token)
+        #
         for cam, cfg in zip(cameras, cams_before_cfg):
             params = cam_params.copy()
             params["primary"] = cfg.params.get("primary", "off")
@@ -215,10 +220,6 @@ def make_3d_calib(
 
         wait_cams_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
 
-        logger.info("Connecting to HW ..")
-        hard.connect(app_model.message_handler.input_queue)
-        token = hard.send_home()
-        hard.wait_pending_command_acked(token, timeout=15)
         #
         logger.verbose("Setting start position")
         key = None
@@ -230,7 +231,12 @@ def make_3d_calib(
 
         for cam in cameras:
             logger.info("%s: capture start ..", cam.name)
-            cam.on_capture_start()
+            if not cam.is_primary:
+                cam.on_capture_start()
+        for cam in cameras:
+            logger.info("%s: capture start ..", cam.name)
+            if cam.is_primary:
+                cam.on_capture_start()
 
         if record_mode == VideoRecordMode.TRIGGER:
             logger.info("Trigering recording")
@@ -254,6 +260,7 @@ def make_3d_calib(
             logger.verbose("coord-%s -> %s", coord, value)
             key = coord2m[coord](value)
             cur_requests.append(key)
+
         while len(cur_requests) > 0:
             hard.wait_pending_command_acked(cur_requests.popleft())
 
