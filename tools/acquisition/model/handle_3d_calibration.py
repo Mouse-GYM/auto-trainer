@@ -228,6 +228,7 @@ def make_3d_calib(
         hard.wait_pending_command_acked(key)
 
         #
+        time.sleep(0.05)
 
         for cam in cameras:
             logger.info("%s: capture start ..", cam.name)
@@ -253,6 +254,7 @@ def make_3d_calib(
         cur_requests = collections.deque(maxlen=max_requests)
         #
         logger.info("Now executing calib moves ..")
+        time.sleep(0.05)
 
         for coord, value in moves:
             if len(cur_requests) >= max_requests:
