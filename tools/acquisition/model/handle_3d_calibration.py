@@ -178,11 +178,7 @@ def make_3d_calib(
         p_before = time.perf_counter()
         p_timeout = p_before + timeout
         for cam in cameras:
-            while (cur_status := cam.capture_process_status) != capture_status:
-                if time.perf_counter() > p_timeout:
-                    raise RuntimeError(f"Timeout waiting capture status {capture_status} on cam {cam.name}"
-                                       f" ; current={cur_status}")
-                time.sleep(0.001)
+            cam.wait_for_capture_status(capture_status, timeout=p_timeout - time.perf_counter())
             logger.info("%s: got %s", cam.name, capture_status)
 
     def prepare():
@@ -207,19 +203,17 @@ def make_3d_calib(
 
         for cam in cameras:
             logger.info("%s: prepare capture ..", cam.name)
-            if not cam.is_primary:
-                if cam.on_prepare_capture():
-                    cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
-                else:
+            if cam.is_primary:
+                if not cam.on_prepare_capture():
                     raise RuntimeError(f"{cam.name}.on_prepare_capture() failed")
 
         for cam in cameras:
             logger.info("%s: prepare capture ..", cam.name)
-            if cam.is_primary:
-                if cam.on_prepare_capture():
-                    cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
-                else:
+            if not cam.is_primary:
+                if not cam.on_prepare_capture():
                     raise RuntimeError(f"{cam.name}.on_prepare_capture() failed")
+
+        wait_cams_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
 
         logger.info("Connecting to HW ..")
         hard.connect(app_model.message_handler.input_queue)

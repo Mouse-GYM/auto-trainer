@@ -608,11 +608,11 @@ class AppModel(ObservableObject):
             self._inference_queue = None
 
         #
-        top_cam = self._top_camera
+        synced_cameras = (self._left_camera, self._right_camera)
         did_start = True
         if did_start:
-            for camera in self._cameras:
-                if camera.is_primary and camera is not top_cam and camera.is_enabled:
+            for camera in synced_cameras:
+                if camera.is_primary and camera.is_enabled:
                     logger.info("Preparing capture on %s", camera.name)
                     did_start = camera.on_prepare_capture(self._inference_queue)
                     if not did_start:
@@ -621,8 +621,8 @@ class AppModel(ObservableObject):
                         break
 
         if did_start:
-            for camera in self._cameras:
-                if not camera.is_primary and camera is not top_cam and camera.is_enabled:
+            for camera in synced_cameras:
+                if not camera.is_primary and camera.is_enabled:
                     logger.info("Preparing capture on %s", camera.name)
                     did_start = camera.on_prepare_capture(self._inference_queue)
                     if not did_start:
@@ -633,9 +633,9 @@ class AppModel(ObservableObject):
         if did_start:
             p_before = time.perf_counter()
             p_timeout = p_before + 10
-            for camera in self._cameras:
+            for camera in synced_cameras:
                 p_now = time.perf_counter()
-                if camera is not top_cam and camera.is_enabled:
+                if camera.is_enabled:
                     if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=p_timeout - p_now):
                         did_start = False
                         self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
@@ -643,12 +643,12 @@ class AppModel(ObservableObject):
                     logger.verbose("%s now running", camera.name)
 
         if did_start:
-            for camera in self._cameras:
-                if camera is not top_cam and camera.is_enabled:
+            for camera in synced_cameras:
+                if camera.is_enabled:
                     logger.info("Starting capture on %s", camera.name)
                     camera.on_capture_start()
 
-        camera = top_cam
+        camera = self._top_camera
         if did_start and camera.is_enabled:
             logger.info("Preparing capture on %s", camera.name)
             did_start = camera.on_prepare_capture()
