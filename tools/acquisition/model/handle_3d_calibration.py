@@ -186,22 +186,11 @@ def make_3d_calib(
             logger.info("%s: got %s", cam.name, capture_status)
 
     def prepare():
-        # app_model.on_capture_start
         logger.notice("Preparing ..")
-        logger.info("Connecting to HW ..")
-        hard.connect(app_model.message_handler.input_queue)
-        token = hard.send_home()
-        hard.wait_pending_command_acked(token, timeout=15)
-        #
-        logger.verbose("Setting start position")
-        key = None
-        for coord, value in start:
-            key = coord2m[coord](value)
-        hard.wait_pending_command_acked(key)
         #
         for cam, cfg in zip(cameras, cams_before_cfg):
             params = cam_params.copy()
-            # params["primary"] = cam is left
+            params["primary"] = "on" if cam is left else "off"
             logger.info("Preparing cam %s with params=%s", cam.name, params)
             new_cfg = dataclasses.replace(
                 cfg,
@@ -217,13 +206,30 @@ def make_3d_calib(
         for cam in cameras:
             logger.info("%s: prepare capture ..", cam.name)
             if cam.is_primary:
-                cam.on_prepare_capture()
-                cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
+                if cam.on_prepare_capture():
+                    cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
+                else:
+                    raise RuntimeError(f"{cam.name}.on_prepare_capture() failed")
 
         for cam in cameras:
             logger.info("%s: prepare capture ..", cam.name)
             if not cam.is_primary:
-                cam.on_prepare_capture()
+                if cam.on_prepare_capture():
+                    cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
+                else:
+                    raise RuntimeError(f"{cam.name}.on_prepare_capture() failed")
+
+        logger.info("Connecting to HW ..")
+        hard.connect(app_model.message_handler.input_queue)
+        token = hard.send_home()
+        hard.wait_pending_command_acked(token, timeout=15)
+        #
+        logger.verbose("Setting start position")
+        key = None
+        for coord, value in start:
+            key = coord2m[coord](value)
+        hard.wait_pending_command_acked(key)
+
 
         for cam in cameras:
             logger.info("%s: capture start ..", cam.name)
