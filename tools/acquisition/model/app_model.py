@@ -582,8 +582,6 @@ class AppModel(ObservableObject):
 
         analysis.project_info = self._project_info
 
-        self._save_project_metadata(self._project_info)
-
         self._behavior.on_prepare_capture()
 
         self._inference_queue = None
@@ -608,7 +606,7 @@ class AppModel(ObservableObject):
             self._inference_queue = None
 
         #
-        synced_cameras = (self._left_camera, self._right_camera)
+        synced_cameras = (self._left_camera, self._right_camera)  # normally/usually left cam is primary
         did_start = True
         if did_start:
             for camera in synced_cameras:
@@ -618,6 +616,10 @@ class AppModel(ObservableObject):
                     if not did_start:
                         self.on_error("Camera Process Failed",
                                       _failed_camera_template(camera.name, camera.last_error))
+                        break
+                    if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5):
+                        did_start = False
+                        self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
                         break
 
         if did_start:
@@ -635,7 +637,7 @@ class AppModel(ObservableObject):
             p_timeout = p_before + 10
             for camera in synced_cameras:
                 p_now = time.perf_counter()
-                if camera.is_enabled:
+                if not camera.is_primary and camera.is_enabled:
                     if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=p_timeout - p_now):
                         did_start = False
                         self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
@@ -657,11 +659,17 @@ class AppModel(ObservableObject):
                               _failed_camera_template(camera.name, camera.last_error))
             else:
                 camera.on_capture_start()
+                if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5):
+                    did_start = False
+                    self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
 
         if not did_start:
             logger.error("failed to start all subprocesses")
             self.on_capture_stop()
             return False
+
+        # once cameras successfully started:
+        self._save_project_metadata(self._project_info)
 
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
@@ -710,14 +718,14 @@ class AppModel(ObservableObject):
         self.hardware.disconnect()
 
         for camera in self._cameras:
-            if camera.is_primary:
+            if not camera.is_primary:
                 logger.verbose("notifying end to %s", camera.name)
                 camera.on_capture_notify_end()
 
-        time.sleep(0.001)
+        time.sleep(0.01)
 
         for camera in self._cameras:
-            if not camera.is_primary:
+            if camera.is_primary:
                 logger.verbose("notifying end to %s", camera.name)
                 camera.on_capture_notify_end()
 

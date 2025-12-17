@@ -174,7 +174,7 @@ def make_3d_calib(
     src_dir = Path(
         calibration_FLIR.make_new_calibration(square_size, row_ct, col_ct, oversample, sess_path.location))
 
-    def wait_cams_capture_status(capture_status: CaptureProcessStatus, timeout: float):
+    def wait_cams_capture_status(capture_status: CaptureProcessStatus, timeout: float = 3):
         p_before = time.perf_counter()
         p_timeout = p_before + timeout
         for cam in cameras:
@@ -217,6 +217,7 @@ def make_3d_calib(
             if cam.is_primary:
                 if not cam.on_prepare_capture():
                     raise RuntimeError(f"{cam.name}.on_prepare_capture() failed")
+                cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
 
         for cam in cameras:
             logger.info("%s: prepare capture ..", cam.name)
