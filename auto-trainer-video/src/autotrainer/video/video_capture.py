@@ -377,7 +377,7 @@ class VideoCapture(Process):
                 # TODO: investigate if using shared multiproc value would not be more ideal..
                 def primary_acquire(primary_sema=self._attrs.semaphore, event=self._attrs.event, camera_count=2,
                                     get_val=sema_get_value):
-                    nonlocal primary_acquired_count, released
+                    nonlocal primary_acquired_count
                     for _ in range(camera_count - primary_acquired_count - 1):
                         if primary_sema.acquire(timeout=0):
                             primary_acquired_count += 1
@@ -390,7 +390,7 @@ class VideoCapture(Process):
 
                 def primary_release(primary_sema=self._attrs.semaphore, event=self._attrs.event,
                                     get_val=sema_get_value):
-                    nonlocal primary_acquired_count, released
+                    nonlocal primary_acquired_count
                     # barrier eventually necessary if non-primary cams are doing sync_barrier before frame read
                     # sync_barrier()
                     __debug__ and logger.debug("acquiring %s times before release", primary_acquired_count)
@@ -437,8 +437,8 @@ class VideoCapture(Process):
                     continue
 
                 # ensure primary capture first
-                if not is_primary and cur_frame_idx == -1:
-                    sync_barrier()
+                # if not is_primary and cur_frame_idx == -1:
+                #     sync_barrier()
 
                 frame, when = capture()
                 perf_now_ns = time.perf_counter_ns()
@@ -449,8 +449,8 @@ class VideoCapture(Process):
                     perf_now = perf_now_ns / 1e9
                     if cur_frame_idx == 0:
                         logger.success("captured first frame ; cam_when=%.4f perf_now=%.4f", when_secs, perf_now)
-                        if is_primary:
-                            sync_barrier()
+                        # if is_primary:
+                        #     sync_barrier()
                     else:
                         logger.debug("got frame %s cam_when=%.4f perf_now=%.4f", cur_frame_idx, when_secs, perf_now)
 
