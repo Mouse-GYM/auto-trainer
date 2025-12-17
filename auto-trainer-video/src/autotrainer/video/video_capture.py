@@ -401,7 +401,7 @@ class VideoCapture(Process):
                     # after the above acquire:
                     event.clear()  # must also be after the before acquire. to ensure all cams get
                     # a chance to see the event flag
-                    sync_barrier()  # this sync_barrier also ensure this
+                    # sync_barrier()  # this sync_barrier also ensure this
                     primary_acquired_count = 0
                     __debug__ and logger.debug("primary released ; val=%s", get_val())
 
@@ -421,7 +421,7 @@ class VideoCapture(Process):
                     nonlocal released
                     __debug__ and logger.debug("not primary releasing")
                     primary_sema.release()
-                    sync_barrier()
+                    # sync_barrier()
                     __debug__ and logger.debug("not primary released")
                     released = False
 
@@ -471,9 +471,9 @@ class VideoCapture(Process):
                         record_start_frame_idx = cur_frame_idx - len(frames_prebuffer_list)
                         first_frame_when = when if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][1]
                         first_frame_perf_now = (perf_now_ns if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][2]) / 1e9
-                        logger.notice("Starting record with frame %s cam_when=%.4f perf_now=%.4f ; prebuffer=%.1f (%s)",
+                        logger.notice("Starting record with frame %s cam_when=%.4f perf_now=%.4f ; prebuffer_cnt=%s",
                                       record_start_frame_idx, first_frame_when / 1e9, first_frame_perf_now,
-                                      self._attrs.record_prebuffer_duration, len(frames_prebuffer_list))
+                                      len(frames_prebuffer_list))
                         #
                         self._record.first_frame_when = first_frame_when
                         #
