@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QMessageBox
 
-from autotrainer.core import Offset3DTuple, get_verbose_logger
+from autotrainer.core import Offset3DTuple, get_verbose_logger, ProjectInterval
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.pyside.content_widget import InvokeMethod
 from autotrainer.video import VideoRecordMode, CaptureProcessStatus
@@ -290,7 +290,11 @@ def make_3d_calib(
         raise failed
 
     for camera in cameras:
-        vp = Path(project.get_video_path(camera.name, allow_overwrite=True)[0])
+        vp = Path(project.get_video_path(
+            camera.name,
+            allow_overwrite=True,
+            interval=ProjectInterval.HOUR if record_mode == VideoRecordMode.CONTINUOUS else ProjectInterval.NONE
+        )[0])
         target = src_dir.joinpath(f"source_videos/{camera.name}.mp4")
         logger.verbose("%s -> %s", vp.as_posix(), target.as_posix())
         vp.rename(target)
