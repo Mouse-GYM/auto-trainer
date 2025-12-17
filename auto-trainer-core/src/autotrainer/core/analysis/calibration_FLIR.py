@@ -616,10 +616,7 @@ def create_corner_matrix(src_dir, num_frames: Optional[int] = 50, gamma=1, camer
                 centers.append(round(np.mean(corners[:, :, 0])))
                 centers.append(round(np.mean(corners[:, :, 1])))
 
-            if len(centers) == len(centers_prev):
-                move_test = abs(np.mean(np.asarray(centers)-np.asarray(centers_prev)))
-            else:
-                move_test = 0
+            move_test = abs(np.mean(np.asarray(centers) - np.asarray(centers_prev)))
             if move_test <= 10:
                 # Simple method to avoid over-sampling portions of the calibration
                 # movie where the grid is not in motion
