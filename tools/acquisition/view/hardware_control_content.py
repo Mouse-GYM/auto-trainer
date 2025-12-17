@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Callable
 from functools import partial
 
 from PySide6.QtCore import Signal, Qt
@@ -46,6 +46,10 @@ class HardwareControlContent(ContentWidget):
 
         self._app_model = app_model
         self._hardware_model = app_model.hardware
+
+        def log_hardware_cmd(cmd: Callable):
+            logger.verbose("User-control: Executing %s", cmd)
+            return cmd()
 
         # Header
         layout = QHBoxLayout()
@@ -116,7 +120,7 @@ class HardwareControlContent(ContentWidget):
 
         self._tare_button = QPushButton("Tare")
         self._tare_button.setEnabled(False)
-        self._tare_button.clicked.connect(self._hardware_model.tare_load_cell)
+        self._tare_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.tare_load_cell))
         form_layout.addRow(QLabel("Load cell:"), self._tare_button)
 
         layout.addLayout(form_layout, 1, 0)
@@ -176,19 +180,19 @@ class HardwareControlContent(ContentWidget):
         button_layout = QVBoxLayout()
         button_layout.setSpacing(4)
         self._home_button = QPushButton("Home")
-        self._home_button.clicked.connect(lambda: self._hardware_model.send_home())
+        self._home_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.send_home))
         button_layout.addWidget(self._home_button)
         self._load_button = QPushButton("Load")
-        self._load_button.clicked.connect(lambda: self._hardware_model.load_pellet())
+        self._load_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.load_pellet))
         button_layout.addWidget(self._load_button)
         self._send_button = QPushButton("Send")
-        self._send_button.clicked.connect(lambda: self._hardware_model.send_pellet())
+        self._send_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.send_pellet))
         button_layout.addWidget(self._send_button)
         self._release_button = QPushButton("Release")
-        self._release_button.clicked.connect(lambda: self._hardware_model.release_pellet())
+        self._release_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.release_pellet))
         button_layout.addWidget(self._release_button)
         self._cover_button = QPushButton("Cover")
-        self._cover_button.clicked.connect(lambda: self._hardware_model.cover_pellet())
+        self._cover_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.cover_pellet))
         button_layout.addWidget(self._cover_button)
         layout.addLayout(button_layout, 1, 4)
 

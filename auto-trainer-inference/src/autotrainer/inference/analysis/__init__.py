@@ -5,9 +5,9 @@ from dataclasses import dataclass
 @dataclass
 class IntersessionResponse:
     # NB: all 3 x/y/z are relative values here:
-    pellet_x: int = 0
-    pellet_y: int = 0
-    pellet_z: int = 0
+    pellet_x: float = 0
+    pellet_y: float = 0
+    pellet_z: float = 0
     food_consumed: int = 0
     successful_reaches: int = 0
     pellets_presented: int = 0

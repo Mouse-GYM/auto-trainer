@@ -4,6 +4,7 @@ from autotrainer.core import ProjectInfo
 
 
 class ProjectDependentProtol(Protocol):
+
     @property
     def project(self) -> ProjectInfo:
         pass

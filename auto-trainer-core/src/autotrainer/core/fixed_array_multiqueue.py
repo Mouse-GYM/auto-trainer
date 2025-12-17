@@ -285,6 +285,7 @@ class FixedArrayMultiQueue:
         return True
 
     def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 10):
+        logger.debug("putting frame index category %s", frame_idx)
         for _ in range(self._frames_per_camera):
             for cdx in range(self._cam_count):
                 t0 = time.perf_counter()

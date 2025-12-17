@@ -8,33 +8,51 @@ on:
     branches:
       - main
       - develop
-
+  workflow_dispatch:
+    inputs:
+      pytest_extra_args:
+        description: 'Extra args for pytest'
+        required: true
+        default: ''
+        type: string
+concurrency:  # allow cancel if new commit pushed
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  build:
+  build-and-test:
+    name: Setup env. and run tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.8"]
+    env:
+      FORCE_COLOR: '1'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true  # required for real data test files
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: |  
-          export FORCE_COLOR=1
-          python -m pip config --user set global.progress_bar off
-          python -m pip install --upgrade pip  
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f requirements-test.txt ]; then pip install -r requirements-test.txt; fi
+        shell: bash  # this is to get color output
+        env:
+          TERM: 'xterm' # This can also help
+        run: |
+          pip config --user set global.progress_bar off
+          pip install --upgrade pip
+          pip -V
+          cat /home/runner/.config/pip/pip.conf
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
       - name: Test with pytest
-        run: |  
+        run: |
           export PYTEST_ADDOPTS="--color=yes"
-          coverage run -m pytest -v -s
+          export COVERAGE_PROCESS_START="$PWD/.coveragerc"
+          coverage run -m pytest -v -s ${{ github.event.inputs.pytest_extra_args }}
       - name: Coverage
         run: |
+          coverage combine
           coverage html
           coverage report

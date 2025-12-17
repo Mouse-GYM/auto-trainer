@@ -212,6 +212,10 @@ class ShiftXYZHandler(ObservableObject):
 
     #
 
+    @property
+    def handle_new_shift_xyz_func(self) -> Optional[Union[ShiftXYZCallbackHandlerT]]:
+        return self._handle_new_shift_xyz_func
+
     def set_handle_new_shift_xyz(self, func: ShiftXYZCallbackHandlerT):
         self._handle_new_shift_xyz_func = func
 
@@ -224,8 +228,10 @@ class ShiftXYZHandler(ObservableObject):
         if res is not None:
             self.last_processed_shift_xyz = res
             func = self._handle_processed_shift_func
-            if func is not None:
-                func(shift_xyz)  # noqa
+            if func is None:
+                logger.debug("handle_processed_shift_func undefined")
+            else:
+                func(res)  # noqa
                 # not sure why need noqa otherwise PyCharm think it's None .. despite the previous if .. :/
 
 #

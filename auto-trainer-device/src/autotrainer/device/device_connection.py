@@ -64,7 +64,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         self._collect_ms: int = 5  # so freq == 200 Hz
 
         # The means of providing non-blocking access to the device.
-        self._current_thread = None
+        self._current_thread: Optional[Thread] = None
 
     @property
     def device(self) -> Device:
@@ -90,9 +90,13 @@ class DeviceConnection(DeviceConnectionProtocol):
         # TODO this is for legacy compatibility when the connection was exposed directly as a thread for clients that
         #  wanted to know when the connection was guaranteed to be terminated.  This should be accommodated a different
         #  way - see TODOs in request_(dis)connect.
-
-        if self._current_thread is not None:
-            self._current_thread.join()
+        thread = self._current_thread
+        if thread is not None:
+            assert isinstance(thread, Thread)
+            logger.debug("joinging %s", thread)
+            thread.join(3)
+            if thread.is_alive():
+                logger.warning("thread %s still alive", thread)
             self._current_thread = None
 
     def request_connect(self):
@@ -115,8 +119,14 @@ class DeviceConnection(DeviceConnectionProtocol):
         allocated with be terminated and disposed.
         """
         # TODO provide a mechanism for the caller to be notified when disconnection is complete.
-        if self._cmd_queue is not None:
-            self._cmd_queue.put((_REQUEST_DISCONNECT, None, None))
+        cmd_queue = self._cmd_queue
+        if cmd_queue is not None:
+            logger.debug("requesting disconnect")
+            cmd_queue.put((_REQUEST_DISCONNECT, None, None))
+        dev = self._device
+        if dev is not None:
+            logger.verbose("disconnecting from %s", dev)
+            dev.disconnect()
 
     def send_message(self, kind: int, data: object = None, context: object = None):
         """Send a command/message to the device (writer-thread)"""
