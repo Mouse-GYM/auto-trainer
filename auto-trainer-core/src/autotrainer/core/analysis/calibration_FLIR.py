@@ -511,12 +511,13 @@ def create_corner_matrix(src_dir, num_frames: Optional[int] = 50, gamma=1, camer
         cap_list.append(cap)
         total_frames.append(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
 
+    min_tot_frames = min(total_frames[0], total_frames[1])
     if num_frames is None:
-        num_frames = total_frames[0]
+        num_frames = min_tot_frames
         frame_indices = np.arange(0, num_frames, dtype=int)
     else:
-        frame_indices = np.linspace(0, total_frames[0] - 1, num=num_frames, dtype=int)
-    
+        frame_indices = np.linspace(0, min_tot_frames - 1, num=num_frames, dtype=int)
+
     metadata = {
     'alpha': alpha,
     'gamma': gamma,
@@ -552,12 +553,12 @@ def create_corner_matrix(src_dir, num_frames: Optional[int] = 50, gamma=1, camer
                 continue
             h, w = img.shape[:2]
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            # gray = rgb2gray_matlab(gray)
-            # limout_low, limout_high = stretchlim_like_matlab(gray, tol=(0.01, 0.99))
-            # gamma_pre = (np.log(np.mean(gray)) / np.log(0.5)) * 1.5
-            # limin_low, limin_high = np.percentile(gray.ravel(), [5, 95])
-            # gray = imadjust_like_matlab(gray, (limin_low, limin_high), (limout_low, limout_high), gamma_pre)
-            # gray = np.clip(gray * 255.0, 0, 255).astype(np.uint8)
+            gray = rgb2gray_matlab(gray)
+            limout_low, limout_high = stretchlim_like_matlab(gray, tol=(0.01, 0.99))
+            gamma_pre = (np.log(np.mean(gray)) / np.log(0.5)) * 1.5
+            limin_low, limin_high = np.percentile(gray.ravel(), [5, 95])
+            gray = imadjust_like_matlab(gray, (limin_low, limin_high), (limout_low, limout_high), gamma_pre)
+            gray = np.clip(gray * 255.0, 0, 255).astype(np.uint8)
             gray = adjust_gamma(gray, gamma=gamma)
         
             # Find the chess board corners

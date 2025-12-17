@@ -87,8 +87,8 @@ default_params = dict(
     hbin=1,
     width=1440,
     height=1080,
-    exposure=3000,
-    fps=30,
+    exposure=4500,
+    fps=40,
     # primary=cam is left,
     offsetx=0,
     offsety=0,
@@ -103,9 +103,9 @@ def process_capture(src_dir):
     # Of no consequence??
     alpha = 1
     # Threshold for qutomatic corner-finding quality assessment, between 0 and 1
-    quality = 0.9
+    quality = 0.925
     # Gamma correction can improve chessboard corner finding
-    gamma = 0.75
+    gamma = 2
     # Number of frames to extract
     num_frames = None
     # Prepare for out-of-plane camera correction
