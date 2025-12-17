@@ -186,7 +186,7 @@ def make_3d_calib(
         #
         for cam, cfg in zip(cameras, cams_before_cfg):
             params = cam_params.copy()
-            params["primary"] = "on" if cam is left else "off"
+            params["primary"] = cfg.params.get("primary", "off")
             logger.info("Preparing cam %s with params=%s", cam.name, params)
             new_cfg = dataclasses.replace(
                 cfg,
