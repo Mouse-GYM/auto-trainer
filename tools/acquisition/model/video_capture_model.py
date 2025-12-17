@@ -365,8 +365,12 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
         if video_capture is not None:
             self._trace("waiting for process termination")
-            video_capture.join()
-            self._trace(f"process terminated: exitcode={video_capture.exitcode}")
+            video_capture.join(5)
+            if video_capture.is_alive():
+                self._trace("capture not exited yet, terminating..")
+                video_capture.terminate()
+                video_capture.join()
+            self._trace(f"process exited: exitcode={video_capture.exitcode}")
             self._video_capture = None
 
         self._video_image_queue = None
