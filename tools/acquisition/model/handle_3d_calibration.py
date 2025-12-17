@@ -203,9 +203,11 @@ def make_3d_calib(
             cam.load_configuration(new_cfg)
             cam.project = project
 
+        #
+
         for cam in cameras:
             logger.info("%s: prepare capture ..", cam.name)
-            if cam.is_primary:
+            if not cam.is_primary:
                 if cam.on_prepare_capture():
                     cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
                 else:
@@ -213,7 +215,7 @@ def make_3d_calib(
 
         for cam in cameras:
             logger.info("%s: prepare capture ..", cam.name)
-            if not cam.is_primary:
+            if cam.is_primary:
                 if cam.on_prepare_capture():
                     cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
                 else:
@@ -230,10 +232,19 @@ def make_3d_calib(
             key = coord2m[coord](value)
         hard.wait_pending_command_acked(key)
 
+        #
 
         for cam in cameras:
             logger.info("%s: capture start ..", cam.name)
             cam.on_capture_start()
+
+        if record_mode == VideoRecordMode.TRIGGER:
+            logger.info("Trigering recording")
+            for cam in cameras:
+                cam.on_trigger_recording(True)
+
+        logger.notice("Waiting RECORDING on cams")
+        wait_cams_capture_status(CaptureProcessStatus.RECORDING, 5)
 
     def run():
         logger.notice("Running 3d calib ..")
@@ -241,14 +252,6 @@ def make_3d_calib(
         max_requests = 1
         cur_requests = collections.deque(maxlen=max_requests)
         #
-        if record_mode == VideoRecordMode.TRIGGER:
-            logger.info("Trigering recording")
-            for cam in cameras:
-                cam.on_trigger_recording(True)
-
-            logger.notice("Waiting RECORDING on cams")
-            wait_cams_capture_status(CaptureProcessStatus.RECORDING, 5)
-
         logger.info("Now executing calib moves ..")
 
         for coord, value in moves:
