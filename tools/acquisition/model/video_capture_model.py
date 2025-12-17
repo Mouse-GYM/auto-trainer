@@ -353,24 +353,18 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._send_command(CaptureCommandKind.DISABLE_CAPTURE)
 
     def on_capture_stop(self):
-        # if not self._is_enabled:
-        #     # risky: if enabled is changed after started
-        #     return
-
         self._video_reader_teardown()
 
         video_capture = self._video_capture
-        if video_capture is not None:
+        if video_capture is not None and video_capture.is_alive():
             self._send_command(CaptureCommandKind.TERMINATE)
-            if self.wait_for_capture_status(CaptureProcessStatus.TERMINATED, timeout=15):
+            if self.wait_for_capture_status(CaptureProcessStatus.TERMINATED, timeout=5):
                 logger.debug(f"<{self._name}> video capture terminate acknowledged")
             else:
                 logger.error(f"<{self._name}> did not receive process terminates status")
 
         if video_capture is not None:
             self._trace("waiting for process termination")
-            while video_capture.is_alive():
-                time.sleep(0.1)
             video_capture.join()
             self._trace(f"process terminated: exitcode={video_capture.exitcode}")
             self._video_capture = None
@@ -383,14 +377,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         # video_image_queue is our FixedArrayQueue which cannot be "cleared" by another thread than the
         # one consuming it. We anyway recreate a new one for each new capture.
 
-
     def on_close(self):
         logger.debug("closing %s", self.name)
-        if self._video_capture is not None:
-            self._video_capture.terminate()
-            self._video_capture.join()
-            self._video_capture = None
-        self._video_reader_teardown()
+        self.on_capture_stop()
 
     def load_configuration(self, conf: CameraConfiguration):
         self._id = conf.id
@@ -472,7 +461,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     def wait_for_capture_status(self, expected: CaptureProcessStatus, *, timeout: float):
         perf_timeout = time.perf_counter() + timeout
-        logger.debug(f"<%s> waiting for start acknowledgement", self._name)
+        logger.debug(f"<%s> waiting for %s acknowledgement", self._name, expected)
         while self._video_status.value != expected:
             if time.perf_counter() > perf_timeout:
                 self._last_error = self._errors.value.decode()
