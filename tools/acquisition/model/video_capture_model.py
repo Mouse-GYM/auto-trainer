@@ -466,10 +466,11 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
     def wait_for_capture_status(self, expected: CaptureProcessStatus, *, timeout: float):
         perf_timeout = time.perf_counter() + timeout
         logger.debug(f"<%s> waiting for %s acknowledgement", self._name, expected)
-        while self._video_status.value != expected:
+        while (cur_status := self._video_status.value) != expected:
             if time.perf_counter() > perf_timeout:
                 self._last_error = self._errors.value.decode()
-                logger.error(f"<%s> failed to receive %s acknowledgement", self._name, expected)
+                logger.error(f"<%s> failed to receive %s acknowledgement ; current=%s", self._name, expected,
+                             cur_status)
                 return False
             time.sleep(0.001)
         return True
