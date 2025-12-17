@@ -410,11 +410,11 @@ class MainWindow(QMainWindow):
                 executor_thread.join()
                 InvokeMethod(show_result)
 
-            executor_thread = threading.Thread(target=handle_3d_calib, name="3d-calibration")
+            executor_thread = threading.Thread(target=handle_3d_calib, name="3d-calibration", daemon=True)
             executor_thread.start()
 
             waiter_thread = threading.Thread(target=wait_3d_calib_done, name="wait-3d-calibration",
-                                             args=(executor_thread,))
+                                             args=(executor_thread,), daemon=True)
             waiter_thread.start()
 
     def on_activated(self):
