@@ -129,7 +129,7 @@ def process_capture(src_dir):
 def make_3d_calib(
     app_model: AppModel,
     cam_params: Optional[Dict[str, Any]] = None,
-    record_mode: VideoRecordMode = VideoRecordMode.TRIGGER,
+    record_mode: VideoRecordMode = VideoRecordMode.CONTINUOUS,
 ) -> Path:
     if cam_params is None:
         cam_params = default_params
