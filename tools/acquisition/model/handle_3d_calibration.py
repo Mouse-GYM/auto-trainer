@@ -189,6 +189,12 @@ def make_3d_calib(
         token = hard.send_home()
         hard.wait_pending_command_acked(token)
         #
+        logger.verbose("Setting start position")
+        key = None
+        for coord, value in start:
+            key = coord2m[coord](value)
+        hard.wait_pending_command_acked(key)
+        #
         for cam, cfg in zip(cameras, cams_before_cfg):
             params = cam_params.copy()
             params["primary"] = cfg.params.get("primary", "off")
@@ -219,13 +225,6 @@ def make_3d_calib(
                     raise RuntimeError(f"{cam.name}.on_prepare_capture() failed")
 
         wait_cams_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
-
-        #
-        logger.verbose("Setting start position")
-        key = None
-        for coord, value in start:
-            key = coord2m[coord](value)
-        hard.wait_pending_command_acked(key)
 
         #
         time.sleep(0.05)
