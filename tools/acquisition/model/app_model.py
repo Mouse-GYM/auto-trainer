@@ -845,14 +845,18 @@ class AppModel(ObservableObject):
         if (camera := configuration.get_camera(CameraId.Right)) is not None:
             self._right_camera.load_configuration(camera)
             if camera.record_prebuffer_duration != prebuffer_duration:
-                logger.warning("left & right cameras don't have same record_prebuffer_duration: %s vs %s",
+                logger.warning("left & right cameras don't have same record_prebuffer_duration: %s vs %s ; using max",
                                camera.record_prebuffer_duration, prebuffer_duration)
             prebuffer_duration = max(prebuffer_duration, camera.record_prebuffer_duration)
         if (camera := configuration.get_camera(CameraId.Web)) is not None:
             self._top_camera.load_configuration(camera)
 
         if prebuffer_duration > 0:
-            prebuffer_duration *= float(os.getenv("AUTOTRAINER_PREBUFFER_SCALE", "1"))
+            prebuffer_scale = os.getenv("AUTOTRAINER_PREBUFFER_SCALE")
+            if prebuffer_scale is not None:
+                prebuffer_duration *= float(prebuffer_scale)
+                logger.notice("Using AUTOTRAINER_PREBUFFER_SCALE=%s ; prebuffer_duration -> %.3f",
+                              prebuffer_scale, prebuffer_duration)
 
         logger.verbose("Will use algo record_prebuffer_duration=%.1f seconds", prebuffer_duration)
         self._behavior.algorithm.record_prebuffer_duration = prebuffer_duration
