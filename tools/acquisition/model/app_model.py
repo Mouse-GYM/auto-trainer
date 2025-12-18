@@ -143,10 +143,16 @@ class AppModel(ObservableObject):
         self._timer_recording_age_enough = _recording_age_enough_timer(0, lambda: None)
         # end not sure
 
+        barrier = self._mp_barrier = mp_ctx.Barrier(2)  # 2 for left + right cams
+        sema = self._mp_semaphore = mp_ctx.Semaphore(0)
+        event = self._mp_event = mp_ctx.Event()
+
         self._left_camera = VideoCaptureModel("left", self._preferences, 0,
-                                              msg_queue=proc_msg_queue)
+                                              msg_queue=proc_msg_queue,
+                                              semaphore=sema, barrier=barrier, event=event)
         self._right_camera = VideoCaptureModel("right", self._preferences, 1,
-                                               msg_queue=proc_msg_queue)
+                                               msg_queue=proc_msg_queue,
+                                               semaphore=sema, barrier=barrier, event=event)
 
         self._top_camera_presence_detection = PresenceDetectionAttrs()
         self._top_camera = VideoCaptureModel("web", self._preferences, -1,
@@ -184,7 +190,7 @@ class AppModel(ObservableObject):
             with metadata_path.open() as fh:
                 self._calib_metadata = yaml.safe_load(fh)
 
-            square_size, _, _ = calibration_FLIR.get_calibration_info(calib_src_dir.as_posix())
+            square_size, _, _, _ = calibration_FLIR.get_calibration_info(calib_src_dir.as_posix())
             cam_names = calibration_FLIR.get_video_list(calib_src_dir.as_posix())
             path_offsets = calib_src_dir.joinpath('camera_offsets.pkl')
             with open(path_offsets, "rb") as fh:
@@ -302,7 +308,7 @@ class AppModel(ObservableObject):
                 if self._cameras[cam_idx].is_primary:
                     algo.capture_status = new_status  # first
                     self._timer_recording_age_enough.cancel()
-                    if new_status == CaptureProcessStatus.RECORDING:
+                    if new_status == CaptureProcessStatus.RECORDING and algo.is_in_session:
                         new_timer = self._timer_recording_age_enough = _recording_age_enough_timer(
                             algo.recording_age_release_pellet_threshold, self._consider_release_pellet
                         )
@@ -324,7 +330,7 @@ class AppModel(ObservableObject):
         return self._loaded_configuration
 
     @property
-    def project(self):
+    def project(self) -> Optional[ProjectInfo]:
         return self._project_info
 
     @property
@@ -631,19 +637,8 @@ class AppModel(ObservableObject):
             self.selected_animal = animal
         return animal
 
-    def on_capture_start(self) -> bool:
-
-        self._acquisition_started = True
-
-        analysis = self._analysis
-
-        # first:
-        self._behavior.system_machine.intersession.reset_to_idle()
-        # to ensure clear state on start, previous segmentation/detection could have fails,
-        # and left behind their context.
-
-        # also:
-        self._project_info = ProjectInfo(
+    def make_project_info(self):
+        return ProjectInfo(
             root=self.output_location,
             device_id=self._preferences.serial_number,
             ensure_exists=True,
@@ -657,6 +652,20 @@ class AppModel(ObservableObject):
             # manager, to any of these already alive sub-processes, via a multiprocess.Queue().put() call/transfer.
         )
 
+    def on_capture_start(self) -> bool:
+
+        self._acquisition_started = True
+
+        analysis = self._analysis
+
+        # first:
+        self._behavior.system_machine.intersession.reset_to_idle()
+        # to ensure clear state on start, previous segmentation/detection could have fails,
+        # and left behind their context.
+
+        # also:
+        self._project_info = self.make_project_info()
+
         # Now put the new project info to all "models" :
         for model in self._models:
             model.project = self._project_info
@@ -666,13 +675,10 @@ class AppModel(ObservableObject):
         self._behavior.on_prepare_capture()
 
         self._inference_queue = None
-        left_cam = self._left_camera
-        right_cam = self._right_camera
-        top_cam = self._top_camera
 
         if self._inference.is_enabled:
-            shape_1 = left_cam.shape
-            shape_2 = right_cam.shape
+            shape_1 = self._left_camera.shape
+            shape_2 = self._right_camera.shape
             if shape_1 == shape_2:
                 self._inference_queue = FixedArrayMultiQueue(
                     # live queue does not need/require a lot of "depth" == total nbr of batches that can sit
@@ -689,48 +695,85 @@ class AppModel(ObservableObject):
         else:
             self._inference_queue = None
 
-        did_start = left_cam.on_prepare_capture(self._inference_queue)
-
-        if not did_start:
-            self.on_error("Camera Process Failed",
-                          _failed_camera_template(left_cam.name, left_cam.last_error))
+        #
+        synced_cameras = (self._left_camera, self._right_camera)  # normally/usually left cam is primary
+        did_start = True
+        if did_start:
+            for camera in synced_cameras:
+                if camera.is_primary and camera.is_enabled:
+                    logger.info("Preparing capture on %s", camera.name)
+                    did_start = camera.on_prepare_capture(self._inference_queue)
+                    if not did_start:
+                        self.on_error("Camera Process Failed",
+                                      _failed_camera_template(camera.name, camera.last_error))
+                        break
+                    if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5):
+                        did_start = False
+                        self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
+                        break
 
         if did_start:
-            did_start = did_start and right_cam.on_prepare_capture(self._inference_queue)
-            if not did_start:
-                self.on_error("Camera Process Failed",
-                              _failed_camera_template(right_cam.name, right_cam.last_error))
+            for camera in synced_cameras:
+                if not camera.is_primary and camera.is_enabled:
+                    logger.info("Preparing capture on %s", camera.name)
+                    did_start = camera.on_prepare_capture(self._inference_queue)
+                    if not did_start:
+                        self.on_error("Camera Process Failed",
+                                      _failed_camera_template(camera.name, camera.last_error))
+                        break
 
         if did_start:
-            did_start = did_start and top_cam.on_prepare_capture()
+            p_before = time.perf_counter()
+            p_timeout = p_before + 10
+            for camera in synced_cameras:
+                p_now = time.perf_counter()
+                if not camera.is_primary and camera.is_enabled:
+                    if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=p_timeout - p_now):
+                        did_start = False
+                        self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
+                        break
+                    logger.verbose("%s now running", camera.name)
+
+        if did_start:
+            for camera in synced_cameras:
+                if camera.is_enabled:
+                    logger.info("Starting capture on %s", camera.name)
+                    camera.on_capture_start()
+
+        camera = self._top_camera
+        if did_start and camera.is_enabled:
+            logger.info("Preparing capture on %s", camera.name)
+            did_start = camera.on_prepare_capture()
             if not did_start:
                 self.on_error("Camera Process Failed",
-                              _failed_camera_template(top_cam.name, top_cam.last_error))
+                              _failed_camera_template(camera.name, camera.last_error))
+            else:
+                camera.on_capture_start()
+                if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5):
+                    did_start = False
+                    self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
 
         if not did_start:
             logger.error("failed to start all subprocesses")
             self.on_capture_stop()
             return False
 
+        # once cameras successfully started:
         self._save_project_metadata(self._project_info)
 
+        #
+        # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
+
+        algo = self._behavior.algorithm
+
         if self._inference.is_enabled:
+            logger.info("Starting inference ..")
             self._inference.start(self._inference_queue)
-
-        for camera in self._cameras:
-            if camera.is_primary:
-                camera.on_capture_start()
-
-        for camera in self._cameras:
-            if not camera.is_primary:
-                camera.on_capture_start()
 
         logger.debug("connecting hardware ...")
         self._hardware.connect(self._system_message_handler.input_queue)
-        self._hardware.set_auto_correct_motor_drift(self._behavior.algorithm.auto_correct_motors_drift)
+        self._hardware.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)
         logger.info("finished connecting hardware")
-
-        algo = self._behavior.algorithm
 
         if not algo.algo_paused:
             analysis.start()

@@ -6,17 +6,17 @@ Created on Mon Sep 16 17:29:00 2024
 @author: agx001
 """
 
-import logging
 import os
 import pickle
-from pathlib import Path
-import cv2
-import numpy as np
-from sklearn.decomposition import PCA
 import shutil
 import yaml
 import math
+from pathlib import Path
+from typing import Tuple, Optional
 
+import cv2
+import numpy as np
+from sklearn.decomposition import PCA
 
 from autotrainer.core.logging import get_verbose_logger
 
@@ -24,7 +24,7 @@ from autotrainer.core.logging import get_verbose_logger
 logger = get_verbose_logger(__name__)
 
 
-def make_new_calibration(square_size, row_ct, col_ct, parent_dir):
+def make_new_calibration(square_size, row_ct, col_ct, over_x, parent_dir):
     """
     Creates a new directory for calibration with subdirectories for storing source videos.
 
@@ -32,6 +32,10 @@ def make_new_calibration(square_size, row_ct, col_ct, parent_dir):
     square_size (int): Size of the calibration square (in millimeters).
     row_ct (int): Number of rows in the calibration grid.
     col_ct (int): Number of columns in the calibration grid.
+    over_x: int
+        If the frames were sampled at a higher resolution than will be used for
+        normal acquisition, this is the x-fold oversampling factor
+
     parent_dir (str): Parent directory where the calibration folder will be created.
     
     The function will create:
@@ -44,7 +48,7 @@ def make_new_calibration(square_size, row_ct, col_ct, parent_dir):
     """
     
     # Create a descriptive directory name for the calibration
-    src_name = f'{square_size}mm_{row_ct}r_{col_ct}c'
+    src_name = f'{square_size}mm_{row_ct}r_{col_ct}c_{over_x}x'
     calibration_dir = os.path.join(parent_dir, src_name)
 
     # Check if the directory already exists to prevent overwriting
@@ -71,7 +75,8 @@ def make_new_calibration(square_size, row_ct, col_ct, parent_dir):
     
     return calibration_dir
 
-def get_calibration_info(file):
+
+def get_calibration_info(file) -> Tuple[int, int, int, int]:
     """
     Extracts calibration information from the folder name based on the format '{square_size}mm_{row_ct}r_{col_ct}c'.
 
@@ -86,15 +91,15 @@ def get_calibration_info(file):
 
     The folder name should be in the format '{square_size}mm_{row_ct}r_{col_ct}c'.
     """
-    
-    try:
-        # Extract the directory name from the provided file path
-        src_name = os.path.split(file)[1]
+    # Extract the directory name from the provided file path
+    src_name = os.path.split(file)[1]
 
+    try:
         # Find the index of key parts ('mm', 'r', and 'c') in the directory name
         size_ndx = src_name.index('mm')
         row_ndx = src_name.index('r')
         col_ndx = src_name.index('c')
+        x_ndx = src_name.index('x')
 
         # Extract and convert the square size (before 'mm')
         square_size = int(src_name[:size_ndx])
@@ -105,13 +110,17 @@ def get_calibration_info(file):
         # Extract and convert the column count (between 'r' and 'c')
         col_ct = int(src_name[row_ndx+2:col_ndx])
 
+        # Extract and convert the column count (between 'r' and 'c')
+        over_x = int(src_name[col_ndx+2:x_ndx])
+        
         # Return the extracted values
-        return square_size, row_ct, col_ct
+        return square_size, row_ct, col_ct, over_x
     
-    except (ValueError, IndexError) as e:
+    except (ValueError, IndexError) as err:
         # If there is an issue with extracting data, such as missing 'mm', 'r', or 'c'
-        print(f"Error extracting calibration info from {src_name}: {e}")
-        return None
+        logger.error("Error extracting calibration info from %s: %s", src_name, err)
+        raise
+
 
 def get_video_list(src_dir):
     """
@@ -147,6 +156,7 @@ def get_video_list(src_dir):
 
     return video_files
 
+
 def adjust_gamma(image, gamma=1.0):
     """
     Adjusts the gamma of the given image.
@@ -164,6 +174,7 @@ def adjust_gamma(image, gamma=1.0):
 
     # Apply the gamma correction using the lookup table
     return cv2.LUT(image, table)
+
 
 def score_grid(points):
     """
@@ -211,24 +222,29 @@ def score_grid(points):
         return 1 - np.std(distances) / mean_distance
 
     # Initialize scores
-    linearity_score = 0
-    spacing_score = 0
+#    linearity_score = 0
+#    spacing_score = 0
+    linearity_score = np.zeros((rows+cols,1))
+    spacing_score = np.zeros((rows+cols,1))
+    score_ndx = 0
 
     # Step 4: Evaluate linearity and spacing for both rows and columns
     for i in range(rows):
-        linearity_score += check_linearity(aligned_points[i, :, :])  # Check rows
-        spacing_score += check_spacing(aligned_points[i, :, :])
+        linearity_score[score_ndx] = check_linearity(aligned_points[i, :, :])  # Check rows
+        spacing_score[score_ndx] = check_spacing(aligned_points[i, :, :])
+        score_ndx += 1
 
     for j in range(cols):
-        linearity_score += check_linearity(aligned_points[:, j, :])  # Check columns
-        spacing_score += check_spacing(aligned_points[:, j, :])
+        linearity_score[score_ndx] = check_linearity(aligned_points[:, j, :])  # Check columns
+        spacing_score[score_ndx] = check_spacing(aligned_points[:, j, :])
+        score_ndx += 1
 
     # Normalize scores by the total number of rows and columns evaluated
-    linearity_score /= (rows + cols)
-    spacing_score /= (rows + cols)
+    min_linearity_score = np.min(linearity_score)
+    min_spacing_score = np.min(spacing_score)
 
     # Final score: average of linearity and spacing scores
-    final_score = (linearity_score + spacing_score) / 2
+    final_score = min(min_linearity_score, min_spacing_score)
 
     return final_score
 
@@ -305,7 +321,8 @@ def refine_corners(image, initial_corner, window_size):
     # Adjust the refined corner relative to the corner region
     refined_corner = (intersection_x + x - half_window, intersection_y + y - half_window)
     return refined_corner
-    
+
+
 def rotate_2D_points(points, angle_degrees):
     # Detect the input shape and data type
     original_shape = points.shape
@@ -330,6 +347,7 @@ def rotate_2D_points(points, angle_degrees):
     rotated_points = rotated_points.astype(original_dtype).reshape(original_shape)
 
     return rotated_points
+
 
 def average_chessboard_distance(corners, board_size):
     """
@@ -368,8 +386,47 @@ def average_chessboard_distance(corners, board_size):
     average_distance = np.mean(total_distances)
     return average_distance
 
-def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
-                         alpha=1, quality=0.9, over_x=1, calibrate=False):
+def stretchlim_like_matlab(I, tol=(0.01, 0.99)):
+    """Emulate MATLAB's stretchlim (uses uint8 bins + round)."""
+    I = np.clip(I, 0, 1)
+    I_uint8 = np.round(I * 255).astype(np.uint8)
+    hist, _ = np.histogram(I_uint8, bins=256, range=(0, 255))
+    cdf = np.cumsum(hist) / np.sum(hist)
+
+    low = np.searchsorted(cdf, tol[0])
+    high = np.searchsorted(cdf, tol[1])
+
+    return low / 255.0, high / 255.0
+
+
+def imadjust_like_matlab(I, in_range, out_range, gamma):
+    """Emulate MATLAB's imadjust."""
+    low_in, high_in = in_range
+    low_out, high_out = out_range
+
+    I = np.clip(I, low_in, high_in)
+    if high_in - low_in == 0:
+        scaled = np.zeros_like(I)
+    else:
+        scaled = (I - low_in) / (high_in - low_in)
+    adjusted = scaled ** gamma
+    out = adjusted * (high_out - low_out) + low_out
+    return np.clip(out, 0, 1)
+
+
+def rgb2gray_matlab(frame_bgr):
+    """Convert BGR to MATLAB-style grayscale."""
+    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    gray = (
+        0.2989 * frame_rgb[:, :, 0]
+        + 0.5870 * frame_rgb[:, :, 1]
+        + 0.1140 * frame_rgb[:, :, 2]
+    )
+    return gray.astype(np.float64) / 255.0
+
+
+def create_corner_matrix(src_dir, num_frames: Optional[int] = 50, gamma=1, camera_pos=None,
+                         alpha=1, quality=0.9, calibrate=False):
     """
     
     src_dir (str): Path created by make_new_calibration
@@ -390,27 +447,15 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
 
     quality: float
         Floating point number between 0 and 1 for qutomatic corner-finding quality assessment
-
-    over_x: int
-        If the frames were sampled at a higher resolution than will be used for
-        normal acquisition, this is the x-fold oversampling factor
         
     calibrate : bool
         Can be set to false while refining other variables
     
     """
     
-    metadata = {
-    'alpha': alpha,
-    'gamma': gamma,
-    'quality': quality,
-    'num_frames': num_frames,
-    'oversample': over_x,
-    'camera_pos': camera_pos,
-    }
-    metadata_path = os.path.join(src_dir, 'calibration_userset.yaml')
-    with open(metadata_path, 'w') as file:
-        yaml.dump(metadata, file)
+    # Gather calib variables
+    square_size, cbrow, cbcol, over_x = get_calibration_info(src_dir)
+    cam_names = get_video_list(src_dir)
     
     rotation_correction = 0
     if not camera_pos == None:
@@ -421,15 +466,14 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
         theta = math.atan((camLele-camRele) / (camLazi-camRazi))
         rotation_correction = math.degrees(theta)
 
-    # Gather calib variables
-    square_size, cbrow, cbcol = get_calibration_info(src_dir)
-    cam_names = get_video_list(src_dir)
     
     # Clear directories
     path_corners = os.path.join(src_dir,'corners')
     create_or_clean_directory(path_corners)
     dir_gray = os.path.join(src_dir,'gray')
     create_or_clean_directory(dir_gray)
+    dir_rejected = os.path.join(src_dir,'rejected')
+    create_or_clean_directory(dir_rejected)
     
     # Termination criteria
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
@@ -466,14 +510,35 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
         
         cap_list.append(cap)
         total_frames.append(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+
+    min_tot_frames = min(total_frames[0], total_frames[1])
+    if num_frames is None:
+        num_frames = min_tot_frames
+        frame_indices = np.arange(0, num_frames, dtype=int)
+    else:
+        frame_indices = np.linspace(0, min_tot_frames - 1, num=num_frames, dtype=int)
+
+    metadata = {
+    'alpha': alpha,
+    'gamma': gamma,
+    'quality': quality,
+    'num_frames': num_frames,
+    'oversample': over_x,
+    'camera_pos': camera_pos,
+    }
+    metadata_path = os.path.join(src_dir, 'calibration_userset.yaml')
+    with open(metadata_path, 'w') as file:
+        yaml.dump(metadata, file)
     
-    frame_indices = np.linspace(0, total_frames[0] - 1, num=num_frames, dtype=int)
     keep_list = []
     centers_prev = [0,0,0,0]
+    h = 0
+    w = 0
     for index in frame_indices:
         keep_test = True
         corner_cams = []
         img_cams = []
+        score_count = []
         for cap, cam in zip(cap_list, cam_names):
         
         # Loop through the frame indices
@@ -486,15 +551,21 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
             if not ret:
                 print(f"Warning: Could not read frame at index {index}")
                 continue
-            
+            h, w = img.shape[:2]
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            gray = rgb2gray_matlab(gray)
+            limout_low, limout_high = stretchlim_like_matlab(gray, tol=(0.01, 0.99))
+            gamma_pre = (np.log(np.mean(gray)) / np.log(0.5)) * 1.5
+            limin_low, limin_high = np.percentile(gray.ravel(), [5, 95])
+            gray = imadjust_like_matlab(gray, (limin_low, limin_high), (limout_low, limout_high), gamma_pre)
+            gray = np.clip(gray * 255.0, 0, 255).astype(np.uint8)
             gray = adjust_gamma(gray, gamma=gamma)
         
             # Find the chess board corners
             ret, corners = cv2.findChessboardCorners(gray, (cbcol, cbrow), None)
             
             # If found, add object points, image points (after refining them)
-            if ret == True:
+            if ret:
                 mean_pix_dist = average_chessboard_distance(corners, (cbcol, cbrow))
                 window_size = int(round(mean_pix_dist*1.5))
                 
@@ -506,11 +577,11 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
                 # Iterate through each point and apply correction
                 for c in range(np.shape(corners)[0]):
                     try:
-                        corrected_c = refine_corners(gray, corners[c,0,:], window_size)
+                        corrected_c = refine_corners(gray, corners[c, 0, :], window_size)
                         corrected_points.append([corrected_c])  # Maintain (1, 2) shape for each point
                     except Exception as err:
-                        logger.warning(f"Index {index} - c {c} err=%s", err)
-                        keep_test = False
+                        logger.exception(f"Index {index} - c {c} err=%s", err)
+                        # keep_test = False
                 if keep_test:
                     # Convert corrected_points to a numpy array with shape (30, 1, 2)
                     corners_refined = np.array(corrected_points)[:,:,:,0]
@@ -525,28 +596,36 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
                         
                     # print(f"Grid Score: {score_post:.2f}")
                     if score < quality:
+                        print(f"Low quality corners: {cam} cam at {index} {score:.3f}")
                         keep_test = False
+                    else:
+                        score_count.append(score)
                         
                     corner_cams.append(corners)
                     img_cams.append(gray)
                 
             else:
+                filename = f"{cam}_{index}_reject.jpg"
+                cv2.imwrite(os.path.join(str(dir_rejected), filename), gray)
+                print(f"Corners not found: {cam} cam at {index}")
                 keep_test = False
         
-        
-        if keep_test == True:
+        if keep_test:
             
             centers = list()
             for corners in corner_cams:
-                centers.append(round(np.mean(corners[:,:,0])))
-                centers.append(round(np.mean(corners[:,:,1])))
-                
-            if centers == centers_prev:
+                centers.append(round(np.mean(corners[:, :, 0])))
+                centers.append(round(np.mean(corners[:, :, 1])))
+
+            move_test = abs(np.mean(np.asarray(centers) - np.asarray(centers_prev)))
+            if move_test <= 10:
                 # Simple method to avoid over-sampling portions of the calibration
                 # movie where the grid is not in motion
                 print(f"Duplicate centers, skipping index: {index}")
             else:
+                centers_prev = centers
                 keep_list.append(index)
+                print(f"Good pair at index {index} - scores: {score_count[0]:.3f} and {score_count[1]:.3f}")
                 for corners, gray, cam in zip(corner_cams, img_cams, cam_names):
                     filename = f"{cam}_{index}_corner.jpg"
                     gray_path = os.path.join(str(dir_gray), filename)
@@ -569,7 +648,7 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
                     new_height = int(img.shape[0] * over_x)
                     new_size = (new_width, new_height)
                     img = cv2.resize(img, new_size)
-                    img = cv2.drawChessboardCorners(img, (cbcol, cbrow), corners * over_x, ret)
+                    img = cv2.drawChessboardCorners(img, (cbcol, cbrow), corners * over_x, int(ret))
                     
                     filename = f"{cam}_{index}_corner.jpg"
                     cv2.imwrite(os.path.join(str(path_corners), filename), img)
@@ -577,14 +656,13 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
                     rotated_points = rotate_2D_points(corners, rotation_correction)
                     corpoints[cam].append(rotated_points)
                     
-            centers_prev = centers
             
     print(f"Found {len(keep_list)} quality pairs out of {num_frames}")
     # Release the video capture object
     for cap in cap_list:
         cap.release()
     
-    h, w = img.shape[:2]
+    
 
     # Perform calibration for each cameras and store the matrices as a pickle file
     if calibrate == True:
@@ -702,10 +780,12 @@ def create_corner_matrix(src_dir, num_frames=50, gamma=1, camera_pos=None,
     else:
         print("Corners extracted!")
     
+
 def read_pickle(filename):
     """Read the pickle file"""
     with open(filename, "rb") as handle:
         return pickle.load(handle)
+
 
 def write_pickle(filename, data):
     """Write the pickle file"""

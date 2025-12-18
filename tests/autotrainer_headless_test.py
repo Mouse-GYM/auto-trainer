@@ -9,12 +9,83 @@ import pytest
 
 from pathlib import Path
 
+import verboselogs
+
+from autotrainer.behavior import DiamondTriangleOffsetConfig, BehaviorAlgorithm
+from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
+from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
 
 
 top_dir = Path(__file__).parent.parent  # supposed be the repo top/root dir
 headless_path = top_dir.joinpath("auto-trainer-headless.py")
 
+
+@pytest.fixture
+def system_config(trainer_config_dir, tmp_path):
+    config = SystemConfiguration()
+    for cam_member in (CameraId.Left, CameraId.Right, CameraId.Web):
+        params = dict(width=300, height=200, primary="yes" if cam_member is CameraId.Left else "no")
+        cam = CameraConfiguration(name=cam_member.name, params=params)
+        cam.scheme = "random"
+        cam.id = cam_member
+        config.cameras.append(cam)
+    config.persistence.output_location = tmp_path.joinpath("Data").as_posix()
+    config.save_default(trainer_config_dir)
+    return config
+
+
+@pytest.fixture
+def config_file_path(trainer_config_dir):
+    return trainer_config_dir.joinpath(SystemConfiguration.make_default_yaml_config_path(trainer_config_dir))
+
+
+@pytest.fixture
+def animals_dir(tmp_path):
+    path = tmp_path.joinpath("animals")
+    path.mkdir()
+    return path
+
+
+@pytest.fixture
+def settings_ini_path(tmp_path):
+    return tmp_path.joinpath("settings.ini")
+
+
+@pytest.fixture
+def user_pref(tmp_path, trainer_config_dir, animals_dir, settings_ini_path):
+    pref = UserPreferences(settings_file_path=settings_ini_path)
+    pref.configuration_location = trainer_config_dir
+    pref.animal_location = animals_dir
+    p = tmp_path.joinpath("logs")
+    p.mkdir()
+    pref.log_location = p
+    pref.log_level = int(verboselogs.VERBOSE)
+    return pref
+
+
+@pytest.fixture
+def calib_dir():
+    # could be todo: copy it top-level, or generate new temporary one as above for system config.
+    return top_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
+
+
+@pytest.fixture
+def diamond_config_path(trainer_config_dir):
+    path = trainer_config_dir.joinpath("diamond_triangle.yaml")
+    prev_default = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH
+    DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH = path
+    yield path
+    DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH = prev_default
+
+
+@pytest.fixture
+def app_model(user_pref, calib_dir, diamond_config_path, system_config):
+    # for now:
+    BehaviorAlgorithm._no_handler_thread = True  # to be safe to start with
+    #
+    app = AppModel(user_pref, calib_dir=calib_dir)
+    return app
 
 
 def test_user_preferences(settings_ini_path, user_pref, trainer_config_dir):
@@ -70,7 +141,7 @@ def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, co
     ], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
     # NB: for now we wait a fixed amount of time and then interrupt the app:
     def interrupt_proc():
-        time.sleep(15)  # with 5s or event 10s sometimes it's too slow to output what we expect/assert below..
+        time.sleep(10)  # with 5s or event 10s sometimes it's too slow to output what we expect/assert below..
         proc.send_signal(signal.SIGINT)
     t = threading.Thread(target=interrupt_proc, daemon=True)
     t.start()
@@ -81,10 +152,12 @@ def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, co
     communicate_thread = threading.Thread(target=communicate, daemon=True)
     communicate_thread.start()  # use a communicate thread, given otherwise it might stay blocked ignoring the SIGINT
     t.join()
-    communicate_thread.join(20)
+    communicate_thread.join(5)
     proc.terminate()  # in case of
     proc.wait(3)  # in case of
     proc.kill()  # in case of
+    if out is None:
+        out, err = proc.communicate()
     assert proc.returncode == 0
     assert isinstance(out, bytes)
     output = out.decode()
@@ -93,3 +166,4 @@ def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, co
     assert f"Using setting ini file: {settings_ini_path.as_posix()!r}" in output
     assert "Alogus hardware or hardware support not found. Using emulation interface." in output
     # etc...
+    assert f"Writing to {config_file_path.as_posix()!r}" in output

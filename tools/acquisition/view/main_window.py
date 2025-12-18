@@ -1,4 +1,6 @@
+import collections
 import dataclasses
+import shutil
 import threading
 import time
 from functools import partial
@@ -13,7 +15,7 @@ from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessa
                                QSpinBox, QDoubleSpinBox)
 import qtawesome as qta
 
-from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration
+from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.pose_elements import SceneElement
@@ -28,6 +30,7 @@ from autotrainer.pyside.content_widget import InvokeMethod
 from autotrainer.training import TrainingPlan
 
 from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.model.handle_3d_calibration import make_3d_calib
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.training_plan import get_plan_id
 from tools.acquisition.model.user_preferences import UserPreferences
@@ -66,6 +69,7 @@ class MainWindow(QMainWindow):
 
         self._open_dialogs = []
         self._training_plan_index_by_plan_id: Dict[Optional[str], int] = {}
+        self._diamond_triangle_calib_run = None
 
         app_model = self._app_model = AppModel(self._preferences, app_version)
 
@@ -125,6 +129,7 @@ class MainWindow(QMainWindow):
         self._animal_dropdown.setEnabled(stopped)
         self._training_plan_combo.setEnabled(stopped)
         self.edit_camera_settings_action.setEnabled(stopped)
+        self.make_3d_calib_action.setEnabled(stopped)
         #
         if started:
             icon = qta.icon('ei.stop')
@@ -139,6 +144,7 @@ class MainWindow(QMainWindow):
     def on_capture_start_stop(self, is_toggled):
         app_model = self._app_model
         self.run_action.setEnabled(False)
+        self.make_3d_calib_action.setEnabled(False)
         self.running_status_changed.emit(is_toggled)
         if is_toggled:
             self._status_label.setText("Starting acquisition...")
@@ -162,6 +168,7 @@ class MainWindow(QMainWindow):
             def doit():
                 logger.info("stopping subprocesses")
                 app_model.on_capture_stop()
+                self.running_status_changed.emit(False)
                 self.run_action.setEnabled(True)
                 self._status_label.setText("")
                 self._acquisition_started = False
@@ -199,7 +206,7 @@ class MainWindow(QMainWindow):
         std_dev = variance ** 0.5
         return mean, std_dev
 
-    def _handle_calib_run(self, *, positions: List[Offset3DTuple], offsets: List[Offset3DTuple]):
+    def _handle_diamond_triangle_calib_run(self, *, positions: List[Offset3DTuple], offsets: List[Offset3DTuple]):
         self._timer_calibrate.cancel()
         if len(offsets) < 3:
             self.calib_diamond_triangle_action.setEnabled(False)
@@ -254,7 +261,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.Yes | QMessageBox.No
             )
             if rsp == QMessageBox.Yes:
-                self._calib_run = self._make_calib_run(2 * DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION)
+                self._diamond_triangle_calib_run = self._make_diamond_triangle_calib_run(2 * DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION)
                 self.on_calibrate_diamond_triangle(True)
             return
         app_model = self._app_model
@@ -304,7 +311,7 @@ class MainWindow(QMainWindow):
         app_model.selected_animal = None
         app_model.selected_animal = animal
 
-    def _make_calib_run(self, calib_duration: float = DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
+    def _make_diamond_triangle_calib_run(self, calib_duration: float = DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
         logger.notice("Starting diamond-triangle calibration .. duration=%.1f second(s)", calib_duration)
 
         app_model = self._app_model
@@ -356,13 +363,13 @@ class MainWindow(QMainWindow):
         action.setIcon(qta.icon("fa5s.crosshairs"))
         action.setChecked(False)
         #
-        self._calib_run = None  # MUST be before
-        self._handle_calib_run(positions=positions, offsets=offsets)
+        self._diamond_triangle_calib_run = None  # MUST be before
+        self._handle_diamond_triangle_calib_run(positions=positions, offsets=offsets)
 
     def on_calibrate_diamond_triangle(self, is_toggled):
-        if is_toggled and self._calib_run is None:
-            self._calib_run = self._make_calib_run()
-        calib_run = self._calib_run
+        if is_toggled and self._diamond_triangle_calib_run is None:
+            self._diamond_triangle_calib_run = self._make_diamond_triangle_calib_run()
+        calib_run = self._diamond_triangle_calib_run
         if is_toggled:
             # this triggers the execution of the first part of the calib run,
             # which is to record enough data
@@ -374,6 +381,53 @@ class MainWindow(QMainWindow):
                 next(calib_run)
             except StopIteration:
                 pass
+
+    def on_3d_calibrate(self, is_toggled):
+        self.run_action.setEnabled(not is_toggled)
+        if is_toggled:
+            error = "Processing unfinished"
+            result_dir: Path = None
+            def handle_3d_calib():
+                nonlocal error, result_dir
+                try:
+                    result_dir = make_3d_calib(self._app_model)
+                except Exception as err:
+                    logger.exception("3d-calib failed: %s", err)
+                    error = err
+                else:
+                    error = None
+
+            def show_result():
+                self.run_action.setEnabled(True)
+                self.make_3d_calib_action.setChecked(False)
+                self.make_3d_calib_action.setEnabled(True)
+                logger.verbose("3d-calib thread joined, error=%s", error)
+                if error is None:
+                    target = Path(self._preferences.configuration_location).joinpath("4mm_6r_8c_4x")
+                    if target.exists():
+                        rsp = QMessageBox.question(
+                            self,
+                            "3D calibration success", f"Calibration dir already exists, do you want overwrite ?",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                        if rsp != QMessageBox.StandardButton.Yes:
+                            return
+                    shutil.copytree(result_dir, target, dirs_exist_ok=True)
+                    QMessageBox.information(
+                        self,
+                        "3D calibration success", f"Result saved into {target}", QMessageBox.StandardButton.Ok)
+                else:
+                    QMessageBox.warning(self, "3D calibration failed", f"Error received: {error}", QMessageBox.StandardButton.Ok)
+
+            def wait_3d_calib_done(thread):
+                executor_thread.join()
+                InvokeMethod(show_result)
+
+            executor_thread = threading.Thread(target=handle_3d_calib, name="3d-calibration", daemon=True)
+            executor_thread.start()
+
+            waiter_thread = threading.Thread(target=wait_3d_calib_done, name="wait-3d-calibration",
+                                             args=(executor_thread,), daemon=True)
+            waiter_thread.start()
 
     def on_activated(self):
         EventManager.default()
@@ -445,13 +499,17 @@ class MainWindow(QMainWindow):
         action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
         action.triggered.connect(self.on_previous_plan_phase)
 
-        self._calib_run = None
+        self._diamond_triangle_calib_run = None
         self._timer_calibrate = no_op_timer
         action = self.calib_diamond_triangle_action = QAction(QIcon(qta.icon("fa5s.crosshairs")), "Calibrate Coordinate System", self)
         action.setToolTip("Calibrate the relative offset between the pellet delivery spoon and the tunnel")
         action.setCheckable(True)
         action.triggered.connect(self.on_calibrate_diamond_triangle)
         action.setEnabled(False)
+
+        action = self.make_3d_calib_action = QAction(QIcon(qta.icon("fa5s.crosshairs")), "Make 3D calibration", self)
+        action.setCheckable(True)
+        action.triggered.connect(self.on_3d_calibrate)
 
         action = self.view_diagnostics_action = QAction("Diagnostics", self)
         action.setToolTip("Show or hide diagnostics panel")
@@ -504,6 +562,7 @@ class MainWindow(QMainWindow):
 
         tools_menu = menu_bar.addMenu("Tools")
         tools_menu.addAction(self.calib_diamond_triangle_action)
+        tools_menu.addAction(self.make_3d_calib_action)
 
         if self._is_dev:
             view_menu = menu_bar.addMenu("View")
@@ -702,14 +761,13 @@ class MainWindow(QMainWindow):
         self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
 
-    def __show_error(self, title: str, message: str):
-        dlg = QMessageBox(self)
-        dlg.setWindowTitle(title)
-        dlg.setText(message)
-        dlg.exec()
-
     def _show_error(self, title: str, message: str):
-        InvokeMethod(self.__show_error, title, message)
+        def show_in_gui_thread(title=title, message=message):
+            dlg = QMessageBox(self)
+            dlg.setWindowTitle(title)
+            dlg.setText(message)
+            dlg.exec()
+        InvokeMethod(show_in_gui_thread)
 
     def _preferences_property_changed(self, name, value, _):
         if name == "log_level":

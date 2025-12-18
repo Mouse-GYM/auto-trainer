@@ -3,11 +3,15 @@ import dataclasses
 import functools
 import itertools
 import logging.handlers
+import math
 import multiprocessing
+import operator
 import os
+import queue
 import signal
 import threading
 import time
+from logging import LogRecord
 from queue import Empty
 from multiprocessing import Process
 from typing import Optional, Dict, Union, TextIO, List
@@ -362,9 +366,75 @@ def repr_handler(obj: logging.Handler):
 
 
 class WithThreadIdQueueListener(logging.handlers.QueueListener):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._2_sorter = []
+        self._q_2_sorter_lock = threading.Lock()
+        self._delay_buffer = 0.25  # aggregate records up to that age, and only output when older than that, sorted
+        self._recheck_delay = 0.1  # delay between re-aggregate/sorts
+        self._sorter_thread = threading.Thread(target=self._sorter, daemon=True)
+        self._sorter_thread.start()
+
+    def _get_2_sorter(self):
+        with self._q_2_sorter_lock:
+            buff = self._2_sorter
+            self._2_sorter = []
+        return buff
+
+    def _sorter(self):
+        buffer: List[LogRecord] = []
+        recheck_delay = self._recheck_delay
+        p_next_sort = time.perf_counter() + recheck_delay
+        get_created = operator.attrgetter("created")
+        while True:
+            new_recs = self._get_2_sorter()
+            want_quit = any(r is None for r in new_recs)
+            if want_quit:
+                new_recs.remove(None)
+            buffer.extend(new_recs)
+            p_now = time.perf_counter()
+            if p_now < p_next_sort and not want_quit:
+                if len(new_recs) == 0:
+                    time.sleep(0.005)
+            else:
+                p_next_sort = p_now + recheck_delay
+                buffer = sorted(buffer, key=get_created)
+                t_now = time.time()
+                idx = 0
+                for record in buffer:
+                    if t_now - record.created < self._delay_buffer and not want_quit:
+                        break
+                    self._handle(record)
+                    idx += 1
+                del buffer[:idx]
+            #
+            if want_quit:
+                break
+
+    def _handle(self, record):
+        for handler in self.handlers:
+            if not self.respect_handler_level:
+                process = True
+            else:
+                process = record.levelno >= handler.level
+            if process:
+                handler.handle(record)
+
+    def handle(self, record):
+        record = self.prepare(record)
+        with self._q_2_sorter_lock:
+            self._2_sorter.append(record)
+
     def prepare(self, record):
         thread_id_filter.filter(record)
         return record
+
+    def stop(self):
+        super().stop()
+        with self._q_2_sorter_lock:
+            self._2_sorter.append(None)
+        self._sorter_thread.join(5)
 
 
 class WithThreadIdQueueHandler(logging.handlers.QueueHandler):
