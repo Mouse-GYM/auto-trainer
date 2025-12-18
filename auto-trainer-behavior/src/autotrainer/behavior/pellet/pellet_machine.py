@@ -564,7 +564,7 @@ class PelletMachine(StateMachine):
 
         dict(
             trigger=send_pellet,
-            source=[PelletState.loading, PelletState.covering, PelletState.releasing, PelletState.home, PelletState.prerelease, PelletState.retract],
+            source="*",
             dest=PelletState.sending,
             before=before_send_pellet,
             conditions=can_send_pellet,
