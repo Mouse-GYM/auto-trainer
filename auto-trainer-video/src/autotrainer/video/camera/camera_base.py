@@ -117,7 +117,7 @@ class CameraBase:
         elif name == "name":
             self.name = value
         elif name == "primary":
-            self._is_primary = True
+            self._is_primary = value.lower() in {"true", "yes", "on", "1"}
         else:
             logger.warning(f"<{self._name}> unknown property {name}")
             return False

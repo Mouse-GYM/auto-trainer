@@ -16,7 +16,7 @@ class VideoReader(Thread):
 
     def __init__(self, name: str, image_queue: Union[queue.Queue, FixedArrayQueue], update_fcn, stop_event: Event, reset_event: Event = None,
                  decimation: int = 10):
-        super().__init__(name=name)
+        super().__init__(name=name, daemon=True)
         self._image_queue = image_queue
         self._update_fcn = update_fcn
         self._name = name

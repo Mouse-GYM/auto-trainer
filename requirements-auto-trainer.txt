@@ -12,4 +12,4 @@
 
 # available public on PyPi :
 auto-trainer-training >= 0.9.7
-auto-trainer-api >= 0.9.3
+auto-trainer-api >= 0.9.6

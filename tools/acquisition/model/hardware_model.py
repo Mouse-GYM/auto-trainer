@@ -294,7 +294,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._on_property_changed(self.PELLET_VERSION_PROPERTY, "", None)
 
     def _device_property_changed(self, name: str, value, _):
-        if name == self._device.device.UUID_ACK_TIMEOUT_ENGAGED:
+        conn_dev = self._device
+        if conn_dev is None:
+            return
+        dev = conn_dev.device
+        if dev is None:
+            return
+        if name == dev.UUID_ACK_TIMEOUT_ENGAGED:
             self.property_changed(self.DEVICE_ACK_TIMEOUT_ENGAGED, value, _)
 
     def _message_handler_property_changed(self, name: str, value, old_value):
@@ -390,17 +396,18 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if popped is None:
             logger.warning("Received unexpected ack token: %s", token)
 
-    def wait_pending_command_acked(self, token, timeout: float = 3):
-        t_perf_start = time.perf_counter()
-        timeout = t_perf_start + timeout
+    def wait_pending_command_acked(self, token, *, timeout: float = 3):
+        p_start = time.perf_counter()
+        p_timeout = p_start + timeout
+        logger.verbose("Waiting ack pending command %s", token)
         while True:
-            t_perf = time.perf_counter()
-            if t_perf >= timeout:
+            p_now = time.perf_counter()
+            if p_now > p_timeout:
                 break
             if token not in self._pending_tokens:
-                logger.verbose("Got ack for token=%s ; delay=%.6f", token, t_perf - t_perf_start)
+                logger.debug("Got ack for token=%s ; delay=%.6f", token, p_now - p_start)
                 return
-            time.sleep(0.005)
+            time.sleep(0.0025)  # 2.5 ms
         raise RuntimeError(f"timeout waiting ack of pending token={token}")
 
     def get_motor_config(self, motor: Motor) -> Union[StepperConfig, ServoConfig]:

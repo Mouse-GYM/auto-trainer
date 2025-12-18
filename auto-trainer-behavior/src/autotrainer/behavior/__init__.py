@@ -74,24 +74,28 @@ class DiamondTriangleOffsetConfig:
 
     def inference_to_motor(self, inference_xyz: Offset3DTuple) -> Offset3DTuple:
         """Transform an inference "offset" coordinate (which is """
+        assert isinstance(inference_xyz, Offset3DTuple), inference_xyz
         return (
             self.flips_inference_motor * (self.measured_offset - inference_xyz)
             + self.used_position
         )
 
     def motor_to_inference(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
+        assert isinstance(motor_xyz, Offset3DTuple), motor_xyz
         return (
             self.measured_offset
             - self.flips_inference_motor * (motor_xyz - self.used_position)
         )
 
     def motor_to_diamond(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
+        assert isinstance(motor_xyz, Offset3DTuple), motor_xyz
         return (
             self.flips_inference_diamond * self.measured_offset
             - self.flips_motor_diamond * (motor_xyz - self.used_position)
         )
 
     def diamond_to_motor(self, diamond_xyz: Offset3DTuple) -> Offset3DTuple:
+        assert isinstance(diamond_xyz, Offset3DTuple), diamond_xyz
         return (
             self.flips_inference_diamond * self.measured_offset - diamond_xyz
         ) * self.flips_motor_diamond + self.used_position
