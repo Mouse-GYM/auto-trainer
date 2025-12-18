@@ -467,12 +467,12 @@ class PelletMachine(StateMachine):
     # region State Machine Requirements
     # Methods required for model_override=True to work.
 
-    # was unused:
-    # def trigger(self):
-    #     pass
-    #
-    # def may_trigger(self):
-    #     pass
+    # NB: keeping to not have warning from Machine transition parent class
+    def trigger(self):
+        pass
+
+    def may_trigger(self):
+        pass
 
     def move_home(self):
         """Move home"""
