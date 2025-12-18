@@ -292,7 +292,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._auto_clamp_release_load_count = HeadClampConfiguration.auto_clamp_release_load_count
         self._auto_clamp_no_activity_release_delay = HeadClampConfiguration.auto_clamp_no_activity_release_delay
 
-        self._recording_age_release_pellet_threshold = 0.75
+        self._recording_age_release_pellet_threshold = 0.25
         self._recording_prebuffer_duration = 0
 
         self._algo_paused = False
