@@ -143,7 +143,7 @@ class CaptureAttrs:
     msg_queue: Optional[multiprocessing.Queue] = None
     # optional msg queue to send messages to main process from camera process
 
-    record_prebuffer_duration: float = 2
+    record_prebuffer_duration: float = 0
 
 
 class VideoCapture(Process):
