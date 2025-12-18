@@ -115,10 +115,9 @@ class SystemMachine(StateMachine):
 
         pellet_machine = self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
         pellet_machine.events.state_changed += self._pellet_state_changed
-        pellet_machine.events.pellet_loading += self._pellet_loading
         pellet_machine.events.pellet_sent += self._pellet_sent
-        # directly relay to algo:
-        pellet_machine.events.pellet_loaded += algo.pellet_loaded
+        pellet_machine.events.pellet_loading += self._pellet_loading
+        pellet_machine.events.pellet_loaded += self._pellet_loaded
 
         intersession_machine = self._intersession = IntersessionMachine(algo, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._intersession_ended
@@ -637,6 +636,11 @@ class SystemMachine(StateMachine):
                     partial(self._consider_end_session, reason="pellet_loading"))
                 timer.start()
 
+    def _pellet_loaded(self):
+        self._algorithm.pellet_loaded()
+        # self._consider_start_session(reason="pellet-loaded")
+        # after load-pellet a send-pellet is executed, so we get that event too for consider-start-session
+
     def _pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
         algo = self._algorithm
@@ -652,42 +656,55 @@ class SystemMachine(StateMachine):
         self._consider_start_session(reason="pellet-sent-and-in-tunnel-and-not-in-session")
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _consider_start_session(self, reason: str = "NA"):
+    def _consider_start_session(self, reason: str = "NA", is_from_timer: bool=False):
         self._timer_consider_start_session.cancel()  # in case of
+        self._timer_consider_start_session = no_op_timer
         perf_now = time.perf_counter()
         algo = self._algorithm
+        pellet_seen_age = algo.get_pellet_seen_age(perf_now)
         pellet_machine = self._pellet_machine
         send_begin_age = pellet_machine.get_send_begin_age(perf_now)
         send_end_age = pellet_machine.get_send_end_age(perf_now)
         logger.verbose(
-            "consider_start_session: state=%s pellet-state=%s recently_seen=%s in_session=%s "
+            "consider_start_session(timer=%s): "
+            "state=%s pellet-state=%s recently_seen=%s seen_age=%.1f in_session=%s "
             "send_begin_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
-            self._state, self._pellet_machine.state, algo.pellet_recently_seen, algo.is_in_session,
-            send_begin_age, send_end_age, algo.capture_status_age)
+            is_from_timer, self._state, self._pellet_machine.state, algo.pellet_recently_seen, pellet_seen_age,
+            algo.is_in_session, send_begin_age, send_end_age, algo.capture_status_age)
+        # NB/TODO: maybe we should consider if pellet was seen and disappeared before we start sesssion,
+        # to still start it : a mouse could be in tunnel, and pellet move back from load-pellet and mouse hit/makes
+        # the pellet to fall or get it, before we got the time to notice it here..
         if not (
             self._state == SystemState.tunnel
             and not algo.is_in_session
             and self._analysis.load_cell_monitor.is_engaged
             and pellet_machine.state == PelletState.monitoring
+            # waiting monitoring state, ensure pellet is in deliver position
         ):
             return
         if not math.isinf(send_begin_age) and send_begin_age < send_end_age:
-            # wait pellet-sent, no need further timer.
+            # wait pellet-sent, no need further timer:
+            # we'll get a pellet_machine.events.pellet_sent() when it's received/acked
             return
         if not algo.pellet_recently_seen:
             # pellet not seen, if enabled a pellet-load will be executed once pellet_missing_time elapsed,
-            remains = min(0.1, algo.pellet_missing_time - algo.get_pellet_seen_age(perf_now))  # ensure some minimum time before recheck
-            if remains <= 0:
-                remains = 0.1
+            # remains = min(0.1, algo.pellet_missing_time - pellet_seen_age)  # ensure some minimum time before recheck
+            # if remains <= 0:
+            #     remains = 0.1
+            # remains = 0.1  # although unusure if necessary, given we would get a pellet-loaded() event,
+            # which we also consider-start-session for it..
+            return
         else:
             if math.isinf(send_begin_age) and math.isinf(send_end_age):
                 remains = 0  # first session
             # elif algo.capture_status_age < send_end_age:
             #     remains = 0.1
             else:
+                # This ensure that we'll have the start of video matching the very end, or ~right after,
+                # of send-pellet action/move.
                 remains = algo.record_prebuffer_duration - send_end_age
         if remains > 0:
-            timer = make_daemon_timer(remains, partial(self._consider_start_session, reason=reason))
+            timer = make_daemon_timer(remains, partial(self._consider_start_session, reason=reason, is_from_timer=True))
             self._timer_consider_start_session = timer
             timer.start()
             return
