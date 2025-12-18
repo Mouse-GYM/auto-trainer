@@ -7,6 +7,12 @@ omit =
     signature_bootstrap.py
     */tests/*
 
+# allow coverage in python sub-processes (subprocess):
+# patch = subprocess  # only valid from coverage 7.11+ but one for py3.8 is stuck lower.
+# so using coverage-enable-subprocess for now.
+
+parallel = true
+
 [report]
 show_missing = True
 omit =

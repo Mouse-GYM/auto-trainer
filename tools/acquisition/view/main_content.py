@@ -303,9 +303,8 @@ class MainContent(ContentWidget):
             self._protocol_progress_alarm_content_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._protocol_phase_progress_widget)
             self._end_stacked_layout.setCurrentWidget(self._protocol_phase_end_widget)
-            animal = self._app_model.selected_animal
-            plan = None if animal is None else self._app_model.get_training_plan_by_id(animal.training.current_protocol)
-        self._update_training_plan(plan)
+        #     plan = self._app_model.attached_plan
+        # self._update_training_plan(plan)
         self.update()
 
     def _update_training_plan(self, plan: Optional[TrainingPlan]):
@@ -398,6 +397,8 @@ class MainContent(ContentWidget):
             phase = app_model.training_plan.current_phase
             if phase != value:
                 raise RuntimeError("plan phase != new phase: %s", phase, value)
+            self.training_plan_changed.emit(app_model.training_plan)
+        elif name in {props.TRAINING_PLAN_PROP, props.TRAINING_PHASE_PROP}:
             self.training_plan_changed.emit(app_model.training_plan)
 
     def _behavior_algo_property_changed(self, name, value, _):

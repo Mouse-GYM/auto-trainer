@@ -18,7 +18,7 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
-from . import CaptureAnalysisResult
+from . import CaptureAnalysisResult, DiamondTriangleOffsetConfig
 
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
 from .inference_protocol import InferenceProtocol
@@ -652,7 +652,7 @@ class SystemMachine(StateMachine):
             # this will trigger a new start session if mouse still there
             self._analysis.load_cell_monitor.is_engaged = False
 
-    @BehaviorAlgorithm.relay_func(wait=False)
+    @BehaviorAlgorithm.relay_func(wait=True)
     def _handle_detection_result(self, res: IntersessionResponse):
         algo = self._algorithm
         if res.food_consumed > 0:
@@ -666,17 +666,27 @@ class SystemMachine(StateMachine):
         algo.shift_xyz_handler.put_new_shift_xyz(shift_xyz)
 
     def _handle_processed_shift_xyz(self, shift_xyz: Offset3DTuple):
-        logger.verbose("Received processed shift xyz: %s", shift_xyz)
+        logger.verbose("Received processed shift xyz: %s", shift_xyz.humanize(n_digits=1))
         dev = self._pellet_device
-        if dev is not None and self.algorithm.intersession_pellet_shift_enabled:
-            for val, meth, kind in ((shift_xyz[0], dev.set_x, BehaviorEventKind.intersessionShiftX),
-                                    (shift_xyz[1], dev.set_y, BehaviorEventKind.intersessionShiftY),
-                                    (shift_xyz[2], dev.set_z, BehaviorEventKind.intersessionShiftZ)):
-                if val != 0:
-                    meth(val, absolute=False, sender="processed_shift_xyz")
-                    EventManager.default().post_event_content(kind, context=val)
-                else:
-                    logger.debug("%s == 0 ; skip", kind)
+        algo = self.algorithm
+        if dev is None or not algo.intersession_pellet_shift_enabled:
+            return
+        # flips are at the moment statics, but handle possible custom flips ; defensive:
+        cfg = DiamondTriangleOffsetConfig if algo.diamond_triangle_config is None else algo.diamond_triangle_config
+        # NB: dev.set_x/y/z is in motor coordinate system,
+        # but we want the shifts to be in inference system :
+        for idx, (val, meth, kind) in enumerate((
+            (shift_xyz[0], dev.set_x, BehaviorEventKind.intersessionShiftX),
+            (shift_xyz[1], dev.set_y, BehaviorEventKind.intersessionShiftY),
+            (shift_xyz[2], dev.set_z, BehaviorEventKind.intersessionShiftZ)),
+        ):
+            if val != 0:
+                val *= cfg.flips_inference_motor[idx]
+                logger.debug("applying %s with %.1f", kind, val)
+                meth(val, absolute=False, sender="processed_shift_xyz")
+                EventManager.default().post_event_content(kind, context=val)
+            else:
+                logger.debug("%s == 0 ; skip", kind)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
