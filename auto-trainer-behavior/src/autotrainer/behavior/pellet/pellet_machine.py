@@ -219,15 +219,13 @@ class PelletMachine(StateMachine):
             correct_drift = algo.auto_correct_motors_drift
             if drifts is not None and correct_drift:
                 dev.set_motors_drift(drifts)
-        if not (algo.session_mouse_seen and algo.intersession_enabled):
-            # force also a send_pellet, only if not gonna go to intersession
-            self.send_pellet()
-            # otherwise there is a retract pellet which is executed with next/following try_next_state.
-            # NB: not entirely sure we need this here as it is.
-            #
-        elif algo.session_mouse_seen and self._state == PelletState.monitoring:
-            # sessions ended because exit tunnel, otherwise state would be load_pellet
-            self.move_retract()
+            if not (algo.session_mouse_seen and algo.intersession_enabled):
+                # force also a send_pellet, only if not gonna go to intersession
+                logger.debug("forcing a dev.send_pellet() to ensure XYZ are correct before next state")
+                dev.send_pellet()
+                # otherwise there is a retract pellet which is executed with next/following try_next_state.
+                # NB: not entirely sure we need this here as it is.
+                #
         # execute try next state AFTER having applied motor drifts,
         # given next state will move/send the pellet back to deliver/SEND position
         # self.environment_changed(caller="session_ending")

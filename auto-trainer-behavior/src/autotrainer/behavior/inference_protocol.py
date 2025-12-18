@@ -1,6 +1,6 @@
 from typing import Protocol, Callable, Tuple, Optional
 
-from autotrainer.core import Offset3DTuple, ObservableObject
+from autotrainer.core import Offset3DTuple, ObservableObject, InferenceConfiguration
 
 import autotrainer.inference.analysis
 from autotrainer.inference import InferenceStatus, PoseAlgorithm
@@ -12,8 +12,21 @@ class _InferenceProtocol(Protocol):
 
     status: InferenceStatus
 
+    def stop(self):
+        """Stop inference ; it can still be restarted after"""
+
+    def terminate(self):
+        """Terminate totally"""
+
+    def load_configuration(self, config: InferenceConfiguration): ...
+    def save_configuration(self): ...
+
     @property
     def pose_algorithm(self) -> PoseAlgorithm: ...
+
+    @property
+    def is_enabled(self):
+        return False
 
     def perform_segmentation(self, configuration: SegmentationConfiguration): ...
 

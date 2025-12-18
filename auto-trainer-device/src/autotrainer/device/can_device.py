@@ -8,6 +8,7 @@ class relies on the CanInterface class to send and receive data.
 import collections
 import logging
 import math
+import os
 import queue
 import threading
 import time
@@ -20,12 +21,16 @@ from autotrainer.core.message import SystemDataArgsKwargs
 
 logger = get_verbose_logger(__name__)
 
-try:
-    from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCfgMsg, JerryCANCmdType
-
-    HAVE_CAN_DEVICE = True
-except ModuleNotFoundError:
+_force_emulation = os.getenv("AUTOTRAINER_FORCE_CAN_EMULATION_IFACE", "") == "1"
+if _force_emulation:
     HAVE_CAN_DEVICE = False
+else:
+    try:
+        from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCfgMsg, JerryCANCmdType
+
+        HAVE_CAN_DEVICE = True
+    except ModuleNotFoundError:
+        HAVE_CAN_DEVICE = False
 
 from autotrainer.core import (SystemStatusMessageKind, SystemCommandKind,
                               AudioSpectrumData, Offset3DTuple)
@@ -587,7 +592,10 @@ class CanDevice(Device):
             if cmd_thread.is_alive():
                 cmd_queue.put(None)
             cmd_thread.join(3)
+            if cmd_thread.is_alive():
+                logger.warning("%s still alive", cmd_thread)
             self._commands_handler_thread = None
+            # cmd_queue.join()  # not totally necessary here
 
     def _start_sequence(self, movements: MotorSteps):
         """

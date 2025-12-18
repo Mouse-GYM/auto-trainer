@@ -69,15 +69,15 @@ class FileEventPlugin(EventManagerPlugin):
                 return
 
             try:
-                file_existed = Path(event_file_info.file).exists()
-
-                location = open(event_file_info.file, "a")
-
+                file_path = Path(event_file_info.file)
+                file_existed = file_path.exists()
+                file_path.parent.mkdir(exist_ok=True)
+                fh = file_path.open("a")
                 if not file_existed:
-                    location.write("Time, Index, EventId, EventName, Data, Repeat\n")
+                    fh.write("Time, Index, EventId, EventName, Data, Repeat\n")
 
                 self._current_record_interval = event_file_info.current_interval
-                self._event_file = location
+                self._event_file = fh
 
                 logger.info(f"event file opened at {event_file_info.file}")
             except Exception as ex:

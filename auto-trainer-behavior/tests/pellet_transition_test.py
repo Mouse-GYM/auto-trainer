@@ -7,7 +7,7 @@ import logging
 from functools import partial
 
 from autotrainer.behavior import PelletMachine, PelletState, SystemMachine, SystemState
-from .conftest import property_value_save_transitions
+from top_fixtures import property_value_save_transitions
 
 
 def assert_load_cycle(pellet_m: PelletMachine, should_release: bool = True) -> None:
