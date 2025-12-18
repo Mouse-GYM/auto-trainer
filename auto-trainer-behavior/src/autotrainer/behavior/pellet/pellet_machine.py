@@ -114,7 +114,7 @@ class PelletMachine(StateMachine):
             if self._api_status_token is not None:
                 self._prev_pellet_load_perf_c = time.perf_counter()
                 self._covered_state = None
-            EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
+                EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
@@ -125,7 +125,7 @@ class PelletMachine(StateMachine):
                 self._api_status_token_pellet_send = self._api_status_token
                 self._send_begin_perf_c = time.perf_counter()
                 self.events.pellet_sending()
-            EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
+                EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
         else:
             self._api_status_token = None
 
