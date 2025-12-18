@@ -138,7 +138,7 @@ class PelletMachine(StateMachine):
 
     def after_load_pellet(self):
         pass
-        # now handled in try-next-state:
+        # now handled in try-next-state, and indirectely usig self.events.pellet_loaded()
         # self._algorithm.pellet_loaded
 
     def before_cover_pellet(self):
@@ -360,14 +360,14 @@ class PelletMachine(StateMachine):
                 return
             # this is going to be called at end of intersession after going to detection phase,
             # basically when inference is back to live
-            if not pellet_seen and algo.triangle_recently_seen:  # algo.diamond_recently_seen and algo.star_recently_seen:
+            if not pellet_seen and algo.triangle_recently_seen:
                 # if triangle seen and pellet not seen: pellet not loaded ok for sure, we should see it if it was there
                 reason = "load_pellet_when_not_seen_and_retract_or_loading"
                 logit()
                 self.load_pellet()
             else:
                 # either pellet is seen, or we don't know (might be not visible on cameras),
-                if cur_state == PelletState.loading and pellet_seen:
+                if cur_state == PelletState.loading and pellet_seen and is_from_inference:
                     self._notify_pellet_loaded_ok()
                 # current state is either retract or loading (loaded),
                 # we can do a send_pellet() but ensure covered(-or-released) is as desired, *before* sending :
@@ -379,7 +379,6 @@ class PelletMachine(StateMachine):
                     reason = "release_when_loaded_or_retract"
                     logit()
                     self.release_pellet()
-
                 #
                 # even if pellet is not seen, send it to deliver,
                 # the end position of load-pellet sequence might not be (entirely) visibile by camera,
@@ -419,7 +418,7 @@ class PelletMachine(StateMachine):
 
             # previous load-pellet could have missed to notify for pellet-loaded event,
             # if/when pellet is not visible at end of load-pellet sequence. So have to recheck here:
-            if pellet_seen and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
+            if pellet_seen and is_from_inference and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
                 self._notify_pellet_loaded_ok()
 
             if ((not pellet_seen and algo.triangle_recently_seen)
