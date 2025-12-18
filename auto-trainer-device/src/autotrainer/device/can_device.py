@@ -193,6 +193,14 @@ class CanDevice(Device):
             ])
             return self._start_sequence(steps)
 
+        def move_head_magnet(position):
+            steps = MotorSteps("move_magnet", [
+                {'servo_attach': Motor.TUNNEL_MAGNET_SERVO},
+                {'magnet': position},
+                {'servo_detach': Motor.TUNNEL_MAGNET_SERVO},
+            ])
+            return self._start_sequence(steps)
+
         def set_load_pellet_proc(proc):
             if isinstance(proc, MotorSteps) and not proc.is_empty:
                 self._load_pellet = proc
@@ -226,7 +234,7 @@ class CanDevice(Device):
 
             SystemCommandKind.READ_MOTOR_CONFIGURATION: self._interface.request_motor_config,
 
-            SystemCommandKind.MOVE_MAGNET_SERVO: self._interface.move_magnet_servo,
+            SystemCommandKind.MOVE_MAGNET_SERVO: move_head_magnet,
 
             SystemCommandKind.MOVE_LOAD_SERVO: self._interface.move_load_servo,
 
