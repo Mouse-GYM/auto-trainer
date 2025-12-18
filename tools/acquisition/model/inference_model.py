@@ -396,12 +396,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             msg_thread.join()
             self._msg_thread = None
 
-        logger.verbose("closing mp queues")
-        for mp_q in (data_monitor_cmd_queue, self._data_queue, self._inference_cmd_queue, msg_queue):
-            if mp_q is not None:
-                clear_queue(mp_q, log_dumped=True)
-                logger.debug("closing %s size=%s", mp_q, mp_q.qsize())
-                mp_q.close()
+            logger.verbose("closing mp queues")
+            for mp_q in (data_monitor_cmd_queue, self._data_queue, self._inference_cmd_queue, msg_queue):
+                if mp_q is not None:
+                    clear_queue(mp_q, log_dumped=True)
+                    logger.debug("closing %s size=%s", mp_q, mp_q.qsize())
+                    mp_q.close()
 
     def load_configuration(self, configuration: InferenceConfiguration):
         self.model_location = configuration.pose_model_location
@@ -518,7 +518,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # if pose process goes away (when exit) then this will hang up to timeout: currently 15s,
         # see _put_intersession_frame().
         try:
-            self.__feed_intersession_analysis(intersession_block)
+            self._feed_intersession_analysis_execute(intersession_block)
         except InferenceIncorrectStatus as err:
             got_error = err
         except Exception as err:
@@ -561,7 +561,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # self._intersession_block = None
         # it is/must be done by monitor data thread
 
-    def __feed_intersession_analysis(self, intersession_block: IntersessionBlock):
+    def _feed_intersession_analysis_execute(self, intersession_block: IntersessionBlock):
         offline_q = self._offline_queue
         cams = (self._project.camera_1, self._project.camera_2)
         n_cams = len(cams)
@@ -762,6 +762,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._offline_queue.put_block(frame, cam_index, frame_idx, timeout=timeout, sleep_retry=0.025)
         return True
 
+    @staticmethod
+    def _intersession_process_execute(*args, **kwargs):
+        return intersession_process(*args, **kwargs)
+
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
         project = project.to_local_value()  # get local ref to current project infos,
         detection_config = intersession_detection.configuration
@@ -771,7 +775,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
         try:
             async_res = self._process_pool.apply_async(
-                intersession_process,
+                self._intersession_process_execute,
                 args=(project,),
                 kwds=dict(calib_dir=self._calib_dir),
             )
@@ -783,9 +787,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         else:
             processed_ok = True
 
-        intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
-        # NB: triggering/calling the "complete" of the detection BEFORE trigger the detection_result_ready below,
-
         if processed_ok:
             self.detection_result_ready(result)
+
+        intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
+
         self._intersession_detection = None

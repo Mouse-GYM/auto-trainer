@@ -1,6 +1,7 @@
 import dataclasses
 import threading
 import time
+from functools import partial
 from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Dict
@@ -8,7 +9,8 @@ from typing import List, Optional, Dict
 from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
-                               QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout)
+                               QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
+                               QSpinBox, QDoubleSpinBox)
 import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration
@@ -20,11 +22,14 @@ from autotrainer.inference import InferenceStatus, PoseResponse
 
 from autotrainer.behavior import DiamondTriangleOffsetConfig, TrainingMode
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.pyside.content_widget import InvokeMethod
 
 from autotrainer.training import TrainingPlan
 
 from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.model.inference_model import InferenceModel
+from tools.acquisition.model.training_plan import get_plan_id
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
 from tools.acquisition.view.preferences_dialog import PreferencesDialog
@@ -48,6 +53,9 @@ class MainWindow(QMainWindow):
                  app_version: str = "", is_dev: bool = False):
         super(MainWindow, self).__init__(None)
 
+        self._orig_inference_analysis_feed = None
+        self._orig_inference_analysis_process = None
+
         self._app = app
         self._is_dev = is_dev
         self._preferences = user_preferences
@@ -61,25 +69,27 @@ class MainWindow(QMainWindow):
 
         app_model = self._app_model = AppModel(self._preferences, app_version)
 
-        self.setContentsMargins(0, 0, 0, 0)
+        try:
+            self.setContentsMargins(0, 0, 0, 0)
 
-        self.main_content = MainContent(app_model)
+            self.main_content = MainContent(app_model)
 
-        self._create_actions()
-        self._configure_menubar()
-        self._configure_toolbar()
-        self._configure_statusbar()
+            self._create_actions()
+            self._configure_menubar()
+            self._configure_toolbar()
+            self._configure_statusbar()
 
-        self.setCentralWidget(self.main_content)
-        self.centralWidget().layout().setContentsMargins(0, 0, 0, 0)
-        # self.setMaximumSize(1880, 1080)
+            self.setCentralWidget(self.main_content)
+            self.centralWidget().layout().setContentsMargins(0, 0, 0, 0)
+            # self.setMaximumSize(1880, 1080)
+        except Exception as err:
+            app_model.on_close()
+            raise RuntimeError(f"Error setting up UI: {err}") from err
 
         app_model.configuration_loaded_event += self._on_app_model_configuration_loaded
-
         try:
             app_model.load_configuration(configuration)
         except Exception as err:
-            app_model.on_error(f"Could not load system config {configuration}", str(err))
             app_model.on_close()
             raise RuntimeError(f"Could not load config: {err}") from err
 
@@ -144,6 +154,7 @@ class MainWindow(QMainWindow):
                     started = False
                 if started:
                     self._status_label.setText("")
+                    self._acquisition_started = True
                 else:
                     self._status_label.setText("Startup failed")
                     self.running_status_changed.emit(False)
@@ -156,6 +167,7 @@ class MainWindow(QMainWindow):
                 app_model.on_capture_stop()
                 self.run_action.setEnabled(True)
                 self._status_label.setText("")
+                self._acquisition_started = False
             threading.Thread(target=doit, daemon=True).start()
 
     def on_previous_plan_phase(self):
@@ -467,6 +479,10 @@ class MainWindow(QMainWindow):
         action = self.mouse_near_pellet_action = QAction("Hands near pellet", self)
         action.triggered.connect(self._internal_mouse_near_pellet)
 
+        action = self.detection_results_action = QAction("Detection-Result", self)
+        action.setCheckable(True)
+        action.triggered.connect(self._internal_detection_result_toggle)
+
         action = self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
         action.triggered.connect(lambda: self._show_preferences())
 
@@ -549,10 +565,10 @@ class MainWindow(QMainWindow):
                           # this is because it's a typed str-subclass enum.
                           )
 
-        def index_changed(_):
+        def training_mode_index_changed(_):
             selected_mode = self._training_mode_combo.currentData()[0]  # unpack from tuple, see above.
-            self._app_model.training_mode = selected_mode
-        combo.currentIndexChanged.connect(index_changed)
+            app_model.training_mode = selected_mode
+        combo.currentIndexChanged.connect(training_mode_index_changed)
 
         label = QLabel("Protocol:")
         label.setContentsMargins(8, 0, 0, 0)
@@ -562,27 +578,27 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(label)
         combo = self._training_plan_combo = QComboBox()
-        app_model = self._app_model
-
         layout.addWidget(combo)
-        def index_changed(_):
-            plan_id = self._training_plan_combo.currentData()
-            selected_plan: Optional[TrainingPlan] = self._app_model.get_training_plan_by_id(plan_id)
-            logger.debug("plan changed: %s -> %s", plan_id, selected_plan)
-            self._app_model.training_plan = selected_plan
 
-        combo.currentIndexChanged.connect(index_changed)
+        def training_plan_index_changed(_):
+            plan_id = self._training_plan_combo.currentData()
+            selected_plan: Optional[TrainingPlan] = app_model.get_training_plan_by_id(plan_id)
+            logger.debug("plan changed: %s -> %s", plan_id, selected_plan)
+            app_model.training_plan = selected_plan
+
+        combo.currentIndexChanged.connect(training_plan_index_changed)
 
         def update_training_mode(training_mode):
             logger.debug("Updating training_mode to %s", training_mode)
             self._widget_training_plan_action.setVisible(training_mode != TrainingMode.MANUAL)
             animal = app_model.selected_animal
-            plan = self._app_model.get_training_plan_by_id(None if animal is None else animal.training.current_protocol)
-            training_plan_idx = None if plan is None else self._training_plan_index_by_plan_id.get(plan.plan_id)
-            if training_plan_idx is None:
-                training_plan_idx = self._training_plan_index_by_plan_id.get(None, -1)
+            plan_id = None if animal is None else animal.training.current_protocol
+            training_plan_idx = self._training_plan_index_by_plan_id.get(plan_id, -1)
+            self._training_plan_combo.blockSignals(True)
             self._training_plan_combo.setCurrentIndex(training_plan_idx)
-            self.main_content.training_plan_changed.emit(plan)
+            self._training_plan_combo.blockSignals(False)
+            # self.main_content.training_plan_changed.emit(self._app_model.training_plan)
+            self._app_model.training_mode = training_mode
             self._refresh_prev_next_phases()
 
         update_training_mode(self._app_model.training_mode)
@@ -617,8 +633,9 @@ class MainWindow(QMainWindow):
 
         if self._is_dev:
             self.addToolBarBreak()
-            toolbar = QToolBar("Dev Toolbar")
+            toolbar = self._dev_toolbar = QToolBar("Dev Toolbar")
             toolbar.setContentsMargins(0, 0, 0, 0)
+            # toolbar.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
             self.addToolBar(toolbar)
             toolbar.setFloatable(False)
             toolbar.setMovable(False)
@@ -627,6 +644,54 @@ class MainWindow(QMainWindow):
             toolbar.addAction(self.pellet_seen_action)
             toolbar.addAction(self.mouse_seen_action)
             toolbar.addAction(self.mouse_near_pellet_action)
+            toolbar.addAction(self.detection_results_action)
+            widget = QWidget()
+            widget.setContentsMargins(4, 0, 0, 0)
+            self._internal_analysis_widget_toolbar = toolbar.addWidget(widget)
+            self._internal_analysis_widget_toolbar.setVisible(False)
+            hbox = QHBoxLayout(widget)
+            label = QLabel("P:")
+            label.setToolTip("Pellets Presented")
+            hbox.addWidget(label)
+            spinbox = self._internal_pellet_presented_spinbox = QSpinBox()
+            spinbox.setToolTip(label.toolTip())
+            hbox.addWidget(spinbox)
+            label = QLabel("R:")
+            label.setToolTip("Pellets Reached")
+            hbox.addWidget(label)
+            spinbox = self._internal_pellet_reached_spinbox = QSpinBox()
+            spinbox.setToolTip(label.toolTip())
+            hbox.addWidget(spinbox)
+            label = QLabel("C:")
+            label.setToolTip("Pellets Consumed")
+            hbox.addWidget(label)
+            spinbox = self._internal_pellet_consumed_spinbox = QSpinBox()
+            spinbox.setToolTip(label.toolTip())
+            hbox.addWidget(spinbox)
+            hbox.addWidget(QLabel("Shift:"))
+            spinbox = self._internal_shift_x_spinbox = QDoubleSpinBox()
+            spinbox.setToolTip("X shift")
+            spinbox.setRange(-9, 9)
+            spinbox.setDecimals(1)
+            hbox.addWidget(spinbox)
+            spinbox = self._internal_shift_y_spinbox = QDoubleSpinBox()
+            spinbox.setToolTip("Y shift")
+            spinbox.setRange(-9, 9)
+            spinbox.setDecimals(1)
+            hbox.addWidget(spinbox)
+            spinbox = self._internal_shift_z_spinbox = QDoubleSpinBox()
+            spinbox.setToolTip("Z shift")
+            spinbox.setRange(-9, 9)
+            spinbox.setDecimals(1)
+            hbox.addWidget(spinbox)
+            # for i in range(hbox.count()):
+            #     w = hbox.itemAt(i).widget()
+            #     # w.setContentsMargins(0, 0, 0, 0)
+            #     # w.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+            # unnecessary with:
+            hbox.setContentsMargins(0, 0, 0, 0)
+            # plus:
+            toolbar.setMaximumHeight(toolbar.minimumSizeHint().height())
 
     def _configure_statusbar(self):
         self._status_label = QLabel("")
@@ -640,11 +705,14 @@ class MainWindow(QMainWindow):
         self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
 
-    def _show_error(self, title: str, message: str):
+    def __show_error(self, title: str, message: str):
         dlg = QMessageBox(self)
         dlg.setWindowTitle(title)
         dlg.setText(message)
         dlg.exec()
+
+    def _show_error(self, title: str, message: str):
+        InvokeMethod(self.__show_error, title, message)
 
     def _preferences_property_changed(self, name, value, _):
         if name == "log_level":
@@ -652,9 +720,39 @@ class MainWindow(QMainWindow):
         elif name == "remove_raw_data_when_inactive_session":
             self._app_model.behavior.algorithm.clean_raw_data_on_inactive_session = value
 
+    @staticmethod
+    def _simulate_intersession_process(*args, fake_result, **kwargs):
+        # NB: must be static method given it's executed in a sub-process, so must no get the whole main-window
+        # instance tried to be serialized (would most likely fails/error) !
+        logger.verbose("Simulate intersession process: %s", fake_result)
+        time.sleep(1.5)
+        return fake_result
+
     def _internal_simulate_trigger(self):
         is_checked = self.capture_trigger_action.isChecked()
-        load_cell_monitor = self._app_model.analysis.load_cell_monitor
+        app_model = self._app_model
+        load_cell_monitor = app_model.analysis.load_cell_monitor
+        if not is_checked:
+            use_fake_results = self.detection_results_action.isChecked()
+            if use_fake_results:
+                inference = app_model.behavior.system_machine.intersession._inference
+                def feed(intersession_block):
+                    logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
+                    inference._data_monitor_proc.stop_recorded.wait()
+                    logger.debug("got stop recorded")
+                    inference._data_monitor_proc.stop_recorded.clear()
+                    intersession_block.frame_count = 42
+                    time.sleep(1.5)
+                inference._feed_intersession_analysis_execute = feed
+                res = IntersessionResponse(
+                    pellets_presented=self._internal_pellet_presented_spinbox.value(),
+                    successful_reaches=self._internal_pellet_reached_spinbox.value(),
+                    food_consumed=self._internal_pellet_consumed_spinbox.value(),
+                    pellet_x=self._internal_shift_x_spinbox.value(),
+                    pellet_y=self._internal_shift_y_spinbox.value(),
+                    pellet_z=self._internal_shift_z_spinbox.value(),
+                )
+                inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
         load_cell_monitor.force_engaged(is_checked)
         load_cell_monitor.is_engaged = is_checked
 
@@ -677,6 +775,41 @@ class MainWindow(QMainWindow):
             algo.pellet_hands_min_distance = new_val
             logger.debug("set pellet_hands_min_distance to %s", new_val)
 
+    def _internal_detection_result_toggle(self):
+        app_model = self._app_model
+        inference = app_model.behavior.system_machine.intersession._inference
+        is_checked = self.detection_results_action.isChecked()
+        self._internal_analysis_widget_toolbar.setVisible(is_checked)
+        if is_checked:
+            self._orig_inference_analysis_feed = inference._feed_intersession_analysis_execute
+            self._orig_inference_analysis_process = inference._intersession_process_execute
+            inference = app_model.behavior.system_machine.intersession._inference
+
+            def simulate_feed_intersession(intersession_block):
+                logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
+                inference._data_monitor_proc.stop_recorded.wait(5)
+                logger.debug("got stop recorded")
+                inference._data_monitor_proc.stop_recorded.clear()
+                intersession_block.frame_count = 42
+                #
+                res = IntersessionResponse(
+                    pellets_presented=self._internal_pellet_presented_spinbox.value(),
+                    successful_reaches=self._internal_pellet_reached_spinbox.value(),
+                    food_consumed=self._internal_pellet_consumed_spinbox.value(),
+                    pellet_x=self._internal_shift_x_spinbox.value(),
+                    pellet_y=self._internal_shift_y_spinbox.value(),
+                    pellet_z=self._internal_shift_z_spinbox.value(),
+                )
+                inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
+                logger.debug("Patched inference._intersession_process_execute with simulate one: %s", res)
+                time.sleep(1.5)
+
+            inference._feed_intersession_analysis_execute = simulate_feed_intersession
+
+        else:
+            inference._feed_intersession_analysis_execute = self._orig_inference_analysis_feed
+            inference._intersession_process_execute = self._orig_inference_analysis_process
+
     def notes_changed(self, value: str):
         self._app_model.notes = value
 
@@ -689,12 +822,11 @@ class MainWindow(QMainWindow):
         else:
             animal_id = self._animal_dropdown.currentData()
             animal: AnimalSubject = self._app_model.get_animal_by_id(animal_id)
-            # logger.debug("animal: %s", dataclasses.asdict(animal))
             self._app_model.selected_animal = animal
 
     def _refresh_prev_next_phases(self):
         attached = self._app_model.attached_plan
-        if attached is None or self._app_model.training_mode == TrainingMode.MANUAL:
+        if attached is None or self._app_model.training_mode != TrainingMode.MANUAL_AND_PROTOCOL:
             self.previous_training_phase_action.setVisible(False)
             self.next_training_phase_action.setVisible(False)
             return
@@ -739,6 +871,9 @@ class MainWindow(QMainWindow):
             self._training_plan_combo.setCurrentIndex(index)
             self._training_plan_combo.blockSignals(False)
             self._refresh_prev_next_phases()
+
+        elif name == props.TRAINING_PLANS:
+            self._set_training_plans()
 
         elif name == props.TRAINING_PHASE:
             self._refresh_prev_next_phases()
@@ -810,28 +945,37 @@ class MainWindow(QMainWindow):
             "Select a training protocol" if has_some
             else "There are no training protocols in the Autotrainer folder"
         )
+        combo_indices_map: Dict[Optional[str], int]
         combo_indices_map = self._training_plan_index_by_plan_id = {
-            plan.plan_id: idx
+            get_plan_id(plan): idx
             for idx, plan in enumerate(plans)
         }
         for plan_index, plan in enumerate(plans):
-            combo.addItem(plan.name, userData=plan.plan_id)
-            combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
+            # plan = TrainingPlan.from_dict(plan, no_transition=True)
+            combo.addItem(plan['name'], userData=get_plan_id(plan))
+            combo.setItemData(plan_index, plan['description'], Qt.ToolTipRole)
         combo.addItem(empty_txt, userData=None)  # put it last
         combo_indices_map[None] = len(plans)
         combo.setItemData(len(plans), tooltip_txt, Qt.ToolTipRole)
         combo.blockSignals(False)
         animal = app_model.selected_animal
         if animal is None:
+            combo.blockSignals(True)  # required to not induce loop
             combo.setCurrentIndex(len(plans))
+            combo.blockSignals(False)  # required to not induce loop
             return
         plan_id = animal.training.current_protocol
-        if plan_id is not None:
+        combo.blockSignals(True)  # required to not induce loop
+        if plan_id is None:
+            combo.setCurrentIndex(len(plans))
+        else:
             plan_combo_index = self._training_plan_index_by_plan_id.get(plan_id, None)
             if plan_combo_index is None:
                 logger.warning("Animal has current protocol %r but no such protocol found", plan_id)
+                combo.setCurrentIndex(len(plans))
             else:
                 combo.setCurrentIndex(plan_combo_index)
+        combo.blockSignals(False)  # required to not induce loop
 
     def _on_app_model_configuration_loaded(self, config):
         self._set_training_plans()

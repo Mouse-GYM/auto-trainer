@@ -25,7 +25,7 @@ class IntersessionMachineEvents(StateMachineEvents):
 class IntersessionMachine(StateMachine):
     _events_class = IntersessionMachineEvents
 
-    states = [e for e in IntersessionState]
+    states = list(IntersessionState)
 
     def __init__(self, algorithm: BehaviorAlgorithm, project_info: ProjectInfo = None,
                  inference: InferenceProtocol = None):

@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Callable, Any, Union
 
 import yaml
+from watchdog.events import FileSystemEventHandler, FileSystemEvent, PatternMatchingEventHandler
+from watchdog.observers import Observer
 
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
@@ -37,7 +39,7 @@ from autotrainer.video import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, InferenceStatus
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
-from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode
+from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine
 
 from autotrainer.training import TrainingPlan, TrainingPhase
 
@@ -48,7 +50,7 @@ from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
-from tools.acquisition.model.training_plan import load_training_plans
+from tools.acquisition.model.training_plan import load_training_plans, get_plan_id
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
@@ -61,6 +63,25 @@ _recording_age_enough_timer = make_daemon_timer
 
 def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
+
+
+class TrainingPlansFSEventHandler(PatternMatchingEventHandler):
+
+    def __init__(self, app_model: "AppModel"):
+        super().__init__(patterns=["*.json"])
+        self._app_model = app_model
+
+    def _reload_app_model_plans(self):
+        self._app_model.reload_training_plans()
+
+    def on_any_event(self, event: FileSystemEvent) -> None:
+        match = lambda p: False if p is None else p.lower().endswith(".json")
+        logger.debug("Any Event[%s]: %s -> %s", event.event_type, event.src_path, event.dest_path)
+        if (
+               (event.event_type in {'created', 'closed', 'deleted'} and match(event.src_path))
+            or (event.event_type == 'moved' and (match(event.dest_path) or match(event.src_path)))
+        ):
+            self._reload_app_model_plans()
 
 
 class AppModel(ObservableObject):
@@ -76,7 +97,10 @@ class AppModel(ObservableObject):
         NOTES = "notes"
         TRAINING_MODE = 'training_mode'
         TRAINING_PLAN = "training_plan"
+        TRAINING_PLANS = 'training_plans'
         TRAINING_PHASE = "training_plan.current_phase"
+        TRAINING_PLAN_PROP = 'training_plan_prop'
+        TRAINING_PHASE_PROP = 'training_phase_prop'
 
     def __init__(
         self,
@@ -84,6 +108,10 @@ class AppModel(ObservableObject):
         app_version: str = "",
         *,
         calib_dir: Optional[Path] = None,
+        sensor_analysis: Optional[SensorAnalysis] = None,
+        inference_model: Optional[InferenceProtocol] = None,
+        system_message_handler: Optional[SystemMessageHandler] = None,
+        system_machine: Optional[SystemMachine] = None,
     ):
         super().__init__(('on_error', 'configuration_loaded_event'))
 
@@ -101,6 +129,8 @@ class AppModel(ObservableObject):
         self._training_mode = TrainingMode.MANUAL
         self._training_plan: Optional[TrainingPlan] = None
         self._training_plan_animal: Optional[AnimalSubject] = None
+        self._acquisition_started = False
+        self._reload_plans_needed = False
 
         mp_ctx = get_mp_ctx()
 
@@ -132,10 +162,10 @@ class AppModel(ObservableObject):
         self._system_message_queue = queue.Queue()  # only dedicated to CAN bus messages reading/handling
         # so: using a multiprocess queue instead, would allow to put the CAN connection thread into a dedicated process,
         # also giving more space/freedom for the main/UI process python GIL acquire/release.
-        sensor_analysis = self._analysis = SensorAnalysis(topcam_presence=self._top_camera_presence_detection)
+        sensor_analysis = self._analysis = SensorAnalysis(topcam_presence=self._top_camera_presence_detection) if sensor_analysis is None else sensor_analysis
         #
         self._system_message_handler = SystemMessageHandler(self._system_message_queue,
-                                                            sensor_analysis=sensor_analysis)
+                                                            sensor_analysis=sensor_analysis) if system_message_handler is None else system_message_handler
         self._system_message_handler.start()
 
         self._hardware = HardwareModel(self._system_message_handler)
@@ -175,16 +205,18 @@ class AppModel(ObservableObject):
             cam_offsets=cam_offsets,
         )
 
-        self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir)
+        self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir) if inference_model is None else inference_model
 
         #
 
-        self._training_plans: List[TrainingPlan] = []
-        self._training_plan_by_plan_id: Dict[str, TrainingPlan] = {}
+        self._training_plans: List[Dict] = []
+        self._training_plan_by_plan_id: Dict[str, Dict] = {}
+        self._plans_by_path: Dict[Path, Dict[str, Any]] = {}
 
         self._behavior = BehaviorModel(
             self._system_message_handler, self._analysis, self._hardware, self._inference,
             topcam_presence=self._top_camera_presence_detection,
+            system_machine=system_machine,
         )
 
         self._output_location = ""
@@ -206,6 +238,7 @@ class AppModel(ObservableObject):
 
         self._selected_animal: Optional[AnimalSubject] = None
         self._attached_plan: Optional[TrainingPlan] = None
+        self._attached_phase: Optional[TrainingPhase] = None
         self._attached_animal: Optional[AnimalSubject] = None
 
         self._rpc_service: Optional[RpcService] = None
@@ -216,6 +249,10 @@ class AppModel(ObservableObject):
         self._behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
         preferences.property_changed += self._on_preferences_property_changed
         self._inference.property_changed += self._on_inference_property_changed
+
+        self._plans_files_event_handler = TrainingPlansFSEventHandler(self)
+        self._plans_files_observer = Observer()
+        self._plans_files_observer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_release_pellet(self):
@@ -332,7 +369,8 @@ class AppModel(ObservableObject):
 
     @animals.setter
     def animals(self, value: List[AnimalSubject]):
-        self._animals = self._on_property_changed(self.Props.ANIMALS, value, self._animals)
+        prev, self._animals = self._animals, value
+        self._on_property_changed(self.Props.ANIMALS, value, prev)
 
     def get_animal_by_id(self, animal_id) -> Optional[AnimalSubject]:
         for animal in self._animals:
@@ -368,7 +406,8 @@ class AppModel(ObservableObject):
             if self._training_mode == TrainingMode.MANUAL:
                 # only set animal base position if manual training mode
                 self._set_animal_base_positions_and_send_to_deliver(animal)
-            self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
+            else:
+                self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
 
         self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
         self._preferences.selected_animal = "" if animal is None else animal.name
@@ -386,9 +425,18 @@ class AppModel(ObservableObject):
         if value == TrainingMode.MANUAL:
             self._detach_training_plan()
         else:
-            plan = self._training_plan
-            if plan is not None and self._attached_plan is None:
-                self._attach_training_plan(plan)
+            animal = self._selected_animal
+            if animal is None:  # animal might be not active/created yet
+                self._detach_training_plan()
+            else:
+                attached = self._attached_plan
+                if attached is not None:
+                    is_auto = value == TrainingMode.AUTOMATIC
+                    logger.info("Updating plan is_automatic to %s", is_auto)
+                    attached.is_automatic = is_auto
+                else:
+                    # this will also attach to it (given current mode != manual):
+                    self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
         self._on_property_changed(self.Props.TRAINING_MODE, value, prev)
 
     @property
@@ -410,6 +458,7 @@ class AppModel(ObservableObject):
             self._detach_training_plan()
             new_plan_id = None if value is None else value.plan_id
             prev_plan_id, animal.training.current_protocol = animal.training.current_protocol, new_plan_id
+            logger.debug("training_plan attach: animal prev_plan=%s new=%s", prev_plan_id, new_plan_id)
             if new_plan_id != prev_plan_id:
                 self._save_animal_metadata(animal, sender="animal_current_plan_changed")
         if value is None:
@@ -460,72 +509,112 @@ class AppModel(ObservableObject):
             value.command_request_delegate = self._handle_rpc_service_command
 
     @property
-    def training_plans(self) -> List[TrainingPlan]:
+    def training_plans(self) -> List[Dict[str, Any]]:
         return self._training_plans
+
+    @training_plans.setter
+    def training_plans(self, value):
+        self._training_plans = value
+        self._training_plan_by_plan_id = {
+            get_plan_id(plan): plan
+            for idx, plan in enumerate(self._training_plans)
+        }
+        self._detach_training_plan()  # always
+        animal = self._selected_animal
+        if animal is not None:
+            plan_id = animal.training.current_protocol
+            if plan_id is not None:
+                logger.info("reattaching %s to animal", plan_id)
+                self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
+        self.property_changed(self.Props.TRAINING_PLANS, value, None)
 
     def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
         if plan_id is None:
             return None
-        attached = self._attached_plan
-        if attached is not None and attached.plan_id == plan_id:
-            logger.debug("get_training_plan_by_id: reusing attached: %s", attached)
-            return attached
         plan = self._training_plan_by_plan_id.get(plan_id)
         if plan is None:
             logger.warning("Unknown plan_id: %s", plan_id)
             return None
-        # plan = copy.deepcopy(plan)  # always, so that different mouses won't share same plan instance
-        animal = self._selected_animal
-        if animal is not None:
-            prog = animal.training.get_plan_progress(plan.plan_id)
-            if prog is not None:
-                logger.debug("%s: deserializing plan progress: %s", animal, prog)
-                plan.deserialize_progress(prog)
-        return plan
+        pid = get_plan_id(plan)
+        for available_path, available_plan in self._plans_by_path.items():
+            if get_plan_id(available_plan) == pid:
+                # ensure any caller gets a fresh instance, without need re-read from disk:
+                return TrainingPlan.from_dict(copy.deepcopy(available_plan))
+        logger.warning("Plan %s not anymore available", pid)
+        return None
 
     def _attach_training_plan(self, plan: TrainingPlan):
         algo = self._behavior.algorithm
         animal = self._selected_animal
-        assert animal is not None
+        if animal is None:
+            # if animal not created yet
+            return
+        assert isinstance(animal, AnimalSubject)
         attached = self._attached_plan
         if attached is not None:
             if attached.plan_id == plan.plan_id and animal == self._attached_animal:
                 logger.verbose("Plan %s already attached", plan.plan_id)
                 return
             self._detach_training_plan()
-        logger.success("Animal %s: attaching plan %s (%s) ..", animal, plan.plan_id, hex(id(plan)))
-        plan.is_automatic = self._training_mode == TrainingMode.AUTOMATIC
-        plan.behavior_algorithm = algo
-        plan.pellet_device = self._hardware
-        plan.tunnel_device = self._hardware
+        prog = animal.training.get_plan_progress(plan.plan_id)
+        # if prog is None:
+        #     logger.debug("plan first use, using plan.serialize_progress")
+        #     prog = plan.serialize_progress()
+        # do we ?
+        if prog is not None:
+            logger.debug("%s: deserializing plan progress: %s", animal, prog)
+            plan.deserialize_progress(prog)
+        is_auto = self._training_mode == TrainingMode.AUTOMATIC
+        logger.success("Animal %s: attaching auto=%s to plan %s (%s) ..",
+                       animal.name, is_auto, plan.plan_id, hex(id(plan)))
+        plan.is_automatic = is_auto
+        pellet_dev = tunnel_dev = self._hardware
+        plan.attach(algo, pellet_dev, tunnel_dev)
         self._attached_plan = plan
         self._attached_animal = animal
         plan.property_changed += self._on_training_plan_property_changed  # first, to be sure get everything
+        plan.progress_updated += self._on_training_plan_progress_updated
+        self._attach_training_phase(plan.current_phase)
         plan.resume()
+
+    def _attach_training_phase(self, phase: Optional[TrainingPhase]):
+        self._detach_training_phase()  # always
+        self._attached_phase = phase
+        if phase is not None:
+            phase.property_changed += self._on_training_phase_property_changed
 
     def _detach_training_plan(self):
         plan = self._attached_plan
         if plan is None:
             return
-        prog = plan.serialize_progress()
+        self._detach_training_phase()
+        plan.property_changed -= self._on_training_plan_property_changed
+        plan.progress_updated -= self._on_training_plan_progress_updated
         animal = self._attached_animal
-        assert animal is not None
+        assert isinstance(animal, AnimalSubject)
         logger.notice("%s: detaching from plan %s (%s)", animal.name, plan.plan_id, hex(id(plan)))
-        animal.training.set_plan_progress(plan.plan_id, prog)
-        plan.property_changed -= self._on_training_plan_property_changed  # last
-        plan.behavior_algorithm = plan.pellet_device = plan.tunnel_device = None
+        plan.detach()
         self._attached_plan = None
         self._attached_animal = None
+        prog = plan.serialize_progress()
+        animal.training.set_plan_progress(plan.plan_id, prog)
         self._save_animal_metadata(animal, sender="detach_plan")
+
+    def _detach_training_phase(self):
+        phase = self._attached_phase
+        if phase is not None:
+            phase.property_changed -= self._on_training_phase_property_changed
+            self._attached_phase = None
+
     #
 
-    def add_animal(self, name: str, select: bool = False):
+    def add_animal(self, name: str, select: bool = False) -> Optional[AnimalSubject]:
         if not name or len(name) == 0:
-            return
+            return None
 
-        animal = [x for x in self._animals if x.name == name]
+        matching_animals = [x for x in self._animals if x.name == name]
 
-        if len(animal) == 0:
+        if len(matching_animals) == 0:
             logger.info("Adding new animal name=%s", name)
             animal = AnimalSubject(name=name)
             self._save_animal_metadata(animal)
@@ -536,12 +625,15 @@ class AppModel(ObservableObject):
             self._animals = None
             self.animals = animals
         else:
-            animal = animal[0]
+            animal = matching_animals[0]
 
         if select:
             self.selected_animal = animal
+        return animal
 
     def on_capture_start(self) -> bool:
+
+        self._acquisition_started = True
 
         analysis = self._analysis
 
@@ -653,8 +745,7 @@ class AppModel(ObservableObject):
             # forcing manual so:
             self.training_mode = TrainingMode.MANUAL
         else:
-            if plan is not None and self._training_mode != TrainingMode.MANUAL:
-                self._attach_training_plan(plan)
+            self.training_plan = plan
 
         if self._attached_animal is None and animal is not None:
             self._set_animal_base_positions_and_send_to_deliver(animal)
@@ -663,6 +754,19 @@ class AppModel(ObservableObject):
 
     def on_capture_stop(self):
         logger.debug("AppModel.on_capture_stop")
+        try:
+            self._capture_stop()
+        finally:
+            # always:
+            self._is_recording_trigger = False
+            self._acquisition_started = False  # must be set before try reload training plans, given checked in it
+            analysis = self._analysis
+            analysis.project_info = None
+            if self._reload_plans_needed:
+                self._reload_plans_needed = False
+                self.reload_training_plans()
+
+    def _capture_stop(self):
 
         self._detach_training_plan()  # always
 
@@ -694,9 +798,9 @@ class AppModel(ObservableObject):
                 logger.verbose("stopping capture to %s", camera.name)
                 camera.on_capture_stop()
 
-        analysis.project_info = None
-
-        self._is_recording_trigger = False
+    def _get_plans_dir(self):
+        plans_path = Path(self._preferences.configuration_location).joinpath("training/protocols")
+        return plans_path
 
     def load_configuration(self, location: Optional[str] = None):
         p_location = Path(location or "")
@@ -756,19 +860,44 @@ class AppModel(ObservableObject):
         # only at the end:
         self._loaded_configuration = configuration
 
-        self._training_plans = load_training_plans(
-            Path(self._preferences.configuration_location).joinpath("training/protocols"))
-        self._training_plan_by_plan_id = {
-            plan.plan_id: plan
-            for idx, plan in enumerate(self._training_plans)
-        }
+        plans_path = self._get_plans_dir()
+        self.reload_training_plans(plans_path, reraise_on_error=True)
 
         # and:
         self._load_animals()
 
         self.configuration_loaded_event(configuration)
 
+        observer = self._plans_files_observer
+        observer.stop()
+        observer.join(2)
+        observer = self._plans_files_observer = Observer()
+        logger.debug("starting FS monitoring of %s", plans_path)
+        plans_path.mkdir(parents=True, exist_ok=True)  # observer requires the path/dir to exists, otherwise exception
+        observer.schedule(self._plans_files_event_handler, path=plans_path.resolve(), recursive=False)
+        observer.start()
+
         return True
+
+    def reload_training_plans(self, dir_path: Optional[Path] = None, *, reraise_on_error: bool=False):
+        if self._acquisition_started:
+            logger.notice("delaying reload training plans given acquisition started")
+            self._reload_plans_needed = True
+            return
+        if dir_path is None:
+            dir_path = self._get_plans_dir()
+        try:
+            plans = load_training_plans(dir_path)
+        except Exception as err:
+            if reraise_on_error:
+                raise RuntimeError(f"Could not load training plans: {err}") from None
+            logger.exception("Could not load plans from %s: %s", dir_path, err)
+            self.on_error("Reload training protocols error",
+                          f"Could not reload plans from {dir_path.as_posix()}:\n\n"
+                          f"{err}\n\nPrevious plans are retained.")
+            return
+        self._plans_by_path = plans
+        self.training_plans = list(plans.values())
 
     def save_configuration(self):
         if self._loaded_configuration is None:
@@ -812,7 +941,8 @@ class AppModel(ObservableObject):
         self._handle_proc_msg_thread.join(5)
         if self._handle_proc_msg_thread.is_alive():
             logger.warning("Handle process messages thread still alive ; closing queue")
-        self._multiproc_msg_queue.close()
+        # self._multiproc_msg_queue.close()
+        # do not close to allow multiple on_close() calls.
 
         self._behavior.system_machine.cancel_timers()
 
@@ -990,10 +1120,28 @@ class AppModel(ObservableObject):
             self._update_status_text_overlay()
 
     def _on_training_plan_property_changed(self, name, value, _):
+        logger.debug("plan prop: %s -> %s", name, value)
         if name == "current_phase":
             if value is not None:
                 assert isinstance(value, TrainingPhase)
+            self._attach_training_phase(value)
             self.property_changed(self.Props.TRAINING_PHASE, value, _)
+        else:
+            self.property_changed(self.Props.TRAINING_PLAN_PROP, (name, value), _)
+
+    def _on_training_plan_progress_updated(self):
+        plan = self._attached_plan
+        logger.debug("plan %s progress updated", plan.plan_id)
+        prog = plan.serialize_progress()
+        animal = self._attached_animal
+        assert animal is not None
+        animal.training.set_plan_progress(plan.plan_id, prog)
+        self._save_animal_metadata(animal, sender="plan-progress-updated")
+        self.property_changed(self.Props.TRAINING_PLAN_PROP, None, None)
+
+    def _on_training_phase_property_changed(self, name, value, _):
+        logger.debug("phase prop: %s -> %s", name, value)
+        self.property_changed(self.Props.TRAINING_PHASE_PROP, (name, value), _)
 
     def _save_animal_metadata(self, animal: AnimalSubject, *, backup_previous: bool = False, sender: str="na"):
         prev_animals = self._animals  # in case _animals content is copied, we reset it to current animal

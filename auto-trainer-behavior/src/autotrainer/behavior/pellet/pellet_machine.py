@@ -198,13 +198,17 @@ class PelletMachine(StateMachine):
                 dev.set_motors_drift(drifts)
             if not (algo.session_mouse_seen and algo.intersession_enabled):
                 # force also a send_pellet, only if not gonna go to intersession
+                logger.debug("forcing a dev.send_pellet() to ensure XYZ are correct before next state")
                 dev.send_pellet()
                 # otherwise there is a retract pellet which is executed with next/following try_next_state.
+                # NB: not entirely sure we need this here as it is.
+                #
         # execute try next state AFTER having applied motor drifts,
         # given next state will move/send the pellet back to deliver/SEND position
         self._try_next_state(caller="session_ending")
 
     def _move_retract(self):
+        logger.debug("calling dev.send_retract()")
         self._pellet_device.send_retract()
 
     def _pellet_device_ack_received(self, token: Optional[str]):
@@ -295,7 +299,7 @@ class PelletMachine(StateMachine):
 
         # Always arrest to the retract position during intersession.
         if algo.system_state == SystemState.intersession:
-            if self.state != PelletState.retract:
+            if cur_state != PelletState.retract:
                 covering_retrying = False
                 if algo.can_cover_pellet():
                     reason = "cover_pellet_before_retract_when_intersession"

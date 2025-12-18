@@ -94,7 +94,7 @@ class TrainingPlanProgressContent(CardWidget):
             main_layout.addWidget(side_widget)
 
     def set_training_plan_progress(self, plan: Optional[TrainingPlan]):
-        logger.verbose("Setting training plan to %s", plan)
+        logger.verbose("Setting training plan progress to %s", plan)
         if plan is None:
             for label in (
                 self._started_label,
@@ -111,7 +111,9 @@ class TrainingPlanProgressContent(CardWidget):
             "NA" if value is None
             else f"{value.strftime('%Y/%m/%d %I:%M %p')}"
         )
-        self._time_in_training_label.setText(f"{plan.total_time:.1f}")
+        hour_plan_tot_time = plan.total_time / 3600  # total_time is in seconds,
+        # but label is with hour unit:
+        self._time_in_training_label.setText(f"{hour_plan_tot_time:.1f}")
         for label, value in (
             (self._sessions_label, plan.total_session_count),
             (self._pellets_presented_label, plan.total_pellets_presented),
