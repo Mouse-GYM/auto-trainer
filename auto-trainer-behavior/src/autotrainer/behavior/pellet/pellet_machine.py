@@ -466,32 +466,35 @@ class PelletMachine(StateMachine):
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
-    def trigger(self):
-        pass
 
-    def may_trigger(self):
-        pass
+    # was unused:
+    # def trigger(self):
+    #     pass
+    #
+    # def may_trigger(self):
+    #     pass
 
     def move_home(self):
-        pass
+        """Move home"""
 
     def may_move_home(self):
-        pass
+        """May move home"""
 
     def move_retract(self):
         """Trigger a "move" to retract position (y - 10 relative)"""
 
     def may_move_retract(self):
-        pass
+        """May move retract"""
 
     def load_pellet(self):
-        pass
+        """Load pellet"""
 
     def may_load_pellet(self):
-        pass
+        """May load pellet"""
 
+    # not anymore used:
     def prerelease_pellet(self):
-        pass
+        """"Prerelease" pellet"""
 
     def may_prerelease_pellet(self):
         pass
