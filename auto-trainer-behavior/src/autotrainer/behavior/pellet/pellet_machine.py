@@ -421,7 +421,7 @@ class PelletMachine(StateMachine):
             if pellet_seen and is_from_inference and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
                 self._notify_pellet_loaded_ok()
 
-            if ((not pellet_seen and algo.triangle_recently_seen)
+            if ((not pellet_seen and (algo.triangle_recently_seen or algo.star_recently_seen))
                   or (pellet_seen and algo.triangle_recently_seen and algo.is_triangle_pellet_distance_too_far())
             ):
                 reason = "load_pellet_when_insession_pellet_not_seen_or_too_far"
