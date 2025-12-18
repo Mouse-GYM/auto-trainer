@@ -114,13 +114,11 @@ class SystemMachine(StateMachine):
         self._pellet_device = pellet_device
 
         pellet_machine = self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
-        pellet_machine.events.pellet_loading += self._pellet_loading
-        # pellet_machine.events.pellet_sending += self._pellet_sending
-        # NB: _pellet_sending was used to trigger a start session, if one is not already running/recording,
-        # *always*, by design, atm.
-        # But this is already handled by load_cell_engaged property, basically.
         pellet_machine.events.state_changed += self._pellet_state_changed
+        pellet_machine.events.pellet_loading += self._pellet_loading
         pellet_machine.events.pellet_sent += self._pellet_sent
+        # directly relay to algo:
+        pellet_machine.events.pellet_loaded += algo.pellet_loaded
 
         intersession_machine = self._intersession = IntersessionMachine(algo, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._intersession_ended

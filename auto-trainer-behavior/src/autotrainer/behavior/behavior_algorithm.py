@@ -1007,7 +1007,7 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def pellet_seen_age(self) -> float:
         """In nbr of seconds"""
-        return time.perf_counter() - self._pellet_last_seen
+        return self.get_pellet_seen_age(time.perf_counter())
 
     @property
     def pellet_recently_seen(self):

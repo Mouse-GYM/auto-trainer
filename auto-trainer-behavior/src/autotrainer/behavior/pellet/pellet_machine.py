@@ -1,7 +1,7 @@
 import math
 import time
 from enum import Enum
-from typing import Dict, Callable, Any, Optional
+from typing import Dict, Callable, Any, Optional, get_type_hints
 
 from transitions import Machine
 
@@ -31,9 +31,10 @@ class PelletState(str, Enum):
 
 
 class PelletMachineEvents(StateMachineEvents):
-    pellet_loading: Callable[[], None]
+    pellet_loading: Callable[[], None]  # when a load-pellet is started executing
     pellet_sending: Callable[[], None]  # now unused
-    pellet_sent: Callable[[], None]
+    pellet_loaded: Callable[[], None]  # when a load-pellet is finished executing AND a pellet is seen on it
+    pellet_sent: Callable[[], None]  # when a send-pellet is finished executing
 
 
 class PelletMachine(StateMachine):
@@ -48,9 +49,11 @@ class PelletMachine(StateMachine):
     ):
         initial_state = PelletState.monitoring
 
+        event_names = tuple(get_type_hints(self._events_class))
+
         super().__init__(
             initial_state=initial_state,
-            event_names=("pellet_loading", "pellet_sending", "pellet_sent"),
+            event_names=event_names,  # ("pellet_loading", "pellet_loaded", "pellet_sending", "pellet_sent"),
         )
 
         # This is primarily for unit testing.  In general, algorithm should always be passed in from the parent
@@ -197,14 +200,6 @@ class PelletMachine(StateMachine):
     def _session_starting(self):
         # ensure we reset the diamond triangle drifts measures
         self._algorithm.get_diamond_triangle_drifts(reset=True)
-        # Strictly speaking, the pellet should not be covered here when covering is disabled.  Under that condition,
-        # must release could be set to False.  However, given how critical it is that the pellet is not covered when
-        # disabled, go ahead and request a release under all conditions, even though it should be a no-op in that
-        # instance.
-        # self._try_next_state(pellet_seen=True, must_release=True, caller="session_starting")
-        # this was forcing a release pellet,
-        # but is now controlled via receiving camera capture status == RECORDING
-        # and not releasing before the desired threshold/delay.
 
     @BehaviorAlgorithm.relay_func
     def _session_ending(self):
@@ -258,27 +253,34 @@ class PelletMachine(StateMachine):
             self.events.pellet_sent()
 
         # nb: in live we could bypass this call : it's anyway called with live-inference pellet-seen callback..
-        self.environment_changed(caller="pellet_device_ack_received")
+        self.environment_changed(
+            # we might want to use:
+            #   pellet_seen=self._algorithm.pellet_recently_seen,
+            # so that pellet_seen is more accuretely handled:
+            # i.e: if this device-ack is/was for a load-pellet, and that the pellet missed to load,
+            # we could possibly & erroneously acknowledge a successfull load-pellet...
+            caller="pellet_device_ack_received",
+        )
 
     def get_send_begin_age(self, perf_now: float):
         return perf_now - self._send_begin_perf_c
 
     @property
     def pellet_send_begin_age(self) -> float:
-        return time.perf_counter() - self._send_begin_perf_c
+        return self.get_send_begin_age(time.perf_counter())
 
     def get_send_end_age(self, perf_now: float):
         return perf_now - self._send_end_perf_c
 
     @property
     def pellet_send_end_age(self) -> float:
-        return time.perf_counter() - self._send_end_perf_c
+        return self.get_send_end_age(time.perf_counter())
 
     # endregion
 
     def _notify_pellet_loaded_ok(self):
         self._prev_notify_loaded_perf_c = time.perf_counter()
-        self._algorithm.pellet_loaded()
+        self.events.pellet_loaded()
 
     @BehaviorAlgorithm.relay_func
     def environment_changed(

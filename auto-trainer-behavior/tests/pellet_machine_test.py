@@ -6,7 +6,7 @@ import pytest
 
 from autotrainer.behavior import PelletState, SystemState, PelletMachine, PelletDeviceProtocol, BehaviorAlgorithm
 
-from .conftest import MockSystemMachine
+from top_fixtures import MockSystemMachine
 
 
 @pytest.fixture()
