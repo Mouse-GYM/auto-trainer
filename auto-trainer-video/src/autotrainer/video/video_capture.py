@@ -457,10 +457,10 @@ class VideoCapture(Process):
                         # if is_primary:
                         #     sync_barrier()
                     elif net_q is not None and (
-                        cur_frame_idx < 16
-                        or (cur_frame_idx < 64 and cur_frame_idx % 2 == 0)
-                        or (cur_frame_idx < 256 and cur_frame_idx % 4 == 0)
-                        or (cur_frame_idx < 450 and cur_frame_idx % 8 == 0)
+                        (cur_frame_idx < 450 and cur_frame_idx % 16 == 0)
+                        or (cur_frame_idx < 64 and cur_frame_idx % 4 == 0)
+                        or (cur_frame_idx < 32 and cur_frame_idx % 2 == 0)
+                        or cur_frame_idx < 16
                     ):
                         logger.debug("got frame %s cam_when=%.4f perf_now=%.4f", cur_frame_idx, when_secs, perf_now)
 
