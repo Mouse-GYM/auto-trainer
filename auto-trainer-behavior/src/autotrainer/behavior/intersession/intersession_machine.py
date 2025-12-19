@@ -19,7 +19,7 @@ logger = get_verbose_logger(__name__)
 
 class IntersessionMachineEvents(StateMachineEvents):
     on_analysis_started: Callable[[], None]
-    on_analysis_ended: Callable[[], None]
+    on_analysis_ended: Callable[[CaptureAnalysisResult], None]
 
 
 class IntersessionMachine(StateMachine):
@@ -89,9 +89,9 @@ class IntersessionMachine(StateMachine):
                                                       context=segment_config.nonce)
 
     def after_end_analysis(self, success):
-        self._algorithm.session_processing_ending(CaptureAnalysisResult.ANALYSIS_SUCCEEDED if success
-                                                  else CaptureAnalysisResult.ANALYSIS_FAILED)
-        self.events.on_analysis_ended()
+        result = CaptureAnalysisResult.ANALYSIS_SUCCEEDED if success else CaptureAnalysisResult.ANALYSIS_FAILED
+        self._algorithm.end_session(result)
+        self.events.on_analysis_ended(result)
         self._segmentation_configuration = None
         self._detection_configuration = None
 
