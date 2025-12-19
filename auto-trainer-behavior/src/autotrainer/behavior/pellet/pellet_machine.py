@@ -203,8 +203,8 @@ class PelletMachine(StateMachine):
     def _session_ending(self):
         # todo: this entire func/block should be moved to system machine or behavior algo imho
         algo = self._algorithm
-        logger.debug("_session_ending() called ; session_mouse_seen=%s",
-                     algo.session_mouse_seen)
+        logger.debug("_session_ending() called ; session_mouse_seen=%s algo.intersession_state=%s",
+                     algo.session_mouse_seen, algo.intersession_state)
         dev = self._pellet_device
         # optional apply of measured motor drifts,
         drifts = algo.get_diamond_triangle_drifts(reset=True)  # always, to reset the recorded values list too.
@@ -215,12 +215,13 @@ class PelletMachine(StateMachine):
 
         if not (algo.session_mouse_seen and algo.intersession_enabled):
             # force also a send_pellet, only if not gonna go to intersession
-            self.send_pellet()
-            # otherwise there is a retract pellet which is executed with next/following try_next_state.
-            # NB: not entirely sure we need this here as it is.
-            #
+            pass
+            # don't think necessary:
+            # self.send_pellet()
+            # self.monitor_pellet()
         elif algo.session_mouse_seen and self._state == PelletState.monitoring:
             # sessions ended because exit tunnel, otherwise state would be load_pellet
+            self.cover_pellet()
             self.move_retract()
         # execute try next state AFTER having applied motor drifts,
         # given next state will move/send the pellet back to deliver/SEND position
@@ -229,6 +230,7 @@ class PelletMachine(StateMachine):
     def _before_move_retract(self):
         self._api_status_token = self._pellet_device.send_retract()
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _pellet_device_ack_received(self, token: Optional[str]):
         if token is not None:
             logger.debug("pellet_ack_received: %s", token)
@@ -345,7 +347,7 @@ class PelletMachine(StateMachine):
         if algo.algo_paused:
             return
 
-        cur_state = self.state
+        cur_state = self._state
 
         if algo.system_state == SystemState.intersession:
             if algo.intersession_state == IntersessionState.segmentation and not is_from_inference:
