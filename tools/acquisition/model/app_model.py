@@ -701,6 +701,8 @@ class AppModel(ObservableObject):
         #
         synced_cameras = (self._left_camera, self._right_camera)  # normally/usually left cam is primary
         did_start = True
+
+        # 1) prepare synced primary camera(s)
         if did_start:
             for camera in synced_cameras:
                 if camera.is_primary and camera.is_enabled:
@@ -710,11 +712,13 @@ class AppModel(ObservableObject):
                         self.on_error("Camera Process Failed",
                                       _failed_camera_template(camera.name, camera.last_error))
                         break
+                    # 1.1) wait it's running
                     if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5):
                         did_start = False
                         self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
                         break
 
+        # 2) prepare synced non-primary camera(s)
         if did_start:
             for camera in synced_cameras:
                 if not camera.is_primary and camera.is_enabled:
@@ -725,6 +729,7 @@ class AppModel(ObservableObject):
                                       _failed_camera_template(camera.name, camera.last_error))
                         break
 
+        # 3) wait all synced cameras are running
         if did_start:
             p_before = time.perf_counter()
             p_timeout = p_before + 10
@@ -737,12 +742,20 @@ class AppModel(ObservableObject):
                         break
                     logger.verbose("%s now running", camera.name)
 
+        # 4) trigger enable capture on synced cameras
         if did_start:
+            # 4.1) first on non-primary
             for camera in synced_cameras:
-                if camera.is_enabled:
+                if not camera.is_primary and camera.is_enabled:
+                    logger.info("Starting capture on %s", camera.name)
+                    camera.on_capture_start()
+            # 4.2) then on primary
+            for camera in synced_cameras:
+                if camera.is_primary and camera.is_enabled:
                     logger.info("Starting capture on %s", camera.name)
                     camera.on_capture_start()
 
+        # 5) remaining non-synced camera(s)
         camera = self._top_camera
         if did_start and camera.is_enabled:
             logger.info("Preparing capture on %s", camera.name)

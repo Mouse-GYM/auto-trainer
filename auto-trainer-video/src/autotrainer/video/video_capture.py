@@ -329,7 +329,7 @@ class VideoCapture(Process):
         record_q_list = self._record_queue_list
         record_q = self._record_queue
         capture = self._camera.capture
-        net_q_put = None if self._network_queue is None else self._network_queue.put
+        net_q_put = None if net_q is None else net_q.put
         net_q_idx = None if net_q_put is None else self._attrs.inference.index  # although is same than self._camera_idx
         image_queue_delay = self._image_queue_frame_delay
         empty_frame = numpy.zeros(self._record_properties.frame_size, dtype=numpy.uint8)
@@ -444,14 +444,19 @@ class VideoCapture(Process):
                 perf_now_ns = time.perf_counter_ns()
                 cur_frame_idx += 1
 
-                if cur_frame_idx < 128:
+                if cur_frame_idx < 450:
                     when_secs = when / 1e9
                     perf_now = perf_now_ns / 1e9
                     if cur_frame_idx == 0:
                         logger.success("captured first frame ; cam_when=%.4f perf_now=%.4f", when_secs, perf_now)
                         # if is_primary:
                         #     sync_barrier()
-                    else:
+                    elif net_q is not None and (
+                        cur_frame_idx < 16
+                        or (cur_frame_idx < 64 and cur_frame_idx % 2 == 0)
+                        or (cur_frame_idx < 256 and cur_frame_idx % 4 == 0)
+                        or (cur_frame_idx < 450 and cur_frame_idx % 8 == 0)
+                    ):
                         logger.debug("got frame %s cam_when=%.4f perf_now=%.4f", cur_frame_idx, when_secs, perf_now)
 
                 if img_q is not None:
