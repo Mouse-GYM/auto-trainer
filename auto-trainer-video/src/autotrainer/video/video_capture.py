@@ -352,13 +352,10 @@ class VideoCapture(Process):
         released = False
         primary_acquired_count = 0
 
-        if self._attrs.semaphore is None:
-            sync_barrier = lambda t=None: None
-            primary_acquire = lambda: True
-            primary_release = lambda: None
+        if self._attrs.barrier is None:
+            def sync_barrier(_=5):
+                pass
         else:
-            sema = self._attrs.semaphore
-            sema_get_value = sema.get_value if hasattr(sema, "get_value") else lambda: "NA"
             def sync_barrier(t=5, *, wait_barrier=self._attrs.barrier.wait):
                 try:
                     wait_barrier(timeout=t)
@@ -366,6 +363,14 @@ class VideoCapture(Process):
                     logger.critical("multiproc barrier broken")
                     raise
 
+        sema = self._attrs.semaphore
+        if sema is None or self._record_properties.should_record(False):
+            # should_record(False) -> if continuous recording,
+            # in that case no need sync for start/stop recording
+            primary_acquire = lambda: True
+            primary_release = lambda: None
+        else:
+            sema_get_value = sema.get_value if hasattr(sema, "get_value") else lambda: "NA"
             if is_primary:
                 # NB : this is required to ensure the primary camera and all/any secondary cameras will have
                 # their start(or stop) recording synced.
