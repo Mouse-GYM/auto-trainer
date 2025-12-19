@@ -49,11 +49,9 @@ class PelletMachine(StateMachine):
     ):
         initial_state = PelletState.monitoring
 
-        event_names = tuple(get_type_hints(self._events_class))
-
         super().__init__(
             initial_state=initial_state,
-            event_names=event_names,  # ("pellet_loading", "pellet_loaded", "pellet_sending", "pellet_sent"),
+            event_names=tuple(get_type_hints(self._events_class)),
         )
 
         # This is primarily for unit testing.  In general, algorithm should always be passed in from the parent

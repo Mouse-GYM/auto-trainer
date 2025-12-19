@@ -1,5 +1,5 @@
 import secrets
-from typing import Callable, Optional
+from typing import Callable, Optional, get_type_hints
 
 from transitions import Machine
 
@@ -32,7 +32,7 @@ class IntersessionMachine(StateMachine):
 
         initial_state = IntersessionState.idle
 
-        super().__init__(initial_state=initial_state, event_names=("on_analysis_started", "on_analysis_ended"))
+        super().__init__(initial_state=initial_state, event_names=tuple(get_type_hints(IntersessionMachineEvents)))
 
         self._machine = Machine(model=[self], states=IntersessionMachine.states,
                                 transitions=IntersessionMachine.transitions, auto_transitions=False,
