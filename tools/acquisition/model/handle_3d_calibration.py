@@ -250,8 +250,8 @@ def make_3d_calib(
         max_requests = 1
         cur_requests = collections.deque(maxlen=max_requests)
         #
-        logger.info("Now executing calib moves ..")
         time.sleep(0.05)
+        logger.info("Now executing calib moves ..")
 
         for coord, value in moves:
             if len(cur_requests) >= max_requests:

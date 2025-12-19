@@ -370,7 +370,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 logger.warning("capture not exited yet, terminating..")
                 video_capture.terminate()
                 video_capture.join()
-            self.video("process exited: exitcode=%s", video_capture.exitcode)
+            logger.info("process exited: exitcode=%s", video_capture.exitcode)
             self._video_capture = None
 
         # NB: clearing video cmd queue having waited & joined the capture process is best.
