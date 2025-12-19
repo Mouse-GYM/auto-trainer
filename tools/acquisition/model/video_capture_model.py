@@ -345,7 +345,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     def on_capture_start(self):
         if not self._is_enabled:
-            logger.warning("%s: on_capture_start called but disabled", self)
+            logger.warning("%s: on_capture_start called but disabled", self._name)
             return
         self._send_command(CaptureCommandKind.ENABLE_CAPTURE)
 
@@ -364,20 +364,19 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 logger.error(f"<{self._name}> did not receive process terminates status")
 
         if video_capture is not None:
-            self._trace("waiting for process termination")
+            logger.debug("waiting for process termination")
             video_capture.join(5)
             if video_capture.is_alive():
-                self._trace("capture not exited yet, terminating..")
+                logger.warning("capture not exited yet, terminating..")
                 video_capture.terminate()
                 video_capture.join()
-            self._trace(f"process exited: exitcode={video_capture.exitcode}")
+            self.video("process exited: exitcode=%s", video_capture.exitcode)
             self._video_capture = None
-
-        self._video_image_queue = None
 
         # NB: clearing video cmd queue having waited & joined the capture process is best.
         clear_queue(self._video_command_queue)
-        # clear_queue(self._video_image_queue)
+
+        self._video_image_queue = None
         # video_image_queue is our FixedArrayQueue which cannot be "cleared" by another thread than the
         # one consuming it. We anyway recreate a new one for each new capture.
 
@@ -534,14 +533,14 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             self._video_reader_stop_event.set()
             logger.debug("joining video reader")
             reader.join(5)
-            logger.debug("%s: joined video_reader", self.name)
+            logger.debug("%s: joined video_reader", self._name)
             self._video_reader = None
 
     def _send_command(self, cmd: CaptureCommandKind, context: object = None):
         if self._video_command_queue is not None:
             self._video_command_queue.put((cmd, context))
         else:
-            logger.warning("%s: _send_command: %s but video command queue is None", self, cmd)
+            logger.warning("%s: _send_command: %s but video command queue is None", self._name, cmd)
 
     def _trace(self, message: str):
         if self._is_trace_enabled:

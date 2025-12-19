@@ -590,6 +590,7 @@ class VideoCapture(Process):
                 self._set_error(err)
                 fault_count += 1
                 if fault_count > 5:
+                    logger.critical("Too many capture loop processing errors ; giving up")
                     self._end_capture(None)
                     self._user_terminate(None)
         # end while self._is_running
@@ -603,7 +604,9 @@ class VideoCapture(Process):
 
             if self._record is not None:
                 self._record.cancel()
+                logger.debug("joining record thread")
                 self._record.join()
+                self._record = None
 
             video_detection = self._video_detection
             if video_detection is not None:
