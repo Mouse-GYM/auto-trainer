@@ -78,8 +78,10 @@ class SystemMachine(StateMachine):
         # and that a session is active, to trigger an eventual end_session()
 
         self._timer_consider_close_gate = no_op_timer
+        self._timer_auto_clamp_evaluate = no_op_timer
         self._timer_auto_clamp_disengage = no_op_timer
         self._disengage_auto_clamp_load_count = 0
+        self._last_disengage_autoclamp_perf_c = -math.inf
 
         self._last_close_tunnel_gate_perf_t = -math.inf
         self._is_handling_diamond_triangle = False
@@ -130,6 +132,7 @@ class SystemMachine(StateMachine):
             self._timer_consider_end_session,
             self._timer_consider_close_gate,
             self._timer_auto_clamp_disengage,
+            self._timer_auto_clamp_evaluate,
         ):
             if not timer.finished.is_set():
                 logger.debug("cancelling timer %s", timer)
@@ -368,6 +371,8 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func
     def _evaluate_auto_clamp(self, is_headbar_pressure_engaged: bool):
+        self._timer_auto_clamp_evaluate.cancel()  # in case of
+        self._timer_auto_clamp_evaluate = no_op_timer
         algo = self._algorithm
         if not algo.head_fixation_enabled:
             logger.info("auto-clamp disabled (no action taken)")
@@ -376,23 +381,35 @@ class SystemMachine(StateMachine):
         if not is_headbar_pressure_engaged:
             logger.info("auto-clamp detector not engaged (no action taken)")
             return
-        logger.debug("system state: %s", self.state)
-        if self.state == SystemState.tunnel:
-            algo = self._algorithm
-            logger.info("auto-clamp setting position to %s", algo.auto_clamp_intensity)
-            self._update_magnet_position(algo.auto_clamp_intensity)
-            self._disengage_auto_clamp_load_count = 0
-            self._timer_auto_clamp_disengage.cancel()
-            t_delay = algo.auto_clamp_no_activity_release_delay
-            if t_delay >= 0:
-                logger.debug("starting new timer for disengage_auto_clamp in %.2f seconds", t_delay)
-                new_timer = self._timer_auto_clamp_disengage = _consider_disengage_autoclamp_timer(
-                    t_delay, self._disengage_auto_clamp,
-                )
-                new_timer.start()
-            EventManager.default().post_event_content(BehaviorEventKind.headFixationEnabled)
-        else:
-            logger.debug("auto-clamp position not sent (not in tunnel)")
+        if not self._state == SystemState.tunnel:
+            logger.info("auto-clamp not in tunnel  (no action taken)")
+            return
+        p_now = time.perf_counter()
+        disengage_age = p_now - self._last_disengage_autoclamp_perf_c
+        remains = algo.auto_clamp_before_reengage_delay - disengage_age
+        if remains > 0:
+            logger.debug("delaying evaluate auto-clamp in %.1fs due to recent disengage ; age=%.1fs",
+                         remains, disengage_age)
+            timer = make_daemon_timer(
+                remains,
+                # but re-evaluate the pressure monitor is_engaged:
+                lambda: self._evaluate_auto_clamp(self._analysis.headbar_pressure_monitor.is_engaged))
+            self._timer_auto_clamp_evaluate = timer
+            timer.start()
+            return
+        algo = self._algorithm
+        logger.info("auto-clamp setting position to %s", algo.auto_clamp_intensity)
+        self._update_magnet_position(algo.auto_clamp_intensity)
+        self._disengage_auto_clamp_load_count = 0
+        self._timer_auto_clamp_disengage.cancel()
+        t_delay = algo.auto_clamp_no_activity_release_delay
+        if t_delay >= 0:
+            logger.debug("starting new timer for disengage_auto_clamp in %.2f seconds", t_delay)
+            new_timer = self._timer_auto_clamp_disengage = _consider_disengage_autoclamp_timer(
+                t_delay, self._disengage_auto_clamp,
+            )
+            new_timer.start()
+        EventManager.default().post_event_content(BehaviorEventKind.headFixationEnabled)
 
     @BehaviorAlgorithm.relay_func
     def _load_cell_tare_requested(self):
@@ -509,14 +526,22 @@ class SystemMachine(StateMachine):
         if algo.is_in_session:
             logger.debug("sending tone to indicate auto-clamp disabled (tunnel=%s)", self._tunnel_device)
             pellet_dev.play_tone(self.algorithm.auto_clamp_release_tone_freq, 0.5)
-        if self._tunnel_device is not None:  # condition seems not necessary... but some test assert it
-            logger.debug(
-                "changing magnet to baseline intensity in %.2f seconds", algo.auto_clamp_release_tone_delay)
-            timer = self._timer_auto_clamp_disengage = _auto_clamp_release_timer(
-                algo.auto_clamp_release_tone_delay,
-                partial(self._update_magnet_position, algo.baseline_intensity),
-            )
-            timer.start()
+        if self._tunnel_device is None:  # condition seems not necessary... but some test assert it
+            # eventually todo: ensure it's not None always
+            logger.warning("Uncomplete setup, tunnel_device None")
+            return
+        #
+        def disengage_auto_clamp():
+            self._last_disengage_autoclamp_perf_c = time.perf_counter()
+            self._update_magnet_position(algo.baseline_intensity)
+        #
+        logger.debug(
+            "changing magnet to baseline intensity in %.2f seconds", algo.auto_clamp_release_tone_delay)
+        timer = self._timer_auto_clamp_disengage = _auto_clamp_release_timer(
+            algo.auto_clamp_release_tone_delay,
+            disengage_auto_clamp,
+        )
+        timer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_close_gate_during_intersession(self):
@@ -575,9 +600,7 @@ class SystemMachine(StateMachine):
         elif name == BehaviorAlgoProps.ALGO_PAUSED:
             algo = self._algorithm
             tunnel_dev = self._tunnel_device
-            self._timer_consider_end_session.cancel()
-            self._timer_auto_clamp_disengage.cancel()
-            self._timer_consider_close_gate.cancel()
+            self.cancel_timers()
             if new_value:
                 if algo.is_in_session:
                     if algo.intersession_state == IntersessionState.idle:
