@@ -99,10 +99,114 @@ def apply_system_command_with_data_args(func, data):
     return func(*args, **kwargs)
 
 
+# misc default movement sequences:
+
+
+DEFAULT_DETACH_SERVO_DELAY = 0.5
+
+
+def default_load_pellet() -> MotorSteps:
+    """
+    Create the default motor step sequence for loading a pellet.
+
+    Returns:
+        A MotorSteps object containing the load pellet sequence
+    """
+    return MotorSteps("load_pellet",
+                      [
+                          {'x': 0.0},
+                          {'predefined': 'retrieve'},
+                          {'delay': 1.0},  # in sec
+                          {'z': 5.0},
+                          {'predefined': 'scoop'},
+                          {'delay': 1.0},
+                          {'z': 0.0},  # in mm
+                          {'delay': 1.0},
+                      ]
+                      )
+
+
+def default_send_pellet() -> MotorSteps:
+    """
+    Create the default motor step sequence for sending a pellet.
+
+    Returns:
+        A MotorSteps object containing the send pellet sequence
+    """
+    return MotorSteps("send_pellet",
+                      [
+                          {'predefined': 'send'},
+                      ]
+                      )
+
+
+def default_cover_pellet() -> MotorSteps:
+    """
+    Create the default motor step sequence for covering a pellet.
+
+    Returns:
+        A MotorSteps object containing the cover pellet sequence
+    """
+    return MotorSteps("cover_pellet",
+                      [
+                          {'predefined': 'cover'},
+                      ]
+                      )
+
+
+def default_release_pellet() -> MotorSteps:
+    """
+    Create the default motor step sequence for releasing a pellet.
+
+    Returns:
+        A MotorSteps object containing the release pellet sequence
+    """
+    return MotorSteps("release_pellet",
+                      [
+                          {'predefined': 'release'},
+                      ]
+                      )
+
+
+def default_open_gate() -> MotorSteps:
+    """
+    Create the default motor step sequence for releasing a pellet.
+
+    Returns:
+        A MotorSteps object containing the release pellet sequence
+    """
+    return MotorSteps("open_gate",
+                      [
+                          {'servo_attach': Motor.TUNNEL_GATE_SERVO},
+                          {'gate': 0},
+                          {'delay': DEFAULT_DETACH_SERVO_DELAY},
+                          {'servo_detach': Motor.TUNNEL_GATE_SERVO},
+                      ]
+                      )
+
+
+def default_close_gate() -> MotorSteps:
+    """
+    Create the default motor step sequence for releasing a pellet.
+
+    Returns:
+        A MotorSteps object containing the release pellet sequence
+    """
+    return MotorSteps("close_gate",
+                      [
+                          {'servo_attach': Motor.TUNNEL_GATE_SERVO},
+                          {'gate': 100},
+                          {'delay': DEFAULT_DETACH_SERVO_DELAY},
+                          {'servo_detach': Motor.TUNNEL_GATE_SERVO},
+                      ]
+                      )
+
+
+
 class CanDevice(Device):
 
     default_command_write_failed_repeat_count: int = 3
-    default_command_ack_timeout_duration: float = 3  # seconds
+    default_command_ack_timeout_duration: float = 10  # seconds
     default_command_ack_timeout_repeat_count: int = 2
 
     _motor_to_status_kind = {
@@ -186,9 +290,11 @@ class CanDevice(Device):
         no_op_handler = lambda _: True
 
         def move_gate(position):
+            # NB keep in sync with default_open_gate
             steps = MotorSteps("move_gate", [
                 {'servo_attach': Motor.TUNNEL_GATE_SERVO},
                 {'gate': position},
+                {'delay': DEFAULT_DETACH_SERVO_DELAY},
                 {'servo_detach': Motor.TUNNEL_GATE_SERVO},
             ])
             return self._start_sequence(steps)
@@ -197,6 +303,7 @@ class CanDevice(Device):
             steps = MotorSteps("move_magnet", [
                 {'servo_attach': Motor.TUNNEL_MAGNET_SERVO},
                 {'magnet': position},
+                {'delay': DEFAULT_DETACH_SERVO_DELAY},
                 {'servo_detach': Motor.TUNNEL_MAGNET_SERVO},
             ])
             return self._start_sequence(steps)
@@ -873,98 +980,3 @@ class CanDevice(Device):
             logger.error("%s write command failed", step)
 
         return success
-
-
-def default_load_pellet() -> MotorSteps:
-    """
-    Create the default motor step sequence for loading a pellet.
-
-    Returns:
-        A MotorSteps object containing the load pellet sequence
-    """
-    return MotorSteps("load_pellet",
-                      [
-                          {'x': 0.0},
-                          {'predefined': 'retrieve'},
-                          {'delay': 1.0},  # in sec
-                          {'z': 5.0},
-                          {'predefined': 'scoop'},
-                          {'delay': 1.0},
-                          {'z': 0.0},  # in mm
-                          {'delay': 1.0},
-                      ]
-                      )
-
-
-def default_send_pellet() -> MotorSteps:
-    """
-    Create the default motor step sequence for sending a pellet.
-
-    Returns:
-        A MotorSteps object containing the send pellet sequence
-    """
-    return MotorSteps("send_pellet",
-                      [
-                          {'predefined': 'send'},
-                      ]
-                      )
-
-
-def default_cover_pellet() -> MotorSteps:
-    """
-    Create the default motor step sequence for covering a pellet.
-
-    Returns:
-        A MotorSteps object containing the cover pellet sequence
-    """
-    return MotorSteps("cover_pellet",
-                      [
-                          {'predefined': 'cover'},
-                      ]
-                      )
-
-
-def default_release_pellet() -> MotorSteps:
-    """
-    Create the default motor step sequence for releasing a pellet.
-
-    Returns:
-        A MotorSteps object containing the release pellet sequence
-    """
-    return MotorSteps("release_pellet",
-                      [
-                          {'predefined': 'release'},
-                      ]
-                      )
-
-
-def default_open_gate() -> MotorSteps:
-    """
-    Create the default motor step sequence for releasing a pellet.
-
-    Returns:
-        A MotorSteps object containing the release pellet sequence
-    """
-    return MotorSteps("open_gate",
-                      [
-                          {'servo_attach': Motor.TUNNEL_GATE_SERVO},
-                          {'gate': 0},
-                          {'servo_detach': Motor.TUNNEL_GATE_SERVO},
-                      ]
-                      )
-
-
-def default_close_gate() -> MotorSteps:
-    """
-    Create the default motor step sequence for releasing a pellet.
-
-    Returns:
-        A MotorSteps object containing the release pellet sequence
-    """
-    return MotorSteps("close_gate",
-                      [
-                          {'servo_attach': Motor.TUNNEL_GATE_SERVO},
-                          {'gate': 100},
-                          {'servo_detach': Motor.TUNNEL_GATE_SERVO},
-                      ]
-                      )
