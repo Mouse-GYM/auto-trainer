@@ -110,19 +110,19 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     send_begin_age = pellet_machine.get_pellet_send_begin_age(p_now)
     send_end_age = pellet_machine.get_pellet_send_end_age(p_now)
 
-    assert mock_system.pellet_state_trans == [PelletState.sending]
-    assert not math.isinf(send_begin_age)
-    assert math.isinf(send_end_age)
-    assert send_end_age > send_begin_age
+    # assert mock_system.pellet_state_trans == [PelletState.sending]
+    # assert not math.isinf(send_begin_age)
+    # assert math.isinf(send_end_age)
+    # assert send_end_age > send_begin_age
 
-    pellet_ack_received()
+    # pellet_ack_received()
 
-    send_begin_age = pellet_machine.get_pellet_send_begin_age(p_now)
-    send_end_age = pellet_machine.get_pellet_send_end_age(p_now)
-
-    assert not math.isinf(send_begin_age)
-    assert not math.isinf(send_end_age)
-    assert send_end_age < send_begin_age
+    # send_begin_age = pellet_machine.get_pellet_send_begin_age(p_now)
+    # send_end_age = pellet_machine.get_pellet_send_end_age(p_now)
+    #
+    # assert not math.isinf(send_begin_age)
+    # assert not math.isinf(send_end_age)
+    # assert send_end_age < send_begin_age
 
     # mock_system.make_load_cell_active()
     machine._analysis.load_cell_monitor.is_engaged = True

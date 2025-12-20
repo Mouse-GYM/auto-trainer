@@ -61,7 +61,7 @@ class PoseResponse:
     @property
     def star_seen(self):
         """Default logic/conditions for star seen"""
-        return self.parts_flags[0][SceneElement.Star] or self.parts_flags[1][SceneElement.Star]
+        return self.parts_flags[0].get(SceneElement.Star, False) or self.parts_flags[1].get(SceneElement.Star, False)
 
     @property
     def mouse_seen(self) -> bool:
@@ -72,7 +72,7 @@ class PoseResponse:
     @property
     def diamond_seen(self):
         p_flags = self.parts_flags
-        return p_flags[0][SceneElement.Diamond] or p_flags[1][SceneElement.Diamond]
+        return p_flags[0].get(SceneElement.Diamond, False) or p_flags[1].get(SceneElement.Diamond, False)
 
     @property
     def triangle_seen(self):

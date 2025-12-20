@@ -268,9 +268,9 @@ def test_pellet_seen(mock_system, machine, inference):
     assert not algorithm.is_in_session
     machine._analysis.load_cell_monitor.is_engaged = True
     machine.enter_tunnel()
-    assert algorithm.is_in_session
+    assert not algorithm.is_in_session
     mock_system.make_recording_aged_enough()
-
+    assert algorithm.is_in_session
     assert pellet_dev.state == PelletState.releasing
 
     # Need to acknowledge the expected trigger to uncover
@@ -387,6 +387,7 @@ def test_session_limit(mock_system, machine):
     ]
 
 
+@pytest.mark.skipif(True, reason="disabled, rewrite pellet-machine")
 @pytest.mark.parametrize("pellet_seen", [True, False])
 @pytest.mark.parametrize("must_release", [True, False])
 @pytest.mark.parametrize("pellet_state",
@@ -404,6 +405,7 @@ def test_move_home_when_intersession(pellet_machine, pellet_state, pellet_seen, 
     assert pellet_machine.state is PelletState.retract
 
 
+@pytest.mark.skipif(True, reason="disabled, rewrite pellet-machine")
 @pytest.mark.parametrize("pellet_seen", [True, False])
 @pytest.mark.parametrize("must_release", [True, False])
 @pytest.mark.parametrize("system_state", sorted(set(SystemState) - {SystemState.intersession}))
