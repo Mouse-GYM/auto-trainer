@@ -136,7 +136,7 @@ class PelletMachine(StateMachine):
 
     def after_load_pellet(self):
         pass
-        # now handled in try-next-state, and indirectely usig self.events.pellet_loaded()
+        # now handled in try-next-state, and indirectly using self.events.pellet_loaded()
         # self._algorithm.pellet_loaded
 
     def before_cover_pellet(self):
@@ -258,10 +258,10 @@ class PelletMachine(StateMachine):
         # nb: in live we could bypass this call : it's anyway called with live-inference pellet-seen callback..
         self.environment_changed(
             # we might want to use:
-            #   pellet_seen=self._algorithm.pellet_recently_seen,
-            # so that pellet_seen is more accuretely handled:
+            pellet_seen=self._algorithm.pellet_recently_seen,
+            # so that pellet_seen is more accurately handled:
             # i.e: if this device-ack is/was for a load-pellet, and that the pellet missed to load,
-            # we could possibly & erroneously acknowledge a successfull load-pellet...
+            # we could possibly & erroneously acknowledge a successfully load-pellet...
             caller="pellet_device_ack_received",
         )
 
@@ -424,7 +424,7 @@ class PelletMachine(StateMachine):
             if ((not pellet_seen and (algo.triangle_recently_seen or algo.star_recently_seen))
                   or (pellet_seen and algo.triangle_recently_seen and algo.is_triangle_pellet_distance_too_far())
             ):
-                reason = "load_pellet_when_insession_pellet_not_seen_or_too_far"
+                reason = "load_pellet_when_monitoring_pellet_not_seen_or_too_far"
                 if self.can_load_pellet():
                     logit()
                     self.load_pellet()
@@ -614,9 +614,9 @@ class PelletMachine(StateMachine):
             source=(
                 # PelletState.loading,  # not sure
                 # PelletState.sending,  # not sure
-                PelletState.releasing,  # could/should remove too
                 # PelletState.prerelease,  # unused
-                PelletState.covering,  # could/should remove too
+                PelletState.releasing,
+                PelletState.covering,
                 PelletState.monitoring,
             ),
             dest=PelletState.retract,
