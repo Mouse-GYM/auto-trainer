@@ -177,16 +177,18 @@ class HardwareControlContent(ContentWidget):
 
         #
 
+        pellet_machine = app_model.behavior.system_machine.pellet
+
         button_layout = QVBoxLayout()
         button_layout.setSpacing(4)
         self._home_button = QPushButton("Home")
         self._home_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.send_home))
         button_layout.addWidget(self._home_button)
         self._load_button = QPushButton("Load")
-        self._load_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.load_pellet))
+        self._load_button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_load_pellet))
         button_layout.addWidget(self._load_button)
         self._send_button = QPushButton("Send")
-        self._send_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.send_pellet))
+        self._send_button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.send_pellet))
         button_layout.addWidget(self._send_button)
         self._release_button = QPushButton("Release")
         self._release_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.release_pellet))

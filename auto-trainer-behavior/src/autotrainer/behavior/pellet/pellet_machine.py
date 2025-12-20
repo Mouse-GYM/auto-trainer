@@ -391,17 +391,19 @@ class PelletMachine(StateMachine):
                 self.monitor_pellet()
 
         elif cur_state == PelletState.sending:
-            # normally not anymore necessary, pellet-send is now immediatelly followed by pellet-monitor
-            logger.warning("%s: deprecated, should be followed by monitor_pellet", cur_state)
+            # logger.warning("%s: deprecated, should be followed by monitor_pellet", cur_state)
             reason = "monitor_when_sent"
             logit()
             self.monitor_pellet()
-            # could probably re-enter immediatelly this func/try_next_state with current passed args ..
+            self.__try_next_state(pellet_seen, must_release, caller=caller, is_from_timer=is_from_timer, is_from_inference=is_from_inference)
+            # could probably re-enter immediately this func/try_next_state with current passed args ..
 
         elif cur_state in {PelletState.covering, PelletState.releasing}:
-            logger.warning("%s: deprecated, should be followed by send_pellet or monitor_pellet", cur_state)
+            # logger.warning("%s: deprecated, should be followed by send_pellet or monitor_pellet", cur_state)
             # maybe not anymore necessary/needed, same as above
             self.monitor_pellet()
+            self.__try_next_state(pellet_seen, must_release, caller=caller, is_from_timer=is_from_timer,
+                                  is_from_inference=is_from_inference)
 
         elif cur_state == PelletState.home:
             # not used, could probably remove
@@ -410,7 +412,7 @@ class PelletMachine(StateMachine):
                 logit()
                 self.send_pellet()
                 self.monitor_pellet()
-                # could probably re-enter immediatelly this func/try_next_state with current passed args ..
+                # could probably re-enter immediately this func/try_next_state with current passed args ..
             else:
                 log_could_retry_shortly()
 
@@ -441,7 +443,7 @@ class PelletMachine(StateMachine):
                              can_release)
                 self._prev_can_cover = can_cover
 
-            if not algo.can_cover_pellet() or can_release:
+            if not can_cover or can_release:
                 # NB: also having to use algo.can_cover_pellet(), given can_release_pellet() depends on conditions
                 if self._covered_state is not False:
                     # nb: keep this second if not grouped with the previous one,
@@ -454,7 +456,7 @@ class PelletMachine(StateMachine):
                         self.monitor_pellet()
                     else:
                         log_could_retry_shortly()
-            elif algo.can_cover_pellet() and self._covered_state is not True:
+            elif can_cover and self._covered_state is not True:
                 reason = "cover_pellet_in_monitoring"
                 if self.can_use_pellet_command():
                     logit()
@@ -490,6 +492,9 @@ class PelletMachine(StateMachine):
 
     def load_pellet(self):
         """Load pellet"""
+
+    def force_load_pellet(self):
+        """Same than load but does not require can_load_pellet condition"""
 
     def may_load_pellet(self):
         """May load pellet"""
@@ -562,6 +567,15 @@ class PelletMachine(StateMachine):
             before=before_load_pellet,
             after=after_load_pellet,
             conditions=can_load_pellet,
+        ),
+
+        dict(
+            trigger=force_load_pellet,
+            source=[PelletState.loading, PelletState.monitoring, PelletState.covering, PelletState.retract],
+            dest=PelletState.loading,
+            before=before_load_pellet,
+            after=after_load_pellet,
+            # conditions=can_load_pellet,  # contrary to load_pellet
         ),
 
         dict(
