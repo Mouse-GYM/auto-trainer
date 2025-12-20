@@ -778,6 +778,15 @@ class MainWindow(QMainWindow):
         elif name == "remove_raw_data_when_inactive_session":
             self._app_model.behavior.algorithm.clean_raw_data_on_inactive_session = value
 
+    def _simulate_intersession_segmentation(self, intersession_block):
+        logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
+        inference = self._app_model.behavior.system_machine.intersession._inference
+        inference._data_monitor_proc.stop_recorded.wait()
+        logger.debug("got stop recorded")
+        inference._data_monitor_proc.stop_recorded.clear()
+        intersession_block.frame_count = 42
+        time.sleep(2.5)
+
     @staticmethod
     def _simulate_intersession_process(*args, fake_result, **kwargs):
         # NB: must be static method given it's executed in a sub-process, so must no get the whole main-window
@@ -790,27 +799,18 @@ class MainWindow(QMainWindow):
         is_checked = self.capture_trigger_action.isChecked()
         app_model = self._app_model
         load_cell_monitor = app_model.analysis.load_cell_monitor
-        if not is_checked:
-            use_fake_results = self.detection_results_action.isChecked()
-            if use_fake_results:
-                inference = app_model.behavior.system_machine.intersession._inference
-                def feed(intersession_block):
-                    logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
-                    inference._data_monitor_proc.stop_recorded.wait()
-                    logger.debug("got stop recorded")
-                    inference._data_monitor_proc.stop_recorded.clear()
-                    intersession_block.frame_count = 42
-                    time.sleep(1.5)
-                inference._feed_intersession_analysis_execute = feed
-                res = IntersessionResponse(
-                    pellets_presented=self._internal_pellet_presented_spinbox.value(),
-                    successful_reaches=self._internal_pellet_reached_spinbox.value(),
-                    food_consumed=self._internal_pellet_consumed_spinbox.value(),
-                    pellet_x=self._internal_shift_x_spinbox.value(),
-                    pellet_y=self._internal_shift_y_spinbox.value(),
-                    pellet_z=self._internal_shift_z_spinbox.value(),
-                )
-                inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
+        if not is_checked and self.detection_results_action.isChecked():
+            inference = app_model.inference
+            inference._feed_intersession_analysis_execute = self._simulate_intersession_segmentation
+            res = IntersessionResponse(
+                pellets_presented=self._internal_pellet_presented_spinbox.value(),
+                successful_reaches=self._internal_pellet_reached_spinbox.value(),
+                food_consumed=self._internal_pellet_consumed_spinbox.value(),
+                pellet_x=self._internal_shift_x_spinbox.value(),
+                pellet_y=self._internal_shift_y_spinbox.value(),
+                pellet_z=self._internal_shift_z_spinbox.value(),
+            )
+            inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
         load_cell_monitor.force_engaged(is_checked)
         load_cell_monitor.is_engaged = is_checked
 
@@ -834,36 +834,12 @@ class MainWindow(QMainWindow):
             logger.debug("set pellet_hands_min_distance to %s", new_val)
 
     def _internal_detection_result_toggle(self):
-        app_model = self._app_model
-        inference = app_model.behavior.system_machine.intersession._inference
+        inference = self._app_model.inference
         is_checked = self.detection_results_action.isChecked()
         self._internal_analysis_widget_toolbar.setVisible(is_checked)
         if is_checked:
             self._orig_inference_analysis_feed = inference._feed_intersession_analysis_execute
             self._orig_inference_analysis_process = inference._intersession_process_execute
-            inference = app_model.behavior.system_machine.intersession._inference
-
-            def simulate_feed_intersession(intersession_block):
-                logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
-                inference._data_monitor_proc.stop_recorded.wait(5)
-                logger.debug("got stop recorded")
-                inference._data_monitor_proc.stop_recorded.clear()
-                intersession_block.frame_count = 42
-                #
-                res = IntersessionResponse(
-                    pellets_presented=self._internal_pellet_presented_spinbox.value(),
-                    successful_reaches=self._internal_pellet_reached_spinbox.value(),
-                    food_consumed=self._internal_pellet_consumed_spinbox.value(),
-                    pellet_x=self._internal_shift_x_spinbox.value(),
-                    pellet_y=self._internal_shift_y_spinbox.value(),
-                    pellet_z=self._internal_shift_z_spinbox.value(),
-                )
-                inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
-                logger.debug("Patched inference._intersession_process_execute with simulate one: %s", res)
-                time.sleep(1.5)
-
-            inference._feed_intersession_analysis_execute = simulate_feed_intersession
-
         else:
             inference._feed_intersession_analysis_execute = self._orig_inference_analysis_feed
             inference._intersession_process_execute = self._orig_inference_analysis_process
