@@ -85,6 +85,11 @@ class SystemMachine(StateMachine):
         self._last_close_tunnel_gate_perf_t = -math.inf
         self._is_handling_diamond_triangle = False
 
+        self._enter_tunnel_pellet_seen = False
+
+        self._tunnel_device = tunnel_device
+        self._msg_handler = msg_handler
+
         algo = self._algorithm = BehaviorAlgorithm(
             topcam_presence=topcam_presence,
         ) if algorithm is None else algorithm
@@ -95,9 +100,6 @@ class SystemMachine(StateMachine):
         algo.relay_transitions(self)
         # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
         algo.shift_xyz_handler.set_handle_processed_shift_xyz(self._handle_processed_shift_xyz)
-
-        self._tunnel_device = tunnel_device
-        self._msg_handler = msg_handler
 
         self._analysis = analysis
         if analysis is not None:
@@ -165,11 +167,12 @@ class SystemMachine(StateMachine):
     def before_enter_tunnel(self, *, reason: str = "NA"):
         EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
         pellet_state = self._pellet_machine.state
-        logger.debug("before_enter_tunnel: pellet_state=%s", pellet_state)
+        self._enter_tunnel_pellet_seen = self._algorithm.pellet_recently_seen
+        logger.debug("before_enter_tunnel: pellet_state=%s pellet_recently_seen=%s",
+                     pellet_state, self._enter_tunnel_pellet_seen)
 
     def after_enter_tunnel(self, *, reason: str = "NA"):
         self._consider_start_session(reason=reason)
-
         if self._analysis is not None:
             self._evaluate_auto_clamp(self._analysis.headbar_pressure_monitor.is_engaged)
 
@@ -591,7 +594,7 @@ class SystemMachine(StateMachine):
             self.cancel_timers()
             if new_value:
                 if algo.is_in_session:
-                    if algo.intersession_state == IntersessionState.idle:
+                    if self._intersession.state == IntersessionState.idle:
                         algo.end_session(reason="algo_paused")
                 tunnel_dev.open_tunnel_gate()
                 tunnel_dev.update_head_magnet_intensity(0)
@@ -671,7 +674,7 @@ class SystemMachine(StateMachine):
             "send_begin_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
             is_from_timer, self._state, self._pellet_machine.state, algo.pellet_recently_seen, pellet_seen_age,
             algo.is_in_session, send_begin_age, send_end_age, algo.capture_status_age)
-        # NB/TODO: maybe we should consider if pellet was seen and disappeared before we start sesssion,
+        # NB/TODO: maybe we should consider if pellet was seen and disappeared before we start the session,
         # to still start it : a mouse could be in tunnel, and pellet move back from load-pellet and mouse hit/makes
         # the pellet to fall or get it, before we got the time to notice it here..
         if not (
@@ -691,18 +694,16 @@ class SystemMachine(StateMachine):
             # remains = min(0.1, algo.pellet_missing_time - pellet_seen_age)  # ensure some minimum time before recheck
             # if remains <= 0:
             #     remains = 0.1
-            # remains = 0.1  # although unusure if necessary, given we would get a pellet-loaded() event,
+            # remains = 0.1  # although unsure if necessary, given we would get a pellet-loaded() event,
             # which we also consider-start-session for it..
             return
+        #
+        if math.isinf(send_begin_age) and math.isinf(send_end_age):
+            remains = 0  # first session
         else:
-            if math.isinf(send_begin_age) and math.isinf(send_end_age):
-                remains = 0  # first session
-            # elif algo.capture_status_age < send_end_age:
-            #     remains = 0.1
-            else:
-                # This ensure that we'll have the start of video matching the very end, or ~right after,
-                # of send-pellet action/move.
-                remains = algo.record_prebuffer_duration - send_end_age
+            # This ensure that we'll have the start of video matching the very end, or ~right after,
+            # of send-pellet action/move.
+            remains = algo.record_prebuffer_duration - send_end_age
         if remains > 0:
             timer = make_daemon_timer(remains, partial(self._consider_start_session, reason=reason, is_from_timer=True))
             self._timer_consider_start_session = timer
