@@ -667,8 +667,8 @@ class SystemMachine(StateMachine):
         algo = self._algorithm
         pellet_seen_age = algo.get_pellet_seen_age(perf_now)
         pellet_machine = self._pellet_machine
-        send_begin_age = pellet_machine.get_send_begin_age(perf_now)
-        send_end_age = pellet_machine.get_send_end_age(perf_now)
+        send_begin_age = pellet_machine.get_pellet_send_begin_age(perf_now)
+        send_end_age = pellet_machine.get_pellet_send_end_age(perf_now)
         logger.verbose(
             "consider_start_session(timer=%s): "
             "state=%s pellet-state=%s recently_seen=%s seen_age=%.1f in_session=%s "

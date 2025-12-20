@@ -1,7 +1,7 @@
 from autotrainer.device import CompoundMovements, MotorSteps
 
 
-def test_can_load():
+def test_load_from_default():
     movements = CompoundMovements.from_file(CompoundMovements.DEFAULT_LOCATION)
     assert isinstance(movements, CompoundMovements)
     assert isinstance(movements.load_pellet, MotorSteps)

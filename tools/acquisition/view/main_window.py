@@ -780,7 +780,7 @@ class MainWindow(QMainWindow):
 
     def _simulate_intersession_segmentation(self, intersession_block):
         logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
-        inference = self._app_model.behavior.system_machine.intersession._inference
+        inference = self._app_model.inference
         inference._data_monitor_proc.stop_recorded.wait()
         logger.debug("got stop recorded")
         inference._data_monitor_proc.stop_recorded.clear()

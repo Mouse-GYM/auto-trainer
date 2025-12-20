@@ -213,30 +213,32 @@ class PelletMachine(StateMachine):
             if drifts is not None and correct_drift:
                 dev.set_motors_drift(drifts)
 
-        if not (algo.session_mouse_seen and algo.intersession_enabled):
-            # force also a send_pellet, only if not gonna go to intersession
-            pass
-            # don't think necessary:
-            # self.send_pellet()
-            # self.monitor_pellet()
-        elif algo.session_mouse_seen and self._state == PelletState.monitoring:
-            # sessions ended because exit tunnel, otherwise state would be load_pellet
-            self.cover_pellet()
+        # if not (algo.session_mouse_seen and algo.intersession_enabled):
+        #     # force also a send_pellet, only if not gonna go to intersession
+        #     pass
+        #     # don't think necessary:
+        #     # self.send_pellet()
+        #     # self.monitor_pellet()
+        # was elif:
+        if algo.session_mouse_seen and self._state == PelletState.monitoring:
+            # session ended because exit of tunnel, otherwise state would be load_pellet
+            logger.debug("ending session with mouse seen and monitoring: moving retract")
+            if algo.pellet_cover_enabled:
+                # do we want ?
+                self.cover_pellet()
             self.move_retract()
-        # execute try next state AFTER having applied motor drifts,
-        # given next state will move/send the pellet back to deliver/SEND position
-        # self.environment_changed(caller="session_ending")
 
     def _before_move_retract(self):
         self._api_status_token = self._pellet_device.send_retract()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pellet_device_ack_received(self, token: Optional[str]):
-        if token is not None:
-            logger.debug("pellet_ack_received: %s", token)
+        if token is None:
+            return
+        logger.debug("pellet_ack_received: %s", token)
 
         if self._api_status_token is None:
-            # External command.  Safe to ignore.
+            # External command. Safe to ignore.
             return
 
         if token != self._api_status_token:
@@ -265,19 +267,11 @@ class PelletMachine(StateMachine):
             caller="pellet_device_ack_received",
         )
 
-    def get_send_begin_age(self, perf_now: float):
+    def get_pellet_send_begin_age(self, perf_now: float):
         return perf_now - self._send_begin_perf_c
 
-    @property
-    def pellet_send_begin_age(self) -> float:
-        return self.get_send_begin_age(time.perf_counter())
-
-    def get_send_end_age(self, perf_now: float):
+    def get_pellet_send_end_age(self, perf_now: float):
         return perf_now - self._send_end_perf_c
-
-    @property
-    def pellet_send_end_age(self) -> float:
-        return self.get_send_end_age(time.perf_counter())
 
     # endregion
 

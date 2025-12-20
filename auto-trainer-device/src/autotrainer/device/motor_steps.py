@@ -1,6 +1,9 @@
 from typing import Protocol, List, Dict, Any
 from copy import copy
 
+from autotrainer.core.logging import get_verbose_logger
+
+logger = get_verbose_logger(__name__)
 
 _missing = object()  # sentinel
 
@@ -15,6 +18,8 @@ class MotorSteps:
             if _missing in (step_type, step_value):
                 raise ValueError(f"Missing 'type' or 'value' key for motor steps, got {step!r}")
             steps.append({step_type: step_value})
+        if len(steps) == 0:
+            logger.warning("Empty steps for MotorSteps %s", name)
         return MotorSteps(name, steps)
 
     def __init__(self, name: str = "NA", steps: List[Dict[str, Any]] = None):
