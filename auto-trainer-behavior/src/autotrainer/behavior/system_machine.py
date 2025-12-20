@@ -509,7 +509,8 @@ class SystemMachine(StateMachine):
         algo.update_diamond_seen(response.diamond_seen)
         algo.update_star_seen(response.star_seen)
         algo.update_pellet_seen(response.pellet_seen)
-        algo.mouse_seen(response.mouse_seen)
+        algo.update_mouse_seen(response.mouse_seen)
+        #
         if not algo.pellet_delivery_enabled:
             return
         #

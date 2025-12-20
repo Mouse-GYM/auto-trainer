@@ -406,7 +406,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
         #
         algo.start_session()
         assert processing_ended_count == 0
-        algo.mouse_seen(False)
+        algo.update_mouse_seen(False)
         assert processing_ended_count == 0
         algo.end_session()
         assert processing_ended_count == 1
@@ -427,7 +427,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
         algo.intersession_enabled = True
         algo.session_processing_ending += processing_ended
         algo.start_session()
-        algo.mouse_seen(True)
+        algo.update_mouse_seen(True)
         assert processing_ended_count == 0
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())
@@ -453,7 +453,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
         algo.intersession_enabled = True
         algo.session_processing_ending += processing_ended
         algo.start_session()
-        algo.mouse_seen(True)
+        algo.update_mouse_seen(True)
         assert processing_ended_count == 0
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())

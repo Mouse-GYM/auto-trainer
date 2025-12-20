@@ -1078,7 +1078,7 @@ class BehaviorAlgorithm(ObservableObject):
     def pellet_loaded(self):
         self.session_pellet_count += 1
 
-    def mouse_seen(self, seen: bool = True):
+    def update_mouse_seen(self, seen: bool = True):
         if self._is_in_session and seen:
             prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
             if not prev_seen:

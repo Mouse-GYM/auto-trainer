@@ -822,7 +822,7 @@ class MainWindow(QMainWindow):
         self._app_model.behavior.algorithm.update_pellet_seen(True)
 
     def _internal_set_mouse_seen(self):
-        self._app_model.behavior.algorithm.mouse_seen(True)
+        self._app_model.behavior.algorithm.update_mouse_seen(True)
 
     def _internal_mouse_near_pellet(self):
         behavior = self._app_model.behavior

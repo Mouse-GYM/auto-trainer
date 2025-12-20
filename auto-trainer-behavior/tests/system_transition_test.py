@@ -38,7 +38,7 @@ def test_enter_exit_transitions(machine: SystemMachine, mock_system):
 
     assert machine.state == SystemState.tunnel
 
-    machine.algorithm.mouse_seen(True)
+    machine.algorithm.update_mouse_seen(True)
 
     with mock_system.mock_perform_segmentation() as m_perf_segm:
         machine.exit_tunnel()
