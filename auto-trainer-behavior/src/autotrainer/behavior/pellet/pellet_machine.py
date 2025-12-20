@@ -258,7 +258,7 @@ class PelletMachine(StateMachine):
         # nb: in live we could bypass this call : it's anyway called with live-inference pellet-seen callback..
         self.environment_changed(
             # we might want to use:
-            pellet_seen=self._algorithm.pellet_recently_seen,
+            #    pellet_seen=self._algorithm.pellet_recently_seen,
             # so that pellet_seen is more accurately handled:
             # i.e: if this device-ack is/was for a load-pellet, and that the pellet missed to load,
             # we could possibly & erroneously acknowledge a successfully load-pellet...
@@ -381,10 +381,10 @@ class PelletMachine(StateMachine):
                     self.release_pellet()
                 #
                 # even if pellet is not seen, send it to deliver,
-                # the end position of load-pellet sequence might not be (entirely) visibile by camera,
+                # the end position of load-pellet sequence might not be (entirely or on all units) visible by camera,
                 reason = "send_pellet_when_loaded_or_retract"
                 logit()
-                # force api status token to None, from eventualy previous release/cover pellet actions.
+                # force api status token to None, from eventually previous release/cover pellet actions.
                 self._api_status_token = None  # otherwise cannot send pellet
                 self.send_pellet()
                 # then always directly:
@@ -450,6 +450,7 @@ class PelletMachine(StateMachine):
                     if self.can_use_pellet_command():
                         logit()
                         self.release_pellet()
+                        self._api_status_token = None  # no need wait for ack
                         self.monitor_pellet()
                     else:
                         log_could_retry_shortly()
@@ -458,6 +459,7 @@ class PelletMachine(StateMachine):
                 if self.can_use_pellet_command():
                     logit()
                     self.cover_pellet()
+                    self._api_status_token = None  # no need wait for ack
                     self.monitor_pellet()
                 else:
                     log_could_retry_shortly()
