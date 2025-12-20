@@ -415,11 +415,8 @@ class SystemMachine(StateMachine):
         if (
             self._state == SystemState.tunnel
             and self._pellet_machine.state == PelletState.monitoring
-            # TODO: monitoring only happens when mouse hands near pellet seen, which uncover the pellet,
-            #  we might want to also handle/capture it when state is send and covering ?
-            #  It might be that it's not enough though.. we want be sure the last command is/was send_pellet,
-            #   even if there was some manual move after that.
-            #  And we could also decide to check in SystemState.cage as well (as far as last command is send_pellet) ?
+            # TODO: we could also decide to check in SystemState.cage as well,
+            #  as far as we can ensure pellet is at deliver/send position
             and self._pellet_machine.can_use_pellet_command()
         ):
             last_pos = self._pellet_device.last_position
@@ -492,6 +489,7 @@ class SystemMachine(StateMachine):
             if p_now - t_last >= 5:
                 logger.debug("pose_changed: %s", response)
                 self._last_pose_changed_logged = p_now
+        #
         self._handle_diamond_triangle_offset_changed(
             response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
 
