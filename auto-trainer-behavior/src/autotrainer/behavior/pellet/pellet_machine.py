@@ -258,7 +258,7 @@ class PelletMachine(StateMachine):
         # nb: in live we could bypass this call : it's anyway called with live-inference pellet-seen callback..
         self.environment_changed(
             # we might want to use:
-            #    pellet_seen=self._algorithm.pellet_recently_seen,
+            pellet_seen=self._algorithm.pellet_recently_seen,
             # so that pellet_seen is more accurately handled:
             # i.e: if this device-ack is/was for a load-pellet, and that the pellet missed to load,
             # we could possibly & erroneously acknowledge a successfully load-pellet...

@@ -505,10 +505,10 @@ class SystemMachine(StateMachine):
         if algo.is_in_session and not algo.session_mouse_seen and response.mouse_seen:
             logger.verbose("session first mouse_seen: parts=%s locations=%s", response.parts_flags, response.locations)
         #
-        algo.triangle_seen(response.triangle_seen)
-        algo.diamond_seen(response.diamond_seen)
-        algo.star_seen(response.star_seen)
-        algo.pellet_seen(response.pellet_seen)
+        algo.update_triangle_seen(response.triangle_seen)
+        algo.update_diamond_seen(response.diamond_seen)
+        algo.update_star_seen(response.star_seen)
+        algo.update_pellet_seen(response.pellet_seen)
         algo.mouse_seen(response.mouse_seen)
         if not algo.pellet_delivery_enabled:
             return

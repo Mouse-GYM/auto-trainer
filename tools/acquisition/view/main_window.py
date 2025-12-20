@@ -819,7 +819,7 @@ class MainWindow(QMainWindow):
         self._app_model.analysis.headbar_pressure_monitor.force_engaged(new_value)
 
     def _internal_set_pellet_seen(self):
-        self._app_model.behavior.algorithm.pellet_seen(True)
+        self._app_model.behavior.algorithm.update_pellet_seen(True)
 
     def _internal_set_mouse_seen(self):
         self._app_model.behavior.algorithm.mouse_seen(True)
