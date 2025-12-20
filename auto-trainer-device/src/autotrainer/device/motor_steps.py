@@ -2,22 +2,27 @@ from typing import Protocol, List, Dict, Any
 from copy import copy
 
 
+_missing = object()  # sentinel
+
 class MotorSteps:
 
     @classmethod
-    def from_dict(cls, name: str, data: dict):
-
+    def from_raw(cls, name: str, data: List[Dict[str, Any]]):
         steps = []
-
         for step in data:
-            if "type" in step and "value" in step:
-                steps.append({step['type']: step['value']})
-
+            step_type = step.get('type', _missing)
+            step_value = step.get('value', _missing)
+            if _missing in (step_type, step_value):
+                raise ValueError(f"Missing 'type' or 'value' key for motor steps, got {step!r}")
+            steps.append({step_type: step_value})
         return MotorSteps(name, steps)
 
     def __init__(self, name: str = "NA", steps: List[Dict[str, Any]] = None):
         self._name = name
         self._steps = steps
+
+    def __repr__(self):
+        return f"MotorSteps(name={self._name!r}, steps={self._steps})"
 
     @property
     def name(self) -> str:
@@ -46,6 +51,7 @@ class CompoundMovementDataSet(Protocol):
     @property
     def release_pellet(self) -> MotorSteps: ...
 
+    # NB: open|close_tunnel_gate unused:
     @property
     def open_tunnel_gate(self) -> MotorSteps: ...
 

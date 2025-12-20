@@ -8,18 +8,32 @@ It can have 4 subgroups:
 * "cover_pellet" - a sequence of commands for covering the pellet
 * "release_pellet" - a sequence of commands for uncovering the pellet
 """
-
-import logging
-from enum import IntEnum
+import enum
 from pathlib import Path
 import yaml
 
+from autotrainer.core.logging import get_verbose_logger
+
 from .motor_steps import MotorSteps, CompoundMovementDataSet
 
-logger = logging.getLogger(__name__)
+
+logger = get_verbose_logger(__name__)
 
 
-class CompoundMovementFile(CompoundMovementDataSet):
+class CompoundMovementKind(str, enum.Enum):
+    LOAD_PELLET = "load_pellet"
+    SEND_PELLET = "send_pellet"
+    COVER_PELLET = "cover_pellet"
+    RELEASE_PELLET = "release_pellet"
+
+
+CompoundMovementByStringValue = {
+    kind.value: kind
+    for kind in CompoundMovementKind
+}
+
+
+class CompoundMovements(CompoundMovementDataSet):
     """
     Class that loads compound movements (MotorSteps) from either a file or
     a YAML-type dictionary.
@@ -29,24 +43,14 @@ class CompoundMovementFile(CompoundMovementDataSet):
 
     DEFAULT_LOCATION = Path("~/Autotrainer/move_config.yaml")  # you shall use .expanduser() when you use it
 
-    class _Movement(IntEnum):
-        LOAD_PELLET = 0
-        SEND_PELLET = 1
-        COVER_PELLET = 2
-        RELEASE_PELLET = 3
-
-    _mapping = {
-        _Movement.LOAD_PELLET: "load_pellet",
-        _Movement.SEND_PELLET: "send_pellet",
-        _Movement.COVER_PELLET: "cover_pellet",
-        _Movement.RELEASE_PELLET: "release_pellet"
-    }
-
     def __init__(self):
         """
         Set the default movements to an empty sequence
         """
-        self._movements = [MotorSteps(), MotorSteps(), MotorSteps(), MotorSteps()]
+        self._movements = {
+            kind: MotorSteps()
+            for kind in CompoundMovementKind
+        }
 
     @classmethod
     def from_file(cls, filename):
@@ -57,7 +61,7 @@ class CompoundMovementFile(CompoundMovementDataSet):
             filename (str or Path): Filename to load from
 
         Returns:
-            CompoundMovementFile: populated with file contents
+            CompoundMovements: populated with file contents
         """
         inst = cls()
         inst._load(filename)
@@ -72,31 +76,22 @@ class CompoundMovementFile(CompoundMovementDataSet):
             yaml_dict (dict): Dictionary of data
 
         Returns:
-            CompoundMovementFile: populated with file contents
+            CompoundMovements: populated with file contents
         """
         inst = cls()
         inst._convert(yaml_dict)
         return inst
 
-    def _load(self, filename):
+    def _load(self, file_path):
         """
         Load sequences from a file.
 
         Args:
-            filename (str or Path): Filename to load from
+            file_path (str or Path): Filename to load from
         """
-        if isinstance(filename, str):
-            filename = Path(filename)
-
-        if filename.exists():
-            try:
-                with open(filename, "r") as file:
-                    self._convert(yaml.safe_load(file))
-
-            except Exception as e:
-                logger.error(f"ERROR: Alogus Compound Movement file {filename}: {e}")
-        else:
-            logger.error(f"ERROR: Alogus Compound Movement file {filename}: No such File")
+        file_path = Path(file_path)
+        with file_path.expanduser().open() as fh:
+            self._convert(yaml.safe_load(fh))
 
     def _convert(self, yaml_dict):
         """
@@ -105,15 +100,25 @@ class CompoundMovementFile(CompoundMovementDataSet):
         Args:
             yaml_dict (dict): Dictionary of data
         """
-        if "actions" not in yaml_dict:
-            return
+        if not isinstance(yaml_dict, dict):
+            raise TypeError(f"Expected dict for main compound move content, but got %s", type(yaml_dict))
+        try:
+            actions = yaml_dict["actions"]
+        except KeyError:
+            raise ValueError("Expected an 'actions' key in main compound move content") from None
+        if not isinstance(actions, dict):
+            raise TypeError(f"Expected dict for 'actions' in main compound move content, but got %s", type(actions))
 
-        sub_dict = yaml_dict["actions"]
-
-        for idx, name in CompoundMovementFile._mapping.items():
-            if name in sub_dict:
-                self._movements[idx.value] = \
-                    MotorSteps.from_dict(name, sub_dict[name])
+        for name, value in actions.items():
+            kind = CompoundMovementByStringValue.get(name, None)
+            if kind is None:
+                logger.warning("Unhandled %r in compound movement definition. value=%s", name, value)
+                continue
+            if not isinstance(value, (list, tuple)):
+                raise TypeError(f"Expected dict for action {name!r}, got {value!r}")
+            steps = MotorSteps.from_raw(name, value)
+            self._movements[kind] = steps
+            logger.debug("loaded compound move %r: %s", name, steps)
 
     '''
     Meet the CompoundMovementDataSet Protocol
@@ -121,16 +126,16 @@ class CompoundMovementFile(CompoundMovementDataSet):
 
     @property
     def load_pellet(self) -> MotorSteps:
-        return self._movements[CompoundMovementFile._Movement.LOAD_PELLET.value]
+        return self._movements[CompoundMovementKind.LOAD_PELLET]
 
     @property
     def send_pellet(self) -> MotorSteps:
-        return self._movements[CompoundMovementFile._Movement.SEND_PELLET.value]
+        return self._movements[CompoundMovementKind.SEND_PELLET]
 
     @property
     def cover_pellet(self) -> MotorSteps:
-        return self._movements[CompoundMovementFile._Movement.COVER_PELLET.value]
+        return self._movements[CompoundMovementKind.COVER_PELLET]
 
     @property
     def release_pellet(self) -> MotorSteps:
-        return self._movements[CompoundMovementFile._Movement.RELEASE_PELLET.value]
+        return self._movements[CompoundMovementKind.RELEASE_PELLET]

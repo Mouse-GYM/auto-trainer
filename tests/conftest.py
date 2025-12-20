@@ -4,7 +4,7 @@ import pytest
 
 from autotrainer.behavior import DiamondTriangleOffsetConfig, BehaviorAlgorithm
 from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
-from autotrainer.device import MotorConfigurationFile, CompoundMovementFile
+from autotrainer.device import MotorConfigurationFile, CompoundMovements
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
@@ -38,14 +38,6 @@ def system_config(trainer_config_dir, tmp_path):
 @pytest.fixture
 def config_file_path(trainer_config_dir):
     return trainer_config_dir.joinpath(SystemConfiguration.make_default_yaml_config_path(trainer_config_dir))
-
-
-@pytest.fixture(autouse=True)
-def motor_config(monkeypatch):
-    monkeypatch.setattr(MotorConfigurationFile, "DEFAULT_LOCATION",
-                        this_dir.joinpath(MotorConfigurationFile.DEFAULT_LOCATION.name))
-    monkeypatch.setattr(CompoundMovementFile, "DEFAULT_LOCATION",
-                        this_dir.joinpath(CompoundMovementFile.DEFAULT_LOCATION.name))
 
 
 @pytest.fixture

@@ -7,6 +7,7 @@ import sys
 import time
 import threading
 
+from pathlib import Path
 from functools import partial
 from typing import List, Any
 from unittest import mock
@@ -16,6 +17,7 @@ import pytest
 
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
+from autotrainer.device import MotorConfigurationFile, CompoundMovements
 
 from autotrainer.video import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
@@ -25,6 +27,10 @@ from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDevi
 
 
 logger = logging.getLogger(__name__)
+
+
+repo_root_this_dir = Path(__file__).parent  # supposed to be the repo root/top dir
+repo_root_tests_subdir = repo_root_this_dir.joinpath("tests")
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +44,14 @@ def auto_close_event_manager():
 def auto_set_misc_log_level():
     # some logger we don't want too verbose in any case
     logging.getLogger('transitions').setLevel(logging.INFO)
+
+
+@pytest.fixture(autouse=True)
+def motor_config(monkeypatch):
+    monkeypatch.setattr(MotorConfigurationFile, "DEFAULT_LOCATION",
+                        repo_root_tests_subdir.joinpath(MotorConfigurationFile.DEFAULT_LOCATION.name))
+    monkeypatch.setattr(CompoundMovements, "DEFAULT_LOCATION",
+                        repo_root_tests_subdir.joinpath(CompoundMovements.DEFAULT_LOCATION.name))
 
 
 @pytest.fixture
