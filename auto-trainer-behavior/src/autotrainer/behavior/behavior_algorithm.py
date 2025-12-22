@@ -1118,6 +1118,21 @@ class BehaviorAlgorithm(ObservableObject):
         self._pellet_hands_min_distance = self._on_property_changed(
             BehaviorAlgoProps.PELLET_HANDS_DISTANCE, value, self._pellet_hands_min_distance)
 
+    def reset_configuration(self):
+        """Reset current config to the previous loaded config (via load_configuration)"""
+        prev = self._loaded_config
+        if prev is not None:
+            logger.notice("Resetting config to previous loaded")
+            self.load_configuration(prev)
+
+    def load_configuration(self, config: BehaviorConfiguration):
+        self._loaded_config = copy.deepcopy(config)
+        self._load_pellet_cfg(config.pellet_delivery)
+        self._load_head_clamp_cfg(config.head_clamp)
+        if self._topcam_presence is not None:
+            self._topcam_presence.load_config(config.topcam_presence_detection)
+        # self.auto_close_gate_on_intersession_config = config.  # not saved yet to config
+
     def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         self.pellet_delivery_enabled = cfg.is_enabled
         self.pellet_cover_enabled = cfg.is_pellet_cover_enabled
@@ -1126,6 +1141,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.max_pellets_per_day = cfg.max_pellets_per_day
         self.intersession_pellet_shift_enabled = cfg.is_intersession_pellet_shift_enabled
         self.use_triangle_pellet_distance_too_far = cfg.use_triangle_pellet_distance_too_far
+        self.triangle_pellet_expected_distance = cfg.triangle_pellet_expected_distance
         self.triangle_pellet_diff_too_far_threshold = cfg.triangle_pellet_diff_too_far_threshold
         self.auto_correct_motors_drift = cfg.auto_correct_motors_drift
         self.pellet_hand_uncover_distance = cfg.pellet_hand_uncover_distance
@@ -1141,21 +1157,6 @@ class BehaviorAlgorithm(ObservableObject):
         self.auto_clamp_release_load_count = cfg.auto_clamp_release_load_count
         self.auto_clamp_no_activity_release_delay = cfg.auto_clamp_no_activity_release_delay
         self.auto_clamp_before_reengage_delay = cfg.before_reengage_delay
-
-    def reset_configuration(self):
-        """Reset current config to the previous loaded config (via load_configuration)"""
-        prev = self._loaded_config
-        if prev is not None:
-            logger.notice("Resetting config to previous loaded")
-            self.load_configuration(prev)
-
-    def load_configuration(self, config: BehaviorConfiguration):
-        self._loaded_config = copy.deepcopy(config)
-        self._load_pellet_cfg(config.pellet_delivery)
-        self._load_head_clamp_cfg(config.head_clamp)
-        if self._topcam_presence is not None:
-            self._topcam_presence.load_config(config.topcam_presence_detection)
-        # self.auto_close_gate_on_intersession_config = config.  # not saved yet to config
 
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         cfg.is_enabled = self._pellet_delivery_enabled
