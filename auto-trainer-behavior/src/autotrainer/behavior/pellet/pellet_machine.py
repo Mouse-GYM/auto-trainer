@@ -505,11 +505,14 @@ class PelletMachine(StateMachine):
     def load_pellet(self):
         """Load pellet"""
 
+    def may_load_pellet(self):
+        """May load pellet"""
+
     def force_load_pellet(self):
         """Same than load but does not require can_load_pellet condition"""
 
-    def may_load_pellet(self):
-        """May load pellet"""
+    def may_force_load_pellet(self):
+        """May force load pellet"""
 
     # not anymore used:
     def prerelease_pellet(self):
