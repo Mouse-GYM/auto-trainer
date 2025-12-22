@@ -1,5 +1,6 @@
 import math
 import time
+import os
 from enum import Enum
 from typing import Dict, Callable, Any, Optional, get_type_hints
 
@@ -17,6 +18,9 @@ from ..state_machine import StateMachine, StateMachineEvents
 from ..system_machine_state import SystemState
 
 logger = get_verbose_logger(__name__)
+
+
+DEFAULT_LOAD_RETRACT_COUNT_FORCE_HOME = int(os.getenv("AUTOTRAINER_LOAD_RETRACT_COUNT_FORCE_HOME", "12"))
 
 
 class PelletState(str, Enum):
@@ -89,6 +93,8 @@ class PelletMachine(StateMachine):
         )
 
         self._cur_timer_try_next_state = no_op_timer
+        self._pellet_load_count = 0
+        self._pellet_retract_count = 0
 
     @property
     def algorithm(self):
@@ -113,19 +119,30 @@ class PelletMachine(StateMachine):
                 self._prev_pellet_load_perf_c = self._algorithm.get_perf_now()
                 self._covered_state = None
                 EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
+                self._pellet_load_count += 1
         else:
             self._api_status_token = None
 
     def before_send_pellet(self):
-        if self._pellet_device is not None:
-            self._api_status_token = self._pellet_device.send_pellet()
-            if self._api_status_token is not None:
-                self._api_status_token_pellet_send = self._api_status_token
-                self._send_begin_perf_c = self._algorithm.get_perf_now()
-                self.events.pellet_sending()
-                EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
-        else:
+        if self._pellet_device is None:
             self._api_status_token = None
+            return
+        tot_count = self._pellet_load_count + self._pellet_retract_count
+        trigger_count = DEFAULT_LOAD_RETRACT_COUNT_FORCE_HOME
+        if 0 < trigger_count <= tot_count:
+            # eventual todo: use a configuration value for the threshold
+            logger.notice("Forcing a send_home to reset to limits due to load (%s) + retract (%s) "
+                          "count greater than threshold (%s)", self._pellet_load_count, self._pellet_retract_count,
+                          trigger_count)
+            self._pellet_device.send_home()
+            self._pellet_load_count = self._pellet_retract_count = 0
+        self.events.pellet_sending()
+        self._api_status_token = self._pellet_device.send_pellet()
+        if self._api_status_token is not None:
+            self._api_status_token_pellet_send = self._api_status_token
+            self._send_begin_perf_c = self._algorithm.get_perf_now()
+            self.events.pellet_sending()
+            EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
 
     def before_prerelease_pellet(self):
         if self._pellet_device is not None:
@@ -230,6 +247,7 @@ class PelletMachine(StateMachine):
 
     def _before_move_retract(self):
         self._api_status_token = self._pellet_device.send_retract()
+        self._pellet_retract_count += 1
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pellet_device_ack_received(self, token: Optional[str]):

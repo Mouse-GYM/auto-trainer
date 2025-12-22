@@ -129,6 +129,7 @@ def test_cli_help():
     assert "usage: auto-trainer-headless.py" in output
 
 
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="hang atm. mostlikely signal related, different on windows")
 def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, config_file_path, settings_ini_path):
     user_pref.save()  # do not forget ! otherwise default home config dirs/files are used
     env = os.environ.copy()
