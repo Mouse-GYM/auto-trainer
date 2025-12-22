@@ -275,6 +275,7 @@ class BehaviorAlgorithm(ObservableObject):
             "pellets_consumed_evt",
             "successful_reaches_evt"
         ))
+
         self._thread_lock = threading.RLock()
         self._project_info = None
 
@@ -314,7 +315,7 @@ class BehaviorAlgorithm(ObservableObject):
             PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold)
         self._triangle_pellet_expected_distance = PelletDeliveryConfiguration.triangle_pellet_expected_distance
         self._diamond_last_seen_perf_c = -math.inf
-        self._next_diamond_triangle_log_report = time.perf_counter()
+        self._next_diamond_triangle_log_report = -math.inf
         self._star_last_seen_perf_c = -math.inf
 
         self._system_state = SystemState.cage
@@ -359,7 +360,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._diamond_triangle_drift: Optional[Offset3DTuple] = None
         self._diamond_triangle_prev_drifts: List[Offset3DTuple] = []
-        self._diamond_triangle_last_drift_report = time.perf_counter()
+        self._diamond_triangle_last_drift_report = -math.inf
 
         self._cover_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=BehaviorAlgoProps.COVER_PELLET_DISTANCE,
@@ -383,7 +384,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._shift_xyz_handler = ShiftXYZHandler()
 
     @classmethod
-    def _check_start_thread(cls):
+    def _check_start_thread(cls: "BehaviorAlgorithm"):
         if cls._no_handler_thread:
             return
         _, handler_queue = cls._handler_thread_queue
@@ -424,11 +425,14 @@ class BehaviorAlgorithm(ObservableObject):
             return partial(_relay_func, wait=wait)
         return _relay_func(func, wait=wait)
 
-    @staticmethod
-    def _handler_thread_run(input_queue: queue.Queue):
+    @classmethod
+    def _handler_thread_run(cls: "BehaviorAlgorithm", input_queue: queue.Queue):
         logger.verbose("Running for handling/executing all algo decision/transition ..")
         while True:
-            raw = input_queue.get()
+            try:
+                raw = input_queue.get(timeout=0.005)
+            except queue.Empty:
+                continue
             if raw is None:
                 input_queue.task_done()
                 break
@@ -447,7 +451,7 @@ class BehaviorAlgorithm(ObservableObject):
         logger.debug("Exiting ; left queue_size=%s", input_queue.qsize())
 
     @classmethod
-    def relay_transitions(cls, machine_transitions: Any):
+    def relay_transitions(cls: "BehaviorAlgorithm", machine_transitions: Any):
         """Relay all transition triggers of the given machine_transitions instance to the algo dedicated thread"""
         for trans in machine_transitions.transitions:
             trig = trans['trigger']
@@ -458,7 +462,7 @@ class BehaviorAlgorithm(ObservableObject):
                 setattr(machine_transitions, trig, cls.relay_func(meth))
 
     @classmethod
-    def put_func_call(cls, func, args: Tuple[Any], kwargs: Optional[Dict]=None,
+    def put_func_call(cls: "BehaviorAlgorithm", func, args: Tuple[Any], kwargs: Optional[Dict]=None,
                       *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
         """Put a function call request to the algo dedicated thread, and eventually wait on its completion.
         See also `BehaviorAlgorithm.set_put_func_call_mode`.
@@ -501,6 +505,10 @@ class BehaviorAlgorithm(ObservableObject):
     def project(self, project):
         self._project_info = project
 
+    @staticmethod
+    def get_perf_now() -> float:
+        return time.perf_counter()
+
     @property
     def algo_paused(self):
         return self._algo_paused
@@ -509,13 +517,8 @@ class BehaviorAlgorithm(ObservableObject):
     def algo_paused(self, value):
         prev, self._algo_paused = self._algo_paused, value
         if value and not prev:
-            self._algo_paused_perf_t = time.perf_counter()
+            self._algo_paused_perf_t = self.get_perf_now()
         self._on_property_changed(BehaviorAlgoProps.ALGO_PAUSED, value, prev)
-
-    @property
-    def algo_paused_age(self):
-        # actually unused.
-        return time.perf_counter() - self._algo_paused_perf_t
 
     @property
     def top_camera_presence_detection(self) -> PresenceDetectionAttrs:
@@ -544,13 +547,13 @@ class BehaviorAlgorithm(ObservableObject):
 
     @capture_status.setter
     def capture_status(self, value: CaptureProcessStatus):
-        self._last_capture_status_change_perf_c = time.perf_counter()
+        self._last_capture_status_change_perf_c = self.get_perf_now()
         self._capture_status = self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, self._capture_status)
 
     @property
     def capture_status_age(self) -> float:
         """Capture status age as number of seconds"""
-        return time.perf_counter() - self._last_capture_status_change_perf_c
+        return self.get_perf_now() - self._last_capture_status_change_perf_c
 
     @property
     def recording_age_release_pellet_threshold(self) -> float:
@@ -695,15 +698,15 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def star_recently_seen(self) -> bool:
-        return time.perf_counter() - self._star_last_seen_perf_c < self.limits.triangle_missing_time
+        return self.get_perf_now() - self._star_last_seen_perf_c < self.limits.triangle_missing_time
 
     @property
     def triangle_recently_seen(self) -> bool:
-        return time.perf_counter() - self._triangle_last_seen_perf_c < self.limits.triangle_missing_time
+        return self.get_perf_now() - self._triangle_last_seen_perf_c < self.limits.triangle_missing_time
 
     @property
     def diamond_recently_seen(self) -> bool:
-        return time.perf_counter() - self._diamond_last_seen_perf_c < self.limits.triangle_missing_time
+        return self.get_perf_now() - self._diamond_last_seen_perf_c < self.limits.triangle_missing_time
 
     @property
     def pellet_last_seen(self) -> float:
@@ -1001,17 +1004,14 @@ class BehaviorAlgorithm(ObservableObject):
     def can_cover_pellet(self):
         return self._pellet_delivery_enabled and self._pellet_cover_enabled and not self._algo_paused
 
-    def get_pellet_seen_age(self, perf_now: float):
-        return perf_now - self._pellet_last_seen
-
     @property
     def pellet_seen_age(self) -> float:
         """In nbr of seconds"""
-        return self.get_pellet_seen_age(time.perf_counter())
+        return self.get_perf_now() - self._pellet_last_seen
 
     @property
     def pellet_recently_seen(self):
-        return time.perf_counter() - self._pellet_last_seen < self.limits.pellet_missing_time
+        return self.get_perf_now() - self._pellet_last_seen < self.limits.pellet_missing_time
 
     #
 
@@ -1055,25 +1055,25 @@ class BehaviorAlgorithm(ObservableObject):
 
     def update_diamond_seen(self, seen: bool):
         if seen:
-            self._diamond_last_seen_perf_c = time.perf_counter()
+            self._diamond_last_seen_perf_c = self.get_perf_now()
 
     def update_star_seen(self, seen: bool):
         if seen:
-            self._star_last_seen_perf_c = time.perf_counter()
+            self._star_last_seen_perf_c = self.get_perf_now()
 
     def update_triangle_seen(self, seen: bool = True):
         if self._triangle_seen != seen:
             self._triangle_seen = seen
             EventManager.default().post_event_content(BehaviorEventKind.triangleSeen, context=seen)
         if seen:
-            self._set_triangle_last_seen(time.perf_counter())
+            self._set_triangle_last_seen(self.get_perf_now())
 
     def update_pellet_seen(self, seen: bool = True):
         if self._pellet_seen != seen:
             self._pellet_seen = seen
             EventManager.default().post_event_content(BehaviorEventKind.pelletSeen, context=seen)
         if seen:
-            self._set_pellet_last_seen(time.perf_counter())
+            self._set_pellet_last_seen(self.get_perf_now())
 
     def pellet_loaded(self):
         self.session_pellet_count += 1
@@ -1208,13 +1208,13 @@ class BehaviorAlgorithm(ObservableObject):
         if prev is None:
             prev = Offset3DTuple(0, 0, 0)
         if __debug__:
-            t_perf_now = time.perf_counter()
+            t_perf_now = self.get_perf_now()
             if t_perf_now >= self._next_diamond_triangle_log_report:
                 logger.spam("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
                             drift.humanize(), prev.humanize(), motor_position.humanize(), offset.humanize())
                 self._next_diamond_triangle_log_report = t_perf_now + 1
             if any(abs(d) >= 2 for d in drift):
-                perf_now = time.perf_counter()
+                perf_now = self.get_perf_now()
                 if perf_now > self._diamond_triangle_last_drift_report + 1:  # max 1 / s
                     logger.debug("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
                                  drift.humanize(), prev.humanize(), motor_position.humanize(), offset.humanize())

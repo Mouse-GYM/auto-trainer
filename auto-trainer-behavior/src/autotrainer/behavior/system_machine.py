@@ -545,7 +545,7 @@ class SystemMachine(StateMachine):
         load_cell_mon = self._analysis.load_cell_monitor.context
         topcam_pres = algo.top_camera_presence_detection
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
-        perf_now = time.perf_counter()
+        perf_now = algo.get_perf_now()
         if (
             not load_cell_mon.is_engaged
             and topcam_pres.last_presence_start_perf_c >= load_cell_mon.last_disengaged_perf_c
@@ -661,17 +661,18 @@ class SystemMachine(StateMachine):
     def _consider_start_session(self, reason: str = "NA", is_from_timer: bool=False):
         self._timer_consider_start_session.cancel()  # in case of
         self._timer_consider_start_session = no_op_timer
-        perf_now = time.perf_counter()
         algo = self._algorithm
-        pellet_seen_age = algo.get_pellet_seen_age(perf_now)
+        perf_now = algo.get_perf_now()
+        pellet_seen_age = algo.pellet_seen_age
         pellet_machine = self._pellet_machine
         send_begin_age = pellet_machine.get_pellet_send_begin_age(perf_now)
         send_end_age = pellet_machine.get_pellet_send_end_age(perf_now)
         logger.verbose(
-            "consider_start_session(timer=%s): "
+            "consider_start_session(timer=%s): load_cell.engaged=%s "
             "state=%s pellet-state=%s recently_seen=%s seen_age=%.1f in_session=%s "
             "send_begin_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
-            is_from_timer, self._state, self._pellet_machine.state, algo.pellet_recently_seen, pellet_seen_age,
+            is_from_timer, self._analysis.load_cell_monitor.is_engaged,
+            self._state, self._pellet_machine.state, algo.pellet_recently_seen, pellet_seen_age,
             algo.is_in_session, send_begin_age, send_end_age, algo.capture_status_age)
         # NB/TODO: maybe we should consider if pellet was seen and disappeared before we start the session,
         # to still start it : a mouse could be in tunnel, and pellet move back from load-pellet and mouse hit/makes
@@ -683,12 +684,15 @@ class SystemMachine(StateMachine):
             and pellet_machine.state == PelletState.monitoring
             # waiting monitoring state, ensure pellet is in deliver position
         ):
+            logger.debug("Not good state")
             return
         if not math.isinf(send_begin_age) and send_begin_age < send_end_age:
+            logger.debug("Wait pellet is sent")
             # wait pellet-sent, no need further timer:
             # we'll get a pellet_machine.events.pellet_sent() when it's received/acked
             return
         if not algo.pellet_recently_seen:
+            logger.debug("Wait pellet seen")
             # pellet not seen, if enabled a pellet-load will be executed once pellet_missing_time elapsed,
             # remains = min(0.1, algo.pellet_missing_time - pellet_seen_age)  # ensure some minimum time before recheck
             # if remains <= 0:
