@@ -398,3 +398,4 @@ class LoadCellMonitor(ObservableObject):
         """
         logger.verbose("Force engaged: %s", engaged)
         self._force_engaged = engaged
+        self.is_engaged = engaged

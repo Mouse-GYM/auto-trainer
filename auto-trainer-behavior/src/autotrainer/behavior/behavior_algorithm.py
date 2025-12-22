@@ -293,6 +293,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._auto_clamp_release_tone_delay = 0.1
         self._auto_clamp_release_load_count = HeadClampConfiguration.auto_clamp_release_load_count
         self._auto_clamp_no_activity_release_delay = HeadClampConfiguration.auto_clamp_no_activity_release_delay
+        self._auto_clamp_before_reengage_delay = HeadClampConfiguration.before_reengage_delay
 
         self._recording_age_release_pellet_threshold = 0.75
 
@@ -674,6 +675,14 @@ class BehaviorAlgorithm(ObservableObject):
     @auto_clamp_no_activity_release_delay.setter
     def auto_clamp_no_activity_release_delay(self, value):
         self._auto_clamp_no_activity_release_delay = value
+
+    @property
+    def auto_clamp_before_reengage_delay(self) -> float:
+        return self._auto_clamp_before_reengage_delay
+
+    @auto_clamp_before_reengage_delay.setter
+    def auto_clamp_before_reengage_delay(self, value):
+        self._auto_clamp_before_reengage_delay = value
 
     #
 
@@ -1100,6 +1109,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.auto_clamp_release_tone_delay = cfg.auto_clamp_release_tone_delay
         self.auto_clamp_release_load_count = cfg.auto_clamp_release_load_count
         self.auto_clamp_no_activity_release_delay = cfg.auto_clamp_no_activity_release_delay
+        self.auto_clamp_before_reengage_delay = cfg.before_reengage_delay
 
     def reset_configuration(self):
         """Reset current config to the previous loaded config (via load_configuration)"""
@@ -1137,6 +1147,7 @@ class BehaviorAlgorithm(ObservableObject):
         cfg.auto_clamp_release_tone_delay = self.auto_clamp_release_tone_delay
         cfg.auto_clamp_release_load_count = self.auto_clamp_release_load_count
         cfg.auto_clamp_no_activity_release_delay = self.auto_clamp_no_activity_release_delay
+        cfg.before_reengage_delay = self.auto_clamp_before_reengage_delay
 
     def update_configuration(self, configuration: BehaviorConfiguration):
         self._update_pellet_cfg(configuration.pellet_delivery)

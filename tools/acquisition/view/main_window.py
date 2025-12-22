@@ -812,7 +812,6 @@ class MainWindow(QMainWindow):
                 )
                 inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
         load_cell_monitor.force_engaged(is_checked)
-        load_cell_monitor.is_engaged = is_checked
 
     def _internal_set_force_detector_seen(self):
         new_value = self.force_detector_action.isChecked()
