@@ -76,7 +76,7 @@ def test_covered_load_cycle(mock_system, machine):
 
     assert pellet_m.state == PelletState.monitoring
 
-    pellet_m.algorithm.end_session()
+    pellet_m.algorithm.end_capture_session()
 
     pellet_m._pellet_device_ack_received(pellet_m._api_status_token)
 
@@ -97,7 +97,7 @@ def test_covered_load_cycle(mock_system, machine):
 
     assert_load_cycle(pellet_m, should_release=True)
 
-    pellet_m.algorithm.end_session()
+    pellet_m.algorithm.end_capture_session()
 
     pellet_m._pellet_device_ack_received(pellet_m._api_status_token)
 
