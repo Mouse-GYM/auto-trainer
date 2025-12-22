@@ -138,7 +138,7 @@ def system_msg_handler(system_msg_queue, sensor_analysis):
 
 
 @pytest.fixture
-def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis):
+def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis) -> SystemMachine:
     # prevents some test to fail due to handling function in dedicated thread
     BehaviorAlgorithm._no_handler_thread = True
     #
@@ -306,7 +306,7 @@ class MockSystemMachine:
 
 
 @pytest.fixture
-def mock_system(machine):
+def mock_system(machine) -> MockSystemMachine:
     """Allow use BaseSystemMachineTest instance helper methods in a simple function test, without having to subclass,
     just use the 'mock_system' fixture"""
     instance = MockSystemMachine()

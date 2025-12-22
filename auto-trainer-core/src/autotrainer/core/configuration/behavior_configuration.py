@@ -72,6 +72,7 @@ class HeadClampConfiguration:
     auto_clamp_release_tone_delay: float = 0.1
     auto_clamp_no_activity_release_delay: float = 30
     auto_clamp_release_load_count: int = 100_000
+    before_reengage_delay: float = 5  # how long to wait/delay before allow/execute a re-engage after a disengage.
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
