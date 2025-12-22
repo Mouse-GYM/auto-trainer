@@ -18,8 +18,8 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
-from . import CaptureAnalysisResult, DiamondTriangleOffsetConfig
 
+from . import CaptureAnalysisResult, DiamondTriangleOffsetConfig
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine, IntersessionState
@@ -44,7 +44,7 @@ _consider_disengage_autoclamp_timer = make_daemon_timer
 
 class SystemMachine(StateMachine):
 
-    states = [e for e in SystemState]
+    states = list(SystemState)
 
     def __init__(self,
                  algorithm: Optional[BehaviorAlgorithm] = None,
@@ -87,9 +87,10 @@ class SystemMachine(StateMachine):
         algo = self._algorithm = BehaviorAlgorithm(
             topcam_presence=topcam_presence,
         ) if algorithm is None else algorithm
+        del algorithm  # using algo
         algo.project = project_info
-        algo.session_starting += self._session_starting
-        algo.session_ending += self._session_ended
+        algo.session_starting += self._session_capture_started
+        algo.session_capture_ending += self._session_capture_ended
         algo.property_changed += self._algorithm_property_changed
         algo.relay_transitions(self)
         # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
@@ -114,11 +115,7 @@ class SystemMachine(StateMachine):
 
         pellet_machine = self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
         pellet_machine.events.pellet_loading += self._pellet_loading
-        # pellet_machine.events.pellet_sending += self._pellet_sending
-        # NB: _pellet_sending was used to trigger a start session, if one is not already running/recording,
-        # *always*, by design, atm.
-        # But this is already handled by load_cell_engaged property, basically.
-        pellet_machine.events.state_changed += self._pellet_state_changed
+        # pellet_machine.events.state_changed += self._pellet_state_changed
 
         intersession_machine = self._intersession = IntersessionMachine(algo, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._intersession_ended
@@ -177,7 +174,7 @@ class SystemMachine(StateMachine):
         self._update_magnet_position(self.algorithm.baseline_intensity)
         EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
         if self._algorithm.is_in_session:
-            self._algorithm.end_session(reason=f"{reason}->after_exit_tunnel")
+            self._algorithm.end_capture_session(reason=f"{reason}->after_exit_tunnel")
 
     def before_enter_intersession(self):
         # current system_state should be tunnel here
@@ -241,11 +238,11 @@ class SystemMachine(StateMachine):
         t.start()
 
     @BehaviorAlgorithm.relay_func
-    def _session_starting(self):
+    def _session_capture_started(self):
         pass
 
     @BehaviorAlgorithm.relay_func
-    def _session_ended(self):
+    def _session_capture_ended(self):
         # 5/16/25 should not remove auto-clamp at session end for current testing.
         # TODO: make this configurable.
         # if self._tunnel_device is not None:
@@ -292,11 +289,12 @@ class SystemMachine(StateMachine):
                 else:
                     inference.set_inference_to_online()
             #
-            algo.session_processing_ending(CaptureAnalysisResult.CAPTURE_ONLY)
+            algo.end_session(CaptureAnalysisResult.CAPTURE_ONLY)
 
     @BehaviorAlgorithm.relay_func
-    def _intersession_ended(self):
-        if self.state == SystemState.intersession:
+    def _intersession_ended(self, result: CaptureAnalysisResult):
+        # having to check state, some test bypass the full stack
+        if self._state == SystemState.intersession:
             self._timer_consider_close_gate.cancel()
             self._tunnel_device.open_tunnel_gate()  # always ensure open gate on intersession ended
             logger.debug("_intersession_ended: load_cell.engaged=%s",
@@ -581,7 +579,7 @@ class SystemMachine(StateMachine):
             if new_value:
                 if algo.is_in_session:
                     if algo.intersession_state == IntersessionState.idle:
-                        algo.end_session(reason="algo_paused")
+                        algo.end_capture_session(reason="algo_paused")
                 tunnel_dev.open_tunnel_gate()
                 tunnel_dev.update_head_magnet_intensity(0)
                 if self._pellet_machine.state != PelletState.retract:
@@ -647,7 +645,7 @@ class SystemMachine(StateMachine):
                          reason, self._algorithm.is_in_session, self.state, self._pellet_machine.state)
             return
 
-        if self.algorithm.end_session(reason=f"{reason}->consider_end_session"):
+        if self.algorithm.end_capture_session(reason=f"{reason}->consider_end_session"):
             # force analysis to False,
             # this will trigger a new start session if mouse still there
             self._analysis.load_cell_monitor.is_engaged = False

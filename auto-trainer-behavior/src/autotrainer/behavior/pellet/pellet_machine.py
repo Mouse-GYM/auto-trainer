@@ -54,8 +54,8 @@ class PelletMachine(StateMachine):
         if algorithm is None:
             algorithm = BehaviorAlgorithm()
         self._algorithm = algorithm
-        algorithm.session_starting += self._session_starting
-        algorithm.session_ending += self._session_ending
+        algorithm.session_starting += self._session_started
+        algorithm.session_capture_ending += self._session_capture_ended
         algorithm.relay_transitions(self)
 
         self._message_handler = msg_handler
@@ -171,7 +171,7 @@ class PelletMachine(StateMachine):
 
     # region Callbacks
     @BehaviorAlgorithm.relay_func
-    def _session_starting(self):
+    def _session_started(self):
         # ensure we reset the diamond triangle drifts measures
         self._algorithm.get_diamond_triangle_drifts(reset=True)
         # Strictly speaking, the pellet should not be covered here when covering is disabled.  Under that condition,
@@ -184,7 +184,7 @@ class PelletMachine(StateMachine):
         # and not releasing before the desired threshold/delay.
 
     @BehaviorAlgorithm.relay_func
-    def _session_ending(self):
+    def _session_capture_ended(self):
         # todo: this entire func/block should be moved to system machine or behavior algo imho
         algo = self._algorithm
         logger.debug("_session_ending() called ; session_mouse_seen=%s",

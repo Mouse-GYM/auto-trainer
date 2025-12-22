@@ -240,8 +240,9 @@ class BehaviorAlgorithm(ObservableObject):
     # dynamic events type hints,
     # helps IDE search/completion/type-verification:
     session_starting: Callable[[], None]
-    session_ending: Callable[[], None]
-    session_processing_ending: Callable[[CaptureAnalysisResult], None]
+    session_capture_ending: Callable[[], None]
+    session_processing_starting: Callable[[], None]
+    session_ending: Callable[[CaptureAnalysisResult], None]
 
     pellet_motor_drift_changed: Callable[[Offset3DTuple], None]
     cover_servo_status_changed: Callable[[CoverServoStatus], None]
@@ -267,8 +268,9 @@ class BehaviorAlgorithm(ObservableObject):
     ):
         super().__init__(event_names=(
             "session_starting",
+            "session_capture_ending",
+            "session_processing_starting",
             "session_ending",
-            "session_processing_ending",
             "cover_servo_status_changed",
             "pellet_motor_drift_changed",
             "pellets_presented_evt",  # Some unfortunate names for now given existing property names
@@ -414,7 +416,6 @@ class BehaviorAlgorithm(ObservableObject):
         yield
         t_locals.sync_call_mode = prev
 
-    @staticmethod
     def relay_func(func=None, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
         """Decorator for marking a function/method as having to be relayed to our algo dedicated thread"""
         if func is None:
@@ -914,9 +915,9 @@ class BehaviorAlgorithm(ObservableObject):
 
     def start_session(self, *, reason: str = "NA"):
         with self._thread_lock:
-            return self._start_session(reason=reason)
+            return self._start_capture_session(reason=reason)
 
-    def _start_session(self, *, reason: str):
+    def _start_capture_session(self, *, reason: str):
         if self._is_in_session:
             logger.warning("%s: start_session() called but already in session",
                            reason)
@@ -951,11 +952,11 @@ class BehaviorAlgorithm(ObservableObject):
         self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, True, False)
         return True
 
-    def end_session(self, *, reason: str = "NA"):
+    def end_capture_session(self, *, reason: str = "NA"):
         with self._thread_lock:
-            return self._end_session(reason=reason)
+            return self._end_capture_session(reason=reason)
 
-    def _end_session(self, *, reason: str):
+    def _end_capture_session(self, *, reason: str):
         if not self._is_in_session:
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)
@@ -968,11 +969,15 @@ class BehaviorAlgorithm(ObservableObject):
         self._stop_session_reason = reason
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
-        self.session_ending()
+        self.session_capture_ending()
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
         self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)
         return True
+
+    def end_session(self, result: CaptureAnalysisResult):
+        logger.notice("session processing end: %s", result)
+        self.session_ending(result)
 
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0
@@ -1260,6 +1265,10 @@ class BehaviorAlgorithm(ObservableObject):
             handler_queue.put(None)
             handler_thread.join()
             logger.info("Closed algorithm thread handler")
+
+    # finally:
+    relay_func = staticmethod(relay_func)
+    # so that it can be used with @BehaviorAlgorithm.relay_func by importers.
 
 
 import atexit
