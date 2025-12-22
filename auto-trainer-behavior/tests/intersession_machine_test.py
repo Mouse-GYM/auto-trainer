@@ -1,21 +1,32 @@
+import datetime
 from unittest import mock
 
 import pytest
 from transitions import MachineError
 
-from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration
+from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, SystemState
 from autotrainer.behavior.intersession import IntersessionState
+from top_fixtures import MockSystemMachine
 
 
 def test_intersession(
-    mock_system, machine,
+    mock_system,
+    machine,
 ):
     intersession = machine.intersession
 
     assert intersession.state == IntersessionState.idle
 
     with pytest.raises(MachineError):
-        intersession.perform_detection()
+        seg_cfg = SegmentationConfiguration(
+            nonce="foobar",
+            session_index=42,
+            session_when=datetime.datetime.now(),
+            complete=lambda n, s: 1 / 0,  # noqa
+        )
+        intersession.perform_detection(seg_cfg)
+
+    machine.state = SystemState.intersession
 
     with mock_system.mock_perform_segmentation() as m_perf_segm:
         intersession.perform_segmentation()
@@ -38,9 +49,12 @@ def test_intersession(
         mock.call(detection_cfg)
     ]
 
+    assert intersession.state == IntersessionState.detection
+
     detection_cfg.complete(detection_cfg.nonce, True)
 
     assert intersession.state == IntersessionState.idle
+
     assert mock_system.intersession_state_trans == [
         IntersessionState.segmentation,
         IntersessionState.detection,

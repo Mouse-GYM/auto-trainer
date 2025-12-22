@@ -161,7 +161,7 @@ def get_fake_perf_now(self):
 
 
 @pytest.fixture
-def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch):
+def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch) -> SystemMachine:
     # prevents some test to fail due to handling function in dedicated thread
     global fake_perf_now
     fake_perf_now = 0
@@ -178,7 +178,7 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
     algo = machine.algorithm
     algo.capture_status = CaptureProcessStatus.RUNNING
     algo.pellet_hand_uncover_distance = None  # disabled
-    yield machine
+    return machine
 
 
 class MockSystemMachine:
@@ -330,7 +330,7 @@ class MockSystemMachine:
 
 
 @pytest.fixture
-def mock_system(machine):
+def mock_system(machine) -> MockSystemMachine:
     """Allow use BaseSystemMachineTest instance helper methods in a simple function test, without having to subclass,
     just use the 'mock_system' fixture"""
     instance = MockSystemMachine()

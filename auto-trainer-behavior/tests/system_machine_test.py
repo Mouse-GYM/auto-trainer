@@ -379,7 +379,7 @@ class TestAutoClamp(MockSystemMachine):
             m.start.side_effect = func
             return m
         with mock.patch("autotrainer.behavior.system_machine._clean_raw_data_timer", new=patch_timer):
-            machine.algorithm.end_session()
+            machine.algorithm.end_capture_session()
         for p in file_paths:
             assert not p.exists() if feature_enabled else p.exists()
 
@@ -396,10 +396,10 @@ class TestSessionProcessingEnding(MockSystemMachine):
         #
         algo = machine.algorithm
         algo.intersession_enabled = False
-        algo.session_processing_ending += processing_ended
+        algo.session_ending += processing_ended
         algo.start_session()
         assert processing_ended_count == 0
-        algo.end_session()
+        algo.end_capture_session()
         assert processing_ended_count == 1
 
     def test_when_intersession_mouse_not_seen(self, machine):
@@ -411,13 +411,13 @@ class TestSessionProcessingEnding(MockSystemMachine):
         #
         algo = machine.algorithm
         algo.intersession_enabled = True
-        algo.session_processing_ending += processing_ended
+        algo.session_ending += processing_ended
         #
         algo.start_session()
         assert processing_ended_count == 0
         algo.update_mouse_seen(False)
         assert processing_ended_count == 0
-        algo.end_session()
+        algo.end_capture_session()
         assert processing_ended_count == 1
 
     @pytest.mark.parametrize("detection_success", [False, True])
@@ -434,7 +434,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
         #
         algo = machine.algorithm
         algo.intersession_enabled = True
-        algo.session_processing_ending += processing_ended
+        algo.session_ending += processing_ended
         algo.start_session()
         algo.update_mouse_seen(True)
         assert processing_ended_count == 0
@@ -443,7 +443,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
             assert processing_ended_count == 0
             stack.enter_context(self.mock_perform_detection())
             assert processing_ended_count == 0
-            algo.end_session()
+            algo.end_capture_session()
             assert processing_ended_count == 0
             self.mock_complete_segmentation(True)
             assert processing_ended_count == 0
@@ -460,14 +460,14 @@ class TestSessionProcessingEnding(MockSystemMachine):
         #
         algo = machine.algorithm
         algo.intersession_enabled = True
-        algo.session_processing_ending += processing_ended
+        algo.session_ending += processing_ended
         algo.start_session()
         algo.update_mouse_seen(True)
         assert processing_ended_count == 0
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())
             assert processing_ended_count == 0
-            algo.end_session()
+            algo.end_capture_session()
             assert processing_ended_count == 0
             self.mock_complete_segmentation(False)
             assert processing_ended_count == 1

@@ -479,6 +479,17 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
+        grid_layout.addWidget(QLabel("Before re-engage delay (sec.):"), cur_row, cur_col)
+        spinbox = self._auto_clamp_before_reengage_delay = QDoubleSpinBox()
+        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        spinbox.setRange(0, 600)
+        spinbox.setValue(algo.auto_clamp_before_reengage_delay)
+        spinbox.setDecimals(1)
+        def auto_clamp_before_reengage_delay_changed(value):
+            algo.auto_clamp_before_reengage_delay = value
+        spinbox.valueChanged.connect(auto_clamp_before_reengage_delay_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        #
         # to enable/disable the inference dependant sub-widgets:
         refresh_enabled_states()
 

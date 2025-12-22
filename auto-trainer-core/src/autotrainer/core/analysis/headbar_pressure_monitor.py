@@ -1,3 +1,4 @@
+import math
 import time
 from dataclasses import dataclass
 from math import floor
@@ -39,6 +40,9 @@ class HeadbarPressureMonitor(ObservableObject):
     def __init__(self):
         super().__init__()
 
+        self._is_engaged = False
+        self._force_engaged = False
+
         self._sample_rate = 100
 
         self._load_cell_engaged_threshold: float = 30
@@ -56,8 +60,6 @@ class HeadbarPressureMonitor(ObservableObject):
 
         self._rebuild_buffers()
 
-        self._is_engaged = False
-        self._force_engaged = False
 
     @property
     def sample_rate(self) -> int:

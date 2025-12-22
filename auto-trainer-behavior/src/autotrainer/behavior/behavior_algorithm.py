@@ -240,8 +240,9 @@ class BehaviorAlgorithm(ObservableObject):
     # dynamic events type hints,
     # helps IDE search/completion/type-verification:
     session_starting: Callable[[], None]
-    session_ending: Callable[[], None]
-    session_processing_ending: Callable[[CaptureAnalysisResult], None]
+    session_capture_ending: Callable[[], None]
+    session_processing_starting: Callable[[], None]
+    session_ending: Callable[[CaptureAnalysisResult], None]
 
     pellet_motor_drift_changed: Callable[[Offset3DTuple], None]
     cover_servo_status_changed: Callable[[CoverServoStatus], None]
@@ -267,8 +268,9 @@ class BehaviorAlgorithm(ObservableObject):
     ):
         super().__init__(event_names=(
             "session_starting",
+            "session_capture_ending",
+            "session_processing_starting",
             "session_ending",
-            "session_processing_ending",
             "cover_servo_status_changed",
             "pellet_motor_drift_changed",
             "pellets_presented_evt",  # Some unfortunate names for now given existing property names
@@ -292,6 +294,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._auto_clamp_release_tone_delay = 0.1
         self._auto_clamp_release_load_count = HeadClampConfiguration.auto_clamp_release_load_count
         self._auto_clamp_no_activity_release_delay = HeadClampConfiguration.auto_clamp_no_activity_release_delay
+        self._auto_clamp_before_reengage_delay = HeadClampConfiguration.before_reengage_delay
 
         self._recording_age_release_pellet_threshold = 0.25
         self._recording_prebuffer_duration = 0
@@ -418,7 +421,6 @@ class BehaviorAlgorithm(ObservableObject):
         yield
         t_locals.sync_call_mode = prev
 
-    @staticmethod
     def relay_func(func=None, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
         """Decorator for marking a function/method as having to be relayed to our algo dedicated thread"""
         if func is None:
@@ -680,6 +682,14 @@ class BehaviorAlgorithm(ObservableObject):
     def auto_clamp_no_activity_release_delay(self, value):
         self._auto_clamp_no_activity_release_delay = value
 
+    @property
+    def auto_clamp_before_reengage_delay(self) -> float:
+        return self._auto_clamp_before_reengage_delay
+
+    @auto_clamp_before_reengage_delay.setter
+    def auto_clamp_before_reengage_delay(self, value):
+        self._auto_clamp_before_reengage_delay = value
+
     #
 
     @property
@@ -938,9 +948,9 @@ class BehaviorAlgorithm(ObservableObject):
 
     def start_session(self, *, reason: str = "NA"):
         with self._thread_lock:
-            return self._start_session(reason=reason)
+            return self._start_capture_session(reason=reason)
 
-    def _start_session(self, *, reason: str):
+    def _start_capture_session(self, *, reason: str):
         if self._is_in_session:
             logger.warning("%s: start_session() called but already in session",
                            reason)
@@ -975,11 +985,11 @@ class BehaviorAlgorithm(ObservableObject):
         self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, True, False)
         return True
 
-    def end_session(self, *, reason: str = "NA"):
+    def end_capture_session(self, *, reason: str = "NA"):
         with self._thread_lock:
-            return self._end_session(reason=reason)
+            return self._end_capture_session(reason=reason)
 
-    def _end_session(self, *, reason: str):
+    def _end_capture_session(self, *, reason: str):
         if not self._is_in_session:
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)
@@ -992,11 +1002,15 @@ class BehaviorAlgorithm(ObservableObject):
         self._stop_session_reason = reason
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
-        self.session_ending()
+        self.session_capture_ending()
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
         self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)
         return True
+
+    def end_session(self, result: CaptureAnalysisResult):
+        logger.notice("session processing end: %s", result)
+        self.session_ending(result)
 
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0
@@ -1129,6 +1143,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.auto_clamp_release_tone_delay = cfg.auto_clamp_release_tone_delay
         self.auto_clamp_release_load_count = cfg.auto_clamp_release_load_count
         self.auto_clamp_no_activity_release_delay = cfg.auto_clamp_no_activity_release_delay
+        self.auto_clamp_before_reengage_delay = cfg.before_reengage_delay
 
     def reset_configuration(self):
         """Reset current config to the previous loaded config (via load_configuration)"""
@@ -1161,11 +1176,13 @@ class BehaviorAlgorithm(ObservableObject):
         cfg.min_baseline_intensity = self.min_baseline_intensity
         cfg.max_baseline_intensity = self.max_baseline_intensity
         cfg.baseline_intensity_increment = self.baseline_intensity_increment
+
         cfg.auto_clamp_intensity = self._auto_clamp_intensity
         cfg.auto_clamp_release_tone_freq = self._auto_clamp_release_tone_freq
         cfg.auto_clamp_release_tone_delay = self._auto_clamp_release_tone_delay
         cfg.auto_clamp_release_load_count = self._auto_clamp_release_load_count
         cfg.auto_clamp_no_activity_release_delay = self._auto_clamp_no_activity_release_delay
+        cfg.before_reengage_delay = self._auto_clamp_before_reengage_delay
 
     def update_configuration(self, configuration: BehaviorConfiguration):
         self._update_pellet_cfg(configuration.pellet_delivery)
@@ -1294,6 +1311,10 @@ class BehaviorAlgorithm(ObservableObject):
             handler_queue.put(None)
             handler_thread.join()
             logger.info("Closed algorithm thread handler")
+
+    # finally:
+    relay_func = staticmethod(relay_func)
+    # so that it can be used with @BehaviorAlgorithm.relay_func by importers.
 
 
 import atexit

@@ -81,7 +81,7 @@ def test_covered_load_cycle(mock_system, machine: SystemMachine):
     assert pellet_m.state == PelletState.monitoring
 
     machine._analysis.load_cell_monitor.is_engaged = False
-    # pellet_m.algorithm.end_session()
+    pellet_m.algorithm.end_capture_session()
 
     assert machine.state == SystemState.cage
     assert not machine.algorithm.is_in_session
@@ -111,6 +111,7 @@ def test_covered_load_cycle(mock_system, machine: SystemMachine):
 
     # pellet_m.algorithm.end_session()
     machine._analysis.load_cell_monitor.is_engaged = False
+    pellet_m.algorithm.end_capture_session()
 
     assert machine.state == SystemState.cage
     assert not machine.algorithm.is_in_session
