@@ -35,19 +35,22 @@ class UserPreferences(ObservableObject):
 
     def __init__(self, *, settings_file_path: Optional[Path] = None):
         super().__init__()
+        if settings_file_path is None:
+            settings_args = ()
+        else:
+            settings_args = (settings_file_path.as_posix(), QSettings.Format.IniFormat)
 
-        settings_args = [] if settings_file_path is None else [settings_file_path.as_posix()]
         if sys.platform.startswith("win"):
-            settings_args.extend((QSettings.IniFormat, QSettings.UserScope, "Colorado", "Auto Trainer"))
-            settings = self._settings = QSettings(*settings_args)
+            if settings_file_path is None:
+                settings = self._settings = QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, "Colorado", "Auto Trainer")
+            else:
+                settings = self._settings = QSettings(*settings_args)
         else:
             QCoreApplication.setOrganizationName("Colorado")
             QCoreApplication.setOrganizationDomain("colorado.edu")
             QCoreApplication.setApplicationName("Auto Trainer")
             # IniFormat is required for the settings_file_path to be effective,
             # otherwise it's prepended with XDG_CONFIG_DIR :
-            if settings_file_path is not None:
-                settings_args.append(QSettings.IniFormat)
             settings = self._settings = QSettings(*settings_args)
 
         logger.verbose("Using setting ini file: %r", settings.fileName())
