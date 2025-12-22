@@ -15,6 +15,7 @@ from unittest import mock
 
 import pytest
 
+import autotrainer.core
 
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
@@ -156,17 +157,21 @@ def system_msg_handler(system_msg_queue, sensor_analysis):
         handler.wait_terminated()
 
 
-def get_fake_perf_now(self):
+def get_fake_perf_now():
     return fake_perf_now
+
+
+def update_fake_perf_now(value):
+    global fake_perf_now
+    fake_perf_now = value
 
 
 @pytest.fixture
 def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch) -> SystemMachine:
     # prevents some test to fail due to handling function in dedicated thread
-    global fake_perf_now
-    fake_perf_now = 0
+    update_fake_perf_now(0)
     BehaviorAlgorithm._no_handler_thread = True
-    monkeypatch.setattr(BehaviorAlgorithm, "get_perf_now", get_fake_perf_now)
+    monkeypatch.setattr(autotrainer.core, "_get_perf_now", get_fake_perf_now)
     #
     machine = SystemMachine(
         tunnel_device=tunnel_device,
@@ -200,7 +205,15 @@ class MockSystemMachine:
         self.intersession_state_trans = []
         machine.intersession.events.state_changed += partial(
             property_value_save_transitions, transitions=self.intersession_state_trans)
-        self.mock_pose_response(pellet_seen=True, mouse_seen=False)
+
+    @staticmethod
+    def update_fake_perf_now(value, func=update_fake_perf_now):
+        func(value)
+
+    @staticmethod
+    def inc_fake_perf_now(inc: float=60):
+        global fake_perf_now
+        fake_perf_now += inc
 
     @pytest.fixture()
     def machine(self, machine: SystemMachine) -> SystemMachine:  # noqa
@@ -225,19 +238,35 @@ class MockSystemMachine:
         with mock.patch.object(self.inference, 'perform_segmentation') as m_seg:
             yield m_seg
 
+    def mock_complete_segmentation(self, success: bool):
+        seg_cfg = self._machine.intersession._segmentation_configuration
+        seg_cfg.complete(seg_cfg.nonce, success)
+
     @contextlib.contextmanager
     def mock_perform_detection(self):
         """Mock the inference.perform_detection() method"""
         with mock.patch.object(self.inference, 'perform_detection') as m_det:
             yield m_det
 
-    def mock_pose_response(self, pellet_seen: bool, mouse_seen: bool, triangle_seen: bool=True, ack_pellet: bool=False):
+    def mock_complete_detection(self, success: bool):
+        det_cfg = self._machine.intersession._detection_configuration
+        det_cfg.complete(det_cfg.nonce, success)
+
+    def mock_pose_response(
+        self,
+        pellet_seen: bool,
+        mouse_seen: bool,
+        triangle_seen: bool=True,
+        diamond_seen: bool=True,
+        ack_pellet: bool=False,
+    ):
         """Send/trigger a PoseResponse via pose_algorithm.pose_changed event"""
         parts_flag = {
             "Pellet": pellet_seen,
             "Tongue": mouse_seen,
             "Nose": mouse_seen,
             "Triangle": triangle_seen,
+            "Diamond": diamond_seen,
         }
         parts_flags = (parts_flag, parts_flag, parts_flag)
         response = PoseResponse(sequence=1, parts_flags=parts_flags, locations=[])
@@ -255,14 +284,11 @@ class MockSystemMachine:
         """Ack the previous sent pellet command"""
         self.pellet._pellet_device_ack_received(self.pellet._api_status_token)
 
-    def mock_pellet_missing(self, should_release: bool = True, was_covered: bool = False, mouse_seen: bool = False,
-                            should_prerelease: bool = False):
-        # Make sure we are beyond the required pellet missing time.
-        # time.sleep(self.machine.algorithm.limits.pellet_missing_time + 0.1)
-
+    def mock_pellet_missing(self, mouse_seen: bool = False):
         self.mock_pose_response(False, mouse_seen)
-
-        self.expect_pellet_delivery(should_release, was_covered, should_prerelease)
+        # make sure we are beyond the required pellet missing time:
+        self.inc_fake_perf_now(self._machine.algorithm.pellet_missing_time + 1e-9)
+        self.mock_pose_response(False, mouse_seen)
 
     def expect_pellet_delivery(self, should_release: bool = True, was_covered: bool = False,
                                should_prerelease: bool = False):
@@ -300,14 +326,6 @@ class MockSystemMachine:
 
             assert pellet.state == PelletState.monitoring
 
-    def mock_complete_segmentation(self, success: bool):
-        seg_cfg = self._machine.intersession._segmentation_configuration
-        seg_cfg.complete(seg_cfg.nonce, success)
-
-    def mock_complete_detection(self, success: bool):
-        det_cfg = self._machine.intersession._detection_configuration
-        det_cfg.complete(det_cfg.nonce, success)
-
     def make_load_cell_active(self):
         # NB: this could be moved to auto-trainer-core (where load_cell_monitor is defined),
         # so to be reused by auto-trainer-core/tests dedicated to load cell monitor.
@@ -324,16 +342,19 @@ class MockSystemMachine:
 
     def make_recording_aged_enough(self):
         algo = self._machine.algorithm
+        # self.inc_fake_perf_now(-algo.recording_age_release_pellet_threshold)
         algo.capture_status = CaptureProcessStatus.RECORDING
-        algo._last_capture_status_change_perf_c -= algo.recording_age_release_pellet_threshold
-        self.pellet.environment_changed(pellet_seen=True, must_release=True, caller="simulate start recording")
+        self.inc_fake_perf_now(algo.recording_age_release_pellet_threshold)
+        # algo._last_capture_status_change_perf_c -= algo.recording_age_release_pellet_threshold
+        # self._machine._consider_start_session(reason="recording-age-enough")
+        # self.pellet.environment_changed(pellet_seen=True, must_release=True, caller="simulate start recording")
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_system(machine) -> MockSystemMachine:
     """Allow use BaseSystemMachineTest instance helper methods in a simple function test, without having to subclass,
     just use the 'mock_system' fixture"""
     instance = MockSystemMachine()
     # instance.machine_(machine)  # pytest fixture refuse direct call, so:
     instance._init(machine)
-    yield instance
+    return instance

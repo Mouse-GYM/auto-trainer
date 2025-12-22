@@ -9,7 +9,7 @@ from typing import Optional
 from transitions import Machine
 
 from autotrainer.core import (ProjectInfo, EventManager, SensorAnalysis, LoadCellMonitor, Offset3DTuple,
-                              HeadbarPressureMonitor, transitions_allow_functions, SystemMessageHandler)
+                              HeadbarPressureMonitor, transitions_allow_functions, SystemMessageHandler, get_perf_now)
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
@@ -572,7 +572,7 @@ class SystemMachine(StateMachine):
         load_cell_mon = self._analysis.load_cell_monitor.context
         topcam_pres = algo.top_camera_presence_detection
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
-        perf_now = algo.get_perf_now()
+        perf_now = get_perf_now()
         if (
             not load_cell_mon.is_engaged
             and topcam_pres.last_presence_start_perf_c >= load_cell_mon.last_disengaged_perf_c
@@ -689,7 +689,7 @@ class SystemMachine(StateMachine):
         self._timer_consider_start_session.cancel()  # in case of
         self._timer_consider_start_session = no_op_timer
         algo = self._algorithm
-        perf_now = algo.get_perf_now()
+        perf_now = get_perf_now()
         pellet_seen_age = algo.pellet_seen_age
         pellet_machine = self._pellet_machine
         send_begin_age = pellet_machine.get_pellet_send_begin_age(perf_now)

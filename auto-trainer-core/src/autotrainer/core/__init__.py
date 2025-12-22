@@ -1,5 +1,6 @@
 import dataclasses
 import math
+import time
 from collections import namedtuple
 from typing import Union, List, Tuple, Dict, Any, Iterable, TypeVar, Type, Optional, Callable
 from typing_extensions import Self
@@ -67,6 +68,15 @@ def transitions_allow_functions(transitions: List[Dict[str, Any]]) -> List[Dict[
 Pairs3dOffsetT = Union[List[Tuple[str, str]], Tuple[Tuple[str, str], ...]]
 
 _Offset3DTuple = namedtuple("Offset3DTuple", ('x', 'y', 'z'))
+
+
+def _get_perf_now():
+    # allowed to be patched from test
+    return time.perf_counter()
+
+
+def get_perf_now():
+    return _get_perf_now()
 
 
 class Offset3DTuple(_Offset3DTuple):

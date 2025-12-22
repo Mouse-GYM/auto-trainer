@@ -25,7 +25,7 @@ from typing_extensions import Self
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
-    AnimalSubject
+    AnimalSubject, get_perf_now
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
@@ -507,10 +507,6 @@ class BehaviorAlgorithm(ObservableObject):
     def project(self, project):
         self._project_info = project
 
-    @staticmethod
-    def get_perf_now() -> float:
-        return time.perf_counter()
-
     @property
     def algo_paused(self):
         return self._algo_paused
@@ -519,7 +515,7 @@ class BehaviorAlgorithm(ObservableObject):
     def algo_paused(self, value):
         prev, self._algo_paused = self._algo_paused, value
         if value and not prev:
-            self._algo_paused_perf_t = self.get_perf_now()
+            self._algo_paused_perf_t = get_perf_now()
         self._on_property_changed(BehaviorAlgoProps.ALGO_PAUSED, value, prev)
 
     @property
@@ -549,13 +545,13 @@ class BehaviorAlgorithm(ObservableObject):
 
     @capture_status.setter
     def capture_status(self, value: CaptureProcessStatus):
-        self._last_capture_status_change_perf_c = self.get_perf_now()
+        self._last_capture_status_change_perf_c = get_perf_now()
         self._capture_status = self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, self._capture_status)
 
     @property
     def capture_status_age(self) -> float:
         """Capture status age as number of seconds"""
-        return self.get_perf_now() - self._last_capture_status_change_perf_c
+        return get_perf_now() - self._last_capture_status_change_perf_c
 
     @property
     def recording_age_release_pellet_threshold(self) -> float:
@@ -708,15 +704,15 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def star_recently_seen(self) -> bool:
-        return self.get_perf_now() - self._star_last_seen_perf_c < self.limits.triangle_missing_time
+        return get_perf_now() - self._star_last_seen_perf_c < self.limits.triangle_missing_time
 
     @property
     def triangle_recently_seen(self) -> bool:
-        return self.get_perf_now() - self._triangle_last_seen_perf_c < self.limits.triangle_missing_time
+        return get_perf_now() - self._triangle_last_seen_perf_c < self.limits.triangle_missing_time
 
     @property
     def diamond_recently_seen(self) -> bool:
-        return self.get_perf_now() - self._diamond_last_seen_perf_c < self.limits.triangle_missing_time
+        return get_perf_now() - self._diamond_last_seen_perf_c < self.limits.triangle_missing_time
 
     @property
     def pellet_last_seen(self) -> float:
@@ -965,8 +961,7 @@ class BehaviorAlgorithm(ObservableObject):
         if self._project_info is not None:
             self._project_info.calculate_next_session_index()
 
-        self._set_pellet_last_seen(0.0)
-        self._set_triangle_last_seen(0.0)
+        # ensure we look at their state on start:
         self._session_mouse_seen = False
         self._pellet_seen = False
         self._hands_near_pellet_seen = False
@@ -1006,6 +1001,8 @@ class BehaviorAlgorithm(ObservableObject):
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
         self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)
+        self._set_pellet_last_seen(-math.inf)
+        self._set_triangle_last_seen(-math.inf)
         return True
 
     def end_session(self, result: CaptureAnalysisResult):
@@ -1021,11 +1018,11 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def pellet_seen_age(self) -> float:
         """In nbr of seconds"""
-        return self.get_perf_now() - self._pellet_last_seen
+        return get_perf_now() - self._pellet_last_seen
 
     @property
     def pellet_recently_seen(self):
-        return self.get_perf_now() - self._pellet_last_seen < self.limits.pellet_missing_time
+        return get_perf_now() - self._pellet_last_seen < self.limits.pellet_missing_time
 
     #
 
@@ -1069,25 +1066,25 @@ class BehaviorAlgorithm(ObservableObject):
 
     def update_diamond_seen(self, seen: bool):
         if seen:
-            self._diamond_last_seen_perf_c = self.get_perf_now()
+            self._diamond_last_seen_perf_c = get_perf_now()
 
     def update_star_seen(self, seen: bool):
         if seen:
-            self._star_last_seen_perf_c = self.get_perf_now()
+            self._star_last_seen_perf_c = get_perf_now()
 
     def update_triangle_seen(self, seen: bool = True):
         if self._triangle_seen != seen:
             self._triangle_seen = seen
             EventManager.default().post_event_content(BehaviorEventKind.triangleSeen, context=seen)
         if seen:
-            self._set_triangle_last_seen(self.get_perf_now())
+            self._set_triangle_last_seen(get_perf_now())
 
     def update_pellet_seen(self, seen: bool = True):
         if self._pellet_seen != seen:
             self._pellet_seen = seen
             EventManager.default().post_event_content(BehaviorEventKind.pelletSeen, context=seen)
         if seen:
-            self._set_pellet_last_seen(self.get_perf_now())
+            self._set_pellet_last_seen(get_perf_now())
 
     def pellet_loaded(self):
         self.session_pellet_count += 1
@@ -1225,13 +1222,13 @@ class BehaviorAlgorithm(ObservableObject):
         if prev is None:
             prev = Offset3DTuple(0, 0, 0)
         if __debug__:
-            t_perf_now = self.get_perf_now()
+            t_perf_now = get_perf_now()
             if t_perf_now >= self._next_diamond_triangle_log_report:
                 logger.spam("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
                             drift.humanize(), prev.humanize(), motor_position.humanize(), offset.humanize())
                 self._next_diamond_triangle_log_report = t_perf_now + 1
             if any(abs(d) >= 2 for d in drift):
-                perf_now = self.get_perf_now()
+                perf_now = get_perf_now()
                 if perf_now > self._diamond_triangle_last_drift_report + 1:  # max 1 / s
                     logger.debug("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
                                  drift.humanize(), prev.humanize(), motor_position.humanize(), offset.humanize())

@@ -6,7 +6,7 @@ from typing import Dict, Callable, Any, Optional, get_type_hints
 
 from transitions import Machine
 
-from autotrainer.core import EventManager, transitions_allow_functions, SystemMessageHandler
+from autotrainer.core import EventManager, transitions_allow_functions, SystemMessageHandler, get_perf_now
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.logging import get_verbose_logger
@@ -116,7 +116,7 @@ class PelletMachine(StateMachine):
             self.events.pellet_loading()
             self._api_status_token = self._pellet_device.load_pellet()
             if self._api_status_token is not None:
-                self._prev_pellet_load_perf_c = self._algorithm.get_perf_now()
+                self._prev_pellet_load_perf_c = get_perf_now()
                 self._covered_state = None
                 EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
                 self._pellet_load_count += 1
@@ -140,7 +140,7 @@ class PelletMachine(StateMachine):
         self._api_status_token = self._pellet_device.send_pellet()
         if self._api_status_token is not None:
             self._api_status_token_pellet_send = self._api_status_token
-            self._send_begin_perf_c = self._algorithm.get_perf_now()
+            self._send_begin_perf_c = get_perf_now()
             self.events.pellet_sending()
             EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
 
@@ -269,7 +269,7 @@ class PelletMachine(StateMachine):
         EventManager.default().post_event_content(BehaviorEventKind.pelletAcknowledgeToken, context=token)
 
         self._api_status_token = None
-        perf_now = self._algorithm.get_perf_now()
+        perf_now = get_perf_now()
         if token == self._api_status_token_pellet_send:
             self._send_end_perf_c = perf_now
             self._api_status_token_pellet_send = None
@@ -294,7 +294,7 @@ class PelletMachine(StateMachine):
     # endregion
 
     def _notify_pellet_loaded_ok(self):
-        self._prev_notify_loaded_perf_c = self._algorithm.get_perf_now()
+        self._prev_notify_loaded_perf_c = get_perf_now()
         self.events.pellet_loaded()
 
     @BehaviorAlgorithm.relay_func

@@ -4,6 +4,7 @@ import time
 import threading
 
 import dataclasses
+import warnings
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
@@ -122,7 +123,7 @@ class LoadCellMonitor(ObservableObject):
         if config is None:
             config = LoadCellConfiguration()
         self._config = config
-        self._last_engaged_start: float = 0
+        self._last_engaged_start: float = -math.inf
         self._cur_idx = 0
         self._t_start_was_active: Optional[float] = None
         self._t_inactive_start: Optional[float] = None
@@ -140,14 +141,22 @@ class LoadCellMonitor(ObservableObject):
             Tuple[float, float, int]
             # data, when, index
         ] = deque()
-        perf_now = time.perf_counter()
         self._thread_lock = threading.RLock()  # might be required re-entrant lock !!
         self._context = LoadCellMonitorContext(
-            last_engaged_perf_c=perf_now,
-            last_disengaged_perf_c=perf_now,
-            thrashing_last_engaged_perf_c=perf_now,
-            thrashing_last_disengaged_perf_c=perf_now,
+            last_engaged_perf_c=-math.inf,
+            last_disengaged_perf_c=-math.inf,
+            thrashing_last_engaged_perf_c=-math.inf,
+            thrashing_last_disengaged_perf_c=-math.inf,
         )
+
+    @property
+    def _is_engaged(self):
+        warnings.warn("LoadCellMonitor._is_engaged deprecated", DeprecationWarning)
+        return self.is_engaged
+
+    @_is_engaged.setter
+    def _is_engaged(self, value):
+        raise RuntimeError("deprecated")
 
     @property
     def context(self) -> LoadCellMonitorContext:
