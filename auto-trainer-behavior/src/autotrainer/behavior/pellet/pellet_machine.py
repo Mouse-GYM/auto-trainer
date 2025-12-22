@@ -75,8 +75,8 @@ class PelletMachine(StateMachine):
 
         self._api_status_token = None
         self._api_status_token_pellet_send = None
-        self._covered_state = None  # False == released ; True == covered ; None == unknown/none
-        self._prev_can_cover = None
+        self._covered_state: Optional[bool] = None  # False == released ; True == covered ; None == unknown/none
+        self._prev_can_cover: Optional[bool] = None
         self._prev_covered_state = None
         self._send_begin_perf_c = -math.inf
         self._send_end_perf_c = -math.inf
