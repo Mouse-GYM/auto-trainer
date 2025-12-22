@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 import contextlib
 import logging
@@ -31,6 +32,10 @@ logger = logging.getLogger(__name__)
 
 repo_root_this_dir = Path(__file__).parent  # supposed to be the repo root/top dir
 repo_root_tests_subdir = repo_root_this_dir.joinpath("tests")
+
+
+fake_perf_now = -math.inf  # used to control time.perf_counter() in BehaviorAlgo/SystemMachine/PelletMachine/Intersession
+
 
 
 @pytest.fixture(autouse=True)
@@ -151,25 +156,29 @@ def system_msg_handler(system_msg_queue, sensor_analysis):
         handler.wait_terminated()
 
 
+def get_fake_perf_now(self):
+    return fake_perf_now
+
+
 @pytest.fixture
-def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis):
+def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch):
     # prevents some test to fail due to handling function in dedicated thread
+    global fake_perf_now
+    fake_perf_now = 0
     BehaviorAlgorithm._no_handler_thread = True
+    monkeypatch.setattr(BehaviorAlgorithm, "get_perf_now", get_fake_perf_now)
     #
-    def check_pres_missing(delay, func):
-        m = mock.create_autospec(threading.Timer)
-        return m
-    with mock.patch(f"{SystemMachine.__module__}._check_missing_timer", new=check_pres_missing):
-        machine = SystemMachine(
-            tunnel_device=tunnel_device,
-            pellet_device=pellet_device,
-            analysis=sensor_analysis,
-            inference=inference,
-            project_info=project_info,
-        )
-        machine.algorithm.capture_status = CaptureProcessStatus.RUNNING
-        machine.algorithm.pellet_hand_uncover_distance = None  # disabled
-        yield machine
+    machine = SystemMachine(
+        tunnel_device=tunnel_device,
+        pellet_device=pellet_device,
+        analysis=sensor_analysis,
+        inference=inference,
+        project_info=project_info,
+    )
+    algo = machine.algorithm
+    algo.capture_status = CaptureProcessStatus.RUNNING
+    algo.pellet_hand_uncover_distance = None  # disabled
+    yield machine
 
 
 class MockSystemMachine:
@@ -191,6 +200,7 @@ class MockSystemMachine:
         self.intersession_state_trans = []
         machine.intersession.events.state_changed += partial(
             property_value_save_transitions, transitions=self.intersession_state_trans)
+        self.mock_pose_response(pellet_seen=True, mouse_seen=False)
 
     @pytest.fixture()
     def machine(self, machine: SystemMachine) -> SystemMachine:  # noqa
