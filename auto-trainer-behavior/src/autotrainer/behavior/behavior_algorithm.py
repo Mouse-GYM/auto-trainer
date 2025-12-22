@@ -431,10 +431,7 @@ class BehaviorAlgorithm(ObservableObject):
     def _handler_thread_run(cls: "BehaviorAlgorithm", input_queue: queue.Queue):
         logger.verbose("Running for handling/executing all algo decision/transition ..")
         while True:
-            try:
-                raw = input_queue.get(timeout=0.005)
-            except queue.Empty:
-                continue
+            raw = input_queue.get()
             if raw is None:
                 input_queue.task_done()
                 break
