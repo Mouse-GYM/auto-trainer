@@ -138,7 +138,7 @@ class LoadCellMonitor(ObservableObject):
         self._force_engaged: bool = False  # debug
         self._engaged_batch_count: int = 10  # how many last values to use as mean for check is_engaged
         # same than in HardwareModel.connect (currently hardcoded too)
-        self._p_next_hist_log = -math.inf
+        self._p_next_hist_log = get_perf_now()
         self._values_history: Deque[
             Tuple[float, float, int]
             # data, when, index
