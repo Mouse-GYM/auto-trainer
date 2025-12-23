@@ -15,13 +15,15 @@ from top_fixtures import MockSystemMachine
 from autotrainer.core import HeadbarPressureMonitor
 from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
-from autotrainer.behavior import PelletMachine, CaptureAnalysisResult
+from autotrainer.behavior import PelletMachine, CaptureAnalysisResult, IntersessionState
 from autotrainer.behavior import SystemState, PelletState, SystemMachine
 
 from autotrainer.inference.analysis.intersession_process import IntersessionResponse
 
 
 def test_enter_exit_tunnel(mock_system, machine):
+    algo = machine.algorithm
+
     # Observe for video capture being triggered.
     is_capture_triggered = False
 
@@ -34,30 +36,33 @@ def test_enter_exit_tunnel(mock_system, machine):
     tun_dev = machine._tunnel_device
 
     # Current code assumes intersession analysis is off by default.
-    assert machine.algorithm.intersession_enabled is False
+    assert algo.intersession_enabled is False
 
     # Defaults
     assert machine.state == SystemState.cage
     # assert machine.mock_headfix.current_position == 0
     assert tun_dev.update_head_magnet_intensity.call_args_list == []
-    assert machine.algorithm.is_in_session is False
+    assert algo.is_in_session is False
+    assert not algo.pellet_recently_seen
+    algo.update_pellet_seen(True)
+    assert algo.pellet_recently_seen
 
     # Should trigger enter tunnel, new session, and associated changes.
     mock_system.make_load_cell_active()
 
+    assert algo.is_in_session is True
+    assert is_capture_triggered is True
     assert machine.state == SystemState.tunnel
     assert tun_dev.update_head_magnet_intensity.call_args_list == [
-        mock.call(machine.algorithm.baseline_intensity)
+        mock.call(algo.baseline_intensity)
     ]
-    assert machine.algorithm.is_in_session is True
-    assert is_capture_triggered is True
 
     # Exit tunnel and end session.
     # machine.mock_analysis.mock_load_cell_engaged(False)
     mock_system.make_load_cell_inactive()
 
     assert machine.state == SystemState.cage
-    assert machine.algorithm.is_in_session is False
+    assert algo.is_in_session is False
     assert is_capture_triggered is False
     assert mock_system.machine_state_trans == [
         SystemState.tunnel,
@@ -66,118 +71,108 @@ def test_enter_exit_tunnel(mock_system, machine):
 
 
 def test_no_session_without_pellet(mock_system, machine: SystemMachine):
-    pellet_machine = machine._pellet_machine
-    assert isinstance(pellet_machine, PelletMachine)
+    pellet_m = machine._pellet_machine
+    algo = machine.algorithm
+    assert isinstance(pellet_m, PelletMachine)
 
-    def pellet_ack_received():
-        pellet_machine._pellet_device_ack_received(pellet_machine._api_status_token)
+    load_attempt_count = load_ok_count = 0
+    def pellet_loading():
+        nonlocal load_attempt_count
+        load_attempt_count += 1
 
-    assert machine.algorithm.is_in_session is False
+    def pellet_loaded():
+        nonlocal load_ok_count
+        load_ok_count += 1
+
+    pellet_m.events.pellet_loading += pellet_loading
+    pellet_m.events.pellet_loaded += pellet_loaded
+
+    assert algo.is_in_session is False
+    assert load_attempt_count == 0
 
     # Lose the pellet (pellet state machine initializes to monitoring).  Pellet machine will be in loading state.
-    mock_system.mock_pose_response(False, False)
-
+    mock_system.mock_pose_response(pellet_seen=False)
+    # NB: on very first start the pellet_last_seen will be -inf.. so that the first load will not have to wait pellet_missing_time:
+    assert load_attempt_count == 1
     assert mock_system.pellet_state_trans == [PelletState.loading]
+
     mock_system.pellet_state_trans.clear()
+
+    assert pellet_m._api_status_token is not None
+    mock_system.mock_pellet_ack()
+    assert load_attempt_count == 2
+    assert mock_system.pellet_state_trans == []
+    assert pellet_m._api_status_token is not None
+    # pellet must be seen after loading to go to sending
+    mock_system.mock_pose_response(pellet_seen=True)
+    mock_system.mock_pellet_ack()  # ack the loading
+    assert mock_system.pellet_state_trans == [
+        PelletState.covering,
+        PelletState.sending,
+        PelletState.monitoring,
+    ]
+    mock_system.pellet_state_trans.clear()
+    mock_system.mock_pellet_ack()  # ack the sending, covering is included.
+    assert pellet_m._api_status_token is None
 
     assert mock_system.machine_state_trans == []
 
-    mock_system.make_load_cell_active()
+    mock_system.mock_pose_response(pellet_seen=False)
+    assert pellet_m.state == PelletState.monitoring, "must wait missing time before load"
+    mock_system.increment_perf_now(algo.pellet_missing_time)
 
-    mock_system.make_recording_aged_enough()
-
-    assert mock_system.pellet_state_trans == []
-    assert mock_system.machine_state_trans == [SystemState.tunnel]
-    # Pellet machine not sending/releasing/monitoring - should not start.
-
-    # assert machine.algorithm.is_in_session is False
-    # NO: we now always start a session recording any time load cell is engaged, whatever is pellet status
-
-    mock_system.make_load_cell_inactive()
-
-    assert machine.algorithm.is_in_session is False
-    assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]
-
-    # Cycle through pellet loading cycle so at next entrance a pellet is present.  In all of these cases recording/the
-    # session should start because the send command happened out of tunnel and will not have triggered it.
-
-    # Acknowledge load command -> should go to sending.
-
-    pellet_ack_received()
-
-    p_now = time.perf_counter()
-
-    send_begin_age = pellet_machine.get_pellet_send_begin_age(p_now)
-    send_end_age = pellet_machine.get_pellet_send_end_age(p_now)
-
-    # assert mock_system.pellet_state_trans == [PelletState.sending]
-    # assert not math.isinf(send_begin_age)
-    # assert math.isinf(send_end_age)
-    # assert send_end_age > send_begin_age
-
-    # pellet_ack_received()
-
-    # send_begin_age = pellet_machine.get_pellet_send_begin_age(p_now)
-    # send_end_age = pellet_machine.get_pellet_send_end_age(p_now)
-    #
-    # assert not math.isinf(send_begin_age)
-    # assert not math.isinf(send_end_age)
-    # assert send_end_age < send_begin_age
-
-    # mock_system.make_load_cell_active()
-    machine._analysis.load_cell_monitor.is_engaged = True
-
-    pellet_ack_received()
-
-    assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage, SystemState.tunnel]
-    assert mock_system.pellet_state_trans == [PelletState.sending, PelletState.covering]
-
-    assert machine.algorithm.is_in_session is True
-
-    mock_system.make_load_cell_inactive()
-
-    assert machine.algorithm.is_in_session is False
-
-    assert mock_system.machine_state_trans == 2 * [SystemState.tunnel, SystemState.cage]
-    # Acknowledge send command -> should go to releasing.
-    pellet_ack_received()
-
-    assert machine.algorithm.is_in_session is False
+    assert pellet_m.state == PelletState.monitoring
 
     mock_system.make_load_cell_active()
-    mock_system.make_recording_aged_enough()
+    assert algo.is_in_session is False, "without a pellet-seen session must not start"
+    assert pellet_m.state == PelletState.monitoring  # still monitoring
+    assert machine.state == SystemState.tunnel  # but tunnel
 
-    assert machine.algorithm.is_in_session is True
-    assert machine.pellet.state == PelletState.releasing
+    # now:
+    mock_system.mock_pose_response(pellet_seen=False)
+    assert pellet_m.state == PelletState.loading
 
-    mock_system.make_load_cell_inactive()
+    assert not algo.pellet_recently_seen
+    mock_system.mock_pose_response(pellet_seen=True)  # make pellet-seen
+    assert algo.pellet_recently_seen
 
-    # Acknowledge release command -> should go to monitoring.
-    pellet_ack_received()
-    assert machine.pellet.state == PelletState.covering
+    mock_system.mock_pellet_ack()  # ack the loading AFTER put pellet_seen
 
-    mock_system.make_load_cell_active()
-    mock_system.make_recording_aged_enough()
+    assert algo.is_in_session is False
+    assert algo.pellet_recently_seen
 
-    assert machine.algorithm.is_in_session is True
-
-    mock_system.make_load_cell_inactive()
-
-    assert machine.algorithm.is_in_session is False
-
-    assert machine.state == SystemState.cage
-    assert mock_system.machine_state_trans == 4 * [
-        SystemState.tunnel,
-        SystemState.cage,
-    ]
-    assert machine.pellet.state == PelletState.covering
+    assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [
+        PelletState.loading,
+        PelletState.covering,
         PelletState.sending,
-        PelletState.covering,
-        PelletState.releasing,
         PelletState.monitoring,
-        PelletState.covering,
     ]
+
+    mock_system.mock_pellet_ack()  # ack the sending, covering is included.
+
+    assert algo.pellet_recently_seen
+    assert algo.is_in_session is True, "Once pellet seen and send acked and in monitoring"
+
+    mock_system.make_load_cell_inactive()
+
+    assert not algo.is_in_session
+    assert algo.pellet_recently_seen
+    assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]
+    mock_system.machine_state_trans.clear()
+
+    mock_system.make_load_cell_active()
+
+    assert algo.pellet_recently_seen
+
+    assert mock_system.machine_state_trans == [SystemState.tunnel]
+
+    assert algo.is_in_session is True, "now that pellet-seen: is_in_session"
+
+    mock_system.make_load_cell_inactive()
+
+    assert algo.is_in_session is False
+    assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]
 
 
 def test_intersession_enabled(mock_system, machine):
@@ -186,46 +181,54 @@ def test_intersession_enabled(mock_system, machine):
     system changes are as expected.
     :return: None
     """
-    pellet_machine = machine._pellet_machine
+    algo = machine.algorithm
+    pellet_m = machine._pellet_machine
 
-    machine.algorithm.intersession_enabled = True
+    algo.intersession_enabled = True
 
     assert machine.state == SystemState.cage
-    assert machine.algorithm.system_state == machine.state
-    assert pellet_machine.state == PelletState.monitoring
+    assert algo.system_state == machine.state
+    assert pellet_m.state == PelletState.monitoring
+
+    mock_system.mock_pose_response(pellet_seen=True)
+
+    # first pellet-seen make the pellet to be covered:
+    assert mock_system.pellet_state_trans == [
+        PelletState.covering,
+        PelletState.monitoring,
+    ]
+    mock_system.pellet_state_trans.clear()
+    assert pellet_m._api_status_token is None  # but we don't await the cover ack
 
     mock_system.make_load_cell_active()  # this trigger a start session recording
 
-    assert pellet_machine.state == PelletState.monitoring
-
-    mock_system.make_recording_aged_enough()
-
+    assert algo.is_in_session
+    assert pellet_m.state == PelletState.monitoring
     assert machine.state == SystemState.tunnel
-    assert machine.algorithm.system_state == machine.state
-    assert pellet_machine.state == PelletState.releasing
+    assert algo.system_state == machine.state
+    assert pellet_m.state == PelletState.monitoring
 
-    mock_system.mock_pose_response(False, True, ack_pellet=True)
+    mock_system.mock_pose_response(pellet_seen=False, mouse_seen=True, ack_pellet=True)
 
-    assert pellet_machine.state == PelletState.monitoring
+    assert pellet_m.state == PelletState.monitoring
 
     with mock_system.mock_perform_segmentation():
         mock_system.make_load_cell_inactive()
         assert not machine._analysis.load_cell_monitor.is_engaged
 
+    assert algo.intersession_state == IntersessionState.segmentation
     assert machine.state == SystemState.intersession
-    assert machine.algorithm.system_state == machine.state
+    assert algo.system_state == machine.state
     assert mock_system.machine_state_trans == [
         SystemState.tunnel,
         SystemState.cage,
         SystemState.intersession,
     ]
     assert mock_system.pellet_state_trans == [
-        PelletState.releasing,
-        PelletState.monitoring,
-        PelletState.covering,   # double transition
+        PelletState.covering,
         PelletState.retract,
     ]
-    assert pellet_machine._api_status_token is not None, \
+    assert pellet_m._api_status_token is not None, \
         "An API status token should be in use for the previous retract"
 
 
@@ -314,9 +317,9 @@ class TestAutoClamp(MockSystemMachine):
             stack.enter_context(mock.patch("autotrainer.behavior.system_machine._auto_clamp_release_timer", new=patch_timer))
             stack.enter_context(mock.patch("autotrainer.behavior.system_machine._consider_disengage_autoclamp_timer", new=patch_timer))
             stack.enter_context(mock.patch("autotrainer.behavior.system_machine._consider_end_session_timer", new=patch_timer))
-            machine.algorithm.head_fixation_enabled = False  # Disable auto-clamp
+            algo.head_fixation_enabled = False  # Disable auto-clamp
         # This above mock patch allow to not have to :
-        #   time.sleep(machine.algorithm.auto_clamp_release_delay + 0.0005)
+        #   time.sleep(algo.auto_clamp_release_delay + 0.0005)
         # and/but not be always sure that the timer has completed...
         # NB:
         # This is eventually fragile if other Timer (than the exact one desired (in the same module that is)) were
@@ -324,10 +327,10 @@ class TestAutoClamp(MockSystemMachine):
 
         # Now ensure update_head_magnet_intensity has been called as desired (or not):
         if head_fixation_enabled:
-            exp_update_head_magnet = [mock.call(machine.algorithm.baseline_intensity)]
+            exp_update_head_magnet = [mock.call(algo.baseline_intensity)]
             if start_session:
                 exp_play_tone = [
-                    mock.call(machine.algorithm.auto_clamp_release_tone_freq, 0.5)
+                    mock.call(algo.auto_clamp_release_tone_freq, 0.5)
                 ]
             else:
                 exp_play_tone = []
@@ -341,9 +344,10 @@ class TestAutoClamp(MockSystemMachine):
     # auto-clamp is fully evaluated w/animals.
     @pytest.mark.parametrize("start_session", [False, True])
     def test_auto_clamp_session_off_reset_to_baseline(self, machine, start_session):
+        algo = machine.algorithm
         machine.state = SystemState.tunnel
         if start_session:
-            machine.algorithm.start_session()
+            algo.start_session()
         tun_dev = machine._tunnel_device
         assert tun_dev.update_head_magnet_intensity.call_args_list == []
         #
@@ -354,15 +358,16 @@ class TestAutoClamp(MockSystemMachine):
         machine.after_exit_tunnel()
 
         assert tun_dev.update_head_magnet_intensity.call_args_list == [
-            mock.call(machine.algorithm.baseline_intensity)
+            mock.call(algo.baseline_intensity)
         ]
         assert machine._pellet_device.play_tone.call_args_list == []
 
     @pytest.mark.parametrize("feature_enabled", [False, True])
     def test_clean_raw_data_on_session_end(self, machine, project_info, feature_enabled):
+        algo = machine.algorithm
         machine.project = project_info
-        machine.algorithm.start_session()
-        machine.algorithm.intersession_enabled = True
+        algo.start_session()
+        algo.intersession_enabled = True
         # check with cam1 file paths:
         cam = project_info.camera_1
         file_paths = list(
@@ -373,13 +378,13 @@ class TestAutoClamp(MockSystemMachine):
         for p in file_paths:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.touch()
-        machine.algorithm.clean_raw_data_on_inactive_session = feature_enabled
+        algo.clean_raw_data_on_inactive_session = feature_enabled
         def patch_timer(delay, func):
             m = mock.create_autospec(Timer)
             m.start.side_effect = func
             return m
         with mock.patch("autotrainer.behavior.system_machine._clean_raw_data_timer", new=patch_timer):
-            machine.algorithm.end_capture_session()
+            algo.end_capture_session()
         for p in file_paths:
             assert not p.exists() if feature_enabled else p.exists()
 

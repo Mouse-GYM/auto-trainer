@@ -275,7 +275,7 @@ class AppModel(ObservableObject):
             # desired threshold (but very very near). So to not miss that case: do not "recheck"
             if algo.can_release_pellet():
                 self._behavior.system_machine.pellet.environment_changed(
-                    pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-start-recording")
+                    pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-recording-aged-enough")
                 # NB: this is not really necessary anymore as it's handled by pellet machine itself during monitoring now,
                 # but this makes the call faster, not waiting the next inference result passed to pellet machine environement changed
         else:

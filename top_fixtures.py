@@ -1,12 +1,6 @@
-import logging
-import math
-import time
 import contextlib
 import logging
 import queue
-import sys
-import time
-import threading
 
 from pathlib import Path
 from functools import partial
@@ -20,6 +14,7 @@ import autotrainer.core
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
 from autotrainer.device import MotorConfigurationFile, CompoundMovements
+from autotrainer.inference.analysis import IntersessionResponse
 
 from autotrainer.video import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
@@ -35,8 +30,19 @@ repo_root_this_dir = Path(__file__).parent  # supposed to be the repo root/top d
 repo_root_tests_subdir = repo_root_this_dir.joinpath("tests")
 
 
-fake_perf_now = -math.inf  # used to control time.perf_counter() in BehaviorAlgo/SystemMachine/PelletMachine/Intersession
+fake_perf_now = 0  # used to control time.perf_counter() in BehaviorAlgo/SystemMachine/PelletMachine/Intersession
 
+
+@pytest.fixture(autouse=True)
+def reset_fake_perf_now():
+    global fake_perf_now
+    fake_perf_now = 0
+
+
+def get_fake_perf_now():
+    global fake_perf_now
+    fake_perf_now += 1e-9  # convenience, so that any call to it will get a different value than the previous
+    return fake_perf_now
 
 
 @pytest.fixture(autouse=True)
@@ -66,13 +72,6 @@ def project_info(tmp_path):
     root.mkdir()
     prj = ProjectInfo(root=root.as_posix())
     yield prj
-
-
-@pytest.fixture
-def m_time_time():
-    """Allow to control time.time()"""
-    with mock.patch.object(time, "time") as m_time:
-        yield m_time
 
 
 ##
@@ -157,21 +156,18 @@ def system_msg_handler(system_msg_queue, sensor_analysis):
         handler.wait_terminated()
 
 
-def get_fake_perf_now():
-    return fake_perf_now
-
-
-def update_fake_perf_now(value):
-    global fake_perf_now
-    fake_perf_now = value
-
-
 @pytest.fixture
 def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch) -> SystemMachine:
-    # prevents some test to fail due to handling function in dedicated thread
-    update_fake_perf_now(0)
-    BehaviorAlgorithm._no_handler_thread = True
+    # Disable algo handler thread
+    assert BehaviorAlgorithm._no_handler_thread is False
+    monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
+    assert BehaviorAlgorithm._no_handler_thread is True
+
+    # cur = autotrainer.core.get_perf_now()
+    # assert cur > 0
     monkeypatch.setattr(autotrainer.core, "_get_perf_now", get_fake_perf_now)
+    # assert autotrainer.core.get_perf_now() == 0
+
     #
     machine = SystemMachine(
         tunnel_device=tunnel_device,
@@ -207,11 +203,7 @@ class MockSystemMachine:
             property_value_save_transitions, transitions=self.intersession_state_trans)
 
     @staticmethod
-    def update_fake_perf_now(value, func=update_fake_perf_now):
-        func(value)
-
-    @staticmethod
-    def inc_fake_perf_now(inc: float=60):
+    def increment_perf_now(inc: float=60):
         global fake_perf_now
         fake_perf_now += inc
 
@@ -231,6 +223,18 @@ class MockSystemMachine:
     @property
     def msg_handler(self) -> MessageHandler:
         return self._machine._msg_handler
+
+    #
+
+    @contextlib.contextmanager
+    def mock_analysis(self, results: IntersessionResponse):
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(self.mock_perform_segmentation())
+            stack.enter_context(self.mock_perform_detection())
+            self.mock_complete_segmentation(True)
+            self.mock_complete_detection(True)
+            self._machine._inference.detection_result_ready(results)
+            yield
 
     @contextlib.contextmanager
     def mock_perform_segmentation(self):
@@ -254,8 +258,9 @@ class MockSystemMachine:
 
     def mock_pose_response(
         self,
+        *,
         pellet_seen: bool,
-        mouse_seen: bool,
+        mouse_seen: bool=False,
         triangle_seen: bool=True,
         diamond_seen: bool=True,
         ack_pellet: bool=False,
@@ -282,13 +287,16 @@ class MockSystemMachine:
 
     def mock_pellet_ack(self):
         """Ack the previous sent pellet command"""
-        self.pellet._pellet_device_ack_received(self.pellet._api_status_token)
+        token = self.pellet._api_status_token
+        assert token is not None
+        self.increment_perf_now(1e-9)
+        self.pellet._pellet_device_ack_received(token)
 
     def mock_pellet_missing(self, mouse_seen: bool = False):
-        self.mock_pose_response(False, mouse_seen)
+        self.mock_pose_response(pellet_seen=False, mouse_seen=mouse_seen)
         # make sure we are beyond the required pellet missing time:
-        self.inc_fake_perf_now(self._machine.algorithm.pellet_missing_time + 1e-9)
-        self.mock_pose_response(False, mouse_seen)
+        self.increment_perf_now(self._machine.algorithm.pellet_missing_time + 1e-9)
+        self.mock_pose_response(pellet_seen=False, mouse_seen=mouse_seen)
 
     def expect_pellet_delivery(self, should_release: bool = True, was_covered: bool = False,
                                should_prerelease: bool = False):
@@ -342,12 +350,8 @@ class MockSystemMachine:
 
     def make_recording_aged_enough(self):
         algo = self._machine.algorithm
-        # self.inc_fake_perf_now(-algo.recording_age_release_pellet_threshold)
         algo.capture_status = CaptureProcessStatus.RECORDING
-        self.inc_fake_perf_now(algo.recording_age_release_pellet_threshold)
-        # algo._last_capture_status_change_perf_c -= algo.recording_age_release_pellet_threshold
-        # self._machine._consider_start_session(reason="recording-age-enough")
-        # self.pellet.environment_changed(pellet_seen=True, must_release=True, caller="simulate start recording")
+        self.increment_perf_now(algo.recording_age_release_pellet_threshold)
 
 
 @pytest.fixture()

@@ -14,8 +14,9 @@ from autotrainer.behavior import SystemState, SystemMachine
 def test_enter_exit_transitions(machine: SystemMachine, mock_system):
     # Current code assumes intersession analysis is off by default.  Flag if that changes and we forget to update
     # assumptions.
-    assert machine.algorithm.intersession_enabled is False
-
+    algo = machine.algorithm
+    # some defaults:
+    assert algo.intersession_enabled is False
     assert machine.state == SystemState.cage
 
     with pytest.raises(MachineError):
@@ -23,6 +24,8 @@ def test_enter_exit_transitions(machine: SystemMachine, mock_system):
 
     with pytest.raises(MachineError):
         machine.exit_tunnel()
+
+    algo.update_pellet_seen(True)  # required for below
 
     machine.enter_tunnel()
 
@@ -32,15 +35,17 @@ def test_enter_exit_transitions(machine: SystemMachine, mock_system):
 
     assert machine.state == SystemState.cage
 
-    machine.algorithm.intersession_enabled = True
+    algo.intersession_enabled = True
 
     machine._analysis.load_cell_monitor.is_engaged = True
 
+    assert algo.is_in_session
     assert machine.state == SystemState.tunnel
 
-    machine.algorithm.update_mouse_seen(True)
+    algo.update_mouse_seen(True)  # required for intersession analysis !!
 
     with mock_system.mock_perform_segmentation() as m_perf_segm:
+        assert m_perf_segm.call_args_list == []
         machine.exit_tunnel()
 
     assert m_perf_segm.call_args_list == [

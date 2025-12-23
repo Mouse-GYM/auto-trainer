@@ -307,11 +307,11 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._session_mouse_seen = False
         self._pellet_seen = False
-        self._pellet_last_seen = 0.0
+        self._pellet_last_seen = -math.inf  # 0.0
         self._pellet_hands_min_distance: float = math.inf
         self._hands_near_pellet_seen = False
         self._triangle_seen = False
-        self._triangle_last_seen_perf_c = 0.0
+        self._triangle_last_seen_perf_c = -math.inf  # 0.0
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
         self._use_triangle_pellet_distance_too_far = False
         self._triangle_pellet_diff_too_far_threshold: float = (
@@ -998,8 +998,8 @@ class BehaviorAlgorithm(ObservableObject):
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
         self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)
-        self._set_pellet_last_seen(-math.inf)
-        self._set_triangle_last_seen(-math.inf)
+        # self._set_pellet_last_seen(-math.inf)
+        # self._set_triangle_last_seen(-math.inf)
         return True
 
     def end_session(self, result: CaptureAnalysisResult):
@@ -1112,7 +1112,7 @@ class BehaviorAlgorithm(ObservableObject):
                 self._hands_near_pellet_seen = True  # must be set BEFORE doing the on_property_changed
                 self._on_property_changed(
                     BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN, True, False)
-        self._pellet_hands_min_distance = self._on_property_changed(
+        self._pellet_hands_min_distance = self._on_property_changed(  # property unused
             BehaviorAlgoProps.PELLET_HANDS_DISTANCE, value, self._pellet_hands_min_distance)
 
     def reset_configuration(self):

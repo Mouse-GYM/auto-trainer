@@ -13,15 +13,12 @@ import pytest
 from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode, SystemState, \
     PelletState, IntersessionState
 from autotrainer.behavior.behavior_algorithm import ShiftXYZBufferHandler
-from autotrainer.core import AnimalSubject
-from autotrainer.device import MotorConfigurationFile
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
-from tests.pellet_machine_test import pellet_machine
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.inference_model import InferenceModel
-from tools.acquisition.model.training_plan import load_training_plans, get_plan_id
+from tools.acquisition.model.training_plan import get_plan_id
 from top_fixtures import MockSystemMachine
 
 this_dir = Path(__file__).parent.resolve()
@@ -124,7 +121,7 @@ class TestTrainingPlan(MockSystemMachine):
         ]
 
         for session_idx in range(2):
-            self.inc_fake_perf_now()
+            self.increment_perf_now()
             assert "Received processed shift xyz: " not in caplog.text
             assert plan.current_phase == plan_start_phase
             caplog.clear()
@@ -193,14 +190,12 @@ class TestTrainingPlan(MockSystemMachine):
         assert machine.state == SystemState.tunnel
         algo.update_triangle_seen(True)
         algo.update_pellet_seen(True)
-        self.inc_fake_perf_now(1e-9)
-        # self.make_recording_aged_enough()
+        self.increment_perf_now(1e-9)
         assert algo.pellet_recently_seen
         assert algo.is_in_session
         assert pellet_m.state == PelletState.monitoring  # still
         assert algo.can_release_pellet()
-        self.inc_fake_perf_now(1e-9)
-        # self.make_load_cell_inactive()
+        self.increment_perf_now(1e-9)
         with contextlib.ExitStack() as stack:
             # to be sure:
             algo.update_triangle_seen(True)
@@ -214,7 +209,7 @@ class TestTrainingPlan(MockSystemMachine):
             assert algo.system_state == SystemState.intersession
             assert algo.intersession_state == IntersessionState.segmentation
             assert pellet_m.state == PelletState.retract  # Retract !!
-            self.inc_fake_perf_now(1e-9)
+            self.increment_perf_now(1e-9)
             self.mock_complete_segmentation(True)
             assert algo.system_state == SystemState.intersession
             assert algo.intersession_state == IntersessionState.detection
@@ -233,4 +228,4 @@ class TestTrainingPlan(MockSystemMachine):
         algo.capture_status = CaptureProcessStatus.RUNNING
         assert machine.state == SystemState.cage  # still ofc.
 
-        self.inc_fake_perf_now(1)
+        self.increment_perf_now(1)

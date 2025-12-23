@@ -97,10 +97,6 @@ class PelletMachine(StateMachine):
         self._pellet_retract_count = 0
 
     @property
-    def algorithm(self):
-        return self._algorithm
-
-    @property
     def events(self) -> PelletMachineEvents:
         return self._events
 

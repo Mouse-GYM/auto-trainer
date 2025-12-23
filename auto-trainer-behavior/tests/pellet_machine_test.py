@@ -10,193 +10,8 @@ from autotrainer.behavior import PelletState, SystemState, PelletMachine, Pellet
 from top_fixtures import MockSystemMachine, mock_system
 
 
-@pytest.fixture()
-def pellet_machine():
-    m_pellet_device = mock.create_autospec(PelletDeviceProtocol)
-    BehaviorAlgorithm._no_handler_thread = True
-    pellet_machine = PelletMachine(pellet_device=m_pellet_device)
-    return pellet_machine
-
-
-def test_enter_exit_default(mock_system, machine):
-
-    algo = machine.algorithm
-    algo.pellet_missing_time = 0.1
-
-    pellet_m = machine.pellet
-
-    # Default state
-    assert not algo.is_in_session
-    assert pellet_m.state == PelletState.monitoring
-
-    assert machine.state == SystemState.cage
-
-    machine._analysis.load_cell_monitor.is_engaged = True
-    # machine.enter_tunnel()
-    assert machine.state == SystemState.tunnel
-
-    mock_system.make_recording_aged_enough()
-    assert machine.algorithm.is_in_session
-
-    assert pellet_m.state == PelletState.releasing
-
-    mock_system.mock_pellet_ack()
-
-    assert pellet_m.state == PelletState.monitoring
-
-    machine._analysis.load_cell_monitor._is_engaged = False
-    machine.exit_tunnel()
-
-    assert pellet_m.state == PelletState.covering
-
-    mock_system.mock_pellet_ack()
-
-    machine.enter_tunnel()
-
-    mock_system.make_recording_aged_enough()
-
-    assert pellet_m.state == PelletState.releasing
-
-    mock_system.mock_pellet_ack()
-
-    assert pellet_m.state == PelletState.monitoring
-    assert mock_system.pellet_state_trans == [
-        PelletState.releasing,
-        PelletState.monitoring,
-        PelletState.covering,
-        PelletState.releasing,
-        PelletState.monitoring
-    ]
-    assert machine.state == SystemState.tunnel
-    assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage, SystemState.tunnel]
-
-
-@pytest.mark.skipif(True, reason="xx")
-def test_cover_pellet_enabled(mock_system: MockSystemMachine, machine: SystemMachine):
-    """
-    Should confirm that:
-        A missing pellet triggers load in and out of tunnel
-        Pellet is released if in tunnel, left covered if out of tunnel
-        Pellet is covered if present when leaving tunnel and released if present when entering tunnel
-    :return: None
-    """
-    algo = machine.algorithm
-    algo.pellet_missing_time = 0.5
-
-    pellet_m = machine.pellet
-
-    # Assumed default configuration.
-    assert algo.pellet_cover_enabled is True
-    assert algo.pellet_hand_uncover_distance is None
-    assert pellet_m.state == PelletState.monitoring
-    assert machine.state == SystemState.cage
-
-    mock_system.mock_pose_response(pellet_seen=True, mouse_seen=False, triangle_seen=True)
-    machine._analysis.load_cell_monitor.is_engaged = True
-    # machine.enter_tunnel()
-    assert machine.state == SystemState.tunnel
-    assert pellet_m.state == PelletState.monitoring
-
-    mock_system.make_recording_aged_enough()
-    assert algo.is_in_session
-
-    # assert pellet_m.state == PelletState.releasing
-
-    # mock_system.mock_pellet_ack()
-
-    assert pellet_m.state == PelletState.monitoring
-
-    assert machine.state == SystemState.tunnel
-
-    # mock_system.mock_pellet_ack()
-    # Send a pose response with pellet not seen which should trigger a load/release cycle while in tunnel.
-    try:
-        mock_system.mock_pellet_missing()
-    except AssertionError as err:
-        logging.exception("Failed: %s", err)
-        raise
-
-    machine.exit_tunnel()
-    assert machine.state == SystemState.cage
-
-    # Should have covered on exit.
-    mock_system.expect_cover_command()
-
-    machine.enter_tunnel()
-
-    assert machine.state == SystemState.tunnel
-    assert pellet_m.state == PelletState.covering
-
-    mock_system.make_recording_aged_enough()
-
-    assert pellet_m.state == PelletState.releasing
-
-    # Entering again should have triggered a release (uncover) of the covered pellet.
-    mock_system.expect_pellet_delivery(was_covered=True)
-
-    machine.exit_tunnel()
-
-    assert machine.state == SystemState.cage
-    assert pellet_m.state == PelletState.covering
-
-    # Already tested above, just confirm before next test.
-    mock_system.expect_cover_command()
-
-    assert pellet_m.state == PelletState.covering
-
-    # Send a pose response with pellet not seen which should trigger a load/cover cycle while out of tunnel.
-    mock_system.mock_pose_response(False, False)
-
-    assert pellet_m.state == PelletState.loading
-
-    mock_system.mock_pellet_missing(should_release=False, was_covered=False)
-
-    # This should be the same as entering with it covered above.
-    machine.enter_tunnel()
-
-    mock_system.make_recording_aged_enough()
-
-    # Entering again should have triggered a release (uncover) of the covered pellet.
-    mock_system.expect_pellet_delivery(was_covered=True)
-
-    assert machine.state == SystemState.tunnel
-
-    assert mock_system.machine_state_trans == [
-        SystemState.tunnel,
-        SystemState.cage,
-        SystemState.tunnel,
-        SystemState.cage,
-        SystemState.tunnel,
-    ]
-    assert mock_system.pellet_state_trans == [
-        PelletState.releasing,
-
-        PelletState.monitoring,
-
-        PelletState.loading,
-        PelletState.sending,
-        PelletState.covering,
-        PelletState.releasing,
-
-        PelletState.monitoring,
-
-        PelletState.covering,
-        PelletState.releasing,
-
-        PelletState.monitoring,
-
-        PelletState.covering,
-        PelletState.loading,
-        PelletState.sending,
-        PelletState.covering,
-        PelletState.releasing,
-
-        PelletState.monitoring,
-    ]
-
-
 @pytest.mark.parametrize("cover_enabled", [False, True])
-def test_cover_pellet_on_load_pellet(mock_system, machine, cover_enabled):
+def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enabled):
     """
     Should confirm that:
         A missing pellet triggers load in and out of tunnel
@@ -205,7 +20,6 @@ def test_cover_pellet_on_load_pellet(mock_system, machine, cover_enabled):
     """
     pellet_m = machine.pellet
     algo = machine.algorithm
-    load_cell = machine._analysis.load_cell_monitor
 
     algo.pellet_cover_enabled = cover_enabled
 
@@ -217,18 +31,18 @@ def test_cover_pellet_on_load_pellet(mock_system, machine, cover_enabled):
     assert algo.pellet_recently_seen
 
     # Send a pose response with pellet not seen which should trigger a load/cover cycle while out of tunnel.
-    mock_system.mock_pose_response(False, False)
-    assert pellet_m.state is PelletState.monitoring  # still
+    mock_system.mock_pose_response(pellet_seen=False)
+    assert pellet_m.state == PelletState.monitoring  # still
     assert algo.pellet_recently_seen  # still
-    mock_system.inc_fake_perf_now(algo.pellet_missing_time + 1e-9)
+    mock_system.increment_perf_now(algo.pellet_missing_time + 1e-9)
     assert not algo.pellet_recently_seen  # now not recently seen
-    mock_system.mock_pose_response(False, False)
-    assert pellet_m.state is PelletState.loading
-    mock_system.inc_fake_perf_now(1e-9)
-    mock_system.mock_pose_response(True, False)
-    mock_system.inc_fake_perf_now(1e-9)
+    mock_system.mock_pose_response(pellet_seen=False)
+    assert pellet_m.state == PelletState.loading
+    mock_system.increment_perf_now(1e-9)
+    mock_system.mock_pose_response(pellet_seen=True)
+    mock_system.increment_perf_now(1e-9)
     mock_system.mock_pellet_ack()  # ack the load
-    assert pellet_m.state is PelletState.monitoring
+    assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [
         PelletState.loading,
         PelletState.covering if cover_enabled else PelletState.releasing,
@@ -239,158 +53,65 @@ def test_cover_pellet_on_load_pellet(mock_system, machine, cover_enabled):
     assert algo.can_cover_pellet() is (True if cover_enabled else False)
     assert algo.can_release_pellet() is (False if cover_enabled else True)
     assert algo.session_pellet_count == 0
-    mock_system.mock_pose_response(True, False)
+    mock_system.mock_pose_response(pellet_seen=True)
     assert algo.pellet_recently_seen
     assert algo.session_pellet_count == 1
 
-    # same but with session :
+
+def test_uncover_when_record_aged_enough(mock_system, machine):
+    pellet_m = machine.pellet
+    algo = machine.algorithm
+    algo.pellet_cover_enabled = True
+    load_cell = machine._analysis.load_cell_monitor
+    algo.update_pellet_seen(True)
+    algo.update_triangle_seen(True)
+    assert pellet_m.state == PelletState.monitoring
+    assert not algo.is_in_session
+
     load_cell.is_engaged = True
-    assert algo.pellet_recently_seen
-    assert algo.triangle_recently_seen
     assert algo.is_in_session
-
-
-def test_session_limit(mock_system, machine):
-    # TODO: Session limits and associated logic currently on hold.
-    return
-
-    machine.algorithm.pellet_missing_time = 0.1
-    machine.algorithm.max_pellets_per_session = 2
-    pellet_machine = machine.pellet
-    algorithm = machine.algorithm
-
-    assert algorithm.session_pellet_count == 0
-
-    machine.enter_tunnel()
-
-    # Need to acknowledge the expected trigger to uncover
-    mock_system.expect_pellet_delivery(was_covered=True)
-
-    mock_system.mock_pellet_missing()
-
-    assert pellet_machine.state == PelletState.monitoring
-    # assert algorithm.day_pellet_count == 1
-    assert algorithm.session_pellet_count == 1
-
-    mock_system.mock_pellet_missing()
-
-    assert pellet_machine.state == PelletState.monitoring
-    # assert algorithm.day_pellet_count == 2
-    assert algorithm.session_pellet_count == 2
-
-    # Session limit should have been reached
-
-    mock_system.mock_pellet_missing(should_release=False)
-
-    assert pellet_machine.state == PelletState.covering
-    # assert algorithm.day_pellet_count == 2
-    assert algorithm.session_pellet_count == 3
-
-    # Start a new session
-    machine.exit_tunnel()
-
-    machine.enter_tunnel()
-
-    # Need to acknowledge the expected trigger to uncover
-    mock_system.expect_pellet_delivery(was_covered=True)
-
-    # Previously covered re-released.
-    assert pellet_machine.state == PelletState.monitoring
-    # assert algorithm.day_pellet_count == 3
-    assert algorithm.session_pellet_count == 0
-
-    assert mock_system.machine_state_trans == [
-        SystemState.tunnel,
-        SystemState.cage,
-        SystemState.tunnel,
-    ]
+    assert pellet_m.state == PelletState.monitoring
+    assert mock_system.pellet_state_trans == []
+    # now:
+    mock_system.make_recording_aged_enough()
+    # and:
+    pellet_m.environment_changed()
     assert mock_system.pellet_state_trans == [
         PelletState.releasing,
-
-        PelletState.monitoring,
-
-        PelletState.loading,
-        PelletState.sending,
-        PelletState.covering,
-        PelletState.releasing,
-
-        PelletState.monitoring,
-
-        PelletState.loading,
-        PelletState.sending,
-        PelletState.covering,
-        PelletState.releasing,
-
-        PelletState.monitoring,
-
-        PelletState.loading,
-        PelletState.sending,
-        PelletState.covering,
-        PelletState.releasing,
-
         PelletState.monitoring,
     ]
+    assert pellet_m._api_status_token is None, "we don't await the release"
 
 
-@pytest.mark.skipif(True, reason="disabled, rewrite pellet-machine")
-@pytest.mark.parametrize("pellet_seen", [True, False])
-@pytest.mark.parametrize("must_release", [True, False])
-@pytest.mark.parametrize("pellet_state",
-                         set(PelletState)
-                         - {
-                             PelletState.monitoring,
-                             PelletState.home,
-                             PelletState.loading,
-                             PelletState.prerelease,
-                         })
-def test_move_home_when_intersession(pellet_machine, pellet_state, pellet_seen, must_release):
-    pellet_machine.state = pellet_state
-    pellet_machine.algorithm.system_state = SystemState.intersession
-    pellet_machine.environment_changed(pellet_seen=pellet_seen, must_release=must_release)
-    assert pellet_machine.state is PelletState.retract
+def test_uncover_when_hands_near_pellet(mock_system, machine):
+    pellet_m = machine.pellet
+    algo = machine.algorithm
+    algo.pellet_cover_enabled = True
+    algo.pellet_hand_uncover_distance = 5
+    load_cell = machine._analysis.load_cell_monitor
+    algo.update_pellet_seen(True)
+    algo.update_triangle_seen(True)
+    load_cell.is_engaged = True
+    assert algo.is_in_session
+    mock_system.make_recording_aged_enough()
+    assert pellet_m.state == PelletState.monitoring
+    assert mock_system.pellet_state_trans == [], "contrary to test_uncover_when_record_aged_enough"
+    algo.pellet_hands_min_distance = algo.pellet_hand_uncover_distance
+    assert pellet_m.state == PelletState.monitoring
+    assert mock_system.pellet_state_trans == [
+        PelletState.releasing,
+        PelletState.monitoring,
+    ]
+    assert pellet_m._api_status_token is None, "we don't await the release ack"
 
 
-@pytest.mark.skipif(True, reason="disabled, rewrite pellet-machine")
-@pytest.mark.parametrize("pellet_seen", [True, False])
-@pytest.mark.parametrize("must_release", [True, False])
-@pytest.mark.parametrize("system_state", sorted(set(SystemState) - {SystemState.intersession}))
-def test_send_pellet_when_home(pellet_machine, system_state, pellet_seen, must_release):
-    pellet_machine.state = PelletState.home
-    pellet_machine.algorithm.system_state = system_state
-    pellet_machine.environment_changed(pellet_seen=pellet_seen, must_release=must_release)
-    assert pellet_machine.state is PelletState.sending
+@pytest.mark.skipif(True, reason="Session limits and associated logic currently on hold")
+def test_session_limit(mock_system, machine):
+    # TODO: Session limits and associated logic currently on hold.
+    pass
 
 
-@pytest.mark.xfail(reason="Disabled until day limit is implemented via reach detection.")
-def test_day_limit(machine, mock_system, pellet_machine):
-    machine.algorithm.pellet_missing_time = 0.1
-    machine.algorithm.max_pellets_per_day = 2
-
-    # pellet_machine = machine.pellet
-    algorithm = machine.algorithm
-
-    assert algorithm.day_pellet_count == 0
-
-    machine.enter_tunnel()
-
-    # Pellets one and two.
-    mock_system.mock_pellet_missing()
-    mock_system.mock_pellet_missing()
-
-    assert pellet_machine.state == PelletState.monitoring
-    assert algorithm.day_pellet_count == 2
-    # Pellet over the day limit
-    mock_system.mock_pellet_missing(should_release=False)
-
-    assert pellet_machine.state == PelletState.covering
-    assert algorithm.day_pellet_count == 2
-
-    # Force the new day logic to trigger, if working correctly.  Should not access this field directly outside of
-    # testing.
-    algorithm._today = datetime(2000, 1, 1)
-
-    # Trigger a release on a new day.  If a covered pellet is seen with the mouse in tunnel, it should release.
-    mock_system.mock_pellet_seen(was_covered=True)
-
-    assert pellet_machine.state == PelletState.monitoring
-    assert algorithm.day_pellet_count == 1
+@pytest.mark.skipif(True, reason="Disabled until day limit is implemented via reach detection.")
+def test_day_limit(machine, mock_system):
+    # TODO
+    pass

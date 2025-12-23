@@ -80,9 +80,10 @@ def diamond_config_path(monkeypatch):
 
 
 @pytest.fixture
-def app_model(user_pref, calib_dir, diamond_config_path, system_config):
+def app_model(user_pref, calib_dir, diamond_config_path, system_config, monkeypatch):
     # for now:
-    BehaviorAlgorithm._no_handler_thread = True  # to be safe to start with
+    monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
+    assert BehaviorAlgorithm._no_handler_thread is True  # to be safe to start with
     #
     app = AppModel(user_pref, calib_dir=calib_dir)
     return app

@@ -9,7 +9,7 @@ from collections import deque
 from functools import reduce, partial
 from typing import Optional, List
 
-from autotrainer.core import ObservableObject
+from autotrainer.core import ObservableObject, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 
 
@@ -43,7 +43,7 @@ class AudioSpectrumThrashMonitor(ObservableObject):
         self._config = config
         self._values_history = deque()
         self._cur_detected = False
-        perf_now = time.perf_counter()
+        perf_now = get_perf_now()
         self._last_engaged_perf_c: float = perf_now
         self._last_disengaged_perf_c: float = perf_now
         self._when_start_detecting: Optional[float] = None
@@ -66,7 +66,7 @@ class AudioSpectrumThrashMonitor(ObservableObject):
     def is_thrashing_detected(self, value):
         prev, self._cur_detected = self._cur_detected, value
         if prev != value:
-            perf_now = time.perf_counter()
+            perf_now = get_perf_now()
             if value:
                 self._last_engaged_perf_c = perf_now
             else:
@@ -75,11 +75,11 @@ class AudioSpectrumThrashMonitor(ObservableObject):
 
     @property
     def engaged_age(self):
-        return (time.perf_counter() if self._cur_detected else self._last_disengaged_perf_c) - self._last_engaged_perf_c
+        return (get_perf_now() if self._cur_detected else self._last_disengaged_perf_c) - self._last_engaged_perf_c
 
     @property
     def disengaged_age(self):
-        return (time.perf_counter() if not self._cur_detected else self._last_engaged_perf_c) - self._last_disengaged_perf_c
+        return (get_perf_now() if not self._cur_detected else self._last_engaged_perf_c) - self._last_disengaged_perf_c
 
     def _update_history(self, values, when, index):
         hist = self._values_history
@@ -94,7 +94,7 @@ class AudioSpectrumThrashMonitor(ObservableObject):
             dropped += 1
         hist.append((values, when, index))
         if __debug__:
-            t_perf_now = time.perf_counter()
+            t_perf_now = get_perf_now()
             if t_perf_now > self._t_perf_next_report:
                 self._t_perf_next_report = t_perf_now + float(os.getenv("AUDIO_THRASHING_LOG_REPORT_DELAY", "60"))
                 logger.debug("hist size=%s cur_dropped=%s cur_when=%.3f cur_index=%s ; values=%s",

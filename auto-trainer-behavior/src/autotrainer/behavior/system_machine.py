@@ -120,9 +120,9 @@ class SystemMachine(StateMachine):
 
         pellet_machine = self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
         pellet_machine.events.state_changed += self._pellet_state_changed
-        # pellet_machine.events.pellet_sent += self._pellet_sent  already handled via _pellet_state_changed
         pellet_machine.events.pellet_loading += self._pellet_loading
         pellet_machine.events.pellet_loaded += self._pellet_loaded
+        pellet_machine.events.pellet_sent += self._pellet_sent
 
         intersession_machine = self._intersession = IntersessionMachine(algo, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._intersession_ended
@@ -392,7 +392,7 @@ class SystemMachine(StateMachine):
         if not self._state == SystemState.tunnel:
             logger.info("auto-clamp not in tunnel  (no action taken)")
             return
-        p_now = time.perf_counter()
+        p_now = get_perf_now()
         disengage_age = p_now - self._last_disengage_autoclamp_perf_c
         remains = algo.auto_clamp_before_reengage_delay - disengage_age
         if remains > 0:
@@ -504,7 +504,7 @@ class SystemMachine(StateMachine):
     def _pose_changed(self, response: PoseResponse):
         if __debug__:
             t_last = getattr(self, "_last_pose_changed_logged", 0)
-            p_now = time.perf_counter()
+            p_now = get_perf_now()
             if p_now - t_last >= 5:
                 logger.debug("pose_changed: %s", response)
                 self._last_pose_changed_logged = p_now
@@ -548,7 +548,7 @@ class SystemMachine(StateMachine):
             return
         #
         def disengage_auto_clamp():
-            self._last_disengage_autoclamp_perf_c = time.perf_counter()
+            self._last_disengage_autoclamp_perf_c = get_perf_now()
             self._update_magnet_position(algo.baseline_intensity)
         #
         logger.debug(
@@ -682,7 +682,7 @@ class SystemMachine(StateMachine):
         self._algorithm.intersession_state = new_value
 
     def _pellet_sent(self):
-        self._consider_start_session(reason="pellet-sent-and-in-tunnel-and-not-in-session")
+        self._consider_start_session(reason="pellet-sent")
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_start_session(self, reason: str = "NA", is_from_timer: bool=False):

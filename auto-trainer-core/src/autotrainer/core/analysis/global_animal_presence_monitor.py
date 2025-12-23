@@ -3,7 +3,7 @@ import time
 import math
 import threading
 
-from autotrainer.core import ObservableObject
+from autotrainer.core import ObservableObject, get_perf_now
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
 from autotrainer.core.logging import get_verbose_logger
@@ -38,7 +38,7 @@ class GlobalAnimalPresenceMonitor(BaseDetector):
         self._config = value
 
     def _check_state(self):
-        t_perf_now = time.perf_counter()
+        t_perf_now = get_perf_now()
         cfg = self._config
         load_cell_mon = self._load_cell_monitor.context
         top_cam_pres_age = t_perf_now - self._topcam_presence.last_presence_start_perf_c

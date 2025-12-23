@@ -15,7 +15,7 @@ from typing_extensions import Self
 import numpy
 
 from autotrainer.core.logging import get_verbose_logger
-from .. import build_kwargs_apply_mapping, make_camelize_representer
+from .. import build_kwargs_apply_mapping, make_camelize_representer, get_perf_now
 from ..multiproc import make_daemon_timer, no_op_timer
 from ..observable_object import ObservableObject
 from ..event import EventManager, ApiEventKind
@@ -81,23 +81,25 @@ class LoadCellMonitorContext:
 
     @property
     def engaged_age(self):
-        """current if is currently engaged, or previous otherwise, engaged age"""
-        return (time.perf_counter() if self.is_engaged else self.last_disengaged_perf_c) - self.last_engaged_perf_c
+        """Current, if is currently engaged, or previous otherwise, engaged age"""
+        return (get_perf_now() if self.is_engaged else self.last_disengaged_perf_c) - self.last_engaged_perf_c
 
     @property
     def disengaged_age(self):
-        # current or previous disengaged age
-        return (time.perf_counter() if not self.is_engaged else self.last_engaged_perf_c) - self.last_disengaged_perf_c
+        """Current or previous disengaged age"""
+        return (get_perf_now() if not self.is_engaged else self.last_engaged_perf_c) - self.last_disengaged_perf_c
 
     @property
     def thrashing_engaged_age(self):
-        """current if it is currently detected, or previous otherwise thrashing_engaged_age"""
-        return (time.perf_counter() if self.thrashing_detected else self.thrashing_last_disengaged_perf_c) - self.thrashing_last_engaged_perf_c
+        """current if it is currently engaged, or previous otherwise thrashing_engaged_age"""
+        age = get_perf_now() if self.thrashing_detected else self.thrashing_last_disengaged_perf_c
+        return age - self.thrashing_last_engaged_perf_c
 
     @property
     def thrashing_disengaged_age(self):
-        return (
-            time.perf_counter() if not self.thrashing_detected else self.thrashing_last_engaged_perf_c) - self.thrashing_last_disengaged_perf_c
+        """current if it is currently disengaged, or previous otherwise thrashing_disengaged_age"""
+        age = get_perf_now() if not self.thrashing_detected else self.thrashing_last_engaged_perf_c
+        return age - self.thrashing_last_disengaged_perf_c
 
 
 class LoadCellMonitor(ObservableObject):
@@ -136,7 +138,7 @@ class LoadCellMonitor(ObservableObject):
         self._force_engaged: bool = False  # debug
         self._engaged_batch_count: int = 10  # how many last values to use as mean for check is_engaged
         # same than in HardwareModel.connect (currently hardcoded too)
-        self._t_next_hist_log = time.time()
+        self._p_next_hist_log = -math.inf
         self._values_history: Deque[
             Tuple[float, float, int]
             # data, when, index
@@ -185,7 +187,7 @@ class LoadCellMonitor(ObservableObject):
             if value == self._context.is_engaged:
                 return
             new_context = dataclasses.replace(self._context, is_engaged=value)
-            perf_now = time.perf_counter()
+            perf_now = get_perf_now()
             if value:
                 new_context.last_engaged_perf_c = perf_now
             else:
@@ -212,7 +214,7 @@ class LoadCellMonitor(ObservableObject):
         if value != prev:
             new_ctx = dataclasses.replace(ctx, thrashing_detected=value)
             logger.debug("load_cell_monitor.thrashing_detected=%s", value)
-            perf_now = time.perf_counter()
+            perf_now = get_perf_now()
             if value:
                 new_ctx.thrashing_last_engaged_perf_c = perf_now
             else:
@@ -266,8 +268,8 @@ class LoadCellMonitor(ObservableObject):
 
     def _make_thrashing_check(self, when, cfg):
         if not (
-                self.is_engaged
-                and when - self._t_last_ptp_check >= cfg.thrashing_var_min_delay
+            self.is_engaged
+            and when - self._t_last_ptp_check >= cfg.thrashing_var_min_delay
         ):
             return
         self._t_last_ptp_check = when
@@ -314,11 +316,11 @@ class LoadCellMonitor(ObservableObject):
         cur_engaged = ctx.is_engaged
         cur_thrashing = ctx.thrashing_detected
         if __debug__:
-            t_now = time.time()
-            if t_now > self._t_next_hist_log:
+            p_now = get_perf_now()
+            if p_now > self._p_next_hist_log:
                 logger.verbose("hist size=%s value=%.1f index=%s start_active=%s engaged=%s trashing=%s",
                                len(self._values_history), value, index, t_start, cur_engaged, cur_thrashing)
-                self._t_next_hist_log += 60
+                self._p_next_hist_log += 60
         # always:
         self._make_thrashing_check(when, cfg)
         #

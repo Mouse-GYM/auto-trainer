@@ -5,8 +5,9 @@ from autotrainer.core import BehaviorConfiguration
 
 
 @pytest.fixture
-def algo():
-    BehaviorAlgorithm._no_handler_thread = True
+def algo(monkeypatch):
+    monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
+    assert BehaviorAlgorithm._no_handler_thread is True
     algo = BehaviorAlgorithm()
     yield algo
     # in case need cleanup
