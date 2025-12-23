@@ -11,11 +11,11 @@ from autotrainer.core.logging import get_verbose_logger
 logger = get_verbose_logger(__name__)
 
 
-def _find_default_configuration_location() -> str:
+def get_default_configuration_location() -> str:
     return str(Path.home().joinpath("Autotrainer"))
 
 
-def _find_default_data_location() -> str:
+def get_default_data_location() -> str:
     return str(Path.home().joinpath("Documents").joinpath("RawDataLocal"))
 
 
@@ -60,7 +60,7 @@ class UserPreferences(ObservableObject):
         self._last_configuration = settings.value("system/last_configuration", "")
 
         self._configuration_location = settings.value("system/configuration_location",
-                                                      _find_default_configuration_location())
+                                                      get_default_configuration_location())
 
         self._animal_location = settings.value("system/animal_location", "")
         self._selected_animal = settings.value("system/selected_animal", "")

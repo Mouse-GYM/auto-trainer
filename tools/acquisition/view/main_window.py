@@ -29,7 +29,7 @@ from autotrainer.pyside.content_widget import InvokeMethod
 
 from autotrainer.training import TrainingPlan
 
-from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.model.app_model import AppModel, AppModelStatus
 from tools.acquisition.model.handle_3d_calibration import make_3d_calib
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.training_plan import get_plan_id
@@ -52,9 +52,15 @@ class MainWindow(QMainWindow):
     training_mode_changed = Signal(TrainingMode)
     running_status_changed = Signal(bool)  # True == running
 
-    def __init__(self, app: QApplication, user_preferences: UserPreferences, configuration: str = None,
-                 app_version: str = "", is_dev: bool = False):
-        super(MainWindow, self).__init__(None)
+    def __init__(
+        self,
+        app: QApplication,
+        user_preferences: UserPreferences,
+        configuration: str = None,
+        app_version: str = "",
+        is_dev: bool = False,
+    ):
+        super().__init__(None)
 
         self._orig_inference_analysis_feed = None
         self._orig_inference_analysis_process = None
@@ -210,7 +216,8 @@ class MainWindow(QMainWindow):
         return mean, std_dev
 
     def _handle_diamond_triangle_calib_run(self, *, positions: List[Offset3DTuple], offsets: List[Offset3DTuple]):
-        self._timer_calibrate.cancel()
+        self._timer_calibrate_diamond_triangle.cancel()
+        self._app_model.status = AppModelStatus.ACQUIRING
         if len(offsets) < 3:
             self.calib_diamond_triangle_action.setEnabled(False)
             box = QMessageBox()
@@ -246,6 +253,7 @@ class MainWindow(QMainWindow):
             box.closeEvent = close_event
             box.show()
             return
+
         avg_pos, stdev_pos = self.calculate_std_dev_manual(positions)
         assert isinstance(avg_pos, Offset3DTuple)
         assert isinstance(stdev_pos, Offset3DTuple)
@@ -318,6 +326,8 @@ class MainWindow(QMainWindow):
         logger.notice("Starting diamond-triangle calibration .. duration=%.1f second(s)", calib_duration)
 
         app_model = self._app_model
+        app_model.status = AppModelStatus.CALIBRATION_DCS
+
         algo = app_model.behavior.algorithm
         action = self.calib_diamond_triangle_action
 
@@ -326,7 +336,7 @@ class MainWindow(QMainWindow):
             if not recording:
                 return
             if len(offsets) > 2:
-                self._timer_calibrate.cancel()
+                self._timer_calibrate_diamond_triangle.cancel()
             new_offset = pose_response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle)
             if new_offset is not None:
                 offsets.append(new_offset)
@@ -347,7 +357,7 @@ class MainWindow(QMainWindow):
         start_perf_c = time.perf_counter()
         app_model.inference.pose_response_ready += record_offsets
         self._status_label.setText("Capturing data ..")
-        timer = self._timer_calibrate = _calibrate_timer(
+        timer = self._timer_calibrate_diamond_triangle = _calibrate_timer(
             DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT,
             lambda: InvokeMethod(self.on_calibrate_diamond_triangle, False)
         )
@@ -360,7 +370,7 @@ class MainWindow(QMainWindow):
         #
         self._status_label.setText("")
         logger.notice("finished diamond-triangle calibration")
-        self._timer_calibrate.cancel()
+        self._timer_calibrate_diamond_triangle.cancel()
         app_model.inference.pose_response_ready -= record_offsets
         algo.pellet_delivery_enabled = before_pellet_delivery_enabled
         action.setIcon(qta.icon("fa5s.crosshairs"))
@@ -388,6 +398,7 @@ class MainWindow(QMainWindow):
     def on_3d_calibrate(self, is_toggled):
         self.run_action.setEnabled(not is_toggled)
         if is_toggled:
+            self._app_model.status = AppModelStatus.CALIBRATION_3D
             error = "Processing unfinished"
             result_dir: Path = None
             def handle_3d_calib():
@@ -404,6 +415,7 @@ class MainWindow(QMainWindow):
                 self.run_action.setEnabled(True)
                 self.make_3d_calib_action.setChecked(False)
                 self.make_3d_calib_action.setEnabled(True)
+                self._app_model.status = AppModelStatus.IDLE
                 logger.verbose("3d-calib thread joined, error=%s", error)
                 if error is None:
                     target = Path(self._preferences.configuration_location).joinpath("4mm_6r_8c_4x")
@@ -452,7 +464,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         logger.debug("MainWindow.closeEvent: %s", event)
-        self._timer_calibrate.cancel()
+        self._timer_calibrate_diamond_triangle.cancel()
         self._app_model.on_close()  # close app_model before all/any window/GUI parts/elements
         self.main_content.close()
         dialogs = self._open_dialogs
@@ -503,7 +515,7 @@ class MainWindow(QMainWindow):
         action.triggered.connect(self.on_previous_plan_phase)
 
         self._diamond_triangle_calib_run = None
-        self._timer_calibrate = no_op_timer
+        self._timer_calibrate_diamond_triangle = no_op_timer
         action = self.calib_diamond_triangle_action = QAction(QIcon(qta.icon("fa5s.crosshairs")), "Calibrate Coordinate System", self)
         action.setToolTip("Calibrate the relative offset between the pellet delivery spoon and the tunnel")
         action.setCheckable(True)
@@ -883,7 +895,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_prev_next_phases(self):
         attached = self._app_model.attached_plan
-        if attached is None or self._app_model.training_mode != TrainingMode.MANUAL_AND_PROTOCOL:
+        if attached is None or self._app_model.training_mode != TrainingMode.MANUAL_WITH_PROTOCOL:
             self.previous_training_phase_action.setVisible(False)
             self.next_training_phase_action.setVisible(False)
             return
@@ -898,7 +910,11 @@ class MainWindow(QMainWindow):
 
     def _app_model_property_changed(self, name: str, value, _):
         props = self._app_model.Props
-        if name == props.ANIMALS:
+        #
+        if name == props.ACQUISITION_RUNNING:
+            self.running_status_changed.emit(value)
+
+        elif name == props.ANIMALS:
             self._reload_animals(value)
 
         elif name == props.SELECTED_ANIMAL:

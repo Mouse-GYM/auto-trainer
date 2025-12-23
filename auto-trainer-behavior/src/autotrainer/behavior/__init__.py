@@ -136,7 +136,7 @@ class CaptureAnalysisResult(str, enum.Enum):
 
 class TrainingMode(str, enum.Enum):  # todo: eventually find better place
     MANUAL = "Manual"
-    MANUAL_AND_PROTOCOL = "Manual with Protocol"
+    MANUAL_WITH_PROTOCOL = "Manual with Protocol"
     AUTOMATIC = "Automatic"
 
 

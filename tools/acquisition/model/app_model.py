@@ -43,15 +43,23 @@ from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingM
 
 from autotrainer.training import TrainingPlan, TrainingPhase
 
-from autotrainer.api import RpcService, ApiCommandRequest, ApiCommandRequestResponse, ApiCommandReqeustResult
+from autotrainer.api.command.status_response import ApiAppStatus, ApiTrainingMode
 from autotrainer.api.rpc_service import ApiCommand, ApiCommandRequestErrorKind
+from autotrainer.api import (
+    RpcService,
+    ApiCommandRequest,
+    ApiCommandRequestResponse,
+    ApiCommandReqeustResult,
+    ApiTopic,
+    ConfigurationResponse, StatusResponse, ApiEventKind,
+)
 
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 from tools.acquisition.model.training_plan import load_training_plans, get_plan_id
-from tools.acquisition.model.user_preferences import UserPreferences
+from tools.acquisition.model.user_preferences import UserPreferences, get_default_configuration_location
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = get_verbose_logger(__name__)
@@ -84,12 +92,35 @@ class TrainingPlansFSEventHandler(PatternMatchingEventHandler):
             self._reload_app_model_plans()
 
 
+class AppModelStatus(str, enum.Enum):
+    IDLE = "idle"
+    ACQUIRING = "acquiring"
+    CALIBRATION_3D = "calibration_3d"
+    CALIBRATION_DCS = "calibration_dcs"
+
+    def to_api_app_status(self) -> ApiAppStatus:
+        return getattr(ApiAppStatus, self.name)
+
+
+def training_mode_to_api_training_mode(mode: TrainingMode) -> ApiTrainingMode:
+    try:
+        member = getattr(ApiTrainingMode, mode.name)
+        assert isinstance(member, ApiTrainingMode)
+        return member
+    except AttributeError:
+        return ApiTrainingMode.UNDEFINED
+
+
 class AppModel(ObservableObject):
 
     configuration_loaded_event: Callable[[SystemConfiguration], None]
     on_error: Callable[[str, str], None]
 
     class Props(str, enum.Enum):
+
+        STATUS = "status"
+        ACQUISITION_RUNNING = "acquisition_running"  # False / True
+
         ANIMALS = "animals"
         SELECTED_ANIMAL = "selected_animal"
         OUTPUT_LOCATION = "output_location"
@@ -115,14 +146,18 @@ class AppModel(ObservableObject):
     ):
         super().__init__(('on_error', 'configuration_loaded_event'))
 
+        self._app_lock = threading.RLock()
         # using a shared process manager,
         # this allows to put shared values, created via the manager, to any multiprocess shared queue, notably.
         self._mp_manager = multiprocessing.get_context("spawn").Manager()
         # otherwise (new) shared values can only be inherited from newly spawned sub-process(es) and not from already
         # existing sub-process(es).
 
+        self._status = AppModelStatus.IDLE
+
         self._preferences = preferences
         self._loaded_configuration: Optional[SystemConfiguration] = None
+        self._loaded_config_dir_path = Path()
 
         self._app_version = app_version
 
@@ -130,7 +165,10 @@ class AppModel(ObservableObject):
         self._training_plan: Optional[TrainingPlan] = None
         self._training_plan_animal: Optional[AnimalSubject] = None
         self._acquisition_started = False
+        self._acquisition_stopping = False
         self._reload_plans_needed = False
+
+        self._event_manager = EventManager.default()
 
         mp_ctx = get_mp_ctx()
 
@@ -219,7 +257,7 @@ class AppModel(ObservableObject):
         self._training_plan_by_plan_id: Dict[str, Dict] = {}
         self._plans_by_path: Dict[Path, Dict[str, Any]] = {}
 
-        self._behavior = BehaviorModel(
+        behavior_model = self._behavior = BehaviorModel(
             self._system_message_handler, self._analysis, self._hardware, self._inference,
             topcam_presence=self._top_camera_presence_detection,
             system_machine=system_machine,
@@ -227,7 +265,7 @@ class AppModel(ObservableObject):
 
         self._output_location = ""
         self._is_recording_trigger = False
-        self._project_info = None
+        self._project_info: Optional[ProjectInfo] = None
         self._animal_name = ""
         self._notes = ""
 
@@ -252,13 +290,24 @@ class AppModel(ObservableObject):
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
         self._hardware.property_changed += self._on_hardware_property_changed
-        self._behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
-        preferences.property_changed += self._on_preferences_property_changed
         self._inference.property_changed += self._on_inference_property_changed
+        preferences.property_changed += self._on_preferences_property_changed
+        behavior_model.algorithm.property_changed += self._on_behavior_algo_property_changed
+        behavior_model.emergency_stopped += self._on_emergency_stopped
+        behavior_model.emergency_resumed += self._on_emergency_resumed
 
         self._plans_files_event_handler = TrainingPlansFSEventHandler(self)
         self._plans_files_observer = Observer()
         self._plans_files_observer.start()
+
+    @property
+    def status(self) -> AppModelStatus:
+        return self._status
+
+    @status.setter
+    def status(self, value):
+        prev, self._status = self._status, value
+        self._on_property_changed(self.Props.STATUS, value, prev)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_release_pellet(self):
@@ -424,11 +473,11 @@ class AppModel(ObservableObject):
         return self._training_mode
 
     @training_mode.setter
-    def training_mode(self, value):
-        prev, self._training_mode = self._training_mode, value
-        if prev == value:
+    def training_mode(self, mode: TrainingMode):
+        prev, self._training_mode = self._training_mode, mode
+        if prev == mode:
             return
-        if value == TrainingMode.MANUAL:
+        if mode == TrainingMode.MANUAL:
             self._detach_training_plan()
         else:
             animal = self._selected_animal
@@ -437,13 +486,15 @@ class AppModel(ObservableObject):
             else:
                 attached = self._attached_plan
                 if attached is not None:
-                    is_auto = value == TrainingMode.AUTOMATIC
+                    is_auto = mode == TrainingMode.AUTOMATIC
                     logger.info("Updating plan is_automatic to %s", is_auto)
                     attached.is_automatic = is_auto
                 else:
                     # this will also attach to it (given current mode != manual):
                     self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
-        self._on_property_changed(self.Props.TRAINING_MODE, value, prev)
+        self._on_property_changed(self.Props.TRAINING_MODE, mode, prev)
+        self._event_manager.post_event_content(
+            ApiEventKind.trainingModeChanged, {'training_mode': mode})
 
     @property
     def attached_plan(self) -> Optional[TrainingPlan]:
@@ -454,25 +505,31 @@ class AppModel(ObservableObject):
         return self._training_plan
 
     @training_plan.setter
-    def training_plan(self, value: Optional[TrainingPlan]):
+    def training_plan(self, plan: Optional[TrainingPlan]):
         animal = self._selected_animal
-        prev, self._training_plan = self._training_plan, value
-        if prev == value and self._training_plan_animal == animal:
+        prev, self._training_plan = self._training_plan, plan
+        if prev == plan and self._training_plan_animal == animal:
             return
         self._training_plan_animal = animal
         if animal is not None:
             self._detach_training_plan()
-            new_plan_id = None if value is None else value.plan_id
+            new_plan_id = None if plan is None else plan.plan_id
             prev_plan_id, animal.training.current_protocol = animal.training.current_protocol, new_plan_id
             logger.debug("training_plan attach: animal prev_plan=%s new=%s", prev_plan_id, new_plan_id)
             if new_plan_id != prev_plan_id:
                 self._save_animal_metadata(animal, sender="animal_current_plan_changed")
-        if value is None:
+        if plan is None:
             self._detach_training_plan()  # always
         elif animal is not None:
             if self._training_mode != TrainingMode.MANUAL:
-                self._attach_training_plan(value)
-        self._on_property_changed(self.Props.TRAINING_PLAN, value, prev)
+                self._attach_training_plan(plan)
+        self._on_property_changed(self.Props.TRAINING_PLAN, plan, prev)
+        self._event_manager.post_event_content(
+            ApiEventKind.trainingPlanLoad, {'training_plan_id': None if plan is None else plan.plan_id})
+        # rpc = self._rpc_service
+        # if rpc is not None:
+        #     ApiCommandRequestResponse()
+        #     rpc.send_dict(ApiTopic.EVENT, )
 
     @property
     def output_location(self) -> str:
@@ -588,6 +645,8 @@ class AppModel(ObservableObject):
         self._attached_phase = phase
         if phase is not None:
             phase.property_changed += self._on_training_phase_property_changed
+            self._event_manager.post_event_content(
+                ApiEventKind.trainingPhaseEnter, {'training_phase_id': phase.phase_id})
 
     def _detach_training_plan(self):
         plan = self._attached_plan
@@ -611,6 +670,8 @@ class AppModel(ObservableObject):
         if phase is not None:
             phase.property_changed -= self._on_training_phase_property_changed
             self._attached_phase = None
+            self._event_manager.post_event_content(
+                ApiEventKind.trainingPhaseExit, {'training_phase_id': phase.phase_id})
 
     #
 
@@ -653,8 +714,15 @@ class AppModel(ObservableObject):
         )
 
     def on_capture_start(self) -> bool:
+        """Request to start the acquisition"""
+        with self._app_lock:
+            if self._acquisition_started:
+                self.on_error("acquisition start", "acquisition already running")
+                return False
+            self._acquisition_started = True
 
-        self._acquisition_started = True
+        self.property_changed(self.Props.ACQUISITION_RUNNING, True, False)
+        self.status = AppModelStatus.ACQUIRING
 
         analysis = self._analysis
 
@@ -797,6 +865,13 @@ class AppModel(ObservableObject):
 
     def on_capture_stop(self):
         logger.debug("AppModel.on_capture_stop")
+        with self._app_lock:
+            if not self._acquisition_started:
+                logger.verbose("acquisition not running")
+                return
+            if self._acquisition_stopping:
+                raise RuntimeError("acquisition already stopping")
+            self._acquisition_stopping = True
         try:
             self._capture_stop()
         finally:
@@ -805,6 +880,9 @@ class AppModel(ObservableObject):
             self._acquisition_started = False  # must be set before try reload training plans, given checked in it
             analysis = self._analysis
             analysis.project_info = None
+            self.status = AppModelStatus.IDLE
+            self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
+            self._acquisition_stopping = False
             if self._reload_plans_needed:
                 self._reload_plans_needed = False
                 self.reload_training_plans()
@@ -846,34 +924,35 @@ class AppModel(ObservableObject):
         return plans_path
 
     def load_configuration(self, location: Optional[str] = None):
-        p_location = Path(location or "")
-        if not location or not p_location.is_file():
+        if location is None:
             # Check to see if there is a file in the new default location.  If so, use it.
-            p_location = Path(self._preferences.configuration_location)
-            p_location.mkdir(parents=True, exist_ok=True)
-            logger.info("did not receive explicit configuration file, trying default p_location=%s", p_location)
-            configuration = SystemConfiguration.load_default(p_location)
+            location = Path(self._preferences.configuration_location)
+            location.mkdir(parents=True, exist_ok=True)
+            logger.info("did not receive explicit configuration file, trying default p_location=%s", location)
+            configuration = SystemConfiguration.load_default(location)
             # Fallback to the old last configuration preference if this device has not converted.
             # TODO - remove this once all devices have migrated.
             if configuration is not None:
-                file_path = SystemConfiguration.make_default_yaml_config_path(p_location)
+                file_path = SystemConfiguration.make_default_yaml_config_path(location)
             else:
                 logger.info("default not yet in use, trying last configuration")
                 file_path = Path(self._preferences.last_configuration)
                 if file_path.is_file():
                     configuration = SystemConfiguration.load_yaml_file(file_path)
-                if configuration is not None:
-                    # Migrate to new default location.
-                    configuration.save_default(self._preferences.configuration_location)
+                    if configuration is not None:
+                        # Migrate to new default location.
+                        configuration.save_default(self._preferences.configuration_location)
         else:
             # Always allow for a custom configuration file if provided.
             logger.info("using explicit configuration %s", location)
             file_path = Path(location)
-            configuration: SystemConfiguration = SystemConfiguration.load_yaml_file(file_path)
+            configuration = SystemConfiguration.load_yaml_file(file_path)
 
         if configuration is None:
             configuration = SystemConfiguration()
             logger.info("using default configuration")
+            file_path = SystemConfiguration.make_default_yaml_config_path(
+                Path(get_default_configuration_location()))
         else:
             logger.info("using configuration from %r", file_path.as_posix())
 
@@ -902,6 +981,7 @@ class AppModel(ObservableObject):
 
         # only at the end:
         self._loaded_configuration = configuration
+        self._loaded_config_dir_path = file_path.parent.resolve()
 
         plans_path = self._get_plans_dir()
         self.reload_training_plans(plans_path, reraise_on_error=True)
@@ -923,8 +1003,9 @@ class AppModel(ObservableObject):
         return True
 
     def reload_training_plans(self, dir_path: Optional[Path] = None, *, reraise_on_error: bool=False):
-        if self._acquisition_started:
-            logger.notice("delaying reload training plans given acquisition started")
+        if self._acquisition_started or self._status != AppModelStatus.IDLE:
+            logger.notice("delaying reload training plans given acquisition started(%s) or status not idle: %s",
+                          self._acquisition_started, self._status)
             self._reload_plans_needed = True
             return
         if dir_path is None:
@@ -1033,12 +1114,10 @@ class AppModel(ObservableObject):
 
     def _trigger_received(self, notification: Notification):
         self._is_recording_trigger = notification.context
-
-        if notification.context and self._project_info is not None:
+        project = self._project_info
+        if notification.context and project is not None:
             now = datetime.now()
-            self._save_metadata(now,
-                                self._project_info.get_metadata_file(-1, when=now),
-                                self._project_info.session)
+            self._save_metadata(now, project.get_metadata_file(-1, when=now), project.session)
 
     def _update_status_text_overlay(self):
         parts = []
@@ -1094,7 +1173,8 @@ class AppModel(ObservableObject):
                     break
 
     def _on_behavior_algo_property_changed(self, name: str, value, _):
-        if name == BehaviorAlgoProps.INTERSESSION_STATE:
+        props = BehaviorAlgoProps
+        if name == props.INTERSESSION_STATE:
             self._update_status_text_overlay()
             return
         #
@@ -1102,7 +1182,7 @@ class AppModel(ObservableObject):
         if animal is None:
             return
         #
-        if name == BehaviorAlgoProps.BASELINE_INTENSITY:
+        if name == props.BASELINE_INTENSITY:
             prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
             if value != prev:
                 self._save_animal_metadata(animal, sender="baseline_magnet_intensity")
@@ -1181,6 +1261,7 @@ class AppModel(ObservableObject):
         animal.training.set_plan_progress(plan.plan_id, prog)
         self._save_animal_metadata(animal, sender="plan-progress-updated")
         self.property_changed(self.Props.TRAINING_PLAN_PROP, None, None)
+        self._event_manager.post_event_content(ApiEventKind.trainingProgressUpdate)
 
     def _on_training_phase_property_changed(self, name, value, _):
         logger.debug("phase prop: %s -> %s", name, value)
@@ -1247,62 +1328,175 @@ class AppModel(ObservableObject):
         except Exception as ex:
             logger.error(ex)
 
+    #
+
+
     def _handle_rpc_service_command(self, request: ApiCommandRequest) -> ApiCommandRequestResponse:
-        logger.notice("Received RPC command: %s ; nonce=%s", request.command, request.nonce)
+        logger.notice("RPC command: %s ; nonce=%s", request.command, request.nonce)
         logger.debug("RPC cmd=%s custom=%s data=%s", request.command, request.custom_command, request.data)
         try:
             rsp = self.__handle_rpc_service_command(request)
             if isinstance(rsp, ApiCommandRequestResponse):
-                assert rsp.nonce == request.nonce
-            elif rsp in {None, True, False}:  # to not have to create/return it for all possible request
+                pass
+            elif any(map(lambda x: rsp is x, (None, True, False))):  # to not have to create/return it for all possible request
+                if rsp is not False:
+                    result = ApiCommandReqeustResult.SUCCESS
+                    error_code = ApiCommandRequestErrorKind.NONE
+                    error_message = None
+                else:
+                    result = ApiCommandReqeustResult.FAILED
+                    error_code = ApiCommandRequestErrorKind.COMMAND_ERROR
+                    error_message = f"Command request {request.command} failed"
                 rsp = ApiCommandRequestResponse(
                     nonce=request.nonce,
                     command=request.command,
-                    result=ApiCommandReqeustResult.SUCCESS if rsp != False else ApiCommandReqeustResult.FAILED,
-                    error_kind=ApiCommandRequestErrorKind.NONE if rsp != False else ApiCommandRequestErrorKind.COMMAND_ERROR,
-                    error_message=None if rsp != False else f"Command request {request.command} failed"
+                    result=result,
+                    error_code=error_code,
+                    error_message=error_message,
                 )
             else:
-                logger.critical("Rpc request %s : unexpected __handle_rpc_service_command() return value: %r",
-                                request.command, rsp)
                 rsp = ApiCommandRequestResponse(
                     nonce=request.nonce,
                     command=request.command,
-                    result=ApiCommandReqeustResult.FAILED,
-                    error_kind=ApiCommandRequestErrorKind.SYSTEM_ERROR,
-                    error_message="Command request returned invalid return value"
+                    result=ApiCommandReqeustResult.SUCCESS,
+                    error_code=ApiCommandRequestErrorKind.NONE,
+                    data=rsp,
                 )
         except Exception as err:
-            logger.exception("Rpc Command %s exception: %s", request.command, err)
+            logger.exception("RPC command %s exception: %s", request.command, err)
             rsp = ApiCommandRequestResponse(
                 nonce=request.nonce,
                 command=request.command,
                 result=ApiCommandReqeustResult.EXCEPTION,
-                error_kind=ApiCommandRequestErrorKind.COMMAND_ERROR,
-                error_message=f"Failed executing {request.command}: {err}",
+                error_code=ApiCommandRequestErrorKind.COMMAND_ERROR,
+                error_message=f"Exception executing {request.command}: {type(err)} -> {err}",
             )
         return rsp
 
-    def __handle_rpc_service_command(self, request: ApiCommandRequest) -> Optional[Union[bool, ApiCommandRequestResponse]]:
+    def _handle_rpc_async_command(self, request: ApiCommandRequest, func):
+        def execute():
+            try:
+                res = func()
+            except BaseException as err:
+                logger.exception("Failure during async execution of RPC command %s: %s", request.command, err)
+                res = None
+                has_err = err
+            else:
+                has_err = None
+            rpc = self._rpc_service
+            if rpc is None:
+                # service gone
+                return
+            if has_err is not None:
+                result = ApiCommandReqeustResult.EXCEPTION
+                error_code = ApiCommandRequestErrorKind.SYSTEM_ERROR
+                error_message = f"{has_err}"
+            else:
+                if res is None:
+                    res = True
+                if res is True:
+                    result = ApiCommandReqeustResult.SUCCESS
+                    error_code = ApiCommandRequestErrorKind.NONE
+                    error_message = None
+                else:
+                    result = ApiCommandReqeustResult.FAILED
+                    error_code = ApiCommandRequestErrorKind.COMMAND_ERROR
+                    error_message = f"{request.command} failed (result=False)"
+            #
+            message = ApiCommandRequestResponse(
+                result=result,
+                command=request.command,
+                nonce=request.nonce,
+                error_code=error_code,
+                error_message=error_message,
+            )
+            rpc.send_dict(ApiTopic.COMMAND_RESULT, message=dataclasses.asdict(message))
+
+        #
+        th = threading.Thread(target=execute, daemon=True, name=f"Handle-{func}")
+        th.start()
+        return ApiCommandRequestResponse(
+            result=ApiCommandReqeustResult.PENDING_WITH_NOTIFICATION,
+        )
+
+    def __handle_rpc_service_command(self, request: ApiCommandRequest) -> Optional[
+        Union[bool, ApiCommandRequestResponse, Any]]:
         cmd = request.command
         rsp = None  # let caller handle it
         if cmd == ApiCommand.START_ACQUISITION:
-            return self.on_capture_start()
+            return self._handle_rpc_async_command(request, self.on_capture_start)
+
         elif cmd == ApiCommand.STOP_ACQUISITION:
-            return self.on_capture_stop()
+            return self._handle_rpc_async_command(request, self.on_capture_stop)
+
         elif cmd == ApiCommand.EMERGENCY_STOP:
             return self._behavior.emergency_stop(source="RpcService")
+
         elif cmd == ApiCommand.EMERGENCY_RESUME:
             return self._behavior.emergency_resume(source="RpcService")
+
         elif cmd == ApiCommand.USER_DEFINED:
             logger.verbose("TODO")
+
+        elif cmd == ApiCommand.GET_CONFIGURATION:
+            project_info = self._project_info
+            if project_info is None:
+                raise RuntimeError(f"No current project info")
+            prefs = self._preferences
+            return ConfigurationResponse(
+                device_id=project_info.device_id,
+                configuration_location=self._loaded_config_dir_path.as_posix(),
+                data_location=self._output_location,
+                animal_location=prefs.animal_location,
+                log_location=prefs.log_location,
+                inference_model=self._inference.model_location,
+            )
+
+        elif cmd == ApiCommand.GET_STATUS:
+            animal = self._selected_animal
+            return StatusResponse(
+                animal_id="" if animal is None else animal.id,
+                app_status=self._status.to_api_app_status(),
+                training_mode=training_mode_to_api_training_mode(self._training_mode),
+            )
+
         elif cmd == ApiCommand.NONE:
             pass
+
         else:
             rsp = ApiCommandRequestResponse(
+                result=ApiCommandReqeustResult.UNRECOGNIZED,
                 nonce=request.nonce,
                 command=cmd,
-                error_kind=ApiCommandRequestErrorKind.COMMAND_ERROR,
+                error_code=ApiCommandRequestErrorKind.COMMAND_ERROR,
                 error_message=f"Unknown/Unhandled request command: {cmd!r}"
             )
         return rsp
+
+    #
+
+    def _on_emergency_stopped(self, source):
+        rpc = self._rpc_service
+        if rpc is None:
+            return
+        message = ApiCommandRequestResponse(
+            result=ApiCommandReqeustResult.SUCCESS,
+            command=ApiCommand.EMERGENCY_STOP,
+            data=dict(reason=source),
+        )
+        dct = dataclasses.asdict(message)
+        logger.verbose("RPC: sending %s", dct)
+        rpc.send_dict(ApiTopic.EMERGENCY, message=dct)
+
+    def _on_emergency_resumed(self, source):
+        rpc = self._rpc_service
+        if rpc is None:
+            return
+        message = ApiCommandRequestResponse(
+            result=ApiCommandReqeustResult.SUCCESS,
+            command=ApiCommand.EMERGENCY_RESUME,
+            data=dict(reason=source),
+        )
+        dct = dataclasses.asdict(message)
+        logger.verbose("RPC: sending %s", dct)
+        rpc.send_dict(ApiTopic.EMERGENCY, message=dct)
