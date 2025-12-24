@@ -10,19 +10,17 @@ from autotrainer.behavior import PelletState, SystemState, PelletMachine, Pellet
 from top_fixtures import MockSystemMachine, mock_system
 
 
+
+
+
 @pytest.mark.parametrize("cover_enabled", [False, True])
 def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enabled):
-    """
-    Should confirm that:
-        A missing pellet triggers load in and out of tunnel
-        Pellet is released under all conditions
-    :return: None
-    """
     pellet_m = machine.pellet
     algo = machine.algorithm
 
     algo.pellet_cover_enabled = cover_enabled
 
+    # for start:
     algo.update_pellet_seen(True)
     algo.update_triangle_seen(True)
 
@@ -58,10 +56,43 @@ def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enab
     assert algo.session_pellet_count == 1
 
 
+@pytest.mark.parametrize("cover_enabled", [False, True])
+def test_send_pellet_after_load_when_triangle_not_seen(mock_system, machine, cover_enabled):
+    pellet_m = machine.pellet
+    algo = machine.algorithm
+
+    algo.pellet_cover_enabled = cover_enabled
+
+    # for start:
+    algo.update_pellet_seen(True)
+    algo.update_triangle_seen(True)
+
+    assert machine.state == SystemState.cage
+    assert not algo.is_in_session
+    assert algo.pellet_recently_seen
+
+    # Send a pose response with pellet not seen which should trigger a load/cover cycle while out of tunnel.
+    mock_system.mock_pose_response(pellet_seen=False, triangle_seen=True)
+    assert pellet_m.state == PelletState.monitoring  # still
+    assert algo.pellet_recently_seen  # still
+    assert algo.triangle_recently_seen
+    mock_system.increment_perf_now(algo.pellet_missing_time + 1e-9)
+    assert not algo.pellet_recently_seen  # now not recently seen
+    assert not algo.triangle_recently_seen
+    mock_system.mock_pose_response(pellet_seen=False, triangle_seen=False)
+    # without triangle pellet is
+    assert not algo.triangle_recently_seen
+    assert not algo.pellet_recently_seen  # still
+    assert pellet_m.state == PelletState.monitoring
+    assert pellet_m._api_status_token is None
+
+
+
 def test_uncover_when_record_aged_enough(mock_system, machine):
     pellet_m = machine.pellet
     algo = machine.algorithm
     algo.pellet_cover_enabled = True
+    algo.pellet_hand_uncover_distance = None
     load_cell = machine._analysis.load_cell_monitor
     algo.update_pellet_seen(True)
     algo.update_triangle_seen(True)
@@ -96,7 +127,9 @@ def test_uncover_when_hands_near_pellet(mock_system, machine):
     mock_system.make_recording_aged_enough()
     assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [], "contrary to test_uncover_when_record_aged_enough"
+    #
     algo.pellet_hands_min_distance = algo.pellet_hand_uncover_distance
+    #
     assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [
         PelletState.releasing,

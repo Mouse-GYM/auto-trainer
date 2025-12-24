@@ -298,42 +298,6 @@ class MockSystemMachine:
         self.increment_perf_now(self._machine.algorithm.pellet_missing_time + 1e-9)
         self.mock_pose_response(pellet_seen=False, mouse_seen=mouse_seen)
 
-    def expect_pellet_delivery(self, should_release: bool = True, was_covered: bool = False,
-                               should_prerelease: bool = False):
-        """
-        Convenience method that uses the mock pellet device reader to send the expected ack() to the machine for the
-        expected transitions.  This method assumes that load_pellet() has already been triggered via pose response or
-        whatever applicable mechanism.
-
-        :param should_release: whether the pellet is expected to be released (vs. left covered)
-
-        :param was_covered: whether the pellet should already be in the covered state
-
-        :param should_prerelease: whether movement should include the prerelease step
-        """
-
-        pellet = self.pellet
-        ack_received = pellet._pellet_device_ack_received
-
-        if not was_covered:
-            assert pellet.state == PelletState.loading
-
-            ack_received(pellet._api_status_token)
-            if should_prerelease:
-                assert pellet.state == PelletState.prerelease
-                ack_received(pellet._api_status_token)
-
-            assert pellet.state == PelletState.sending
-
-            ack_received(pellet._api_status_token)
-
-        if should_release:
-            if not should_prerelease:
-                assert pellet.state == PelletState.releasing
-                ack_received(pellet._api_status_token)
-
-            assert pellet.state == PelletState.monitoring
-
     def make_load_cell_active(self):
         # NB: this could be moved to auto-trainer-core (where load_cell_monitor is defined),
         # so to be reused by auto-trainer-core/tests dedicated to load cell monitor.

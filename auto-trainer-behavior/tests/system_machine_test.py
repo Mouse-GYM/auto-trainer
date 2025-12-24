@@ -46,6 +46,7 @@ def test_enter_exit_tunnel(mock_system, machine):
     assert not algo.pellet_recently_seen
     algo.update_pellet_seen(True)
     assert algo.pellet_recently_seen
+    assert is_capture_triggered is False
 
     # Should trigger enter tunnel, new session, and associated changes.
     mock_system.make_load_cell_active()
@@ -57,8 +58,6 @@ def test_enter_exit_tunnel(mock_system, machine):
         mock.call(algo.baseline_intensity)
     ]
 
-    # Exit tunnel and end session.
-    # machine.mock_analysis.mock_load_cell_engaged(False)
     mock_system.make_load_cell_inactive()
 
     assert machine.state == SystemState.cage
@@ -87,17 +86,23 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     pellet_m.events.pellet_loading += pellet_loading
     pellet_m.events.pellet_loaded += pellet_loaded
 
+    # before:
     assert algo.is_in_session is False
     assert load_attempt_count == 0
+    assert not algo.triangle_recently_seen
+    assert not algo.pellet_recently_seen
 
     # Lose the pellet (pellet state machine initializes to monitoring).  Pellet machine will be in loading state.
-    mock_system.mock_pose_response(pellet_seen=False)
+    mock_system.mock_pose_response(pellet_seen=False, triangle_seen=True)
     # NB: on very first start the pellet_last_seen will be -inf.. so that the first load will not have to wait pellet_missing_time:
     assert load_attempt_count == 1
     assert mock_system.pellet_state_trans == [PelletState.loading]
+    assert algo.triangle_recently_seen
+    assert not algo.pellet_recently_seen
 
     mock_system.pellet_state_trans.clear()
 
+    # if ack the load-pellet, and pellet not  yet seen, then
     assert pellet_m._api_status_token is not None
     mock_system.mock_pellet_ack()
     assert load_attempt_count == 2

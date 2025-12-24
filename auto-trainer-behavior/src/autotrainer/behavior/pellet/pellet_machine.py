@@ -26,7 +26,6 @@ DEFAULT_LOAD_RETRACT_COUNT_FORCE_HOME = int(os.getenv("AUTOTRAINER_LOAD_RETRACT_
 class PelletState(str, Enum):
     monitoring = "monitoring"
     loading = "loading"
-    prerelease = "prerelease"
     sending = "sending"
     releasing = "releasing"
     covering = "covering"
@@ -140,13 +139,6 @@ class PelletMachine(StateMachine):
             self.events.pellet_sending()
             EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
 
-    def before_prerelease_pellet(self):
-        if self._pellet_device is not None:
-            self._api_status_token = self._pellet_device.release_pellet()
-            EventManager.default().post_event_content(BehaviorEventKind.pelletPrereleaseBegin, context=self._api_status_token)
-        else:
-            self._api_status_token = None
-
     def after_load_pellet(self):
         pass
         # now handled in try-next-state, and indirectly using self.events.pellet_loaded()
@@ -188,11 +180,6 @@ class PelletMachine(StateMachine):
     def can_cover_pellet(self):
         can = self.can_use_pellet_command() and self._algorithm.can_cover_pellet()
         EventManager.default().post_event_content(BehaviorEventKind.pelletCoverCan, context=can)
-        return can
-
-    def can_prerelease_pellet(self):
-        can = self.can_use_pellet_command()
-        EventManager.default().post_event_content(BehaviorEventKind.pelletPrereleaseCan, context=can)
         return can
 
     def can_release_pellet(self):
@@ -510,13 +497,6 @@ class PelletMachine(StateMachine):
     def may_force_load_pellet(self):
         """May force load pellet"""
 
-    # not anymore used:
-    def prerelease_pellet(self):
-        """"Prerelease" pellet"""
-
-    def may_prerelease_pellet(self):
-        pass
-
     def send_pellet(self):
         pass
 
@@ -545,9 +525,6 @@ class PelletMachine(StateMachine):
         pass
 
     def is_loading(self):
-        pass
-
-    def is_prerelease(self):
         pass
 
     def is_sending(self):
@@ -598,15 +575,6 @@ class PelletMachine(StateMachine):
         ),
 
         dict(
-            # now unused
-            trigger=prerelease_pellet,
-            source=[PelletState.loading, PelletState.home, PelletState.retract],
-            dest=PelletState.prerelease,
-            before=before_prerelease_pellet,
-            conditions=can_prerelease_pellet,
-        ),
-
-        dict(
             trigger=cover_pellet,
             source=[PelletState.loading, PelletState.monitoring, PelletState.retract],
             dest=PelletState.covering,
@@ -639,9 +607,6 @@ class PelletMachine(StateMachine):
         dict(
             trigger=move_retract,
             source=(
-                # PelletState.loading,  # not sure
-                # PelletState.sending,  # not sure
-                # PelletState.prerelease,  # unused
                 PelletState.releasing,
                 PelletState.covering,
                 PelletState.monitoring,
