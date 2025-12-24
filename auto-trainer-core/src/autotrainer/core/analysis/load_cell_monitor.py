@@ -152,15 +152,6 @@ class LoadCellMonitor(ObservableObject):
         )
 
     @property
-    def _is_engaged(self):
-        warnings.warn("LoadCellMonitor._is_engaged deprecated", DeprecationWarning)
-        return self.is_engaged
-
-    @_is_engaged.setter
-    def _is_engaged(self, value):
-        raise RuntimeError("deprecated")
-
-    @property
     def context(self) -> LoadCellMonitorContext:
         return self._context
 
