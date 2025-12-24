@@ -88,6 +88,7 @@ class SystemMachine(StateMachine):
         self._is_handling_diamond_triangle = False
 
         self._enter_tunnel_pellet_seen = False
+        self._session_started_perf_c = -math.inf
 
         self._tunnel_device = tunnel_device
         self._msg_handler = msg_handler
@@ -199,12 +200,11 @@ class SystemMachine(StateMachine):
         algo = self._algorithm
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
         if auto_close_gate_cfg.enabled:
-            duration = datetime.now() - project.when  # could/should be todo: have session duration recorded in project-session info.
-            if auto_close_gate_cfg.session_min_duration <= duration.total_seconds():
-                timer = self._timer_consider_close_gate = make_daemon_timer(0.1, self._consider_close_gate_during_intersession)
-                timer.start()
+            duration = get_perf_now() - self._session_started_perf_c  # could/should be todo: have session duration recorded in project-session info.
+            if auto_close_gate_cfg.session_min_duration <= duration:
+                self._consider_close_gate_during_intersession()
             else:
-                logger.verbose("Not starting timer to auto-close gate when mouse in cage confirmed ; session duration=%s",
+                logger.verbose("Not considering to auto-close gate when mouse in cage confirmed ; session duration=%s",
                            duration)
 
     def before_exit_intersession_to_cage(self):
@@ -252,7 +252,7 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func
     def _session_capture_started(self):
-        pass
+        self._session_started_perf_c = get_perf_now()
 
     @BehaviorAlgorithm.relay_func
     def _session_capture_ended(self):
@@ -569,8 +569,11 @@ class SystemMachine(StateMachine):
             # only valid for intersession
             logger.debug("not anymore intersession, skipping auto-close-gate")
             return
-        load_cell_mon = self._analysis.load_cell_monitor.context
         topcam_pres = algo.top_camera_presence_detection
+        if topcam_pres is None:
+            logger.debug("Topcam presence not enabled, skipping auto-close-gate")
+            return
+        load_cell_mon = self._analysis.load_cell_monitor.context
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
         perf_now = get_perf_now()
         if (

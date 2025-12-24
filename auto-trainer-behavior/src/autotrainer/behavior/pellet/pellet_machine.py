@@ -46,9 +46,9 @@ class PelletMachine(StateMachine):
 
     def __init__(
         self,
-        algorithm: BehaviorAlgorithm = None,
-        msg_handler: SystemMessageHandler = None,
-        pellet_device: PelletDeviceProtocol = None,
+        algorithm: BehaviorAlgorithm,
+        msg_handler: SystemMessageHandler,
+        pellet_device: PelletDeviceProtocol,
     ):
         initial_state = PelletState.monitoring
 
@@ -100,28 +100,19 @@ class PelletMachine(StateMachine):
         return self._events
 
     def before_move_home(self):
-        if self._pellet_device is not None:
-            self._api_status_token = self._pellet_device.send_home()
-            EventManager.default().post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
-        else:
-            self._api_status_token = None
+        self._api_status_token = self._pellet_device.send_home()
+        EventManager.default().post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
 
     def before_load_pellet(self):
-        if self._pellet_device is not None:
-            self.events.pellet_loading()
-            self._api_status_token = self._pellet_device.load_pellet()
-            if self._api_status_token is not None:
-                self._prev_pellet_load_perf_c = get_perf_now()
-                self._covered_state = None
-                EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
-                self._pellet_load_count += 1
-        else:
-            self._api_status_token = None
+        self.events.pellet_loading()
+        self._api_status_token = self._pellet_device.load_pellet()
+        if self._api_status_token is not None:
+            self._prev_pellet_load_perf_c = get_perf_now()
+            self._covered_state = None
+            EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
+            self._pellet_load_count += 1
 
     def before_send_pellet(self):
-        if self._pellet_device is None:
-            self._api_status_token = None
-            return
         tot_count = self._pellet_load_count + self._pellet_retract_count
         trigger_count = DEFAULT_LOAD_RETRACT_COUNT_FORCE_HOME
         if 0 < trigger_count <= tot_count:
@@ -145,22 +136,16 @@ class PelletMachine(StateMachine):
         # self._algorithm.pellet_loaded
 
     def before_cover_pellet(self):
-        if self._pellet_device is not None:
-            self._api_status_token = self._pellet_device.cover_pellet()
-            if self._api_status_token is not None:
-                self._covered_state = True
-            EventManager.default().post_event_content(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
-        else:
-            self._api_status_token = None
+        self._api_status_token = self._pellet_device.cover_pellet()
+        if self._api_status_token is not None:
+            self._covered_state = True
+        EventManager.default().post_event_content(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
 
     def before_release_pellet(self):
-        if self._pellet_device is not None:
-            self._api_status_token = self._pellet_device.release_pellet()
-            if self._api_status_token is not None:
-                self._covered_state = False
-            EventManager.default().post_event_content(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
-        else:
-            self._api_status_token = None
+        self._api_status_token = self._pellet_device.release_pellet()
+        if self._api_status_token is not None:
+            self._covered_state = False
+        EventManager.default().post_event_content(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
 
     def can_move_home(self):
         can = self.can_use_pellet_command()
@@ -468,10 +453,10 @@ class PelletMachine(StateMachine):
 
     # NB: keeping to not have warning from Machine transition parent class
     def trigger(self):
-        pass
+        """"""
 
     def may_trigger(self):
-        pass
+        """"""
 
     def move_home(self):
         """Move home"""
@@ -498,49 +483,49 @@ class PelletMachine(StateMachine):
         """May force load pellet"""
 
     def send_pellet(self):
-        pass
+        """Send pellet to deliver position"""
 
     def may_send_pellet(self):
-        pass
+        """May Send pellet to deliver position"""
 
     def release_pellet(self):
-        pass
+        """Release pellet cover"""
 
     def may_release_pellet(self):
-        pass
+        """May Release pellet cover"""
 
     def cover_pellet(self):
-        pass
+        """Cover pellet cover"""
 
     def may_cover_pellet(self):
-        pass
+        """May Cover pellet cover"""
 
     def monitor_pellet(self):
-        pass
+        """Monitor pellet"""
 
     def may_monitor_pellet(self):
-        pass
+        """May Monitor pellet"""
 
     def is_home(self):
-        pass
+        """is home"""
 
     def is_loading(self):
-        pass
+        """is loading"""
 
     def is_sending(self):
-        pass
+        """is sending"""
 
     def is_covering(self):
-        pass
+        """is covering"""
 
     def is_releasing(self):
-        pass
+        """is releasing"""
 
     def is_monitoring(self):
-        pass
+        """is monitoring"""
 
-    def is_retract(self):
-        pass
+    def is_move_retract(self):
+        """is retract"""
 
     # endregion
 

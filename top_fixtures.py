@@ -4,7 +4,7 @@ import queue
 
 from pathlib import Path
 from functools import partial
-from typing import List, Any
+from typing import List, Any, Optional
 from unittest import mock
 
 import pytest
@@ -227,14 +227,24 @@ class MockSystemMachine:
     #
 
     @contextlib.contextmanager
-    def mock_analysis(self, results: IntersessionResponse):
+    def mock_analysis(
+        self,
+        results: Optional[IntersessionResponse] = None,
+        *,
+        segmentation_ok: bool = True,
+        detection_ok: bool = True,
+    ):
+        if results is None:
+            results = IntersessionResponse()
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())
             stack.enter_context(self.mock_perform_detection())
-            self.mock_complete_segmentation(True)
-            self.mock_complete_detection(True)
-            self._machine._inference.detection_result_ready(results)
             yield
+            self.mock_complete_segmentation(segmentation_ok)
+            if segmentation_ok:
+                self.mock_complete_detection(detection_ok)
+            if detection_ok:
+                self._machine._inference.detection_result_ready(results)
 
     @contextlib.contextmanager
     def mock_perform_segmentation(self):
@@ -288,7 +298,6 @@ class MockSystemMachine:
     def mock_pellet_ack(self):
         """Ack the previous sent pellet command"""
         token = self.pellet._api_status_token
-        assert token is not None
         self.increment_perf_now(1e-9)
         self.pellet._pellet_device_ack_received(token)
 

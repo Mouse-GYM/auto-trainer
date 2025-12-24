@@ -4,12 +4,11 @@ from unittest import mock
 
 import pytest
 
+import autotrainer.behavior.pellet.pellet_machine
 from autotrainer.behavior import PelletState, SystemState, PelletMachine, PelletDeviceProtocol, BehaviorAlgorithm, \
     SystemMachine
 
 from top_fixtures import MockSystemMachine, mock_system
-
-
 
 
 
@@ -148,3 +147,22 @@ def test_session_limit(mock_system, machine):
 def test_day_limit(machine, mock_system):
     # TODO
     pass
+
+
+@pytest.mark.parametrize("trigger_count", [0, 1, 3])
+def test_force_home(machine, mock_system, monkeypatch, trigger_count, caplog):
+    pellet_m = machine.pellet
+    algo = machine.algorithm
+    monkeypatch.setattr(autotrainer.behavior.pellet.pellet_machine,
+                        "DEFAULT_LOAD_RETRACT_COUNT_FORCE_HOME", trigger_count)
+    algo.pellet_cover_enabled = True
+    caplog.set_level(logging.INFO)
+    for _ in range(trigger_count + 1):
+        mock_system.increment_perf_now(60)
+        pellet_m.move_retract()
+        mock_system.mock_pellet_ack()
+        mock_system.mock_pellet_ack()
+    if trigger_count > 0:
+        assert f"Forcing a send_home to reset to limits due to load (0) + retract ({trigger_count})" in caplog.text
+    else:
+        assert "Forcing a send_home to reset to limits" not in caplog.text, "when 0 it's disabled"
