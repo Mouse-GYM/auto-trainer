@@ -1,4 +1,17 @@
 [run]
+branch = true
+relative_files = true
+
+source_pkgs =
+    autotrainer.core
+    autotrainer.device
+    autotrainer.behavior
+    autotrainer.inference
+    autotrainer.model
+    autotrainer.pyside
+    autotrainer.video
+
+
 omit =
 	# not yet sure where these are coming, but coverage get a ref. to these, which are non-existent here:
     config-3.py
@@ -9,7 +22,14 @@ omit =
     */auto-trainer-api/*
 
 # allow coverage in python sub-processes (subprocess):
-# patch = subprocess  # only valid from coverage 7.11+ but one for py3.8 is stuck lower.
+# patch = subprocess  # only valid from coverage 7.10+ but one for py3.8 is stuck lower.
+# only available by 7.10:
+# patch =
+#    execv
+#    _exit
+#    fork
+#    subprocess
+
 # so using coverage-enable-subprocess for now.
 
 parallel = true

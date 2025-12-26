@@ -188,7 +188,7 @@ class PelletMachine(StateMachine):
     def _session_capture_ended(self):
         # todo: this entire func/block should be moved to system machine or behavior algo imho
         algo = self._algorithm
-        logger.debug("_session_ending() called ; session_mouse_seen=%s algo.intersession_state=%s",
+        logger.debug("session_capture_ended ; session_mouse_seen=%s algo.intersession_state=%s",
                      algo.session_mouse_seen, algo.intersession_state)
         dev = self._pellet_device
         # optional apply of measured motor drifts,
@@ -198,18 +198,11 @@ class PelletMachine(StateMachine):
             if drifts is not None and correct_drift:
                 dev.set_motors_drift(drifts)
 
-        # if not (algo.session_mouse_seen and algo.intersession_enabled):
-        #     # force also a send_pellet, only if not gonna go to intersession
-        #     pass
-        #     # don't think necessary:
-        #     # self.send_pellet()
-        #     # self.monitor_pellet()
-        # was elif:
         if algo.session_mouse_seen and self._state == PelletState.monitoring:
             # session ended because exit of tunnel, otherwise state would be load_pellet
             logger.debug("ending session with mouse seen and monitoring: moving retract")
             if algo.pellet_cover_enabled:
-                # do we want ?
+                # do we want ? probably.
                 self.cover_pellet()
             self.move_retract()
 
@@ -221,8 +214,8 @@ class PelletMachine(StateMachine):
     def _pellet_device_ack_received(self, token: Optional[str]):
         if token is None:
             return
-        logger.debug("pellet_ack_received: %s", token)
 
+        logger.debug("pellet_ack_received: %s", token)
         if self._api_status_token is None:
             # External command. Safe to ignore.
             return
@@ -561,7 +554,7 @@ class PelletMachine(StateMachine):
 
         dict(
             trigger=cover_pellet,
-            source=[PelletState.loading, PelletState.monitoring, PelletState.retract],
+            source="*",
             dest=PelletState.covering,
             before=before_cover_pellet,
             conditions=can_cover_pellet,
@@ -569,7 +562,7 @@ class PelletMachine(StateMachine):
 
         dict(
             trigger=release_pellet,
-            source=[PelletState.loading, PelletState.monitoring, PelletState.retract],
+            source="*",
             dest=PelletState.releasing,
             before=before_release_pellet,
             conditions=can_release_pellet,

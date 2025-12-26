@@ -335,8 +335,8 @@ class BehaviorAlgorithm(ObservableObject):
         self.max_pellets_per_session: int = 10
         self.max_pellets_per_headfix_session: int = 10
         self.max_pellets_per_day: int = 50
-        self.pellet_missing_time: float = 1.0
-        self.triangle_missing_time: float = 0.5  # maybe should sync on pellet_missing_time ?
+        self._pellet_missing_time: float = 1.0
+        self.triangle_missing_time: float = 1.0  # kept in sync with pellet_missing_time via its property setter
         self.pellet_hand_uncover_distance = PelletDeliveryConfiguration.pellet_hand_uncover_distance
 
         self.auto_close_gate_on_intersession_config = AutoCloseGateOnIntersessionConfiguration()
@@ -576,6 +576,15 @@ class BehaviorAlgorithm(ObservableObject):
     def pellet_cover_enabled(self, value: bool):
         prev, self._pellet_cover_enabled = self._pellet_cover_enabled, value
         self._on_property_changed(BehaviorAlgoProps.PELLET_COVER_ENABLED, value, prev)
+
+    @property
+    def pellet_missing_time(self) -> float:
+        return self._pellet_missing_time
+
+    @pellet_missing_time.setter
+    def pellet_missing_time(self, value):
+        self._pellet_missing_time = value
+        self._triangle_missing_time = value  # keep in sync
 
     @property
     def intersession_enabled(self):

@@ -432,7 +432,8 @@ class TestSessionProcessingEnding(MockSystemMachine):
         assert processing_ended_count == 1
 
     @pytest.mark.parametrize("detection_success", [False, True])
-    def test_when_intersession_mouse_seen(self, machine, detection_success):
+    @pytest.mark.parametrize("system_state", [SystemState.cage, SystemState.tunnel])
+    def test_when_intersession_mouse_seen(self, machine, detection_success, system_state):
         processing_ended_count = 0
         def processing_ended(status):
             nonlocal processing_ended_count
@@ -455,6 +456,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
             assert processing_ended_count == 0
             stack.enter_context(self.mock_perform_detection())
             assert processing_ended_count == 0
+            machine.state = system_state
             algo.end_capture_session(reason="manual")
             assert processing_ended_count == 0
             self.mock_complete_segmentation(True)

@@ -147,22 +147,36 @@ def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, co
         proc.send_signal(signal.SIGINT)
     t = threading.Thread(target=interrupt_proc, daemon=True)
     t.start()
-    out = err = None
-    def communicate():
-        nonlocal out, err
-        out, err = proc.communicate()
-    communicate_thread = threading.Thread(target=communicate, daemon=True)
-    communicate_thread.start()  # use a communicate thread, given otherwise it might stay blocked ignoring the SIGINT
+    out = []
+    err = []
+    def communicate(dest, src_fh, dest_fh):
+        while proc.poll() is None:
+            line = src_fh.readline()  # .decode()
+            line = line.strip(b'\n')
+            print(line.decode(), file=dest_fh)
+            dest.append(line.decode('ascii', errors='ignore'))
+        tail = src_fh.read().decode()
+        print(tail, file=dest_fh)
+        dest.extend(tail.split("\n"))
+        # out, err = proc.communicate()
+    communicate_out_thread = threading.Thread(target=communicate, daemon=True, args=(out, proc.stdout, sys.stdout))
+    communicate_out_thread.start()  # use a communicate thread, given otherwise it might stay blocked ignoring the SIGINT
+    communicate_err_thread = threading.Thread(target=communicate, daemon=True, args=(err, proc.stderr, sys.stderr))
+    communicate_err_thread.start()  # use a communicate thread, given otherwise it might stay blocked ignoring the SIGINT
     t.join()
-    communicate_thread.join(5)
+
+    communicate_out_thread.join(3)
+
     proc.terminate()  # in case of
     proc.wait(3)  # in case of
     proc.kill()  # in case of
-    if out is None:
-        out, err = proc.communicate()
+    # if out is None:
+    #     out, err = proc.communicate()
+    communicate_out_thread.join()
+    communicate_err_thread.join()
+
     assert proc.returncode == 0
-    assert isinstance(out, bytes)
-    output = out.decode()
+    output = "\n".join(out)
     # print(output)
     assert f"Loading diamond-triangle file {diamond_config_path.as_posix()!r}"
     assert f"Using setting ini file: {settings_ini_path.as_posix()!r}" in output
