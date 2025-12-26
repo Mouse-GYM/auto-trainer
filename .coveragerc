@@ -8,9 +8,10 @@ source_pkgs =
     autotrainer.behavior
     autotrainer.inference
     autotrainer.model
-    autotrainer.pyside
-    autotrainer.video
-
+    # autotrainer.pyside
+    # autotrainer.video
+    tools
+    # tools for the main app_model mainly
 
 omit =
 	# not yet sure where these are coming, but coverage get a ref. to these, which are non-existent here:

@@ -13,6 +13,11 @@ def algo(monkeypatch):
     # in case need cleanup
 
 
+def test_properties(algo):
+    algo.auto_clamp_release_tone_freq = 42
+    assert algo.auto_clamp_release_tone_freq == 42
+
+
 def test_set_put_func_call_mode(algo):
 
     def record_sync_call_mode(result):

@@ -163,41 +163,40 @@ class IntersessionMachine(StateMachine):
 
             self.end_analysis(success)
 
-
     # region State Machine Requirements
     # Methods required for model_override=True to work.
     def trigger(self):
-        pass
+        """Main trigger"""
 
     def may_trigger(self):
-        pass
+        """Main trigger"""
 
     def perform_segmentation(self):
-        pass
+        """Perform segmentation"""
 
     def may_perform_segmentation(self):
-        pass
+        """Perform segmentation"""
 
     def perform_detection(self, segment_config):
-        pass
+        """Perform detection"""
 
     def may_perform_detection(self):
-        pass
+        """Perform detection"""
 
     def end_analysis(self, success: bool):
-        pass
+        """End analysis"""
 
     def may_end_analysis(self):
-        pass
+        """End analysis"""
 
     def is_idle(self):
-        pass
+        """Is idle"""
 
     def is_segmentation(self):
-        pass
+        """Is segmentation"""
 
     def is_detection(self):
-        pass
+        """Is detection"""
     # endregion
 
     transitions = transitions_allow_functions([

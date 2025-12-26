@@ -16,7 +16,7 @@ from autotrainer.core.configuration import SystemConfigurationDumper
 logger = get_verbose_logger(__name__)
 
 
-class CameraId(IntEnum, Enum):
+class CameraId(IntEnum):
     Left = 0
     Right = 1
     Web = 2

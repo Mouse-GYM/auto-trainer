@@ -2,6 +2,7 @@ import datetime
 from unittest import mock
 
 import pytest
+from autotrainer.core import ProjectInfo
 from transitions import MachineError
 
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, SystemState
@@ -15,6 +16,7 @@ def test_intersession(
 ):
     intersession = machine.intersession
 
+    assert intersession.project is not None
     assert intersession.state == IntersessionState.idle
 
     with pytest.raises(MachineError):

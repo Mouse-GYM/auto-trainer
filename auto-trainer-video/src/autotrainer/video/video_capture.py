@@ -152,6 +152,7 @@ class CaptureAttrs:
     barrier: Optional = None
     event: Optional = None
 
+
 class VideoCapture(Process):
     """
     Process-based class for video capture and recording.
@@ -441,6 +442,7 @@ class VideoCapture(Process):
                     record_q_list = self._record_queue_list = []
                     continue
 
+                # Not anymore necessary with cameras correctly synced in hardware.
                 # ensure primary capture first
                 # if not is_primary and cur_frame_idx == -1:
                 #     sync_barrier()
@@ -449,7 +451,7 @@ class VideoCapture(Process):
                 perf_now_ns = time.perf_counter_ns()
                 cur_frame_idx += 1
 
-                if cur_frame_idx < 450:
+                if cur_frame_idx < 300:
                     when_secs = when / 1e9
                     perf_now = perf_now_ns / 1e9
                     if cur_frame_idx == 0:
@@ -457,10 +459,10 @@ class VideoCapture(Process):
                         # if is_primary:
                         #     sync_barrier()
                     elif net_q is not None and (
-                        (cur_frame_idx < 450 and cur_frame_idx % 16 == 0)
-                        or (cur_frame_idx < 64 and cur_frame_idx % 4 == 0)
-                        or (cur_frame_idx < 32 and cur_frame_idx % 2 == 0)
-                        or cur_frame_idx < 16
+                        (cur_frame_idx < 300 and cur_frame_idx % 64 == 0)
+                        or (cur_frame_idx < 64 and cur_frame_idx % 16 == 0)
+                        or (cur_frame_idx < 32 and cur_frame_idx % 4 == 0)
+                        or cur_frame_idx < 4
                     ):
                         logger.debug("got frame %s cam_when=%.4f perf_now=%.4f", cur_frame_idx, when_secs, perf_now)
 

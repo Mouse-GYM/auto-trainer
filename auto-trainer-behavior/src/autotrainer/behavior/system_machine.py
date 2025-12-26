@@ -105,9 +105,10 @@ class SystemMachine(StateMachine):
         # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
         algo.shift_xyz_handler.set_handle_processed_shift_xyz(self._handle_processed_shift_xyz)
 
-        def sync_algo_system_state(old_state, new_state):
+        def sync_algo_system_state(_, new_state):
             self._algorithm.system_state = new_state
         self.events.state_changed += sync_algo_system_state
+        algo.system_state = self._state  # to be sure
 
         self._analysis = analysis
         if analysis is not None:
@@ -184,10 +185,6 @@ class SystemMachine(StateMachine):
         self._consider_start_session(reason=reason)
         if self._analysis is not None:
             self._evaluate_auto_clamp(self._analysis.headbar_pressure_monitor.is_engaged)
-
-    def before_exit_tunnel(self, *, reason: str = "NA"):
-        pass
-        # self._algorithm.system_state = SystemState.cage
 
     def after_exit_tunnel(self, *, reason: str = "NA"):
         self._update_magnet_position(self.algorithm.baseline_intensity)
@@ -656,8 +653,6 @@ class SystemMachine(StateMachine):
 
     def _pellet_loaded(self):
         self._algorithm.pellet_loaded()
-        # self._consider_start_session(reason="pellet-loaded")
-        # after load-pellet a send-pellet is executed, so we get that event too for consider-start-session
 
     def _pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
@@ -738,22 +733,16 @@ class SystemMachine(StateMachine):
         # Do not end if the mouse is still in the tunnel and a pellet is seen or the pellet deliver is in the sending
         # or releasing states. Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
-        if (not algo.is_in_session
-            # or (self.state == SystemState.tunnel
-            #     and self._pellet_machine.state in {
-            #         PelletState.sending, PelletState.releasing, PelletState.monitoring,
-            #         # PelletState.loading,
-            #     }
-            # )
-        ):
-            logger.debug("_consider_end_session[%s]: not ending: is_in_session=%s state=%s pellet=%s",
-                         reason, algo.is_in_session, self.state, self._pellet_machine.state)
+        if not algo.is_in_session:
+            logger.debug("_consider_end_session[%s]: not in session ; state=%s pellet=%s",
+                         reason, self.state, self._pellet_machine.state)
             return
-
         if algo.end_capture_session(reason=f"{reason}->consider_end_session"):
             # force analysis to False,
             # this will trigger a new start session if mouse still there
             self._analysis.load_cell_monitor.is_engaged = False
+                # maybe not necessary, if also checked at end of at end of end cpture session execution.
+                # or when pellet goes back to monitor state
 
     @BehaviorAlgorithm.relay_func(wait=True)
     def _handle_detection_result(self, res: IntersessionResponse):
@@ -794,55 +783,55 @@ class SystemMachine(StateMachine):
     # region State Machine Requirements
     # Methods required for model_override=True to work.
     def trigger(self):
-        pass
+        """Trigger"""
 
     def may_trigger(self):
-        pass
+        """Trigger"""
 
     def enter_tunnel(self, *, reason: str = "NA"):
-        pass
+        """Enter tunnel"""
 
     def may_enter_tunnel(self):
-        pass
+        """Enter tunnel"""
 
     def exit_tunnel(self, *, reason: str = "NA"):
-        pass
+        """Exit tunnel"""
 
     def may_exit_tunnel(self):
-        pass
+        """Exit tunnel"""
 
     def enter_intersession(self):
-        pass
+        """Enter intersession"""
 
     def may_enter_intersession(self):
-        pass
+        """Enter intersession"""
 
     def exit_intersession(self):
-        pass
+        """Exit intersession"""
 
     def exit_intersession_to_tunnel(self):
-        pass
+        """Exit intersession"""
 
     def exit_intersession_to_cage(self):
-        pass
+        """Exit intersession"""
 
     def may_exit_intersession(self):
-        pass
+        """Exit intersession"""
 
     def may_exit_intersession_to_tunnel(self):
-        pass
+        """Exit intersession"""
 
     def may_exit_intersession_to_cage(self):
-        pass
+        """Exit intersession"""
 
     def is_cage(self):
-        pass
+        """Is cage"""
 
     def is_tunnel(self):
-        pass
+        """Is tunnel"""
 
     def is_intersession(self):
-        pass
+        """Is intersesion"""
     # endregion
 
     transitions = transitions_allow_functions([
@@ -858,7 +847,6 @@ class SystemMachine(StateMachine):
             trigger=exit_tunnel,
             source=SystemState.tunnel,
             dest=SystemState.cage,
-            before=before_exit_tunnel,
             after=after_exit_tunnel,
         ),
 

@@ -972,7 +972,6 @@ class BehaviorAlgorithm(ObservableObject):
 
         self.session_starting()
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
-        self.system_state = SystemState.tunnel
         self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, True, False)
         return True
 
@@ -997,8 +996,6 @@ class BehaviorAlgorithm(ObservableObject):
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
         self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)
-        # self._set_pellet_last_seen(-math.inf)
-        # self._set_triangle_last_seen(-math.inf)
         return True
 
     def end_session(self, result: CaptureAnalysisResult):

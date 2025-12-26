@@ -301,12 +301,12 @@ class PelletMachine(StateMachine):
             func(
                 "try_next_state cur=%s from %s: %s -> in_session=%s pellet_seen=%s recently=%s triangle_recently_seen=%s "
                 "session_mouse_seen=%s session_pellet_count=%s must_release=%s "
-                "pellet_state=%s algo_system_state=%s intersession_state=%s "
+                "algo_system_state=%s intersession_state=%s "
                 "pellet_seen_age=%.1f" "sec hands_near_pellet_seen=%s covered_state=%s"
                 , cur_state, caller, reason, algo.is_in_session, pellet_seen,
                 algo.pellet_recently_seen, algo.triangle_recently_seen,
                 algo.session_mouse_seen, algo.session_pellet_count, must_release,
-                self._state, algo.system_state, algo.intersession_state,
+                algo.system_state, algo.intersession_state,
                 algo.pellet_seen_age, algo.hands_near_pellet_seen, self._covered_state,
             )
 
