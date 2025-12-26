@@ -524,9 +524,9 @@ class MainWindow(QMainWindow):
         action.setCheckable(True)
         action.triggered.connect(self._internal_simulate_trigger)
 
-        action = self.force_detector_action = QAction("Force Detector", self)
+        action = self.force_headbar_detector_action = QAction("Force Detector", self)
         action.setCheckable(True)
-        action.triggered.connect(self._internal_set_force_detector_seen)
+        action.triggered.connect(self._internal_set_force_headbar_detector)
 
         action = self.pellet_seen_action = QAction("Pellet Seen", self)
         action.triggered.connect(self._internal_set_pellet_seen)
@@ -699,7 +699,7 @@ class MainWindow(QMainWindow):
             toolbar.setFloatable(False)
             toolbar.setMovable(False)
             toolbar.addAction(self.capture_trigger_action)
-            toolbar.addAction(self.force_detector_action)
+            toolbar.addAction(self.force_headbar_detector_action)
             toolbar.addAction(self.pellet_seen_action)
             toolbar.addAction(self.mouse_seen_action)
             toolbar.addAction(self.mouse_near_pellet_action)
@@ -813,8 +813,8 @@ class MainWindow(QMainWindow):
             inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
         load_cell_monitor.force_engaged(is_checked)
 
-    def _internal_set_force_detector_seen(self):
-        new_value = self.force_detector_action.isChecked()
+    def _internal_set_force_headbar_detector(self):
+        new_value = self.force_headbar_detector_action.isChecked()
         self._app_model.analysis.headbar_pressure_monitor.force_engaged(new_value)
 
     def _internal_set_pellet_seen(self):
@@ -828,9 +828,11 @@ class MainWindow(QMainWindow):
         algo = behavior.algorithm
         uncover_dist = algo.pellet_hand_uncover_distance
         if uncover_dist is not None:
-            new_val = uncover_dist - 0.1
-            algo.pellet_hands_min_distance = new_val
-            logger.debug("set pellet_hands_min_distance to %s", new_val)
+            new_val = uncover_dist / 2
+        else:
+            new_val = 0.001  # that is on it
+        logger.debug("set pellet_hands_min_distance to %s", new_val)
+        algo.pellet_hands_min_distance = new_val
 
     def _internal_detection_result_toggle(self):
         inference = self._app_model.inference

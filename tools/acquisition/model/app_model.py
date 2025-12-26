@@ -618,7 +618,7 @@ class AppModel(ObservableObject):
     #
 
     def add_animal(self, name: str, select: bool = False) -> Optional[AnimalSubject]:
-        if not name or len(name) == 0:
+        if not name:
             return None
 
         matching_animals = [x for x in self._animals if x.name == name]

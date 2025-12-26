@@ -524,7 +524,7 @@ class PelletMachine(StateMachine):
     def is_monitoring(self):
         """is monitoring"""
 
-    def is_move_retract(self):
+    def is_retract(self):
         """is retract"""
 
     # endregion

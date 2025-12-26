@@ -211,18 +211,8 @@ class SystemMachine(StateMachine):
         self._algorithm.system_state = SystemState.cage
         self._pellet_machine.environment_changed(caller="before_exit_intersession_to_cage")
 
-    def before_exit_intersession_to_tunnel(self):
-        self.state = SystemState.tunnel
-        # set/force tunnel state required now, otherwise enter_tunnel is refused here after,
-        # another possibility would be to have a dedicated trigger like "re_enter_tunnel_from_end_of_intersession"
-        self._algorithm.system_state = SystemState.tunnel
+    def after_exit_intersession_to_tunnel(self):
         self.enter_tunnel(reason="exit_intersession_to_tunnel")
-        # # EDIT: even not sure it's needed anymore ? at least not for current tests. trying without..
-        if not self._algorithm.is_in_session:
-            # only needed if not start a new session,
-            # given when a new session is started, the pellet machine already receives a session_starting event/callback
-            # which already makes the necessary move(s).
-            self._pellet_machine.environment_changed(caller="before_exit_intersession_to_tunnel")
 
     @staticmethod
     def _clean_raw_data(project: ProjectInfo, *, wait_before_clean: float = 10):
@@ -675,9 +665,6 @@ class SystemMachine(StateMachine):
 
     def _pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
-        algo = self._algorithm
-        if algo.algo_paused:
-            return
         if new_value == PelletState.monitoring:
             self._consider_start_session(reason="pellet-monitoring")
 
@@ -692,6 +679,8 @@ class SystemMachine(StateMachine):
         self._timer_consider_start_session.cancel()  # in case of
         self._timer_consider_start_session = no_op_timer
         algo = self._algorithm
+        if algo.algo_paused:
+            return
         perf_now = get_perf_now()
         pellet_seen_age = algo.pellet_seen_age
         pellet_machine = self._pellet_machine
@@ -893,8 +882,9 @@ class SystemMachine(StateMachine):
 
         dict(
             trigger=exit_intersession_to_tunnel,
-            source=SystemState.intersession, dest=SystemState.tunnel,
-            before=before_exit_intersession_to_tunnel,
+            source=SystemState.intersession,
+            dest=SystemState.tunnel,
+            after=after_exit_intersession_to_tunnel,
         ),
         dict(
             trigger=exit_intersession_to_cage,

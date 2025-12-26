@@ -60,7 +60,6 @@ class HeadbarPressureMonitor(ObservableObject):
 
         self._rebuild_buffers()
 
-
     @property
     def sample_rate(self) -> int:
         return self._sample_rate
