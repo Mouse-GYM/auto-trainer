@@ -584,7 +584,7 @@ class BehaviorAlgorithm(ObservableObject):
     @pellet_missing_time.setter
     def pellet_missing_time(self, value):
         self._pellet_missing_time = value
-        self._triangle_missing_time = value  # keep in sync
+        self.triangle_missing_time = value  # keep in sync
 
     @property
     def intersession_enabled(self):
