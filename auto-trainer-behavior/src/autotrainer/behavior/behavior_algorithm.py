@@ -921,16 +921,6 @@ class BehaviorAlgorithm(ObservableObject):
     def diamond_triangle_offset_config_path(self) -> Path:
         return self._diamond_triangle_offset_config_path
 
-    def animal_pellet_to_motor(self, animal: AnimalSubject) -> Optional[Offset3DTuple]:
-        xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_z)
-        if not animal.is_pellet_dcs:
-            return xyz
-        cfg = self._diamond_triangle_offset_config
-        if cfg is None:
-            return None
-            # raise RuntimeError(f"Animal has pellet in DCS but no diamond-triangle config")
-        return cfg.diamond_to_motor(xyz)
-
     #
 
     @property
@@ -1100,6 +1090,7 @@ class BehaviorAlgorithm(ObservableObject):
             prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
             if not prev_seen:
                 logger.verbose("Session mouse seen")
+            # property currently unused:
             self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, prev_seen)
             if not prev_seen:
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)

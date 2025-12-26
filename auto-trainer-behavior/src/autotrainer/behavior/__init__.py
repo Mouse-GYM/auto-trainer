@@ -50,7 +50,7 @@ class DiamondTriangleOffsetConfig:
             if not cfg_path.expanduser().is_file():
                 logger.warning("Diamond triangle config %r not a file", cfg_path.as_posix())
             else:
-                logger.verbose("Loading diamond-triangle file %r", cfg_path)
+                logger.verbose("Loading diamond-triangle file %r", cfg_path.as_posix())
                 return DiamondTriangleOffsetConfig.from_file(cfg_path)
         return None
 

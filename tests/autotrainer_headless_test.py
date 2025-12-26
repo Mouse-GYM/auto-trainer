@@ -1,4 +1,5 @@
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -17,8 +18,15 @@ from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
 
 
-top_dir = Path(__file__).parent.parent  # supposed be the repo top/root dir
-headless_path = top_dir.joinpath("auto-trainer-headless.py")
+import top_fixtures
+
+headless_path = top_fixtures.repo_root_dir.joinpath("auto-trainer-headless.py")
+
+
+def remove_ansi_escape_sequences(s):
+    # Regex for common ANSI escape codes
+    ansi_escape = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]')
+    return ansi_escape.sub('', s)
 
 
 @pytest.fixture
@@ -67,16 +75,15 @@ def user_pref(tmp_path, trainer_config_dir, animals_dir, settings_ini_path):
 @pytest.fixture
 def calib_dir():
     # could be todo: copy it top-level, or generate new temporary one as above for system config.
-    return top_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
+    return top_fixtures.repo_root_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
 
 
 @pytest.fixture
-def diamond_config_path(trainer_config_dir):
-    path = trainer_config_dir.joinpath("diamond_triangle.yaml")
-    prev_default = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH
-    DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH = path
+def diamond_config_path(monkeypatch):
+    path = top_fixtures.repo_root_tests_subdir.joinpath("diamond_triangle_offset.yaml")
+    # prev_default = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH
+    monkeypatch.setattr(DiamondTriangleOffsetConfig, "DEFAULT_CONFIG_PATH", path)
     yield path
-    DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH = prev_default
 
 
 @pytest.fixture
@@ -141,20 +148,25 @@ def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, co
         "-c", config_file_path.as_posix(),
         "--preferences-file", settings_ini_path.as_posix(),
     ], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
+    #
+    out = []
+    err = []
     # NB: for now we wait a fixed amount of time and then interrupt the app:
     def interrupt_proc():
-        time.sleep(10)  # with 5s or event 10s sometimes it's too slow to output what we expect/assert below..
+        t_end = time.perf_counter() + 25
+        while time.perf_counter() < t_end:
+            if any("App is now running" in line for line in out):
+                break
+            time.sleep(0.05)
         proc.send_signal(signal.SIGINT)
     t = threading.Thread(target=interrupt_proc, daemon=True)
     t.start()
-    out = []
-    err = []
     def communicate(dest, src_fh, dest_fh):
         while proc.poll() is None:
             line = src_fh.readline()  # .decode()
-            line = line.strip(b'\n')
-            print(line.decode(), file=dest_fh)
-            dest.append(line.decode('ascii', errors='ignore'))
+            line = line.strip(b'\n').decode()
+            print(line, file=dest_fh)
+            dest.append(remove_ansi_escape_sequences(line))
         tail = src_fh.read().decode()
         print(tail, file=dest_fh)
         dest.extend(tail.split("\n"))
@@ -170,16 +182,13 @@ def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, co
     proc.terminate()  # in case of
     proc.wait(3)  # in case of
     proc.kill()  # in case of
-    # if out is None:
-    #     out, err = proc.communicate()
     communicate_out_thread.join()
     communicate_err_thread.join()
-
     assert proc.returncode == 0
     output = "\n".join(out)
     # print(output)
-    assert f"Loading diamond-triangle file {diamond_config_path.as_posix()!r}"
+    assert f"Loading diamond-triangle file {diamond_config_path.as_posix()!r}" in output
     assert f"Using setting ini file: {settings_ini_path.as_posix()!r}" in output
     assert "Alogus hardware or hardware support not found. Using emulation interface." in output
-    # etc...
     assert f"Writing to {config_file_path.as_posix()!r}" in output
+    # etc...

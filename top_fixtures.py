@@ -26,8 +26,8 @@ from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDevi
 logger = logging.getLogger(__name__)
 
 
-repo_root_this_dir = Path(__file__).parent  # supposed to be the repo root/top dir
-repo_root_tests_subdir = repo_root_this_dir.joinpath("tests")
+repo_root_dir = Path(__file__).parent  # supposed to be the repo root/top dir
+repo_root_tests_subdir = repo_root_dir.joinpath("tests")
 
 
 fake_perf_now = 0  # used to control time.perf_counter() in BehaviorAlgo/SystemMachine/PelletMachine/Intersession
