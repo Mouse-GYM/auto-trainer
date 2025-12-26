@@ -20,7 +20,7 @@ def test_enter_exit_transitions(machine: SystemMachine, mock_system):
     assert machine.state == SystemState.cage
 
     with pytest.raises(MachineError):
-        machine.exit_intersession()
+        machine.exit_intersession_to_cage()
 
     with pytest.raises(MachineError):
         machine.exit_tunnel()
@@ -61,6 +61,6 @@ def test_enter_exit_transitions(machine: SystemMachine, mock_system):
     with pytest.raises(MachineError):
         machine.exit_tunnel()
 
-    machine.exit_intersession()
+    machine.exit_intersession_to_cage()
 
     assert machine.state == SystemState.cage

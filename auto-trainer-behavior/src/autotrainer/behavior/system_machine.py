@@ -105,6 +105,10 @@ class SystemMachine(StateMachine):
         # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
         algo.shift_xyz_handler.set_handle_processed_shift_xyz(self._handle_processed_shift_xyz)
 
+        def sync_algo_system_state(old_state, new_state):
+            self._algorithm.system_state = new_state
+        self.events.state_changed += sync_algo_system_state
+
         self._analysis = analysis
         if analysis is not None:
             analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
@@ -182,7 +186,8 @@ class SystemMachine(StateMachine):
             self._evaluate_auto_clamp(self._analysis.headbar_pressure_monitor.is_engaged)
 
     def before_exit_tunnel(self, *, reason: str = "NA"):
-        self._algorithm.system_state = SystemState.cage
+        pass
+        # self._algorithm.system_state = SystemState.cage
 
     def after_exit_tunnel(self, *, reason: str = "NA"):
         self._update_magnet_position(self.algorithm.baseline_intensity)
@@ -192,7 +197,8 @@ class SystemMachine(StateMachine):
 
     def before_enter_intersession(self):
         # current system_state should be tunnel here
-        self._algorithm.system_state = SystemState.intersession
+        pass
+        # self._algorithm.system_state = SystemState.intersession
 
     def after_enter_intersession(self):
         project = self._project_info.to_local_value()
@@ -208,7 +214,11 @@ class SystemMachine(StateMachine):
                            duration)
 
     def before_exit_intersession_to_cage(self):
-        self._algorithm.system_state = SystemState.cage
+        pass
+        # self._algorithm.system_state = SystemState.cage
+        # self._pellet_machine.environment_changed(caller="before_exit_intersession_to_cage")
+
+    def after_exit_intersession_to_cage(self):
         self._pellet_machine.environment_changed(caller="before_exit_intersession_to_cage")
 
     def after_exit_intersession_to_tunnel(self):
@@ -878,6 +888,7 @@ class SystemMachine(StateMachine):
             trigger=exit_intersession,
             source=SystemState.intersession, dest=SystemState.cage,
             before=before_exit_intersession_to_cage,
+            after=after_exit_intersession_to_cage,
         ),
 
         dict(
@@ -890,5 +901,6 @@ class SystemMachine(StateMachine):
             trigger=exit_intersession_to_cage,
             source=SystemState.intersession, dest=SystemState.cage,
             before=before_exit_intersession_to_cage,
+            after=after_exit_intersession_to_cage,
         )
     ])
