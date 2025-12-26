@@ -703,12 +703,8 @@ class SystemMachine(StateMachine):
             return
         if not algo.pellet_recently_seen:
             logger.debug("Wait pellet seen")
-            # pellet not seen, if enabled a pellet-load will be executed once pellet_missing_time elapsed,
-            # remains = min(0.1, algo.pellet_missing_time - pellet_seen_age)  # ensure some minimum time before recheck
-            # if remains <= 0:
-            #     remains = 0.1
-            # remains = 0.1  # although unsure if necessary, given we would get a pellet-loaded() event,
-            # which we also consider-start-session for it..
+            # pellet not seen, if enabled a pellet-load will be executed,
+            # which we also consider-start-session for it.
             return
         #
         if math.isinf(send_begin_age) and math.isinf(send_end_age):
