@@ -195,13 +195,7 @@ class SystemMachine(StateMachine):
         if self._algorithm.is_in_session:
             self._algorithm.end_capture_session(reason=f"{reason}->after_exit_tunnel")
 
-    def before_enter_intersession(self):
-        # current system_state should be tunnel here
-        pass
-        # self._algorithm.system_state = SystemState.intersession
-
     def after_enter_intersession(self):
-        project = self._project_info.to_local_value()
         self._intersession.perform_segmentation()
         algo = self._algorithm
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
@@ -212,11 +206,6 @@ class SystemMachine(StateMachine):
             else:
                 logger.verbose("Not considering to auto-close gate when mouse in cage confirmed ; session duration=%s",
                            duration)
-
-    def before_exit_intersession_to_cage(self):
-        pass
-        # self._algorithm.system_state = SystemState.cage
-        # self._pellet_machine.environment_changed(caller="before_exit_intersession_to_cage")
 
     def after_exit_intersession_to_cage(self):
         self._pellet_machine.environment_changed(caller="before_exit_intersession_to_cage")
@@ -520,16 +509,13 @@ class SystemMachine(StateMachine):
         #
         algo = self._algorithm
         if algo.is_in_session and not algo.session_mouse_seen and response.mouse_seen:
-            logger.verbose("session first mouse_seen: parts=%s locations=%s", response.parts_flags, response.locations)
+            logger.success("session first mouse_seen: parts=%s locations=%s", response.parts_flags, response.locations)
         #
         algo.update_triangle_seen(response.triangle_seen)
         algo.update_diamond_seen(response.diamond_seen)
         algo.update_star_seen(response.star_seen)
         algo.update_pellet_seen(response.pellet_seen)
         algo.update_mouse_seen(response.mouse_seen)
-        #
-        if not algo.pellet_delivery_enabled:
-            return
         #
         self._handle_pellet_hands_offsets(response)
         self._pellet_machine.pellet_seen(response.pellet_seen)
@@ -880,14 +866,12 @@ class SystemMachine(StateMachine):
             trigger=enter_intersession,
             source=(SystemState.cage, SystemState.tunnel),
             dest=SystemState.intersession,
-            before=before_enter_intersession,
             after=after_enter_intersession,
         ),
 
         dict(  # previous behavior
             trigger=exit_intersession,
             source=SystemState.intersession, dest=SystemState.cage,
-            before=before_exit_intersession_to_cage,
             after=after_exit_intersession_to_cage,
         ),
 
@@ -900,7 +884,6 @@ class SystemMachine(StateMachine):
         dict(
             trigger=exit_intersession_to_cage,
             source=SystemState.intersession, dest=SystemState.cage,
-            before=before_exit_intersession_to_cage,
             after=after_exit_intersession_to_cage,
         )
     ])
