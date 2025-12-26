@@ -93,9 +93,10 @@ class SystemMachine(StateMachine):
         self._tunnel_device = tunnel_device
         self._msg_handler = msg_handler
 
-        algo = self._algorithm = BehaviorAlgorithm(
+        self._algorithm: BehaviorAlgorithm =BehaviorAlgorithm(
             topcam_presence=topcam_presence,
         ) if algorithm is None else algorithm
+        algo = self._algorithm
         del algorithm  # using algo
         algo.project = project_info
         algo.session_starting += self._session_capture_started
@@ -205,7 +206,7 @@ class SystemMachine(StateMachine):
                            duration)
 
     def after_exit_intersession_to_cage(self):
-        self._pellet_machine.environment_changed(caller="before_exit_intersession_to_cage")
+        self._pellet_machine.environment_changed(caller="exit_intersession_to_cage")
 
     def after_exit_intersession_to_tunnel(self):
         self.enter_tunnel(reason="exit_intersession_to_tunnel")
@@ -419,9 +420,9 @@ class SystemMachine(StateMachine):
             return
         if (
             self._state == SystemState.tunnel
-            and self._pellet_machine.state == PelletState.monitoring
             # TODO: we could also decide to check in SystemState.cage as well,
             #  as far as we can ensure pellet is at deliver/send position
+            and self._pellet_machine.state == PelletState.monitoring
             and self._pellet_machine.can_use_pellet_command()
         ):
             last_pos = self._pellet_device.last_position
@@ -433,10 +434,9 @@ class SystemMachine(StateMachine):
                 self._algorithm.handle_diamond_triangle_offset(offset, last_pos)
         else:
             if self._is_handling_diamond_triangle:
+                algo = self._algorithm
                 self._is_handling_diamond_triangle = False
-                measured_drift = self._algorithm.diamond_triangle_drift
-                logger.info("Stopped handling diamond-triangle offset ; measured drift = %s",
-                            None if measured_drift is None else measured_drift.humanize())
+                algo.get_diamond_triangle_drifts()  # trigger calculate current mean/stdev
 
     def _handle_triangle_pellet_offset_changed(self, offset: Optional[Offset3DTuple]):
         if offset is None:  # not sure we should not let it pass to algo

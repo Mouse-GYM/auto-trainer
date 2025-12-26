@@ -25,7 +25,7 @@ from typing_extensions import Self
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
-    AnimalSubject, get_perf_now
+    AnimalSubject, get_perf_now, calculate_std_dev_manual
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
@@ -244,7 +244,7 @@ class BehaviorAlgorithm(ObservableObject):
     session_processing_starting: Callable[[], None]
     session_ending: Callable[[CaptureAnalysisResult], None]
 
-    pellet_motor_drift_changed: Callable[[Offset3DTuple], None]
+    pellet_motor_drift_changed: Callable[[Offset3DTuple], None]  # unused
     cover_servo_status_changed: Callable[[CoverServoStatus], None]
 
     pellets_presented_evt: Callable[[int], None]
@@ -1183,25 +1183,29 @@ class BehaviorAlgorithm(ObservableObject):
     def get_diamond_triangle_drifts(self, reset: bool = False) -> Optional[Offset3DTuple]:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""
         values = self._diamond_triangle_prev_drifts
-        tot = reduce(operator.add, values, Offset3DTuple(0, 0, 0))
-        n_vals = len(values)
         if reset:
             self._diamond_triangle_prev_drifts = []
-        new_drift = Offset3DTuple(0, 0, 0) if n_vals == 0 else tot / n_vals
-        if len(values) > 0:
-            logger.info(
-                "Motor mean drift: %s ; min=%s max=%s n_vals=%s",
-                new_drift.humanize(n_digits=3),
+        n_vals = len(values)
+        if n_vals < 2:
+            new_drift = None if len(values) == 0 else values[-1]
+            stdev_drift = Offset3DTuple(0, 0, 0)
+        else:
+            new_drift, stdev_drift = calculate_std_dev_manual(values)
+        if n_vals > 0:
+            logger.verbose(
+                "Current motor (diamond-triangle) mean drift: %s ; min=%s max=%s n_vals=%s stdev=%s",
+                None if new_drift is None else new_drift.humanize(n_digits=2),
                 min(values, key=lambda v: v.distance).humanize(n_digits=1),
                 max(values, key=lambda v: v.distance).humanize(n_digits=1),
-                len(values),
+                n_vals,
+                stdev_drift.humanize(n_digits=1)
             )
         else:
             logger.verbose("No motor drift measure available")
             # put here to minimize nbr of times we update it:
             new_drift = None
         prev, self._diamond_triangle_drift = self._diamond_triangle_drift, new_drift
-        self._on_property_changed(BehaviorAlgoProps.PELLET_MOTOR_DRIFT, new_drift, prev)
+        self._on_property_changed(BehaviorAlgoProps.PELLET_MOTOR_DRIFT, new_drift, prev)  # property unused atm
         return new_drift
 
     def handle_diamond_triangle_offset(

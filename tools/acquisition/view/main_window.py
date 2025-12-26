@@ -15,7 +15,8 @@ from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessa
                                QSpinBox, QDoubleSpinBox)
 import qtawesome as qta
 
-from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration
+from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
+    calculate_std_dev_manual
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.pose_elements import SceneElement
@@ -197,18 +198,6 @@ class MainWindow(QMainWindow):
         self._refresh_prev_next_phases()
         self.main_content.training_plan_changed.emit(plan)
 
-    @staticmethod
-    def calculate_std_dev_manual(data):
-        n = len(data)
-        if n < 2:
-            raise ValueError("Data must contain at least two values to calculate standard deviation.")
-
-        mean = sum(data) / n
-        squared_diffs = [(x - mean) ** 2 for x in data]
-        variance = sum(squared_diffs) / (n - 1)  # Sample standard deviation
-        std_dev = variance ** 0.5
-        return mean, std_dev
-
     def _handle_diamond_triangle_calib_run(self, *, positions: List[Offset3DTuple], offsets: List[Offset3DTuple]):
         self._timer_calibrate.cancel()
         if len(offsets) < 3:
@@ -250,7 +239,7 @@ class MainWindow(QMainWindow):
         assert isinstance(avg_pos, Offset3DTuple)
         assert isinstance(stdev_pos, Offset3DTuple)
         logger.info("position: average=%s stdev=%s", avg_pos, stdev_pos)
-        avg_offset, stdev_offset = self.calculate_std_dev_manual(offsets)
+        avg_offset, stdev_offset = calculate_std_dev_manual(offsets)
         assert isinstance(avg_offset, Offset3DTuple)
         assert isinstance(stdev_offset, Offset3DTuple)
         logger.info("offset: average=%s stdev=%s", avg_offset, stdev_offset)

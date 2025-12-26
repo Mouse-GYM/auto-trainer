@@ -19,6 +19,19 @@ logger = get_verbose_logger(__name__)
 
 #
 
+def calculate_std_dev_manual(data):
+    n = len(data)
+    if n < 2:
+        raise ValueError("Data must contain at least two values to calculate standard deviation.")
+
+    mean = sum(data) / n
+    squared_diffs = [(x - mean) ** 2 for x in data]
+    variance = sum(squared_diffs) / (n - 1)  # Sample standard deviation
+    std_dev = variance ** 0.5
+    return mean, std_dev
+
+#
+
 @dataclasses.dataclass
 class RawValueHolder:
     value: Any
