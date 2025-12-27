@@ -13,7 +13,6 @@ from mocks import MockEventPlugin
 @pytest.fixture
 def default_manager():
     yield EventManager.default()
-
     # Required to close the process_events thread and exit cleanly.
     EventManager.default().close()
 
@@ -22,7 +21,6 @@ def default_manager():
 def event_manager():
     manager = EventManager("EventManagerInstance")
     yield manager
-
     manager.close()
 
 
@@ -88,5 +86,5 @@ def test_plugin_interface(event_manager, mock_plugin):
 
 
 def test_post_none_event_refused(event_manager):
-    with pytest.raises(RuntimeError, match="post_event\(None\) refused"):
+    with pytest.raises(RuntimeError, match=r"post_event\(None\) refused"):
         event_manager.post_event(None)  # noqa

@@ -22,9 +22,22 @@ def diamond_triangle_config():
     (4, 5, 6),
     (15, 8, 12),
 ])
-def test_transform_coordinates(motor_xyz, diamond_triangle_config):
+@pytest.mark.parametrize("used_pos", [
+    (0, 0, 0),
+    (3, 5, 9),
+    (15, 0, 5),
+])
+@pytest.mark.parametrize("measured_off", [
+    (-8, -5, -15),
+    (8, 5, 15),
+    (-4, 0, 8),
+])
+def test_transform_coordinates(motor_xyz, used_pos, measured_off):
+    cfg = DiamondTriangleOffsetConfig(used_position=used_pos, measured_offset=measured_off)
     motor_xyz = Offset3DTuple(motor_xyz)
-    diamond_xyz = diamond_triangle_config.motor_to_diamond(motor_xyz)
-    assert np.isclose(diamond_triangle_config.diamond_to_motor(diamond_xyz), motor_xyz).all()
-    inference_xyz = diamond_triangle_config.motor_to_inference(motor_xyz)
-    assert np.isclose(diamond_triangle_config.inference_to_motor(inference_xyz), motor_xyz).all()
+    diamond_xyz = cfg.motor_to_diamond(motor_xyz)
+    assert np.isclose(cfg.diamond_to_motor(diamond_xyz), motor_xyz).all()
+    inference_xyz = cfg.motor_to_inference(motor_xyz)
+    assert np.isclose(cfg.inference_to_motor(inference_xyz), motor_xyz).all()
+    assert np.isclose(cfg.inference_to_diamond(inference_xyz), diamond_xyz).all()
+    assert np.isclose(cfg.inference_to_motor(cfg.diamond_to_inference(diamond_xyz)), motor_xyz).all()

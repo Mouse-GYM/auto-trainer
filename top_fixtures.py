@@ -20,8 +20,7 @@ from autotrainer.video import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 
 from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, PelletState, \
-    BehaviorAlgorithm, InferenceProtocol
-
+    BehaviorAlgorithm, InferenceProtocol, DiamondTriangleOffsetConfig
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +71,14 @@ def project_info(tmp_path):
     root.mkdir()
     prj = ProjectInfo(root=root.as_posix())
     yield prj
+
+
+@pytest.fixture(autouse=True)
+def diamond_config_path(monkeypatch):
+    path = repo_root_tests_subdir.joinpath("diamond_triangle_offset.yaml")
+    monkeypatch.setattr(DiamondTriangleOffsetConfig, "DEFAULT_CONFIG_PATH", path)
+    assert DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH is path
+    return path
 
 
 ##

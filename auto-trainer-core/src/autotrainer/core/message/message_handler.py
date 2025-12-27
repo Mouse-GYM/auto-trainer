@@ -96,12 +96,12 @@ class MessageHandler(ObservableObject):
         task_done = self._input_queue.task_done
         msg_received = self.message_received
         tot_read_count = 0
-        t_next_check_size = time.time()
+        t_next_check_size = time.perf_counter()
         while True:
             msg, data = q_get()
             if __debug__:
                 tot_read_count += 1
-                t_now = time.time()
+                t_now = time.perf_counter()
                 if t_now > t_next_check_size:
                     logger.debug("system message handler input queue: size=%s read=%.1f / s",
                                  self._input_queue.qsize(), tot_read_count / 60)
