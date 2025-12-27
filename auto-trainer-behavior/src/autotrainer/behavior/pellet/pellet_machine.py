@@ -99,9 +99,16 @@ class PelletMachine(StateMachine):
     def events(self) -> PelletMachineEvents:
         return self._events
 
+    @property
+    def covered_state(self) -> Optional[bool]:
+        return self._covered_state
+
+    # transitions
+
     def before_move_home(self):
         self._api_status_token = self._pellet_device.send_home()
-        EventManager.default().post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
+        if self._api_status_token is not None:
+            EventManager.default().post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
 
     def before_load_pellet(self):
         self.events.pellet_loading()
@@ -122,6 +129,7 @@ class PelletMachine(StateMachine):
                           trigger_count)
             self._pellet_device.send_home()
             self._pellet_load_count = self._pellet_retract_count = 0
+        # don't we want to apply the pellet cover/release here before sending ?
         self.events.pellet_sending()
         self._api_status_token = self._pellet_device.send_pellet()
         if self._api_status_token is not None:
@@ -129,11 +137,6 @@ class PelletMachine(StateMachine):
             self._send_begin_perf_c = get_perf_now()
             self.events.pellet_sending()
             EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
-
-    def after_load_pellet(self):
-        pass
-        # now handled in try-next-state, and indirectly using self.events.pellet_loaded()
-        # self._algorithm.pellet_loaded
 
     def before_cover_pellet(self):
         self._api_status_token = self._pellet_device.cover_pellet()
@@ -193,10 +196,9 @@ class PelletMachine(StateMachine):
         dev = self._pellet_device
         # optional apply of measured motor drifts,
         drifts = algo.get_diamond_triangle_drifts(reset=True)  # always, to reset the recorded values list too.
-        if dev is not None:
-            correct_drift = algo.auto_correct_motors_drift
-            if drifts is not None and correct_drift:
-                dev.set_motors_drift(drifts)
+        correct_drift = algo.auto_correct_motors_drift
+        if drifts is not None and correct_drift:
+            dev.set_motors_drift(drifts)
 
         if algo.session_mouse_seen and self._state == PelletState.monitoring:
             # session ended because exit of tunnel, otherwise state would be load_pellet
@@ -256,6 +258,7 @@ class PelletMachine(StateMachine):
 
     def _notify_pellet_loaded_ok(self):
         self._prev_notify_loaded_perf_c = get_perf_now()
+        logger.info("Notifying pellet loaded successfully")
         self.events.pellet_loaded()
 
     @BehaviorAlgorithm.relay_func
@@ -265,14 +268,13 @@ class PelletMachine(StateMachine):
         must_release: bool = False,
         *,
         caller: str = "not-provided",
-        from_timer: bool = False,
         is_from_inference: bool = False,
     ):
         # always use the thread lock, given this can be called from different threads at the same time,
         # so possibly completely intermixed/leaved, which we want to protect from, so:
         with self._algorithm.thread_lock:
             self.__try_next_state(pellet_seen, must_release,
-                                  caller=caller, is_from_timer=from_timer, is_from_inference=is_from_inference)
+                                  caller=caller, is_from_inference=is_from_inference)
 
     def __try_next_state(
         self,
@@ -280,7 +282,6 @@ class PelletMachine(StateMachine):
         must_release: bool = False,
         *,
         caller: str,
-        is_from_timer: bool = False,
         is_from_inference: bool = False,
     ):
         cur_timer = self._cur_timer_try_next_state
@@ -292,9 +293,7 @@ class PelletMachine(StateMachine):
         retrying = False
 
         def logit():
-            if is_from_timer:
-                func = logger.notice
-            elif retrying:
+            if retrying:
                 func = logger.spam if reason != "release_when_sent_cover_enabled" else logger.debug
             else:
                 func = logger.verbose
@@ -364,28 +363,24 @@ class PelletMachine(StateMachine):
                 self.monitor_pellet()
 
         elif cur_state == PelletState.sending:
-            # logger.warning("%s: deprecated, should be followed by monitor_pellet", cur_state)
             reason = "monitor_when_sent"
             logit()
             self.monitor_pellet()
-            self.__try_next_state(pellet_seen, must_release, caller=caller, is_from_timer=is_from_timer, is_from_inference=is_from_inference)
-            # could probably re-enter immediately this func/try_next_state with current passed args ..
+            self.__try_next_state(pellet_seen, must_release, caller=caller, is_from_inference=is_from_inference)
 
         elif cur_state in {PelletState.covering, PelletState.releasing}:
-            # logger.warning("%s: deprecated, should be followed by send_pellet or monitor_pellet", cur_state)
-            # maybe not anymore necessary/needed, same as above
+            reason = "monitor_when_covered_or_released"
+            logit()
             self.monitor_pellet()
-            self.__try_next_state(pellet_seen, must_release, caller=caller, is_from_timer=is_from_timer,
-                                  is_from_inference=is_from_inference)
+            self.__try_next_state(pellet_seen, must_release, caller=caller, is_from_inference=is_from_inference)
 
         elif cur_state == PelletState.home:
-            # not used, could probably remove
             reason = "send_pellet_when_home"
             if self.can_send_pellet():
                 logit()
                 self.send_pellet()
                 self.monitor_pellet()
-                # could probably re-enter immediately this func/try_next_state with current passed args ..
+                self.__try_next_state(pellet_seen, must_release, caller=caller, is_from_inference=is_from_inference)
             else:
                 log_could_retry_shortly()
 
@@ -531,7 +526,6 @@ class PelletMachine(StateMachine):
             source=[PelletState.loading, PelletState.monitoring, PelletState.covering, PelletState.retract],
             dest=PelletState.loading,
             before=before_load_pellet,
-            after=after_load_pellet,
             conditions=can_load_pellet,
         ),
 
@@ -540,7 +534,6 @@ class PelletMachine(StateMachine):
             source=[PelletState.loading, PelletState.monitoring, PelletState.covering, PelletState.retract],
             dest=PelletState.loading,
             before=before_load_pellet,
-            after=after_load_pellet,
             # conditions=can_load_pellet,  # contrary to load_pellet
         ),
 

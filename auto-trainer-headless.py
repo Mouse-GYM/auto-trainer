@@ -9,12 +9,13 @@ from multiprocessing import set_start_method
 
 
 def main():
-    from tools.acquisition.model.user_preferences import UserPreferences
-    from tools.acquisition.model.app_model import AppModel
 
     from autotrainer.core.logging import get_verbose_logger
 
-    logger = get_verbose_logger("main")
+    from tools.acquisition.model.user_preferences import UserPreferences
+    from tools.acquisition.model.app_model import AppModel
+
+    logger = get_verbose_logger("autotrainer.headless")
 
     parser = argparse.ArgumentParser()
 
@@ -82,4 +83,5 @@ if __name__ == '__main__':
         exit_code = 1
     finally:
         stop_multiproc_logging()
+    #
     sys.exit(exit_code)

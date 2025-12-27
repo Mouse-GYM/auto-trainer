@@ -225,17 +225,17 @@ class PoseProcess(Process):
 
         reset_locals()
 
-        t_last_data = t_next_cmd = time.perf_counter()
+        p_last_data = p_next_cmd = time.perf_counter()
         while True:
-            t_now = time.perf_counter()
-            if t_now > t_next_cmd:
+            p_now = time.perf_counter()
+            if p_now > p_next_cmd:
                 # do not check command queue on each loop turn, mostly useless
                 # and overhead is not that small
                 for _ in range(4):  # assuming we don't get "burst" of commands
                     try:
                         cmd, context = get_command()
                     except Empty:
-                        t_next_cmd = t_now + 0.5
+                        p_next_cmd = p_now + 0.5
                         # current processing speed of inference is ~0.05s / batch ; which has 3 frames per cam.
                         # so it's unnecessary to wait smaller than that before trying reading next command.
                         # also given all the related messages are infrequent and normally never following
@@ -271,7 +271,7 @@ class PoseProcess(Process):
                 prev_mode = self._mode
 
             # should be removed once more confident
-            if i_q is self._offline_input_queue and t_now > t_last_data + 15:
+            if i_q is self._offline_input_queue and p_now > p_last_data + 15:
                 logger.warning("auto-switching to online")
                 self._set_process_live()
                 reset_locals()
@@ -280,7 +280,7 @@ class PoseProcess(Process):
                 time.sleep(0.001)
                 continue
 
-            t_last_data = t_now
+            p_last_data = p_now
             mode_used = InferenceMode.Live if i_q is self._live_input_queue else InferenceMode.Offline
 
             if (frames_indices[:, -1] < 0).any():

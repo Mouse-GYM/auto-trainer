@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
             box.closeEvent = close_event
             box.show()
             return
-        avg_pos, stdev_pos = self.calculate_std_dev_manual(positions)
+        avg_pos, stdev_pos = calculate_std_dev_manual(positions)
         assert isinstance(avg_pos, Offset3DTuple)
         assert isinstance(stdev_pos, Offset3DTuple)
         logger.info("position: average=%s stdev=%s", avg_pos, stdev_pos)

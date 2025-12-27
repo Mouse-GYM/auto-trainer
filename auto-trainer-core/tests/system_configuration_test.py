@@ -272,3 +272,9 @@ def test_safe_loader_ignore_unknown_tags():
     # apart the version, these are all the defaults values
     expected_result["version"] = SystemConfiguration.version + 1
     assert dataclasses.asdict(cfg) == expected_result
+
+
+def test_save_file_without_specify_save_type_fails():
+    cfg = SystemConfiguration()
+    with pytest.raises(ValueError, match="Missing one of as_json or as_yaml"):
+        cfg.save_file("foobar.baz")

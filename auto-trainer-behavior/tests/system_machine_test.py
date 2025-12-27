@@ -8,12 +8,16 @@ from threading import Timer
 from unittest import mock
 
 import pytest
+
+from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from autotrainer.inference import PoseResponse, PoseLocation
+from tests.behavior_algo_test import algo
 
 from top_fixtures import MockSystemMachine
 
 
-from autotrainer.core import HeadbarPressureMonitor, get_perf_now
+from autotrainer.core import HeadbarPressureMonitor, get_perf_now, Offset3DTuple
 from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
 from autotrainer.behavior import PelletMachine, CaptureAnalysisResult, IntersessionState
@@ -512,3 +516,76 @@ class TestSessionProcessingEnding(MockSystemMachine):
             self.mock_complete_segmentation(False)
             assert processing_ended_count == 1
         assert processing_ended_count == 1
+
+
+
+def test_handle_diamond_triangle_offset_full(mock_system, machine):
+    self = mock_system
+    algo = machine.algorithm
+    machine.enter_tunnel()
+    pellet_m = machine.pellet
+    diamond_cfg = machine.algorithm.diamond_triangle_config
+    assert machine.state == SystemState.tunnel
+    assert pellet_m.state == PelletState.monitoring
+    assert pellet_m.can_use_pellet_command()
+    #
+    last_pos = pellet_m._pellet_device.last_position = diamond_cfg.used_position  # noqa
+    inference_pos = diamond_cfg.motor_to_inference(last_pos)
+    # diamond_cfg.inference_to_motor()
+    rsp_idx = 0
+    se = SceneElement
+    locs_3d = {
+        se.Diamond: inference_pos + diamond_cfg.measured_offset,
+        se.Triangle: diamond_cfg.measured_offset,
+    }
+    presents = {se.Diamond: True, se.Triangle: True, se.Pellet: True}  # keep pellet seen
+
+    def make_rsp():
+        nonlocal rsp_idx
+        parts_offset = {
+            se.Diamond: {
+                se.Triangle: locs_3d[se.Diamond] - locs_3d[se.Triangle],
+            }
+        }
+        locs = []  # 2d inference location unnecessary
+        r = PoseResponse(
+            sequence=rsp_idx,
+            parts_flags=(presents, presents, presents),
+            locations=locs,
+            locations_3d=locs_3d,
+            parts_3d_offsets=parts_offset,
+        )
+        rsp_idx += 1
+        return r
+    #
+    def pose_changed():
+        machine._pose_changed(make_rsp())
+    #
+    assert algo.get_diamond_triangle_drifts() is None
+    pose_changed()
+    assert algo.get_diamond_triangle_drifts() == (0, 0, 0)
+    locs_3d[se.Triangle] += (0.5, 1, -1)
+    pose_changed()
+    assert algo.get_diamond_triangle_drifts() == (0.25, -0.5, -0.5)  # given 2 measures now
+    pose_changed()
+    assert algo.get_diamond_triangle_drifts(reset=True) == (1 / 3, -2 / 3, -2 / 3)  # given 3 measures now
+    assert algo.get_diamond_triangle_drifts() is None
+    #
+    presents.pop(se.Pellet)
+    self.increment_perf_now(algo.pellet_missing_time)
+    pose_changed()
+    assert algo.get_diamond_triangle_drifts(reset=True) is not None
+    pose_changed()
+    assert algo.get_diamond_triangle_drifts() is None  # given in loading now
+    presents[se.Pellet] = True
+    pose_changed()
+    self.mock_pellet_ack()  # ack load
+    pose_changed()
+    assert algo.get_diamond_triangle_drifts() is None  # given in sending now
+    assert pellet_m.state == PelletState.monitoring  # even if already monitoring
+    assert not pellet_m.can_use_pellet_command()  # sending not finished
+    self.mock_pellet_ack()  # ack send
+    assert pellet_m.state == PelletState.monitoring  # still
+    assert pellet_m.can_use_pellet_command()
+    pose_changed()
+    assert algo.get_diamond_triangle_drifts() == (0.5, -1, -1)  # back

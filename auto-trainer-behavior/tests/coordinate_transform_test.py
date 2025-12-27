@@ -23,8 +23,10 @@ def diamond_triangle_config():
     (15, 8, 12),
 ])
 def test_transform_coordinates(motor_xyz, diamond_triangle_config):
+    cfg = diamond_triangle_config
     motor_xyz = Offset3DTuple(motor_xyz)
-    diamond_xyz = diamond_triangle_config.motor_to_diamond(motor_xyz)
-    assert np.isclose(diamond_triangle_config.diamond_to_motor(diamond_xyz), motor_xyz).all()
-    inference_xyz = diamond_triangle_config.motor_to_inference(motor_xyz)
-    assert np.isclose(diamond_triangle_config.inference_to_motor(inference_xyz), motor_xyz).all()
+    diamond_xyz = cfg.motor_to_diamond(motor_xyz)
+    assert np.isclose(cfg.diamond_to_motor(diamond_xyz), motor_xyz).all()
+    inference_xyz = cfg.motor_to_inference(motor_xyz)
+    assert np.isclose(cfg.inference_to_motor(inference_xyz), motor_xyz).all()
+    assert np.isclose(cfg.inference_to_diamond(inference_xyz), diamond_xyz).all()

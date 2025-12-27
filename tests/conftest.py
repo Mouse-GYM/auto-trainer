@@ -69,16 +69,6 @@ def calib_dir():
     return top_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
 
 
-@pytest.fixture(autouse=True)
-def diamond_config_path(monkeypatch):
-    path = this_dir.joinpath("diamond_triangle_offset.yaml")
-    monkeypatch.setattr(DiamondTriangleOffsetConfig, 'DEFAULT_CONFIG_PATH', path)
-    # prev_default = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH
-    # DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH = path
-    yield path
-    # DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH = prev_default
-
-
 @pytest.fixture
 def app_model(user_pref, calib_dir, diamond_config_path, system_config, monkeypatch):
     # for now:

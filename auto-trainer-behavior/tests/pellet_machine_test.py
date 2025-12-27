@@ -197,3 +197,76 @@ def test_force_home_with_load_retract_count_triggered(machine, mock_system, monk
     else:
         assert machine._pellet_device.send_home.call_args_list == []
         assert "Forcing a send_home to reset to limits" not in caplog.text, "when 0 it's disabled"
+
+
+def test_move_home(machine, mock_system):
+    pellet_m = machine.pellet
+    assert pellet_m.state == PelletState.monitoring
+    pellet_m.move_home()
+    assert pellet_m._api_status_token is not None
+    assert pellet_m.state == PelletState.home
+    mock_system.mock_pellet_ack()
+    assert pellet_m.state == PelletState.monitoring
+    assert mock_system.pellet_state_trans == [
+        PelletState.home,
+        PelletState.sending,
+        PelletState.monitoring,
+    ]
+    assert pellet_m._api_status_token is not None
+    mock_system.mock_pellet_ack()
+    assert pellet_m._api_status_token is None
+    assert mock_system.pellet_state_trans == [
+        PelletState.home,
+        PelletState.sending,
+        PelletState.monitoring,
+        PelletState.covering,  # given cover state was still unknown/None
+        PelletState.monitoring,
+    ]
+
+
+def test_can_cover_pellet_in_monitoring(machine, mock_system):
+    pellet_m = machine.pellet
+    algo = machine.algorithm
+    #
+    algo.pellet_cover_enabled = False
+    assert pellet_m.can_cover_pellet() is False
+    #
+    algo.pellet_cover_enabled = True
+    assert pellet_m.can_cover_pellet() is True
+    assert pellet_m._api_status_token is None
+    assert pellet_m.covered_state is None  # unknown on start
+    assert pellet_m.state == PelletState.monitoring
+    #
+    pellet_m.cover_pellet()
+    assert pellet_m.covered_state is True
+    assert pellet_m._api_status_token is not None
+    assert mock_system.pellet_state_trans == [
+        PelletState.covering,
+    ]
+    mock_system.mock_pellet_ack()
+    assert mock_system.pellet_state_trans == [
+        PelletState.covering,
+        PelletState.monitoring,
+    ]
+    assert pellet_m._api_status_token is None
+
+
+def test_release_pellet(machine, mock_system):
+    pellet_m = machine.pellet
+    algo = machine.algorithm
+    #
+    algo.pellet_cover_enabled = False
+    assert algo.can_release_pellet() is True
+    assert pellet_m.covered_state is None  # on start
+    assert pellet_m.state == PelletState.monitoring
+    #
+    pellet_m.release_pellet()
+    assert pellet_m.covered_state is False
+    assert pellet_m._api_status_token is not None
+    assert mock_system.pellet_state_trans == [PelletState.releasing]
+    mock_system.mock_pellet_ack()
+    assert mock_system.pellet_state_trans == [
+        PelletState.releasing,
+        PelletState.monitoring,
+    ]
+    assert pellet_m._api_status_token is None

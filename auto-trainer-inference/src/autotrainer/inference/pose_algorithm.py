@@ -56,7 +56,7 @@ class PoseResponse:
     @property
     def pellet_seen(self) -> bool:
         """Default logic/conditions for pellet seen"""
-        return self.parts_flags[0][SceneElement.Pellet] or self.parts_flags[1][SceneElement.Pellet]
+        return self.parts_flags[0].get(SceneElement.Pellet, False) or self.parts_flags[1].get(SceneElement.Pellet, False)
 
     @property
     def star_seen(self):
@@ -67,7 +67,7 @@ class PoseResponse:
     def mouse_seen(self) -> bool:
         """Default logic/conditions for mouse seen: require seen in ALL/both cams"""
         # return all(flags.get(SceneElement.Nose, False) for flags in self.parts_flags)
-        return self.parts_flags[2][SceneElement.Nose]
+        return self.parts_flags[2].get(SceneElement.Nose, False)
 
     @property
     def diamond_seen(self):

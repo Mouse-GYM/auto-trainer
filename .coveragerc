@@ -9,7 +9,7 @@ source_pkgs =
     autotrainer.inference
     autotrainer.model
     # autotrainer.pyside
-    # autotrainer.video
+    autotrainer.video
     tools
     # tools for the main app_model mainly
 
@@ -24,12 +24,11 @@ omit =
 
 # allow coverage in python sub-processes (subprocess):
 # patch = subprocess  # only valid from coverage 7.10+ but one for py3.8 is stuck lower.
-# only available by 7.10:
 # patch =
-#    execv
-#    _exit
-#    fork
-#    subprocess
+#   execv
+#   _exit
+#   fork
+#   subprocess
 
 # so using coverage-enable-subprocess for now.
 

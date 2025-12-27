@@ -80,6 +80,10 @@ class DiamondTriangleOffsetConfig:
             + self.used_position
         )
 
+    def inference_to_diamond(self, inference_xyz: Offset3DTuple) -> Offset3DTuple:
+        assert isinstance(inference_xyz, Offset3DTuple), inference_xyz
+        return self.flips_inference_diamond * inference_xyz
+
     def motor_to_inference(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
         assert isinstance(motor_xyz, Offset3DTuple), motor_xyz
         return (

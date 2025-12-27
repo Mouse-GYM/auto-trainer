@@ -14,6 +14,7 @@ import verboselogs
 
 from autotrainer.behavior import DiamondTriangleOffsetConfig, BehaviorAlgorithm
 from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
+from autotrainer.video import VideoRecordMode
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
 
@@ -34,7 +35,7 @@ def system_config(trainer_config_dir, tmp_path):
     config = SystemConfiguration()
     for cam_member in (CameraId.Left, CameraId.Right, CameraId.Web):
         params = dict(width=300, height=200, primary="yes" if cam_member is CameraId.Left else "no")
-        cam = CameraConfiguration(name=cam_member.name, params=params)
+        cam = CameraConfiguration(name=cam_member.name, params=params, is_enabled=False, is_record_enabled=False)
         cam.scheme = "random"
         cam.id = cam_member
         config.cameras.append(cam)
@@ -76,14 +77,6 @@ def user_pref(tmp_path, trainer_config_dir, animals_dir, settings_ini_path):
 def calib_dir():
     # could be todo: copy it top-level, or generate new temporary one as above for system config.
     return top_fixtures.repo_root_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
-
-
-@pytest.fixture
-def diamond_config_path(monkeypatch):
-    path = top_fixtures.repo_root_tests_subdir.joinpath("diamond_triangle_offset.yaml")
-    # prev_default = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH
-    monkeypatch.setattr(DiamondTriangleOffsetConfig, "DEFAULT_CONFIG_PATH", path)
-    yield path
 
 
 @pytest.fixture
@@ -138,8 +131,14 @@ def test_cli_help():
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="hang atm. mostlikely signal related, different on windows")
-def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, config_file_path, settings_ini_path):
+@pytest.mark.parametrize("record_mode", list(VideoRecordMode))
+def test_launch_cli(system_config, config_file_path, user_pref, calib_dir, diamond_config_path, settings_ini_path, record_mode):
     user_pref.save()  # do not forget ! otherwise default home config dirs/files are used
+    for cam in system_config.cameras:
+        cam.is_enabled = True
+        cam.is_record_enabled = True
+        cam.record_mode = record_mode.value
+    system_config.save_file(config_file_path, as_yaml=True)
     env = os.environ.copy()
     env['AUTOTRAINER_DIAMOND_TRIANGLE_CONFIG'] = diamond_config_path.as_posix()  # same for this !
     env['AUTOTRAINER_FORCE_CAN_EMULATION_IFACE'] = "1"
@@ -149,15 +148,15 @@ def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, co
         "--preferences-file", settings_ini_path.as_posix(),
     ], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
     #
-    out = []
-    err = []
-    # NB: for now we wait a fixed amount of time and then interrupt the app:
+    out_lines = []
+    err_lines = []
     def interrupt_proc():
-        t_end = time.perf_counter() + 25
+        t_end = time.perf_counter() + 60  # should be up and running within that delay
         while time.perf_counter() < t_end:
-            if any("App is now running" in line for line in out):
+            if any("App is now running" in line for line in out_lines):
                 break
             time.sleep(0.05)
+        time.sleep(0.5)
         proc.send_signal(signal.SIGINT)
     t = threading.Thread(target=interrupt_proc, daemon=True)
     t.start()
@@ -167,28 +166,30 @@ def test_launch_cli(system_config, user_pref, calib_dir, diamond_config_path, co
             line = line.strip(b'\n').decode()
             print(line, file=dest_fh)
             dest.append(remove_ansi_escape_sequences(line))
-        tail = src_fh.read().decode()
+        tail = src_fh.read().strip(b'\n').decode()
         print(tail, file=dest_fh)
         dest.extend(tail.split("\n"))
-        # out, err = proc.communicate()
-    communicate_out_thread = threading.Thread(target=communicate, daemon=True, args=(out, proc.stdout, sys.stdout))
-    communicate_out_thread.start()  # use a communicate thread, given otherwise it might stay blocked ignoring the SIGINT
-    communicate_err_thread = threading.Thread(target=communicate, daemon=True, args=(err, proc.stderr, sys.stderr))
-    communicate_err_thread.start()  # use a communicate thread, given otherwise it might stay blocked ignoring the SIGINT
+
+    # use communicate threads, using communicate() might block if process is stuck or smth.
+    communicate_out_thread = threading.Thread(target=communicate, daemon=True, args=(out_lines, proc.stdout, sys.stdout))
+    communicate_out_thread.start()
+    communicate_err_thread = threading.Thread(target=communicate, daemon=True, args=(err_lines, proc.stderr, sys.stderr))
+    communicate_err_thread.start()
+
     t.join()
 
-    communicate_out_thread.join(3)
-
+    communicate_out_thread.join(3)  # give a chance
     proc.terminate()  # in case of
     proc.wait(3)  # in case of
     proc.kill()  # in case of
     communicate_out_thread.join()
     communicate_err_thread.join()
-    assert proc.returncode == 0
-    output = "\n".join(out)
-    # print(output)
-    assert f"Loading diamond-triangle file {diamond_config_path.as_posix()!r}" in output
-    assert f"Using setting ini file: {settings_ini_path.as_posix()!r}" in output
-    assert "Alogus hardware or hardware support not found. Using emulation interface." in output
-    assert f"Writing to {config_file_path.as_posix()!r}" in output
+    output = "\n".join(out_lines)
+    def assert_is_present(content):
+        assert any(content in line for line in out_lines), output
+    assert proc.returncode == 0, err_lines
+    assert_is_present(f"Loading diamond-triangle file {diamond_config_path.as_posix()!r}")
+    assert_is_present(f"Using setting ini file: {settings_ini_path.as_posix()!r}")
+    assert_is_present("Alogus hardware or hardware support not found. Using emulation interface.")
+    assert_is_present(f"Writing to {config_file_path.as_posix()!r}")
     # etc...

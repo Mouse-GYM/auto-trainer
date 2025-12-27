@@ -77,10 +77,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
         mp_ctx = get_mp_ctx()
         self._thread_lock = threading.RLock()  # for perform_detection / perform_segmentation
-        self._data_queue = mp_ctx.Queue(maxsize=64)  # inference result data queue
-        self._inference_cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to inference process
-        self._msg_queue = mp_ctx.Queue(maxsize=64)
-        self._data_monitor_cmd_queue = mp_ctx.Queue(maxsize=16)
+        self._output_data_queue = mp_ctx.Queue(maxsize=64)  # inference result data queue
+        self._cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to inference process
+        self._notif_msg_queue = mp_ctx.Queue(maxsize=64)
+        self._data_monitor_cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to monitor data result process
 
         self._offline_queue: Optional[FixedArrayMultiQueue] = None
         self._offline_thread: Optional[Thread] = None
@@ -278,8 +278,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         if self._data_monitor_proc is None:
             proc = self._data_monitor_proc = InferenceMonitorDataProc(
                 project=self._project,
-                pose_data_queue=self._data_queue,
-                msg_queue=self._msg_queue,
+                pose_data_queue=self._output_data_queue,
+                msg_queue=self._notif_msg_queue,
                 cmd_queue=self._data_monitor_cmd_queue,
                 frames_per_cam=live_queue.frames_per_camera,
                 monitored_parts_offsets=list(self._pair_offsets_2_handler),
@@ -302,9 +302,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._pose_process = PoseProcess(
             live_queue,
             self._offline_queue,
-            data_queue=self._data_queue,
-            cmd_queue=self._inference_cmd_queue,
-            msg_queue=self._msg_queue,
+            data_queue=self._output_data_queue,
+            cmd_queue=self._cmd_queue,
+            msg_queue=self._notif_msg_queue,
             model_location=self._model_location,
         )
 
@@ -345,10 +345,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
             self._set_status(InferenceStatus.stopped)
 
-            clear_queue(self._data_queue)
-            clear_queue(self._msg_queue)
-            clear_queue(self._inference_cmd_queue)
-            clear_queue(self._data_monitor_cmd_queue)
+            clear_queue(self._output_data_queue, name="inference_output_data_queue")
+            clear_queue(self._notif_msg_queue, name="inference_notif_messages_queue")
+            clear_queue(self._cmd_queue, name="inference_cmd_queue")
+            clear_queue(self._data_monitor_cmd_queue, name="inference_output_data_cmd_queue")
 
         pool = self._process_pool
         if pool is not None:
@@ -362,6 +362,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         thread = self._offline_thread
         if thread is not None:
             thread.join(3)
+            if thread.is_alive():
+                logger.warning("offline thread still alive")
 
         # always:
         self._intersession_block = None
@@ -378,30 +380,38 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             data_monitor_cmd_queue.put(None)
             data_proc.join(3)
             if data_proc.exitcode is None:
+                logger.warning("sending interrupt to monitor data process")
                 os.kill(data_proc.pid, signal.SIGINT)
                 data_proc.join(3)
                 if data_proc.exitcode is None:
+                    logger.warning("terminating to monitor data process")
                     data_proc.terminate()
                     data_proc.join(2)
                     if data_proc.exitcode is None:
+                        logger.warning("killing monitor data process")
                         data_proc.kill()
                         data_proc.join(5)
             logger.verbose("joined %s ; exit_code=%s", data_proc, data_proc.exitcode)
 
         msg_thread = self._msg_thread
-        msg_queue = self._msg_queue
+        msg_queue = self._notif_msg_queue
         if msg_thread is not None:
             msg_queue.put(None)
             logger.debug("joining msg_thread")
             msg_thread.join()
             self._msg_thread = None
 
-            logger.verbose("closing mp queues")
-            for mp_q in (data_monitor_cmd_queue, self._data_queue, self._inference_cmd_queue, msg_queue):
-                if mp_q is not None:
-                    clear_queue(mp_q, log_dumped=True)
-                    logger.debug("closing %s size=%s", mp_q, mp_q.qsize())
-                    mp_q.close()
+        logger.verbose("closing mp queues")
+        for mp_q, name in (
+            (data_monitor_cmd_queue, "inference_data_monitor_cmd_queue"),
+            (self._output_data_queue, "inference_output_data_queue"),
+            (self._cmd_queue, "inference_cmd_queue"),
+            (msg_queue, "inference_msg_queue"),
+        ):
+            if mp_q is not None:
+                clear_queue(mp_q, log_dumped=True, name=name)
+                logger.debug("queue: %s: closing size=%s", name, mp_q.qsize())
+                mp_q.close()
 
     def load_configuration(self, configuration: InferenceConfiguration):
         self.model_location = configuration.pose_model_location
@@ -420,7 +430,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._on_property_changed(self.STATUS, status, prev)
 
     def _send_message(self, kind: InferenceCommandMessageKind, context: typing.Any = None):
-        cmd_queue = self._inference_cmd_queue
+        cmd_queue = self._cmd_queue
         # logger.debug("sending command msg %s qsize=%s", kind, cmd_queue.qsize())
         cmd_queue.put((kind, context))
         logger.debug("sent command msg %s qsize=%s", kind, cmd_queue.qsize())
@@ -458,7 +468,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     def _monitor_msg_queue(self):
         while True:
             try:
-                raw = self._msg_queue.get(timeout=0.1)
+                raw = self._notif_msg_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
             if raw is None:
