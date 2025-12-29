@@ -866,7 +866,8 @@ class AppModel(ObservableObject):
                 logger.verbose("acquisition not running")
                 return
             if self._acquisition_stopping:
-                raise RuntimeError("acquisition already stopping")
+                logger.verbose("acquisition already stopping")
+                return
             self._acquisition_stopping = True
         try:
             self._capture_stop()
