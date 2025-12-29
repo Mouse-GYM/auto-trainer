@@ -1,4 +1,3 @@
-
 import numpy as np
 
 from autotrainer.behavior import DiamondTriangleOffsetConfig
@@ -28,8 +27,8 @@ def diamond_triangle_config():
     (15, 0, 5),
 ])
 @pytest.mark.parametrize("measured_off", [
-    (-8, -5, -15),
-    (8, 5, 15),
+    (8, -30, -8),
+    (6, -33, -6),
     (-4, 0, 8),
 ])
 def test_transform_coordinates(motor_xyz, used_pos, measured_off):
@@ -41,3 +40,12 @@ def test_transform_coordinates(motor_xyz, used_pos, measured_off):
     assert np.isclose(cfg.inference_to_motor(inference_xyz), motor_xyz).all()
     assert np.isclose(cfg.inference_to_diamond(inference_xyz), diamond_xyz).all()
     assert np.isclose(cfg.inference_to_motor(cfg.diamond_to_inference(diamond_xyz)), motor_xyz).all()
+    orig = Offset3DTuple(0, 0, 0)
+    assert cfg.motor_to_diamond(cfg.inference_to_motor(orig)) == cfg.inference_to_diamond(orig)
+    assert cfg.motor_to_diamond(cfg.inference_to_motor(motor_xyz)) == cfg.inference_to_diamond(motor_xyz)
+    assert cfg.motor_to_inference(cfg.inference_to_motor(motor_xyz)) == motor_xyz
+    assert cfg.inference_to_diamond(cfg.measured_offset - cfg.motor_to_inference(cfg.used_position)) == (0, 0, 0)
+    assert cfg.motor_to_inference(cfg.used_position) == cfg.measured_offset
+    assert cfg.inference_to_diamond(cfg.motor_to_inference(cfg.used_position) - cfg.measured_offset) == (0, 0, 0)
+    assert cfg.inference_to_motor(cfg.measured_offset) == cfg.used_position
+    assert cfg.inference_to_diamond(cfg.measured_offset) == cfg.motor_to_diamond(cfg.used_position)

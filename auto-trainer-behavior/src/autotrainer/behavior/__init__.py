@@ -39,8 +39,8 @@ class DiamondTriangleOffsetConfig:
 
     def __init__(self, *, used_position, measured_offset):
         super().__init__()
-        self.used_position = used_position
-        self.measured_offset = measured_offset
+        self.used_position = Offset3DTuple(used_position)
+        self.measured_offset = Offset3DTuple(measured_offset)
 
     @classmethod
     def load_config(cls, cfg_path: Optional[Path]) -> Optional[Self]:
