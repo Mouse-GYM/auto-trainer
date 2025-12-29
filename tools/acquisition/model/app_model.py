@@ -526,10 +526,6 @@ class AppModel(ObservableObject):
         self._on_property_changed(self.Props.TRAINING_PLAN, plan, prev)
         self._event_manager.post_event_content(
             ApiEventKind.trainingPlanLoad, {'training_plan_id': None if plan is None else plan.plan_id})
-        # rpc = self._rpc_service
-        # if rpc is not None:
-        #     ApiCommandRequestResponse()
-        #     rpc.send_dict(ApiTopic.EVENT, )
 
     @property
     def output_location(self) -> str:
@@ -1334,44 +1330,40 @@ class AppModel(ObservableObject):
     def _handle_rpc_service_command(self, request: ApiCommandRequest) -> ApiCommandRequestResponse:
         logger.notice("RPC command: %s ; nonce=%s", request.command, request.nonce)
         logger.debug("RPC cmd=%s custom=%s data=%s", request.command, request.custom_command, request.data)
+        data = None
+        error_message = None
+        error_code = ApiCommandRequestErrorKind.NONE
         try:
             rsp = self.__handle_rpc_service_command(request)
+        except Exception as err:
+            logger.exception("RPC command %s exception: %s", request.command, err)
+            result = ApiCommandReqeustResult.EXCEPTION
+            error_code = ApiCommandRequestErrorKind.COMMAND_ERROR
+            error_message = f"Exception executing {request.command}: {type(err)} -> {err}"
+        else:
             if isinstance(rsp, ApiCommandRequestResponse):
-                pass
+                return dataclasses.replace(rsp, command=request.command, nonce=request.nonce)
+            if isinstance(rsp, ApiCommandReqeustResult):
+                result = rsp
             elif any(map(lambda x: rsp is x, (None, True, False))):  # to not have to create/return it for all possible request
                 if rsp is not False:
                     result = ApiCommandReqeustResult.SUCCESS
-                    error_code = ApiCommandRequestErrorKind.NONE
-                    error_message = None
                 else:
                     result = ApiCommandReqeustResult.FAILED
                     error_code = ApiCommandRequestErrorKind.COMMAND_ERROR
                     error_message = f"Command request {request.command} failed"
-                rsp = ApiCommandRequestResponse(
-                    nonce=request.nonce,
-                    command=request.command,
-                    result=result,
-                    error_code=error_code,
-                    error_message=error_message,
-                )
             else:
-                rsp = ApiCommandRequestResponse(
-                    nonce=request.nonce,
-                    command=request.command,
-                    result=ApiCommandReqeustResult.SUCCESS,
-                    error_code=ApiCommandRequestErrorKind.NONE,
-                    data=rsp,
-                )
-        except Exception as err:
-            logger.exception("RPC command %s exception: %s", request.command, err)
-            rsp = ApiCommandRequestResponse(
-                nonce=request.nonce,
-                command=request.command,
-                result=ApiCommandReqeustResult.EXCEPTION,
-                error_code=ApiCommandRequestErrorKind.COMMAND_ERROR,
-                error_message=f"Exception executing {request.command}: {type(err)} -> {err}",
-            )
-        return rsp
+                result = ApiCommandReqeustResult.SUCCESS
+                data = rsp
+
+        return ApiCommandRequestResponse(
+            nonce=request.nonce,
+            command=request.command,
+            result=result,
+            data=data,
+            error_code=error_code,
+            error_message=error_message,
+        )
 
     def _handle_rpc_async_command(self, request: ApiCommandRequest, func):
         def execute():
@@ -1415,12 +1407,10 @@ class AppModel(ObservableObject):
         #
         th = threading.Thread(target=execute, daemon=True, name=f"Handle-{func}")
         th.start()
-        return ApiCommandRequestResponse(
-            result=ApiCommandReqeustResult.PENDING_WITH_NOTIFICATION,
-        )
+        return ApiCommandReqeustResult.PENDING_WITH_NOTIFICATION
 
     def __handle_rpc_service_command(self, request: ApiCommandRequest) -> Optional[
-        Union[bool, ApiCommandRequestResponse, Any]]:
+        Union[bool, ApiCommandRequestResponse, ApiCommandReqeustResult, Any]]:
         cmd = request.command
         rsp = None  # let caller handle it
         if cmd == ApiCommand.START_ACQUISITION:
