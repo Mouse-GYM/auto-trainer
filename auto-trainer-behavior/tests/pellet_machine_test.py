@@ -6,6 +6,7 @@ import pytest
 import autotrainer.behavior.pellet.pellet_machine
 from autotrainer.behavior import PelletState, SystemState, PelletMachine, PelletDeviceProtocol, BehaviorAlgorithm, \
     SystemMachine
+from autotrainer.behavior.pellet.pellet_machine import PelletDeviceCommandFailed
 
 from top_fixtures import MockSystemMachine, mock_system
 
@@ -270,3 +271,23 @@ def test_release_pellet(machine, mock_system):
         PelletState.monitoring,
     ]
     assert pellet_m._api_status_token is None
+
+
+def test_on_device_command_failed_get_exception(machine, mock_system):
+    pellet_m = machine.pellet
+    dev = pellet_m._pellet_device
+    for action, dev_meth in (
+        (pellet_m.send_pellet, dev.send_pellet),
+        (pellet_m.load_pellet, dev.load_pellet),
+        (pellet_m.move_home, dev.send_home),
+        (pellet_m.move_retract, dev.send_retract),
+        (pellet_m.cover_pellet, dev.cover_pellet),
+        (pellet_m.release_pellet, dev.release_pellet),
+    ):
+        pellet_m._api_status_token = None
+        pellet_m.state = PelletState.monitoring  # is normally accepted for all actions
+        dev_meth.return_value = None
+        machine.algorithm.pellet_cover_enabled = action != pellet_m.release_pellet  # need for release_pellet
+        with pytest.raises(PelletDeviceCommandFailed):
+            action()
+        dev_meth.reset_mock()
