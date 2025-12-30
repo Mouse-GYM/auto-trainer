@@ -209,6 +209,7 @@ def test_move_home(machine, mock_system):
     assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [
         PelletState.home,
+        PelletState.covering,
         PelletState.sending,
         PelletState.monitoring,
     ]
@@ -217,9 +218,8 @@ def test_move_home(machine, mock_system):
     assert pellet_m._api_status_token is None
     assert mock_system.pellet_state_trans == [
         PelletState.home,
+        PelletState.covering,
         PelletState.sending,
-        PelletState.monitoring,
-        PelletState.covering,  # given cover state was still unknown/None
         PelletState.monitoring,
     ]
 

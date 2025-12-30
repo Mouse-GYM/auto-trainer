@@ -130,6 +130,12 @@ class PelletMachine(StateMachine):
             self._pellet_device.send_home()
             self._pellet_load_count = self._pellet_retract_count = 0
         # don't we want to apply the pellet cover/release here before sending ?
+        algo = self._algorithm
+        if algo.pellet_cover_enabled:
+            self.cover_pellet()
+        else:
+            self.release_pellet()
+        self._api_status_token = None
         self.events.pellet_sending()
         self._api_status_token = self._pellet_device.send_pellet()
         if self._api_status_token is not None:
@@ -343,14 +349,14 @@ class PelletMachine(StateMachine):
                     self._notify_pellet_loaded_ok()
                 # current state is either retract or loading (loaded),
                 # we can do a send_pellet() but ensure covered(-or-released) is as desired, *before* sending :
-                if algo.can_cover_pellet():
-                    reason = "cover_when_loaded_or_retract"
-                    logit()
-                    self.cover_pellet()
-                else:
-                    reason = "release_when_loaded_or_retract"
-                    logit()
-                    self.release_pellet()
+                # if algo.can_cover_pellet():
+                #     reason = "cover_when_loaded_or_retract"
+                #     logit()
+                #     self.cover_pellet()
+                # else:
+                #     reason = "release_when_loaded_or_retract"
+                #     logit()
+                #     self.release_pellet()
                 #
                 # even if pellet is not seen, send it to deliver,
                 # the end position of load-pellet sequence might not be (entirely or on all units) visible by camera,
