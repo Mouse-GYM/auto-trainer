@@ -273,7 +273,7 @@ class SystemMachine(StateMachine):
                 logger.debug("started timer for consider_auto_end_session in %.1fs", threshold_sec)
 
     @BehaviorAlgorithm.relay_func
-    def _session_capture_ended(self, reason: str):
+    def _session_capture_ended(self, reason: RecordingEndingReason):
         self._timer_consider_auto_end_session.cancel()
         if reason == RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT:
             logger.notice("Forcing tare load cell due to %s", reason)

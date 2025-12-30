@@ -8,6 +8,7 @@ from autotrainer.core import EventManager, transitions_allow_functions, SystemMe
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.logging import get_verbose_logger
+from .. import RecordingEndingReason
 
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..pellet_device_protocol import PelletDeviceProtocol
@@ -200,11 +201,10 @@ class PelletMachine(StateMachine):
         # and not releasing before the desired threshold/delay.
 
     @BehaviorAlgorithm.relay_func
-    def _session_capture_ended(self, reason):
+    def _session_capture_ended(self, reason: RecordingEndingReason):
         # todo: this entire func/block should be moved to system machine or behavior algo imho
         algo = self._algorithm
-        logger.debug("_session_ending() called ; session_mouse_seen=%s",
-                     algo.session_mouse_seen)
+        logger.debug("session_capture_ended(%s): session_mouse_seen=%s", reason, algo.session_mouse_seen)
         dev = self._pellet_device
         # optional apply of measured motor drifts,
         drifts = algo.get_diamond_triangle_drifts(reset=True)  # always, to reset the recorded values list too.
