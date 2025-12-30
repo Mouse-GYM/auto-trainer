@@ -764,10 +764,11 @@ class AppModel(ObservableObject):
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(camera.name, camera.last_error))
             else:
-                camera.on_capture_start()
                 if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5):
                     did_start = False
                     self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
+                else:
+                    camera.on_capture_start()
 
         if not did_start:
             logger.error("failed to start all subprocesses")
