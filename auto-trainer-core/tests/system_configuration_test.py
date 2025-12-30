@@ -25,9 +25,10 @@ v1_config_path = fixtures_path.joinpath("v1_config.yaml")
 audio_cfg = AudioSpectrumThrashMonitorConfig()
 emergency_alarm_cfg = EmergencyAlarmConfiguration()
 
+current_default_config_dict = dataclasses.asdict(SystemConfiguration())
 
-current_default_config = dataclasses.asdict(SystemConfiguration())
-behavior_default_config = current_default_config['behavior']
+behavior_default_config_dict = current_default_config_dict['behavior']
+
 
 v0_expected_result_config = {'version': SystemConfiguration.version,
  'cameras': [{'id': CameraId.Left,
@@ -108,13 +109,17 @@ v0_expected_result_config = {'version': SystemConfiguration.version,
    'thrashing_min_ptp_change_count': 3},
   'headbar_pressure': {'threshold': 10, 'duration': 1.5},
   'auto_tare': {'threshold': 1.1, 'range_threshold': 1.75, 'duration': 1.0},
-  'audio': behavior_default_config['audio'],
-  'global_animal_presence': behavior_default_config['global_animal_presence'],
-  'emergency_alarm': behavior_default_config['emergency_alarm'],
-  'topcam_presence_detection': behavior_default_config['topcam_presence_detection'],
-  'external_doors': behavior_default_config['external_doors'],
   },
  'persistence': {'output_location': '/home/autotrainer/output'}}
+
+
+def _fill_v0():
+    v0_behavior = v0_expected_result_config['behavior']
+    for k, v in behavior_default_config_dict.items():
+        if k not in v0_behavior:
+            v0_behavior[k] = copy.deepcopy(v)
+
+_fill_v0()
 
 
 def test_load_version_zero():
@@ -144,16 +149,7 @@ def test_load_version_1():
     path = fixtures_path.joinpath("v1_config.yaml")
     with path.open() as fh:
         config = SystemConfiguration.load_yaml(fh)
-    assert dataclasses.asdict(config) == {
-        'behavior': {
-            'external_doors': behavior_default_config['external_doors'],
-            'topcam_presence_detection': behavior_default_config['topcam_presence_detection'],
-            'audio': behavior_default_config['audio'],
-            'global_animal_presence': behavior_default_config['global_animal_presence'],
-            'emergency_alarm': behavior_default_config['emergency_alarm'],
-            'auto_tare': behavior_default_config['auto_tare'],
-            'head_clamp': behavior_default_config['head_clamp'],
-            'headbar_pressure': behavior_default_config['headbar_pressure'],
+    expected_behavior = {
             'load_cell': {
                 'min_event_duration': 3.0,
                 'min_post_event_hold_duration': 6.0,
@@ -179,7 +175,12 @@ def test_load_version_1():
                 'triangle_pellet_diff_too_far_threshold': PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold,
                 'use_triangle_pellet_distance_too_far': PelletDeliveryConfiguration.use_triangle_pellet_distance_too_far,
             }
-        },
+    }
+    for k, v in behavior_default_config_dict.items():
+        if k not in expected_behavior:
+            expected_behavior[k] = v
+    assert dataclasses.asdict(config) == {
+        'behavior': expected_behavior,
         'cameras': [{'host': None,
                      'id': CameraId.Left,
                      'is_enabled': True,
@@ -249,7 +250,7 @@ persistence: !PersistenceConfiguration
 """
     cfg = SystemConfiguration.load_yaml(io.StringIO(config_text))
     assert isinstance(cfg, SystemConfiguration)
-    expected_result = copy.deepcopy(current_default_config)
+    expected_result = copy.deepcopy(current_default_config_dict)
     # apart the version and persistence.output_location, these are all the defaults values
     expected_result["version"] = SystemConfiguration.version + 1
     expected_result["persistence"]["output_location"] = "/output_location_path"
@@ -268,7 +269,7 @@ def test_safe_loader_ignore_unknown_tags():
     """
     cfg = SystemConfiguration.load_yaml(io.StringIO(config_text))
     assert isinstance(cfg, SystemConfiguration)
-    expected_result = copy.deepcopy(current_default_config)
+    expected_result = copy.deepcopy(current_default_config_dict)
     # apart the version, these are all the defaults values
     expected_result["version"] = SystemConfiguration.version + 1
     assert dataclasses.asdict(cfg) == expected_result

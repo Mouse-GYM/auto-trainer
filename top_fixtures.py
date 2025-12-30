@@ -73,7 +73,11 @@ def _disable_timers():
     def disabled_daemon_timer(delay, func):
         # raise RuntimeError(f"Disabled daemon timer {delay} -> {func}")
         logging.warning("DaemonTimer disabled for delay=%s @ %s", delay, func)
-        return mock.create_autospec(DaemonTimer)
+        timer = mock.create_autospec(DaemonTimer)
+        # for some reason the finished event isn't present on the mocks, despite the autospec. so set it:
+        mock_finished = timer.finished = mock.create_autospec(threading.Event)
+        mock_finished.is_set.return_value = True
+        return timer
     with mock.patch(f"{DaemonTimer.__module__}.{DaemonTimer.__name__}", new=disabled_daemon_timer):
         yield
 

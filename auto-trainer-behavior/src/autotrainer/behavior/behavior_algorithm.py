@@ -27,13 +27,13 @@ from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
     AnimalSubject
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
-    BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration
+    BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.video import CaptureProcessStatus
 
-from . import DiamondTriangleOffsetConfig, CaptureAnalysisResult, TrainingMode
+from . import DiamondTriangleOffsetConfig, CaptureAnalysisResult, TrainingMode, RecordingEndingReason
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 
@@ -240,7 +240,7 @@ class BehaviorAlgorithm(ObservableObject):
     # dynamic events type hints,
     # helps IDE search/completion/type-verification:
     session_starting: Callable[[], None]
-    session_capture_ending: Callable[[], None]
+    session_capture_ending: Callable[[RecordingEndingReason], None]  # reason
     session_processing_starting: Callable[[], None]
     session_ending: Callable[[CaptureAnalysisResult], None]
 
@@ -301,13 +301,14 @@ class BehaviorAlgorithm(ObservableObject):
         self._algo_paused_perf_t = 0
         self._is_in_session = False
         self._start_session_reason = "NA"
-        self._stop_session_reason = "NA"
+        self._stop_session_reason = RecordingEndingReason.NA
 
         self._session_mouse_seen = False
         self._pellet_seen = False
         self._pellet_last_seen = 0.0
         self._pellet_hands_min_distance: float = math.inf
         self._hands_near_pellet_seen = False
+        self._mouse_seen_last_perf_c = -math.inf
         self._triangle_seen = False
         self._triangle_last_seen = 0.0
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
@@ -558,6 +559,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def is_in_session(self) -> bool:
+        """Is in capture/recording session"""
         return self._is_in_session
 
     @property
@@ -908,6 +910,13 @@ class BehaviorAlgorithm(ObservableObject):
     #
 
     @property
+    def auto_end_session_config(self) -> Optional[AutoEndSessionConfiguration]:
+        cfg = self._loaded_config
+        if cfg is None:
+            return None
+        return cfg.auto_end_session
+
+    @property
     def auto_correct_motors_drift(self) -> bool:
         return self._auto_correct_motors_drift
 
@@ -961,11 +970,11 @@ class BehaviorAlgorithm(ObservableObject):
         self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, True, False)
         return True
 
-    def end_capture_session(self, *, reason: str = "NA"):
+    def end_capture_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
         with self._thread_lock:
             return self._end_capture_session(reason=reason)
 
-    def _end_capture_session(self, *, reason: str):
+    def _end_capture_session(self, *, reason: RecordingEndingReason):
         if not self._is_in_session:
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)
@@ -978,7 +987,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._stop_session_reason = reason
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
-        self.session_capture_ending()
+        self.session_capture_ending(reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
         self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)
@@ -1058,7 +1067,13 @@ class BehaviorAlgorithm(ObservableObject):
     def pellet_loaded(self):
         self.session_pellet_count += 1
 
+    @property
+    def mouse_seen_age(self) -> float:
+        return time.perf_counter() - self._mouse_seen_last_perf_c
+
     def mouse_seen(self, seen: bool = True):
+        if seen:
+            self._mouse_seen_last_perf_c = time.perf_counter()
         if self._is_in_session and seen:
             prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
             if not prev_seen:
@@ -1152,6 +1167,7 @@ class BehaviorAlgorithm(ObservableObject):
     def update_configuration(self, configuration: BehaviorConfiguration):
         self._update_pellet_cfg(configuration.pellet_delivery)
         self._update_head_clamp_cfg(configuration.head_clamp)
+        configuration.auto_end_session = self._loaded_config.auto_end_session
 
     def get_diamond_triangle_drifts(self, reset: bool = False) -> Optional[Offset3DTuple]:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""

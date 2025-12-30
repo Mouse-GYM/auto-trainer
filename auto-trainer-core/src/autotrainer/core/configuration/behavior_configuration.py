@@ -10,9 +10,9 @@ from .animal_presence_configuration import GlobalAnimalPresenceConfig
 from .external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 from .presence_detection_configuration import PresenceDetectionConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor
-from ..analysis import LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer
-from ..analysis import HeadbarPressureConfiguration, headbar_pressure_configuration_representer
-from ..analysis import LoadCellConfiguration, load_cell_configuration_representer
+from ..analysis import LoadCellAutoTareConfiguration
+from ..analysis import HeadbarPressureConfiguration
+from ..analysis import LoadCellConfiguration
 from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from .alarm_configuration import EmergencyAlarmConfiguration
 
@@ -83,6 +83,15 @@ class HeadClampConfiguration:
         ))
 
 
+@dataclasses.dataclass
+class AutoEndSessionConfiguration:
+
+    no_activity_delay_minutes: int = 2
+    """How many minutes without animal activity to wait before auto end a running capture session.
+    If animal seen in between: timeout is reset. Up until animal not seen for the given duration, then auto end session.
+    """
+
+
 @dataclass
 class _BehaviorConfiguration:
     pellet_delivery: PelletDeliveryConfiguration = field(default_factory=PelletDeliveryConfiguration)
@@ -95,6 +104,7 @@ class _BehaviorConfiguration:
     emergency_alarm: EmergencyAlarmConfiguration = field(default_factory=EmergencyAlarmConfiguration)
     external_doors: ExternalDoorsMonitorConfig = field(default_factory=ExternalDoorsMonitorConfig)
     topcam_presence_detection: PresenceDetectionConfig = field(default_factory=PresenceDetectionConfig)
+    auto_end_session: AutoEndSessionConfiguration = field(default_factory=AutoEndSessionConfiguration)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -141,26 +151,20 @@ class BehaviorConfiguration(_BehaviorConfiguration):
         super().__init__(**kwargs)
 
 
-pellet_delivery_configuration_representer = make_camelize_representer("!PelletDeliveryConfiguration")
-head_clamp_configuration_representer = make_camelize_representer("!HeadClampConfiguration")
-behavior_configuration_representer = make_camelize_representer("!BehaviorConfiguration")
-audio_monitor_representer = make_camelize_representer("!AudioMonitorConfiguration")
-animal_presence_monitor_representer = make_camelize_representer("!AnimalPresenceConfiguration")
-emergency_alarm_representer = make_camelize_representer("!EmergencyAlarmConfiguration")
-
-
 def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
-    dumper.add_representer(PelletDeliveryConfiguration, pellet_delivery_configuration_representer)
-    dumper.add_representer(LoadCellConfiguration, load_cell_configuration_representer)
-    dumper.add_representer(HeadClampConfiguration, head_clamp_configuration_representer)
-    dumper.add_representer(HeadbarPressureConfiguration, headbar_pressure_configuration_representer)
-    dumper.add_representer(LoadCellAutoTareConfiguration, load_cell_auto_tare_configuration_representer)
-    dumper.add_representer(BehaviorConfiguration, behavior_configuration_representer)
-    dumper.add_representer(AudioSpectrumThrashMonitorConfig, audio_monitor_representer)
-    dumper.add_representer(GlobalAnimalPresenceConfig, animal_presence_monitor_representer)
-    dumper.add_representer(EmergencyAlarmConfiguration, emergency_alarm_representer)
-    dumper.add_representer(PresenceDetectionConfig, make_camelize_representer("!PresenceDetectionConfiguration"))
-    dumper.add_representer(ExternalDoorsMonitorConfig, make_camelize_representer("!ExternalDoorsMonitorConfiguration"))
+    add = dumper.add_representer
+    add(PelletDeliveryConfiguration, make_camelize_representer("!PelletDeliveryConfiguration"))
+    add(LoadCellConfiguration, make_camelize_representer("!LoadCellConfiguration"))
+    add(HeadClampConfiguration, make_camelize_representer("!HeadClampConfiguration"))
+    add(HeadbarPressureConfiguration, make_camelize_representer("!HeadbarPressureConfiguration"))
+    add(LoadCellAutoTareConfiguration, make_camelize_representer("!LoadCellAutoTareConfiguration"))
+    add(BehaviorConfiguration, make_camelize_representer("!BehaviorConfiguration"))
+    add(AudioSpectrumThrashMonitorConfig, make_camelize_representer("!AudioMonitorConfiguration"))
+    add(GlobalAnimalPresenceConfig, make_camelize_representer("!AnimalPresenceConfiguration"))
+    add(EmergencyAlarmConfiguration, make_camelize_representer("!EmergencyAlarmConfiguration"))
+    add(PresenceDetectionConfig, make_camelize_representer("!PresenceDetectionConfiguration"))
+    add(ExternalDoorsMonitorConfig, make_camelize_representer("!ExternalDoorsMonitorConfiguration"))
+    add(AutoEndSessionConfiguration, make_camelize_representer("!AutoEndSessionConfiguration"))
 
 
 pellet_delivery_configuration_constructor = make_decamelize_constructor(PelletDeliveryConfiguration)
@@ -191,3 +195,4 @@ def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
     safe_loader.add_constructor("!EmergencyAlarmConfiguration", emergency_alarm_configuration_constructor)
     safe_loader.add_constructor("!PresenceDetectionConfiguration", make_decamelize_constructor(PresenceDetectionConfig))
     safe_loader.add_constructor("!ExternalDoorsMonitorConfiguration", make_decamelize_constructor(ExternalDoorsMonitorConfig))
+    safe_loader.add_constructor("!AutoEndSessionConfiguration", make_decamelize_constructor(AutoEndSessionConfiguration))

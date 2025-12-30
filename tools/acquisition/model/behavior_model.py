@@ -56,6 +56,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         ) if system_machine is None else system_machine
 
         self._project: Optional[ProjectInfo] = None
+        #
         self._is_intersession_enabled = system_machine.algorithm.intersession_enabled
         self._hardware_model = hardware_model
         #
@@ -99,13 +100,14 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
 
     @property
     def is_intersession_enabled(self) -> bool:
+        # todo: could use the one from/on BehaviorAlgorithm config instance itself
         return self._is_intersession_enabled
 
     @is_intersession_enabled.setter
     def is_intersession_enabled(self, value: bool) -> None:
-        self._is_intersession_enabled = self._on_property_changed("is_intersession_enabled", value,
-                                                                  self._is_intersession_enabled)
-        self._system_machine.algorithm.intersession_enabled = self._is_intersession_enabled
+        prev, self._is_intersession_enabled = self._is_intersession_enabled, value
+        self._system_machine.algorithm.intersession_enabled = value
+        self._on_property_changed("is_intersession_enabled", value, prev)
 
     def load_configuration(self, configuration: BehaviorConfiguration):
         self.is_intersession_enabled = configuration.pellet_delivery.is_intersession_analysis_enabled
@@ -128,7 +130,6 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         config.topcam_presence_detection = None if algo.top_camera_presence_detection is None else algo.top_camera_presence_detection.to_config()
         config.global_animal_presence = analysis.global_animal_presence_monitor.config
         config.external_doors = analysis.external_doors_monitor.config
-        logger.debug("config.external_doors=%s", config.external_doors)
 
         return config
 

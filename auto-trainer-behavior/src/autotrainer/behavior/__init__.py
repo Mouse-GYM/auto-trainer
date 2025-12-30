@@ -140,6 +140,13 @@ class TrainingMode(str, enum.Enum):  # todo: eventually find better place
     AUTOMATIC = "Automatic"
 
 
+class RecordingEndingReason(str, enum.Enum):
+    NA = "NA"
+    ALGO_PAUSED = "AlgoPaused"
+    EXIT_TUNNEL = "ExitTunnel"
+    PELLET_LOADING = "PelletLoading"
+    MISSING_ANIMAL_ACTIVITY_TIMEOUT = "MissingAnimalActivityTimeout"
+
 
 # Protocol first (less strict)
 from .inference_protocol import InferenceProtocol

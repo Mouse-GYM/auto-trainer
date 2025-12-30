@@ -19,7 +19,7 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
 
-from . import CaptureAnalysisResult, DiamondTriangleOffsetConfig
+from . import CaptureAnalysisResult, DiamondTriangleOffsetConfig, RecordingEndingReason
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine, IntersessionState
@@ -72,6 +72,7 @@ class SystemMachine(StateMachine):
         self._project_info = project_info
 
         self._timer_consider_end_session = no_op_timer
+        self._timer_consider_auto_end_session = no_op_timer
 
         self._delay_timer_consider_end_session: Optional[float] = 2.0
         # delay to wait, when/once a pellet load is executed (on start),
@@ -127,6 +128,7 @@ class SystemMachine(StateMachine):
     def cancel_timers(self):
         for timer in (
             self._timer_consider_end_session,
+            self._timer_consider_auto_end_session,
             self._timer_consider_close_gate,
             self._timer_auto_clamp_disengage,
             self._timer_auto_clamp_evaluate,
@@ -177,7 +179,7 @@ class SystemMachine(StateMachine):
         self._update_magnet_position(self.algorithm.baseline_intensity)
         EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
         if self._algorithm.is_in_session:
-            self._algorithm.end_capture_session(reason=f"{reason}->after_exit_tunnel")
+            self._algorithm.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
 
     def before_enter_intersession(self):
         # current system_state should be tunnel here
@@ -240,12 +242,42 @@ class SystemMachine(StateMachine):
         # if that still happens (like with overloaded system), then some files will be left on disk still.
         t.start()
 
-    @BehaviorAlgorithm.relay_func
-    def _session_capture_started(self):
-        pass
+    @BehaviorAlgorithm.relay_func(wait=False)
+    def _consider_auto_end_session(self):
+        self._timer_consider_auto_end_session.cancel()  # in case of
+        algo = self._algorithm
+        cfg = algo.auto_end_session_config
+        if not algo.is_in_session or cfg is None or cfg.no_activity_delay_minutes <= 0:
+            return
+        last_activity_age = algo.mouse_seen_age  # reminder: this is the nose part which is accounted for mouse_seen
+        remains = 60 * cfg.no_activity_delay_minutes - last_activity_age
+        if remains <= 0:
+            algo.end_capture_session(reason=RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT)
+        else:
+            logger.debug("started new timer for consider_auto_end_session in %.1fs", remains)
+            timer = self._timer_consider_auto_end_session = make_daemon_timer(remains, self._consider_auto_end_session)
+            timer.start()
 
     @BehaviorAlgorithm.relay_func
-    def _session_capture_ended(self):
+    def _session_capture_started(self):
+        auto_end_session_cfg = self._algorithm.auto_end_session_config
+        if auto_end_session_cfg is not None:  # in case of
+            self._timer_consider_auto_end_session.cancel()
+            threshold_sec = 60 * auto_end_session_cfg.no_activity_delay_minutes
+            if threshold_sec > 0:
+                timer = self._timer_consider_auto_end_session = make_daemon_timer(
+                    threshold_sec,
+                    self._consider_auto_end_session,
+                )
+                timer.start()
+                logger.debug("started timer for consider_auto_end_session in %.1fs", threshold_sec)
+
+    @BehaviorAlgorithm.relay_func
+    def _session_capture_ended(self, reason: str):
+        self._timer_consider_auto_end_session.cancel()
+        if reason == RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT:
+            logger.notice("Forcing tare load cell due to %s", reason)
+            self._tunnel_device.tare_load_cell()
         # 5/16/25 should not remove auto-clamp at session end for current testing.
         # TODO: make this configurable.
         # if self._tunnel_device is not None:
@@ -602,7 +634,7 @@ class SystemMachine(StateMachine):
             if new_value:
                 if algo.is_in_session:
                     if algo.intersession_state == IntersessionState.idle:
-                        algo.end_capture_session(reason="algo_paused")
+                        algo.end_capture_session(reason=RecordingEndingReason.ALGO_PAUSED)
                 tunnel_dev.open_tunnel_gate()
                 tunnel_dev.update_head_magnet_intensity(0)
                 if self._pellet_machine.state != PelletState.retract:
@@ -652,7 +684,7 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     # called by a timer, so can use wait=False (to not always recreate event for the wait sync)
-    def _consider_end_session(self, *, reason: str = "NA"):
+    def _consider_end_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
         # Do not end if the mouse is still in the tunnel and a pellet is seen or the pellet deliver is in the sending
         # or releasing states. Otherwise, there will be no trigger to start a new session and recording (tunnel entry
         # or sending the pellet)
@@ -668,7 +700,7 @@ class SystemMachine(StateMachine):
                          reason, self._algorithm.is_in_session, self.state, self._pellet_machine.state)
             return
 
-        if self.algorithm.end_capture_session(reason=f"{reason}->consider_end_session"):
+        if self.algorithm.end_capture_session(reason=reason):
             # force analysis to False,
             # this will trigger a new start session if mouse still there
             self._analysis.load_cell_monitor.is_engaged = False

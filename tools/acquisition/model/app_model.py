@@ -350,7 +350,7 @@ class AppModel(ObservableObject):
         return self._behavior.algorithm.top_camera_presence_detection
 
     @property
-    def behavior(self):
+    def behavior(self) -> BehaviorModel:
         return self._behavior
 
     @property

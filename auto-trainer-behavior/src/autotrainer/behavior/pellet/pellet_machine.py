@@ -200,7 +200,7 @@ class PelletMachine(StateMachine):
         # and not releasing before the desired threshold/delay.
 
     @BehaviorAlgorithm.relay_func
-    def _session_capture_ended(self):
+    def _session_capture_ended(self, reason):
         # todo: this entire func/block should be moved to system machine or behavior algo imho
         algo = self._algorithm
         logger.debug("_session_ending() called ; session_mouse_seen=%s",
