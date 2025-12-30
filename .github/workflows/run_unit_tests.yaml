@@ -65,10 +65,17 @@ jobs:
           echo "FULL COVERAGE"
           coverage report
           #
+          # extra detail:
           echo
-          for module in $(echo tools/* auto-trainer-* | sort)
+          for module in tools/acquisition $(echo auto-trainer-*/ | sort)
           do
             echo "${module} COVERAGE"
-            coverage report --include="${module}/src/autotrainer/*"
+            if test -d "${module}src/autotrainer"
+            then
+              include="${module}src/autotrainer/*"
+            else
+              include="${module}/*"
+            fi
+            coverage report --include="${include}" || true
             echo
           done
