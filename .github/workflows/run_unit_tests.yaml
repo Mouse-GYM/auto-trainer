@@ -61,4 +61,14 @@ jobs:
         run: |
           coverage combine
           coverage html
+          #
+          echo "FULL COVERAGE"
           coverage report
+          #
+          echo
+          for module in $(echo tools/* auto-trainer-* | sort)
+          do
+            echo "${module} COVERAGE"
+            coverage report --include="${module}/src/autotrainer/*"
+            echo
+          done

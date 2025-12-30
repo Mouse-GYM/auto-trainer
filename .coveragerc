@@ -38,7 +38,9 @@ parallel = true
 sigterm = true
 
 [report]
-show_missing = True
+show_missing = true
+include_namespace_packages = true
+
 omit =
     config-3.py
     config.py
