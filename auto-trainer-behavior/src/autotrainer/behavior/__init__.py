@@ -93,6 +93,7 @@ class DiamondTriangleOffsetConfig:
         )
 
     def motor_to_diamond(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
+        """Transform the motor coordinate to corresponding triangle coordinate in DCS"""
         assert isinstance(motor_xyz, Offset3DTuple), motor_xyz
         return (
             self.flips_inference_diamond * self.measured_offset
@@ -100,6 +101,7 @@ class DiamondTriangleOffsetConfig:
         )
 
     def diamond_to_motor(self, diamond_xyz: Offset3DTuple) -> Offset3DTuple:
+        """Transform the triangle coordinate from DCS to corresponding motor coordinates"""
         assert isinstance(diamond_xyz, Offset3DTuple), diamond_xyz
         return (
             self.flips_inference_diamond * self.measured_offset - diamond_xyz

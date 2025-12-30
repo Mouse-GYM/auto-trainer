@@ -1142,9 +1142,6 @@ class AppModel(ObservableObject):
             prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
             if value != prev:
                 self._save_animal_metadata(animal, sender="baseline_magnet_intensity")
-        # elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
-        #     self._hardware.set_auto_correct_motor_drift(value)
-        # already handled by SystemMachine
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal
@@ -1164,7 +1161,7 @@ class AppModel(ObservableObject):
                 logger.verbose("hardware set_xyz has NaN/None still: %s", t)
                 return
             changed = False
-            xyz = orig_xyz = Offset3DTuple(*t)
+            xyz = Offset3DTuple(*t)
             cfg = self._behavior.algorithm.diamond_triangle_config
             if cfg is None:
                 changed |= animal.is_pellet_dcs
