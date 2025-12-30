@@ -40,6 +40,10 @@ class PelletMachineEvents(StateMachineEvents):
     pellet_sent: Callable[[], None]  # when a send-pellet is finished executing
 
 
+class PelletDeviceCommandFailed(RuntimeError):
+    """Dedicated"""
+
+
 class PelletMachine(StateMachine):
 
     _events_class = PelletMachineEvents
@@ -107,17 +111,19 @@ class PelletMachine(StateMachine):
 
     def before_move_home(self):
         self._api_status_token = self._pellet_device.send_home()
-        if self._api_status_token is not None:
-            EventManager.default().post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
+        if self._api_status_token is None:
+            raise PelletDeviceCommandFailed
+        EventManager.default().post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
 
     def before_load_pellet(self):
-        self.events.pellet_loading()
         self._api_status_token = self._pellet_device.load_pellet()
-        if self._api_status_token is not None:
-            self._prev_pellet_load_perf_c = get_perf_now()
-            self._covered_state = None
-            EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
-            self._pellet_load_count += 1
+        if self._api_status_token is None:
+            raise PelletDeviceCommandFailed
+        self.events.pellet_loading()
+        self._prev_pellet_load_perf_c = get_perf_now()
+        self._covered_state = None
+        EventManager.default().post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
+        self._pellet_load_count += 1
 
     def before_send_pellet(self):
         tot_count = self._pellet_load_count + self._pellet_retract_count
@@ -129,31 +135,35 @@ class PelletMachine(StateMachine):
                           trigger_count)
             self._pellet_device.send_home()
             self._pellet_load_count = self._pellet_retract_count = 0
-        # don't we want to apply the pellet cover/release here before sending ?
+        # apply the pellet cover or release here right before sending
         algo = self._algorithm
-        if algo.pellet_cover_enabled:
+        # use can_cover which checks for both cover_pellet_enabled AND pellet_delivery_enabled:
+        if algo.can_cover_pellet():
             self.cover_pellet()
         else:
+        # elif algo.can_release_pellet():  # could we want to use the can_release_pellet instead of else ?
             self.release_pellet()
-        self._api_status_token = None
-        self.events.pellet_sending()
+        self._api_status_token = None  # otherwise cannot send_pellet, given requires it None
         self._api_status_token = self._pellet_device.send_pellet()
-        if self._api_status_token is not None:
-            self._api_status_token_pellet_send = self._api_status_token
-            self._send_begin_perf_c = get_perf_now()
-            self.events.pellet_sending()
-            EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
+        if self._api_status_token is None:
+            raise PelletDeviceCommandFailed
+        self._api_status_token_pellet_send = self._api_status_token
+        self._send_begin_perf_c = get_perf_now()
+        self.events.pellet_sending()
+        EventManager.default().post_event_content(BehaviorEventKind.pelletSendBegin, context=self._api_status_token)
 
     def before_cover_pellet(self):
         self._api_status_token = self._pellet_device.cover_pellet()
-        if self._api_status_token is not None:
-            self._covered_state = True
+        if self._api_status_token is None:
+            raise PelletDeviceCommandFailed
+        self._covered_state = True
         EventManager.default().post_event_content(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
 
     def before_release_pellet(self):
         self._api_status_token = self._pellet_device.release_pellet()
-        if self._api_status_token is not None:
-            self._covered_state = False
+        if self._api_status_token is None:
+            raise PelletDeviceCommandFailed
+        self._covered_state = False
         EventManager.default().post_event_content(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
 
     def can_move_home(self):
@@ -216,6 +226,8 @@ class PelletMachine(StateMachine):
 
     def _before_move_retract(self):
         self._api_status_token = self._pellet_device.send_retract()
+        if self._api_status_token is None:
+            raise PelletDeviceCommandFailed
         self._pellet_retract_count += 1
 
     @BehaviorAlgorithm.relay_func(wait=False)
@@ -348,22 +360,10 @@ class PelletMachine(StateMachine):
                 if cur_state == PelletState.loading and pellet_seen and is_from_inference:
                     self._notify_pellet_loaded_ok()
                 # current state is either retract or loading (loaded),
-                # we can do a send_pellet() but ensure covered(-or-released) is as desired, *before* sending :
-                # if algo.can_cover_pellet():
-                #     reason = "cover_when_loaded_or_retract"
-                #     logit()
-                #     self.cover_pellet()
-                # else:
-                #     reason = "release_when_loaded_or_retract"
-                #     logit()
-                #     self.release_pellet()
-                #
                 # even if pellet is not seen, send it to deliver,
                 # the end position of load-pellet sequence might not be (entirely or on all units) visible by camera,
                 reason = "send_pellet_when_loaded_or_retract"
                 logit()
-                # force api status token to None, from eventually previous release/cover pellet actions.
-                self._api_status_token = None  # otherwise cannot send pellet
                 self.send_pellet()
                 # then always directly:
                 self.monitor_pellet()
