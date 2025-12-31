@@ -91,15 +91,15 @@ class SystemConfiguration:
         return configuration
 
     @classmethod
-    def load_yaml_file(cls, path: Union[Path, str], *, save_backup: bool = True) -> Optional[Self]:
+    def load_yaml_file(cls, path: Union[Path, str], *, save_backup: bool = True) -> Self:
         path = Path(path)
         logger.debug("loading configuration from %r", path)
         with path.open() as fh:
             return SystemConfiguration.load_yaml(fh, file_path=path if save_backup else None)
 
     @classmethod
-    def make_default_yaml_config_path(cls, location: Path) -> Path:
-        return location.joinpath(f"{SystemConfiguration.DEFAULT_NAME}.yaml")
+    def make_default_yaml_config_path(cls, dir_path: Path) -> Path:
+        return dir_path.joinpath(f"{SystemConfiguration.DEFAULT_NAME}.yaml")
 
     @classmethod
     def load_default(cls, location: Union[str, Path]) -> Optional[Self]:
@@ -109,8 +109,8 @@ class SystemConfiguration:
         logger.debug("cannot load default from %s ; not a file", path)
         return None
 
-    def save_default(self, location: Union[Path, str]):
-        path = self.make_default_yaml_config_path(Path(location))
+    def save_default(self, dir_path: Union[Path, str]):
+        path = self.make_default_yaml_config_path(Path(dir_path))
         self.save_file(path.with_suffix(""), as_yaml=True)
 
     def dump_yaml(self) -> str:

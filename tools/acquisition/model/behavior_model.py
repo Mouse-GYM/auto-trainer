@@ -94,7 +94,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         return self._system_machine
 
     @property
-    def algorithm(self):
+    def algorithm(self) -> BehaviorAlgorithm:
         return self._system_machine.algorithm
 
     @property
@@ -152,7 +152,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             return
         algo.algo_paused = True
         self._source_algo_paused = source
-        EventManager.default().post_event_content(ApiEventKind.emergencyStop, source)
+        EventManager.default().post_event_content(ApiEventKind.emergencyStop, dict(reason=source))
         self.emergency_stopped(source)
 
     def emergency_resume(self, source: str):
@@ -166,7 +166,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         algo.algo_paused = False
         # restart full analysis so that monitors/detectors counters/context are reset, as if app was just started:
         self._analysis.restart()
-        EventManager.default().post_event_content(ApiEventKind.emergencyResume, source)
+        EventManager.default().post_event_content(ApiEventKind.emergencyResume, dict(reason=source))
         self.emergency_resumed(source)
 
     def _on_algorithm_property_changed(self, property_name: str, value, _):
