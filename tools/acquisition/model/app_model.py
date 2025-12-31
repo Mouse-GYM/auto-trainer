@@ -12,7 +12,7 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List, Dict, Callable, Any, Union
+from typing import Optional, List, Dict, Callable, Any, Union, Tuple
 
 import yaml
 from watchdog.events import FileSystemEventHandler, FileSystemEvent, PatternMatchingEventHandler
@@ -29,6 +29,7 @@ from autotrainer.core import AnimalSubject
 from autotrainer.core.configuration import SystemConfigurationDumper
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer
+from autotrainer.core.pose_elements import SceneElement
 
 from autotrainer.core.project.project_info import DATE_FORMAT, DATE_TIME_FORMAT
 
@@ -36,7 +37,7 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.config import load_calib_stereo_params
 
 from autotrainer.video import CaptureProcessStatus
-from autotrainer.inference import PoseAlgorithm, InferenceStatus
+from autotrainer.inference import PoseAlgorithm, InferenceStatus, PoseResponse
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine
@@ -147,6 +148,12 @@ class AppModel(ObservableObject):
         super().__init__(('on_error', 'configuration_loaded_event'))
 
         self._app_lock = threading.RLock()
+
+        def log_on_error(title, msg):
+            logger.error("%s: %s", title, msg)
+
+        self.on_error += log_on_error
+
         # using a shared process manager,
         # this allows to put shared values, created via the manager, to any multiprocess shared queue, notably.
         self._mp_manager = multiprocessing.get_context("spawn").Manager()
@@ -167,6 +174,10 @@ class AppModel(ObservableObject):
         self._acquisition_started = False
         self._acquisition_stopping = False
         self._reload_plans_needed = False
+        self._prev_diamond_coord: Tuple[float, Optional[Offset3DTuple]] = (-math.inf, None)
+        self._check_diamond_coord_enabled = True
+        self._p_start_capture = -math.inf
+        self._p_inference_live_begin = -math.inf
 
         self._event_manager = EventManager.default()
 
@@ -291,6 +302,7 @@ class AppModel(ObservableObject):
 
         self._hardware.property_changed += self._on_hardware_property_changed
         self._inference.property_changed += self._on_inference_property_changed
+        self._inference.pose_response_ready += self._on_pose_response_ready
         preferences.property_changed += self._on_preferences_property_changed
         behavior_model.algorithm.property_changed += self._on_behavior_algo_property_changed
         behavior_model.emergency_stopped += self._on_emergency_stopped
@@ -586,6 +598,14 @@ class AppModel(ObservableObject):
                 logger.info("reattaching %s to animal", plan_id)
                 self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
         self.property_changed(self.Props.TRAINING_PLANS, value, None)
+
+    @property
+    def check_diamond_coord_enabled(self):
+        return self._check_diamond_coord_enabled
+
+    @check_diamond_coord_enabled.setter
+    def check_diamond_coord_enabled(self, value):
+        self._check_diamond_coord_enabled = value
 
     def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
         if plan_id is None:
@@ -1234,10 +1254,45 @@ class AppModel(ObservableObject):
     def _on_inference_property_changed(self, name: str, new_value, _):
         if name == InferenceModel.STATUS:
             new_is_live = new_value == InferenceStatus.live
+            if new_is_live:
+                self._p_inference_live_begin = time.perf_counter()
             left_cam = self._left_camera
             left_cam.display_dots_detection = new_is_live
             self._right_camera.display_dots_detection = new_is_live
             self._update_status_text_overlay()
+
+    def _on_pose_response_ready(self, response: PoseResponse):
+        if not self._check_diamond_coord_enabled or self._behavior.algorithm.algo_paused:
+            return
+        cfg = self._behavior.algorithm.diamond_triangle_config
+        if cfg is None:
+            # nothing we can do
+            return
+        # maybe todo: make these configurable:
+        min_check_delay = 5  # seconds ; if no valid check within this delay -> error + emergency
+        delay_inference_begin = 3  # seconds ; wait inference started for that duration
+        max_dist_diff = 1.75  # mm ; if distance between obtained & expected above that -> error + emergency
+        #
+        p_now = time.perf_counter()
+        prev_p, prev_coord = self._prev_diamond_coord
+        del prev_coord  # we actually don't use it.. could possibly be removed from _diamond_coord_prev
+        loc3d = response.locations_3d.get(SceneElement.Diamond)
+        if loc3d is None:
+            if p_now - self._p_inference_live_begin < delay_inference_begin:
+                return
+            if p_now - prev_p > min_check_delay:
+                self._behavior.emergency_stop(source="Diamond-Coord-Check")
+                self.on_error("Diamond not detected", "Could not ensure diamond position for too long")
+            return
+        self._prev_diamond_coord = (p_now, loc3d)
+        diff = loc3d - cfg.diamond_coord
+        if diff.distance > max_dist_diff:
+            self._behavior.emergency_stop(source="Diamond-Coord-Check")
+            self.on_error(
+                "Diamond coordinate invalid",
+                f"Diamond inference 3d position too far from diamond-triangle config:\n\n"
+                f"{loc3d.humanize()} vs {cfg.diamond_coord.humanize()} : dist={diff.distance:.2f} mm"
+            )
 
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("plan prop: %s -> %s", name, value)

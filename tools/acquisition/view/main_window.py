@@ -1,5 +1,6 @@
 import collections
 import dataclasses
+import math
 import shutil
 import threading
 import time
@@ -448,15 +449,15 @@ class MainWindow(QMainWindow):
         EventManager.default()
         app_model = self._app_model
         algo = app_model.behavior.algorithm
-        if algo.diamond_triangle_config is None:
+        if algo.diamond_triangle_config is None or not algo.diamond_triangle_config.fully_valid:
             box = QMessageBox()
-            box.setWindowTitle("No Diamond-Triangle config")
+            box.setWindowTitle("Missing, or invalid, Diamond-Triangle config")
             # box.setModal(True)
             box.setText(
-                f"\n{algo.diamond_triangle_offset_config_path} is missing,\n\n"
+                f"\n{algo.diamond_triangle_offset_config_path} is either missing or needs update,\n\n"
                 "Once application will be running:\n\n"
                 "1) Using Hardware Control Set + Send buttons: move the triangle near the desired deliver position\n\n"
-                "2) Execute a new calibration via menu Tools -> Calibrate Coordinate System\n\n")
+                "2) Execute a new coordinate calibration via menu Tools -> Calibrate Coordinate System\n\n")
             box.setIcon(QMessageBox.Icon.Warning)
             box.show()
             self._add_box_to_open_dialogs(box)
@@ -988,13 +989,13 @@ class MainWindow(QMainWindow):
             if value == InferenceStatus.live:
                 app_model = self._app_model
                 algo = app_model.behavior.algorithm
-                if algo.diamond_triangle_config is None:
+                if algo.diamond_triangle_config is None or not algo.diamond_triangle_config.fully_valid:
                     def show_msg_box():
                         box = QMessageBox()
                         box.setWindowTitle("No Diamond-Triangle config")
                         # box.setModal(True)
                         box.setText(
-                            f"\n{algo.diamond_triangle_offset_config_path} is missing,\n\n"
+                            f"\n{algo.diamond_triangle_offset_config_path} is missing or not fully valid,\n\n"
                             "Now that application is running:\n\n"
                             "1) Using Hardware Control Set + Send buttons: move the triangle near the desired deliver position\n\n"
                             "2) Then, execute a calibration via menu Tools -> Calibrate Coordinate System\n\n")
