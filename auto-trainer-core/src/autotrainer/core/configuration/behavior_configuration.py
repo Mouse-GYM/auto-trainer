@@ -86,7 +86,7 @@ class HeadClampConfiguration:
 @dataclasses.dataclass
 class AutoEndSessionConfiguration:
 
-    no_activity_delay_minutes: int = 2
+    no_activity_delay_minutes: int = 1
     """How many minutes without animal activity to wait before auto end a running capture session.
     If animal seen in between: timeout is reset. Up until animal not seen for the given duration, then auto end session.
     """
