@@ -263,14 +263,15 @@ class MainWindow(QMainWindow):
         avg_pos, stdev_pos = self.calculate_std_dev_manual(positions)
         assert isinstance(avg_pos, Offset3DTuple)
         assert isinstance(stdev_pos, Offset3DTuple)
-        logger.info("position: average=%s stdev=%s", avg_pos, stdev_pos)
+        logger.info("motor-position: avg=%s stdev=%s", avg_pos, stdev_pos)
         avg_offset, stdev_offset = self.calculate_std_dev_manual(offsets)
         assert isinstance(avg_offset, Offset3DTuple)
         assert isinstance(stdev_offset, Offset3DTuple)
-        logger.info("offset: average=%s stdev=%s", avg_offset, stdev_offset)
+        logger.info("diamond-triangle-inference-offset: avg=%s stdev=%s", avg_offset, stdev_offset)
         avg_dia_loc3, stdev_dia_loc3d = self.calculate_std_dev_manual(diamond_locs3d)
         assert isinstance(avg_dia_loc3, Offset3DTuple)
         assert isinstance(stdev_dia_loc3d, Offset3DTuple)
+        logger.info("diamond-inference-position: avg=%s stdev=%s", avg_dia_loc3, stdev_dia_loc3d)
         noisy = False
         for val in chain(stdev_offset, stdev_pos, stdev_dia_loc3d):
             if val >= DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE:
@@ -317,9 +318,9 @@ class MainWindow(QMainWindow):
                                 QMessageBox.Ok,
                                 )
         new_cfg = DiamondTriangleOffsetConfig(
-            used_position=list(avg_pos),
-            measured_offset=list(avg_offset),
-            diamond_coord=list(avg_dia_loc3),
+            used_position=avg_pos,
+            measured_offset=avg_offset,
+            diamond_coord=avg_dia_loc3,
         )
         logger.success("Saving new config %s to %s", new_cfg, save_path.as_posix())
         new_cfg.to_file(save_path)
