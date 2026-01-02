@@ -605,12 +605,18 @@ class SystemMachine(StateMachine):
                         algo.end_capture_session(reason="algo_paused")
                 tunnel_dev.open_tunnel_gate()
                 tunnel_dev.update_head_magnet_intensity(0)
-                if self._pellet_machine.state != PelletState.retract:
-                    pellet_dev.send_pellet()  # better done.. so to be on correct position
-                    #  for following send_retract (which is a relative move):
-                    pellet_dev.send_retract()
-                if algo.can_cover_pellet():
-                    pellet_dev.cover_pellet()
+                # self._pellet_machine.move_home()  # pellet_machine is disabled once algo_paused is set.
+                # so directly call the device command:
+                pellet_dev.send_home()
+                # another possibility would be to do this before the actual/internal algo_paused flag is set,
+                # that is in a "before_algo_paused" kind callback.
+                # self._pellet_machine.state = PelletState.home
+                # if self._pellet_machine.state != PelletState.home:
+                #     pellet_dev.send_pellet()  # better done.. so to be on correct position
+                #     #  for following send_retract (which is a relative move):
+                #     pellet_dev.send_retract()
+                # if algo.can_cover_pellet():
+                #     pellet_dev.cover_pellet()
             else:
                 tunnel_dev.open_tunnel_gate()
                 tunnel_dev.update_head_magnet_intensity(algo.baseline_intensity)
