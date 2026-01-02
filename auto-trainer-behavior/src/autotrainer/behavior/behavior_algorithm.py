@@ -300,6 +300,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._algo_paused = False
         self._algo_paused_perf_t = 0
         self._is_in_session = False
+        self._session_started_perf_c = -math.inf
         self._start_session_reason = "NA"
         self._stop_session_reason = RecordingEndingReason.NA
 
@@ -561,6 +562,10 @@ class BehaviorAlgorithm(ObservableObject):
     def is_in_session(self) -> bool:
         """Is in capture/recording session"""
         return self._is_in_session
+
+    @property
+    def is_in_session_age(self) -> float:
+        return time.perf_counter() - self._session_started_perf_c
 
     @property
     def pellet_delivery_enabled(self):
@@ -944,6 +949,7 @@ class BehaviorAlgorithm(ObservableObject):
         logger.success("%s: starting new session recording ...", reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
         self._is_in_session = True
+        self._session_started_perf_c = time.perf_counter()
         self._start_session_reason = reason
         self.reset_session_pellet_count()
 
