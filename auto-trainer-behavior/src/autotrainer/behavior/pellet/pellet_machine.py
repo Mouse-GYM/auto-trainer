@@ -352,9 +352,10 @@ class PelletMachine(StateMachine):
             # basically when inference is back to live
             if not pellet_seen and algo.triangle_recently_seen:
                 # if triangle seen and pellet not seen: pellet not loaded ok for sure, we should see it if it was there
-                reason = "load_pellet_when_not_seen_and_retract_or_loading"
-                logit()
-                self.load_pellet()
+                if algo.can_load_pellet():
+                    reason = "load_pellet_when_not_seen_and_retract_or_loading"
+                    logit()
+                    self.load_pellet()
             else:
                 # either pellet is seen, or we don't know (might be not visible on cameras),
                 if cur_state == PelletState.loading and pellet_seen and is_from_inference:
