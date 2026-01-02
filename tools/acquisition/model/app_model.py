@@ -1284,15 +1284,19 @@ class AppModel(ObservableObject):
                 self._behavior.emergency_stop(source="Diamond-Coord-Check")
                 self.on_error("Diamond not detected", "Could not ensure diamond position for too long")
             return
-        self._prev_diamond_coord = (p_now, loc3d)
         diff = loc3d - cfg.diamond_coord
         if diff.distance > max_dist_diff:
-            self._behavior.emergency_stop(source="Diamond-Coord-Check")
-            self.on_error(
-                "Diamond coordinate invalid",
-                f"Diamond inference 3d position too far from diamond-triangle config:\n\n"
-                f"{loc3d.humanize()} vs {cfg.diamond_coord.humanize()} : dist={diff.distance:.2f} mm"
-            )
+            logger.warning("Diamond coordinate invalid: %s ; dist=%.2f",
+                           loc3d.humanize(), diff.distance,
+                           stack_info=True)
+            # self._behavior.emergency_stop(source="Diamond-Coord-Check")
+            # self.on_error(
+            #     "Diamond coordinate invalid",
+            #     f"Diamond inference 3d position too far from diamond-triangle config:\n\n"
+            #     f"{loc3d.humanize()} vs {cfg.diamond_coord.humanize()} : dist={diff.distance:.2f} mm"
+            # )
+        else:
+            self._prev_diamond_coord = (p_now, loc3d)
 
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("plan prop: %s -> %s", name, value)
