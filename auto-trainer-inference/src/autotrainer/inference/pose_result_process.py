@@ -562,7 +562,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                 frame_idx = cam_fr_indices[fx]
                                 if frame_idx < 0:  # == FrameIndexCategory.PADDING:
                                     __debug__ and \
-                                    logger.debug("cam-%s : fx=%s got negative frame idx: %s",
+                                    logger.spam("cam-%s : fx=%s got negative frame idx: %s",
                                                  cdx, fx, cam_fr_indices)
                                     continue
                                     # break
