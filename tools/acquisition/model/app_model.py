@@ -1264,7 +1264,7 @@ class AppModel(ObservableObject):
             self._update_status_text_overlay()
 
     def _on_pose_response_ready(self, response: PoseResponse):
-        if not self._check_diamond_coord_enabled:
+        if not self._check_diamond_coord_enabled or self._behavior.algorithm.algo_paused:
             return
         cfg = self._behavior.algorithm.diamond_triangle_config
         if cfg is None:
@@ -1273,7 +1273,7 @@ class AppModel(ObservableObject):
         # maybe todo: make these configurable:
         min_check_delay = 5  # seconds ; if no valid check/measure within this delay -> error + emergency
         delay_inference_begin = 3  # seconds ; wait inference started for that duration before consider min_check_delay
-        max_dist_diff = 1.75  # mm ; if distance between obtained & expected above that -> invalid measure
+        max_dist_diff = 0.75  # mm ; if distance between obtained & expected above that -> invalid measure
         #
         p_now = time.perf_counter()
         loc3d = response.locations_3d.get(SceneElement.Diamond)
@@ -1283,15 +1283,19 @@ class AppModel(ObservableObject):
             if diff.distance > max_dist_diff:
                 if not self._warned_bad_diamond_coord:
                     logger.warning("Diamond coordinate invalid: %s ; dist=%.2f ; pose=%s",
-                                   loc3d.humanize(n_digits=6), diff.distance, response, stack_info=True)
-                    # self._warned_bad_diamond_coord = True
+                                   loc3d.humanize(n_digits=6), diff.distance, response)
+                    self._warned_bad_diamond_coord = True
             else:
                 self._prev_valid_diamond_perf_c = p_now
                 self._warned_bad_diamond_coord = False
         #
         if p_now - self._prev_valid_diamond_perf_c > min_check_delay and p_now - self._p_inference_live_begin > delay_inference_begin:
             self._behavior.emergency_stop(source="Diamond-Coord-Check")
-            self.on_error("Diamond not detected or invalid position", "Could not ensure valid diamond position for too long")
+            self.on_error("Diamond not detected or invalid position",
+                          "Could not ensure valid diamond position for too long.\n\n"
+                          "Please re-execute a diamond-triangle calibration via menu Tools -> Calibrate Coordinate System\n\n"
+                          "Then click Resume to resume from the emergency."
+                          )
 
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("plan prop: %s -> %s", name, value)
