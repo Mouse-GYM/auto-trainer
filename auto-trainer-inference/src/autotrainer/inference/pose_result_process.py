@@ -374,7 +374,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 continue
 
             if prev_mode != mode:
-                logger.verbose("Detected inference mode change -> %s frames=%s", mode, frames_indices)
+                logger.verbose("Detected inference mode change -> %s frames=%s",
+                               mode, frames_indices.tolist())
 
             if mode == InferenceMode.Live:
                 perf_now = time.perf_counter()
@@ -393,7 +394,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 if (not (frames_indices >= 0).all()
                     and not (frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all()
                 ):
-                    logger.debug("mode=%s frames_indices=%s", mode, frames_indices)
+                    logger.debug("mode=%s frames_indices=%s", mode, frames_indices.tolist())
 
             pose_algo = self._pose_algo
             if pose_algo is None:
@@ -406,7 +407,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 if (frames_indices[:, 0] == FrameIndexCategory.EOF_RECORDING).any():
                     recording_in_progress = False
                     logger.notice("Detected stop of recording in progress ; mode=%s prev=%s frames_indices=%s",
-                                  mode, prev_mode, frames_indices)
+                                  mode, prev_mode, frames_indices.tolist())
                     _close_fhs(cams_frame_idx_fhs)
                     cams_frame_idx_fhs = None
                     for cam_pose_path, cam_indices, cam_h5_live in zip(pose_paths, cur_cams_indices, cur_h5_live_batch):
@@ -432,7 +433,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     new_local_prj = self._project.to_local_value()
                     cur_local_prj = new_local_prj
                     logger.notice("Detected new record in progress ; session=%s ; mode=%s frames indices: %s",
-                                   cur_local_prj.session, mode, frames_indices)
+                                   cur_local_prj.session, mode, frames_indices.tolist())
                     self._stop_recorded.clear()
                     cams_frame_idx_fhs = []
                     pose_paths = []
@@ -451,6 +452,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             ib_pose_data_dict.append({})
 
                 if mode == InferenceMode.Live:
+
                     if recording_in_progress:
                         tot_written_to_live += 1
                         for fh, cam_fr_indices in zip(cams_frame_idx_fhs, frames_indices):
@@ -458,6 +460,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             if fh is not None and len(cam_fr_indices) > 0:
                                 fh.write("\n".join(map(str, chain(cam_fr_indices, [""]))))
                                 fh.flush()
+
                         for cdx, cam_fr_indices, cam_pose_path, cam_h5_live, cam_indices in zip(
                             range_cams, frames_indices, pose_paths, cur_h5_live_batch, cur_cams_indices
                         ):
@@ -483,28 +486,12 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     if skip_update:
                         continue
 
-                    new_pose_data = []
-                    got_done = False
-                    for fx in range(self._frames_per_camera):
-                        for cdx, cam_fr_indices in zip(range_cams, frames_indices):
-                            ix = fx * n_cams + cdx
-                            if cam_fr_indices[fx] < FrameIndexCategory.ONLINE_NO_RECORDING:
-                                new_pose_data = new_pose_data[:fx * n_cams]
-                                got_done = True
-                                break
-                            new_pose_data.append(pose_data[ix])
-                        if got_done:
-                            break
+                    if (frames_indices < FrameIndexCategory.ONLINE_NO_RECORDING).any():
+                        # this is normal for stop recording
+                        if not (frames_indices < FrameIndexCategory.ONLINE_NO_RECORDING).all():
+                            logger.verbose("Skipping incomplete frame index pose_data: %s",frames_indices.tolist())
+                        continue
 
-                    r = len(pose_data) % n_cams
-                    if r != 0 or len(pose_data) == 0:
-                        new_pose_data = pose_data[:-r]
-                        if len(new_pose_data) == 0:
-                            logger.warning("skipping invalid nbr of pose_data: %s ; frame_indices=%s",
-                                           len(pose_data), frames_indices)
-                            continue
-                        pose_data = new_pose_data
-                    #
                     response = pose_algo.process(pose_data, pairs_3d_offsets=self._monitored_parts_offsets)
                     self._send_msg(self.Msg.POSE_RESULT_READY, response)
 
@@ -560,6 +547,9 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         ib_pose_data_dict = []
                     else:
                         assert pose_data is not None
+                        if (frames_indices < FrameIndexCategory.ONLINE_NO_RECORDING).all():
+                            # happens for EOF_OFFLINE_PROCESSING
+                            continue
                         # we can now append the received/processed frame data:
                         skipped = 0
                         # append any of the live processed frame data that are before current
@@ -572,7 +562,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                 frame_idx = cam_fr_indices[fx]
                                 if frame_idx < 0:  # == FrameIndexCategory.PADDING:
                                     __debug__ and \
-                                    logger.spam("cam-%s : fx=%s got negative frame idx: %s",
+                                    logger.debug("cam-%s : fx=%s got negative frame idx: %s",
                                                  cdx, fx, cam_fr_indices)
                                     continue
                                     # break

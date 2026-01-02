@@ -174,7 +174,9 @@ class AppModel(ObservableObject):
         self._acquisition_started = False
         self._acquisition_stopping = False
         self._reload_plans_needed = False
-        self._prev_diamond_coord: Tuple[float, Optional[Offset3DTuple]] = (-math.inf, None)
+        self._prev_diamond_coord: Offset3DTuple = Offset3DTuple(math.nan, math.nan, math.nan)
+        self._prev_valid_diamond_perf_c: float = -math.inf
+        self._warned_bad_diamond_coord = False
         self._check_diamond_coord_enabled = True
         self._p_start_capture = -math.inf
         self._p_inference_live_begin = -math.inf
@@ -1262,41 +1264,34 @@ class AppModel(ObservableObject):
             self._update_status_text_overlay()
 
     def _on_pose_response_ready(self, response: PoseResponse):
-        if not self._check_diamond_coord_enabled or self._behavior.algorithm.algo_paused:
+        if not self._check_diamond_coord_enabled:
             return
         cfg = self._behavior.algorithm.diamond_triangle_config
         if cfg is None:
             # nothing we can do
             return
         # maybe todo: make these configurable:
-        min_check_delay = 5  # seconds ; if no valid check within this delay -> error + emergency
-        delay_inference_begin = 3  # seconds ; wait inference started for that duration
-        max_dist_diff = 1.75  # mm ; if distance between obtained & expected above that -> error + emergency
+        min_check_delay = 5  # seconds ; if no valid check/measure within this delay -> error + emergency
+        delay_inference_begin = 3  # seconds ; wait inference started for that duration before consider min_check_delay
+        max_dist_diff = 1.75  # mm ; if distance between obtained & expected above that -> invalid measure
         #
         p_now = time.perf_counter()
-        prev_p, prev_coord = self._prev_diamond_coord
-        del prev_coord  # we actually don't use it.. could possibly be removed from _diamond_coord_prev
         loc3d = response.locations_3d.get(SceneElement.Diamond)
-        if loc3d is None:
-            if p_now - self._p_inference_live_begin < delay_inference_begin:
-                return
-            if p_now - prev_p > min_check_delay:
-                self._behavior.emergency_stop(source="Diamond-Coord-Check")
-                self.on_error("Diamond not detected", "Could not ensure diamond position for too long")
-            return
-        diff = loc3d - cfg.diamond_coord
-        if diff.distance > max_dist_diff:
-            logger.warning("Diamond coordinate invalid: %s ; dist=%.2f",
-                           loc3d.humanize(), diff.distance,
-                           stack_info=True)
-            # self._behavior.emergency_stop(source="Diamond-Coord-Check")
-            # self.on_error(
-            #     "Diamond coordinate invalid",
-            #     f"Diamond inference 3d position too far from diamond-triangle config:\n\n"
-            #     f"{loc3d.humanize()} vs {cfg.diamond_coord.humanize()} : dist={diff.distance:.2f} mm"
-            # )
-        else:
-            self._prev_diamond_coord = (p_now, loc3d)
+        if loc3d is not None:
+            self._prev_diamond_coord = loc3d
+            diff = loc3d - cfg.diamond_coord
+            if diff.distance > max_dist_diff:
+                if not self._warned_bad_diamond_coord:
+                    logger.warning("Diamond coordinate invalid: %s ; dist=%.2f ; pose=%s",
+                                   loc3d.humanize(n_digits=6), diff.distance, response, stack_info=True)
+                    # self._warned_bad_diamond_coord = True
+            else:
+                self._prev_valid_diamond_perf_c = p_now
+                self._warned_bad_diamond_coord = False
+        #
+        if p_now - self._prev_valid_diamond_perf_c > min_check_delay and p_now - self._p_inference_live_begin > delay_inference_begin:
+            self._behavior.emergency_stop(source="Diamond-Coord-Check")
+            self.on_error("Diamond not detected or invalid position", "Could not ensure valid diamond position for too long")
 
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("plan prop: %s -> %s", name, value)
