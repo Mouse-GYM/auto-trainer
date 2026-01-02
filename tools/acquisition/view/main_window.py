@@ -216,10 +216,15 @@ class MainWindow(QMainWindow):
         std_dev = variance ** 0.5
         return mean, std_dev
 
-    def _handle_diamond_triangle_calib_run(self, *, positions: List[Offset3DTuple], offsets: List[Offset3DTuple]):
+    def _handle_diamond_triangle_calib_run(
+        self,
+        *,
+        positions: List[Offset3DTuple],  # motor coordinate system positions
+        offsets: List[Offset3DTuple],  # diamond-triangle offsets (inference coordinate system)
+        diamond_locs3d: List[Offset3DTuple],  # diamond loc3d (inference coordinate system)
+    ):
         self._timer_calibrate_diamond_triangle.cancel()
-        self._app_model.status = AppModelStatus.ACQUIRING
-        if len(offsets) < 3:
+        if len(offsets) < 3 or len(diamond_locs3d) < 10:
             self.calib_diamond_triangle_action.setEnabled(False)
             box = QMessageBox()
             box.setWindowTitle("Please")
@@ -243,8 +248,8 @@ class MainWindow(QMainWindow):
             retry_button.clicked.connect(lambda: self.on_calibrate_diamond_triangle(True))
             retry_button.clicked.connect(remove)
             #
-            box.addButton("Cancel", QMessageBox.RejectRole).clicked.connect(remove)
-            box.setWindowModality(Qt.NonModal)
+            box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole).clicked.connect(remove)
+            box.setWindowModality(Qt.WindowModality.NonModal)
             box.setModal(False)
 
             def close_event(event):
@@ -263,8 +268,11 @@ class MainWindow(QMainWindow):
         assert isinstance(avg_offset, Offset3DTuple)
         assert isinstance(stdev_offset, Offset3DTuple)
         logger.info("offset: average=%s stdev=%s", avg_offset, stdev_offset)
+        avg_dia_loc3, stdev_dia_loc3d = self.calculate_std_dev_manual(diamond_locs3d)
+        assert isinstance(avg_dia_loc3, Offset3DTuple)
+        assert isinstance(stdev_dia_loc3d, Offset3DTuple)
         noisy = False
-        for val in chain(stdev_offset, stdev_pos):
+        for val in chain(stdev_offset, stdev_pos, stdev_dia_loc3d):
             if val >= DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE:
                 noisy = True
         if noisy:
@@ -311,8 +319,9 @@ class MainWindow(QMainWindow):
         new_cfg = DiamondTriangleOffsetConfig(
             used_position=list(avg_pos),
             measured_offset=list(avg_offset),
+            diamond_coord=list(avg_dia_loc3),
         )
-        logger.success("Saving new config to %s", save_path.as_posix())
+        logger.success("Saving new config %s to %s", new_cfg, save_path.as_posix())
         new_cfg.to_file(save_path)
         #
         app_model = self._app_model
@@ -332,6 +341,8 @@ class MainWindow(QMainWindow):
         algo = app_model.behavior.algorithm
         action = self.calib_diamond_triangle_action
 
+        diamond_locs3d = []
+
         def record_offsets(pose_response: PoseResponse):
             nonlocal start_perf_c, offsets, positions, recording
             if not recording:
@@ -342,6 +353,9 @@ class MainWindow(QMainWindow):
             if new_offset is not None:
                 offsets.append(new_offset)
                 positions.append(app_model.hardware.last_position)
+            dia_loc3d = pose_response.locations_3d.get(SceneElement.Diamond)
+            if dia_loc3d is not None:
+                diamond_locs3d.append(dia_loc3d)
             if time.perf_counter() - start_perf_c > calib_duration:
                 # required, to execute the function in the UI/main thread:
                 # reminder this record_offsets is executed by some thread handler/worker in some callback
@@ -378,7 +392,11 @@ class MainWindow(QMainWindow):
         action.setChecked(False)
         #
         self._diamond_triangle_calib_run = None  # MUST be before
-        self._handle_diamond_triangle_calib_run(positions=positions, offsets=offsets)
+        self._handle_diamond_triangle_calib_run(
+            positions=positions,
+            offsets=offsets,
+            diamond_locs3d=diamond_locs3d,
+        )
 
     def on_calibrate_diamond_triangle(self, is_toggled):
         if is_toggled and self._diamond_triangle_calib_run is None:
