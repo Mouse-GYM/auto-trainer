@@ -67,12 +67,15 @@ jobs:
           #
           # extra detail:
           echo
-          for module in tools/acquisition $(echo auto-trainer-*/ | sort)
+          for module in tools/acquisition $(find . -type d -name "auto-trainer-*" | sort)
           do
+            # need relative to ./ (strip front ./) :
+            module=$(realpath -s --relative-to ./ "${module}")
             echo "${module} COVERAGE"
-            if test -d "${module}src/autotrainer"
+            with_auto_trainer_src_dir="${module}/src/autotrainer"
+            if test -d "${with_auto_trainer_src_dir}"
             then
-              include="${module}src/autotrainer/*"
+              include="${with_auto_trainer_src_dir}/*"
             else
               include="${module}/*"
             fi
