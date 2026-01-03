@@ -523,8 +523,9 @@ class VideoCapture(Process):
                             record_q_list = self._record_queue_list = []
                         record_q.put([])
                         # wait record file is closed:
-                        logger.debug("waiting record close event")
-                        self._record.close_event.wait()
+                        # logger.debug("waiting record close event")
+                        # self._record.close_event.wait()
+                        # logger.debug("got record close event")
                         # so that when session analyse is enabled the feeder thread won't try to open the mp4 files
                         # before so.
 

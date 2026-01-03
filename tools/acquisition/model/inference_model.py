@@ -17,7 +17,7 @@ import numpy
 import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
-    InferenceConfiguration, Offset3DTuple, ApiEventKind
+    InferenceConfiguration, Offset3DTuple, ApiEventKind, get_perf_now
 from autotrainer.core.logging import get_verbose_logger, setup_logging, make_log_dict_config, install_log_exception_hook
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
     InferenceProtocol, IntersessionBlock, IntersessionDetection
@@ -592,13 +592,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             if cur_status not in correct_inference_status:
                 raise InferenceIncorrectStatus(f"not correct status: {cur_status}")
         #
-        perf_timeout = time.perf_counter() + 15  # intersession_wait_time is too small
+        perf_timeout = get_perf_now() + 10  # intersession_wait_time is too small
         # the pose process and data monitor thread have some delay between them,
         # sometimes up to several seconds (4-5).
         # wait that we get the event from monitor data queue closing its write side to live files:
         logger.debug("waiting stop_recorded on %s", self._data_monitor_proc.stop_recorded)
         while not self._data_monitor_proc.stop_recorded.wait(1):
-            if time.perf_counter() > perf_timeout:
+            if get_perf_now() > perf_timeout:
                 raise RuntimeError("timeout waiting for intersession stop_recorded event")
             check_correct_status()
         self._data_monitor_proc.stop_recorded.clear()
@@ -613,6 +613,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         videos_frame_count: Dict[int, int] = {}
         video_paths = [cams_paths[cdx][0] for cdx in range(n_cams)]
         logger.verbose("checking can open video files %s", video_paths)
+        perf_timeout = get_perf_now() + 15  # intersession_wait_time is too small
         while True:
             check_correct_status()
 
@@ -624,7 +625,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                         videos_frame_count[cdx] = frame_count
             if len(captures_d) >= n_cams:
                 break
-            if time.perf_counter() > perf_timeout:
+            if get_perf_now() > perf_timeout:
                 EventManager.default().post_event_content(ApiEventKind.intersessionSegmentationInputError)
                 raise RuntimeError(f"timeout waiting for intersession video files {video_paths}, trying continue anyway")
 

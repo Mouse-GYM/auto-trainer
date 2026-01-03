@@ -132,7 +132,6 @@ class VideoRecord(Thread):
                     # Indicator for trigger disabled
                     self._close_writers()
                     self._close_event.set()
-                    # self._input_queue.put(None)
                     logger.info("Closed video file: tot frames written: %s ; last_when=%s",
                                 tot_written, last_when)
                     tot_written = 0
