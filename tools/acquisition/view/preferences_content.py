@@ -294,7 +294,7 @@ class PreferencesContent(QWidget):
         def allow_intersession_shift_toggle_state_changed(x: int):
             enabled = x != 0
             if enabled:
-                behavior.is_intersession_enabled = True
+                behavior.algorithm.intersession_enabled = True
             algo.intersession_pellet_shift_enabled = enabled
         toggle.stateChanged.connect(allow_intersession_shift_toggle_state_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)

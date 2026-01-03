@@ -24,6 +24,8 @@ def trainer_config_dir(tmp_path):
 @pytest.fixture
 def system_config(trainer_config_dir, tmp_path):
     config = SystemConfiguration()
+    # mostly ~all default params are good, but we need:
+    config.behavior.pellet_delivery.is_intersession_analysis_enabled = True
     for cam_member in (CameraId.Left, CameraId.Right, CameraId.Web):
         params = dict(width=300, height=200)
         cam = CameraConfiguration(name=cam_member.name, params=params)

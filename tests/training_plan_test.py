@@ -35,9 +35,6 @@ def inference_model(pose_algo):
 
 class TestTrainingPlan(MockSystemMachine):
 
-    def setup_method(self, test_method):
-        pass
-
     @pytest.fixture(autouse=True)
     def training_plans(self, trainer_config_dir):
         # have to copy or link the plan in the config dir given it's "hardcoded" relatively to it for now:
@@ -84,11 +81,16 @@ class TestTrainingPlan(MockSystemMachine):
 
         algo = app_model.behavior.algorithm
 
+        assert app_model.loaded_configuration is None
         assert app_model.load_configuration() is True
+
+        assert algo.intersession_enabled is True  # required
+        # NB: do not try change some settings after config is loaded,
+        # the loaded parameters/settings (from config file) will be reused/reset with training plan enter.
 
         shift_xyz_buffer_handler = ShiftXYZBufferHandler(size=2)  # will also check this
         algo.shift_xyz_handler.set_handle_new_shift_xyz(shift_xyz_buffer_handler)
-        algo.intersession_enabled = True
+
         app_model.training_mode = TrainingMode.AUTOMATIC
         app_model.on_capture_start()
 

@@ -1124,6 +1124,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         self.pellet_delivery_enabled = cfg.is_enabled
+        self.intersession_enabled = cfg.is_intersession_analysis_enabled
         self.pellet_cover_enabled = cfg.is_pellet_cover_enabled
         self.pellet_missing_time = cfg.max_pellet_missing_seconds
         self.max_pellets_per_session = cfg.max_pellets_per_session
@@ -1149,11 +1150,13 @@ class BehaviorAlgorithm(ObservableObject):
 
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         cfg.is_enabled = self._pellet_delivery_enabled
+        cfg.is_intersession_analysis_enabled = self._intersession_enabled
         cfg.is_pellet_cover_enabled = self._pellet_cover_enabled
         cfg.max_pellet_missing_seconds = self.pellet_missing_time
         cfg.max_pellets_per_session = self.max_pellets_per_session
         cfg.max_pellets_per_day = self.max_pellets_per_day
         cfg.auto_correct_motors_drift = self._auto_correct_motors_drift
+        cfg.is_intersession_pellet_shift_enabled = self._intersession_pellet_shift_enabled
         cfg.use_triangle_pellet_distance_too_far = self._use_triangle_pellet_distance_too_far
         cfg.triangle_pellet_expected_distance = self._triangle_pellet_expected_distance
         cfg.triangle_pellet_diff_too_far_threshold = self._triangle_pellet_diff_too_far_threshold
