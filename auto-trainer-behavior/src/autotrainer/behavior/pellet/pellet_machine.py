@@ -134,6 +134,7 @@ class PelletMachine(StateMachine):
                           "count greater than threshold (%s)", self._pellet_load_count, self._pellet_retract_count,
                           trigger_count)
             self._pellet_device.send_home()
+            self._api_status_token = None  # required for following motor actions
             self._pellet_load_count = self._pellet_retract_count = 0
         # apply the pellet cover or release here right before sending
         algo = self._algorithm
