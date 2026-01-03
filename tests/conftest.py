@@ -10,8 +10,7 @@ from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
 
 
-this_dir = Path(__file__).parent
-top_dir = this_dir.parent  # supposed be the repo top/root dir
+import top_fixtures
 
 
 @pytest.fixture
@@ -68,7 +67,7 @@ def user_pref(tmp_path, trainer_config_dir, animals_dir, settings_ini_path):
 @pytest.fixture
 def calib_dir():
     # could be todo: copy it top-level, or generate new temporary one as above for system config.
-    return top_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
+    return top_fixtures.repo_root_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
 
 
 @pytest.fixture
