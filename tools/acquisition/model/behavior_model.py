@@ -172,19 +172,3 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     def _on_algorithm_property_changed(self, property_name: str, value, _):
         if property_name == BehaviorAlgoProps.INTERSESSION_ENABLED:
             self._is_intersession_enabled = value
-
-    def trigger_tunnel(self, value: bool):
-        # currently unused
-        """
-        Provides the ability to manually trigger tunnel enter/exit state changes independent of load cell events.
-        Future load cell events will still have the expected behavior.  This is primarily supported for testing and
-        diagnostics.
-
-        :param value: True to enter tunnel, False to exit.
-
-        :return:
-        """
-        if value:
-            self._system_machine.enter_tunnel(reason="simulate_enter_tunnel")
-        else:
-            self._system_machine.exit_tunnel(reason="simulate_exit_tunnel")
