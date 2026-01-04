@@ -379,6 +379,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 if mode == InferenceMode.Live:
                     skip_next_pose_data = 3
                     # skip next 3 pose data to flush anything remaining
+                    # NB: this looks necessary/required to ensure the inference gives back "reliable" result,
+                    # with skip=2, for instance, we ~always get a first result without all visible elements detected.
 
             if mode == InferenceMode.Live:
                 perf_now = time.perf_counter()
