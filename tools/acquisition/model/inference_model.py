@@ -88,8 +88,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._is_enabled = False
         self._model_location = ""
         self._algorithm = pose_algorithm
-        # self._algorithm.pose_changed += self._pose_changed
-        # no need, we have the pose response in the monitor data queue function
         self._calib_dir = calib_dir
 
         self._msg_thread = None
@@ -210,24 +208,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # the trigger for pose process to switch to offline queue processing is now delivered by
         # camera capture itself, which send an EOF_RECORDING when a video/session record finishes.
 
-        # once the message is sent, also wait a bit,
-        # this is to give some time to inference process to switch to offline queue,
-        # and also reset its offline read queue side:
-        # time.sleep(0.5)
-        # Not anymore needed, see video_capture and below __feed_intersession_analysis.
         self._offline_thread = Thread(
             target=self._feed_intersession_analysis,
             args=(intersession_block,),
             name="feed_intersession_analysis",
             daemon=True,
         )
-        # but then, wait again a bit of more time.
-        # this is to give some time to the monitor data queue thread, to get/detect the end of recording in progress,
-        # and switch to offline processing request (which is coming indirectly from the pose process),
-        # and get a chance to close the "h5-live" and frames-idx-already-processed file handles.
-        # time.sleep(0.5)
-        # NB: this might not be enough though, we probably should use a threading event (with a timeout eventually)
-        # Now using thread event.
         self._offline_thread.start()
         return configuration
 
@@ -242,7 +228,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         logger.info("performing detection analysis on %s", configuration)
         self._check_previous_offline_thread("perform_detection")
         intersession_detection = self._intersession_detection = IntersessionDetection(configuration)
-        project = self._project
+        project = self._project.to_local_value()
         self._offline_thread = Thread(target=self._intersession_process, name="intersession_process",
                                       args=(project, intersession_detection,))
         self._offline_thread.start()
@@ -612,11 +598,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         captures_d = {}
         videos_frame_count: Dict[int, int] = {}
         video_paths = [cams_paths[cdx][0] for cdx in range(n_cams)]
-        logger.verbose("checking can open video files %s", video_paths)
-        perf_timeout = get_perf_now() + 15  # intersession_wait_time is too small
+        logger.debug("checking can open video files %s", video_paths)
+        p_before = get_perf_now()
+        perf_timeout = p_before + 10
         while True:
             check_correct_status()
-
             for cdx, cam in enumerate(cams):
                 if cdx not in captures_d:
                     capture, frame_count = check_frame_count(video_paths[cdx])
@@ -627,9 +613,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 break
             if get_perf_now() > perf_timeout:
                 EventManager.default().post_event_content(ApiEventKind.intersessionSegmentationInputError)
-                raise RuntimeError(f"timeout waiting for intersession video files {video_paths}, trying continue anyway")
-
+                raise RuntimeError(f"timeout waiting for intersession video files {video_paths}")
             time.sleep(0.1)  # overkill to immediately retry
+
+        logger.debug("Waited %.1fs for video files ready", get_perf_now() - p_before)
 
         captures: List[cv2.VideoCapture] = [captures_d[cdx] for cdx in range(len(cams))]
         cams_processed_fhs = [
@@ -778,7 +765,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         return intersession_process(*args, **kwargs)
 
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
-        project = project.to_local_value()  # get local ref to current project infos,
         detection_config = intersession_detection.configuration
         # *** but *** force update with intersession_detection when & session, to be totally sure:
         project.session = detection_config.session_index

@@ -333,7 +333,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             df_xyp = pandas.DataFrame(arr,
                                       columns=pose_algo.pose_result_columns, index=index)
             df_xyp["frame_idx"] = list(indices_list)  # also store the frame idx with the results
-            logger.debug("Writing batch to %s", dst_path)
+            logger.spam("Writing batch to %s", dst_path)
             # logger.verbose("writing h5 batch (%s/%s entries): indices=%s to %s (prev-exists: %s)",
             #                len(df_xyp), len(arr), indices_list, dst_path, os.path.exists(dst_path))
             df_xyp.to_hdf(dst_path,
@@ -348,7 +348,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             #              object.__repr__(data_list), object.__repr__(indices_list))
             t1 = time.perf_counter()
             d = t1 - t0
-            logger.verbose("wrote h5 batch (%s) in %sms to %s",
+            logger.debug("wrote h5 batch (%s) in %sms to %s",
                            len(df_xyp), int(d * 1000), dst_path)
             writes_h5_live_durations.append(d)
 

@@ -522,12 +522,6 @@ class VideoCapture(Process):
                             record_q.put(record_q_list)
                             record_q_list = self._record_queue_list = []
                         record_q.put([])
-                        # wait record file is closed:
-                        # logger.debug("waiting record close event")
-                        # self._record.close_event.wait()
-                        # logger.debug("got record close event")
-                        # so that when session analyse is enabled the feeder thread won't try to open the mp4 files
-                        # before so.
 
                         self._set_status(CaptureProcessStatus.RUNNING)
 
@@ -565,7 +559,7 @@ class VideoCapture(Process):
                                                 timeout=timeout)
                                 timeout -= time.perf_counter() - t0
 
-                            sync_barrier()
+                            # sync_barrier()
 
                         if is_primary and msg_q is not None:
                             msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
@@ -580,11 +574,11 @@ class VideoCapture(Process):
 
                 if net_q_put is not None:
                     # network queue goes to processing/inference
-                    did_put = net_q_put(frame, net_q_idx,
+                    frame_idx_cat = (
                         FrameIndexCategory.ONLINE_NO_RECORDING if record_start_frame_idx is None
-                        else cur_frame_idx - record_start_frame_idx,
-                        allow_overflow=False) == BufferResult.Ok
-                    if did_put:
+                        else cur_frame_idx - record_start_frame_idx
+                    )
+                    if net_q_put(frame, net_q_idx, frame_idx_cat, allow_overflow=False) == BufferResult.Ok:
                         cnt_net_q_put += 1
 
                 if vid_detection is not None:
