@@ -1033,7 +1033,16 @@ class BehaviorAlgorithm(ObservableObject):
         return not self._algo_paused
 
     def can_load_pellet(self):
-        return self._pellet_delivery_enabled and not self.pellet_recently_seen and not self._algo_paused
+        # is more has_to_load_pellet()
+        return (
+            self._pellet_delivery_enabled and not self._algo_paused
+            and (
+                not self.pellet_recently_seen
+                or (
+                    self.triangle_recently_seen and self.is_triangle_pellet_distance_too_far()
+                )
+            )
+        )
 
     def can_release_pellet(self) -> bool:
         # self._check_date()
@@ -1063,7 +1072,7 @@ class BehaviorAlgorithm(ObservableObject):
         # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_perform_intersession_analysis(self):
-        return self._intersession_enabled and self.session_mouse_seen
+        return self._intersession_enabled and self._session_mouse_seen
 
     #
 

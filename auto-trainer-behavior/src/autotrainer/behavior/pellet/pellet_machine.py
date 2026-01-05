@@ -400,19 +400,16 @@ class PelletMachine(StateMachine):
             if pellet_seen and is_from_inference and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
                 self._notify_pellet_loaded_ok()
 
-            if ((not pellet_seen and (algo.triangle_recently_seen or algo.star_recently_seen))
-                  or (pellet_seen and algo.triangle_recently_seen and algo.is_triangle_pellet_distance_too_far())
-            ):
+            if self.can_load_pellet():
                 reason = "load_pellet_when_monitoring_pellet_not_seen_or_too_far"
-                if self.can_load_pellet():
-                    logit()
-                    self.load_pellet()
-                else:
-                    log_could_retry_shortly()
+                logit()
+                self.load_pellet()
                 return
+
             if self._prev_covered_state is not self._covered_state:
                 logger.debug("covered_state: %s -> %s", self._prev_covered_state, self._covered_state)
                 self._prev_covered_state = self._covered_state
+
             can_cover = algo.can_cover_pellet()
             can_release = algo.can_release_pellet()
             if self._prev_can_cover is not can_cover:
