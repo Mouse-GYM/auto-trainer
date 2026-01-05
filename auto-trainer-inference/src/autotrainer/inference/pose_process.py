@@ -1,5 +1,6 @@
 import logging.config
 import signal
+import threading
 import time
 from enum import IntEnum
 from multiprocessing import Process, Queue
@@ -103,6 +104,7 @@ class PoseProcess(Process):
         self._input_queue = self._live_input_queue
 
         self._process_live_when_ready = False
+        self._is_running = True
 
     def _do_run(self, *, log_dict_config: Optional[Dict]):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -148,6 +150,8 @@ class PoseProcess(Process):
             self._send_message(InferenceStatusMessageKind.Initialized, self._pose_model.body_parts)
             should_process = self._wait_for_start()
             if should_process:
+                thread = threading.Thread(target=self._handle_cmd_queue, daemon=True, name="CmdQueueHandler")
+                thread.start()
                 logger.info("entering pose_predict")
                 self._process()
         except Exception as err:
@@ -198,6 +202,32 @@ class PoseProcess(Process):
 
         return True
 
+    def _handle_cmd_queue(self):
+        while True:
+            try:
+                cmd, context = self._cmd_queue.get(timeout=1)
+            except Empty:
+                continue
+            logger.info("Handling command %s ...", cmd)
+            try:
+                if cmd == InferenceCommandMessageKind.Terminate:
+                    self._is_running = False
+                    return
+                elif cmd == InferenceCommandMessageKind.ProcessLive:
+                    # not anymore used from main process.
+                    # we rely on FrameIndexCategory
+                    # self._set_process_live()
+                    logger.verbose("Ignoring InferenceCommandMessageKind.ProcessLive")
+                elif cmd == InferenceCommandMessageKind.ProcessOffline:
+                    self._set_process_offline()
+                elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
+                    # NB: not anymore used actually.
+                    self._process_live_when_ready = True
+                else:
+                    logger.warning("Unhandled command: %s", cmd)
+            except Exception as err:
+                logger.warning("Error processing %s: %s", cmd, err)
+
     def _process(self):
         # import tensorflow as tf
         # gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -211,10 +241,11 @@ class PoseProcess(Process):
              ))
         frames_indices = numpy.ndarray(
             (self._input_queue.camera_count, self._input_queue.frames_per_camera), dtype="int64")
+        # use a pre-allocated copy for outputting the frames indices:
+        frames_indices_out = frames_indices.copy()
         prev_mode = None
         logger.info("%s: starting processing ..", self)
         d_q_put = self._data_queue.put
-        get_command = self._cmd_queue.get_nowait
         predict = self._pose_model.predict
         perf_add_c = self._perf_monitor.add_cycle
 
@@ -226,54 +257,18 @@ class PoseProcess(Process):
 
         reset_locals()
 
-        t_last_data = t_next_cmd = time.perf_counter()
-        while True:
-            t_now = time.perf_counter()
-            if t_now > t_next_cmd:
-                # do not check command queue on each loop turn, mostly useless
-                # and overhead is not that small
-                for _ in range(4):  # assuming we don't get "burst" of commands
-                    try:
-                        cmd, context = get_command()
-                    except Empty:
-                        t_next_cmd = t_now + 0.5
-                        # current processing speed of inference is ~0.05s / batch ; which has 3 frames per cam.
-                        # so it's unnecessary to wait smaller than that before trying reading next command.
-                        # also given all the related messages are infrequent and normally never following
-                        # the previous one with any that short delay
-                        #
-                        break
-                    logger.info("Handling command %s ...", cmd)
-                    try:
-                        if cmd == InferenceCommandMessageKind.Terminate:
-                            return
-                        elif cmd == InferenceCommandMessageKind.ProcessLive:
-                            # not anymore used from main process.
-                            # we rely on FrameIndexCategory
-                            # self._set_process_live()
-                            logger.verbose("Ignoring InferenceCommandMessageKind.ProcessLive")
-                        elif cmd == InferenceCommandMessageKind.ProcessOffline:
-                            self._set_process_offline()
-                        elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
-                            # NB: not anymore used actually.
-                            self._process_live_when_ready = True
-                        else:
-                            logger.warning("Unhandled command: %s", cmd)
-                    except Exception as err:
-                        logger.warning("Error processing %s: %s", cmd, err)
-                    # always get new ref:
-                    prev_iq = i_q
-                    reset_locals()
-                    if prev_iq is not i_q:
-                        logger.debug("new input_queue: %s", i_q)
+        p_last_data = time.perf_counter()
+
+        while self._is_running:
+            p_now = time.perf_counter()
 
             if prev_mode != self._mode:
                 logger.notice("Detected change of mode: %s", self._mode)
                 prev_mode = self._mode
 
             # should be removed once more confident
-            if i_q is self._offline_input_queue and t_now > t_last_data + 15:
-                logger.warning("auto-switching to online")
+            if i_q is self._offline_input_queue and p_now > p_last_data + 15:
+                logger.warning("timeout waiting offline data ; auto-switching to online")
                 self._set_process_live()
                 reset_locals()
 
@@ -281,7 +276,7 @@ class PoseProcess(Process):
                 time.sleep(0.001)
                 continue
 
-            t_last_data = t_now
+            p_last_data = p_now
             mode_used = InferenceMode.Live if i_q is self._live_input_queue else InferenceMode.Offline
 
             if (frames_indices[:, -1] < 0).any():
@@ -319,14 +314,18 @@ class PoseProcess(Process):
                 # * 3 : for X, Y and confidence
                 pose = [np.asarray([0] * 3 * len(self._pose_model.body_parts))] * frames_indices.size
                 # that will anyway be skipped in the consumer when needed
+
+            frames_indices_out[:] = frames_indices
+            # getting frame indices corruption in reader side without this.
+            # It could be eventually explained if the serialisation
+            # of the frames_indices numpy array happens after the return of the queue put()..
+            # which is not totally impossible.
+
             # NB:
             # the data queue reader/consumer takes care of deciding what to do with the result data:
             d_q_put((pose,
                      mode_used,
-                     frames_indices.copy(),  # getting frame indices corruption in reader side without this.
-                     #  frames_indices,  # it could be eventually explained if the serialisation
-                     # of the frames_indices numpy array happens after the return of the queue put()..
-                     # which is not totally impossible.
+                     frames_indices_out,
                      ))
 
             if not sent_live:

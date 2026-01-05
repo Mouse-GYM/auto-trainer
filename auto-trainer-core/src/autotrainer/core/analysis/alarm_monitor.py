@@ -4,7 +4,7 @@ import threading
 import time
 from typing import Optional, List, Set
 
-from autotrainer.core import ObservableObject
+from autotrainer.core import ObservableObject, get_perf_now
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.analysis.external_doors_monitor import ExternalDoorsMonitor
 from autotrainer.core.logging import get_verbose_logger
@@ -186,7 +186,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         topcam_attrs = self._topcam_presence_attrs
         load_cell = self._load_cell_monitor.context
         cfg = self._config
-        perf_now = time.perf_counter()
+        perf_now = get_perf_now()
         #
         reasons = set()
         #
@@ -261,7 +261,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         if not self._config.use_audio_load_cell_thrash:
             return
         if name == LoadCellMonitor.IS_THRASHING_DETECTED_PROPERTY:
-            perf_now = time.perf_counter()
+            perf_now = get_perf_now()
             load_cell = self._load_cell_monitor.context
             with self._lock:
                 self._load_cell_thrash_values.append((perf_now, value,
@@ -279,7 +279,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
             audio_monitor = self._audio_monitor
             with self._lock:
-                self._audio_thrash_values.append((time.perf_counter(), value,
+                self._audio_thrash_values.append((get_perf_now(), value,
                                                   audio_monitor.disengaged_age if value
                                                   else audio_monitor.engaged_age
                                                   ))

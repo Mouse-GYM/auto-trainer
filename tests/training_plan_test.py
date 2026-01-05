@@ -10,16 +10,15 @@ from unittest import mock
 
 import pytest
 
-from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode, SystemState
+from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode, SystemState, \
+    PelletState, IntersessionState
 from autotrainer.behavior.behavior_algorithm import ShiftXYZBufferHandler
-from autotrainer.core import AnimalSubject
-from autotrainer.device import MotorConfigurationFile
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.inference_model import InferenceModel
-from tools.acquisition.model.training_plan import load_training_plans, get_plan_id
+from tools.acquisition.model.training_plan import get_plan_id
 from top_fixtures import MockSystemMachine
 
 this_dir = Path(__file__).parent.resolve()
@@ -35,9 +34,6 @@ def inference_model(pose_algo):
 
 
 class TestTrainingPlan(MockSystemMachine):
-
-    def setup_method(self, test_method):
-        pass
 
     @pytest.fixture(autouse=True)
     def training_plans(self, trainer_config_dir):
@@ -72,6 +68,7 @@ class TestTrainingPlan(MockSystemMachine):
         try:
             self._test_training_plan(app_model, user_pref, machine, caplog)
         finally:
+            caplog.set_level(logging.CRITICAL)
             # NB: for some reason the last finally: above in app_model() fixture isn't called
             # when this test case fails for any reason. pytest seems to be stuck in some loop post-analysis code,
             # but before teardown, related to/with tmpdir fixture.. maybe the files we are possibly writing in it
@@ -85,11 +82,16 @@ class TestTrainingPlan(MockSystemMachine):
 
         algo = app_model.behavior.algorithm
 
+        assert app_model.loaded_configuration is None
         assert app_model.load_configuration() is True
+
+        assert algo.intersession_enabled is True  # required
+        # NB: do not try change some settings after config is loaded,
+        # the loaded parameters/settings (from config file) will be reused/reset with training plan enter.
 
         shift_xyz_buffer_handler = ShiftXYZBufferHandler(size=2)  # will also check this
         algo.shift_xyz_handler.set_handle_new_shift_xyz(shift_xyz_buffer_handler)
-        algo.intersession_enabled = True
+
         app_model.training_mode = TrainingMode.AUTOMATIC
         app_model.on_capture_start()
 
@@ -122,6 +124,7 @@ class TestTrainingPlan(MockSystemMachine):
         ]
 
         for session_idx in range(2):
+            self.increment_perf_now()
             assert "Received processed shift xyz: " not in caplog.text
             assert plan.current_phase == plan_start_phase
             caplog.clear()
@@ -175,26 +178,57 @@ class TestTrainingPlan(MockSystemMachine):
     def _make_session(self, app_model, machine, analysis_result, *,
                       hands_min_dist: Optional[float]=None):
         algo = app_model.behavior.algorithm
-        machine.enter_tunnel(reason="manual")
-        self._load_cell._is_engaged = True
-        # self.make_load_cell_active()
-        assert machine.state == SystemState.tunnel
-        # self.make_recording_aged_enough()
         if hands_min_dist is not None:
             algo.pellet_hands_min_distance = hands_min_dist
-        self.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
+        #
+        pellet_m = self._machine.pellet
+        assert pellet_m.state == PelletState.monitoring
+        #
+        # machine.enter_tunnel(reason="manual")
+        algo.update_triangle_seen(True)
+        algo.update_pellet_seen(True)
+        #
+        self._load_cell.is_engaged = True
+        #
+        assert machine.state == SystemState.tunnel
+        algo.update_triangle_seen(True)
+        algo.update_pellet_seen(True)
+        self.increment_perf_now(1e-9)
         assert algo.pellet_recently_seen
-        # self.make_load_cell_inactive()
-        self._load_cell._is_engaged = False
+        assert algo.is_in_session
+        assert pellet_m.state == PelletState.monitoring  # still
+        assert algo.can_release_pellet()
+        self.increment_perf_now(1e-9)
         with contextlib.ExitStack() as stack:
+            # to be sure:
+            algo.update_triangle_seen(True)
+            algo.update_mouse_seen(True)
+            algo.update_pellet_seen(True)
             stack.enter_context(self.mock_perform_segmentation())
-            machine.exit_tunnel(reason="manual")
             stack.enter_context(self.mock_perform_detection())
+            assert pellet_m.state == PelletState.monitoring  # still
+            self._load_cell.is_engaged = False  # exit tunnel
+            assert not algo.is_in_session
+            assert algo.system_state == SystemState.intersession
+            assert algo.intersession_state == IntersessionState.segmentation
+            assert pellet_m.state == PelletState.retract  # Retract !!
+            self.increment_perf_now(1e-9)
             self.mock_complete_segmentation(True)
+            assert algo.system_state == SystemState.intersession
+            assert algo.intersession_state == IntersessionState.detection
             machine._inference.detection_result_ready(analysis_result)
             self.mock_complete_detection(True)
-            assert machine.state == SystemState.cage
+            assert algo.intersession_state == IntersessionState.idle
+            assert algo.system_state == SystemState.cage
+            assert pellet_m.state == PelletState.retract  # still
 
+        assert not algo.is_in_session
+
+        self.mock_pellet_ack()  # for retract
+        assert self.pellet_state_trans[-2:] == [PelletState.sending, PelletState.monitoring]
+        self.mock_pellet_ack()  # for send
+
+        algo.capture_status = CaptureProcessStatus.RUNNING
         assert machine.state == SystemState.cage  # still ofc.
-        # app_model.hardware.send_home()
 
+        self.increment_perf_now(1)

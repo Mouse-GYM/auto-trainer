@@ -4,14 +4,13 @@ import pytest
 
 from autotrainer.behavior import DiamondTriangleOffsetConfig, BehaviorAlgorithm
 from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
-from autotrainer.device import MotorConfigurationFile, CompoundMovementFile
+from autotrainer.device import MotorConfigurationFile, CompoundMovements
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.user_preferences import UserPreferences
 
 
-this_dir = Path(__file__).parent
-top_dir = this_dir.parent  # supposed be the repo top/root dir
+import top_fixtures
 
 
 @pytest.fixture
@@ -24,6 +23,8 @@ def trainer_config_dir(tmp_path):
 @pytest.fixture
 def system_config(trainer_config_dir, tmp_path):
     config = SystemConfiguration()
+    # mostly ~all default params are good, but we need:
+    config.behavior.pellet_delivery.is_intersession_analysis_enabled = True
     for cam_member in (CameraId.Left, CameraId.Right, CameraId.Web):
         params = dict(width=300, height=200)
         cam = CameraConfiguration(name=cam_member.name, params=params)
@@ -38,14 +39,6 @@ def system_config(trainer_config_dir, tmp_path):
 @pytest.fixture
 def config_file_path(trainer_config_dir):
     return trainer_config_dir.joinpath(SystemConfiguration.make_default_yaml_config_path(trainer_config_dir))
-
-
-@pytest.fixture(autouse=True)
-def motor_config(monkeypatch):
-    monkeypatch.setattr(MotorConfigurationFile, "DEFAULT_LOCATION",
-                        this_dir.joinpath(MotorConfigurationFile.DEFAULT_LOCATION.name))
-    monkeypatch.setattr(CompoundMovementFile, "DEFAULT_LOCATION",
-                        this_dir.joinpath(CompoundMovementFile.DEFAULT_LOCATION.name))
 
 
 @pytest.fixture
@@ -74,23 +67,14 @@ def user_pref(tmp_path, trainer_config_dir, animals_dir, settings_ini_path):
 @pytest.fixture
 def calib_dir():
     # could be todo: copy it top-level, or generate new temporary one as above for system config.
-    return top_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
-
-
-@pytest.fixture(autouse=True)
-def diamond_config_path(monkeypatch):
-    path = this_dir.joinpath("diamond_triangle_offset.yaml")
-    monkeypatch.setattr(DiamondTriangleOffsetConfig, 'DEFAULT_CONFIG_PATH', path)
-    # prev_default = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH
-    # DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH = path
-    yield path
-    # DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH = prev_default
+    return top_fixtures.repo_root_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
 
 
 @pytest.fixture
-def app_model(user_pref, calib_dir, diamond_config_path, system_config):
+def app_model(user_pref, calib_dir, diamond_config_path, system_config, monkeypatch):
     # for now:
-    BehaviorAlgorithm._no_handler_thread = True  # to be safe to start with
+    monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
+    assert BehaviorAlgorithm._no_handler_thread is True  # to be safe to start with
     #
     app = AppModel(user_pref, calib_dir=calib_dir)
     return app

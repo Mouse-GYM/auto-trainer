@@ -389,8 +389,9 @@ class WithThreadIdQueueListener(logging.handlers.QueueListener):
         get_created = operator.attrgetter("created")
         while True:
             new_recs = self._get_2_sorter()
-            want_quit = any(r is None for r in new_recs)
-            if want_quit:
+            want_quit = False
+            while any(r is None for r in new_recs):
+                want_quit = True
                 new_recs.remove(None)
             buffer.extend(new_recs)
             p_now = time.perf_counter()

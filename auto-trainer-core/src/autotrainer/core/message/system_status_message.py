@@ -84,35 +84,26 @@ class SystemStatusMessageKind(IntEnum):
     """This value is deprecated.  Use MEASUREMENTS if the object you are passing with this identifier conforms to the
     MeasurementMessage protocol."""
 
-    @classmethod
-    def is_member(cls, value):
-        return value in cls._value2member_map_
-
 
 class StepperStatusMessage(Protocol):
     @property
     def position(self) -> float:
         """Current motor position in mm."""
-        pass
 
     @property
     def send_position(self) -> float:
         """Current motor delivery position in mm."""
-        pass
 
     @property
     def is_at_limit(self) -> bool:
         """True if the limit switch has been hit, otherwise False."""
-        pass
 
 
 class ServoStatusMessage(Protocol):
     @property
     def location(self) -> float:
         """Current servo position in degrees."""
-        pass
 
     @property
     def status(self) -> int:
         """Current servo status value."""
-        pass

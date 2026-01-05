@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Tuple, Callable, Any
+from typing import Tuple, Callable, Any, get_type_hints
 
 from events import Events
 
@@ -28,7 +28,7 @@ class StateMachine:
     def __init__(self, *, initial_state, event_names: Tuple[str, ...] = ()):
         super().__init__()
         self._state = initial_state
-        self._events = self._events_class(event_names + ('state_changed', 'property_changed'))
+        self._events = self._events_class(event_names + tuple(get_type_hints(StateMachineEvents)))
 
     @property
     def events(self):

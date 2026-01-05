@@ -118,28 +118,25 @@ class SystemConfiguration:
                          # we sort/iter by dataclasses.fields() order in our representer function
                          sort_keys=False)
 
-    def save_file(self, path: Union[Path, str], as_yaml: bool = False, as_json: bool = False) -> bool:
+    def save_file(self, path: Union[Path, str], as_yaml: bool = False, as_json: bool = False):
+        if not (as_json or as_yaml):
+            raise ValueError("Missing one of as_json or as_yaml")
         path = Path(path)
-        try:
-            if as_json:
-                p = path.with_suffix(".json")
-                logger.notice("Writing to %r as json", p.as_posix())
-                content = json.dumps(asdict(self))
-                # dump before writing to file, to prevent empty file on dump issue
-                with p.open("w") as file:
-                    file.write(content)
-            if as_yaml:
-                p = path.with_suffix(".yaml")
-                logger.notice("Writing to %r as yaml", p.as_posix())
-                content = self.dump_yaml()
-                # dump before writing to file, to prevent empty file on dump issue
-                with p.open("w") as file:
-                    file.write(content)
-        except Exception as err:
-            logger.exception("Error saving config to %s: %s", path, err)
-            return False
-
-        return True
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if as_json:
+            p = path.with_suffix(".json")
+            logger.notice("Writing to %r as json", p.as_posix())
+            content = json.dumps(asdict(self))
+            # dump before writing to file, to prevent empty file on dump issue
+            with p.open("w") as file:
+                file.write(content)
+        if as_yaml:
+            p = path.with_suffix(".yaml")
+            logger.notice("Writing to %r as yaml", p.as_posix())
+            content = self.dump_yaml()
+            # dump before writing to file, to prevent empty file on dump issue
+            with p.open("w") as file:
+                file.write(content)
 
     def get_camera(self, camera_id: CameraId) -> Optional[CameraConfiguration]:
         if len(self._camera_map) == 0 or camera_id not in self._camera_map:

@@ -212,7 +212,7 @@ class BehaviorContent(ContentWidget):
         self.setLayout(layout)
 
         self._inference_status.setText(f"Inference: {inference_model.status}")
-        self._intersession_toggle.setChecked(behavior_model.is_intersession_enabled)
+        self._intersession_toggle.setChecked(behavior_model.algorithm.intersession_enabled)
 
         self._inference_model_property_changed("model_location", inference_model.model_location, None)
         #
@@ -226,7 +226,6 @@ class BehaviorContent(ContentWidget):
         intersession_machine.events.state_changed += lambda old, new: self._intersession_state_label.setText(new)
 
         algo.property_changed += self._algorithm_property_changed
-        behavior_model.property_changed += self._behavior_model_property_changed
         self.status_changed.connect(self._inference_status.setText)
         self.set_is_editable(False)
 
@@ -237,7 +236,7 @@ class BehaviorContent(ContentWidget):
         pass
 
     def _intersession_toggle_state_changed(self, x: int):
-        self._behavior_model.is_intersession_enabled = x != 0
+        self._behavior_model.algorithm.intersession_enabled = x != 0
 
     def _head_fixation_toggle_state_changed(self, x: int):
         self._behavior_model.algorithm.head_fixation_enabled = x != 0
@@ -247,7 +246,9 @@ class BehaviorContent(ContentWidget):
 
     def _algorithm_property_changed(self, name, value, _):
         props = BehaviorAlgoProps
-        if name == props.BASELINE_INTENSITY:
+        if name == props.INTERSESSION_ENABLED:
+            self._intersession_toggle.setChecked(value)
+        elif name == props.BASELINE_INTENSITY:
             self._baseline_label.setText(f"{value}%")
         elif name == props.HEAD_FIXATION_ENABLED:
             self._head_fixation_toggle.setChecked(value)
@@ -263,10 +264,6 @@ class BehaviorContent(ContentWidget):
             self._successful_reaches_label.update_values(day=value)
         elif name == props.TOTAL_SUCCESSFUL_REACHES:
             self._successful_reaches_label.update_values(total=value)
-
-    def _behavior_model_property_changed(self, name, value, _):
-        if name == "is_intersession_enabled":
-            self._intersession_toggle.setChecked(value)
 
     def _app_model_property_changed(self, name, value, _):
         if name == AppModel.Props.SELECTED_ANIMAL:
@@ -288,4 +285,3 @@ class BehaviorContent(ContentWidget):
             self._prev_pellet_shift_label.update_coordinate(value)
         elif name == ShiftXYZHandler.LAST_PROCESSED_SHIFT_XYZ:
             self._prev_processed_pellet_shift_label.update_coordinate(value)
-

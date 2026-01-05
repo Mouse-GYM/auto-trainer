@@ -213,14 +213,14 @@ def make_3d_calib(
         #
 
         for cam in cameras:
-            if not cam.is_primary:
+            if cam.is_primary:
                 logger.info("%s: prepare capture ..", cam.name)
                 if not cam.on_prepare_capture():
                     raise RuntimeError(f"{cam.name}.on_prepare_capture() failed")
                 cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
 
         for cam in cameras:
-            if cam.is_primary:
+            if not cam.is_primary:
                 logger.info("%s: prepare capture ..", cam.name)
                 if not cam.on_prepare_capture():
                     raise RuntimeError(f"{cam.name}.on_prepare_capture() failed")
@@ -250,8 +250,8 @@ def make_3d_calib(
         max_requests = 1
         cur_requests = collections.deque(maxlen=max_requests)
         #
-        logger.info("Now executing calib moves ..")
         time.sleep(0.05)
+        logger.info("Now executing calib moves ..")
 
         for coord, value in moves:
             if len(cur_requests) >= max_requests:

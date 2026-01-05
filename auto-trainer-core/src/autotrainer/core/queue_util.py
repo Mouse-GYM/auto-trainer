@@ -10,10 +10,13 @@ logger = get_verbose_logger(__name__)
 
 
 def clear_queue(queue: Union[Queue, FixedArrayQueue],
-                *, log_dumped: bool=False):
+                *, log_dumped: bool=False, name: str=""):
     """Empty a queue."""
     if queue is None or sys.platform == "darwin":
         return
+
+    if not name:
+        name = str(queue)
 
     warned = False
     flushed = 0
@@ -24,18 +27,19 @@ def clear_queue(queue: Union[Queue, FixedArrayQueue],
             flushed += 1
             task_done()
             if log_dumped:
-                logger.debug("flushed %s: %s", type(obj), obj)
+                logger.debug("queue %s: flushed %s: %s", name, type(obj), obj)
         except Empty:
             empty = queue.empty()
             qsize = queue.qsize()
             if not empty or qsize > 0:
                 if not warned:
+                    log_dumped = True
                     warned = True
                     logger.warning("queue %s: raised Empty but empty()=%s and qsize()=%s",
-                                   queue, empty, qsize)
+                                   name, empty, qsize)
                 continue
             break
-    logger.debug("Flushed %s items from %s", flushed, queue)
+    logger.debug("queue %s: flushed %s items", name, flushed)
 
 
 def trim_queue(queue: Queue, limit: int) -> bool:

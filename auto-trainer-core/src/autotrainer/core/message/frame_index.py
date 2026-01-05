@@ -3,8 +3,7 @@ import enum
 
 class FrameIndexCategory(enum.IntEnum):
 
-    SWITCH_TO_ONLINE = -6
-    SWITCH_TO_OFFLINE_MODE = -5  # unused, could be removed. instead EOF_RECORDING is used given having same effect.
+    SWITCH_TO_ONLINE = -5
     PADDING = -4
     EOF_OFFLINE_PROCESSING = -3
     EOF_RECORDING = -2

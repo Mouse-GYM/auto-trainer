@@ -17,7 +17,7 @@ import numpy
 import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
-    InferenceConfiguration, Offset3DTuple, ApiEventKind
+    InferenceConfiguration, Offset3DTuple, ApiEventKind, get_perf_now
 from autotrainer.core.logging import get_verbose_logger, setup_logging, make_log_dict_config, install_log_exception_hook
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
     InferenceProtocol, IntersessionBlock, IntersessionDetection
@@ -77,10 +77,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
         mp_ctx = get_mp_ctx()
         self._thread_lock = threading.RLock()  # for perform_detection / perform_segmentation
-        self._data_queue = mp_ctx.Queue(maxsize=64)  # inference result data queue
-        self._inference_cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to inference process
-        self._msg_queue = mp_ctx.Queue(maxsize=64)
-        self._data_monitor_cmd_queue = mp_ctx.Queue(maxsize=16)
+        self._output_data_queue = mp_ctx.Queue(maxsize=64)  # inference result data queue
+        self._cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to inference process
+        self._notif_msg_queue = mp_ctx.Queue(maxsize=64)
+        self._data_monitor_cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to monitor data result process
 
         self._offline_queue: Optional[FixedArrayMultiQueue] = None
         self._offline_thread: Optional[Thread] = None
@@ -88,8 +88,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._is_enabled = False
         self._model_location = ""
         self._algorithm = pose_algorithm
-        # self._algorithm.pose_changed += self._pose_changed
-        # no need, we have the pose response in the monitor data queue function
         self._calib_dir = calib_dir
 
         self._msg_thread = None
@@ -210,24 +208,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # the trigger for pose process to switch to offline queue processing is now delivered by
         # camera capture itself, which send an EOF_RECORDING when a video/session record finishes.
 
-        # once the message is sent, also wait a bit,
-        # this is to give some time to inference process to switch to offline queue,
-        # and also reset its offline read queue side:
-        # time.sleep(0.5)
-        # Not anymore needed, see video_capture and below __feed_intersession_analysis.
         self._offline_thread = Thread(
             target=self._feed_intersession_analysis,
             args=(intersession_block,),
             name="feed_intersession_analysis",
             daemon=True,
         )
-        # but then, wait again a bit of more time.
-        # this is to give some time to the monitor data queue thread, to get/detect the end of recording in progress,
-        # and switch to offline processing request (which is coming indirectly from the pose process),
-        # and get a chance to close the "h5-live" and frames-idx-already-processed file handles.
-        # time.sleep(0.5)
-        # NB: this might not be enough though, we probably should use a threading event (with a timeout eventually)
-        # Now using thread event.
         self._offline_thread.start()
         return configuration
 
@@ -242,7 +228,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         logger.info("performing detection analysis on %s", configuration)
         self._check_previous_offline_thread("perform_detection")
         intersession_detection = self._intersession_detection = IntersessionDetection(configuration)
-        project = self._project
+        project = self._project.to_local_value()
         self._offline_thread = Thread(target=self._intersession_process, name="intersession_process",
                                       args=(project, intersession_detection,))
         self._offline_thread.start()
@@ -278,8 +264,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         if self._data_monitor_proc is None:
             proc = self._data_monitor_proc = InferenceMonitorDataProc(
                 project=self._project,
-                pose_data_queue=self._data_queue,
-                msg_queue=self._msg_queue,
+                pose_data_queue=self._output_data_queue,
+                msg_queue=self._notif_msg_queue,
                 cmd_queue=self._data_monitor_cmd_queue,
                 frames_per_cam=live_queue.frames_per_camera,
                 monitored_parts_offsets=list(self._pair_offsets_2_handler),
@@ -302,9 +288,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._pose_process = PoseProcess(
             live_queue,
             self._offline_queue,
-            data_queue=self._data_queue,
-            cmd_queue=self._inference_cmd_queue,
-            msg_queue=self._msg_queue,
+            data_queue=self._output_data_queue,
+            cmd_queue=self._cmd_queue,
+            msg_queue=self._notif_msg_queue,
             model_location=self._model_location,
         )
 
@@ -345,10 +331,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
             self._set_status(InferenceStatus.stopped)
 
-            clear_queue(self._data_queue)
-            clear_queue(self._msg_queue)
-            clear_queue(self._inference_cmd_queue)
-            clear_queue(self._data_monitor_cmd_queue)
+            clear_queue(self._output_data_queue, name="inference_output_data_queue")
+            clear_queue(self._notif_msg_queue, name="inference_notif_messages_queue")
+            clear_queue(self._cmd_queue, name="inference_cmd_queue")
+            clear_queue(self._data_monitor_cmd_queue, name="inference_output_data_cmd_queue")
 
         pool = self._process_pool
         if pool is not None:
@@ -362,6 +348,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         thread = self._offline_thread
         if thread is not None:
             thread.join(3)
+            if thread.is_alive():
+                logger.warning("offline thread still alive")
 
         # always:
         self._intersession_block = None
@@ -378,30 +366,38 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             data_monitor_cmd_queue.put(None)
             data_proc.join(3)
             if data_proc.exitcode is None:
+                logger.warning("sending interrupt to monitor data process")
                 os.kill(data_proc.pid, signal.SIGINT)
                 data_proc.join(3)
                 if data_proc.exitcode is None:
+                    logger.warning("terminating to monitor data process")
                     data_proc.terminate()
                     data_proc.join(2)
                     if data_proc.exitcode is None:
+                        logger.warning("killing monitor data process")
                         data_proc.kill()
                         data_proc.join(5)
             logger.verbose("joined %s ; exit_code=%s", data_proc, data_proc.exitcode)
 
         msg_thread = self._msg_thread
-        msg_queue = self._msg_queue
+        msg_queue = self._notif_msg_queue
         if msg_thread is not None:
             msg_queue.put(None)
             logger.debug("joining msg_thread")
             msg_thread.join()
             self._msg_thread = None
 
-            logger.verbose("closing mp queues")
-            for mp_q in (data_monitor_cmd_queue, self._data_queue, self._inference_cmd_queue, msg_queue):
-                if mp_q is not None:
-                    clear_queue(mp_q, log_dumped=True)
-                    logger.debug("closing %s size=%s", mp_q, mp_q.qsize())
-                    mp_q.close()
+        logger.verbose("closing mp queues")
+        for mp_q, name in (
+            (data_monitor_cmd_queue, "inference_data_monitor_cmd_queue"),
+            (self._output_data_queue, "inference_output_data_queue"),
+            (self._cmd_queue, "inference_cmd_queue"),
+            (msg_queue, "inference_msg_queue"),
+        ):
+            if mp_q is not None:
+                clear_queue(mp_q, log_dumped=True, name=name)
+                logger.debug("queue: %s: closing size=%s", name, mp_q.qsize())
+                mp_q.close()
 
     def load_configuration(self, configuration: InferenceConfiguration):
         self.model_location = configuration.pose_model_location
@@ -420,7 +416,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._on_property_changed(self.STATUS, status, prev)
 
     def _send_message(self, kind: InferenceCommandMessageKind, context: typing.Any = None):
-        cmd_queue = self._inference_cmd_queue
+        cmd_queue = self._cmd_queue
         # logger.debug("sending command msg %s qsize=%s", kind, cmd_queue.qsize())
         cmd_queue.put((kind, context))
         logger.debug("sent command msg %s qsize=%s", kind, cmd_queue.qsize())
@@ -458,7 +454,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     def _monitor_msg_queue(self):
         while True:
             try:
-                raw = self._msg_queue.get(timeout=0.1)
+                raw = self._notif_msg_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
             if raw is None:
@@ -582,13 +578,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             if cur_status not in correct_inference_status:
                 raise InferenceIncorrectStatus(f"not correct status: {cur_status}")
         #
-        perf_timeout = time.perf_counter() + 15  # intersession_wait_time is too small
+        perf_timeout = get_perf_now() + 10  # intersession_wait_time is too small
         # the pose process and data monitor thread have some delay between them,
         # sometimes up to several seconds (4-5).
         # wait that we get the event from monitor data queue closing its write side to live files:
         logger.debug("waiting stop_recorded on %s", self._data_monitor_proc.stop_recorded)
         while not self._data_monitor_proc.stop_recorded.wait(1):
-            if time.perf_counter() > perf_timeout:
+            if get_perf_now() > perf_timeout:
                 raise RuntimeError("timeout waiting for intersession stop_recorded event")
             check_correct_status()
         self._data_monitor_proc.stop_recorded.clear()
@@ -602,10 +598,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         captures_d = {}
         videos_frame_count: Dict[int, int] = {}
         video_paths = [cams_paths[cdx][0] for cdx in range(n_cams)]
-        logger.verbose("checking can open video files %s", video_paths)
+        logger.debug("checking can open video files %s", video_paths)
+        p_before = get_perf_now()
+        perf_timeout = p_before + 10
         while True:
             check_correct_status()
-
             for cdx, cam in enumerate(cams):
                 if cdx not in captures_d:
                     capture, frame_count = check_frame_count(video_paths[cdx])
@@ -614,11 +611,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                         videos_frame_count[cdx] = frame_count
             if len(captures_d) >= n_cams:
                 break
-            if time.perf_counter() > perf_timeout:
+            if get_perf_now() > perf_timeout:
                 EventManager.default().post_event_content(ApiEventKind.intersessionSegmentationInputError)
-                raise RuntimeError(f"timeout waiting for intersession video files {video_paths}, trying continue anyway")
-
+                raise RuntimeError(f"timeout waiting for intersession video files {video_paths}")
             time.sleep(0.1)  # overkill to immediately retry
+
+        logger.debug("Waited %.1fs for video files ready", get_perf_now() - p_before)
 
         captures: List[cv2.VideoCapture] = [captures_d[cdx] for cdx in range(len(cams))]
         cams_processed_fhs = [
@@ -767,7 +765,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         return intersession_process(*args, **kwargs)
 
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
-        project = project.to_local_value()  # get local ref to current project infos,
         detection_config = intersession_detection.configuration
         # *** but *** force update with intersession_detection when & session, to be totally sure:
         project.session = detection_config.session_index

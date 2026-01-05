@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import multiprocessing
+import os
 import pickle
 import queue
 import threading
@@ -332,12 +333,14 @@ class AppModel(ObservableObject):
             logger.verbose("consider_release_pellet: calling try_next_state ; "
                            "pellet_recently_seen=%s age=%.2f",
                            algo.pellet_recently_seen, algo.pellet_seen_age)
-            #   and algo.capture_status_age >= algo.recording_age_release_pellet_threshold:
             # this is called via a timer, which are not necessarily very precise,
             # and to be safe on all side, do not check again, the actual age could even be slightly less than the
             # desired threshold (but very very near). So to not miss that case: do not "recheck"
-            self._behavior.system_machine.pellet.environment_changed(
-                pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-start-recording")
+            if algo.can_release_pellet():
+                self._behavior.system_machine.pellet.environment_changed(
+                    pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-recording-aged-enough")
+                # NB: this is not really necessary anymore as it's handled by pellet machine itself during monitoring now,
+                # but this makes the call faster, not waiting the next inference result passed to pellet machine environement changed
         else:
             logger.verbose("consider_release_pellet but not in session")
 
@@ -694,7 +697,7 @@ class AppModel(ObservableObject):
     #
 
     def add_animal(self, name: str, select: bool = False) -> Optional[AnimalSubject]:
-        if not name or len(name) == 0:
+        if not name:
             return None
 
         matching_animals = [x for x in self._animals if x.name == name]
@@ -784,6 +787,8 @@ class AppModel(ObservableObject):
         #
         synced_cameras = (self._left_camera, self._right_camera)  # normally/usually left cam is primary
         did_start = True
+
+        # 1) prepare synced primary camera(s)
         if did_start:
             for camera in synced_cameras:
                 if camera.is_primary and camera.is_enabled:
@@ -793,11 +798,13 @@ class AppModel(ObservableObject):
                         self.on_error("Camera Process Failed",
                                       _failed_camera_template(camera.name, camera.last_error))
                         break
+                    # 1.1) wait it's running
                     if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5):
                         did_start = False
                         self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
                         break
 
+        # 2) prepare synced non-primary camera(s)
         if did_start:
             for camera in synced_cameras:
                 if not camera.is_primary and camera.is_enabled:
@@ -808,6 +815,7 @@ class AppModel(ObservableObject):
                                       _failed_camera_template(camera.name, camera.last_error))
                         break
 
+        # 3) wait all synced cameras are running
         if did_start:
             p_before = time.perf_counter()
             p_timeout = p_before + 10
@@ -820,12 +828,20 @@ class AppModel(ObservableObject):
                         break
                     logger.verbose("%s now running", camera.name)
 
+        # 4) trigger enable capture on synced cameras
         if did_start:
+            # 4.1) first on non-primary
             for camera in synced_cameras:
-                if camera.is_enabled:
+                if not camera.is_primary and camera.is_enabled:
+                    logger.info("Starting capture on %s", camera.name)
+                    camera.on_capture_start()
+            # 4.2) then on primary
+            for camera in synced_cameras:
+                if camera.is_primary and camera.is_enabled:
                     logger.info("Starting capture on %s", camera.name)
                     camera.on_capture_start()
 
+        # 5) remaining non-synced camera(s)
         camera = self._top_camera
         if did_start and camera.is_enabled:
             logger.info("Preparing capture on %s", camera.name)
@@ -834,10 +850,11 @@ class AppModel(ObservableObject):
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(camera.name, camera.last_error))
             else:
-                camera.on_capture_start()
                 if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5):
                     did_start = False
                     self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
+                else:
+                    camera.on_capture_start()
 
         if not did_start:
             logger.error("failed to start all subprocesses")
@@ -975,13 +992,29 @@ class AppModel(ObservableObject):
         else:
             logger.info("using configuration from %r", file_path.as_posix())
 
+        prebuffer_duration = 0
+
         if (camera := configuration.get_camera(CameraId.Left)) is not None:
             self._left_camera.load_configuration(camera)
+            prebuffer_duration = camera.record_prebuffer_duration
         if (camera := configuration.get_camera(CameraId.Right)) is not None:
             self._right_camera.load_configuration(camera)
+            if camera.record_prebuffer_duration != prebuffer_duration:
+                logger.warning("left & right cameras don't have same record_prebuffer_duration: %s vs %s ; using max",
+                               camera.record_prebuffer_duration, prebuffer_duration)
+            prebuffer_duration = max(prebuffer_duration, camera.record_prebuffer_duration)
         if (camera := configuration.get_camera(CameraId.Web)) is not None:
-            camera.record_prebuffer_duration = 0  # force for now ; so to not keep a buffer for nothing in topcam
             self._top_camera.load_configuration(camera)
+
+        if prebuffer_duration > 0:
+            prebuffer_scale = os.getenv("AUTOTRAINER_PREBUFFER_SCALE")
+            if prebuffer_scale is not None:
+                prebuffer_duration *= float(prebuffer_scale)
+                logger.notice("Using AUTOTRAINER_PREBUFFER_SCALE=%s ; prebuffer_duration -> %.3f",
+                              prebuffer_scale, prebuffer_duration)
+
+        logger.verbose("Will use algo record_prebuffer_duration=%.1f seconds", prebuffer_duration)
+        self._behavior.algorithm.record_prebuffer_duration = prebuffer_duration
 
         self.inference.load_configuration(configuration.inference)
 
@@ -1154,21 +1187,21 @@ class AppModel(ObservableObject):
         logger.verbose("Setting animal base positions and sending to %s is_pellet_dcs=%s",
                        xyz.humanize(n_digits=1), animal.is_pellet_dcs)
         algo = self._behavior.algorithm
-        cfg = algo.diamond_triangle_config
-        if cfg is None and animal.is_pellet_dcs:
+        diamond_cfg = algo.diamond_triangle_config
+        if diamond_cfg is None and animal.is_pellet_dcs:
             logger.warning("loaded animal with pellet DCS, but no diamond-triangle config, forcing to 0")
             animal.is_pellet_dcs = False
             animal.pellet_x = animal.pellet_y = animal.pellet_z = 0
             self._save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
         if animal.is_pellet_dcs:
-            assert cfg is not None
+            assert diamond_cfg is not None
             _xyz = xyz
-            xyz = cfg.diamond_to_motor(xyz)
+            xyz = diamond_cfg.diamond_to_motor(xyz)
             logger.verbose("converted %s to %s", _xyz.humanize(), xyz.humanize())
         else:
-            if cfg is not None:
+            if diamond_cfg is not None:
                 assert not animal.is_pellet_dcs
-                save_xyz = cfg.motor_to_diamond(xyz)
+                save_xyz = diamond_cfg.motor_to_diamond(xyz)
                 logger.notice("Converting animal pellet XYZ to DCS: %s -> %s",
                               xyz.humanize(), save_xyz.humanize())
                 animal.pellet_x = save_xyz.x
@@ -1182,6 +1215,10 @@ class AppModel(ObservableObject):
         hardware.set_x(xyz.x)
         hardware.set_y(xyz.y)
         hardware.set_z(xyz.z)
+        if algo.can_cover_pellet():
+            hardware.cover_pellet()
+        else:
+            hardware.release_pellet()
         hardware.send_pellet()
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
@@ -1205,9 +1242,6 @@ class AppModel(ObservableObject):
             prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
             if value != prev:
                 self._save_animal_metadata(animal, sender="baseline_magnet_intensity")
-        # elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
-        #     self._hardware.set_auto_correct_motor_drift(value)
-        # already handled by SystemMachine
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal
@@ -1227,7 +1261,7 @@ class AppModel(ObservableObject):
                 logger.verbose("hardware set_xyz has NaN/None still: %s", t)
                 return
             changed = False
-            xyz = orig_xyz = Offset3DTuple(*t)
+            xyz = Offset3DTuple(*t)
             cfg = self._behavior.algorithm.diamond_triangle_config
             if cfg is None:
                 changed |= animal.is_pellet_dcs

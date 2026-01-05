@@ -68,7 +68,3 @@ class SystemCommandKind(IntEnum):
     SETTINGS = 1002  # TODO Specific to original hardware head fix unit and not used in user apps.  Remove eventually.
     STREAM_START = 1003  # TODO n/a new hardware, but required for original.
     STREAM_STOP = 1004  # TODO n/a new hardware, but required for original.
-
-    @classmethod
-    def is_member(cls, value):
-        return value in cls._value2member_map_

@@ -16,7 +16,7 @@ from autotrainer.core.configuration import SystemConfigurationDumper
 logger = get_verbose_logger(__name__)
 
 
-class CameraId(IntEnum, Enum):
+class CameraId(IntEnum):
     Left = 0
     Right = 1
     Web = 2
@@ -40,7 +40,7 @@ class CameraConfiguration:
     is_enabled: bool = False
     is_record_enabled: bool = False
     record_mode: int = 0
-    record_prebuffer_duration: float = 2
+    record_prebuffer_duration: float = 1  # seconds, delay of pre-buffer to use/record when start-recording is executed
     is_still_image_capture_enabled: bool = False
     still_image_capture_interval: float = 5.0
     scheme: str = ""
