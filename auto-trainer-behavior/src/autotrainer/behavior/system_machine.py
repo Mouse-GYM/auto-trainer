@@ -515,7 +515,7 @@ class SystemMachine(StateMachine):
         if __debug__:
             t_last = getattr(self, "_last_pose_changed_logged", 0)
             p_now = get_perf_now()
-            if p_now - t_last >= 5:
+            if p_now - t_last >= 30:
                 logger.debug("pose_changed: %s", response)
                 self._last_pose_changed_logged = p_now
         #
