@@ -15,7 +15,8 @@ from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessa
                                QSpinBox, QDoubleSpinBox)
 import qtawesome as qta
 
-from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration
+from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
+    calculate_std_dev_manual
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.pose_elements import SceneElement
@@ -29,7 +30,7 @@ from autotrainer.pyside.content_widget import InvokeMethod
 
 from autotrainer.training import TrainingPlan
 
-from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.model.app_model import AppModel, AppModelStatus
 from tools.acquisition.model.handle_3d_calibration import make_3d_calib
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.training_plan import get_plan_id
@@ -52,9 +53,15 @@ class MainWindow(QMainWindow):
     training_mode_changed = Signal(TrainingMode)
     running_status_changed = Signal(bool)  # True == running
 
-    def __init__(self, app: QApplication, user_preferences: UserPreferences, configuration: str = None,
-                 app_version: str = "", is_dev: bool = False):
-        super(MainWindow, self).__init__(None)
+    def __init__(
+        self,
+        app: QApplication,
+        user_preferences: UserPreferences,
+        configuration: str = None,
+        app_version: str = "",
+        is_dev: bool = False,
+    ):
+        super().__init__(None)
 
         self._orig_inference_analysis_feed = None
         self._orig_inference_analysis_process = None
@@ -197,20 +204,9 @@ class MainWindow(QMainWindow):
         self._refresh_prev_next_phases()
         self.main_content.training_plan_changed.emit(plan)
 
-    @staticmethod
-    def calculate_std_dev_manual(data):
-        n = len(data)
-        if n < 2:
-            raise ValueError("Data must contain at least two values to calculate standard deviation.")
-
-        mean = sum(data) / n
-        squared_diffs = [(x - mean) ** 2 for x in data]
-        variance = sum(squared_diffs) / (n - 1)  # Sample standard deviation
-        std_dev = variance ** 0.5
-        return mean, std_dev
-
     def _handle_diamond_triangle_calib_run(self, *, positions: List[Offset3DTuple], offsets: List[Offset3DTuple]):
-        self._timer_calibrate.cancel()
+        self._timer_calibrate_diamond_triangle.cancel()
+        self._app_model.status = AppModelStatus.ACQUIRING
         if len(offsets) < 3:
             self.calib_diamond_triangle_action.setEnabled(False)
             box = QMessageBox()
@@ -246,11 +242,11 @@ class MainWindow(QMainWindow):
             box.closeEvent = close_event
             box.show()
             return
-        avg_pos, stdev_pos = self.calculate_std_dev_manual(positions)
+        avg_pos, stdev_pos = calculate_std_dev_manual(positions)
         assert isinstance(avg_pos, Offset3DTuple)
         assert isinstance(stdev_pos, Offset3DTuple)
         logger.info("position: average=%s stdev=%s", avg_pos, stdev_pos)
-        avg_offset, stdev_offset = self.calculate_std_dev_manual(offsets)
+        avg_offset, stdev_offset = calculate_std_dev_manual(offsets)
         assert isinstance(avg_offset, Offset3DTuple)
         assert isinstance(stdev_offset, Offset3DTuple)
         logger.info("offset: average=%s stdev=%s", avg_offset, stdev_offset)
@@ -318,6 +314,8 @@ class MainWindow(QMainWindow):
         logger.notice("Starting diamond-triangle calibration .. duration=%.1f second(s)", calib_duration)
 
         app_model = self._app_model
+        app_model.status = AppModelStatus.CALIBRATION_DCS
+
         algo = app_model.behavior.algorithm
         action = self.calib_diamond_triangle_action
 
@@ -326,7 +324,7 @@ class MainWindow(QMainWindow):
             if not recording:
                 return
             if len(offsets) > 2:
-                self._timer_calibrate.cancel()
+                self._timer_calibrate_diamond_triangle.cancel()
             new_offset = pose_response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle)
             if new_offset is not None:
                 offsets.append(new_offset)
@@ -347,7 +345,7 @@ class MainWindow(QMainWindow):
         start_perf_c = time.perf_counter()
         app_model.inference.pose_response_ready += record_offsets
         self._status_label.setText("Capturing data ..")
-        timer = self._timer_calibrate = _calibrate_timer(
+        timer = self._timer_calibrate_diamond_triangle = _calibrate_timer(
             DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT,
             lambda: InvokeMethod(self.on_calibrate_diamond_triangle, False)
         )
@@ -360,7 +358,7 @@ class MainWindow(QMainWindow):
         #
         self._status_label.setText("")
         logger.notice("finished diamond-triangle calibration")
-        self._timer_calibrate.cancel()
+        self._timer_calibrate_diamond_triangle.cancel()
         app_model.inference.pose_response_ready -= record_offsets
         algo.pellet_delivery_enabled = before_pellet_delivery_enabled
         action.setIcon(qta.icon("fa5s.crosshairs"))
@@ -388,6 +386,7 @@ class MainWindow(QMainWindow):
     def on_3d_calibrate(self, is_toggled):
         self.run_action.setEnabled(not is_toggled)
         if is_toggled:
+            self._app_model.status = AppModelStatus.CALIBRATION_3D
             error = "Processing unfinished"
             result_dir: Path = None
             def handle_3d_calib():
@@ -404,6 +403,7 @@ class MainWindow(QMainWindow):
                 self.run_action.setEnabled(True)
                 self.make_3d_calib_action.setChecked(False)
                 self.make_3d_calib_action.setEnabled(True)
+                self._app_model.status = AppModelStatus.IDLE
                 logger.verbose("3d-calib thread joined, error=%s", error)
                 if error is None:
                     target = Path(self._preferences.configuration_location).joinpath("4mm_6r_8c_4x")
@@ -452,7 +452,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         logger.debug("MainWindow.closeEvent: %s", event)
-        self._timer_calibrate.cancel()
+        self._timer_calibrate_diamond_triangle.cancel()
         self._app_model.on_close()  # close app_model before all/any window/GUI parts/elements
         self.main_content.close()
         dialogs = self._open_dialogs
@@ -503,7 +503,7 @@ class MainWindow(QMainWindow):
         action.triggered.connect(self.on_previous_plan_phase)
 
         self._diamond_triangle_calib_run = None
-        self._timer_calibrate = no_op_timer
+        self._timer_calibrate_diamond_triangle = no_op_timer
         action = self.calib_diamond_triangle_action = QAction(QIcon(qta.icon("fa5s.crosshairs")), "Calibrate Coordinate System", self)
         action.setToolTip("Calibrate the relative offset between the pellet delivery spoon and the tunnel")
         action.setCheckable(True)
@@ -524,9 +524,9 @@ class MainWindow(QMainWindow):
         action.setCheckable(True)
         action.triggered.connect(self._internal_simulate_trigger)
 
-        action = self.force_detector_action = QAction("Force Detector", self)
+        action = self.force_headbar_detector_action = QAction("Force Detector", self)
         action.setCheckable(True)
-        action.triggered.connect(self._internal_set_force_detector_seen)
+        action.triggered.connect(self._internal_set_force_headbar_detector)
 
         action = self.pellet_seen_action = QAction("Pellet Seen", self)
         action.triggered.connect(self._internal_set_pellet_seen)
@@ -699,7 +699,7 @@ class MainWindow(QMainWindow):
             toolbar.setFloatable(False)
             toolbar.setMovable(False)
             toolbar.addAction(self.capture_trigger_action)
-            toolbar.addAction(self.force_detector_action)
+            toolbar.addAction(self.force_headbar_detector_action)
             toolbar.addAction(self.pellet_seen_action)
             toolbar.addAction(self.mouse_seen_action)
             toolbar.addAction(self.mouse_near_pellet_action)
@@ -778,6 +778,15 @@ class MainWindow(QMainWindow):
         elif name == "remove_raw_data_when_inactive_session":
             self._app_model.behavior.algorithm.clean_raw_data_on_inactive_session = value
 
+    def _simulate_intersession_segmentation(self, intersession_block):
+        logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
+        inference = self._app_model.inference
+        inference._data_monitor_proc.stop_recorded.wait()
+        logger.debug("got stop recorded")
+        inference._data_monitor_proc.stop_recorded.clear()
+        intersession_block.frame_count = 42
+        time.sleep(2.5)
+
     @staticmethod
     def _simulate_intersession_process(*args, fake_result, **kwargs):
         # NB: must be static method given it's executed in a sub-process, so must no get the whole main-window
@@ -790,79 +799,48 @@ class MainWindow(QMainWindow):
         is_checked = self.capture_trigger_action.isChecked()
         app_model = self._app_model
         load_cell_monitor = app_model.analysis.load_cell_monitor
-        if not is_checked:
-            use_fake_results = self.detection_results_action.isChecked()
-            if use_fake_results:
-                inference = app_model.behavior.system_machine.intersession._inference
-                def feed(intersession_block):
-                    logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
-                    inference._data_monitor_proc.stop_recorded.wait()
-                    logger.debug("got stop recorded")
-                    inference._data_monitor_proc.stop_recorded.clear()
-                    intersession_block.frame_count = 42
-                    time.sleep(1.5)
-                inference._feed_intersession_analysis_execute = feed
-                res = IntersessionResponse(
-                    pellets_presented=self._internal_pellet_presented_spinbox.value(),
-                    successful_reaches=self._internal_pellet_reached_spinbox.value(),
-                    food_consumed=self._internal_pellet_consumed_spinbox.value(),
-                    pellet_x=self._internal_shift_x_spinbox.value(),
-                    pellet_y=self._internal_shift_y_spinbox.value(),
-                    pellet_z=self._internal_shift_z_spinbox.value(),
-                )
-                inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
+        if not is_checked and self.detection_results_action.isChecked():
+            inference = app_model.inference
+            inference._feed_intersession_analysis_execute = self._simulate_intersession_segmentation
+            res = IntersessionResponse(
+                pellets_presented=self._internal_pellet_presented_spinbox.value(),
+                successful_reaches=self._internal_pellet_reached_spinbox.value(),
+                food_consumed=self._internal_pellet_consumed_spinbox.value(),
+                pellet_x=self._internal_shift_x_spinbox.value(),
+                pellet_y=self._internal_shift_y_spinbox.value(),
+                pellet_z=self._internal_shift_z_spinbox.value(),
+            )
+            inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
         load_cell_monitor.force_engaged(is_checked)
 
-    def _internal_set_force_detector_seen(self):
-        new_value = self.force_detector_action.isChecked()
+    def _internal_set_force_headbar_detector(self):
+        new_value = self.force_headbar_detector_action.isChecked()
         self._app_model.analysis.headbar_pressure_monitor.force_engaged(new_value)
 
     def _internal_set_pellet_seen(self):
-        self._app_model.behavior.algorithm.pellet_seen(True)
+        self._app_model.behavior.algorithm.update_pellet_seen(True)
 
     def _internal_set_mouse_seen(self):
-        self._app_model.behavior.algorithm.mouse_seen(True)
+        self._app_model.behavior.algorithm.update_mouse_seen(True)
 
     def _internal_mouse_near_pellet(self):
         behavior = self._app_model.behavior
         algo = behavior.algorithm
         uncover_dist = algo.pellet_hand_uncover_distance
         if uncover_dist is not None:
-            new_val = uncover_dist - 0.1
-            algo.pellet_hands_min_distance = new_val
-            logger.debug("set pellet_hands_min_distance to %s", new_val)
+            new_val = uncover_dist / 2
+        else:
+            new_val = 0.001  # that is on it
+        logger.debug("set pellet_hands_min_distance to %s", new_val)
+        algo.pellet_hands_min_distance = new_val
 
     def _internal_detection_result_toggle(self):
-        app_model = self._app_model
-        inference = app_model.behavior.system_machine.intersession._inference
+        inference = self._app_model.inference
         is_checked = self.detection_results_action.isChecked()
         self._internal_analysis_widget_toolbar.setVisible(is_checked)
         if is_checked:
             self._orig_inference_analysis_feed = inference._feed_intersession_analysis_execute
             self._orig_inference_analysis_process = inference._intersession_process_execute
-            inference = app_model.behavior.system_machine.intersession._inference
-
-            def simulate_feed_intersession(intersession_block):
-                logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
-                inference._data_monitor_proc.stop_recorded.wait(5)
-                logger.debug("got stop recorded")
-                inference._data_monitor_proc.stop_recorded.clear()
-                intersession_block.frame_count = 42
-                #
-                res = IntersessionResponse(
-                    pellets_presented=self._internal_pellet_presented_spinbox.value(),
-                    successful_reaches=self._internal_pellet_reached_spinbox.value(),
-                    food_consumed=self._internal_pellet_consumed_spinbox.value(),
-                    pellet_x=self._internal_shift_x_spinbox.value(),
-                    pellet_y=self._internal_shift_y_spinbox.value(),
-                    pellet_z=self._internal_shift_z_spinbox.value(),
-                )
-                inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
-                logger.debug("Patched inference._intersession_process_execute with simulate one: %s", res)
-                time.sleep(1.5)
-
-            inference._feed_intersession_analysis_execute = simulate_feed_intersession
-
         else:
             inference._feed_intersession_analysis_execute = self._orig_inference_analysis_feed
             inference._intersession_process_execute = self._orig_inference_analysis_process
@@ -883,7 +861,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_prev_next_phases(self):
         attached = self._app_model.attached_plan
-        if attached is None or self._app_model.training_mode != TrainingMode.MANUAL_AND_PROTOCOL:
+        if attached is None or self._app_model.training_mode != TrainingMode.MANUAL_WITH_PROTOCOL:
             self.previous_training_phase_action.setVisible(False)
             self.next_training_phase_action.setVisible(False)
             return
@@ -898,7 +876,11 @@ class MainWindow(QMainWindow):
 
     def _app_model_property_changed(self, name: str, value, _):
         props = self._app_model.Props
-        if name == props.ANIMALS:
+        #
+        if name == props.ACQUISITION_RUNNING:
+            self.running_status_changed.emit(value)
+
+        elif name == props.ANIMALS:
             self._reload_animals(value)
 
         elif name == props.SELECTED_ANIMAL:

@@ -56,22 +56,23 @@ class PoseResponse:
     @property
     def pellet_seen(self) -> bool:
         """Default logic/conditions for pellet seen"""
-        return self.parts_flags[0][SceneElement.Pellet] or self.parts_flags[1][SceneElement.Pellet]
+        return self.parts_flags[0].get(SceneElement.Pellet, False) or self.parts_flags[1].get(SceneElement.Pellet, False)
 
     @property
     def star_seen(self):
         """Default logic/conditions for star seen"""
-        return self.parts_flags[0][SceneElement.Star] or self.parts_flags[1][SceneElement.Star]
+        return self.parts_flags[0].get(SceneElement.Star, False) or self.parts_flags[1].get(SceneElement.Star, False)
 
     @property
     def mouse_seen(self) -> bool:
         """Default logic/conditions for mouse seen: require seen in ALL/both cams"""
         # return all(flags.get(SceneElement.Nose, False) for flags in self.parts_flags)
-        return self.parts_flags[2][SceneElement.Nose]
+        return self.parts_flags[2].get(SceneElement.Nose, False)
 
     @property
     def diamond_seen(self):
-        return self.is_part_seen(SceneElement.Diamond)
+        p_flags = self.parts_flags
+        return p_flags[0].get(SceneElement.Diamond, False) or p_flags[1].get(SceneElement.Diamond, False)
 
     @property
     def triangle_seen(self):
@@ -370,7 +371,6 @@ class PoseAlgorithm(ObservableObject):
 
         gpi = self.get_part_index
         #
-        parts_3d_offsets = defaultdict(dict)
         if self._has_hands_part_names:
             # compute L_Hand / R_Hand averaged position (based on possibly many sub-hand parts)
             all_lst = [
@@ -410,6 +410,7 @@ class PoseAlgorithm(ObservableObject):
                     locations_2[elem] = PoseLocation(elem, -1, v1['x'], v1['y'])
 
         locations_3d = {}
+        parts_3d_offsets = defaultdict(dict)
         if len(pairs_3d_offsets) > 0:
             df_3d = self._handle_offsets_pose_data(*(
                 numpy.asarray([

@@ -169,7 +169,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
     def _intersession_post_process(
         self,
         project_info: ProjectInfo,
-        t_start_offline,
+        perf_c_start_offline,
         pose_algo,
         range_cams, ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss,
     ):
@@ -232,7 +232,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             )
             logger.notice("assembled %s pose responses, speed=%.3f/s (vstack=%s)"
                           " now calling intersession_inference()",
-                          min_nbr_pd, 2 * min_nbr_pd / (time.time() - t_start_offline), final_pose_data.shape[0])
+                          min_nbr_pd, 2 * min_nbr_pd / (time.perf_counter() - perf_c_start_offline), final_pose_data.shape[0])
 
             intersession_inference(final_pose_data, self._pose_algo.part_names,
                                    project_info)
@@ -273,10 +273,10 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         cur_h5_live_batch = [[] for _ in range_cams]
         cur_cams_indices = [[] for _ in range_cams]
         tot_skipped = 0
-        t_start_offline = 0
+        perf_c_start_offline = 0
         skip_next_pose_data = 0
 
-        t_log_counters = time.perf_counter()
+        perf_c_log_counters = time.perf_counter()
         t_perf_live_check_data_queue_size = time.perf_counter() + 5
 
         def get_next_pose_data(timeout: Optional[float] = 0.05):
@@ -333,7 +333,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             df_xyp = pandas.DataFrame(arr,
                                       columns=pose_algo.pose_result_columns, index=index)
             df_xyp["frame_idx"] = list(indices_list)  # also store the frame idx with the results
-            logger.debug("Writing batch to %s", dst_path)
+            logger.spam("Writing batch to %s", dst_path)
             # logger.verbose("writing h5 batch (%s/%s entries): indices=%s to %s (prev-exists: %s)",
             #                len(df_xyp), len(arr), indices_list, dst_path, os.path.exists(dst_path))
             df_xyp.to_hdf(dst_path,
@@ -348,15 +348,16 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             #              object.__repr__(data_list), object.__repr__(indices_list))
             t1 = time.perf_counter()
             d = t1 - t0
-            logger.verbose("wrote h5 batch (%s) in %sms to %s",
+            logger.debug("wrote h5 batch (%s) in %sms to %s",
                            len(df_xyp), int(d * 1000), dst_path)
             writes_h5_live_durations.append(d)
 
+        # main loop
         while self._is_running:
 
             perf_now = time.perf_counter()
-            if perf_now > t_log_counters:
-                t_log_counters = perf_now + 15
+            if perf_now > perf_c_log_counters:
+                perf_c_log_counters = perf_now + 15
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("qlen=%s data=%s avg_writes_h5_live=%.6f skipped_h5_live=%s",
                                 self._data_queue.qsize(), cnt_data_received,
@@ -375,6 +376,11 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
             if prev_mode != mode:
                 logger.verbose("Detected inference mode change -> %s frames=%s", mode, frames_indices)
+                if mode == InferenceMode.Live:
+                    skip_next_pose_data = 3
+                    # skip next 3 pose data to flush anything remaining
+                    # NB: this looks necessary/required to ensure the inference gives back "reliable" result,
+                    # with skip=2, for instance, we ~always get a first result without all visible elements detected.
 
             if mode == InferenceMode.Live:
                 perf_now = time.perf_counter()
@@ -518,7 +524,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     ):
                         _close_fhs(cams_frame_idx_fhs)  # just to be sure
                         cams_frame_idx_fhs = None
-                        t_start_offline = time.time()
+                        perf_c_start_offline = time.perf_counter()
                         logger.notice("Opening live files for offline processing ; prev_mode=%s frames=%s",
                                       prev_mode, frames_indices)
                         cams_read_h5_dss = [
@@ -544,7 +550,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             target=self._intersession_post_process,
                             args=(
                                 cur_local_prj,
-                                t_start_offline,
+                                perf_c_start_offline,
                                 pose_algo,
                                 range_cams,
                                 ib_pose_data_list,

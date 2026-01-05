@@ -12,7 +12,7 @@ from autotrainer.core.logging import setup_logging
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import CanDevice, DeviceConnection, Motor, \
     StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
-    CompoundMovementFile, MotorConfigurationFile, StepperStatus, is_servo
+    CompoundMovements, MotorConfigurationFile, StepperStatus, is_servo
 
 msg_queue_active = True
 output_file = None
@@ -428,7 +428,7 @@ def run_monitor():
                         motors_cfg = MotorConfigurationFile.from_file(params[1])
                         device_connection.use_motor_configurations(motors_cfg)
                     elif params[0] == 'move':
-                        movements_cfg = CompoundMovementFile.from_file(params[1])
+                        movements_cfg = CompoundMovements.from_file(params[1])
                         device_connection.use_compound_movements(movements_cfg)
                     else:
                         logger.error(f"Unknown file request: {params[0]}")

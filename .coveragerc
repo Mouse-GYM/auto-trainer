@@ -1,4 +1,18 @@
 [run]
+branch = true
+relative_files = true
+
+source_pkgs =
+    autotrainer.core
+    autotrainer.device
+    autotrainer.behavior
+    autotrainer.inference
+    # autotrainer.model
+    # autotrainer.pyside
+    autotrainer.video
+    tools.acquisition
+    # tools for the main acquisition app_model mainly
+
 omit =
 	# not yet sure where these are coming, but coverage get a ref. to these, which are non-existent here:
     config-3.py
@@ -6,18 +20,31 @@ omit =
     shibokensupport/*
     signature_bootstrap.py
     */tests/*
+    */auto-trainer-api/*
 
 # allow coverage in python sub-processes (subprocess):
-# patch = subprocess  # only valid from coverage 7.11+ but one for py3.8 is stuck lower.
+# patch = subprocess  # only valid from coverage 7.10+ but one for py3.8 is stuck lower.
+# patch =
+#   execv
+#   _exit
+#   fork
+#   subprocess
+
 # so using coverage-enable-subprocess for now.
 
 parallel = true
+# still needed
+
+sigterm = true
 
 [report]
-show_missing = True
+show_missing = true
+include_namespace_packages = true
+
 omit =
     config-3.py
     config.py
     shibokensupport/*
     signature_bootstrap.py
     */tests/*
+    */auto-trainer-api/*

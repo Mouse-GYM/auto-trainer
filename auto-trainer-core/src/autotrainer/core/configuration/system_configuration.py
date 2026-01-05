@@ -91,15 +91,15 @@ class SystemConfiguration:
         return configuration
 
     @classmethod
-    def load_yaml_file(cls, path: Union[Path, str], *, save_backup: bool = True) -> Optional[Self]:
+    def load_yaml_file(cls, path: Union[Path, str], *, save_backup: bool = True) -> Self:
         path = Path(path)
         logger.debug("loading configuration from %r", path)
         with path.open() as fh:
             return SystemConfiguration.load_yaml(fh, file_path=path if save_backup else None)
 
     @classmethod
-    def make_default_yaml_config_path(cls, location: Path) -> Path:
-        return location.joinpath(f"{SystemConfiguration.DEFAULT_NAME}.yaml")
+    def make_default_yaml_config_path(cls, dir_path: Path) -> Path:
+        return dir_path.joinpath(f"{SystemConfiguration.DEFAULT_NAME}.yaml")
 
     @classmethod
     def load_default(cls, location: Union[str, Path]) -> Optional[Self]:
@@ -109,8 +109,8 @@ class SystemConfiguration:
         logger.debug("cannot load default from %s ; not a file", path)
         return None
 
-    def save_default(self, location: Union[Path, str]):
-        path = self.make_default_yaml_config_path(Path(location))
+    def save_default(self, dir_path: Union[Path, str]):
+        path = self.make_default_yaml_config_path(Path(dir_path))
         self.save_file(path.with_suffix(""), as_yaml=True)
 
     def dump_yaml(self) -> str:
@@ -118,28 +118,25 @@ class SystemConfiguration:
                          # we sort/iter by dataclasses.fields() order in our representer function
                          sort_keys=False)
 
-    def save_file(self, path: Union[Path, str], as_yaml: bool = False, as_json: bool = False) -> bool:
+    def save_file(self, path: Union[Path, str], as_yaml: bool = False, as_json: bool = False):
+        if not (as_json or as_yaml):
+            raise ValueError("Missing one of as_json or as_yaml")
         path = Path(path)
-        try:
-            if as_json:
-                p = path.with_suffix(".json")
-                logger.notice("Writing to %r as json", p.as_posix())
-                content = json.dumps(asdict(self))
-                # dump before writing to file, to prevent empty file on dump issue
-                with p.open("w") as file:
-                    file.write(content)
-            if as_yaml:
-                p = path.with_suffix(".yaml")
-                logger.notice("Writing to %r as yaml", p.as_posix())
-                content = self.dump_yaml()
-                # dump before writing to file, to prevent empty file on dump issue
-                with p.open("w") as file:
-                    file.write(content)
-        except Exception as err:
-            logger.exception("Error saving config to %s: %s", path, err)
-            return False
-
-        return True
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if as_json:
+            p = path.with_suffix(".json")
+            logger.notice("Writing to %r as json", p.as_posix())
+            content = json.dumps(asdict(self))
+            # dump before writing to file, to prevent empty file on dump issue
+            with p.open("w") as file:
+                file.write(content)
+        if as_yaml:
+            p = path.with_suffix(".yaml")
+            logger.notice("Writing to %r as yaml", p.as_posix())
+            content = self.dump_yaml()
+            # dump before writing to file, to prevent empty file on dump issue
+            with p.open("w") as file:
+                file.write(content)
 
     def get_camera(self, camera_id: CameraId) -> Optional[CameraConfiguration]:
         if len(self._camera_map) == 0 or camera_id not in self._camera_map:

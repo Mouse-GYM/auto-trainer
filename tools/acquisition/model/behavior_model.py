@@ -56,13 +56,10 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         ) if system_machine is None else system_machine
 
         self._project: Optional[ProjectInfo] = None
-        #
-        self._is_intersession_enabled = system_machine.algorithm.intersession_enabled
         self._hardware_model = hardware_model
         #
         self._source_algo_paused = "na"
         #
-        system_machine.algorithm.property_changed += self._on_algorithm_property_changed
         system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
 
@@ -95,30 +92,15 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         return self._system_machine
 
     @property
-    def algorithm(self):
+    def algorithm(self) -> BehaviorAlgorithm:
         return self._system_machine.algorithm
 
-    @property
-    def is_intersession_enabled(self) -> bool:
-        # todo: could use the one from/on BehaviorAlgorithm config instance itself
-        return self._is_intersession_enabled
-
-    @is_intersession_enabled.setter
-    def is_intersession_enabled(self, value: bool) -> None:
-        prev, self._is_intersession_enabled = self._is_intersession_enabled, value
-        self._system_machine.algorithm.intersession_enabled = value
-        self._on_property_changed("is_intersession_enabled", value, prev)
-
     def load_configuration(self, configuration: BehaviorConfiguration):
-        self.is_intersession_enabled = configuration.pellet_delivery.is_intersession_analysis_enabled
         self._system_machine.algorithm.load_configuration(configuration)
 
     def save_configuration(self) -> BehaviorConfiguration:
         config = BehaviorConfiguration()
         algo = self._system_machine.algorithm
-        pellet_deliver_cfg = config.pellet_delivery
-        pellet_deliver_cfg.is_intersession_analysis_enabled = self._is_intersession_enabled
-        pellet_deliver_cfg.is_intersession_pellet_shift_enabled = algo.intersession_pellet_shift_enabled
         algo.update_configuration(config)
 
         analysis = self._analysis
@@ -153,7 +135,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
             return
         algo.algo_paused = True
         self._source_algo_paused = source
-        EventManager.default().post_event_content(ApiEventKind.emergencyStop, source)
+        EventManager.default().post_event_content(ApiEventKind.emergencyStop, dict(reason=source))
         self.emergency_stopped(source)
 
     def emergency_resume(self, source: str):
@@ -167,25 +149,5 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         algo.algo_paused = False
         # restart full analysis so that monitors/detectors counters/context are reset, as if app was just started:
         self._analysis.restart()
-        EventManager.default().post_event_content(ApiEventKind.emergencyResume, source)
+        EventManager.default().post_event_content(ApiEventKind.emergencyResume, dict(reason=source))
         self.emergency_resumed(source)
-
-    def _on_algorithm_property_changed(self, property_name: str, value, _):
-        if property_name == BehaviorAlgoProps.INTERSESSION_ENABLED:
-            self._is_intersession_enabled = value
-
-    def trigger_tunnel(self, value: bool):
-        # currently unused
-        """
-        Provides the ability to manually trigger tunnel enter/exit state changes independent of load cell events.
-        Future load cell events will still have the expected behavior.  This is primarily supported for testing and
-        diagnostics.
-
-        :param value: True to enter tunnel, False to exit.
-
-        :return:
-        """
-        if value:
-            self._system_machine.enter_tunnel(reason="simulate_enter_tunnel")
-        else:
-            self._system_machine.exit_tunnel(reason="simulate_exit_tunnel")

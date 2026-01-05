@@ -3,7 +3,7 @@ import threading
 import time
 from typing import Dict, Tuple, Optional
 
-from autotrainer.core import ObservableObject
+from autotrainer.core import ObservableObject, get_perf_now
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.configuration.external_doors_monitor_configuration import ExternalDoorsMonitorConfig
@@ -57,7 +57,7 @@ class ExternalDoorsMonitor(BaseDetector):
 
     def _check_state(self):
         doors_state = self._doors_state
-        perf_now = time.perf_counter()
+        perf_now = get_perf_now()
         cfg = self._config
         min_delay = math.inf
         new_engaged = False
@@ -87,6 +87,6 @@ class ExternalDoorsMonitor(BaseDetector):
         prev_open, prev_perf_c = doors_state[door]
         if is_open != prev_open:
             logger.notice("%s: is_open: %s -> %s", door, prev_open, is_open)
-            new_perf_c = time.perf_counter() if is_open else prev_perf_c
+            new_perf_c = get_perf_now() if is_open else prev_perf_c
             doors_state[door] = (is_open, new_perf_c)
             self.refresh_state()

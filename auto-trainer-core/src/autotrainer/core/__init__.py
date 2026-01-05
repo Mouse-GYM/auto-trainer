@@ -1,5 +1,6 @@
 import dataclasses
 import math
+import time
 from collections import namedtuple
 from typing import Union, List, Tuple, Dict, Any, Iterable, TypeVar, Type, Optional, Callable
 from typing_extensions import Self
@@ -15,6 +16,19 @@ from .logging import get_verbose_logger
 #
 
 logger = get_verbose_logger(__name__)
+
+#
+
+def calculate_std_dev_manual(data):
+    n = len(data)
+    if n < 2:
+        raise ValueError("Data must contain at least two values to calculate standard deviation.")
+
+    mean = sum(data) / n
+    squared_diffs = [(x - mean) ** 2 for x in data]
+    variance = sum(squared_diffs) / (n - 1)  # Sample standard deviation
+    std_dev = variance ** 0.5
+    return mean, std_dev
 
 #
 
@@ -67,6 +81,15 @@ def transitions_allow_functions(transitions: List[Dict[str, Any]]) -> List[Dict[
 Pairs3dOffsetT = Union[List[Tuple[str, str]], Tuple[Tuple[str, str], ...]]
 
 _Offset3DTuple = namedtuple("Offset3DTuple", ('x', 'y', 'z'))
+
+
+def _get_perf_now():
+    # allowed to be patched from test
+    return time.perf_counter()
+
+
+def get_perf_now():
+    return _get_perf_now()
 
 
 class Offset3DTuple(_Offset3DTuple):
