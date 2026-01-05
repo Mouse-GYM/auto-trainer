@@ -85,10 +85,10 @@ class ObservableObject(Events):
 
 class EventSlotProtocol(Protocol):
     def __iadd__(self, f):
-        pass
+        """Allow register a function for callback on the given slot/event"""
 
     def __isub__(self, f):
-        pass
+        """Allow unregister a function for callback on the given slot/event"""
 
 
 class ObservableObjectProtocol(Protocol):

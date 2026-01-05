@@ -1,30 +1,47 @@
-import logging
-import time
 import contextlib
 import logging
 import queue
-import sys
-import time
-import threading
 
+from pathlib import Path
 from functools import partial
-from typing import List, Any
+from typing import List, Any, Optional
 from unittest import mock
 
 import pytest
 
+import autotrainer.core
 
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
+from autotrainer.device import MotorConfigurationFile, CompoundMovements
+from autotrainer.inference.analysis import IntersessionResponse
 
 from autotrainer.video import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 
 from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, PelletState, \
-    BehaviorAlgorithm, InferenceProtocol
-
+    BehaviorAlgorithm, InferenceProtocol, DiamondTriangleOffsetConfig
 
 logger = logging.getLogger(__name__)
+
+
+repo_root_dir = Path(__file__).parent  # supposed to be the repo root/top dir
+repo_root_tests_subdir = repo_root_dir.joinpath("tests")
+
+
+fake_perf_now = 0  # used to control time.perf_counter() in BehaviorAlgo/SystemMachine/PelletMachine/Intersession
+
+
+@pytest.fixture(autouse=True)
+def reset_fake_perf_now():
+    global fake_perf_now
+    fake_perf_now = 0
+
+
+def get_fake_perf_now():
+    global fake_perf_now
+    fake_perf_now += 1e-9  # convenience, so that any call to it will get a different value than the previous
+    return fake_perf_now
 
 
 @pytest.fixture(autouse=True)
@@ -40,6 +57,14 @@ def auto_set_misc_log_level():
     logging.getLogger('transitions').setLevel(logging.INFO)
 
 
+@pytest.fixture(autouse=True)
+def motor_config(monkeypatch):
+    monkeypatch.setattr(MotorConfigurationFile, "DEFAULT_LOCATION",
+                        repo_root_tests_subdir.joinpath(MotorConfigurationFile.DEFAULT_LOCATION.name))
+    monkeypatch.setattr(CompoundMovements, "DEFAULT_LOCATION",
+                        repo_root_tests_subdir.joinpath(CompoundMovements.DEFAULT_LOCATION.name))
+
+
 @pytest.fixture
 def project_info(tmp_path):
     root = tmp_path.joinpath("root")
@@ -48,11 +73,12 @@ def project_info(tmp_path):
     yield prj
 
 
-@pytest.fixture
-def m_time_time():
-    """Allow to control time.time()"""
-    with mock.patch.object(time, "time") as m_time:
-        yield m_time
+@pytest.fixture(autouse=True)
+def diamond_config_path(monkeypatch):
+    path = repo_root_tests_subdir.joinpath("diamond_triangle_offset.yaml")
+    monkeypatch.setattr(DiamondTriangleOffsetConfig, "DEFAULT_CONFIG_PATH", path)
+    assert DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH is path
+    return path
 
 
 ##
@@ -138,24 +164,29 @@ def system_msg_handler(system_msg_queue, sensor_analysis):
 
 
 @pytest.fixture
-def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis) -> SystemMachine:
-    # prevents some test to fail due to handling function in dedicated thread
-    BehaviorAlgorithm._no_handler_thread = True
+def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch) -> SystemMachine:
+    # Disable algo handler thread
+    assert BehaviorAlgorithm._no_handler_thread is False
+    monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
+    assert BehaviorAlgorithm._no_handler_thread is True
+
+    # cur = autotrainer.core.get_perf_now()
+    # assert cur > 0
+    monkeypatch.setattr(autotrainer.core, "_get_perf_now", get_fake_perf_now)
+    # assert autotrainer.core.get_perf_now() == 0
+
     #
-    def check_pres_missing(delay, func):
-        m = mock.create_autospec(threading.Timer)
-        return m
-    with mock.patch(f"{SystemMachine.__module__}._check_missing_timer", new=check_pres_missing):
-        machine = SystemMachine(
-            tunnel_device=tunnel_device,
-            pellet_device=pellet_device,
-            analysis=sensor_analysis,
-            inference=inference,
-            project_info=project_info,
-        )
-        machine.algorithm.capture_status = CaptureProcessStatus.RUNNING
-        machine.algorithm.pellet_hand_uncover_distance = None  # disabled
-        yield machine
+    machine = SystemMachine(
+        tunnel_device=tunnel_device,
+        pellet_device=pellet_device,
+        analysis=sensor_analysis,
+        inference=inference,
+        project_info=project_info,
+    )
+    algo = machine.algorithm
+    algo.capture_status = CaptureProcessStatus.RUNNING
+    algo.pellet_hand_uncover_distance = None  # disabled
+    return machine
 
 
 class MockSystemMachine:
@@ -178,6 +209,11 @@ class MockSystemMachine:
         machine.intersession.events.state_changed += partial(
             property_value_save_transitions, transitions=self.intersession_state_trans)
 
+    @staticmethod
+    def increment_perf_now(inc: float=60):
+        global fake_perf_now
+        fake_perf_now += inc
+
     @pytest.fixture()
     def machine(self, machine: SystemMachine) -> SystemMachine:  # noqa
         self._init(machine)
@@ -195,11 +231,37 @@ class MockSystemMachine:
     def msg_handler(self) -> MessageHandler:
         return self._machine._msg_handler
 
+    #
+
+    @contextlib.contextmanager
+    def mock_analysis(
+        self,
+        results: Optional[IntersessionResponse] = None,
+        *,
+        segmentation_ok: bool = True,
+        detection_ok: bool = True,
+    ):
+        if results is None:
+            results = IntersessionResponse()
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(self.mock_perform_segmentation())
+            stack.enter_context(self.mock_perform_detection())
+            yield
+            self.mock_complete_segmentation(segmentation_ok)
+            if segmentation_ok:
+                self.mock_complete_detection(detection_ok)
+            if detection_ok:
+                self._machine._inference.detection_result_ready(results)
+
     @contextlib.contextmanager
     def mock_perform_segmentation(self):
         """Mock the inference.perform_segmentation() method"""
         with mock.patch.object(self.inference, 'perform_segmentation') as m_seg:
             yield m_seg
+
+    def mock_complete_segmentation(self, success: bool):
+        seg_cfg = self._machine.intersession._segmentation_configuration
+        seg_cfg.complete(seg_cfg.nonce, success)
 
     @contextlib.contextmanager
     def mock_perform_detection(self):
@@ -207,13 +269,26 @@ class MockSystemMachine:
         with mock.patch.object(self.inference, 'perform_detection') as m_det:
             yield m_det
 
-    def mock_pose_response(self, pellet_seen: bool, mouse_seen: bool, triangle_seen: bool=True, ack_pellet: bool=False):
+    def mock_complete_detection(self, success: bool):
+        det_cfg = self._machine.intersession._detection_configuration
+        det_cfg.complete(det_cfg.nonce, success)
+
+    def mock_pose_response(
+        self,
+        *,
+        pellet_seen: bool,
+        mouse_seen: bool=False,
+        triangle_seen: bool=True,
+        diamond_seen: bool=True,
+        ack_pellet: bool=False,
+    ):
         """Send/trigger a PoseResponse via pose_algorithm.pose_changed event"""
         parts_flag = {
             "Pellet": pellet_seen,
             "Tongue": mouse_seen,
             "Nose": mouse_seen,
             "Triangle": triangle_seen,
+            "Diamond": diamond_seen,
         }
         parts_flags = (parts_flag, parts_flag, parts_flag)
         response = PoseResponse(sequence=1, parts_flags=parts_flags, locations=[])
@@ -229,60 +304,15 @@ class MockSystemMachine:
 
     def mock_pellet_ack(self):
         """Ack the previous sent pellet command"""
-        self.pellet._pellet_device_ack_received(self.pellet._api_status_token)
+        token = self.pellet._api_status_token
+        self.increment_perf_now(1e-9)
+        self.pellet._pellet_device_ack_received(token)
 
-    def mock_pellet_missing(self, should_release: bool = True, was_covered: bool = False, mouse_seen: bool = False,
-                            should_prerelease: bool = False):
-        # Make sure we are beyond the required pellet missing time.
-        # time.sleep(self.machine.algorithm.limits.pellet_missing_time + 0.1)
-
-        self.mock_pose_response(False, mouse_seen)
-
-        self.expect_pellet_delivery(should_release, was_covered, should_prerelease)
-
-    def expect_pellet_delivery(self, should_release: bool = True, was_covered: bool = False,
-                               should_prerelease: bool = False):
-        """
-        Convenience method that uses the mock pellet device reader to send the expected ack() to the machine for the
-        expected transitions.  This method assumes that load_pellet() has already been triggered via pose response or
-        whatever applicable mechanism.
-
-        :param should_release: whether the pellet is expected to be released (vs. left covered)
-
-        :param was_covered: whether the pellet should already be in the covered state
-
-        :param should_prerelease: whether movement should include the prerelease step
-        """
-
-        pellet = self.pellet
-        ack_received = pellet._pellet_device_ack_received
-
-        if not was_covered:
-            assert pellet.state == PelletState.loading
-
-            ack_received(pellet._api_status_token)
-            if should_prerelease:
-                assert pellet.state == PelletState.prerelease
-                ack_received(pellet._api_status_token)
-
-            assert pellet.state == PelletState.sending
-
-            ack_received(pellet._api_status_token)
-
-        if should_release:
-            if not should_prerelease:
-                assert pellet.state == PelletState.releasing
-                ack_received(pellet._api_status_token)
-
-            assert pellet.state == PelletState.monitoring
-
-    def mock_complete_segmentation(self, success: bool):
-        seg_cfg = self._machine.intersession._segmentation_configuration
-        seg_cfg.complete(seg_cfg.nonce, success)
-
-    def mock_complete_detection(self, success: bool):
-        det_cfg = self._machine.intersession._detection_configuration
-        det_cfg.complete(det_cfg.nonce, success)
+    def mock_pellet_missing(self, mouse_seen: bool = False):
+        self.mock_pose_response(pellet_seen=False, mouse_seen=mouse_seen)
+        # make sure we are beyond the required pellet missing time:
+        self.increment_perf_now(self._machine.algorithm.pellet_missing_time + 1e-9)
+        self.mock_pose_response(pellet_seen=False, mouse_seen=mouse_seen)
 
     def make_load_cell_active(self):
         # NB: this could be moved to auto-trainer-core (where load_cell_monitor is defined),
@@ -301,15 +331,14 @@ class MockSystemMachine:
     def make_recording_aged_enough(self):
         algo = self._machine.algorithm
         algo.capture_status = CaptureProcessStatus.RECORDING
-        algo._last_capture_status_change_perf_c -= algo.recording_age_release_pellet_threshold
-        self.pellet.environment_changed(pellet_seen=True, must_release=True, caller="simulate start recording")
+        self.increment_perf_now(algo.recording_age_release_pellet_threshold)
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_system(machine) -> MockSystemMachine:
     """Allow use BaseSystemMachineTest instance helper methods in a simple function test, without having to subclass,
     just use the 'mock_system' fixture"""
     instance = MockSystemMachine()
     # instance.machine_(machine)  # pytest fixture refuse direct call, so:
     instance._init(machine)
-    yield instance
+    return instance

@@ -81,7 +81,6 @@ class VideoRecord(Thread):
 
         self._interval_mode = ProjectInterval.NONE
         self._interval_reference = -1
-        self._close_event = threading.Event()
         self._first_frame_when = time.time()
 
     @property
@@ -91,10 +90,6 @@ class VideoRecord(Thread):
     @first_frame_when.setter
     def first_frame_when(self, value):
         self._first_frame_when = value
-
-    @property
-    def close_event(self):
-        return self._close_event
 
     def run(self):
         logger.notice("%s: running", self)
@@ -118,8 +113,6 @@ class VideoRecord(Thread):
         tot_written = 0
 
         while self._is_running:
-            # if self._video_writer is not None and not self._is_video_enabled:
-            #     self._close_writers()
 
             try:
                 queue_list = self._input_queue.get(timeout=0.005)
@@ -131,8 +124,6 @@ class VideoRecord(Thread):
                 if len(queue_list) == 0:
                     # Indicator for trigger disabled
                     self._close_writers()
-                    self._close_event.set()
-                    # self._input_queue.put(None)
                     logger.info("Closed video file: tot frames written: %s ; last_when=%s",
                                 tot_written, last_when)
                     tot_written = 0
@@ -143,7 +134,6 @@ class VideoRecord(Thread):
 
                     if self._is_video_enabled:
                         if self._video_writer is None:
-                            self._close_event.clear()
                             # If triggered, may not be configured yet for this batch
                             self._prepare_writers()
 

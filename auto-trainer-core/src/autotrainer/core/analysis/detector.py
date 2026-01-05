@@ -3,7 +3,7 @@ import threading
 import time
 from typing import Dict, Tuple, Optional
 
-from autotrainer.core import ObservableObject
+from autotrainer.core import ObservableObject, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 
@@ -34,7 +34,7 @@ class BaseDetector(ObservableObject):
         prev, self._is_engaged = self._is_engaged, value
         if prev == value:
             return
-        perf_now = time.perf_counter()
+        perf_now = get_perf_now()
         if value:
             self._engaged_perf_c = perf_now
         else:
@@ -73,7 +73,7 @@ class BaseDetector(ObservableObject):
             logger.verbose("%s: starting monitor", self.__class__.__name__)
             self._enabled = True
             self.is_engaged = False  # force reset "engaged" to False
-            self._t_started = time.perf_counter()
+            self._t_started = get_perf_now()
             self._start()
             self._make_new_timer(0.01)
 

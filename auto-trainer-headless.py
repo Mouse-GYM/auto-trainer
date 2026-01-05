@@ -9,12 +9,13 @@ from multiprocessing import set_start_method
 
 
 def main():
-    from tools.acquisition.model.user_preferences import UserPreferences
-    from tools.acquisition.model.app_model import AppModel
 
     from autotrainer.core.logging import get_verbose_logger
 
-    logger = get_verbose_logger("main")
+    from tools.acquisition.model.user_preferences import UserPreferences
+    from tools.acquisition.model.app_model import AppModel
+
+    logger = get_verbose_logger("autotrainer.headless")
 
     parser = argparse.ArgumentParser()
 
@@ -46,6 +47,8 @@ def main():
         logger.error("failed to start capture")
         return 1
 
+    logger.success("App is now running")
+
     exit_rc = 1
     try:
         while True:
@@ -72,8 +75,13 @@ if __name__ == '__main__':
 
     try:
         sys.exit(main())
+    except KeyboardInterrupt:
+        logger.notice("KeyboardInterrupt")
+        exit_code = 0
     except Exception as err:
         logger.exception("Fatal error: %s", err)
-        sys.exit(1)
+        exit_code = 1
     finally:
         stop_multiproc_logging()
+    #
+    sys.exit(exit_code)

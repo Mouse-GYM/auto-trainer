@@ -10,7 +10,7 @@ from autotrainer.behavior import DiamondTriangleOffsetConfig
 from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
                               EventManager, Offset3DTuple, MotorConfigurations)
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.device import (CanDevice, MotorConfigurationFile, DeviceConnection, CompoundMovementFile)
+from autotrainer.device import (CanDevice, MotorConfigurationFile, DeviceConnection, CompoundMovements)
 
 from tools.pellet_delivery.model.user_settings import UserSettings
 
@@ -315,7 +315,7 @@ class AppModel(ObservableObject):
 
     def load_move_file(self, filename: str):
         if self._device_connection is not None:
-            movements = CompoundMovementFile.from_file(filename)
+            movements = CompoundMovements.from_file(filename)
             self._device_connection.use_compound_movements(movements)
 
     def connect_to_device(self):

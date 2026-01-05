@@ -3,7 +3,7 @@ from typing import Protocol
 
 from autotrainer.core import MotorConfigurations, Offset3DTuple, Motor
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.device import MotorConfigurationFile, CompoundMovementFile, Device
+from autotrainer.device import MotorConfigurationFile, CompoundMovements, Device
 from autotrainer.device.motor_steps import CompoundMovementDataSet
 
 logger = get_verbose_logger(__name__)
@@ -56,10 +56,10 @@ class DeviceConnectionProtocol(Protocol):
         raise NotImplementedError
 
     def load_default_move_config(self):
-        default_move_cfg_file = CompoundMovementFile.DEFAULT_LOCATION.expanduser()
+        default_move_cfg_file = CompoundMovements.DEFAULT_LOCATION.expanduser()
         if default_move_cfg_file.exists():
             logger.notice("Reading and applying default move config: %s", default_move_cfg_file)
-            move_cfg = CompoundMovementFile.from_file(default_move_cfg_file)
+            move_cfg = CompoundMovements.from_file(default_move_cfg_file)
             self.use_compound_movements(move_cfg)
         else:
             logger.warning(

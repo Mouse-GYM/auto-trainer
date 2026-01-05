@@ -25,7 +25,7 @@ from typing_extensions import Self
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
-    AnimalSubject
+    AnimalSubject, get_perf_now, calculate_std_dev_manual
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
@@ -67,7 +67,7 @@ class CheckElementDistanceContext:
 
     distance: float = 0  # unit probably millimeter
     error_detected: bool = False
-    error_start_timestamp: Optional[float] = None
+    error_start_perf_c: Optional[float] = None
 
 
 class BehaviorAlgoProps(str, enum.Enum):
@@ -244,7 +244,6 @@ class BehaviorAlgorithm(ObservableObject):
     session_processing_starting: Callable[[], None]
     session_ending: Callable[[CaptureAnalysisResult], None]
 
-    pellet_motor_drift_changed: Callable[[Offset3DTuple], None]
     cover_servo_status_changed: Callable[[CoverServoStatus], None]
 
     pellets_presented_evt: Callable[[int], None]
@@ -277,6 +276,7 @@ class BehaviorAlgorithm(ObservableObject):
             "pellets_consumed_evt",
             "successful_reaches_evt"
         ))
+
         self._thread_lock = threading.RLock()
         self._project_info = None
 
@@ -295,7 +295,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._auto_clamp_no_activity_release_delay = HeadClampConfiguration.auto_clamp_no_activity_release_delay
         self._auto_clamp_before_reengage_delay = HeadClampConfiguration.before_reengage_delay
 
-        self._recording_age_release_pellet_threshold = 0.75
+        self._recording_age_release_pellet_threshold = 0.25
+        self._recording_prebuffer_duration = 0
 
         self._algo_paused = False
         self._algo_paused_perf_t = 0
@@ -305,22 +306,24 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._session_mouse_seen = False
         self._pellet_seen = False
-        self._pellet_last_seen = 0.0
+        self._pellet_last_seen_perf_c = -math.inf
         self._pellet_hands_min_distance: float = math.inf
         self._hands_near_pellet_seen = False
         self._triangle_seen = False
-        self._triangle_last_seen = 0.0
+        self._triangle_last_seen_perf_c = -math.inf
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
         self._use_triangle_pellet_distance_too_far = False
         self._triangle_pellet_diff_too_far_threshold: float = (
             PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold)
         self._triangle_pellet_expected_distance = PelletDeliveryConfiguration.triangle_pellet_expected_distance
-        self._next_diamond_triangle_log_report = time.perf_counter()
+        self._diamond_last_seen_perf_c = -math.inf
+        self._next_diamond_triangle_log_report = -math.inf
+        self._star_last_seen_perf_c = -math.inf
 
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
         self._capture_status = CaptureProcessStatus.UNKNOWN
-        self._last_capture_status_change_perf_c = time.perf_counter()
+        self._last_capture_status_change_perf_c = -math.inf
 
         self._loaded_config: Optional[BehaviorConfiguration] = None
 
@@ -331,8 +334,8 @@ class BehaviorAlgorithm(ObservableObject):
         self.max_pellets_per_session: int = 10
         self.max_pellets_per_headfix_session: int = 10
         self.max_pellets_per_day: int = 50
-        self.pellet_missing_time: float = 1.0
-        self.triangle_missing_time: float = 1.0
+        self._pellet_missing_time: float = 1.0
+        self.triangle_missing_time: float = 1.0  # kept in sync with pellet_missing_time via its property setter
         self.pellet_hand_uncover_distance = PelletDeliveryConfiguration.pellet_hand_uncover_distance
 
         self.auto_close_gate_on_intersession_config = AutoCloseGateOnIntersessionConfiguration()
@@ -359,7 +362,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._diamond_triangle_drift: Optional[Offset3DTuple] = None
         self._diamond_triangle_prev_drifts: List[Offset3DTuple] = []
-        self._diamond_triangle_last_drift_report = time.perf_counter()
+        self._diamond_triangle_last_drift_report = -math.inf
 
         self._cover_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=BehaviorAlgoProps.COVER_PELLET_DISTANCE,
@@ -383,7 +386,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._shift_xyz_handler = ShiftXYZHandler()
 
     @classmethod
-    def _check_start_thread(cls):
+    def _check_start_thread(cls: "BehaviorAlgorithm"):
         if cls._no_handler_thread:
             return
         _, handler_queue = cls._handler_thread_queue
@@ -423,8 +426,8 @@ class BehaviorAlgorithm(ObservableObject):
             return partial(_relay_func, wait=wait)
         return _relay_func(func, wait=wait)
 
-    @staticmethod
-    def _handler_thread_run(input_queue: queue.Queue):
+    @classmethod
+    def _handler_thread_run(cls: "BehaviorAlgorithm", input_queue: queue.Queue):
         logger.verbose("Running for handling/executing all algo decision/transition ..")
         while True:
             raw = input_queue.get()
@@ -446,7 +449,7 @@ class BehaviorAlgorithm(ObservableObject):
         logger.debug("Exiting ; left queue_size=%s", input_queue.qsize())
 
     @classmethod
-    def relay_transitions(cls, machine_transitions: Any):
+    def relay_transitions(cls: "BehaviorAlgorithm", machine_transitions: Any):
         """Relay all transition triggers of the given machine_transitions instance to the algo dedicated thread"""
         for trans in machine_transitions.transitions:
             trig = trans['trigger']
@@ -457,7 +460,7 @@ class BehaviorAlgorithm(ObservableObject):
                 setattr(machine_transitions, trig, cls.relay_func(meth))
 
     @classmethod
-    def put_func_call(cls, func, args: Tuple[Any], kwargs: Optional[Dict]=None,
+    def put_func_call(cls: "BehaviorAlgorithm", func, args: Tuple[Any], kwargs: Optional[Dict]=None,
                       *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
         """Put a function call request to the algo dedicated thread, and eventually wait on its completion.
         See also `BehaviorAlgorithm.set_put_func_call_mode`.
@@ -508,13 +511,8 @@ class BehaviorAlgorithm(ObservableObject):
     def algo_paused(self, value):
         prev, self._algo_paused = self._algo_paused, value
         if value and not prev:
-            self._algo_paused_perf_t = time.perf_counter()
+            self._algo_paused_perf_t = get_perf_now()
         self._on_property_changed(BehaviorAlgoProps.ALGO_PAUSED, value, prev)
-
-    @property
-    def algo_paused_age(self):
-        # actually unused.
-        return time.perf_counter() - self._algo_paused_perf_t
 
     @property
     def top_camera_presence_detection(self) -> PresenceDetectionAttrs:
@@ -543,13 +541,13 @@ class BehaviorAlgorithm(ObservableObject):
 
     @capture_status.setter
     def capture_status(self, value: CaptureProcessStatus):
-        self._last_capture_status_change_perf_c = time.perf_counter()
+        self._last_capture_status_change_perf_c = get_perf_now()
         self._capture_status = self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, self._capture_status)
 
     @property
     def capture_status_age(self) -> float:
         """Capture status age as number of seconds"""
-        return time.perf_counter() - self._last_capture_status_change_perf_c
+        return get_perf_now() - self._last_capture_status_change_perf_c
 
     @property
     def recording_age_release_pellet_threshold(self) -> float:
@@ -577,6 +575,15 @@ class BehaviorAlgorithm(ObservableObject):
     def pellet_cover_enabled(self, value: bool):
         prev, self._pellet_cover_enabled = self._pellet_cover_enabled, value
         self._on_property_changed(BehaviorAlgoProps.PELLET_COVER_ENABLED, value, prev)
+
+    @property
+    def pellet_missing_time(self) -> float:
+        return self._pellet_missing_time
+
+    @pellet_missing_time.setter
+    def pellet_missing_time(self, value):
+        self._pellet_missing_time = value
+        self.triangle_missing_time = value  # keep in sync
 
     @property
     def intersession_enabled(self):
@@ -687,16 +694,34 @@ class BehaviorAlgorithm(ObservableObject):
     #
 
     @property
+    def record_prebuffer_duration(self) -> float:
+        return self._recording_prebuffer_duration
+
+    @record_prebuffer_duration.setter
+    def record_prebuffer_duration(self, value):
+        self._recording_prebuffer_duration = value
+
+    #
+
+    @property
     def triangle_last_seen(self) -> float:
-        return self._triangle_last_seen
+        return self._triangle_last_seen_perf_c
+
+    @property
+    def star_recently_seen(self) -> bool:
+        return get_perf_now() - self._star_last_seen_perf_c < self.limits.triangle_missing_time
 
     @property
     def triangle_recently_seen(self) -> bool:
-        return time.perf_counter() - self._triangle_last_seen < self.limits.triangle_missing_time
+        return get_perf_now() - self._triangle_last_seen_perf_c < self.limits.triangle_missing_time
+
+    @property
+    def diamond_recently_seen(self) -> bool:
+        return get_perf_now() - self._diamond_last_seen_perf_c < self.limits.triangle_missing_time
 
     @property
     def pellet_last_seen(self) -> float:
-        return self._pellet_last_seen
+        return self._pellet_last_seen_perf_c
 
     @property
     def presence_missing(self) -> bool:
@@ -740,25 +765,18 @@ class BehaviorAlgorithm(ObservableObject):
         # self._on_property_changed(BehaviorProps)
 
     @property
-    def triangle_pellet_diff_too_far_threshold(self):
+    def triangle_pellet_diff_too_far_threshold(self) -> float:
         return self._triangle_pellet_diff_too_far_threshold
 
     @triangle_pellet_diff_too_far_threshold.setter
-    def triangle_pellet_diff_too_far_threshold(self, value):
+    def triangle_pellet_diff_too_far_threshold(self, value: float):
         prev, self._triangle_pellet_diff_too_far_threshold = self._triangle_pellet_diff_too_far_threshold, value
 
     def is_triangle_pellet_distance_too_far(self) -> bool:
         return (
-                abs(self.triangle_pellet_distance - self._triangle_pellet_expected_distance)
-                >= self._triangle_pellet_diff_too_far_threshold
+            abs(self.triangle_pellet_distance - self._triangle_pellet_expected_distance)
+            >= self._triangle_pellet_diff_too_far_threshold
         ) if self._use_triangle_pellet_distance_too_far else False
-
-    def _set_triangle_last_seen(self, value: float):
-        prev, self._triangle_last_seen = self._triangle_last_seen, value
-        # self._on_property_changed("triangle_last_seen", value, prev)
-
-    def _set_pellet_last_seen(self, value: float):
-        self._pellet_last_seen = self._on_property_changed("pellet_last_seen", value, self._pellet_last_seen)
 
     @property
     def day_pellet_count(self) -> int:
@@ -790,7 +808,7 @@ class BehaviorAlgorithm(ObservableObject):
     @session_pellet_count.setter
     def session_pellet_count(self, value):
         prev, self._pellet_count_session = self._pellet_count_session, value
-        self._on_property_changed(BehaviorAlgoProps.SESSION_PELLET_COUNT, value, prev)
+        self._on_property_changed(BehaviorAlgoProps.SESSION_PELLET_COUNT, value, prev)  # property unused
         incr = value - prev
         if incr > 0:
             EventManager.default().post_event_content(BehaviorEventKind.sessionPelletIncrease, context=value)
@@ -895,16 +913,6 @@ class BehaviorAlgorithm(ObservableObject):
     def diamond_triangle_offset_config_path(self) -> Path:
         return self._diamond_triangle_offset_config_path
 
-    def animal_pellet_to_motor(self, animal: AnimalSubject) -> Optional[Offset3DTuple]:
-        xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_z)
-        if not animal.is_pellet_dcs:
-            return xyz
-        cfg = self._diamond_triangle_offset_config
-        if cfg is None:
-            return None
-            # raise RuntimeError(f"Animal has pellet in DCS but no diamond-triangle config")
-        return cfg.diamond_to_motor(xyz)
-
     #
 
     @property
@@ -931,6 +939,9 @@ class BehaviorAlgorithm(ObservableObject):
             logger.warning("%s: start_session() called but already in session",
                            reason)
             return False
+        if self._algo_paused:
+            logger.error("%s: refusing start session when algo paused", reason)
+            return False
 
         logger.success("%s: starting new session recording ...", reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
@@ -941,8 +952,7 @@ class BehaviorAlgorithm(ObservableObject):
         if self._project_info is not None:
             self._project_info.calculate_next_session_index()
 
-        self._set_pellet_last_seen(0.0)
-        self._set_triangle_last_seen(0.0)
+        # ensure we look at their state on start:
         self._session_mouse_seen = False
         self._pellet_seen = False
         self._hands_near_pellet_seen = False
@@ -957,7 +967,6 @@ class BehaviorAlgorithm(ObservableObject):
 
         self.session_starting()
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
-        self.system_state = SystemState.tunnel
         self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, True, False)
         return True
 
@@ -992,16 +1001,16 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_pellet_count = 0
 
     def can_cover_pellet(self):
-        return self.pellet_delivery_enabled and self.pellet_cover_enabled
+        return self._pellet_delivery_enabled and self._pellet_cover_enabled and not self._algo_paused
 
     @property
     def pellet_seen_age(self) -> float:
         """In nbr of seconds"""
-        return time.perf_counter() - self._pellet_last_seen
+        return get_perf_now() - self._pellet_last_seen_perf_c
 
     @property
     def pellet_recently_seen(self):
-        return time.perf_counter() - self._pellet_last_seen < self.limits.pellet_missing_time
+        return get_perf_now() - self._pellet_last_seen_perf_c < self.limits.pellet_missing_time
 
     #
 
@@ -1009,10 +1018,12 @@ class BehaviorAlgorithm(ObservableObject):
         return not self._algo_paused
 
     def can_load_pellet(self):
-        return self.pellet_delivery_enabled and not self.pellet_recently_seen
+        return self._pellet_delivery_enabled and not self.pellet_recently_seen and not self._algo_paused
 
     def can_release_pellet(self) -> bool:
         # self._check_date()
+        if self._algo_paused:
+            return False
 
         if self.can_cover_pellet():
             if self._is_in_session:
@@ -1037,32 +1048,41 @@ class BehaviorAlgorithm(ObservableObject):
         # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_perform_intersession_analysis(self):
-        return self.intersession_enabled and self.session_mouse_seen
+        return self._intersession_enabled and self.session_mouse_seen
 
     #
 
-    def triangle_seen(self, seen: bool = True):
+    def update_diamond_seen(self, seen: bool):
+        if seen:
+            self._diamond_last_seen_perf_c = get_perf_now()
+
+    def update_star_seen(self, seen: bool):
+        if seen:
+            self._star_last_seen_perf_c = get_perf_now()
+
+    def update_triangle_seen(self, seen: bool = True):
         if self._triangle_seen != seen:
             self._triangle_seen = seen
             EventManager.default().post_event_content(BehaviorEventKind.triangleSeen, context=seen)
         if seen:
-            self._set_triangle_last_seen(time.perf_counter())
+            self._triangle_last_seen_perf_c = get_perf_now()
 
-    def pellet_seen(self, seen: bool = True):
+    def update_pellet_seen(self, seen: bool = True):
         if self._pellet_seen != seen:
             self._pellet_seen = seen
             EventManager.default().post_event_content(BehaviorEventKind.pelletSeen, context=seen)
         if seen:
-            self._set_pellet_last_seen(time.perf_counter())
+            self._pellet_last_seen_perf_c = get_perf_now()
 
     def pellet_loaded(self):
         self.session_pellet_count += 1
 
-    def mouse_seen(self, seen: bool = True):
+    def update_mouse_seen(self, seen: bool = True):
         if self._is_in_session and seen:
             prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
             if not prev_seen:
                 logger.verbose("Session mouse seen")
+            # property currently unused:
             self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, prev_seen)
             if not prev_seen:
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
@@ -1084,32 +1104,8 @@ class BehaviorAlgorithm(ObservableObject):
                 self._hands_near_pellet_seen = True  # must be set BEFORE doing the on_property_changed
                 self._on_property_changed(
                     BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN, True, False)
-        self._pellet_hands_min_distance = self._on_property_changed(
+        self._pellet_hands_min_distance = self._on_property_changed(  # property unused
             BehaviorAlgoProps.PELLET_HANDS_DISTANCE, value, self._pellet_hands_min_distance)
-
-    def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
-        self.pellet_delivery_enabled = cfg.is_enabled
-        self.pellet_cover_enabled = cfg.is_pellet_cover_enabled
-        self.pellet_missing_time = cfg.max_pellet_missing_seconds
-        self.max_pellets_per_session = cfg.max_pellets_per_session
-        self.max_pellets_per_day = cfg.max_pellets_per_day
-        self.intersession_pellet_shift_enabled = cfg.is_intersession_pellet_shift_enabled
-        self.use_triangle_pellet_distance_too_far = cfg.use_triangle_pellet_distance_too_far
-        self.triangle_pellet_diff_too_far_threshold = cfg.triangle_pellet_diff_too_far_threshold
-        self.auto_correct_motors_drift = cfg.auto_correct_motors_drift
-        self.pellet_hand_uncover_distance = cfg.pellet_hand_uncover_distance
-
-    def _load_head_clamp_cfg(self, cfg: HeadClampConfiguration):
-        self.min_baseline_intensity = cfg.min_baseline_intensity
-        self.max_baseline_intensity = cfg.max_baseline_intensity
-        self.baseline_intensity_increment = cfg.baseline_intensity_increment
-
-        self.auto_clamp_intensity = cfg.auto_clamp_intensity
-        self.auto_clamp_release_tone_freq = cfg.auto_clamp_release_tone_freq
-        self.auto_clamp_release_tone_delay = cfg.auto_clamp_release_tone_delay
-        self.auto_clamp_release_load_count = cfg.auto_clamp_release_load_count
-        self.auto_clamp_no_activity_release_delay = cfg.auto_clamp_no_activity_release_delay
-        self.auto_clamp_before_reengage_delay = cfg.before_reengage_delay
 
     def reset_configuration(self):
         """Reset current config to the previous loaded config (via load_configuration)"""
@@ -1126,28 +1122,57 @@ class BehaviorAlgorithm(ObservableObject):
             self._topcam_presence.load_config(config.topcam_presence_detection)
         # self.auto_close_gate_on_intersession_config = config.  # not saved yet to config
 
+    def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
+        self.pellet_delivery_enabled = cfg.is_enabled
+        self.intersession_enabled = cfg.is_intersession_analysis_enabled
+        self.pellet_cover_enabled = cfg.is_pellet_cover_enabled
+        self.pellet_missing_time = cfg.max_pellet_missing_seconds
+        self.max_pellets_per_session = cfg.max_pellets_per_session
+        self.max_pellets_per_day = cfg.max_pellets_per_day
+        self.intersession_pellet_shift_enabled = cfg.is_intersession_pellet_shift_enabled
+        self.use_triangle_pellet_distance_too_far = cfg.use_triangle_pellet_distance_too_far
+        self.triangle_pellet_expected_distance = cfg.triangle_pellet_expected_distance
+        self.triangle_pellet_diff_too_far_threshold = cfg.triangle_pellet_diff_too_far_threshold
+        self.auto_correct_motors_drift = cfg.auto_correct_motors_drift
+        self.pellet_hand_uncover_distance = cfg.pellet_hand_uncover_distance
+
+    def _load_head_clamp_cfg(self, cfg: HeadClampConfiguration):
+        self.min_baseline_intensity = cfg.min_baseline_intensity
+        self.max_baseline_intensity = cfg.max_baseline_intensity
+        self.baseline_intensity_increment = cfg.baseline_intensity_increment
+
+        self.auto_clamp_intensity = cfg.auto_clamp_intensity
+        self.auto_clamp_release_tone_freq = cfg.auto_clamp_release_tone_freq
+        self.auto_clamp_release_tone_delay = cfg.auto_clamp_release_tone_delay
+        self.auto_clamp_release_load_count = cfg.auto_clamp_release_load_count
+        self.auto_clamp_no_activity_release_delay = cfg.auto_clamp_no_activity_release_delay
+        self.auto_clamp_before_reengage_delay = cfg.before_reengage_delay
+
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
-        cfg.is_enabled = self.pellet_delivery_enabled
-        cfg.is_pellet_cover_enabled = self.pellet_cover_enabled
+        cfg.is_enabled = self._pellet_delivery_enabled
+        cfg.is_intersession_analysis_enabled = self._intersession_enabled
+        cfg.is_pellet_cover_enabled = self._pellet_cover_enabled
         cfg.max_pellet_missing_seconds = self.pellet_missing_time
         cfg.max_pellets_per_session = self.max_pellets_per_session
         cfg.max_pellets_per_day = self.max_pellets_per_day
         cfg.auto_correct_motors_drift = self._auto_correct_motors_drift
-        cfg.use_triangle_pellet_distance_too_far = self.use_triangle_pellet_distance_too_far
-        cfg.triangle_pellet_expected_distance = self.triangle_pellet_expected_distance
-        cfg.triangle_pellet_diff_too_far_threshold = self.triangle_pellet_diff_too_far_threshold
+        cfg.is_intersession_pellet_shift_enabled = self._intersession_pellet_shift_enabled
+        cfg.use_triangle_pellet_distance_too_far = self._use_triangle_pellet_distance_too_far
+        cfg.triangle_pellet_expected_distance = self._triangle_pellet_expected_distance
+        cfg.triangle_pellet_diff_too_far_threshold = self._triangle_pellet_diff_too_far_threshold
         cfg.pellet_hand_uncover_distance = self.pellet_hand_uncover_distance
 
     def _update_head_clamp_cfg(self, cfg: HeadClampConfiguration):
         cfg.min_baseline_intensity = self.min_baseline_intensity
         cfg.max_baseline_intensity = self.max_baseline_intensity
         cfg.baseline_intensity_increment = self.baseline_intensity_increment
-        cfg.auto_clamp_intensity = self.auto_clamp_intensity
-        cfg.auto_clamp_release_tone_freq = self.auto_clamp_release_tone_freq
-        cfg.auto_clamp_release_tone_delay = self.auto_clamp_release_tone_delay
-        cfg.auto_clamp_release_load_count = self.auto_clamp_release_load_count
-        cfg.auto_clamp_no_activity_release_delay = self.auto_clamp_no_activity_release_delay
-        cfg.before_reengage_delay = self.auto_clamp_before_reengage_delay
+
+        cfg.auto_clamp_intensity = self._auto_clamp_intensity
+        cfg.auto_clamp_release_tone_freq = self._auto_clamp_release_tone_freq
+        cfg.auto_clamp_release_tone_delay = self._auto_clamp_release_tone_delay
+        cfg.auto_clamp_release_load_count = self._auto_clamp_release_load_count
+        cfg.auto_clamp_no_activity_release_delay = self._auto_clamp_no_activity_release_delay
+        cfg.before_reengage_delay = self._auto_clamp_before_reengage_delay
 
     def update_configuration(self, configuration: BehaviorConfiguration):
         self._update_pellet_cfg(configuration.pellet_delivery)
@@ -1156,25 +1181,29 @@ class BehaviorAlgorithm(ObservableObject):
     def get_diamond_triangle_drifts(self, reset: bool = False) -> Optional[Offset3DTuple]:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""
         values = self._diamond_triangle_prev_drifts
-        tot = reduce(operator.add, values, Offset3DTuple(0, 0, 0))
-        n_vals = len(values)
         if reset:
             self._diamond_triangle_prev_drifts = []
-        new_drift = Offset3DTuple(0, 0, 0) if n_vals == 0 else tot / n_vals
-        if len(values) > 0:
-            logger.info(
-                "Motor mean drift: %s ; min=%s max=%s n_vals=%s",
-                new_drift.humanize(n_digits=3),
+        n_vals = len(values)
+        if n_vals < 2:
+            new_drift = None if len(values) == 0 else values[-1]
+            stdev_drift = Offset3DTuple(0, 0, 0)
+        else:
+            new_drift, stdev_drift = calculate_std_dev_manual(values)
+        if n_vals > 0:
+            logger.verbose(
+                "Current motor (diamond-triangle) mean drift: %s ; min=%s max=%s n_vals=%s stdev=%s",
+                None if new_drift is None else new_drift.humanize(n_digits=2),
                 min(values, key=lambda v: v.distance).humanize(n_digits=1),
                 max(values, key=lambda v: v.distance).humanize(n_digits=1),
-                len(values),
+                n_vals,
+                stdev_drift.humanize(n_digits=1)
             )
         else:
             logger.verbose("No motor drift measure available")
             # put here to minimize nbr of times we update it:
             new_drift = None
         prev, self._diamond_triangle_drift = self._diamond_triangle_drift, new_drift
-        self._on_property_changed(BehaviorAlgoProps.PELLET_MOTOR_DRIFT, new_drift, prev)
+        self._on_property_changed(BehaviorAlgoProps.PELLET_MOTOR_DRIFT, new_drift, prev)  # property unused atm
         return new_drift
 
     def handle_diamond_triangle_offset(
@@ -1190,20 +1219,18 @@ class BehaviorAlgorithm(ObservableObject):
         if prev is None:
             prev = Offset3DTuple(0, 0, 0)
         if __debug__:
-            t_perf_now = time.perf_counter()
+            t_perf_now = get_perf_now()
             if t_perf_now >= self._next_diamond_triangle_log_report:
                 logger.spam("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
                             drift.humanize(), prev.humanize(), motor_position.humanize(), offset.humanize())
                 self._next_diamond_triangle_log_report = t_perf_now + 1
             if any(abs(d) >= 2 for d in drift):
-                perf_now = time.perf_counter()
+                perf_now = get_perf_now()
                 if perf_now > self._diamond_triangle_last_drift_report + 1:  # max 1 / s
                     logger.debug("Measured motor drift: %s (prev=%s) ; pos=%s offset=%s",
                                  drift.humanize(), prev.humanize(), motor_position.humanize(), offset.humanize())
                     self._diamond_triangle_last_drift_report = perf_now
         self._diamond_triangle_prev_drifts.append(drift)
-        if prev != drift:
-            self.pellet_motor_drift_changed(drift)
 
     def handle_cover_pellet_offset(self, offset: Offset3DTuple):
         self._handle_check_element_distance(self._cover_pellet_distance_ctx, offset)
@@ -1224,19 +1251,19 @@ class BehaviorAlgorithm(ObservableObject):
             assert ctx.error_way is CheckThresholdWay.TRIGGER_IF_SMALLER
             is_error = distance <= ctx.error_distance_threshold
         if not is_error:
-            # we might want to only unset the error_start_timestamp after some minimum duration too
-            if ctx.error_start_timestamp is not None:
-                ctx.error_start_timestamp = None
+            # we might want to only unset the error_start_perf_c after some minimum duration too
+            if ctx.error_start_perf_c is not None:
+                ctx.error_start_perf_c = None
                 logger.info("End of deviation on %s ; distance=%s",
                             ctx.distance_property_name, distance)
             return
-        t_now = time.time()
-        if ctx.error_start_timestamp is None:
-            ctx.error_start_timestamp = t_now
+        perf_now = get_perf_now()
+        if ctx.error_start_perf_c is None:
+            ctx.error_start_perf_c = perf_now
             logger.warning("Detected start of %s deviation ; distance=%s threshold=%s",
                            ctx.distance_property_name, distance, ctx.error_distance_threshold)
         else:
-            if t_now - ctx.error_start_timestamp >= ctx.error_min_duration_threshold:
+            if perf_now - ctx.error_start_perf_c >= ctx.error_min_duration_threshold:
                 logger.critical("Detected %s over threshold ; distance=%.3f prev=%s threshold=%s",
                                 ctx.distance_property_name, distance, prev_distance,
                                 ctx.error_distance_threshold)

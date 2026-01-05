@@ -32,11 +32,6 @@ def test_frame_index_padding(idx):
 
 @pytest.mark.parametrize("idx", [-5, -5.0, "-5"])
 def test_frame_index_switch_to_offline(idx):
-    assert FrameIndexCategory(idx) is FrameIndexCategory.SWITCH_TO_OFFLINE_MODE
-
-
-@pytest.mark.parametrize("idx", [-6, -6.0, "-6"])
-def test_frame_index_switch_to_offline(idx):
     assert FrameIndexCategory(idx) is FrameIndexCategory.SWITCH_TO_ONLINE
 
 

@@ -1,6 +1,6 @@
 # must be firsts to prevent partial import name error because of import loop cycle(s):
 from .motor_steps import MotorSteps
-from .compound_movement_file import CompoundMovementFile
+from .compound_movement_file import CompoundMovements
 from .motor_configuration_file import MotorConfigurationFile
 
 from .device import Device
