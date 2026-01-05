@@ -563,7 +563,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def is_in_session_age(self) -> float:
-        return time.perf_counter() - self._session_started_perf_c
+        return get_perf_now() - self._session_started_perf_c
 
     @property
     def pellet_delivery_enabled(self):
@@ -960,7 +960,7 @@ class BehaviorAlgorithm(ObservableObject):
         logger.success("%s: starting new session recording ...", reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
         self._is_in_session = True
-        self._session_started_perf_c = time.perf_counter()
+        self._session_started_perf_c = get_perf_now()
         self._start_session_reason = reason
         self.reset_session_pellet_count()
 
@@ -1101,6 +1101,10 @@ class BehaviorAlgorithm(ObservableObject):
             self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, prev_seen)
             if not prev_seen:
                 EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
+
+    @property
+    def mouse_seen_age(self) -> float:
+        return get_perf_now() - self._mouse_seen_last_perf_c
 
     @property
     def hands_near_pellet_seen(self):
