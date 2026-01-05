@@ -287,21 +287,28 @@ def test_release_pellet(machine, mock_system):
     assert pellet_m._api_status_token is None
 
 
-def test_on_device_command_failed_get_exception(machine, mock_system):
+@pytest.mark.parametrize("pellet_dev_method", [
+    "send_pellet",
+    "load_pellet",
+    ("move_home", "send_home"),
+    ("move_retract", "send_retract"),
+    "cover_pellet",
+    "release_pellet"
+])
+def test_on_device_command_failed_get_exception(machine, mock_system, pellet_dev_method):
+    algo = machine.algorithm
     pellet_m = machine.pellet
     dev = pellet_m._pellet_device
-    for action, dev_meth in (
-        (pellet_m.send_pellet, dev.send_pellet),
-        (pellet_m.load_pellet, dev.load_pellet),
-        (pellet_m.move_home, dev.send_home),
-        (pellet_m.move_retract, dev.send_retract),
-        (pellet_m.cover_pellet, dev.cover_pellet),
-        (pellet_m.release_pellet, dev.release_pellet),
-    ):
-        pellet_m._api_status_token = None
-        pellet_m.state = PelletState.monitoring  # is normally accepted for all actions
-        dev_meth.return_value = None
-        machine.algorithm.pellet_cover_enabled = action != pellet_m.release_pellet  # need for release_pellet
-        with pytest.raises(PelletDeviceCommandFailed):
-            action()
-        dev_meth.reset_mock()
+    if isinstance(pellet_dev_method, str):
+        action = getattr(pellet_m, pellet_dev_method)
+        dev_meth = getattr(dev, pellet_dev_method)
+    else:
+        action = getattr(pellet_m, pellet_dev_method[0])
+        dev_meth = getattr(dev, pellet_dev_method[1])
+    pellet_m._api_status_token = None
+    pellet_m.state = PelletState.monitoring  # is normally accepted for all actions
+    dev_meth.return_value = None
+    algo.update_triangle_seen(True)  # need triangle seen for can_load_pellet
+    machine.algorithm.pellet_cover_enabled = action != pellet_m.release_pellet  # need for release_pellet
+    with pytest.raises(PelletDeviceCommandFailed):
+        action()

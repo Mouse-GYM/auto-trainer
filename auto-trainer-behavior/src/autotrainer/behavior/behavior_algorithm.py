@@ -780,9 +780,11 @@ class BehaviorAlgorithm(ObservableObject):
         prev, self._triangle_pellet_diff_too_far_threshold = self._triangle_pellet_diff_too_far_threshold, value
 
     def is_triangle_pellet_distance_too_far(self) -> bool:
+        last_dist_diff = abs(self.triangle_pellet_distance - self._triangle_pellet_expected_distance)
         return (
-            abs(self.triangle_pellet_distance - self._triangle_pellet_expected_distance)
-            >= self._triangle_pellet_diff_too_far_threshold
+            self.pellet_recently_seen
+            and self.triangle_recently_seen
+            and last_dist_diff >= self._triangle_pellet_diff_too_far_threshold
         ) if self._use_triangle_pellet_distance_too_far else False
 
     @property
@@ -1035,12 +1037,12 @@ class BehaviorAlgorithm(ObservableObject):
     def can_load_pellet(self):
         # is more has_to_load_pellet()
         return (
-            self._pellet_delivery_enabled and not self._algo_paused
+            self._pellet_delivery_enabled
+            and not self._algo_paused
+            and self.triangle_recently_seen
             and (
                 not self.pellet_recently_seen
-                or (
-                    self.triangle_recently_seen and self.is_triangle_pellet_distance_too_far()
-                )
+                or self.is_triangle_pellet_distance_too_far()
             )
         )
 
