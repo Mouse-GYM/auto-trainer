@@ -61,9 +61,6 @@ class LoadCellConfiguration:
         )))
 
 
-load_cell_configuration_representer = make_camelize_representer("!LoadCellConfiguration")
-
-
 @dataclass
 class LoadCellMonitorContext:
     # using a dedicated "context" object, allows to have all attributes consistent, given we replace the active one

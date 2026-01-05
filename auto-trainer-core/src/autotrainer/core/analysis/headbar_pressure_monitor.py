@@ -25,9 +25,6 @@ class HeadbarPressureConfiguration:
         )
 
 
-headbar_pressure_configuration_representer = make_camelize_representer("!HeadbarPressureConfiguration")
-
-
 class HeadbarPressureMonitor(ObservableObject):
     """
     Monitor the headbar pressure data stream and perform any required analysis.  The current implementation is used to

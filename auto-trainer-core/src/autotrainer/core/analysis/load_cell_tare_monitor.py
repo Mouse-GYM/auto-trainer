@@ -29,15 +29,6 @@ class LoadCellAutoTareConfiguration:
         )
 
 
-def load_cell_auto_tare_configuration_representer(dumper: yaml.SafeDumper,
-                                                  c: LoadCellAutoTareConfiguration) -> yaml.nodes.MappingNode:
-    return dumper.represent_mapping("!LoadCellAutoTareConfiguration", {
-        "threshold": c.threshold,
-        "rangeThreshold": c.range_threshold,
-        "duration": c.duration
-    })
-
-
 class LoadCellTareMonitor:
     """
     Monitor the load cell data stream and whether zeroing is required.  The decision to actually zero or not is not

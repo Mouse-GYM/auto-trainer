@@ -112,7 +112,6 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         config.topcam_presence_detection = None if algo.top_camera_presence_detection is None else algo.top_camera_presence_detection.to_config()
         config.global_animal_presence = analysis.global_animal_presence_monitor.config
         config.external_doors = analysis.external_doors_monitor.config
-        logger.debug("config.external_doors=%s", config.external_doors)
 
         return config
 
