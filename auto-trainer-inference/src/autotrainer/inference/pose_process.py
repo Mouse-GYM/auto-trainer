@@ -8,6 +8,7 @@ from queue import Empty
 from typing import Optional, Callable, List, Dict
 
 import numpy
+import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, PerfMonitor
 from autotrainer.core.logging import get_verbose_logger, get_multiprocess_log_queue, make_log_dict_config, \
@@ -281,7 +282,7 @@ class PoseProcess(Process):
             if (frames_indices[:, -1] < 0).any():
                 if __debug__:
                     if not (frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all():
-                        logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices)
+                        logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices.tolist())
 
                 if (
                     i_q is self._offline_input_queue
@@ -299,21 +300,32 @@ class PoseProcess(Process):
                 ):
                     self._input_queue = self._offline_input_queue
                     self._mode = InferenceMode.Offline
-                    logger.notice("Switched to offline queue: %s", frames_indices)
+                    logger.notice("Switched to offline queue: %s", frames_indices.tolist())
                     self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
                     # always get new ref:
                     reset_locals()
 
-            pose = predict(frame_buffer)
+            # only predict for not fully incomplete frames buffer:
+            if (frames_indices >= FrameIndexCategory.ONLINE_NO_RECORDING).any():
+                pose = predict(frame_buffer)
+            else:
+                logger.debug("indices=%s skipped inference", frames_indices.tolist())
+                # otherwise gives a full "0" result:
+                # * 3 : for X, Y and confidence
+                pose = [np.asarray([0] * 3 * len(self._pose_model.body_parts))] * frames_indices.size
+                # that will anyway be skipped in the consumer when needed
+
             frames_indices_out[:] = frames_indices
+            # getting frame indices corruption in reader side without this.
+            # It could be eventually explained if the serialisation
+            # of the frames_indices numpy array happens after the return of the queue put()..
+            # which is not totally impossible.
+
             # NB:
             # the data queue reader/consumer takes care of deciding what to do with the result data:
             d_q_put((pose,
                      mode_used,
-                     frames_indices_out,  # getting frame indices corruption in reader side without this.
-                     #  frames_indices,  # it could be eventually explained if the serialisation
-                     # of the frames_indices numpy array happens after the return of the queue put()..
-                     # which is not totally impossible.
+                     frames_indices_out,
                      ))
 
             if not sent_live:
@@ -325,13 +337,8 @@ class PoseProcess(Process):
 
             if mode_used == InferenceMode.Offline and (
                 frames_indices[:, -1] == FrameIndexCategory.EOF_OFFLINE_PROCESSING
-                # numpy.isin(frames_indices[:, -1], [  # noqa
-                #     FrameIndexCategory.EOF_OFFLINE_PROCESSING,
-                #     # FrameIndexCategory.SWITCH_TO_ONLINE,
-                #     ]
-                # ).any()
             ).any():
-                logger.notice("Detected end of offline queue processing: %s", frames_indices)
+                logger.notice("Detected end of offline queue processing: %s", frames_indices.tolist())
                 # self._offline_input_queue.reset_reader()  # reset our reader index for next offline
                 d_q_put((None, InferenceMode.Offline, None))  # tells data monitor this is EOF current offline data
                 # then swap to live queue

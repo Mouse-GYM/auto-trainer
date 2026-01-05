@@ -56,6 +56,7 @@ class TestTrainingPlan(MockSystemMachine):
             calib_dir=calib_dir,
             system_machine=machine,
         )
+        app_model.check_diamond_coord_enabled = False
         self._animal = app_model.add_animal("mouse1", select=True)
         try:
             yield app_model

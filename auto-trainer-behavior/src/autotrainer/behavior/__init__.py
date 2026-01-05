@@ -1,5 +1,6 @@
 import dataclasses
 import enum
+import itertools
 import math
 import os
 from dataclasses import dataclass
@@ -21,26 +22,43 @@ DEFAULT_DIAMOND_TRIANGLE_CONFIG_PATH = Path(
 ).expanduser()
 
 
+_offset_nans = Offset3DTuple(math.nan, math.nan, math.nan)
+
+
 # keeping top level atm, given not quite sure where to put
 @dataclasses.dataclass
 class DiamondTriangleOffsetConfig:
-    used_position: Offset3DTuple
-    measured_offset: Offset3DTuple
+    used_position: Offset3DTuple  # motor coordinate used
+    measured_offset: Offset3DTuple  # inference coordinate offset between diamond and triangle (diamond - triangle)
+
+    diamond_coord: Offset3DTuple = _offset_nans
+    # inference diamond coordinate
 
     DEFAULT_CONFIG_PATH: ClassVar = DEFAULT_DIAMOND_TRIANGLE_CONFIG_PATH
 
     # 3 coordinate systems,
     # but each has some axis direction difference (when one increases, the other decreases)
-    flips_inference_motor = Offset3DTuple(1, -1, 1)
-    flips_inference_diamond = Offset3DTuple(-1, -1, 1)
+    flips_inference_motor: ClassVar[Offset3DTuple] = Offset3DTuple(1, -1, 1)
+    flips_inference_diamond: ClassVar[Offset3DTuple] = Offset3DTuple(-1, -1, 1)
 
     # defining flips between motor and diamond with flips between motor and inference * flips between inference and diamond:
-    flips_motor_diamond = flips_inference_motor * flips_inference_diamond
+    flips_motor_diamond: ClassVar[Offset3DTuple] = flips_inference_motor * flips_inference_diamond
 
-    def __init__(self, *, used_position, measured_offset):
+    # custom init to ensure kwarg only :
+    def __init__(self, *, used_position, measured_offset, diamond_coord=_offset_nans):
         super().__init__()
-        self.used_position = Offset3DTuple(used_position)
-        self.measured_offset = Offset3DTuple(measured_offset)
+        self.used_position = used_position
+        self.measured_offset = measured_offset
+        self.diamond_coord = diamond_coord
+
+    @property
+    def fully_valid(self):
+        return all(map(math.isfinite,
+            itertools.chain(
+                self.used_position,
+                self.measured_offset,
+                self.diamond_coord,
+            )))
 
     @classmethod
     def load_config(cls, cfg_path: Optional[Path]) -> Optional[Self]:
@@ -51,13 +69,13 @@ class DiamondTriangleOffsetConfig:
                 logger.warning("Diamond triangle config %r not a file", cfg_path.as_posix())
             else:
                 logger.verbose("Loading diamond-triangle file %r", cfg_path.as_posix())
-                return DiamondTriangleOffsetConfig.from_file(cfg_path)
+                cfg = DiamondTriangleOffsetConfig.from_file(cfg_path)
+                if all(math.isfinite(c) for c in cfg.diamond_coord):
+                    return cfg
+                logger.warning("Diamond coordinate undefined or not finite in config %r",
+                               cfg_path.as_posix())
+                return cfg
         return None
-
-    @property
-    def reference_corrected_offset(self):
-        # unused
-        return self.measured_offset - self.used_position  # subtract used_position, to have common 0
 
     @classmethod
     def from_file(cls, path: Path):
