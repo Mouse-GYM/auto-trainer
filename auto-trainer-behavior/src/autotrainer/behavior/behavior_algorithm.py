@@ -770,10 +770,12 @@ class BehaviorAlgorithm(ObservableObject):
     @triangle_pellet_expected_distance.setter
     def triangle_pellet_expected_distance(self, value):
         prev, self._triangle_pellet_expected_distance = self._triangle_pellet_expected_distance, value
-        # self._on_property_changed(BehaviorProps)
 
     @property
     def triangle_pellet_diff_too_far_threshold(self) -> float:
+        """Diff threshold above which pellet is considered "too-far" from triangle.
+        That is if abs(current_distance - expected_dictance) >= diff_threshold -> too far
+        """
         return self._triangle_pellet_diff_too_far_threshold
 
     @triangle_pellet_diff_too_far_threshold.setter
@@ -781,12 +783,13 @@ class BehaviorAlgorithm(ObservableObject):
         prev, self._triangle_pellet_diff_too_far_threshold = self._triangle_pellet_diff_too_far_threshold, value
 
     def is_triangle_pellet_distance_too_far(self) -> bool:
+        """Check if triangle is too far from pellet according to triangle_pellet_expected_distance & triangle_pellet_diff_too_far_threshold"""
         last_dist_diff = abs(self.triangle_pellet_distance - self._triangle_pellet_expected_distance)
         return (
             self.pellet_recently_seen
             and self.triangle_recently_seen
             and last_dist_diff >= self._triangle_pellet_diff_too_far_threshold
-        ) if self._use_triangle_pellet_distance_too_far else False
+        )
 
     @property
     def day_pellet_count(self) -> int:
@@ -1048,7 +1051,9 @@ class BehaviorAlgorithm(ObservableObject):
             logger.verbose("BehaviorAlgo.can_load_pellet: pellet_missing")
             return True
         pellet_too_far = (
-            (pellet_state == PelletState.monitoring and self.is_triangle_pellet_distance_too_far())
+            (self.use_triangle_pellet_distance_too_far
+             and pellet_state == PelletState.monitoring
+             and self.is_triangle_pellet_distance_too_far())
         )
         if pellet_too_far:
             logger.verbose("BehaviorAlgo.can_load_pellet: triangle/pellet too far")
