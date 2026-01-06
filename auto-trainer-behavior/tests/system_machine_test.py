@@ -20,8 +20,10 @@ from top_fixtures import MockSystemMachine
 from autotrainer.core import HeadbarPressureMonitor, get_perf_now, Offset3DTuple
 from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
-from autotrainer.behavior import PelletMachine, CaptureAnalysisResult, IntersessionState
-from autotrainer.behavior import SystemState, PelletState, SystemMachine
+from autotrainer.behavior import CaptureAnalysisResult, IntersessionState
+from autotrainer.behavior import SystemState, SystemMachine
+from autotrainer.behavior.pellet import PelletState
+from autotrainer.behavior.pellet.pellet_machine import PelletMachine
 
 from autotrainer.inference.analysis.intersession_process import IntersessionResponse
 

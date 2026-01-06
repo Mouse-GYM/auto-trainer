@@ -12,7 +12,9 @@ from typing_extensions import Self
 import numpy
 import yaml
 
-from autotrainer.core import Offset3DTuple, get_verbose_logger, SystemConfiguration
+from autotrainer.core import Offset3DTuple
+from autotrainer.core.logging import get_verbose_logger
+
 
 logger = get_verbose_logger()
 
@@ -183,7 +185,6 @@ from .pellet_device_protocol import PelletDeviceProtocol
 
 from .intersession import IntersessionState
 from .intersession.intersession_machine import IntersessionMachine
-from .pellet import PelletMachine, PelletState
 from .behavior_algorithm import BehaviorAlgorithm
 
 from .system_machine import SystemMachine

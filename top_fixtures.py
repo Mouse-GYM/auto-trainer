@@ -20,8 +20,8 @@ from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 
-from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, PelletState, \
-    BehaviorAlgorithm, InferenceProtocol, DiamondTriangleOffsetConfig
+from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, BehaviorAlgorithm, InferenceProtocol, DiamondTriangleOffsetConfig
+from autotrainer.behavior.pellet import PelletState
 
 logger = logging.getLogger(__name__)
 
@@ -33,16 +33,17 @@ repo_root_tests_subdir = repo_root_dir.joinpath("tests")
 fake_perf_now = 0  # used to control time.perf_counter() in BehaviorAlgo/SystemMachine/PelletMachine/Intersession
 
 
-@pytest.fixture(autouse=True)
-def reset_fake_perf_now():
-    global fake_perf_now
-    fake_perf_now = 0
-
-
 def get_fake_perf_now():
     global fake_perf_now
     fake_perf_now += 1e-9  # convenience, so that any call to it will get a different value than the previous
     return fake_perf_now
+
+
+@pytest.fixture
+def mock_get_perf_now(monkeypatch):
+    global fake_perf_now
+    fake_perf_now = 0
+    monkeypatch.setattr(autotrainer.core, "_get_perf_now", get_fake_perf_now)
 
 
 @pytest.fixture(autouse=True)
@@ -169,16 +170,13 @@ def system_msg_handler(system_msg_queue, sensor_analysis):
 
 
 @pytest.fixture
-def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch) -> SystemMachine:
+def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch, mock_get_perf_now) -> SystemMachine:
     # Disable algo handler thread
     assert BehaviorAlgorithm._no_handler_thread is False
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True
 
-    # cur = autotrainer.core.get_perf_now()
-    # assert cur > 0
-    monkeypatch.setattr(autotrainer.core, "_get_perf_now", get_fake_perf_now)
-    # assert autotrainer.core.get_perf_now() == 0
+    del mock_get_perf_now  # not needed here, only used for side effect
 
     #
     machine = SystemMachine(

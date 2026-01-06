@@ -23,7 +23,8 @@ from . import CaptureAnalysisResult, DiamondTriangleOffsetConfig, RecordingEndin
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine, IntersessionState
-from .pellet import PelletMachine, PelletState
+from .pellet import PelletState
+from .pellet.pellet_machine import PelletMachine
 from .pellet_device_protocol import PelletDeviceProtocol
 from .state_machine import StateMachine
 from .system_machine_state import SystemState

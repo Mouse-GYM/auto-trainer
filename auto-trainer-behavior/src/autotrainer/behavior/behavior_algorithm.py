@@ -34,6 +34,7 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.video import CaptureProcessStatus
 
 from . import DiamondTriangleOffsetConfig, CaptureAnalysisResult, TrainingMode, RecordingEndingReason
+from .pellet import PelletState
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 
@@ -1034,7 +1035,7 @@ class BehaviorAlgorithm(ObservableObject):
     def can_send_pellet(self):
         return not self._algo_paused
 
-    def can_load_pellet(self):
+    def can_load_pellet(self, pellet_state: PelletState = PelletState.monitoring):
         # is more has_to_load_pellet()
         return (
             self._pellet_delivery_enabled
@@ -1042,7 +1043,7 @@ class BehaviorAlgorithm(ObservableObject):
             and self.triangle_recently_seen
             and (
                 not self.pellet_recently_seen
-                or self.is_triangle_pellet_distance_too_far()
+                or (pellet_state == PelletState.monitoring and self.is_triangle_pellet_distance_too_far())
             )
         )
 

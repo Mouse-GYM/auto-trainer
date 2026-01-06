@@ -4,8 +4,9 @@ from unittest import mock
 import pytest
 
 import autotrainer.behavior.pellet.pellet_machine
-from autotrainer.behavior import PelletState, SystemState, PelletMachine, PelletDeviceProtocol, BehaviorAlgorithm, \
+from autotrainer.behavior import SystemState, PelletDeviceProtocol, BehaviorAlgorithm, \
     SystemMachine
+from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet.pellet_machine import PelletDeviceCommandFailed
 
 from top_fixtures import MockSystemMachine, mock_system
