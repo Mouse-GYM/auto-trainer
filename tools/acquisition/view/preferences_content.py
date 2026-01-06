@@ -127,7 +127,7 @@ class PreferencesContent(QWidget):
                          algo.pellet_delivery_enabled, algo.pellet_cover_enabled,
                          algo.can_cover_pellet(), algo.can_release_pellet(),
                          algo.can_send_pellet(), algo.can_load_pellet(),
-                         algo.can_perform_intersession_analysis(), pm._covered_state)
+                         algo.can_perform_intersession_analysis(), pm.covered_state)
             for r in states_refresh:
                 r()
 
@@ -217,8 +217,8 @@ class PreferencesContent(QWidget):
             self._deliver_pellet_toggle.isEnabled() and self._deliver_pellet_toggle.isChecked()
         ))
         spinbox.setValue(algo.pellet_missing_time)
-        spinbox.setDecimals(1)
-        spinbox.setSingleStep(0.1)
+        spinbox.setDecimals(2)
+        spinbox.setSingleStep(0.05)
         def max_pellet_missing_seconds_changed(value):
             algo.pellet_missing_time = value
         spinbox.valueChanged.connect(max_pellet_missing_seconds_changed)

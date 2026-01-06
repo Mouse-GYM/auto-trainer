@@ -1,37 +1,27 @@
 import math
-import time
 import os
-from enum import Enum
-from typing import Dict, Callable, Any, Optional, get_type_hints
+from typing import Callable, Optional, get_type_hints
 
 from transitions import Machine
 
 from autotrainer.core import EventManager, transitions_allow_functions, SystemMessageHandler, get_perf_now
 from autotrainer.core import ApiEventKind as BehaviorEventKind
-from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
+from autotrainer.core.multiproc import no_op_timer
 from autotrainer.core.logging import get_verbose_logger
-from .. import RecordingEndingReason
-from .. import IntersessionState
 
+from ..intersession import IntersessionState
+from .. import RecordingEndingReason
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..pellet_device_protocol import PelletDeviceProtocol
 from ..state_machine import StateMachine, StateMachineEvents
 from ..system_machine_state import SystemState
 
+from . import PelletState
+
 logger = get_verbose_logger(__name__)
 
 
 DEFAULT_LOAD_RETRACT_COUNT_FORCE_HOME = int(os.getenv("AUTOTRAINER_LOAD_RETRACT_COUNT_FORCE_HOME", "12"))
-
-
-class PelletState(str, Enum):
-    monitoring = "monitoring"
-    loading = "loading"
-    sending = "sending"
-    releasing = "releasing"
-    covering = "covering"
-    home = "home"
-    retract = "retract"
 
 
 class PelletMachineEvents(StateMachineEvents):
@@ -174,7 +164,7 @@ class PelletMachine(StateMachine):
         return can
 
     def can_load_pellet(self):
-        can = self.can_use_pellet_command() and self._algorithm.can_load_pellet()
+        can = self.can_use_pellet_command() and self._algorithm.can_load_pellet(pellet_state=self._state)
         EventManager.default().post_event_content(BehaviorEventKind.pelletLoadCan, context=can)
         return can
 
@@ -348,16 +338,14 @@ class PelletMachine(StateMachine):
 
         if cur_state in {PelletState.loading, PelletState.retract}:
             if not self.can_use_pellet_command():
-                # wait movement is finished
+                # always wait the previous movement is finished
                 return
             # this is going to be called at end of intersession after going to detection phase,
             # basically when inference is back to live
-            if not pellet_seen and algo.triangle_recently_seen:
-                # if triangle seen and pellet not seen: pellet not loaded ok for sure, we should see it if it was there
-                if algo.can_load_pellet():
-                    reason = "load_pellet_when_not_seen_and_retract_or_loading"
-                    logit()
-                    self.load_pellet()
+            if algo.can_load_pellet(pellet_state=cur_state):
+                reason = "load_pellet_when_not_seen_and_retract_or_loading"
+                logit()
+                self.load_pellet()
             else:
                 # either pellet is seen, or we don't know (might be not visible on cameras),
                 if cur_state == PelletState.loading and pellet_seen and is_from_inference:
@@ -400,19 +388,16 @@ class PelletMachine(StateMachine):
             if pellet_seen and is_from_inference and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
                 self._notify_pellet_loaded_ok()
 
-            if ((not pellet_seen and (algo.triangle_recently_seen or algo.star_recently_seen))
-                  or (pellet_seen and algo.triangle_recently_seen and algo.is_triangle_pellet_distance_too_far())
-            ):
+            if self.can_load_pellet():
                 reason = "load_pellet_when_monitoring_pellet_not_seen_or_too_far"
-                if self.can_load_pellet():
-                    logit()
-                    self.load_pellet()
-                else:
-                    log_could_retry_shortly()
+                logit()
+                self.load_pellet()
                 return
+
             if self._prev_covered_state is not self._covered_state:
                 logger.debug("covered_state: %s -> %s", self._prev_covered_state, self._covered_state)
                 self._prev_covered_state = self._covered_state
+
             can_cover = algo.can_cover_pellet()
             can_release = algo.can_release_pellet()
             if self._prev_can_cover is not can_cover:

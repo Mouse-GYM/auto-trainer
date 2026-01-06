@@ -8,7 +8,8 @@ from autotrainer.core import BehaviorConfiguration, Offset3DTuple
 
 
 @pytest.fixture
-def algo(monkeypatch) -> BehaviorAlgorithm:
+def algo(monkeypatch, mock_get_perf_now) -> BehaviorAlgorithm:
+    del mock_get_perf_now  # used for its side effect
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True
     algo = BehaviorAlgorithm()
@@ -96,7 +97,12 @@ def test_algo_paused(algo):
     algo.algo_paused = False
     assert algo.can_send_pellet() is True
     assert algo.can_cover_pellet() is True
-    assert algo.can_load_pellet() is True
+    assert algo.triangle_recently_seen is False
+    assert algo.can_load_pellet() is False  # given not triangle recently seen
+    algo.update_triangle_seen(True)
+    assert algo.triangle_recently_seen is True
+    assert algo.can_load_pellet() is True  # given triangle recently seen
+    assert algo.pellet_recently_seen is False  # but not pellet
 
 
 def test_diamond_triangle_drift(algo):

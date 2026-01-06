@@ -11,7 +11,8 @@ from unittest import mock
 import pytest
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode, SystemState, \
-    PelletState, IntersessionState
+    IntersessionState
+from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.behavior_algorithm import ShiftXYZBufferHandler
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
