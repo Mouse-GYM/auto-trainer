@@ -127,7 +127,7 @@ class PreferencesContent(QWidget):
                          algo.pellet_delivery_enabled, algo.pellet_cover_enabled,
                          algo.can_cover_pellet(), algo.can_release_pellet(),
                          algo.can_send_pellet(), algo.can_load_pellet(),
-                         algo.can_perform_intersession_analysis(), pm._covered_state)
+                         algo.can_perform_intersession_analysis(), pm.covered_state)
             for r in states_refresh:
                 r()
 
