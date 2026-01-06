@@ -1040,7 +1040,9 @@ class BehaviorAlgorithm(ObservableObject):
         return (
             self._pellet_delivery_enabled
             and not self._algo_paused
-            and self.triangle_recently_seen
+            and (self.triangle_recently_seen
+                 or (self.star_recently_seen and pellet_state == PelletState.monitoring)
+            )
             and (
                 not self.pellet_recently_seen
                 or (pellet_state == PelletState.monitoring and self.is_triangle_pellet_distance_too_far())
