@@ -1021,9 +1021,6 @@ class BehaviorAlgorithm(ObservableObject):
     def reset_session_pellet_count(self):
         self.session_pellet_count = 0
 
-    def can_cover_pellet(self):
-        return self._pellet_delivery_enabled and self._pellet_cover_enabled and not self._algo_paused
-
     @property
     def pellet_seen_age(self) -> float:
         """In nbr of seconds"""
@@ -1060,7 +1057,12 @@ class BehaviorAlgorithm(ObservableObject):
             return True
         return False
 
+    def can_cover_pellet(self) -> bool:
+        """Say if cover-pellet is enabled"""
+        return self._pellet_delivery_enabled and self._pellet_cover_enabled and not self._algo_paused
+
     def can_release_pellet(self) -> bool:
+        """Say if should should release pellet"""
         # self._check_date()
         if self._algo_paused:
             return False

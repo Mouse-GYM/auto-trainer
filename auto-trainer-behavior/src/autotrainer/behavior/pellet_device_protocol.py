@@ -114,16 +114,9 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
 
     def set_motors_drift(self, drift: Offset3DTuple):
         """Set the motor drift offset"""
-        raise NotImplementedError
 
     def set_auto_correct_motor_drift(self, enabled: bool):
         """Set auto correct motor drift"""
-        raise NotImplementedError
 
     def get_motor_config(self, motor: Motor) -> Union[StepperConfig, ServoConfig]:
         """Get the motor current config"""
-        raise NotImplementedError
-
-    def get_motor_flips(self):
-        # NB: unused, could be removed
-        raise NotImplementedError
