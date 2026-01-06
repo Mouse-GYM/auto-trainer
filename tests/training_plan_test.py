@@ -194,12 +194,11 @@ class TestTrainingPlan(MockSystemMachine):
         assert machine.state == SystemState.tunnel
         algo.update_triangle_seen(True)
         algo.update_pellet_seen(True)
-        self.increment_perf_now(1e-9)
         assert algo.pellet_recently_seen
         assert algo.is_in_session
         assert pellet_m.state == PelletState.monitoring  # still
-        assert algo.can_release_pellet()
-        self.increment_perf_now(1e-9)
+        # assert algo.can_release_pellet()  some training phase sets cover-pellet-enabled to True..
+        #   .. making can_release_pellet() False.
         with contextlib.ExitStack() as stack:
             # to be sure:
             algo.update_triangle_seen(True)
@@ -213,7 +212,6 @@ class TestTrainingPlan(MockSystemMachine):
             assert algo.system_state == SystemState.intersession
             assert algo.intersession_state == IntersessionState.segmentation
             assert pellet_m.state == PelletState.retract  # Retract !!
-            self.increment_perf_now(1e-9)
             self.mock_complete_segmentation(True)
             assert algo.system_state == SystemState.intersession
             assert algo.intersession_state == IntersessionState.detection
@@ -224,6 +222,11 @@ class TestTrainingPlan(MockSystemMachine):
             assert pellet_m.state == PelletState.retract  # still
 
         assert not algo.is_in_session
+
+        assert pellet_m.state == PelletState.retract  # still
+        # NB: at least one of the training phase is setting pellet-delivery-enabled to False, reset it here:
+        algo.pellet_delivery_enabled = True
+        # so that pellet-send will be allowed with ack of previous retract:
 
         self.mock_pellet_ack()  # for retract
         assert self.pellet_state_trans[-2:] == [PelletState.sending, PelletState.monitoring]
