@@ -1035,19 +1035,25 @@ class BehaviorAlgorithm(ObservableObject):
     def can_send_pellet(self):
         return not self._algo_paused
 
-    def can_load_pellet(self, pellet_state: PelletState = PelletState.monitoring):
+    def can_load_pellet(self, pellet_state: PelletState = PelletState.monitoring) -> bool:
         # is more has_to_load_pellet()
-        return (
-            self._pellet_delivery_enabled
-            and not self._algo_paused
+        if not self._pellet_delivery_enabled or self._algo_paused:
+            return False
+        pellet_missing = (
+            not self.pellet_recently_seen
             and (self.triangle_recently_seen
-                 or (self.star_recently_seen and pellet_state == PelletState.monitoring)
-            )
-            and (
-                not self.pellet_recently_seen
-                or (pellet_state == PelletState.monitoring and self.is_triangle_pellet_distance_too_far())
-            )
+                or (self.star_recently_seen and pellet_state == PelletState.monitoring))
         )
+        if pellet_missing:
+            logger.verbose("BehaviorAlgo.can_load_pellet: pellet_missing")
+            return True
+        pellet_too_far = (
+            (pellet_state == PelletState.monitoring and self.is_triangle_pellet_distance_too_far())
+        )
+        if pellet_too_far:
+            logger.verbose("BehaviorAlgo.can_load_pellet: triangle/pellet too far")
+            return True
+        return False
 
     def can_release_pellet(self) -> bool:
         # self._check_date()
