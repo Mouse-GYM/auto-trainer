@@ -217,8 +217,8 @@ class PreferencesContent(QWidget):
             self._deliver_pellet_toggle.isEnabled() and self._deliver_pellet_toggle.isChecked()
         ))
         spinbox.setValue(algo.pellet_missing_time)
-        spinbox.setDecimals(1)
-        spinbox.setSingleStep(0.1)
+        spinbox.setDecimals(2)
+        spinbox.setSingleStep(0.05)
         def max_pellet_missing_seconds_changed(value):
             algo.pellet_missing_time = value
         spinbox.valueChanged.connect(max_pellet_missing_seconds_changed)
