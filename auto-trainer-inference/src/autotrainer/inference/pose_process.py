@@ -115,7 +115,7 @@ class PoseProcess(Process):
             logging.config.dictConfig(log_dict_config)
             install_log_exception_hook()
 
-        logger.info("started with %s", log_dict_config)
+        logger.debug("started with %s", log_dict_config)
         try:
             self.__do_run()
         except BaseException as err:
