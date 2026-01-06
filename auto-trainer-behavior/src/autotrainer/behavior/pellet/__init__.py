@@ -9,6 +9,3 @@ class PelletState(str, Enum):
     covering = "covering"
     home = "home"
     retract = "retract"
-
-
-# from .pellet_machine import PelletMachine
