@@ -1033,7 +1033,7 @@ class BehaviorAlgorithm(ObservableObject):
     #
 
     def can_send_pellet(self):
-        return not self._algo_paused
+        return self._pellet_delivery_enabled and not self._algo_paused
 
     def can_load_pellet(self, pellet_state: PelletState = PelletState.monitoring) -> bool:
         # is more has_to_load_pellet()
