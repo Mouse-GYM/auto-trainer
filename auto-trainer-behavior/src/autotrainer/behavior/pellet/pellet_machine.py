@@ -353,11 +353,12 @@ class PelletMachine(StateMachine):
                 # current state is either retract or loading (loaded),
                 # even if pellet is not seen, send it to deliver,
                 # the end position of load-pellet sequence might not be (entirely or on all units) visible by camera,
-                reason = "send_pellet_when_loaded_or_retract"
-                logit()
-                self.send_pellet()
-                # then always directly:
-                self.monitor_pellet()
+                if algo.can_send_pellet():
+                    reason = "send_pellet_when_loaded_or_retract"
+                    logit()
+                    self.send_pellet()
+                    # then always directly:
+                    self.monitor_pellet()
 
         elif cur_state == PelletState.sending:
             reason = "monitor_when_sent"
