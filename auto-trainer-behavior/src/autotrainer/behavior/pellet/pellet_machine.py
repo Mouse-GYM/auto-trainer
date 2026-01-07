@@ -95,6 +95,7 @@ class PelletMachine(StateMachine):
 
     @property
     def covered_state(self) -> Optional[bool]:
+        """False == released, True == covered, None == unknown"""
         return self._covered_state
 
     # transitions
@@ -401,7 +402,7 @@ class PelletMachine(StateMachine):
                              can_release)
                 self._prev_can_cover = can_cover
 
-            if not can_cover or can_release:
+            if can_release:
                 # NB: also having to use algo.can_cover_pellet(), given can_release_pellet() depends on conditions
                 if self._covered_state is not False:
                     # nb: keep this second if not grouped with the previous one,
@@ -414,15 +415,17 @@ class PelletMachine(StateMachine):
                         self.monitor_pellet()
                     else:
                         log_could_retry_shortly()
-            elif can_cover and self._covered_state is not True:
-                reason = "cover_pellet_in_monitoring"
-                if self.can_use_pellet_command():
-                    logit()
-                    self.cover_pellet()
-                    self._api_status_token = None  # no need wait for ack
-                    self.monitor_pellet()
-                else:
-                    log_could_retry_shortly()
+
+            elif can_cover:
+                if self._covered_state is not True:  # noqa
+                    reason = "cover_pellet_in_monitoring"
+                    if self.can_use_pellet_command():
+                        logit()
+                        self.cover_pellet()
+                        self._api_status_token = None  # no need wait for ack
+                        self.monitor_pellet()
+                    else:
+                        log_could_retry_shortly()
         else:
             logger.warning("unknown state: %s", cur_state)
 
