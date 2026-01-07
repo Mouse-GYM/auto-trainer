@@ -41,11 +41,6 @@ from .intersession import IntersessionState
 logger = get_verbose_logger(__name__)
 
 
-class CheckThresholdWay(str, enum.Enum):
-    TRIGGER_IF_GREATER = "trigger_if_greater"
-    TRIGGER_IF_SMALLER = "trigger_if_smaller"
-
-
 class CoverServoStatus(int, enum.Enum):
     OK = 0
     COVER_POSITION_ERROR = 1
@@ -62,11 +57,13 @@ class CoverServoStatus(int, enum.Enum):
 class CheckElementDistanceContext:
     distance_property_name: str
     cover_servo_status: CoverServoStatus
-    error_way: CheckThresholdWay
-    error_distance_threshold: float
+
+    expected_distance: float  # mm
+    error_distance_threshold: float  # mm
     error_min_duration_threshold: float = math.inf  # unit is second
 
-    distance: float = 0  # unit probably millimeter
+    distance: float = 0  # millimeter, current distance
+    warned_bad_distance: bool = False
     error_detected: bool = False
     error_start_perf_c: Optional[float] = None
 
@@ -260,9 +257,6 @@ class BehaviorAlgorithm(ObservableObject):
     def __init__(
         self,
         *,
-        cover_error_min_distance_threshold: float = 2,  # millimeter
-        release_error_min_distance_threshold: float = 2,  # millimeter
-        cover_release_min_duration_threshold: float = 3,  # seconds
         diamond_triangle_offset_config_path: Optional[Path] = None,
         topcam_presence: Optional[PresenceDetectionAttrs] = None,
     ):
@@ -369,16 +363,16 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._cover_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=BehaviorAlgoProps.COVER_PELLET_DISTANCE,
-            error_distance_threshold=cover_error_min_distance_threshold,
-            error_min_duration_threshold=cover_release_min_duration_threshold,
-            error_way=CheckThresholdWay.TRIGGER_IF_SMALLER,
+            expected_distance=12,
+            error_distance_threshold=2,
+            error_min_duration_threshold=3,
             cover_servo_status=CoverServoStatus.COVER_POSITION_ERROR,
         )
         self._release_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=BehaviorAlgoProps.RELEASE_PELLET_DISTANCE,
-            error_distance_threshold=release_error_min_distance_threshold,
-            error_min_duration_threshold=cover_release_min_duration_threshold,
-            error_way=CheckThresholdWay.TRIGGER_IF_GREATER,
+            expected_distance=15,
+            error_distance_threshold=2,
+            error_min_duration_threshold=3,
             cover_servo_status=CoverServoStatus.RELEASE_POSITION_ERROR,
         )
         #
@@ -1283,36 +1277,42 @@ class BehaviorAlgorithm(ObservableObject):
             # for now: we only set once this flag, never clear it.
             return
         distance = offset.distance
-        prev_distance = ctx.distance
-        ctx.distance = self._on_property_changed(ctx.distance_property_name, distance, prev_distance)
-        if ctx.error_way is CheckThresholdWay.TRIGGER_IF_GREATER:
-            is_error = distance >= ctx.error_distance_threshold
-        else:
-            assert ctx.error_way is CheckThresholdWay.TRIGGER_IF_SMALLER
-            is_error = distance <= ctx.error_distance_threshold
+        prev_distance, ctx.distance = ctx.distance, distance
+        self._on_property_changed(ctx.distance_property_name, distance, prev_distance)
+        is_error = abs(distance - ctx.expected_distance) >= ctx.error_distance_threshold
         if not is_error:
             # we might want to only unset the error_start_perf_c after some minimum duration too
             if ctx.error_start_perf_c is not None:
                 ctx.error_start_perf_c = None
-                logger.info("End of deviation on %s ; distance=%s",
+                ctx.warned_bad_distance = False
+                logger.verbose("End of deviation on %s ; distance=%s",
                             ctx.distance_property_name, distance)
             return
         perf_now = get_perf_now()
         if ctx.error_start_perf_c is None:
             ctx.error_start_perf_c = perf_now
-            logger.warning("Detected start of %s deviation ; distance=%s threshold=%s",
-                           ctx.distance_property_name, distance, ctx.error_distance_threshold)
+            logger.debug("Detected start of %s deviation ; distance=%.2f expected=%s threshold=%s",
+                           ctx.distance_property_name, distance,
+                           ctx.expected_distance, ctx.error_distance_threshold)
         else:
-            if perf_now - ctx.error_start_perf_c >= ctx.error_min_duration_threshold:
-                logger.critical("Detected %s over threshold ; distance=%.3f prev=%s threshold=%s",
-                                ctx.distance_property_name, distance, prev_distance,
-                                ctx.error_distance_threshold)
+            over_duration = perf_now - ctx.error_start_perf_c
+            if over_duration >= ctx.error_min_duration_threshold:
+                if not ctx.error_detected:
+                    logger.critical("Detected %s over threshold ; distance=%.3f prev=%s expected=%s threshold=%s",
+                                    ctx.distance_property_name, distance, prev_distance,
+                                    ctx.expected_distance, ctx.error_distance_threshold)
                 ctx.error_detected = True
                 prev_status = self._cover_servo_status
                 new_status = CoverServoStatus(prev_status | ctx.cover_servo_status)
                 self.cover_servo_status_changed(new_status)
                 self._cover_servo_status = self._on_property_changed(
                     BehaviorAlgoProps.COVER_SERVO_STATUS, new_status, prev_status)
+            elif over_duration > ctx.error_min_duration_threshold / 8 and not ctx.warned_bad_distance:
+                # this is to not have the warning unnecessarily emitted
+                logger.warning("Deviation of %s ongoing ; distance=%.2f expected=%s threshold=%s",
+                               ctx.distance_property_name, distance,
+                               ctx.expected_distance, ctx.error_distance_threshold)
+                ctx.warned_bad_distance = True
 
     def reset_selected_animal_counts(self, animal: AnimalSubject):
         logger.verbose("Resetting counts for animal change to %s", animal)
