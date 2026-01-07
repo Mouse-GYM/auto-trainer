@@ -1070,7 +1070,7 @@ class BehaviorAlgorithm(ObservableObject):
                 )
             return False
 
-        return True
+        return self._pellet_delivery_enabled
 
         # TODO: Covering for session counts is on hold due to a) not knowing actual consumed, only load cycles (
         # determining consumed happens during intersession) and b) need to determine whether said limit should

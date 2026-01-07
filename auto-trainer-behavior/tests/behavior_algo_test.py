@@ -89,6 +89,30 @@ def test_end_session_if_not_running_fails(algo):
     assert algo.is_in_session is False
 
 
+def test_delivery_disabled(algo):
+    algo.pellet_delivery_enabled = False
+    assert algo.can_load_pellet() is False
+    assert algo.can_send_pellet() is False
+    #
+    assert algo.can_release_pellet() is False
+    assert algo.can_cover_pellet() is False
+    #
+    algo.pellet_delivery_enabled = True
+    #
+    assert algo.can_send_pellet() is True
+    assert algo.can_load_pellet() is False
+
+    algo.update_triangle_seen(True)
+    assert algo.can_load_pellet() is True
+    assert algo.can_send_pellet() is True
+    #
+    assert algo.can_release_pellet() is False
+    assert algo.can_cover_pellet() is True
+    algo.pellet_cover_enabled = False
+    assert algo.can_release_pellet() is True
+    assert algo.can_cover_pellet() is False
+
+
 def test_algo_paused(algo):
     algo.algo_paused = True
     assert algo.can_send_pellet() is False
