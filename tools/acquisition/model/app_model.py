@@ -177,8 +177,10 @@ class AppModel(ObservableObject):
         self._reload_plans_needed = False
         self._prev_diamond_coord: Offset3DTuple = Offset3DTuple(math.nan, math.nan, math.nan)
         self._prev_valid_diamond_perf_c: float = -math.inf
-        self._warned_bad_diamond_coord = False
         self._check_diamond_coord_enabled = True
+        self._trigger_emergency_on_bad_diamond_coord = False
+        self._warned_bad_diamond_coord = False
+        self._triggered_bad_diamond_coord = False
         self._p_start_capture = -math.inf
         self._p_inference_live_begin = -math.inf
 
@@ -1311,25 +1313,36 @@ class AppModel(ObservableObject):
         #
         p_now = time.perf_counter()
         loc3d = response.locations_3d.get(SceneElement.Diamond)
-        if loc3d is not None:
-            self._prev_diamond_coord = loc3d
-            diff = loc3d - cfg.diamond_coord
-            if diff.distance > max_dist_diff:
-                if not self._warned_bad_diamond_coord:
-                    logger.warning("Diamond coordinate invalid: %s ; dist=%.2f ; pose=%s",
-                                   loc3d.humanize(n_digits=6), diff.distance, response)
-                    self._warned_bad_diamond_coord = True
-            else:
-                self._prev_valid_diamond_perf_c = p_now
-                self._warned_bad_diamond_coord = False
+        if loc3d is None:
+            return
+        self._prev_diamond_coord = loc3d
+        diff = loc3d - cfg.diamond_coord
+        if diff.distance > max_dist_diff:
+            if not self._warned_bad_diamond_coord:
+                logger.warning("Diamond coordinate invalid: %s ; dist=%.2f ; pose=%s",
+                               loc3d.humanize(n_digits=2), diff.distance, response)
+                self._warned_bad_diamond_coord = True
+        else:
+            self._prev_valid_diamond_perf_c = p_now
+            self._warned_bad_diamond_coord = False
+            self._triggered_bad_diamond_coord = False
         #
-        if p_now - self._prev_valid_diamond_perf_c > min_check_delay and p_now - self._p_inference_live_begin > delay_inference_begin:
-            self._behavior.emergency_stop(source="Diamond-Coord-Check")
-            self.on_error("Diamond not detected or invalid position",
-                          "Could not ensure valid diamond position for too long.\n\n"
-                          "Please re-execute a diamond-triangle calibration via menu Tools -> Calibrate Coordinate System\n\n"
-                          "Then click Resume to resume from the emergency."
-                          )
+        if (p_now - self._p_inference_live_begin > delay_inference_begin
+            and p_now - self._prev_valid_diamond_perf_c > min_check_delay
+        ):
+            if not self._triggered_bad_diamond_coord:
+                self._triggered_bad_diamond_coord = True
+                if self._trigger_emergency_on_bad_diamond_coord:
+                    self._behavior.emergency_stop(source="Diamond-Coord-Check")
+                    self.on_error("Diamond not detected or invalid position",
+                                  "Could not ensure valid diamond position for too long.\n\n"
+                                  "Please re-execute a diamond-triangle calibration via menu Tools -> Calibrate Coordinate System\n\n"
+                                  "Then click Resume to resume from the emergency."
+                                  )
+                else:
+                    logger.error("Bad diamond coord check: distance=%.2f ; %s vs %s",
+                                 diff.distance,
+                                 loc3d.humanize(), cfg.diamond_coord.humanize())
 
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("plan prop: %s -> %s", name, value)
