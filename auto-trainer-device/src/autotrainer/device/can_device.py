@@ -195,9 +195,9 @@ class CanDevice(Device):
 
         def move_head_magnet(position):
             steps = MotorSteps("move_magnet", [
-                {'servo_attach': Motor.TUNNEL_MAGNET_SERVO},
+                # {'servo_attach': Motor.TUNNEL_MAGNET_SERVO},
                 {'magnet': position},
-                {'servo_detach': Motor.TUNNEL_MAGNET_SERVO},
+                # {'servo_detach': Motor.TUNNEL_MAGNET_SERVO},
             ])
             return self._start_sequence(steps)
 
