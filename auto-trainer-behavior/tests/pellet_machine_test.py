@@ -299,17 +299,59 @@ def test_release_pellet(machine, mock_system):
 def test_on_device_command_failed_get_exception(machine, mock_system, pellet_dev_method):
     algo = machine.algorithm
     pellet_m = machine.pellet
-    dev = pellet_m._pellet_device
+    pellet_dev = pellet_m._pellet_device
     if isinstance(pellet_dev_method, str):
         action = getattr(pellet_m, pellet_dev_method)
-        dev_meth = getattr(dev, pellet_dev_method)
+        dev_meth = getattr(pellet_dev, pellet_dev_method)
     else:
         action = getattr(pellet_m, pellet_dev_method[0])
-        dev_meth = getattr(dev, pellet_dev_method[1])
-    pellet_m._api_status_token = None
+        dev_meth = getattr(pellet_dev, pellet_dev_method[1])
     pellet_m.state = PelletState.monitoring  # is normally accepted for all actions
     dev_meth.return_value = None
     algo.update_triangle_seen(True)  # need triangle seen for can_load_pellet
     machine.algorithm.pellet_cover_enabled = action != pellet_m.release_pellet  # need for release_pellet
     with pytest.raises(PelletDeviceCommandFailed):
         action()
+
+
+@pytest.mark.parametrize("before_state", list(PelletState))
+@pytest.mark.parametrize("cover_enabled", [False, True])
+def test_manual_send_pellet(machine, mock_system, before_state, cover_enabled):
+    algo = machine.algorithm
+    algo.pellet_delivery_enabled = True  # otherwise cannot send_pellet
+    algo.pellet_cover_enabled = cover_enabled
+    pellet_m = machine.pellet
+    pellet_m._covered_state = cover_enabled
+    #
+    pellet_m.state = before_state
+    mock_system.pellet_state_trans.clear()
+    #
+    pellet_m.send_pellet()
+    assert pellet_m._api_status_token is not None
+    assert pellet_m.state == PelletState.sending
+    mock_system.mock_pellet_ack()
+    assert pellet_m._api_status_token is None
+    assert pellet_m.state == PelletState.monitoring
+    cover_state = PelletState.covering if cover_enabled else PelletState.releasing
+    assert mock_system.pellet_state_trans == [
+        *((cover_state,) if before_state != cover_state else ()),
+        PelletState.sending,
+        PelletState.monitoring,
+    ]
+
+
+@pytest.mark.parametrize("before_state", list(PelletState))
+def test_manual_send_pellet_when_delivery_not_enabled(machine, mock_system, before_state):
+    algo = machine.algorithm
+    algo.pellet_delivery_enabled = False
+    pellet_m = machine.pellet
+    assert mock_system.pellet_state_trans == []
+    #
+    pellet_m.state = before_state
+    mock_system.pellet_state_trans.clear()
+
+    assert mock_system.pellet_state_trans == []
+    pellet_m.send_pellet()
+    assert pellet_m._api_status_token is None
+    assert pellet_m.state == before_state
+    assert mock_system.pellet_state_trans == []

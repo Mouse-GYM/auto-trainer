@@ -18,23 +18,32 @@ class _InferenceProtocol(Protocol):
     def terminate(self):
         """Terminate totally"""
 
-    def load_configuration(self, config: InferenceConfiguration): ...
-    def save_configuration(self): ...
+    def load_configuration(self, config: InferenceConfiguration):
+        """Load the given configuration"""
+
+    def save_configuration(self) -> InferenceConfiguration:
+        """Returns current configuration"""
 
     @property
-    def pose_algorithm(self) -> PoseAlgorithm: ...
+    def pose_algorithm(self) -> PoseAlgorithm:
+        """Current associated pose_algo"""
 
     @property
-    def is_enabled(self):
+    def is_enabled(self) -> bool:
+        """Wether enabled or not"""
         return False
 
-    def perform_segmentation(self, configuration: SegmentationConfiguration): ...
+    def perform_segmentation(self, configuration: SegmentationConfiguration) -> Optional[SegmentationConfiguration]:
+        """Perform segmentation with given segment config, returns the passed config if succeeded, else None"""
 
-    def perform_detection(self, configuration: DetectionConfiguration): ...
+    def perform_detection(self, configuration: DetectionConfiguration) -> Optional[DetectionConfiguration]:
+        """Perform detection with given segment config, returns the passed config if succeeded, else None"""
 
-    def perform_live(self): ...
+    def perform_live(self):  # unused
+        """Perform live"""
 
-    def set_inference_to_online(self): ...
+    def set_inference_to_online(self):
+        """Request inference to switch to online mode"""
 
     # "dynamic" event handler attributes,
     # we must not define as real methods in the protocol,

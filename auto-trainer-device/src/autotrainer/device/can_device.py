@@ -395,9 +395,6 @@ class CanDevice(Device):
             raise RuntimeError("CAN command handler thread not anymore alive: %s", cmd_thread)
         self._commands_queue.put(obj)
 
-    def get_motor_flips(self):
-        return self._interface.get_motor_flips()
-
     def get_motor_config(self, motor: Motor):
         return self._interface.get_motor_configuration(motor)
 

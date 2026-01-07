@@ -185,7 +185,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             if was_alive:
                 logger.verbose("Waited %.1fs to join previous offline thread", time.perf_counter() - perf_now)
 
-    def perform_segmentation(self, configuration: SegmentationConfiguration):
+    def perform_segmentation(self, configuration: SegmentationConfiguration) -> Optional[SegmentationConfiguration]:
         with self._thread_lock:
             return self._perform_segmentation(configuration)
 
@@ -217,7 +217,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._offline_thread.start()
         return configuration
 
-    def perform_detection(self, configuration: DetectionConfiguration):
+    def perform_detection(self, configuration: DetectionConfiguration) -> Optional[DetectionConfiguration]:
         with self._thread_lock:
             return self._perform_detection(configuration)
 
