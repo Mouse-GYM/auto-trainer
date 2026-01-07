@@ -1,9 +1,11 @@
 import math
 
+import numpy
 import pytest
 
 from autotrainer.behavior import BehaviorAlgorithm, DiamondTriangleOffsetConfig
 from autotrainer.behavior.behavior_algorithm import CoverServoStatus
+from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import BehaviorConfiguration, Offset3DTuple
 
 
@@ -83,7 +85,7 @@ def test_start_twice_session_fails(algo):
 
 def test_end_session_if_not_running_fails(algo):
     assert algo.is_in_session is False
-    assert algo.end_capture_session(reason="manual") is False
+    assert algo.end_capture_session() is False
     assert algo.is_in_session is False
 
 
@@ -138,3 +140,37 @@ def test_release_pellet_offset(algo):
     algo.handle_release_pellet_offset(o1)
     algo.handle_release_pellet_offset(o2)
     # todo: continue...
+
+
+@pytest.mark.parametrize("use_dist_too_far", [False, True])
+@pytest.mark.parametrize("bad_dist", [0, math.inf, None])  # 0 == too close, inf == far too far
+def test_can_load_when_pellet_triangle_too_far(algo, use_dist_too_far, bad_dist):
+    algo.pellet_delivery_enabled = True
+    algo.pellet_cover_enabled = False
+    #
+    algo.use_triangle_pellet_distance_too_far = use_dist_too_far
+    if bad_dist is None:
+        bad_dist = algo.triangle_pellet_expected_distance + algo.triangle_pellet_diff_too_far_threshold
+    #
+    correct_offset = Offset3DTuple(0, 0, algo.triangle_pellet_expected_distance)
+    assert numpy.isclose(correct_offset.distance, algo.triangle_pellet_expected_distance)
+    #
+    algo.update_triangle_seen(True)
+    algo.update_pellet_seen(True)
+    #
+    algo.triangle_pellet_offset = correct_offset
+    assert algo.is_triangle_pellet_distance_too_far() is False
+    #
+    algo.triangle_pellet_offset = Offset3DTuple(0, 0, bad_dist)
+    assert algo.is_triangle_pellet_distance_too_far() is True
+
+    assert algo.can_load_pellet(pellet_state=PelletState.retract) is False
+    assert algo.can_load_pellet(pellet_state=PelletState.loading) is False
+    assert algo.can_load_pellet(pellet_state=PelletState.home) is False
+    assert algo.can_load_pellet(pellet_state=PelletState.sending) is False
+    # but:
+    assert algo.can_load_pellet(pellet_state=PelletState.monitoring) is use_dist_too_far
+    #
+    algo.triangle_pellet_offset = correct_offset
+    assert algo.is_triangle_pellet_distance_too_far() is False
+    assert algo.can_load_pellet(pellet_state=PelletState.monitoring) is False

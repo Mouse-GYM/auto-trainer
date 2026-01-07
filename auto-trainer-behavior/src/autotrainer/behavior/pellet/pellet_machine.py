@@ -86,7 +86,6 @@ class PelletMachine(StateMachine):
             model_override=True,
         )
 
-        self._cur_timer_try_next_state = no_op_timer
         self._pellet_load_count = 0
         self._pellet_retract_count = 0
 
@@ -294,10 +293,6 @@ class PelletMachine(StateMachine):
         caller: str,
         is_from_inference: bool = False,
     ):
-        cur_timer = self._cur_timer_try_next_state
-        if cur_timer is not None:
-            cur_timer.cancel()
-
         algo = self._algorithm
         reason: str = "unknown"
         retrying = False
@@ -326,7 +321,7 @@ class PelletMachine(StateMachine):
             reason = f"would have retried shortly {reason}"
             logit()
 
-        if algo.algo_paused:
+        if algo.algo_paused:  # unsure we should keep
             return
 
         cur_state = self._state
