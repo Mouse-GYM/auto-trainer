@@ -4,7 +4,7 @@ import time
 import uuid
 from queue import Queue, Empty
 from threading import Thread
-from typing import Callable, Union
+from typing import Callable, Union, Optional
 
 import autotrainer.device
 from autotrainer.core import MotorConfigurations, SystemCommandKind, Offset3DTuple, Motor
@@ -147,6 +147,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.magnet_config)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.cover_config)
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.gate_config)
+        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.tunnel_fan_config)
 
     def set_load_procedure(self, load_steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, load_steps)
@@ -256,6 +257,3 @@ class DeviceConnection(DeviceConnectionProtocol):
             logger.warning(f"<{self._name} DISCONNECT cmd while device already disconnected")
 
         return False
-
-    def get_motor_config(self, motor: Motor):
-        return self._device.device_interface.get_motor_configuration(motor)

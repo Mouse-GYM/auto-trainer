@@ -70,8 +70,3 @@ class Device(ObservableObject):
     @property
     def device_interface(self) -> DeviceInterface:
         return self._interface
-
-    @device_interface.setter
-    def device_interface(self, value: DeviceInterface):
-        # unused
-        self._interface = value

@@ -56,6 +56,9 @@ class SystemCommandKind(IntEnum):
     SERVO_ATTACH = 227
     SERVO_DETACH = 228
 
+    TUNNEL_FAN_ON = 229
+    TUNNEL_FAN_OFF = 230
+
     # General actions.
     PLAY_TONE = 301
     SET_RGB_LED = 302

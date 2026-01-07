@@ -45,7 +45,7 @@ class StepperConfigMessage(Protocol):
         """Units: steps/rev"""
 
     @property
-    def flip_limit_orientation(selfs) -> int:
+    def flip_limit_orientation(self) -> int:
         """
         0 - Do no invert motor direction
         1 - Invert motor direction
@@ -118,3 +118,7 @@ class MotorConfigurations(Protocol):
     @property
     def z_config(self) -> Tuple[Motor, StepperConfigMessage]:
         """The pellet stepper Z motor & config"""
+
+    @property
+    def tunnel_fan_config(self) -> Tuple[Motor, ServoConfigMessage]:
+        """The tunnel-fan motor & config"""

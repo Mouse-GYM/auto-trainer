@@ -258,6 +258,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def delay(self, amount: float):
         return self._send_with_token(self._device, SystemCommandKind.DELAY, amount)
 
+    def set_tunnel_fan_on(self) -> Optional[UUID]:
+        return self._send_with_token(self._device, SystemCommandKind.TUNNEL_FAN_ON)
+
+    def set_tunnel_fan_off(self) -> Optional[UUID]:
+        return self._send_with_token(self._device, SystemCommandKind.TUNNEL_FAN_OFF)
+
     def connect(self, cmd_queue: Queue):
         self._last_coordinates = _nans_offset3dTuple
         self._last_set_coordinates = _nans_offset3dTuple
@@ -409,6 +415,3 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 return
             time.sleep(0.0025)  # 2.5 ms
         raise RuntimeError(f"timeout waiting ack of pending token={token}")
-
-    def get_motor_config(self, motor: Motor) -> Union[StepperConfig, ServoConfig]:
-        return self._device.device.device_interface.get_motor_configuration(motor)

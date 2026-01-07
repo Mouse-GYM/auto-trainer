@@ -284,6 +284,13 @@ class CanDevice(Device):
 
             SystemCommandKind.CLOSE_TUNNEL_GATE: lambda _: self._start_sequence(self._close_tunnel_gate),
 
+            SystemCommandKind.TUNNEL_FAN_ON: lambda _: self._interface.move_servo_motor(
+                Motor.TUNNEL_FAN_SERVO, 100, self._interface.tunnel_fan_config
+            ),
+            SystemCommandKind.TUNNEL_FAN_OFF: lambda _: self._interface.move_servo_motor(
+                Motor.TUNNEL_FAN_SERVO, 0, self._interface.tunnel_fan_config
+            ),
+
             SystemCommandKind.DELAY: self._interface.delay,
 
             SystemCommandKind.WRITE_MOTOR_CONFIGURATION: self._handle_write_motor_configuration,

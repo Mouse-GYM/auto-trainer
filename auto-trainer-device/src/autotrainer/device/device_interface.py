@@ -14,8 +14,6 @@ There is a main interface class (DeviceInterface) that defines the API for acces
 hardware.
 """
 import dataclasses
-import logging
-import math
 import typing
 from dataclasses import dataclass
 from enum import IntEnum
@@ -495,4 +493,10 @@ class DeviceInterface:
         raise NotImplementedError
 
     def servo_detach(self, motor: Motor):
+        raise NotImplementedError
+
+    def set_tunnel_fan_on(self) -> bool:
+        raise NotImplementedError
+
+    def set_tunnel_fan_off(self) -> bool:
         raise NotImplementedError
