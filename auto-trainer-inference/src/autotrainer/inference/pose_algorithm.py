@@ -76,15 +76,16 @@ class PoseResponse:
 
     @property
     def triangle_seen(self):
-        return self.is_part_seen(SceneElement.Triangle)
+        p_flags = self.parts_flags
+        return p_flags[0].get(SceneElement.Triangle, False) or p_flags[1].get(SceneElement.Triangle, False)
 
     @property
     def lh_grab_seen(self):
-        return self.is_part_seen(SceneElement.LH_grab)
+        return self.is_part_seen(SceneElement.LH_grab)  # both cams
 
     @property
     def rh_grab_seen(self):
-        return self.is_part_seen(SceneElement.RH_grab)
+        return self.is_part_seen(SceneElement.RH_grab)  # both cams
 
     def is_part_seen(self, part: str, *, cams_idx: Tuple[int, ...] = ()):
         """Check whether `part` is seen or not in cams_idx, if cams_idx empty: check all"""
