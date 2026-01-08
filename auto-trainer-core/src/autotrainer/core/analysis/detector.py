@@ -78,7 +78,7 @@ class BaseDetector(ObservableObject):
         with self._lock:
             if self._enabled:
                 return
-            logger.verbose("%s: starting monitor", self.__class__.__name__)
+            self._logger.verbose("%s: starting monitor", self.__class__.__name__)
             self._enabled = True
             self.is_engaged = False  # force reset "engaged" to False
             self._t_started = get_perf_now()
@@ -112,7 +112,7 @@ class BaseDetector(ObservableObject):
         with self._lock:
             if not self._enabled:
                 return
-            logger.verbose("%s: stopping monitor", self.__class__.__name__)
+            self._logger.verbose("%s: stopping monitor", self.__class__.__name__)
             self._enabled = False
             self._cur_timer.cancel()
             self._stop()
@@ -120,7 +120,7 @@ class BaseDetector(ObservableObject):
             if thread_queue is not None:
                 thread, q = self._thread_queue
                 q.put(None)
-                logger.debug("Joining thread")
+                self._logger.debug("Joining thread")
                 thread.join()
                 self._thread_queue = None
 
