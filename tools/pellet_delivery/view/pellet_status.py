@@ -62,7 +62,7 @@ def create_servo_panel():
 
     layout.addRow("Load Arm (\u00b0):", load_arm)
     layout.addRow("Cover Arm (\u00b0):", cover_arm)
-    layout.addRow("Tunnel Fan (\u00b0):", tunnel_fan)
+    layout.addRow("Tunnel Fan (%):", tunnel_fan)
 
     layout.setContentsMargins(8, 8, 8, 8)
 
@@ -101,6 +101,7 @@ class PelletStatus(QWidget):
                 reset_prop("send_xyz", app_model.send_xyz, None)
                 reset_prop("load_arm", app_model.load_arm, None)
                 reset_prop("cover_arm", app_model.cover_arm, None)
+                reset_prop("tunnel_fan", app_model.tunnel_fan, None)
             else:
                 for xyz_label in self._xyz_device, self._xyz_diamond, self._send_xyz_device, self._send_xyz_diamond:
                     xyz_label.setText(_NO_UPDATES)
