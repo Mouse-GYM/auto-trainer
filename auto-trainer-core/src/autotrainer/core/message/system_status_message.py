@@ -70,6 +70,9 @@ class SystemStatusMessageKind(IntEnum):
     STIMULUS_INPUTS = 305
     """Message will contain a list of 4 states as True/False"""
 
+    TUNNEL_FAN = 220
+    """Tunnel Fan will contain the tunnel fan status as a ServoStatusMessage"""
+
     MEASUREMENTS = 401
     """Message will contain a list of MeasurementMessage objects."""
 

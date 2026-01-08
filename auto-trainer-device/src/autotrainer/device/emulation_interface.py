@@ -1,10 +1,11 @@
-import logging
 import threading
 import time
 import typing
-from copy import deepcopy
 from pathlib import Path
 from random import uniform, random
+from typing import Union, Tuple
+
+from autotrainer.core.logging import get_verbose_logger
 
 from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
                                StepperStatus, ServoStatus, Target, DigitalOutputs,
@@ -14,7 +15,9 @@ from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
                                )
 from .can_interface import motor_to_str
 
-logger = logging.getLogger(__name__)
+
+logger = get_verbose_logger(__name__)
+
 
 # Slower than the real hardware to be more forgiving in emulation.
 _STATUS_MESSAGE_INTERVAL = 2.0
@@ -41,6 +44,7 @@ class _SharedList:
 
 
 class EmulationInterface(DeviceInterface):
+
     _uuid: int = 1
 
     @classmethod
@@ -72,6 +76,7 @@ class EmulationInterface(DeviceInterface):
             Motor.TUNNEL_MAGNET_SERVO: 0.0,
             Motor.TUNNEL_GATE_SERVO: 0.0,
             Motor.PELLET_COVER_SERVO: 0.0,
+            Motor.TUNNEL_FAN_SERVO: 0.0,
         }
         self._send_pos = {
             Motor.PELLET_X_MOTOR: 0.0,
@@ -87,6 +92,7 @@ class EmulationInterface(DeviceInterface):
             Motor.PELLET_X_MOTOR: StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR),
             Motor.PELLET_Y_MOTOR: StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_Y_MOTOR),
             Motor.PELLET_Z_MOTOR: StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_Z_MOTOR),
+            Motor.TUNNEL_FAN_SERVO: ServoConfig(Target.PELLET_DEVICE, Motor.TUNNEL_FAN_SERVO),
         }
 
         self._messages = _SharedList(lock=self._thread_lock)
@@ -183,6 +189,10 @@ class EmulationInterface(DeviceInterface):
                                         self._positions[Motor.TUNNEL_GATE_SERVO]))
 
             messages.append(
+                ServoStatus(Target.PELLET_DEVICE, Motor.TUNNEL_FAN_SERVO, self._positions[
+                    Motor.TUNNEL_FAN_SERVO]))
+
+            messages.append(
                 MagnetDigitalInputs(continuity_0=random() < 0.1, continuity_1=random() < 0.1))
             messages.append(PelletDigitalInputs(
                 target=Target.PELLET_DEVICE, stimulus_1=True, stimulus_2=False, stimulus_3=True, stimulus_4=False))
@@ -255,7 +265,7 @@ class EmulationInterface(DeviceInterface):
 
     def set_motor_configuration(self, motor: Motor, config, _write_to_remote: bool = True) -> bool:
         if self._is_open:
-            logger.info(f"Set motor configuration {int(motor.value)}")
+            logger.info(f"Set motor configuration %s", motor)
             self._configs[motor] = config
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
@@ -336,6 +346,13 @@ class EmulationInterface(DeviceInterface):
                 self._positions[Motor.PELLET_Z_MOTOR] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
+
+    def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]]):
+        if isinstance(position, tuple):
+            position = position[0]
+        self._positions[motor] = position
+        self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
+        return True
 
     def move_load_servo(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
@@ -460,3 +477,15 @@ class EmulationInterface(DeviceInterface):
 
     def servo_detach(self, motor: Motor):
         return self._is_open
+
+    def set_tunnel_fan_on(self) -> bool:
+        logger.verbose("setting tunnel fan ON")
+        self._positions[Motor.TUNNEL_FAN_SERVO] = 100
+        self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
+        return True
+
+    def set_tunnel_fan_off(self) -> bool:
+        logger.verbose("setting tunnel fan OFF")
+        self._positions[Motor.TUNNEL_FAN_SERVO] = 0
+        self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
+        return True

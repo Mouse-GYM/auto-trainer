@@ -58,6 +58,7 @@ class AppModel(ObservableObject):
         self._send_z = None
         self._load_arm = None
         self._cover_arm = None
+        self._tunnel_fan = None
 
         self._front_door = None
         self._panel_door = None
@@ -203,6 +204,14 @@ class AppModel(ObservableObject):
     @cover_arm.setter
     def cover_arm(self, value):
         self._cover_arm = self._on_property_changed("cover_arm", value, self._cover_arm)
+
+    @property
+    def tunnel_fan(self):
+        return self._tunnel_fan
+
+    @tunnel_fan.setter
+    def tunnel_fan(self, value):
+        self._tunnel_fan = self._on_property_changed("tunnel_fan", value, self._tunnel_fan)
 
     @property
     def travel_limits(self):
@@ -404,6 +413,8 @@ class AppModel(ObservableObject):
             self.load_arm = value
         elif name == MessageHandler.COVER_ARM_ANGLE_PROPERTY:
             self.cover_arm = value
+        elif name == MessageHandler.TUNNEL_FAN_PROPERTY:
+            self.tunnel_fan = value
         elif name == MessageHandler.FRONT_DOOR_PROPERTY:
             self.front_door = value
         elif name == MessageHandler.DRAWER_DOOR_PROPERTY:
@@ -438,3 +449,9 @@ class AppModel(ObservableObject):
         logger.debug("sending message %s with context: %s", message, context)
         if self._device_connection is not None:
             self._device_connection.send_message(message, data, context)
+
+    def set_tunnel_fan_on(self):
+        return self._send_command(SystemCommandKind.TUNNEL_FAN_ON, context=uuid.uuid4())
+
+    def set_tunnel_fan_off(self):
+        return self._send_command(SystemCommandKind.TUNNEL_FAN_OFF, context=uuid.uuid4())

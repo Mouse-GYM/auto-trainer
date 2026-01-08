@@ -93,6 +93,9 @@ class SystemMessageHandler(MessageHandler):
         elif msg == SystemStatusMessageKind.TUNNEL_GATE_SERVO:
             self.property_changed(MessageHandler.HEAD_GATE_PROPERTY, data, None)
 
+        elif msg == SystemStatusMessageKind.TUNNEL_FAN:
+            self.property_changed(MessageHandler.TUNNEL_FAN_PROPERTY, data, None)
+
         elif msg == SystemStatusMessageKind.FRONT_DOOR:
             # directly update related monitor, hopefully is very fast
             self._analysis.external_doors_monitor.update_door_state(msg, data)

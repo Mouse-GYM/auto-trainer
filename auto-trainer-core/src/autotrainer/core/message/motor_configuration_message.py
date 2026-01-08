@@ -1,12 +1,12 @@
 from typing import Protocol, Tuple
 from enum import IntEnum
 
-"""
-Identifiers for the different motor types
-"""
-
 
 class Motor(IntEnum):
+    """
+    Identifiers for the different motor types
+    """
+
     NONE = 0
     TUNNEL_MAGNET_SERVO = 1
     PELLET_X_MOTOR = 2
@@ -15,138 +15,110 @@ class Motor(IntEnum):
     PELLET_COVER_SERVO = 5
     PELLET_LOAD_SERVO = 6
     TUNNEL_GATE_SERVO = 7
-
-
-"""
-Protocol for the interface for obtaining stepper motor configuration entities
-"""
+    TUNNEL_FAN_SERVO = 8
 
 
 class StepperConfigMessage(Protocol):
     """
-    Motor associated with the configuration
+    Protocol for the interface for obtaining stepper motor configuration entities
     """
 
     @property
-    def motor(self) -> Motor: ...
+    def motor(self) -> Motor:
+        """Motor associated with the configuration"""
 
-    """
-    Units: turns/sec
-    """
 
     @property
-    def maximum_velocity(self) -> float: ...
-
-    """
-    Units: turns/sec^2
-    """
+    def maximum_velocity(self) -> float:
+        """Units: turns/sec"""
 
     @property
-    def maximum_acceleration(self) -> float: ...
-
-    """
-    Units: 1/min step
-    """
+    def maximum_acceleration(self) -> float:
+        """Units: turns/sec^2"""
 
     @property
-    def minimum_step_inverted(self) -> int: ...
-
-    """
-    Units: steps/rev
-    """
+    def minimum_step_inverted(self) -> int:
+        """Units: 1/min step"""
 
     @property
-    def steps_per_revolution(self) -> float: ...
-
-    """
-    0 - Do no invert motor direction
-    1 - Invert motor direction
-    """
+    def steps_per_revolution(self) -> float:
+        """Units: steps/rev"""
 
     @property
-    def flip_limit_orientation(selfs) -> int: ...
-
-
-"""
-Protocol for the interface for obtaining servo motor configuration entities
-"""
+    def flip_limit_orientation(self) -> int:
+        """
+        0 - Do no invert motor direction
+        1 - Invert motor direction
+        """
 
 
 class ServoConfigMessage(Protocol):
     """
-    Motor associated with the configuration
+    Protocol for the interface for obtaining servo motor configuration entities
     """
 
     @property
-    def motor(self) -> Motor: ...
-
-    """
-    Units: deg/sec
-    """
+    def motor(self) -> Motor:
+        """Motor associated with the configuration"""
 
     @property
-    def maximum_velocity(self) -> float: ...
-
-    """
-    Units: deg/sec^2
-    """
+    def maximum_velocity(self) -> float:
+        """Units: deg/sec"""
 
     @property
-    def maximum_acceleration(self) -> float: ...
-
-    """
-    Units: deg
-    """
+    def maximum_acceleration(self) -> float:
+        """Units: deg/sec^2"""
 
     @property
-    def minimum_position(self) -> float: ...
-
-    """
-    Units: deg
-    """
+    def minimum_position(self) -> float:
+        """Units: deg"""
 
     @property
-    def maximum_position(self) -> float: ...
-
-    """
-    Units: µs
-    """
+    def maximum_position(self) -> float:
+        """Units: deg"""
 
     @property
-    def min_pwm_duration(self) -> float: ...
-
-    """
-    Units: µs
-    """
+    def min_pwm_duration(self) -> float:
+        """Units: µs"""
 
     @property
-    def max_pwm_duration(self) -> float: ...
-
-
-"""
-Protocol for access to a full set of motor configurations
-"""
+    def max_pwm_duration(self) -> float:
+        """Units: µs"""
 
 
 class MotorConfigurations(Protocol):
+    """
+    Protocol for access to a full set of motor configurations
+    """
 
     @property
-    def magnet_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
+    def magnet_config(self) -> Tuple[Motor, ServoConfigMessage]:
+        """The magnet config"""
 
     @property
-    def gate_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
+    def gate_config(self) -> Tuple[Motor, ServoConfigMessage]:
+        """The gate config"""
 
     @property
-    def load_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
+    def load_config(self) -> Tuple[Motor, ServoConfigMessage]:
+        """The pellet-load config"""
 
     @property
-    def cover_config(self) -> Tuple[Motor, ServoConfigMessage]: ...
+    def cover_config(self) -> Tuple[Motor, ServoConfigMessage]:
+        """The pellet-cover config"""
 
     @property
-    def x_config(self) -> Tuple[Motor, StepperConfigMessage]: ...
+    def x_config(self) -> Tuple[Motor, StepperConfigMessage]:
+        """The pellet stepper X motor & config"""
 
     @property
-    def y_config(self) -> Tuple[Motor, StepperConfigMessage]: ...
+    def y_config(self) -> Tuple[Motor, StepperConfigMessage]:
+        """The pellet stepper Y motor & config"""
 
     @property
-    def z_config(self) -> Tuple[Motor, StepperConfigMessage]: ...
+    def z_config(self) -> Tuple[Motor, StepperConfigMessage]:
+        """The pellet stepper Z motor & config"""
+
+    @property
+    def tunnel_fan_config(self) -> Tuple[Motor, ServoConfigMessage]:
+        """The tunnel-fan motor & config"""

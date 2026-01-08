@@ -136,10 +136,12 @@ _MOTOR_TO_STR_MAP = {
     Motor.PELLET_X_MOTOR: "X",
     Motor.PELLET_Y_MOTOR: "Y",
     Motor.PELLET_Z_MOTOR: "Z",
-    Motor.TUNNEL_MAGNET_SERVO: "Magnet",
     Motor.PELLET_LOAD_SERVO: "Load",
     Motor.PELLET_COVER_SERVO: "Cover",
-    Motor.TUNNEL_GATE_SERVO: "Gate"
+
+    Motor.TUNNEL_MAGNET_SERVO: "Magnet",
+    Motor.TUNNEL_GATE_SERVO: "Gate",
+    Motor.TUNNEL_FAN_SERVO: "Fan",
 }
 
 
@@ -157,9 +159,12 @@ def motor_to_str(motor: Motor) -> str:
 class MotorInstance(IntEnum):
     TUNNEL_MAGNET_SERVO_ID = 0
     TUNNEL_GATE_SERVO_ID = 1
+    TUNNEL_FAN_SERVO_ID = 2
+
     PELLET_X_MOTOR_ID = 0
     PELLET_Y_MOTOR_ID = 1
     PELLET_Z_MOTOR_ID = 2
+
     PELLET_COVER_SERVO_ID = 0
     PELLET_LOAD_SERVO_ID = 1
 
@@ -171,9 +176,9 @@ _MOTOR_TO_ID_MAP = {
     Motor.TUNNEL_MAGNET_SERVO: MotorInstance.TUNNEL_MAGNET_SERVO_ID,
     Motor.TUNNEL_GATE_SERVO: MotorInstance.TUNNEL_GATE_SERVO_ID,
     Motor.PELLET_LOAD_SERVO: MotorInstance.PELLET_LOAD_SERVO_ID,
-    Motor.PELLET_COVER_SERVO: MotorInstance.PELLET_COVER_SERVO_ID
+    Motor.PELLET_COVER_SERVO: MotorInstance.PELLET_COVER_SERVO_ID,
+    Motor.TUNNEL_FAN_SERVO: MotorInstance.TUNNEL_FAN_SERVO_ID,
 }
-
 
 def _motor_to_id(motor: Motor) -> int:
     """
@@ -187,11 +192,13 @@ def _motor_to_id(motor: Motor) -> int:
     motor_id = _MOTOR_TO_ID_MAP[motor]
     return motor_id.value
 
+
 _motor_to_axis_idx_map = {
     Motor.PELLET_X_MOTOR: 0,
     Motor.PELLET_Y_MOTOR: 1,
     Motor.PELLET_Z_MOTOR: 2,
 }
+
 def _motor_to_axis_idx(
     motor: Motor,
     *,
@@ -206,6 +213,8 @@ def _motor_to_axis_idx(
 _servo_motors = {
     Motor.TUNNEL_MAGNET_SERVO,
     Motor.TUNNEL_GATE_SERVO,
+    Motor.TUNNEL_FAN_SERVO,
+
     Motor.PELLET_LOAD_SERVO,
     Motor.PELLET_COVER_SERVO,
 }
@@ -238,6 +247,7 @@ def is_stepper(motor: Motor) -> bool:
 _tunnel_servos = {
     Motor.TUNNEL_MAGNET_SERVO,
     Motor.TUNNEL_GATE_SERVO,
+    # Motor.TUNNEL_FAN_SERVO,  No: tunnel-fan is handled by pellet-device board
 }
 
 def target_of_motor(motor: Motor,
@@ -280,11 +290,14 @@ def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
             elif motor_id == MotorInstance.TUNNEL_GATE_SERVO_ID:
                 return Motor.TUNNEL_GATE_SERVO
     else:
+        assert target == Target.PELLET_DEVICE
         if isa_servo:
             if motor_id == MotorInstance.PELLET_COVER_SERVO_ID:
                 return Motor.PELLET_COVER_SERVO
             elif motor_id == MotorInstance.PELLET_LOAD_SERVO_ID:
                 return Motor.PELLET_LOAD_SERVO
+            elif motor_id == MotorInstance.TUNNEL_FAN_SERVO_ID:
+                return Motor.TUNNEL_FAN_SERVO
         else:
             if motor_id == MotorInstance.PELLET_X_MOTOR_ID:
                 return Motor.PELLET_X_MOTOR
@@ -293,6 +306,8 @@ def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
             elif motor_id == MotorInstance.PELLET_Z_MOTOR_ID:
                 return Motor.PELLET_Z_MOTOR
 
+    logger.warning("Unknown motor id for target: target=%s isa_servo=%s motor_id=%s",
+                   target, isa_servo, motor_id)
     return Motor.NONE
 
 
@@ -369,10 +384,12 @@ class CanInterface(DeviceInterface):
         self._pellet_addr: Optional[int] = None
         self._magnet_addr: Optional[int] = None
 
-        self.magnet_config = ServoConfig()
-        self.gate_config = ServoConfig()
-        self.load_config = ServoConfig()
-        self.cover_config = ServoConfig()
+        self._servo_configs = {}
+        self.magnet_config = self._servo_configs[Motor.TUNNEL_MAGNET_SERVO] = ServoConfig()
+        self.gate_config = self._servo_configs[Motor.TUNNEL_GATE_SERVO] = ServoConfig()
+        self.load_config = self._servo_configs[Motor.PELLET_LOAD_SERVO] = ServoConfig()
+        self.cover_config = self._servo_configs[Motor.PELLET_COVER_SERVO] = ServoConfig()
+        self.tunnel_fan_config = self._servo_configs[Motor.TUNNEL_FAN_SERVO] = ServoConfig()
 
         self._motor_configs = {}
         self.x_config = StepperConfig()
@@ -581,6 +598,16 @@ class CanInterface(DeviceInterface):
         config = config if config is not None else StepperConfig()
         config.motor = Motor.PELLET_Z_MOTOR
         self._set_motor_config(config)
+
+    @property
+    def tunnel_fan_config(self) -> ServoConfig:
+        return self._tunnel_fan_config
+
+    @tunnel_fan_config.setter
+    def tunnel_fan_config(self, value: ServoConfig):
+        self._tunnel_fan_config = value
+        value.motor = Motor.TUNNEL_FAN_SERVO
+        value.target = target_of_motor(Motor.TUNNEL_FAN_SERVO)
 
     @property
     def pellet_address(self):
@@ -843,6 +870,8 @@ class CanInterface(DeviceInterface):
                 config = self.magnet_config
             elif motor == Motor.TUNNEL_GATE_SERVO:
                 config = self.gate_config
+            elif motor == Motor.TUNNEL_FAN_SERVO:
+                config = self.tunnel_fan_config
             else:
                 logger.warning("Unknown motor servo config requested: motor=%s", motor)
                 config = ServoConfig()
@@ -875,7 +904,7 @@ class CanInterface(DeviceInterface):
         if config is None:
             return False
 
-        rc = False
+        rc = True
 
         config.motor = motor
 
@@ -913,6 +942,15 @@ class CanInterface(DeviceInterface):
             self.load_config = config
             if write_to_remote:
                 rc = self._write_servo_config(self.load_config)
+
+        elif motor == Motor.TUNNEL_FAN_SERVO:
+            self.tunnel_fan_config = config
+            if write_to_remote:
+                rc = self._write_servo_config(config)
+
+        else:
+            logger.error("Unhandled motor for set config: %s", motor)
+            rc = False
 
         return rc
 
@@ -954,10 +992,12 @@ class CanInterface(DeviceInterface):
         self._query_motor_configuration(Motor.PELLET_X_MOTOR, StepperConfig)
         self._query_motor_configuration(Motor.PELLET_Y_MOTOR, StepperConfig)
         self._query_motor_configuration(Motor.PELLET_Z_MOTOR, StepperConfig)
+        #
         self._query_motor_configuration(Motor.PELLET_LOAD_SERVO, ServoConfig)
         self._query_motor_configuration(Motor.PELLET_COVER_SERVO, ServoConfig)
         self._query_motor_configuration(Motor.TUNNEL_MAGNET_SERVO, ServoConfig)
         self._query_motor_configuration(Motor.TUNNEL_GATE_SERVO, ServoConfig)
+        self._query_motor_configuration(Motor.TUNNEL_FAN_SERVO, ServoConfig)
 
     def delay(self, delay_sec) -> bool:
         """
@@ -988,7 +1028,13 @@ class CanInterface(DeviceInterface):
         logger.debug("LoadCellTare addr=%s res=%s uuid=%s", addr, res, uuid)
         return res == 0
 
-    def _move_servo_motor(self, motor: Motor, position, config: ServoConfig):
+    def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]]):
+        config = self._servo_configs.get(motor)
+        if config is None:
+            logger.error("Unknown servo motor: %s", motor)
+        return self._move_servo_motor(motor, position, config)
+
+    def _move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]], config: ServoConfig):
         """
         Move a servo motor.
 
@@ -1582,8 +1628,7 @@ class CanInterface(DeviceInterface):
             return Version(target, version=version_str)
         return None
 
-    def _translate_config(self, message) -> \
-        Optional[Union[ServoConfig, StepperConfig]]:
+    def _translate_config(self, message) -> Optional[Union[ServoConfig, StepperConfig]]:
         """
         Translate configuration response messages for servo or stepper motors.
 

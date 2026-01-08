@@ -3,7 +3,7 @@ from typing import Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QSpinBox, \
-    QLayout, QVBoxLayout, QFileDialog, QFrame, QDoubleSpinBox, QComboBox
+    QLayout, QVBoxLayout, QFileDialog, QFrame, QDoubleSpinBox, QComboBox, QSizePolicy
 
 import qtawesome as qta
 
@@ -55,6 +55,8 @@ class PelletControl(QWidget):
     def __init__(self, app_model: AppModel):
         super().__init__()
 
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+
         self._app_model: AppModel = app_model
 
         self._config_dialog = None
@@ -67,6 +69,7 @@ class PelletControl(QWidget):
         layout.addLayout(self._create_move_layout())
 
         panel = CardWidget(title="Control", content_layout=layout)
+        panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -110,6 +113,17 @@ class PelletControl(QWidget):
         b_layout.addWidget(self._cover_button)
 
         b_layout.addStretch(1)
+
+        button = self._tunnel_fan_button = QPushButton("Tunnel-Fan")
+        button.setCheckable(True)
+        def tunnel_fan_clicked(triggered):
+            iface = self._app_model
+            if triggered:
+                iface.set_tunnel_fan_on()
+            else:
+                iface.set_tunnel_fan_off()
+        button.clicked.connect(tunnel_fan_clicked)
+        b_layout.addWidget(button)
 
         self._move_file_button = QPushButton("")
         folder_icon = qta.icon('fa5s.folder-open')
