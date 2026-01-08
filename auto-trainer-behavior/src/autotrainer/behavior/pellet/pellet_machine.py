@@ -95,6 +95,7 @@ class PelletMachine(StateMachine):
 
     @property
     def covered_state(self) -> Optional[bool]:
+        """False == released, True == covered, None == unknown"""
         return self._covered_state
 
     # transitions
@@ -403,7 +404,7 @@ class PelletMachine(StateMachine):
                              can_release)
                 self._prev_can_cover = can_cover
 
-            if not can_cover or can_release:
+            if can_release:
                 # NB: also having to use algo.can_cover_pellet(), given can_release_pellet() depends on conditions
                 if self._covered_state is not False:
                     # nb: keep this second if not grouped with the previous one,
@@ -416,15 +417,17 @@ class PelletMachine(StateMachine):
                         self.monitor_pellet()
                     else:
                         log_could_retry_shortly()
-            elif can_cover and self._covered_state is not True:
-                reason = "cover_pellet_in_monitoring"
-                if self.can_use_pellet_command():
-                    logit()
-                    self.cover_pellet()
-                    self._api_status_token = None  # no need wait for ack
-                    self.monitor_pellet()
-                else:
-                    log_could_retry_shortly()
+
+            elif can_cover:
+                if self._covered_state is not True:  # noqa
+                    reason = "cover_pellet_in_monitoring"
+                    if self.can_use_pellet_command():
+                        logit()
+                        self.cover_pellet()
+                        self._api_status_token = None  # no need wait for ack
+                        self.monitor_pellet()
+                    else:
+                        log_could_retry_shortly()
         else:
             logger.warning("unknown state: %s", cur_state)
 
@@ -465,11 +468,23 @@ class PelletMachine(StateMachine):
     def send_pellet(self):
         """Send pellet to deliver position"""
 
+    def force_send_pellet(self):
+        """Force a send pellet to deliver position"""
+
     def may_send_pellet(self):
         """May Send pellet to deliver position"""
 
+    def may_force_send_pellet(self):
+        """May Force Send pellet to deliver position"""
+
     def release_pellet(self):
         """Release pellet cover"""
+
+    def force_release_pellet(self):
+        """Force release pellet"""
+
+    def may_force_release_pellet(self):
+        """May Force Release pellet to deliver position"""
 
     def may_release_pellet(self):
         """May Release pellet cover"""
@@ -477,8 +492,14 @@ class PelletMachine(StateMachine):
     def cover_pellet(self):
         """Cover pellet cover"""
 
+    def force_cover_pellet(self):
+        """Force cover pellet"""
+
     def may_cover_pellet(self):
         """May Cover pellet cover"""
+
+    def may_force_cover_pellet(self):
+        """May Force Cover pellet to deliver position"""
 
     def monitor_pellet(self):
         """Monitor pellet"""
@@ -538,6 +559,14 @@ class PelletMachine(StateMachine):
         ),
 
         dict(
+            trigger=force_send_pellet,
+            source="*",
+            dest=PelletState.sending,
+            before=before_send_pellet,
+            # conditions=can_send_pellet,  # contrary to send_pellet
+        ),
+
+        dict(
             trigger=cover_pellet,
             source="*",
             dest=PelletState.covering,
@@ -546,11 +575,27 @@ class PelletMachine(StateMachine):
         ),
 
         dict(
+            trigger=force_cover_pellet,
+            source="*",
+            dest=PelletState.covering,
+            before=before_cover_pellet,
+            # conditions=can_cover_pellet,
+        ),
+
+        dict(
             trigger=release_pellet,
             source="*",
             dest=PelletState.releasing,
             before=before_release_pellet,
             conditions=can_release_pellet,
+        ),
+
+        dict(
+            trigger=force_release_pellet,
+            source="*",
+            dest=PelletState.releasing,
+            before=before_release_pellet,
+            # conditions=can_release_pellet,
         ),
 
         dict(

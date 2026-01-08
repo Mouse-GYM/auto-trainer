@@ -513,7 +513,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         cams_frame_idx_fhs = None
                         perf_c_start_offline = time.perf_counter()
                         logger.notice("Opening live files for offline processing ; prev_mode=%s frames=%s",
-                                      prev_mode, frames_indices)
+                                      prev_mode, frames_indices.tolist())
                         cams_read_h5_dss = [
                             open_h5_file(cam_pose_path)
                             for cam_pose_path in pose_paths
