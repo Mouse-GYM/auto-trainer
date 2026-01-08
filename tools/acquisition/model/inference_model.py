@@ -21,7 +21,7 @@ from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, cl
 from autotrainer.core.logging import get_verbose_logger, setup_logging, make_log_dict_config, install_log_exception_hook
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
     InferenceProtocol, IntersessionBlock, IntersessionDetection
-from autotrainer.core.message import FrameIndexCategory
+from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     InferenceMode, InferenceStatus

@@ -1,16 +1,21 @@
 import math
+import queue
 import threading
 import time
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, Union
 
 from autotrainer.core import ObservableObject, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 
+
 logger = get_verbose_logger(__name__)
 
 
 class BaseDetector(ObservableObject):
+
+    use_daemon: bool = False
+    default_timer_delay: Optional[float] = None
 
     def __init__(self):
         super().__init__()
@@ -20,6 +25,7 @@ class BaseDetector(ObservableObject):
         self._engaged_perf_c = math.nan
         self._disengaged_perf_c = math.nan
         self._cur_timer = no_op_timer
+        self._thread_queue: Optional[Tuple[threading.Thread, queue.Queue]] = None
         self._lock = threading.RLock()
         self._logger = get_verbose_logger(self.__class__.__module__)
 
@@ -56,7 +62,9 @@ class BaseDetector(ObservableObject):
             if not self._enabled:
                 return
             next_delay = self._check_state()
-            if next_delay is not None:
+            if next_delay is None:
+                next_delay = self.default_timer_delay
+            if next_delay is not None and not self.use_daemon:
                 # "recurrent/timed" detector
                 self._make_new_timer(next_delay)
             else:
@@ -75,7 +83,27 @@ class BaseDetector(ObservableObject):
             self.is_engaged = False  # force reset "engaged" to False
             self._t_started = get_perf_now()
             self._start()
-            self._make_new_timer(0.01)
+            if self.use_daemon:
+                cmd_queue = queue.Queue()
+                thread = threading.Thread(name=self.__class__.__name__, target=self._daemon_run, daemon=True,
+                                          args=(cmd_queue,))
+                thread.start()
+                self._thread_queue = thread, cmd_queue
+            else:
+                self._make_new_timer(0.01)
+
+    def _daemon_run(self, cmd_queue):
+        while True:
+            delay = self.default_timer_delay
+            if delay is None or delay <= 0.1:
+                delay = 0.1
+            try:
+                r = cmd_queue.get(timeout=delay)
+                assert r is None  # we only support None exit sentinel
+                break
+            except queue.Empty:
+                pass
+            self.check_state()
 
     def _stop(self):
         pass
@@ -88,6 +116,13 @@ class BaseDetector(ObservableObject):
             self._enabled = False
             self._cur_timer.cancel()
             self._stop()
+            thread_queue = self._thread_queue
+            if thread_queue is not None:
+                thread, q = self._thread_queue
+                q.put(None)
+                logger.debug("Joining thread")
+                thread.join()
+                self._thread_queue = None
 
     def restart(self):
         self.stop()
@@ -98,4 +133,4 @@ class BaseDetector(ObservableObject):
         with self._lock:
             if not self._enabled:
                 return
-            self._make_new_timer(0.01)
+            self._make_new_timer(0.01)  # todo: could call self.check_state() directly instead

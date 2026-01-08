@@ -159,6 +159,9 @@ class AlarmContent(ContentWidget):
         form_layout_detectors.addRow("Device Ack Timeout:", icon)
         self.device_ack_timeout_changed.connect(icon.setStatus)
 
+        icon = self._pellet_misplaced_status = make_detector_icon(name="pellet-misplaced")
+        form_layout_detectors.addRow("Pellet Misplaced:", icon)
+
         content_layout.addLayout(form_layout_alarms)
         content_layout.addLayout(form_layout_detectors)
 
@@ -188,6 +191,7 @@ class AlarmContent(ContentWidget):
         # emergency alarm controls 3 sub-alarms:
         analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
         # analysis.external_doors_monitor.property_changed += self._ext_door_property_changed
+        analysis.pellet_misplaced_monitor.property_changed += self._pellet_misplaced_property_changed
 
     def set_is_capture_active(self, is_editable: bool):
         self._card_widget.setEnabled(is_editable)
@@ -246,3 +250,7 @@ class AlarmContent(ContentWidget):
     def _global_animal_presence_property_changed(self, name, value, _):
         if name == "is_engaged":
             self.global_animal_presence_changed.emit(value)
+
+    def _pellet_misplaced_property_changed(self, name, value, _):
+        if name == "is_engaged":
+            self._pellet_misplaced_status.setStatus(value)

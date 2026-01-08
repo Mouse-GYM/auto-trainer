@@ -22,8 +22,8 @@ import verboselogs
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo, SystemStatusMessageKind
 from autotrainer.core.logging import get_verbose_logger, set_logger_level, get_multiprocess_log_queue, \
     make_log_dict_config, thread_id_filter, setup_logging, install_log_exception_hook
+from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.fixed_array_queue import BufferResult
-from autotrainer.core.message import FrameIndexCategory
 from autotrainer.core.video_detection import PresenceDetectionAttrs, VideoDetection
 
 from .video_manager import VideoManager

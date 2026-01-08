@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from autotrainer.core.message.frame_index import FrameIndexCategory
+from autotrainer.core.frame_index import FrameIndexCategory
 
 
 @pytest.mark.parametrize("idx", [0, 1, 42])
