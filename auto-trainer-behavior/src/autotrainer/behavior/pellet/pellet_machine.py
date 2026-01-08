@@ -266,9 +266,11 @@ class PelletMachine(StateMachine):
     # endregion
 
     def _notify_pellet_loaded_ok(self):
-        self._prev_notify_loaded_perf_c = get_perf_now()
-        logger.info("Notifying pellet loaded successfully")
-        self.events.pellet_loaded()
+        # always check:
+        if self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
+            self._prev_notify_loaded_perf_c = get_perf_now()
+            logger.info("Notifying pellet loaded successfully")
+            self.events.pellet_loaded()
 
     @BehaviorAlgorithm.relay_func
     def environment_changed(
@@ -381,7 +383,7 @@ class PelletMachine(StateMachine):
 
             # previous load-pellet could have missed to notify for pellet-loaded event,
             # if/when pellet is not visible at end of load-pellet sequence. So have to recheck here:
-            if pellet_seen and is_from_inference and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
+            if pellet_seen and is_from_inference:
                 self._notify_pellet_loaded_ok()
 
             if self.can_load_pellet():
