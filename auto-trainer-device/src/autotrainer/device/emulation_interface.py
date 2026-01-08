@@ -3,6 +3,7 @@ import time
 import typing
 from pathlib import Path
 from random import uniform, random
+from typing import Union, Tuple
 
 from autotrainer.core.logging import get_verbose_logger
 
@@ -43,6 +44,7 @@ class _SharedList:
 
 
 class EmulationInterface(DeviceInterface):
+
     _uuid: int = 1
 
     @classmethod
@@ -345,6 +347,13 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
+    def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]]):
+        if isinstance(position, tuple):
+            position = position[0]
+        self._positions[motor] = position
+        self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
+        return True
+
     def move_load_servo(self, position: float, _save: bool = False) -> bool:
         if self._is_open:
             logger.info(f"set load arm {position}")
@@ -472,9 +481,11 @@ class EmulationInterface(DeviceInterface):
     def set_tunnel_fan_on(self) -> bool:
         logger.verbose("setting tunnel fan ON")
         self._positions[Motor.TUNNEL_FAN_SERVO] = 100
+        self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return True
 
     def set_tunnel_fan_off(self) -> bool:
         logger.verbose("setting tunnel fan OFF")
         self._positions[Motor.TUNNEL_FAN_SERVO] = 0
+        self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return True

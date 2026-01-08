@@ -47,6 +47,7 @@ class MessageHandler(ObservableObject):
 
     LOAD_ARM_ANGLE_PROPERTY = "load_angle"
     COVER_ARM_ANGLE_PROPERTY = "cover_angle"
+    TUNNEL_FAN_PROPERTY = "tunnel_fan"
 
     FRONT_DOOR_PROPERTY = "front_door"
     DRAWER_DOOR_PROPERTY = "drawer_door"

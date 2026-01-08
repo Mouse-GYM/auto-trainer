@@ -384,11 +384,12 @@ class CanInterface(DeviceInterface):
         self._pellet_addr: Optional[int] = None
         self._magnet_addr: Optional[int] = None
 
-        self.magnet_config = ServoConfig()
-        self.gate_config = ServoConfig()
-        self.load_config = ServoConfig()
-        self.cover_config = ServoConfig()
-        self.tunnel_fan_config = ServoConfig()
+        self._servo_configs = {}
+        self.magnet_config = self._servo_configs[Motor.TUNNEL_MAGNET_SERVO] = ServoConfig()
+        self.gate_config = self._servo_configs[Motor.TUNNEL_GATE_SERVO] = ServoConfig()
+        self.load_config = self._servo_configs[Motor.PELLET_LOAD_SERVO] = ServoConfig()
+        self.cover_config = self._servo_configs[Motor.PELLET_COVER_SERVO] = ServoConfig()
+        self.tunnel_fan_config = self._servo_configs[Motor.TUNNEL_FAN_SERVO] = ServoConfig()
 
         self._motor_configs = {}
         self.x_config = StepperConfig()
@@ -1027,7 +1028,10 @@ class CanInterface(DeviceInterface):
         logger.debug("LoadCellTare addr=%s res=%s uuid=%s", addr, res, uuid)
         return res == 0
 
-    def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]], config: ServoConfig):
+    def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]]):
+        config = self._servo_configs.get(motor)
+        if config is None:
+            logger.error("Unknown servo motor: %s", motor)
         return self._move_servo_motor(motor, position, config)
 
     def _move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]], config: ServoConfig):

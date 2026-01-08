@@ -113,6 +113,7 @@ class CanDevice(Device):
         Motor.PELLET_COVER_SERVO: SystemStatusMessageKind.PELLET_COVER,
         Motor.TUNNEL_MAGNET_SERVO: SystemStatusMessageKind.HEAD_MAGNET,
         Motor.TUNNEL_GATE_SERVO: SystemStatusMessageKind.TUNNEL_GATE_SERVO,
+        Motor.TUNNEL_FAN_SERVO: SystemStatusMessageKind.TUNNEL_FAN,
     }
 
     _motor_to_coordinate_char = {
@@ -135,7 +136,7 @@ class CanDevice(Device):
             buffer_size: Size of the measurement buffer
             force_emulation: Whether to force using emulation mode even if hardware is available
         """
-        self._interface = \
+        self._interface: Union[CanInterface, EmulationInterface] = \
             CanInterface() if HAVE_CAN_DEVICE and not force_emulation else EmulationInterface()
 
         super().__init__(self._interface, api)
@@ -285,10 +286,10 @@ class CanDevice(Device):
             SystemCommandKind.CLOSE_TUNNEL_GATE: lambda _: self._start_sequence(self._close_tunnel_gate),
 
             SystemCommandKind.TUNNEL_FAN_ON: lambda _: self._interface.move_servo_motor(
-                Motor.TUNNEL_FAN_SERVO, 100, self._interface.tunnel_fan_config
+                Motor.TUNNEL_FAN_SERVO, 100
             ),
             SystemCommandKind.TUNNEL_FAN_OFF: lambda _: self._interface.move_servo_motor(
-                Motor.TUNNEL_FAN_SERVO, 0, self._interface.tunnel_fan_config
+                Motor.TUNNEL_FAN_SERVO, 0
             ),
 
             SystemCommandKind.DELAY: self._interface.delay,
