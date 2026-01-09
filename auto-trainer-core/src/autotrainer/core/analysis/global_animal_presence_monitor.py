@@ -41,7 +41,11 @@ class GlobalAnimalPresenceMonitor(BaseDetector):
         t_perf_now = get_perf_now()
         cfg = self._config
         load_cell_mon = self._load_cell_monitor.context
-        top_cam_pres_age = t_perf_now - self._topcam_presence.last_presence_start_perf_c
+        topcam_presence = self._topcam_presence
+        if topcam_presence is None:
+            logger.verbose("topcam presence is not configured")
+            return None
+        top_cam_pres_age = t_perf_now - topcam_presence.last_presence_start_perf_c
         delay_seconds = cfg.presence_missing_delay_hours * 3600
         timer_delay = 1
         diff_started = t_perf_now - self._t_started
