@@ -12,7 +12,8 @@ In either case, the YAML base key for contents is either "magnet" or "pellet".
 "tunnel" can have 1 subgroup:
 * "magnet" - for magnet head servo
 """
-
+import copy
+import dataclasses
 import logging
 import typing
 
@@ -28,6 +29,17 @@ from .device_interface import ServoConfig, StepperConfig, Motor
 from autotrainer.core.logging import get_verbose_logger
 
 logger = get_verbose_logger(__name__)
+
+
+
+DEFAULT_TUNNEL_FAN_CONFIG = ServoConfig.from_dict(dict(
+    min_pos=0,
+    max_pos=100,
+    min_pwm=0,
+    max_pwm=500,
+    max_vel=500.0,
+    max_acc=5000.0,
+))
 
 
 class MotorConfigurationFile(MotorConfigurations):
@@ -98,6 +110,10 @@ class MotorConfigurationFile(MotorConfigurations):
                 raise
             else:
                 logger.notice("Config %s, loaded: %s", filename, loaded)
+                if "tunnel-fan" not in loaded:
+                    logger.notice("Auto-adding default tunnel-fan to motor config")
+                    self._tunnel_fan_config = copy.deepcopy(DEFAULT_TUNNEL_FAN_CONFIG)
+                    self._tunnel_fan_config.motor = Motor.TUNNEL_FAN_SERVO
                 if len(loaded) != 8:
                     # x + y + z + pellet load + pellet cover + tunnel-gate + tunnel-magnet + tunnel-fan
                     logger.warning("Expected 8 sections loaded from motor config file %r but got %s: loaded=%s",
