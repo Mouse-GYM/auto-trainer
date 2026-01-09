@@ -91,7 +91,8 @@ class BaseDetector(ObservableObject):
                 thread.start()
                 self._thread_queue = thread, cmd_queue
             else:
-                self._make_new_timer(0.01)
+                self.check_state()
+                # self._make_new_timer(0.01)
 
     def _daemon_run(self, cmd_queue):
         while True:

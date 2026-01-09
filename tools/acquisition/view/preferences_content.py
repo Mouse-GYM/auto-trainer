@@ -489,6 +489,59 @@ class PreferencesContent(QWidget):
             algo.auto_clamp_before_reengage_delay = value
         spinbox.valueChanged.connect(auto_clamp_before_reengage_delay_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+        #
+        add_empty(min_height=4)
+        #
+        grid_layout.addWidget(QLabel("<b>Tunnel Sweep:</b>"), cur_row, cur_col)
+        toggle = self._tunnel_auto_sweep_toggle = QSwitch()
+        toggle.setChecked(analysis.auto_tunnel_sweep_monitor.config.enabled)
+        def toggled(x: int):
+            enabled = x != 0
+            analysis.auto_tunnel_sweep_monitor.config.enabled = enabled
+            if enabled:
+                analysis.auto_tunnel_sweep_monitor.restart()
+            else:
+                analysis.auto_tunnel_sweep_monitor.stop()
+            refresh_enabled_states()
+        toggle.stateChanged.connect(toggled)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+        #
+        grid_layout.addWidget(QLabel("Pellet Misplaced Trigger Delay (sec.)"), cur_row, cur_col)
+        spinbox = QDoubleSpinBox()
+        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        spinbox.setRange(0, 60)
+        spinbox.setDecimals(1)
+        spinbox.setValue(analysis.auto_tunnel_sweep_monitor.config.misplaced_trigger_delay)
+        def value_changed(value):
+            analysis.auto_tunnel_sweep_monitor.config.misplaced_trigger_delay = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+        #
+        grid_layout.addWidget(QLabel("Rate Limit Delay (sec.)"), cur_row, cur_col)
+        spinbox = QDoubleSpinBox()
+        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        spinbox.setRange(0, 10_000)
+        spinbox.setDecimals(0)
+        spinbox.setValue(analysis.auto_tunnel_sweep_monitor.config.rate_limit_delay)
+        def value_changed(value):
+            analysis.auto_tunnel_sweep_monitor.config.rate_limit_delay = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+        grid_layout.addWidget(QLabel("Tunnel FAN ON duration (sec.)"), cur_row, cur_col)
+        spinbox = QDoubleSpinBox()
+        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        spinbox.setRange(0, 60)
+        spinbox.setDecimals(1)
+        spinbox.setValue(analysis.auto_tunnel_sweep_monitor.config.tunnel_fan_on_duration)
+        def value_changed(value):
+            analysis.auto_tunnel_sweep_monitor.config.tunnel_fan_on_duration = value
+        spinbox.valueChanged.connect(value_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
         #
         # to enable/disable the inference dependant sub-widgets:
         refresh_enabled_states()
