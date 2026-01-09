@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from autotrainer.behavior import DiamondTriangleOffsetConfig, BehaviorAlgorithm
+from autotrainer.behavior import BehaviorAlgorithm
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
 from autotrainer.device import MotorConfigurationFile, CompoundMovements
 

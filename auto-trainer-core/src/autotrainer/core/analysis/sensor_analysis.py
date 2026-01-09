@@ -28,6 +28,7 @@ from .alarm_monitor import EmergencyAlarmMonitor
 from .global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from .external_doors_monitor import ExternalDoorsMonitor
 from .pellet_position_monitor import PelletMisplacedDetector, PelletMisplacedDetectorConfiguration
+from .auto_tunnel_fan_monitor import AutoTunnelSweepMonitor, AutoTunnelSweepConfiguration
 
 
 logger = get_verbose_logger(__name__)
@@ -82,6 +83,10 @@ class SensorAnalysis(ObservableObject):
         self._external_doors_monitor = ExternalDoorsMonitor(ExternalDoorsMonitorConfig())
 
         self._pellet_misplaced_monitor = PelletMisplacedDetector(PelletMisplacedDetectorConfiguration())
+        self._auto_tunnel_sweep_monitor = AutoTunnelSweepMonitor(
+            AutoTunnelSweepConfiguration(),
+            pellet_misplaced_detector=self._pellet_misplaced_monitor,
+        )
 
         self._alarm_monitor = EmergencyAlarmMonitor(
             config=EmergencyAlarmConfiguration(),
@@ -97,6 +102,7 @@ class SensorAnalysis(ObservableObject):
             self._external_doors_monitor,
             self._global_animal_presence_monitor,
             self._pellet_misplaced_monitor,
+            self._auto_tunnel_sweep_monitor,
             self._alarm_monitor,
         ]
 
@@ -170,6 +176,10 @@ class SensorAnalysis(ObservableObject):
     @property
     def pellet_misplaced_monitor(self) -> PelletMisplacedDetector:
         return self._pellet_misplaced_monitor
+
+    @property
+    def auto_tunnel_sweep_monitor(self) -> AutoTunnelSweepMonitor:
+        return self._auto_tunnel_sweep_monitor
 
     @property
     def is_headbar_switch_engaged(self):

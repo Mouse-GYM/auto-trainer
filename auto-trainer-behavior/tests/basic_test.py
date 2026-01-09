@@ -3,8 +3,7 @@ from pathlib import Path
 import pytest
 
 from autotrainer.core import Offset3DTuple
-from autotrainer.behavior import DiamondTriangleOffsetConfig
-
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 
 zero_offset = Offset3DTuple(0, 0, 0)
 one_offset = Offset3DTuple(1, 1, 1)

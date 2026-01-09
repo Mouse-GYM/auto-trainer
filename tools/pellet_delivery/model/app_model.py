@@ -6,7 +6,7 @@ from functools import partial, partialmethod
 from pathlib import Path
 from typing import Optional
 
-from autotrainer.behavior import DiamondTriangleOffsetConfig
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
                               EventManager, Offset3DTuple, MotorConfigurations)
 from autotrainer.core.logging import get_verbose_logger

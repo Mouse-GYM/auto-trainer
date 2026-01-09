@@ -3,7 +3,8 @@ import math
 import numpy
 import pytest
 
-from autotrainer.behavior import BehaviorAlgorithm, DiamondTriangleOffsetConfig
+from autotrainer.behavior import BehaviorAlgorithm
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.behavior_algorithm import CoverServoStatus
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import BehaviorConfiguration, Offset3DTuple

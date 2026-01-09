@@ -10,12 +10,13 @@ from .animal_presence_configuration import GlobalAnimalPresenceConfig
 from .external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 from .presence_detection_configuration import PresenceDetectionConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor
+
 from ..analysis import LoadCellAutoTareConfiguration
 from ..analysis import HeadbarPressureConfiguration
 from ..analysis import LoadCellConfiguration
 from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from .alarm_configuration import EmergencyAlarmConfiguration
-
+from ..analysis.auto_tunnel_fan_monitor import AutoTunnelSweepConfiguration
 
 logger = get_verbose_logger(__name__)
 
@@ -105,6 +106,7 @@ class _BehaviorConfiguration:
     external_doors: ExternalDoorsMonitorConfig = field(default_factory=ExternalDoorsMonitorConfig)
     topcam_presence_detection: PresenceDetectionConfig = field(default_factory=PresenceDetectionConfig)
     auto_end_session: AutoEndSessionConfiguration = field(default_factory=AutoEndSessionConfiguration)
+    auto_tunnel_sweep: AutoTunnelSweepConfiguration = field(default_factory=AutoTunnelSweepConfiguration)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -165,34 +167,38 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     add(PresenceDetectionConfig, make_camelize_representer("!PresenceDetectionConfiguration"))
     add(ExternalDoorsMonitorConfig, make_camelize_representer("!ExternalDoorsMonitorConfiguration"))
     add(AutoEndSessionConfiguration, make_camelize_representer("!AutoEndSessionConfiguration"))
-
-
-pellet_delivery_configuration_constructor = make_decamelize_constructor(PelletDeliveryConfiguration)
-load_cell_configuration_constructor = make_decamelize_constructor(LoadCellConfiguration)
-headbar_pressure_configuration_constructor = make_decamelize_constructor(HeadbarPressureConfiguration)
-head_clamp_configuration_constructor = make_decamelize_constructor(HeadClampConfiguration)
-load_cell_auto_tare_configuration_constructor = make_decamelize_constructor(LoadCellAutoTareConfiguration)
-behavior_configuration_constructor = make_decamelize_constructor(BehaviorConfiguration)
-audio_monitor_configuration_constructor = make_decamelize_constructor(AudioSpectrumThrashMonitorConfig)
-animal_presence_configuration_constructor = make_decamelize_constructor(GlobalAnimalPresenceConfig)
-emergency_alarm_configuration_constructor = make_decamelize_constructor(EmergencyAlarmConfiguration)
+    add(AutoTunnelSweepConfiguration, make_camelize_representer("!AutoTunnelSweepConfiguration"))
 
 
 def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
-    safe_loader.add_constructor("!BehaviorConfiguration", behavior_configuration_constructor)
-    safe_loader.add_constructor("!PelletDeliveryConfiguration", pellet_delivery_configuration_constructor)
-    safe_loader.add_constructor("!LoadCellConfiguration", load_cell_configuration_constructor)
-    safe_loader.add_constructor("!HeadbarPressureConfiguration", headbar_pressure_configuration_constructor)
-    safe_loader.add_constructor("!HeadClampConfiguration", head_clamp_configuration_constructor)
-    safe_loader.add_constructor("!LoadCellAutoTareConfiguration", load_cell_auto_tare_configuration_constructor)
-    safe_loader.add_constructor("!AudioMonitorConfiguration", audio_monitor_configuration_constructor)
+
+    add = safe_loader.add_constructor
+
+    pellet_delivery_configuration_constructor = make_decamelize_constructor(PelletDeliveryConfiguration)
+    load_cell_configuration_constructor = make_decamelize_constructor(LoadCellConfiguration)
+    headbar_pressure_configuration_constructor = make_decamelize_constructor(HeadbarPressureConfiguration)
+    head_clamp_configuration_constructor = make_decamelize_constructor(HeadClampConfiguration)
+    load_cell_auto_tare_configuration_constructor = make_decamelize_constructor(LoadCellAutoTareConfiguration)
+    behavior_configuration_constructor = make_decamelize_constructor(BehaviorConfiguration)
+    audio_monitor_configuration_constructor = make_decamelize_constructor(AudioSpectrumThrashMonitorConfig)
+    animal_presence_configuration_constructor = make_decamelize_constructor(GlobalAnimalPresenceConfig)
+    emergency_alarm_configuration_constructor = make_decamelize_constructor(EmergencyAlarmConfiguration)
+
+    add("!BehaviorConfiguration", behavior_configuration_constructor)
+    add("!PelletDeliveryConfiguration", pellet_delivery_configuration_constructor)
+    add("!LoadCellConfiguration", load_cell_configuration_constructor)
+    add("!HeadbarPressureConfiguration", headbar_pressure_configuration_constructor)
+    add("!HeadClampConfiguration", head_clamp_configuration_constructor)
+    add("!LoadCellAutoTareConfiguration", load_cell_auto_tare_configuration_constructor)
+    add("!AudioMonitorConfiguration", audio_monitor_configuration_constructor)
     #
-    safe_loader.add_constructor("!AnimalPresenceConfiguration", animal_presence_configuration_constructor)
-    safe_loader.add_constructor("!MousePresenceConfiguration", animal_presence_configuration_constructor)
+    add("!AnimalPresenceConfiguration", animal_presence_configuration_constructor)
+    add("!MousePresenceConfiguration", animal_presence_configuration_constructor)
     # keeping temporarily MousePresenceConfiguration, was renamed to AnimalPresenceConfiguration. Back-compatibility.
     # todo: remove some when later.
     #
-    safe_loader.add_constructor("!EmergencyAlarmConfiguration", emergency_alarm_configuration_constructor)
-    safe_loader.add_constructor("!PresenceDetectionConfiguration", make_decamelize_constructor(PresenceDetectionConfig))
-    safe_loader.add_constructor("!ExternalDoorsMonitorConfiguration", make_decamelize_constructor(ExternalDoorsMonitorConfig))
-    safe_loader.add_constructor("!AutoEndSessionConfiguration", make_decamelize_constructor(AutoEndSessionConfiguration))
+    add("!EmergencyAlarmConfiguration", emergency_alarm_configuration_constructor)
+    add("!PresenceDetectionConfiguration", make_decamelize_constructor(PresenceDetectionConfig))
+    add("!ExternalDoorsMonitorConfiguration", make_decamelize_constructor(ExternalDoorsMonitorConfig))
+    add("!AutoEndSessionConfiguration", make_decamelize_constructor(AutoEndSessionConfiguration))
+    add("!AutoTunnelSweepConfiguration", make_decamelize_constructor(AutoTunnelSweepConfiguration))

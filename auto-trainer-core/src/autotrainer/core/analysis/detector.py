@@ -19,7 +19,7 @@ class BaseDetector(ObservableObject):
 
     def __init__(self):
         super().__init__()
-        self._enabled = False
+        self._running = False
         self._t_started = math.nan
         self._is_engaged = False
         self._engaged_perf_c = math.nan
@@ -59,7 +59,7 @@ class BaseDetector(ObservableObject):
 
     def check_state(self):
         with self._lock:
-            if not self._enabled:
+            if not self._running:
                 return
             next_delay = self._check_state()
             if next_delay is None:
@@ -70,16 +70,17 @@ class BaseDetector(ObservableObject):
             else:
                 # detector that will resume by explicit refresh
                 self._cur_timer.cancel()
+                self._cur_timer = no_op_timer
 
     def _start(self):
         """Allow any sub-class to customize its start procedure. super() should be called."""
 
     def start(self):
         with self._lock:
-            if self._enabled:
+            if self._running:
                 return
             self._logger.verbose("%s: starting monitor", self.__class__.__name__)
-            self._enabled = True
+            self._running = True
             self.is_engaged = False  # force reset "engaged" to False
             self._t_started = get_perf_now()
             self._start()
@@ -110,10 +111,10 @@ class BaseDetector(ObservableObject):
 
     def stop(self):
         with self._lock:
-            if not self._enabled:
+            if not self._running:
                 return
             self._logger.verbose("%s: stopping monitor", self.__class__.__name__)
-            self._enabled = False
+            self._running = False
             self._cur_timer.cancel()
             self._stop()
             thread_queue = self._thread_queue
@@ -131,6 +132,7 @@ class BaseDetector(ObservableObject):
     def refresh_state(self):
         """Ensure check_state is called "~now" (i.e very shortly)"""
         with self._lock:
-            if not self._enabled:
+            if not self._running:
                 return
-            self._make_new_timer(0.01)  # todo: could call self.check_state() directly instead
+            # self._make_new_timer(0.01)  # todo: could call self.check_state() directly instead
+            self.check_state()

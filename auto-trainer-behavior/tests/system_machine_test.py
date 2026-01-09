@@ -463,7 +463,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
             stack.enter_context(self.mock_perform_detection())
             assert processing_ended_count == 0
             machine.state = system_state
-            algo.end_capture_session(reason="manual")
+            algo.end_capture_session()
             assert processing_ended_count == 0
             self.mock_complete_segmentation(True)
             assert processing_ended_count == 0
@@ -490,7 +490,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
         caplog.set_level(logging.INFO)
         with self.mock_analysis():
             self.increment_perf_now(sess_duration)
-            algo.end_capture_session(reason="manual")
+            algo.end_capture_session()
             assert not algo.is_in_session
         if auto_close_gate and sess_duration >= sess_min_duration:
             assert "Closing tunnel gate for intersession" in caplog.text
@@ -520,10 +520,10 @@ class TestSessionProcessingEnding(MockSystemMachine):
         assert processing_ended_count == 1
 
 
-
 def test_handle_diamond_triangle_offset_full(mock_system, machine):
     self = mock_system
     algo = machine.algorithm
+    algo.reload_diamond_triangle_config()  # ensure it's loaded
     machine.enter_tunnel()
     pellet_m = machine.pellet
     diamond_cfg = machine.algorithm.diamond_triangle_config

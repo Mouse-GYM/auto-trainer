@@ -256,7 +256,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         return 1  # timer_delay
 
     def _load_cell_monitor_prop_changed(self, name, value, _):
-        if not self._enabled:
+        if not self._running:
             return
         if not self._config.use_audio_load_cell_thrash:
             return
@@ -272,7 +272,7 @@ class EmergencyAlarmMonitor(BaseDetector):
             self.check_state()
 
     def _audio_prop_changed(self, name, value, _):
-        if not self._enabled:
+        if not self._running:
             return
         if not self._config.use_audio_load_cell_thrash:
             return

@@ -1,9 +1,7 @@
 from typing import Protocol, Optional, Union
 from uuid import UUID
 
-from autotrainer.core import ObservableObjectProtocol, Offset3DTuple, Motor
-
-from autotrainer.device.device_interface import StepperConfig, ServoConfig
+from autotrainer.core import ObservableObjectProtocol, Offset3DTuple
 
 
 class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
@@ -118,5 +116,8 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     def set_auto_correct_motor_drift(self, enabled: bool):
         """Set auto correct motor drift"""
 
-    def get_motor_config(self, motor: Motor) -> Union[StepperConfig, ServoConfig]:
-        """Get the motor current config"""
+    def set_tunnel_fan_on(self) -> Optional[UUID]:
+        """Turn ON tunnel FAN"""
+
+    def set_tunnel_fan_off(self) -> Optional[UUID]:
+        """Turn OFF tunnel FAN"""

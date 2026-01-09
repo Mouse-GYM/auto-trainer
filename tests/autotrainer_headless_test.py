@@ -12,7 +12,8 @@ from pathlib import Path
 
 import verboselogs
 
-from autotrainer.behavior import DiamondTriangleOffsetConfig, BehaviorAlgorithm
+from autotrainer.behavior import BehaviorAlgorithm
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
 from autotrainer.video import VideoRecordMode
 from tools.acquisition.model.app_model import AppModel

@@ -1,6 +1,6 @@
 import numpy as np
 
-from autotrainer.behavior import DiamondTriangleOffsetConfig
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import Offset3DTuple
 
 import pytest

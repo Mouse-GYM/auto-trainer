@@ -763,6 +763,9 @@ class AppModel(ObservableObject):
 
         analysis.project_info = self._project_info
 
+        algo = self._behavior.algorithm
+        algo.reload_diamond_triangle_config()
+
         self._behavior.on_prepare_capture()
 
         self._inference_queue = None
@@ -868,8 +871,6 @@ class AppModel(ObservableObject):
 
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
-
-        algo = self._behavior.algorithm
 
         if self._inference.is_enabled:
             logger.info("Starting inference ..")
@@ -996,15 +997,22 @@ class AppModel(ObservableObject):
 
         prebuffer_duration = 0
 
-        if (camera := configuration.get_camera(CameraId.Left)) is not None:
-            self._left_camera.load_configuration(camera)
-            prebuffer_duration = camera.record_prebuffer_duration
-        if (camera := configuration.get_camera(CameraId.Right)) is not None:
-            self._right_camera.load_configuration(camera)
-            if camera.record_prebuffer_duration != prebuffer_duration:
+        if (left_cam_cfg := configuration.get_camera(CameraId.Left)) is not None:
+            prebuffer_duration = left_cam_cfg.record_prebuffer_duration
+
+        if (right_cam_cfg := configuration.get_camera(CameraId.Right)) is not None:
+            prebuffer_duration = max(prebuffer_duration, right_cam_cfg.record_prebuffer_duration)
+            if right_cam_cfg.record_prebuffer_duration != prebuffer_duration:
                 logger.warning("left & right cameras don't have same record_prebuffer_duration: %s vs %s ; using max",
-                               camera.record_prebuffer_duration, prebuffer_duration)
-            prebuffer_duration = max(prebuffer_duration, camera.record_prebuffer_duration)
+                               right_cam_cfg.record_prebuffer_duration, prebuffer_duration)
+            right_cam_cfg.record_prebuffer_duration = prebuffer_duration
+
+        if left_cam_cfg is not None:
+            self._left_camera.load_configuration(left_cam_cfg)
+
+        if right_cam_cfg is not None:
+            self._right_camera.load_configuration(right_cam_cfg)
+
         if (camera := configuration.get_camera(CameraId.Web)) is not None:
             self._top_camera.load_configuration(camera)
 
@@ -1020,16 +1028,7 @@ class AppModel(ObservableObject):
 
         self.inference.load_configuration(configuration.inference)
 
-        behavior_cfg = configuration.behavior
-        self.behavior.load_configuration(behavior_cfg)
-
-        self._analysis.headbar_pressure_monitor.load_configuration(behavior_cfg.headbar_pressure)
-        self._analysis.load_cell_monitor.load_configuration(behavior_cfg.load_cell)
-        self._analysis.load_cell_tare_monitor.load_configuration(behavior_cfg.auto_tare)
-        self._analysis.audio_thrashing_monitor.config = behavior_cfg.audio
-        self._analysis.emergency_alarm_monitor.config = behavior_cfg.emergency_alarm
-        self._analysis.global_animal_presence_monitor.config = behavior_cfg.global_animal_presence
-        self._analysis.external_doors_monitor.config = behavior_cfg.external_doors
+        self.behavior.load_configuration(configuration.behavior)
 
         self.output_location = configuration.persistence.output_location
 

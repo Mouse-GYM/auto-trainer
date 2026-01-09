@@ -403,9 +403,6 @@ class CanDevice(Device):
             raise RuntimeError("CAN command handler thread not anymore alive: %s", cmd_thread)
         self._commands_queue.put(obj)
 
-    def get_motor_config(self, motor: Motor):
-        return self._interface.get_motor_configuration(motor)
-
     def _send_retract(self, _):
         self._prev_command_is_relative = True
         return self._interface.move_motor_y(self._retract_distance, relative=True)
