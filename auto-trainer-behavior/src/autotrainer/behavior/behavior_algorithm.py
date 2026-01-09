@@ -359,9 +359,6 @@ class BehaviorAlgorithm(ObservableObject):
         self._diamond_triangle_offset_config_path = diamond_triangle_offset_config_path
 
         self._diamond_triangle_offset_config: Optional[DiamondTriangleOffsetConfig] = None
-        # self.diamond_triangle_offset_config = DiamondTriangleOffsetConfig.load_config(
-        #     self._diamond_triangle_offset_config_path
-        # )
 
         self._diamond_triangle_drift: Optional[Offset3DTuple] = None
         self._diamond_triangle_prev_drifts: List[Offset3DTuple] = []
@@ -987,11 +984,6 @@ class BehaviorAlgorithm(ObservableObject):
         # this is what send the trigger the enable recording at camera level,
         # but must be done after calculate next session index !!
         post_trigger_enable(self, True)
-
-        # try load diamond-triangle config
-        # self.diamond_triangle_offset_config = DiamondTriangleOffsetConfig.load_config(
-        #     self._diamond_triangle_offset_config_path
-        # )
 
         self.session_starting()
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)

@@ -119,12 +119,9 @@ class SystemMachine(StateMachine):
             analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
             analysis.headbar_pressure_monitor.property_changed += self._headbar_pressure_monitor_property_changed
             analysis.load_cell_tare_monitor.tare_callback = self._load_cell_tare_requested
-            # analysis.pellet_misplaced_monitor.dcs_config = algo.diamond_triangle_config
             analysis.auto_tunnel_sweep_monitor.property_changed += self._auto_tunnel_sweep_property_changed
-
-            # for detector in analysis.detectors:
-            #     detector.behavior_algo = algo
-            analysis.pellet_misplaced_monitor.dcs_config = algo.diamond_triangle_config
+            # analysis.pellet_misplaced_monitor.dcs_config = algo.diamond_triangle_config
+            #   handled by property changed.
 
         self._inference = inference
         if inference is not None:
