@@ -320,6 +320,7 @@ class MainWindow(QMainWindow):
         app_model = self._app_model
         algo = app_model.behavior.algorithm
         algo.diamond_triangle_config = new_cfg
+        app_model.analysis.pellet_misplaced_monitor.dcs_config = new_cfg
         animal = app_model.selected_animal
         # to ensure animal will gets its x/y/z in DCS
         app_model.selected_animal = None

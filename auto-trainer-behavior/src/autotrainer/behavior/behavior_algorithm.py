@@ -1226,7 +1226,7 @@ class BehaviorAlgorithm(ObservableObject):
             self._diamond_triangle_prev_drifts = []
         n_vals = len(values)
         if n_vals < 2:
-            new_drift = None if len(values) == 0 else values[-1]
+            new_drift = None if n_vals == 0 else values[-1]
             stdev_drift = Offset3DTuple(0, 0, 0)
         else:
             new_drift, stdev_drift = calculate_std_dev_manual(values)

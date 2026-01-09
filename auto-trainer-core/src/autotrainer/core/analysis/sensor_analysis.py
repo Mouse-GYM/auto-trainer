@@ -9,7 +9,6 @@ from typing import Optional, List, Tuple, IO
 import numpy
 
 from autotrainer.core.video_detection import PresenceDetectionAttrs
-from .external_doors_monitor import ExternalDoorsMonitor
 
 from ..configuration.alarm_configuration import EmergencyAlarmConfiguration
 from ..configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
@@ -27,6 +26,9 @@ from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
 from .alarm_monitor import EmergencyAlarmMonitor
 from .global_animal_presence_monitor import GlobalAnimalPresenceMonitor
+from .external_doors_monitor import ExternalDoorsMonitor
+from .pellet_position_monitor import PelletMisplacedDetector, PelletMisplacedDetectorConfiguration
+
 
 logger = get_verbose_logger(__name__)
 
@@ -79,6 +81,8 @@ class SensorAnalysis(ObservableObject):
 
         self._external_doors_monitor = ExternalDoorsMonitor(ExternalDoorsMonitorConfig())
 
+        self._pellet_misplaced_monitor = PelletMisplacedDetector(PelletMisplacedDetectorConfiguration())
+
         self._alarm_monitor = EmergencyAlarmMonitor(
             config=EmergencyAlarmConfiguration(),
             load_cell_monitor=self._load_cell_monitor,
@@ -92,8 +96,13 @@ class SensorAnalysis(ObservableObject):
         self._detectors = [
             self._external_doors_monitor,
             self._global_animal_presence_monitor,
+            self._pellet_misplaced_monitor,
             self._alarm_monitor,
         ]
+
+    @property
+    def detectors(self):
+        return self._detectors
 
     def start(self):
         for detector in self._detectors:
@@ -157,6 +166,10 @@ class SensorAnalysis(ObservableObject):
     @property
     def external_doors_monitor(self) -> ExternalDoorsMonitor:
         return self._external_doors_monitor
+
+    @property
+    def pellet_misplaced_monitor(self) -> PelletMisplacedDetector:
+        return self._pellet_misplaced_monitor
 
     @property
     def is_headbar_switch_engaged(self):

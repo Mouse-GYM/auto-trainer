@@ -17,7 +17,7 @@ import numpy
 import pandas
 
 from autotrainer.core import ProjectInfo
-from autotrainer.core.message import FrameIndexCategory
+from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook
 

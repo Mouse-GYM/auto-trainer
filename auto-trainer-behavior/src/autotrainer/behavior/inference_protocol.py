@@ -1,10 +1,12 @@
 from typing import Protocol, Callable, Tuple, Optional
 
-from autotrainer.core import Offset3DTuple, ObservableObject, InferenceConfiguration
+from autotrainer.core import Offset3DTuple, ObservableObject
+
+from autotrainer.core.configuration.inference_configuration import InferenceConfiguration
 
 import autotrainer.inference.analysis
-from autotrainer.inference import InferenceStatus, PoseAlgorithm
 
+from autotrainer.inference import InferenceStatus, PoseAlgorithm
 from . import SegmentationConfiguration, DetectionConfiguration
 
 

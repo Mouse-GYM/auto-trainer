@@ -95,7 +95,7 @@ class SystemMachine(StateMachine):
         self._tunnel_device = tunnel_device
         self._msg_handler = msg_handler
 
-        self._algorithm: BehaviorAlgorithm =BehaviorAlgorithm(
+        self._algorithm: BehaviorAlgorithm = BehaviorAlgorithm(
             topcam_presence=topcam_presence,
         ) if algorithm is None else algorithm
         algo = self._algorithm
@@ -118,6 +118,10 @@ class SystemMachine(StateMachine):
             analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
             analysis.headbar_pressure_monitor.property_changed += self._headbar_pressure_monitor_property_changed
             analysis.load_cell_tare_monitor.tare_callback = self._load_cell_tare_requested
+
+            # for detector in analysis.detectors:
+            #     detector.behavior_algo = algo
+            analysis.pellet_misplaced_monitor.dcs_config = algo.diamond_triangle_config
 
         self._inference = inference
         if inference is not None:
@@ -522,6 +526,10 @@ class SystemMachine(StateMachine):
             if p_now - t_last >= 30:
                 logger.debug("pose_changed: %s", response)
                 self._last_pose_changed_logged = p_now
+        #
+        pellet_3d = response.locations_3d.get(SceneElement.Pellet)
+        self._analysis.pellet_misplaced_monitor.update(pellet_3d)
+
         #
         self._handle_diamond_triangle_offset_changed(
             response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))

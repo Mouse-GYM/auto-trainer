@@ -255,6 +255,9 @@ def make_decamelize_constructor(cls: Type[ConfigItemCls]):
 from .observable_object import ObservableObject, ObservableObjectProtocol
 
 from .event import ApiEventKind, EventManager, EventInfo, EventManagerPlugin
+
+from .frame_index import FrameIndexCategory
+
 from .fixed_array_multiqueue import FixedArrayMultiQueue
 from .fixed_array_queue import FixedArrayQueue
 
@@ -264,12 +267,13 @@ from .animal import AnimalSubject
 from .perf_monitor import PerfMonitor
 from .queue_util import clear_queue
 from .notification import NotificationCenter, Notification, TriggerNotification, post_trigger_enable
+from .configuration import HardwareConfiguration, InferenceConfiguration, PersistenceConfiguration
 
 from .message import MotorConfigurations, Motor
 from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessageProtocol, AudioSpectrumMessage
 from .configuration import SystemConfiguration, BehaviorConfiguration, CameraConfiguration, CameraId, \
     SystemConfigurationLoader
-from .configuration import HardwareConfiguration, InferenceConfiguration, PersistenceConfiguration
+
 from .message import MessageHandler, SystemMessageHandler
 from .analysis import SensorAnalysis, MeasurementData, AudioSpectrumData
 from .analysis import LoadCellMonitor, HeadbarPressureMonitor
