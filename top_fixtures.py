@@ -20,7 +20,8 @@ from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 
-from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, BehaviorAlgorithm, InferenceProtocol, DiamondTriangleOffsetConfig
+from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, BehaviorAlgorithm, InferenceProtocol
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.pellet import PelletState
 
 logger = logging.getLogger(__name__)

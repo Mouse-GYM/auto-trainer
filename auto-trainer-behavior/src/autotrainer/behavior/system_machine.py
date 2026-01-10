@@ -19,7 +19,8 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.inference import PoseResponse, InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
 
-from . import CaptureAnalysisResult, DiamondTriangleOffsetConfig, RecordingEndingReason
+from . import CaptureAnalysisResult, RecordingEndingReason
+from ..core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine, IntersessionState
@@ -118,10 +119,9 @@ class SystemMachine(StateMachine):
             analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
             analysis.headbar_pressure_monitor.property_changed += self._headbar_pressure_monitor_property_changed
             analysis.load_cell_tare_monitor.tare_callback = self._load_cell_tare_requested
-
-            # for detector in analysis.detectors:
-            #     detector.behavior_algo = algo
-            analysis.pellet_misplaced_monitor.dcs_config = algo.diamond_triangle_config
+            analysis.auto_tunnel_sweep_monitor.property_changed += self._auto_tunnel_sweep_property_changed
+            # analysis.pellet_misplaced_monitor.dcs_config = algo.diamond_triangle_config
+            #   handled by property changed.
 
         self._inference = inference
         if inference is not None:
@@ -623,20 +623,21 @@ class SystemMachine(StateMachine):
     def _algorithm_property_changed(self, name: str, new_value, _):
         # Always back off to the baseline intensity when auto-clamp is disabled.
         pellet_dev = self._pellet_device
+        props = BehaviorAlgoProps
         #
-        if name == BehaviorAlgoProps.HEAD_FIXATION_ENABLED:
+        if name == props.HEAD_FIXATION_ENABLED:
             if not new_value:
                 logger.debug("auto-clamp disabled (backing off to baseline intensity)")
                 self._disengage_auto_clamp()
 
-        elif name == BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT:
+        elif name == props.AUTO_CORRECT_MOTOR_DRIFT:
             pellet_dev.set_auto_correct_motor_drift(new_value)
 
-        elif name == BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN:
+        elif name == props.HANDS_NEAR_PELLET_SEEN:
             if new_value:  # not interrested when reset to False
                 self._pellet_machine.environment_changed(must_release=new_value)
 
-        elif name == BehaviorAlgoProps.ALGO_PAUSED:
+        elif name == props.ALGO_PAUSED:
             algo = self._algorithm
             tunnel_dev = self._tunnel_device
             self.cancel_timers()
@@ -660,6 +661,16 @@ class SystemMachine(StateMachine):
                 )
                 # also trigger others checks:
                 self._handle_inference_property_changed(InferenceProtocol.STATUS, self._inference.status, None)
+
+        elif name == props.DIAMOND_TRIANGLE_CONFIG:
+            self._analysis.pellet_misplaced_monitor.dcs_config = new_value
+
+    def _auto_tunnel_sweep_property_changed(self, name, value, _):
+        if name == "is_engaged":
+            if value:
+                self._pellet_device.set_tunnel_fan_on()
+            else:
+                self._pellet_device.set_tunnel_fan_off()
 
     def _update_magnet_position(self, position: int):
         if self._tunnel_device is not None:

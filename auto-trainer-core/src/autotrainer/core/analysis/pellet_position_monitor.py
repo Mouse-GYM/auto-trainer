@@ -2,6 +2,7 @@ import dataclasses
 import math
 from typing import Optional, Tuple, List
 
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import get_perf_now, Offset3DTuple, calculate_std_dev_manual
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.analysis.detector import BaseDetector
@@ -16,7 +17,7 @@ _offset_nans = Offset3DTuple(math.nan, math.nan, math.nan)
 @dataclasses.dataclass
 class PelletMisplacedDetectorConfiguration:
     enabled: bool = True
-    aggregate_duration: float = 1.5  # how long ago to check/look at results
+    aggregate_duration: float = 1  # how long ago to check/look at results
     # previous results older than that are discarded before each check/update.
 
     use_dcs_y_low_limit: bool = True
@@ -26,7 +27,7 @@ class PelletMisplacedDetectorConfiguration:
 class PelletMisplacedDetector(BaseDetector):
 
     use_daemon = True
-    default_timer_delay = 0.5  # default delay between each check of the possible condition(s)
+    default_timer_delay = 0.25  # default delay between each check of the possible condition(s)
     # NB: should be at least 2 times smaller than aggregate_duration, otherwise given we expire too old data
     # before checking the condition, we could always have the data set empty.
 
@@ -34,22 +35,19 @@ class PelletMisplacedDetector(BaseDetector):
         super().__init__()
         self._config = config
         self._prev_data: List[Tuple[float, Offset3DTuple]] = []
-        self._dcs_config = None
+        self._dcs_config: Optional[DiamondTriangleOffsetConfig] = None
 
     @property
-    def dcs_config(self):
+    def dcs_config(self) -> Optional[DiamondTriangleOffsetConfig]:
         return self._dcs_config
 
     @dcs_config.setter
-    def dcs_config(self, value):
+    def dcs_config(self, value: Optional[DiamondTriangleOffsetConfig]):
         logger.verbose("got new DCS config: %s", value)
         self._dcs_config = value
 
     def _check_state(self) -> Optional[float]:
         cfg = self._config
-        dcs_cfg = self._dcs_config
-        if dcs_cfg is None:
-            return None
         prev_data = self._prev_data
         engaged = False
         p_now = get_perf_now()
@@ -82,16 +80,18 @@ class PelletMisplacedDetector(BaseDetector):
 
     def update(self, pellet_inference_3d: Optional[Offset3DTuple]):
         dcs_cfg = self._dcs_config
-        if dcs_cfg is None:
+        if dcs_cfg is None or not dcs_cfg.fully_valid:  # refuse to guess with not fully valid
             return
         if pellet_inference_3d is None:
             # no need put None 3d loc, the check is done by timer
             return
         rel_to_diamond = dcs_cfg.diamond_coord - pellet_inference_3d
         dcs_pellet_3d = dcs_cfg.inference_to_diamond(rel_to_diamond)
-        if any(map(math.isnan, dcs_pellet_3d)):
-            logger.debug("filtering bad pellet3d : %s", pellet_inference_3d)
-            return
+        if __debug__:
+            # should not be needed with fully_valid check above.
+            if any(map(math.isnan, dcs_pellet_3d)):
+                logger.debug("filtering bad pellet3d : %s", pellet_inference_3d)
+                return
         p_now = get_perf_now()
         with self._lock:
             self._prev_data.append((p_now, dcs_pellet_3d))

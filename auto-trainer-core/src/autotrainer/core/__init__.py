@@ -251,7 +251,12 @@ def make_decamelize_constructor(cls: Type[ConfigItemCls]):
     return constructor
 
 
+
 # MUST come first (but after above definitions):
+import autotrainer.core.logging
+import autotrainer.core.diamond_triangle_config
+# ..
+
 from .observable_object import ObservableObject, ObservableObjectProtocol
 
 from .event import ApiEventKind, EventManager, EventInfo, EventManagerPlugin

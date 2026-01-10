@@ -8,7 +8,7 @@ from typing import Optional, Tuple, Dict, Union
 
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor)
-from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol, DiamondTriangleOffsetConfig
+from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 StepperConfig, ServoConfig)

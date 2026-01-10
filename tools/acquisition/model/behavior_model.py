@@ -95,8 +95,17 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     def algorithm(self) -> BehaviorAlgorithm:
         return self._system_machine.algorithm
 
-    def load_configuration(self, configuration: BehaviorConfiguration):
-        self._system_machine.algorithm.load_configuration(configuration)
+    def load_configuration(self, config: BehaviorConfiguration):
+        self._system_machine.algorithm.load_configuration(config)
+        analysis = self._analysis
+        analysis.headbar_pressure_monitor.load_configuration(config.headbar_pressure)
+        analysis.load_cell_monitor.load_configuration(config.load_cell)
+        analysis.load_cell_tare_monitor.load_configuration(config.auto_tare)
+        analysis.audio_thrashing_monitor.config = config.audio
+        analysis.emergency_alarm_monitor.config = config.emergency_alarm
+        analysis.global_animal_presence_monitor.config = config.global_animal_presence
+        analysis.external_doors_monitor.config = config.external_doors
+        analysis.auto_tunnel_sweep_monitor.config = config.auto_tunnel_sweep
 
     def save_configuration(self) -> BehaviorConfiguration:
         config = BehaviorConfiguration()
@@ -112,6 +121,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         config.topcam_presence_detection = None if algo.top_camera_presence_detection is None else algo.top_camera_presence_detection.to_config()
         config.global_animal_presence = analysis.global_animal_presence_monitor.config
         config.external_doors = analysis.external_doors_monitor.config
+        config.auto_tunnel_sweep = analysis.auto_tunnel_sweep_monitor.config
 
         return config
 

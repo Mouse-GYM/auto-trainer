@@ -24,6 +24,7 @@ from typing import Callable
 from typing_extensions import Self
 
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
     AnimalSubject, get_perf_now, calculate_std_dev_manual
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
@@ -33,7 +34,8 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.video import CaptureProcessStatus
 
-from . import DiamondTriangleOffsetConfig, CaptureAnalysisResult, TrainingMode, RecordingEndingReason
+from . import CaptureAnalysisResult, TrainingMode, RecordingEndingReason
+
 from .pellet import PelletState
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
@@ -104,6 +106,8 @@ class BehaviorAlgoProps(str, enum.Enum):
     PRESENCE_MISSING = 'presence_missing'
     PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'
     HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'
+
+    DIAMOND_TRIANGLE_CONFIG = 'diamond_triangle_config'
 
 #
 
@@ -353,9 +357,8 @@ class BehaviorAlgorithm(ObservableObject):
         if diamond_triangle_offset_config_path is None:
             diamond_triangle_offset_config_path = DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH
         self._diamond_triangle_offset_config_path = diamond_triangle_offset_config_path
-        self._diamond_triangle_offset_config = DiamondTriangleOffsetConfig.load_config(
-            self._diamond_triangle_offset_config_path
-        )
+
+        self._diamond_triangle_offset_config: Optional[DiamondTriangleOffsetConfig] = None
 
         self._diamond_triangle_drift: Optional[Offset3DTuple] = None
         self._diamond_triangle_prev_drifts: List[Offset3DTuple] = []
@@ -910,7 +913,13 @@ class BehaviorAlgorithm(ObservableObject):
 
     @diamond_triangle_config.setter
     def diamond_triangle_config(self, value):
-        self._diamond_triangle_offset_config = value
+        prev, self._diamond_triangle_offset_config = self._diamond_triangle_offset_config, value
+        self._on_property_changed(BehaviorAlgoProps.DIAMOND_TRIANGLE_CONFIG, value, prev)
+
+    def reload_diamond_triangle_config(self, path: Optional[Path] = None):
+        if path is None:
+            path = self._diamond_triangle_offset_config_path
+        self.diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(path)
 
     @property
     def diamond_triangle_drift(self) -> Optional[Offset3DTuple]:
@@ -975,10 +984,6 @@ class BehaviorAlgorithm(ObservableObject):
         # this is what send the trigger the enable recording at camera level,
         # but must be done after calculate next session index !!
         post_trigger_enable(self, True)
-
-        self._diamond_triangle_offset_config = DiamondTriangleOffsetConfig.load_config(
-            self._diamond_triangle_offset_config_path
-        )
 
         self.session_starting()
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
@@ -1161,6 +1166,7 @@ class BehaviorAlgorithm(ObservableObject):
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
         # self.auto_close_gate_on_intersession_config = config.  # not saved yet to config
+        self.reload_diamond_triangle_config()
 
     def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         self.pellet_delivery_enabled = cfg.is_enabled

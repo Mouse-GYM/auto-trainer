@@ -24,7 +24,8 @@ from autotrainer.core.pose_elements import SceneElement
 
 from autotrainer.inference import InferenceStatus, PoseResponse
 
-from autotrainer.behavior import DiamondTriangleOffsetConfig, TrainingMode
+from autotrainer.behavior import TrainingMode
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.pyside.content_widget import InvokeMethod
@@ -169,6 +170,7 @@ class MainWindow(QMainWindow):
                 if started:
                     self._status_label.setText("")
                     self._acquisition_started = True
+                    self._check_diamond_triangle_config()
                 else:
                     self._status_label.setText("Startup failed")
                     self.running_status_changed.emit(False)
@@ -320,7 +322,6 @@ class MainWindow(QMainWindow):
         app_model = self._app_model
         algo = app_model.behavior.algorithm
         algo.diamond_triangle_config = new_cfg
-        app_model.analysis.pellet_misplaced_monitor.dcs_config = new_cfg
         animal = app_model.selected_animal
         # to ensure animal will gets its x/y/z in DCS
         app_model.selected_animal = None
@@ -457,22 +458,41 @@ class MainWindow(QMainWindow):
                                              args=(executor_thread,), daemon=True)
             waiter_thread.start()
 
-    def on_activated(self):
-        EventManager.default()
-        app_model = self._app_model
-        algo = app_model.behavior.algorithm
-        if algo.diamond_triangle_config is None or not algo.diamond_triangle_config.fully_valid:
+    def _make_show_msg_box(self, title, text, icon):
+        def show():
             box = QMessageBox()
-            box.setWindowTitle("Missing, or invalid, Diamond-Triangle config")
+            box.setWindowTitle(title)
             # box.setModal(True)
-            box.setText(
-                f"\n{algo.diamond_triangle_offset_config_path} is either missing or needs update,\n\n"
-                "Once application will be running:\n\n"
-                "1) Using Hardware Control Set + Send buttons: move the triangle near the desired deliver position\n\n"
-                "2) Execute a new coordinate calibration via menu Tools -> Calibrate Coordinate System\n\n")
-            box.setIcon(QMessageBox.Icon.Warning)
+            box.setText(text)
+            box.setIcon(icon)
             box.show()
             self._add_box_to_open_dialogs(box)
+        return show
+
+    def _check_diamond_triangle_config(self):
+        algo = self._app_model.behavior.algorithm
+        dcs_cfg = algo.diamond_triangle_config
+        if dcs_cfg is None or not dcs_cfg.fully_valid:
+            title = "Missing, or invalid, Diamond-Triangle config"
+            if self._app_model.inference.status == InferenceStatus.live:
+                text = (
+                    f"\n{algo.diamond_triangle_offset_config_path} is missing or not fully valid,\n\n"
+                    "Now that application is running:\n\n"
+                    "1) Using Hardware Control Set + Send buttons: move the triangle near the desired deliver position\n\n"
+                    "2) Then, execute a calibration via menu Tools -> Calibrate Coordinate System\n\n")
+                
+            else:
+                text = (
+                    f"\n{algo.diamond_triangle_offset_config_path} is either missing or needs update,\n\n"
+                    "Once application will be running:\n\n"
+                    "1) Using Hardware Control Set + Send buttons: move the triangle near the desired deliver position\n\n"
+                    "2) Execute a new coordinate calibration via menu Tools -> Calibrate Coordinate System\n\n")
+            #
+            InvokeMethod(self._make_show_msg_box(title, text, QMessageBox.Icon.Warning))
+
+    def on_activated(self):
+        EventManager.default()
+        self._check_diamond_triangle_config()
         self.main_content.on_activated()
 
     def closeEvent(self, event):
@@ -977,22 +997,7 @@ class MainWindow(QMainWindow):
         if name == inference.STATUS:
             self.calib_diamond_triangle_action.setEnabled(value == InferenceStatus.live)
             if value == InferenceStatus.live:
-                app_model = self._app_model
-                algo = app_model.behavior.algorithm
-                if algo.diamond_triangle_config is None or not algo.diamond_triangle_config.fully_valid:
-                    def show_msg_box():
-                        box = QMessageBox()
-                        box.setWindowTitle("No Diamond-Triangle config")
-                        # box.setModal(True)
-                        box.setText(
-                            f"\n{algo.diamond_triangle_offset_config_path} is missing or not fully valid,\n\n"
-                            "Now that application is running:\n\n"
-                            "1) Using Hardware Control Set + Send buttons: move the triangle near the desired deliver position\n\n"
-                            "2) Then, execute a calibration via menu Tools -> Calibrate Coordinate System\n\n")
-                        box.setIcon(QMessageBox.Icon.Warning)
-                        box.show()
-                        self._add_box_to_open_dialogs(box)
-                    InvokeMethod(show_msg_box)
+                self._check_diamond_triangle_config()
 
     def _behavior_algo_property_changed(self, name, value, _):
         pass

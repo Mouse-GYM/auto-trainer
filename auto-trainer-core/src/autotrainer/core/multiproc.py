@@ -20,3 +20,4 @@ def make_daemon_timer(delay, func, *args, **kwargs):
 
 
 no_op_timer = make_daemon_timer(0, lambda: None)
+# no_op_timer.finished.set()

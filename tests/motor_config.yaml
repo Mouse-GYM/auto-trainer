@@ -52,7 +52,7 @@ pellet:
   tunnel_fan:
     min_pos: 0
     max_pos: 100
-    min_pwm: 2300
-    max_pwm: 800
+    min_pwm: 0
+    max_pwm: 500
     max_vel: 500.0
     max_acc: 5000.0
