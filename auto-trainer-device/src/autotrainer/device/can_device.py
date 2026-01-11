@@ -332,7 +332,7 @@ class CanDevice(Device):
             SystemCommandKind.STREAM_STOP: no_op_handler,
         }
 
-        #
+        # Initialize data / response handlers lookup table
 
         def set_current_pressure(m):
             self._current_pressure = m.pressure
@@ -344,7 +344,6 @@ class CanDevice(Device):
         def set_current_digital(m):
             self._current_digital = m.continuity_0
 
-        # Initialize data handlers lookup table
         self._data_handlers = {
             Status: no_op_handler,  # No-op for Status messages
             Tone: no_op_handler,
@@ -696,12 +695,11 @@ class CanDevice(Device):
             humidity=self._current_humidity,
         )
 
-        self._measurements.append(measurement)
-
-        if len(self._measurements) >= self._measurement_buffer_count:
-            self._api.send_message(SystemStatusMessageKind.MEASUREMENTS,
-                                   self._measurements.copy())
-            self._measurements = list()
+        measures = self._measurements
+        measures.append(measurement)
+        if len(measures) >= self._measurement_buffer_count:
+            self._api.send_message(SystemStatusMessageKind.MEASUREMENTS, measures)
+            self._measurements = []
 
     def _command_complete(self) -> None:
         """
