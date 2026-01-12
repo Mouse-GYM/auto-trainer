@@ -93,6 +93,7 @@ class ServoConfig(MotorSource):
     _maximum_pwm_duration: float = 2000  # (us)
     _maximum_velocity: float = 200  # (deg/sec)
     _maximum_acceleration: float = 100.0  # (deg/sec^2)
+    _detach: bool = False
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -109,7 +110,8 @@ class ServoConfig(MotorSource):
             config.maximum_velocity = data["max_vel"]
         if "max_acc" in data:
             config.maximum_acceleration = data["max_acc"]
-
+        if "detach" in data:
+             config.detach = data["detach"]
         return config
 
     @property
@@ -159,6 +161,14 @@ class ServoConfig(MotorSource):
     @maximum_pwm_duration.setter
     def maximum_pwm_duration(self, value: float):
         self._maximum_pwm_duration = value
+
+    @property
+    def detach(self) -> bool:
+        return self._detach
+
+    @detach.setter
+    def detach(self, value):
+        self._detach = value
 
 
 @dataclass

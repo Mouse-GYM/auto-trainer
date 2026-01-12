@@ -58,6 +58,7 @@ class SystemCommandKind(IntEnum):
 
     TUNNEL_FAN_ON = 229
     TUNNEL_FAN_OFF = 230
+    TUNNEL_FAN_SET = 231
 
     # General actions.
     PLAY_TONE = 301

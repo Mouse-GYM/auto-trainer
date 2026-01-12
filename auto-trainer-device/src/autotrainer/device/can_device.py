@@ -6,6 +6,7 @@ class relies on the CanInterface class to send and receive data.
 
 """
 import collections
+import copy
 import logging
 import math
 import os
@@ -76,6 +77,8 @@ _next_compound = object()
 # for eventual retry when uuid ack timeout:
 _retry_compound = object()
 _retry_full = object()
+
+_lambda_no_op = lambda: True
 
 
 def _to_tuple(value: Union[str, Any]):
@@ -174,6 +177,8 @@ class CanDevice(Device):
             logger.warning(
                 "Alogus hardware or hardware support not found. Using emulation interface.")
 
+        self._motor_configs: Dict[Motor, Union[StepperConfig, ServoConfig]] = {}
+
         self._init_handlers()
 
         self._prev_command: Optional[Tuple[object, Any, type(None)]] = None
@@ -186,21 +191,20 @@ class CanDevice(Device):
 
         no_op_handler = lambda _: True
 
-        def move_gate(position):
-            steps = MotorSteps("move_gate", [
-                {'servo_attach': Motor.TUNNEL_GATE_SERVO},
-                {'gate': position},
-                {'servo_detach': Motor.TUNNEL_GATE_SERVO},
-            ])
-            return self._start_sequence(steps)
+        def inject_steps(steps):
+            # replace current _internal_func with one doing nothing;
+            self._compound_movement[0] = {"_internal_func": _lambda_no_op}
+            # so that the inner steps are not re-injected on eventual write retry:
+            self._compound_movement[1:1] = steps
+            return True
 
-        def move_head_magnet(position):
-            steps = MotorSteps("move_magnet", [
-                # {'servo_attach': Motor.TUNNEL_MAGNET_SERVO},
-                {'magnet': position},
-                # {'servo_detach': Motor.TUNNEL_MAGNET_SERVO},
-            ])
-            return self._start_sequence(steps)
+        def handle_servo_move(motor: Motor, position):
+            steps = self._make_servo_move_steps(motor, position)
+            return self._start_sequence(MotorSteps(f"move_servo_{motor.name}", steps))
+
+        def handle_servo_sequence(motor: Motor, sequence: MotorSteps):
+            steps = self._make_servo_iface_func_steps(motor, lambda: inject_steps(sequence.steps))
+            return self._start_sequence(MotorSteps(f"{motor.name}_{sequence.name}", steps))
 
         def set_load_pellet_proc(proc):
             if isinstance(proc, MotorSteps) and not proc.is_empty:
@@ -235,13 +239,13 @@ class CanDevice(Device):
 
             SystemCommandKind.READ_MOTOR_CONFIGURATION: self._interface.request_motor_config,
 
-            SystemCommandKind.MOVE_MAGNET_SERVO: move_head_magnet,
+            SystemCommandKind.MOVE_MAGNET_SERVO: partial(handle_servo_move, Motor.TUNNEL_MAGNET_SERVO),
 
-            SystemCommandKind.MOVE_LOAD_SERVO: self._interface.move_load_servo,
+            SystemCommandKind.MOVE_LOAD_SERVO: partial(handle_servo_move, Motor.PELLET_LOAD_SERVO),
 
-            SystemCommandKind.MOVE_COVER_SERVO: self._interface.move_cover_servo,
+            SystemCommandKind.MOVE_COVER_SERVO: partial(handle_servo_move, Motor.PELLET_COVER_SERVO),
 
-            SystemCommandKind.MOVE_GATE_SERVO: move_gate,
+            SystemCommandKind.MOVE_GATE_SERVO: partial(handle_servo_move, Motor.TUNNEL_GATE_SERVO),
 
             SystemCommandKind.SET_X: partial(apply_set_or_move, self._interface.set_motor_x),
 
@@ -273,24 +277,26 @@ class CanDevice(Device):
 
             SystemCommandKind.SEND_FIXED_XYZ: lambda _: self._interface.fixed_position(),
 
+            # NB: the following sequences are using "predefined" move,
+            # that are below automatically handled for possible servo attach/detach
             SystemCommandKind.LOAD_PELLET: lambda _: self._start_sequence(self._load_pellet),
-
             SystemCommandKind.SEND_PELLET: lambda _: self._start_sequence(self._send_pellet),
 
             SystemCommandKind.RELEASE_PELLET: lambda _: self._start_sequence(self._release_pellet),
-
             SystemCommandKind.COVER_PELLET: lambda _: self._start_sequence(self._cover_pellet),
 
-            SystemCommandKind.OPEN_TUNNEL_GATE: lambda _: self._start_sequence(self._open_tunnel_gate),
+            # on the other side we don't have "predefined" for open/close gate:
+            SystemCommandKind.OPEN_TUNNEL_GATE: lambda _: handle_servo_sequence(Motor.TUNNEL_GATE_SERVO, self._open_tunnel_gate),
+            SystemCommandKind.CLOSE_TUNNEL_GATE: lambda _: handle_servo_sequence(Motor.TUNNEL_GATE_SERVO, self._close_tunnel_gate),
 
-            SystemCommandKind.CLOSE_TUNNEL_GATE: lambda _: self._start_sequence(self._close_tunnel_gate),
+            SystemCommandKind.TUNNEL_FAN_SET: partial(handle_servo_move, Motor.TUNNEL_FAN_SERVO),
 
-            SystemCommandKind.TUNNEL_FAN_ON: lambda _: self._interface.move_servo_motor(
-                Motor.TUNNEL_FAN_SERVO, 100
-            ),
-            SystemCommandKind.TUNNEL_FAN_OFF: lambda _: self._interface.move_servo_motor(
-                Motor.TUNNEL_FAN_SERVO, 0
-            ),
+            SystemCommandKind.TUNNEL_FAN_ON: lambda _: \
+                handle_servo_sequence(Motor.TUNNEL_FAN_SERVO,
+                                      MotorSteps("tunnel_fan_on", [{"_servo_max_pos": Motor.TUNNEL_FAN_SERVO}])),
+            SystemCommandKind.TUNNEL_FAN_OFF: lambda _: \
+                handle_servo_sequence(Motor.TUNNEL_FAN_SERVO,
+                                      MotorSteps("tunnel_fan_off", [{"_servo_min_pos": Motor.TUNNEL_FAN_SERVO}])),
 
             SystemCommandKind.DELAY: self._interface.delay,
 
@@ -344,6 +350,12 @@ class CanDevice(Device):
         def set_current_digital(m):
             self._current_digital = m.continuity_0
 
+        def handle_motor_config(m: Union[StepperConfig, ServoConfig]):
+            # do we want to:
+            #   self._motor_configs[m.motor] = m
+            # as we do for written motor configs ? but probably better to not do it here.
+            self._api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, m)
+
         self._data_handlers = {
             Status: no_op_handler,  # No-op for Status messages
             Tone: no_op_handler,
@@ -376,11 +388,8 @@ class CanDevice(Device):
 
             ServoStatus: lambda message: self._report_servo_status(message.motor, message.position),
 
-            StepperConfig: lambda message: \
-                self._api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
-
-            ServoConfig: lambda message: \
-                self._api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, message),
+            StepperConfig: handle_motor_config,
+            ServoConfig: handle_motor_config,
 
             Version: lambda message: \
                 self._api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version),
@@ -517,7 +526,7 @@ class CanDevice(Device):
                         break
                     logger.error("Failed sending %s to bus", kind)
                 if not success:
-                    raise RuntimeError("Failed writing too many consecutive times to the device/bus")
+                    raise RuntimeError(f"Failed writing too many consecutive times to the device/bus. kind={kind.name} ctx={ctx}")
                 #
                 if ctx is not None:
                     if self._pending_context is not None:
@@ -606,7 +615,7 @@ class CanDevice(Device):
             self._commands_handler_thread = None
             # cmd_queue.join()  # not totally necessary here
 
-    def _start_sequence(self, movements: MotorSteps):
+    def _start_sequence(self, movements: MotorSteps) -> bool:
         """
         Start a sequence of activities.
 
@@ -619,28 +628,33 @@ class CanDevice(Device):
             self._command_complete()
             return True
         else:
-            logger.info("Starting sequence %s", movements.name)
-            self._compound_movement = movements.steps
+            move_steps = movements.steps
+            logger.info("Starting sequence %s (%s steps): %s", movements.name, len(move_steps), move_steps)
+            self._compound_movement = move_steps
             return self._perform_next_compound_step()
 
-    def _handle_write_motor_configuration(self, data):
+    def _handle_write_motor_configuration(self, data: Tuple[Motor, Union[StepperConfig, ServoConfig]]):
         """
         Handle writing motor configuration.
 
         Args:
             data: A tuple containing motor and config
         """
-        assert isinstance(data, Tuple)
+        # assert isinstance(data, Tuple)
         motor = data[0]
         config = data[1]
-        assert isinstance(motor, Motor)
-        assert isinstance(config, ServoConfig) or isinstance(config, StepperConfig)
-        return self._interface.set_motor_configuration(motor, config)
+        # assert isinstance(motor, Motor)
+        # assert isinstance(config, (ServoConfig, StepperConfig))
+        success = self._interface.set_motor_configuration(motor, config)
+        if success:
+            logger.debug("setting internal motor %s cfg to %s", motor, config)
+            self._motor_configs[motor] = copy.deepcopy(config)
+        return success
 
     def notify_message(
         self,
-        kind: int,
-        data: Union[str, float, int, SupportsInt],
+        kind: SystemCommandKind,
+        data: Any,  # Union[str, float, int, SupportsInt],
         context: object = None,
     ) -> None:
         """
@@ -746,128 +760,198 @@ class CanDevice(Device):
             motor: The motor that has reported its status
             position: The current position of the motor
         """
-
         kind = CanDevice._motor_to_status_kind.get(motor, None)
-
         if self._api is not None and kind is not None:
             self.api.send_message(kind, position)
 
-    def _perform_next_compound_step(self):
+    def _make_servo_steps(self, motor):
+        cfg = self._motor_configs.get(motor, None)
+        if cfg is None:
+            logger.warning("%s: missing internal config", motor)
+            want_detach = False
+        else:
+            want_detach = cfg.detach
+        step = {}
+        if want_detach:
+            return step, [{'servo_attach': motor}, step, {'servo_detach': motor}]
+        return step, [step]
+
+    def _make_servo_move_steps(self, motor, position):
+        step, steps = self._make_servo_steps(motor)
+        step["_servo_move"] = (motor, position)
+        return steps
+
+    def _make_servo_iface_func_steps(self, motor, func):
+        step, steps = self._make_servo_steps(motor)
+        step['_internal_func'] = func
+        return steps
+
+    def _handle_servo_move_compound(self, compound_movements, motor, position):
+        steps = self._make_servo_move_steps(motor, position)
+        # replace current compound move by this new list of steps:
+        # the [0] = : replace whatever previous step leaded to this _handle_servo_move_compound,
+        # by one doing nothing now:
+        compound_movements[0] = {"_internal_func": _lambda_no_op}  # noqa
+        compound_movements[1:1] = steps
+        return True
+
+    def _handle_servo_iface_cmd_compound(self, compound_movements, motor, iface_func):
+        steps = self._make_servo_iface_func_steps(motor, iface_func)
+        # replace current compound move by this new list of steps:
+        # the [0] = : replace whatever previous step leaded to this _handle_servo_iface_cmd_compound,
+        # by one doing nothing now:
+        compound_movements[0] = {"_internal_func": _lambda_no_op}  # noqa
+        compound_movements[1:1] = steps
+        return True
+
+    def _perform_next_compound_step(self) -> bool:
         """
         Issue the next step in a multi-step motor sequence.
         """
         compound_movements = self._compound_movement
-        if (
-            compound_movements is not None
-            and len(compound_movements) > 0
-        ):
-            step = compound_movements[0]
-            logger.debug("executing next compound step: %s", step)
-
-            assert isinstance(step, dict)
-            save_as_fixed = step.get("save_as_fixed", False)
-
-            if "x" in step:
-                location = _to_tuple(step["x"])
-                success = self._interface.move_motor_x(location, save_as_fixed=save_as_fixed)
-
-            elif "y" in step:
-                location = _to_tuple(step["y"])
-                success = self._interface.move_motor_y(location, save_as_fixed=save_as_fixed)
-
-            elif "z" in step:
-                location = _to_tuple(step["z"])
-                success = self._interface.move_motor_z(location, save_as_fixed=save_as_fixed)
-
-            elif "load_arm" in step:
-                location = _to_tuple(step["load_arm"])
-                success = self._interface.move_load_servo(location)
-
-            elif "barrier_arm" in step:
-                location = _to_tuple(step["barrier_arm"])
-                success = self._interface.move_cover_servo(location)
-
-            elif "magnet" in step:
-                location = _to_tuple(step["magnet"])
-                success = self._interface.move_magnet_servo(location)
-
-            elif "gate" in step:
-                location = _to_tuple(step["gate"])
-                success = self._interface.move_gate_servo(location)
-
-            elif "delay" in step:
-                duration = step["delay"]
-                success = self._interface.delay(duration)
-
-            elif "tone" in step:
-                freq, duration = step["tone"].split(',')  # (hz), (sec)
-                success = self._interface.emit_tone(int(freq), int(float(duration) * 1000))
-
-            elif "predefined" in step:
-
-                predefined = step["predefined"]
-
-                if predefined == "send":
-                    success = self._interface.fixed_position()
-
-                elif predefined == "cover":
-                    success = self._interface.cover_pellet()
-
-                elif predefined == "release":
-                    success = self._interface.release_pellet()
-
-                elif predefined == "retrieve":
-                    success = self._interface.retrieve_pellet()
-
-                elif predefined == "scoop":
-                    success = self._interface.scoop_pellet()
-
-                elif predefined == "home":
-                    # replace by home steps (not predefined->home), 1 for each XYZ :
-                    step = {'home': Motor.PELLET_Y_MOTOR}  # for possible retry on ack timeout
-                    compound_movements[0] = step
-                    # inject at index 1 the steps:
-                    compound_movements[1:1] = [
-                        {"home": m}
-                        for m in [Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]
-                    ]
-                    success = self._interface.stepper_home(Motor.PELLET_Y_MOTOR)
-
-                else:
-                    raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
-                    # success = True
-                    # logger.error("Skipping unhandled predefined: %s", predefined)
-
-            elif "servo_attach" in step:
-                motor = step["servo_attach"]
-                assert isinstance(motor, Motor)
-                success = self._interface.servo_attach(motor)
-
-            elif "servo_detach" in step:
-                motor = step["servo_detach"]
-                assert isinstance(motor, Motor)
-                success = self._interface.servo_detach(motor)
-
-            elif "home" in step:
-                # NB: to not mix with predefined->home, which is 3 times this home but each with separate stepper.
-                motor = step["home"]
-                assert isinstance(motor, Motor)
-                success = self._interface.stepper_home(motor)
-
-            else:
-                raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
-                # logger.error("Skipping unknown compound step: %s", step)
-                # success = True  # just skip it
-
-            if success:
-                compound_movements.pop(0)  # remove the one that was just requested successfully
-                self._prev_command = (_retry_compound, step, None)  # in case need for retry for ack timeout
-
-        else:
+        if compound_movements is None or len(compound_movements) == 0:
             self._command_complete()
             return True
 
+        step = compound_movements[0]
+        logger.debug("executing next compound step: %s (remains=%s)",
+                     step,
+                     len(compound_movements) - 1,  # don't include current one
+                     )
+
+        assert isinstance(step, dict)
+        save_as_fixed = step.get("save_as_fixed", False)
+
+        if "x" in step:
+            location = _to_tuple(step["x"])
+            success = self._interface.move_motor_x(location, save_as_fixed=save_as_fixed)
+
+        elif "y" in step:
+            location = _to_tuple(step["y"])
+            success = self._interface.move_motor_y(location, save_as_fixed=save_as_fixed)
+
+        elif "z" in step:
+            location = _to_tuple(step["z"])
+            success = self._interface.move_motor_z(location, save_as_fixed=save_as_fixed)
+
+        elif "_servo_move" in step:  # should be internal only
+            motor, position = step["_servo_move"]  # noqa
+            success = self._interface.move_servo_motor(motor, position)
+
+        elif "load_arm" in step:
+            location = _to_tuple(step["load_arm"])
+            success = self._handle_servo_move_compound(compound_movements, Motor.PELLET_LOAD_SERVO, location)
+
+        elif "barrier_arm" in step:
+            location = _to_tuple(step["barrier_arm"])
+            success = self._handle_servo_move_compound(compound_movements, Motor.PELLET_COVER_SERVO, location)
+
+        elif "magnet" in step:
+            location = _to_tuple(step["magnet"])
+            success = self._handle_servo_move_compound(compound_movements, Motor.TUNNEL_MAGNET_SERVO, location)
+
+        elif "gate" in step:
+            location = _to_tuple(step["gate"])
+            success = self._handle_servo_move_compound(compound_movements, Motor.TUNNEL_GATE_SERVO, location)
+
+        # _servo_max_pos / _servo_max_pos are internal and should not be used from outside.
+        elif "_servo_max_pos" in step:
+            motor = step["_servo_max_pos"]  # noqa
+            assert isinstance(motor, Motor)
+            cfg = self._motor_configs.get(motor)
+            if cfg is None:
+                raise RuntimeError(f"Missing motor {motor} config. Config must be written by current connection/interface instance.")
+            value = cfg.maximum_position
+            success = self._interface.move_servo_motor(motor, value)
+            if success:  # for log below/at end of func:
+                step = {motor: value}
+
+        elif "_servo_min_pos" in step:
+            motor: Motor = step["_servo_min_pos"]  # noqa
+            assert isinstance(motor, Motor)
+            cfg = self._motor_configs.get(motor)
+            if cfg is None:
+                raise RuntimeError(f"Missing motor {motor} config. Config must be written by current connection/interface instance.")
+            value = cfg.minimum_position
+            success = self._interface.move_servo_motor(motor, value)
+            if success:
+                step = {motor: value}
+
+        elif "delay" in step:
+            duration = step["delay"]
+            success = self._interface.delay(duration)
+
+        elif "tone" in step:
+            freq, duration = step["tone"].split(',')  # noqa  # (hz), (sec)
+            success = self._interface.emit_tone(int(freq), int(float(duration) * 1000))
+
+        elif "predefined" in step:
+
+            predefined = step["predefined"]
+
+            if predefined == "send":
+                success = self._interface.fixed_position()
+
+            elif predefined == "cover":
+                success = self._handle_servo_iface_cmd_compound(
+                    compound_movements, Motor.PELLET_COVER_SERVO, self._interface.cover_pellet)
+
+            elif predefined == "release":
+                success = self._handle_servo_iface_cmd_compound(
+                    compound_movements, Motor.PELLET_COVER_SERVO, self._interface.release_pellet)
+
+            elif predefined == "retrieve":
+                success = self._handle_servo_iface_cmd_compound(
+                    compound_movements, Motor.PELLET_LOAD_SERVO, self._interface.retrieve_pellet)
+
+            elif predefined == "scoop":
+                success = self._handle_servo_iface_cmd_compound(
+                    compound_movements, Motor.PELLET_LOAD_SERVO, self._interface.scoop_pellet)
+
+            elif predefined == "home":
+                # replace by home steps (not predefined->home), 1 for each XYZ :
+                step = {'home': Motor.PELLET_Y_MOTOR}  # for possible retry on ack timeout
+                compound_movements[0] = step
+                # inject at index 1 the steps:
+                compound_movements[1:1] = [
+                    {"home": m}
+                    for m in [Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]
+                ]
+                success = self._interface.stepper_home(Motor.PELLET_Y_MOTOR)
+
+            else:
+                raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
+                # success = True
+                # logger.error("Skipping unhandled predefined: %s", predefined)
+
+        elif "servo_attach" in step:
+            motor = step["servo_attach"]  # noqa
+            assert isinstance(motor, Motor)
+            success = self._interface.servo_attach(motor)
+
+        elif "servo_detach" in step:
+            motor = step["servo_detach"]  # noqa
+            assert isinstance(motor, Motor)
+            success = self._interface.servo_detach(motor)
+
+        elif "home" in step:
+            # NB: to not mix with predefined->home, which is 3 times this home but each with separate stepper.
+            motor = step["home"]  # noqa
+            assert isinstance(motor, Motor)
+            success = self._interface.stepper_home(motor)
+
+        elif "_internal_func" in step:
+            func = step["_internal_func"]
+            success = func()  # noqa
+
+        else:
+            raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
+            # logger.error("Skipping unknown compound step: %s", step)
+            # success = True  # just skip it
+
         if success:
+            compound_movements.pop(0)  # remove the one that was just requested successfully
+            self._prev_command = (_retry_compound, step, None)  # in case need for retry for ack timeout
             logger.debug("executed %s write command", step)
         else:
             logger.error("%s write command failed", step)
@@ -945,13 +1029,7 @@ def default_open_gate() -> MotorSteps:
     Returns:
         A MotorSteps object containing the release pellet sequence
     """
-    return MotorSteps("open_gate",
-                      [
-                          {'servo_attach': Motor.TUNNEL_GATE_SERVO},
-                          {'gate': 0},
-                          {'servo_detach': Motor.TUNNEL_GATE_SERVO},
-                      ]
-                      )
+    return MotorSteps("open_gate", [{'_servo_min_pos': Motor.TUNNEL_GATE_SERVO}])
 
 
 def default_close_gate() -> MotorSteps:
@@ -961,10 +1039,4 @@ def default_close_gate() -> MotorSteps:
     Returns:
         A MotorSteps object containing the release pellet sequence
     """
-    return MotorSteps("close_gate",
-                      [
-                          {'servo_attach': Motor.TUNNEL_GATE_SERVO},
-                          {'gate': 100},
-                          {'servo_detach': Motor.TUNNEL_GATE_SERVO},
-                      ]
-                      )
+    return MotorSteps("close_gate", [{'_servo_max_pos': Motor.TUNNEL_GATE_SERVO}])

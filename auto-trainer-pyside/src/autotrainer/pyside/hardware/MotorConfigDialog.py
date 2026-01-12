@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
 from PySide6.QtCore import Qt, QMetaObject, Signal, Q_ARG
 
 from autotrainer.device import Motor, StepperConfig, ServoConfig
+from autotrainer.pyside import QSwitch
 
 
 class MotorConfigDialog(QDialog):
@@ -130,6 +131,9 @@ class MotorConfigDialog(QDialog):
         self.max_pwm_spin.setSuffix(" usec")
         servo_layout.addRow("Maximum PWM duration:", self.max_pwm_spin)
 
+        self.servo_detach_toggle = QSwitch()
+        servo_layout.addRow("detach:", self.servo_detach_toggle)
+
         self.servo_group.setLayout(servo_layout)  # Set layout to group box
         main_layout.addWidget(self.servo_group)
 
@@ -206,6 +210,7 @@ class MotorConfigDialog(QDialog):
             config.maximum_position = self.max_position_spin.value()
             config.minimum_pwm_duration = self.min_pwm_spin.value()
             config.maximum_pwm_duration = self.max_pwm_spin.value()
+            config.detach = self.servo_detach_toggle.isChecked()
 
             self.config = config
 
@@ -250,6 +255,7 @@ class MotorConfigDialog(QDialog):
         self.max_position_spin.setValue(servo_config.maximum_position)
         self.min_pwm_spin.setValue(servo_config.minimum_pwm_duration)
         self.max_pwm_spin.setValue(servo_config.maximum_pwm_duration)
+        self.servo_detach_toggle.setChecked(servo_config.detach)
 
     def update_stepper_config(self, stepper_config: ServoConfig):
         """
