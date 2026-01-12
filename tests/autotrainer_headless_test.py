@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import signal
@@ -149,24 +150,28 @@ def test_launch_cli(system_config, config_file_path, user_pref, calib_dir, diamo
         "--preferences-file", settings_ini_path.as_posix(),
     ], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
     #
+    app_running = threading.Event()
     out_lines = []
     err_lines = []
     def interrupt_proc():
-        t_end = time.perf_counter() + 60  # should be up and running within that delay
-        while time.perf_counter() < t_end:
-            if any("App is now running" in line for line in out_lines):
-                break
-            time.sleep(0.05)
-        time.sleep(0.5)
-        proc.send_signal(signal.SIGINT)
-    t = threading.Thread(target=interrupt_proc, daemon=True)
-    t.start()
+        app_running.wait(60)
+        if proc.poll() is None:
+            time.sleep(1)  # give 1s of running time
+            logging.info("signal main app with sig interrupt")
+            proc.send_signal(signal.SIGINT)
+        else:
+            logging.warning("app exited unexpectedly")
+    interrupt_proc_when_running = threading.Thread(target=interrupt_proc, daemon=True)
+    interrupt_proc_when_running.start()
     def communicate(dest, src_fh, dest_fh):
         while proc.poll() is None:
             line = src_fh.readline()  # .decode()
             line = line.strip(b'\n').decode()
+            if "App is now running" in line:
+                app_running.set()
             print(line, file=dest_fh)
             dest.append(remove_ansi_escape_sequences(line))
+        logging.debug("process terminated, reading remaining data on %s", src_fh.name)
         tail = src_fh.read().strip(b'\n').decode()
         print(tail, file=dest_fh)
         dest.extend(tail.split("\n"))
@@ -177,20 +182,34 @@ def test_launch_cli(system_config, config_file_path, user_pref, calib_dir, diamo
     communicate_err_thread = threading.Thread(target=communicate, daemon=True, args=(err_lines, proc.stderr, sys.stderr))
     communicate_err_thread.start()
 
-    t.join()
+    interrupt_proc_when_running.join()
 
-    communicate_out_thread.join(3)  # give a chance
-    proc.terminate()  # in case of
-    proc.wait(3)  # in case of
-    proc.kill()  # in case of
+    # main app takes quite a bit to finishes/exit once asked to do so, give it at most 15s
+    proc.wait(15)
+    if proc.poll() is None:
+        logging.warning("main app still running, terminating ..")
+        proc.terminate()  # send terminate signal
+        proc.wait(3)
+        if proc.poll() is None:
+            # send kill signal
+            logging.error("main app still running after terminate, killing ..")
+            proc.kill()
+            proc.wait()
+
+    # can now wait/join on communicate threads
     communicate_out_thread.join()
     communicate_err_thread.join()
+
     output = "\n".join(out_lines)
+
     def assert_is_present(content):
         assert any(content in line for line in out_lines), output
-    assert proc.returncode == 0, err_lines
+
+    assert proc.returncode == 0, (out_lines, err_lines)
+
     assert_is_present(f"Loading diamond-triangle file {diamond_config_path.as_posix()!r}")
     assert_is_present(f"Using setting ini file: {settings_ini_path.as_posix()!r}")
     assert_is_present("Alogus hardware or hardware support not found. Using emulation interface.")
     assert_is_present(f"Writing to {config_file_path.as_posix()!r}")
+    #
     # etc...
