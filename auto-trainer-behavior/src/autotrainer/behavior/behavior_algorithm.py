@@ -279,6 +279,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._thread_lock = threading.RLock()
         self._project_info = None
 
+        self._active_config = BehaviorConfiguration()
+
         self._pellet_delivery_enabled = True
         self._pellet_cover_enabled = True
 
@@ -384,6 +386,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._start_day()
         #
         self._shift_xyz_handler = ShiftXYZHandler()
+        # once all is initialized, sync active config with all the manual default params set above on all attributes
+        self.update_configuration(self._active_config)
 
     @classmethod
     def _check_start_thread(cls: "BehaviorAlgorithm"):
@@ -490,6 +494,13 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def thread_lock(self):
         return self._thread_lock
+
+    @property
+    def active_config(self) -> Optional[BehaviorConfiguration]:
+        """Return the current "active" config"""
+        # ensure the user of .active_config get a refreshed view:
+        self.update_configuration(self._active_config)
+        return self._active_config
 
     @property
     def limits(self) -> Self:
@@ -730,11 +741,13 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def presence_missing(self) -> bool:
+        # NB: presence_missing is actually unused
         return self._presence_missing
 
     @presence_missing.setter
     def presence_missing(self, value):
         prev, self._presence_missing = self._presence_missing, value
+        # NB: presence_missing is actually unused
         self._on_property_changed(BehaviorAlgoProps.PRESENCE_MISSING, value, prev)
 
     @property
@@ -933,7 +946,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def auto_end_session_config(self) -> Optional[AutoEndSessionConfiguration]:
-        cfg = self._loaded_config
+        cfg = self._active_config
         if cfg is None:
             return None
         return cfg.auto_end_session
@@ -959,8 +972,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     def _start_capture_session(self, *, reason: str):
         if self._is_in_session:
-            logger.warning("%s: start_session() called but already in session",
-                           reason)
+            logger.warning("%s: start_session() called but already in session", reason)
             return False
         if self._algo_paused:
             logger.error("%s: refusing start session when algo paused", reason)
@@ -1161,6 +1173,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     def load_configuration(self, config: BehaviorConfiguration):
         self._loaded_config = copy.deepcopy(config)
+        self._active_config = copy.deepcopy(config)
         self._load_pellet_cfg(config.pellet_delivery)
         self._load_head_clamp_cfg(config.head_clamp)
         if self._topcam_presence is not None:
@@ -1220,10 +1233,11 @@ class BehaviorAlgorithm(ObservableObject):
         cfg.auto_clamp_no_activity_release_delay = self._auto_clamp_no_activity_release_delay
         cfg.before_reengage_delay = self._auto_clamp_before_reengage_delay
 
-    def update_configuration(self, configuration: BehaviorConfiguration):
-        self._update_pellet_cfg(configuration.pellet_delivery)
-        self._update_head_clamp_cfg(configuration.head_clamp)
-        configuration.auto_end_session = self._loaded_config.auto_end_session
+    def update_configuration(self, config: BehaviorConfiguration):
+        self._update_pellet_cfg(config.pellet_delivery)
+        self._update_head_clamp_cfg(config.head_clamp)
+        config.auto_end_session = self._active_config.auto_end_session
+        config.batch_session_recording = self._active_config.batch_session_recording
 
     def get_diamond_triangle_drifts(self, reset: bool = False) -> Optional[Offset3DTuple]:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""

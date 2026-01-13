@@ -40,7 +40,7 @@ class SystemConfiguration:
 
     DEFAULT_NAME: ClassVar[str] = "system_configuration"
 
-    version: int = 14
+    version: int = 15
     cameras: List[CameraConfiguration] = field(default_factory=list)
     hardware: HardwareConfiguration = field(default_factory=HardwareConfiguration)
     inference: InferenceConfiguration = field(default_factory=InferenceConfiguration)

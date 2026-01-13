@@ -27,6 +27,7 @@ from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandl
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
+from autotrainer.core.project import ProjectDependentProtol
 from autotrainer.core.configuration import SystemConfigurationDumper
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer
@@ -59,7 +60,6 @@ from autotrainer.api import (
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
-from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
 from tools.acquisition.model.training_plan import load_training_plans, get_plan_id
 from tools.acquisition.model.user_preferences import UserPreferences, get_default_configuration_location
 from tools.acquisition.model.video_capture_model import VideoCaptureModel

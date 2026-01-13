@@ -11,8 +11,7 @@ from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from tools.acquisition.model.hardware_model import HardwareModel
 
-from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
-
+from autotrainer.core.project import ProjectDependentProtol
 
 logger = get_verbose_logger(__name__)
 

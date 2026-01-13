@@ -151,19 +151,6 @@ class FixedArrayMultiQueue:
         # See self.get_cam_missing_frames()
         self._cams_tot_frames[cam_idx].value = tot_frames
 
-    def reset_writer(self, cam_idx: int):
-        self._buffer_index[cam_idx] = 0
-        self._batch_index[cam_idx] = 0
-        zero = memoryview(bytes([0] * self._depth * self._frames_per_camera)).cast("B")
-        memoryview(self._is_dirty[cam_idx]).cast("B")[:] = zero
-        self._overflow_count = 0
-        self._put_count = 0
-        logger.debug("%s: cam-%s writer index reset to 0", self, cam_idx)
-
-    def reset_reader(self):
-        self._read_index = 0
-        logger.debug("%s: read_index reset to 0", self)
-
     def is_frame_ready(self, frame_idx):
         frame_idx = frame_idx % (self._depth * self._frames_per_camera)
         for cdx in range(self._cam_count):
@@ -284,8 +271,8 @@ class FixedArrayMultiQueue:
         self._read_index = (read_idx_value + 1) % self._depth
         return True
 
-    def put_frame_index_category(self, frame, frame_idx: int, *, timeout: float = 10):
-        logger.debug("putting frame index category %s", frame_idx)
+    def put_frame_index_category(self, frame, frame_idx: FrameIndexCategory, *, timeout: float = 10):
+        logger.verbose("putting frame index category %s", frame_idx)
         for _ in range(self._frames_per_camera):
             for cdx in range(self._cam_count):
                 t0 = time.perf_counter()

@@ -197,6 +197,7 @@ def test_intersession_enabled(mock_system, machine):
     pellet_m = machine._pellet_machine
 
     algo.intersession_enabled = True
+    algo.pellet_cover_enabled = True
 
     assert machine.state == SystemState.cage
     assert algo.system_state == machine.state
@@ -237,7 +238,6 @@ def test_intersession_enabled(mock_system, machine):
         SystemState.intersession,
     ]
     assert mock_system.pellet_state_trans == [
-        PelletState.covering,
         PelletState.retract,
     ]
     assert pellet_m._api_status_token is not None, \

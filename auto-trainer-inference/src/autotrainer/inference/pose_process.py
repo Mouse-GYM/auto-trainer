@@ -28,6 +28,7 @@ class InferenceCommandMessageKind(IntEnum):
     ProcessOffline = 3
     ProcessLiveWhenReady = 4
     SetLoggerLevel = 5
+    ForceProcessOffline = 6
 
 
 class InferenceStatusMessageKind(IntEnum):
@@ -168,7 +169,7 @@ class PoseProcess(Process):
         logger.notice("setting processing live")
         self._input_queue = self._live_input_queue
         self._mode = InferenceMode.Live
-        self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
+        # self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
 
     def _set_process_offline(self):
         logger.notice("got processing offline")
@@ -220,6 +221,9 @@ class PoseProcess(Process):
                     logger.verbose("Ignoring InferenceCommandMessageKind.ProcessLive")
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:
                     self._set_process_offline()
+                elif cmd == InferenceCommandMessageKind.ForceProcessOffline:
+                    self._set_process_offline()
+                    self._input_queue = self._offline_input_queue
                 elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
                     # NB: not anymore used actually.
                     self._process_live_when_ready = True
@@ -253,9 +257,13 @@ class PoseProcess(Process):
 
         def reset_locals():
             nonlocal i_q
+            prev_iq = i_q
             i_q = self._input_queue
-
-        reset_locals()
+            if prev_iq is not i_q:
+                if i_q is self._live_input_queue:
+                    self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
+                elif i_q is self._offline_input_queue:
+                    self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
 
         p_last_data = time.perf_counter()
 
@@ -265,6 +273,9 @@ class PoseProcess(Process):
             if prev_mode != self._mode:
                 logger.notice("Detected change of mode: %s", self._mode)
                 prev_mode = self._mode
+
+            if i_q is not self._input_queue:
+                reset_locals()  # always, so we get eventual change from command handler
 
             # should be removed once more confident
             if i_q is self._offline_input_queue and p_now > p_last_data + 15:
@@ -339,12 +350,9 @@ class PoseProcess(Process):
                 frames_indices[:, -1] == FrameIndexCategory.EOF_OFFLINE_PROCESSING
             ).any():
                 logger.notice("Detected end of offline queue processing: %s", frames_indices.tolist())
-                # self._offline_input_queue.reset_reader()  # reset our reader index for next offline
                 d_q_put((None, InferenceMode.Offline, None))  # tells data monitor this is EOF current offline data
-                # then swap to live queue
-                self._set_process_live()  # set us to live processing
-                # self._process_live_when_ready = False
-                # always get new ref:
-                reset_locals()
+                # the swap to live queue will be requested explicitly by main app,
+                # there can be many/mulitple offline sessions analysised one after the other,
+                # without going back to live at all in-between them.
 
         # end while True

@@ -195,7 +195,7 @@ class PelletMachine(StateMachine):
         # ensure we reset the diamond triangle drifts measures
         self._algorithm.get_diamond_triangle_drifts(reset=True)
 
-    @BehaviorAlgorithm.relay_func
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _session_capture_ended(self, reason: RecordingEndingReason):
         # todo: this entire func/block should be moved to system machine or behavior algo imho
         algo = self._algorithm
@@ -208,15 +208,11 @@ class PelletMachine(StateMachine):
         if drifts is not None and correct_drift:
             dev.set_motors_drift(drifts)
 
-        if algo.session_mouse_seen and self._state == PelletState.monitoring:
-            # session ended because exit of tunnel, otherwise state would be load_pellet
-            logger.debug("ending session with mouse seen and monitoring: moving retract")
-            if algo.pellet_cover_enabled:
-                # do we want ? probably.
-                self.cover_pellet()
-            self.move_retract()
-
     def _before_move_retract(self):
+        if self._algorithm.pellet_cover_enabled:
+            if self._covered_state is not True:
+                self.cover_pellet()
+                self._api_status_token = None
         self._api_status_token = self._pellet_device.send_retract()
         if self._api_status_token is None:
             raise PelletDeviceCommandFailed
