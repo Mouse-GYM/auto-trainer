@@ -410,21 +410,24 @@ class EmulationInterface(DeviceInterface):
 
     def request_motor_config(self, motor: Motor) -> bool:
         if self._is_open:
+            add = self._messages.append
             logger.info(f"request motor config {motor_to_str(motor)}")
             if motor == Motor.PELLET_COVER_SERVO:
-                self._messages.append(self._configs[Motor.PELLET_COVER_SERVO])
+                add(self._configs[Motor.PELLET_COVER_SERVO])
             elif motor == Motor.PELLET_LOAD_SERVO:
-                self._messages.append(self._configs[Motor.PELLET_LOAD_SERVO])
+                add(self._configs[Motor.PELLET_LOAD_SERVO])
             elif motor == Motor.TUNNEL_MAGNET_SERVO:
-                self._messages.append(self._configs[Motor.TUNNEL_MAGNET_SERVO])
+                add(self._configs[Motor.TUNNEL_MAGNET_SERVO])
             elif motor == Motor.TUNNEL_GATE_SERVO:
-                self._messages.append(self._configs[Motor.TUNNEL_GATE_SERVO])
+                add(self._configs[Motor.TUNNEL_GATE_SERVO])
             elif motor == Motor.PELLET_X_MOTOR:
-                self._messages.append(self._configs[Motor.PELLET_X_MOTOR])
+                add(self._configs[Motor.PELLET_X_MOTOR])
             elif motor == Motor.PELLET_Y_MOTOR:
-                self._messages.append(self._configs[Motor.PELLET_Y_MOTOR])
+                add(self._configs[Motor.PELLET_Y_MOTOR])
             elif motor == Motor.PELLET_Z_MOTOR:
-                self._messages.append(self._configs[Motor.PELLET_Z_MOTOR])
+                add(self._configs[Motor.PELLET_Z_MOTOR])
+            elif motor == Motor.TUNNEL_FAN_SERVO:
+                add(self._configs[Motor.TUNNEL_FAN_SERVO])
 
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open

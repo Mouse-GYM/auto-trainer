@@ -85,6 +85,10 @@ class ServoConfigMessage(Protocol):
     def max_pwm_duration(self) -> float:
         """Units: µs"""
 
+    @property
+    def detach(self) -> bool:
+        """Is attach/detach used"""
+
 
 class MotorConfigurations(Protocol):
     """

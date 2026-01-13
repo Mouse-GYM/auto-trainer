@@ -1,12 +1,5 @@
 import pytest
 
-pytestmark = pytest.mark.canbus
-
-try:
-    from pyjerrycan import StepperStatus
-except (ModuleNotFoundError, TypeError, AttributeError):
-    pass
-
 from autotrainer.core.message import SystemStatusMessageKind, SystemCommandKind
 from autotrainer.device import (CanDevice, DeviceApi, Target, LoadCellReading,
                                 PressureReading, SensorStatus, MagnetDigitalInputs,
@@ -16,17 +9,17 @@ from autotrainer.device import (CanDevice, DeviceApi, Target, LoadCellReading,
 
 _expected = None
 
+def data_callback(kind: int, response):
+    assert kind == _expected
+    del response  # uncheck atm
 
-@pytest.fixture(scope="module")
+
+@pytest.fixture  # (scope="module")
 def device():
-    try:
-        device = CanDevice(api=DeviceApi(message_callback=data_callback), force_emulation=True)
-    except (ModuleNotFoundError, TypeError, AttributeError):
-        assert False
-
-    device._interface.magnet_address = 0x40
-    device._interface.pellet_address = 0x01
-
+    device = CanDevice(api=DeviceApi(message_callback=data_callback), force_emulation=True)
+    # unneeded, at least with emulation iface:
+    # device._interface.magnet_address = 0x40
+    # device._interface.pellet_address = 0x01
     yield device
 
 
@@ -64,7 +57,7 @@ def test_notify_command(device, kind, tag, data):
     (SensorStatus(Target.PELLET_DEVICE, temperature_c=27.3, humidity_percent=64.2), None),
     (MagnetDigitalInputs(Target.MAGNET_DEVICE, continuity_0=False, continuity_1=True), None),
     (StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, 10, 2.0, False),
-     SystemStatusMessageKind.PELLET_X),
+     SystemStatusMessageKind.PELLET_MOTOR_X),
     (ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, 40),
      SystemStatusMessageKind.PELLET_LOAD),
     (ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, 0, 0, 0, 0, 0, 0),
@@ -79,7 +72,3 @@ def test_notify_data(device, data, kind):
         _expected = kind
 
     device.notify_data([data])
-
-
-def data_callback(kind: int, response: object):
-    assert kind == _expected

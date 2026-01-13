@@ -1,8 +1,6 @@
 from .capture import QCaptureView
 from .capture import QGLImageView
 
-from .hardware import ConnectionPanel, MotorConfigDialog
-
 from .ProgressIndicator import ProgressIndicator
 from .Separator import Separator
 from .CardWidget import CardWidget
@@ -15,3 +13,4 @@ from .QtSwitch import QSwitch
 from .QtLabeledSwitch import QLabeledSwitch
 from .QtIndicator import QtIndicator
 
+from .hardware import ConnectionPanel, MotorConfigDialog

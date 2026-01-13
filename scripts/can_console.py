@@ -1,4 +1,5 @@
 import argparse
+import ast
 import logging
 import queue
 import sys
@@ -123,6 +124,7 @@ def monitor_message_queue(msg_queue):
                     f"- max pos (deg)={data.maximum_position:.1f}\n"
                     f"- min pwm={data.minimum_pwm_duration:.1f}\n"
                     f"- max pwm={data.maximum_pwm_duration:.1f}\n"
+                    f"- detach={data.detach}\n"
                 )
             elif isinstance(data, StepperConfig):
                 print(f"STEPPER\n"
@@ -137,16 +139,13 @@ def monitor_message_queue(msg_queue):
                       )
             get_input = True
 
-        elif ((kind == SystemStatusMessageKind.PELLET_COVER and
-               print_motor_status is Motor.PELLET_COVER_SERVO) or
-              (kind == SystemStatusMessageKind.PELLET_LOAD and
-               print_motor_status is Motor.PELLET_LOAD_SERVO) or
-              (kind == SystemStatusMessageKind.HEAD_MAGNET and
-               print_motor_status is Motor.TUNNEL_MAGNET_SERVO) or
-              (kind == SystemStatusMessageKind.TUNNEL_GATE_SERVO and
-               print_motor_status is Motor.TUNNEL_GATE_SERVO)
+        elif (kind, print_motor_status) in (
+            (SystemStatusMessageKind.PELLET_COVER, Motor.PELLET_COVER_SERVO),
+            (SystemStatusMessageKind.PELLET_LOAD, Motor.PELLET_LOAD_SERVO),
+            (SystemStatusMessageKind.HEAD_MAGNET, Motor.TUNNEL_MAGNET_SERVO),
+            (SystemStatusMessageKind.TUNNEL_GATE_SERVO, Motor.TUNNEL_GATE_SERVO),
+            (SystemStatusMessageKind.TUNNEL_FAN, Motor.TUNNEL_FAN_SERVO),
         ):
-
             # TODO deliver full packet. See can_device at or around line 328
             # assert isinstance(data, ServoStatus)
             print(
@@ -224,6 +223,8 @@ def str_to_motor(motor_name: str):
         return Motor.TUNNEL_MAGNET_SERVO
     elif motor_name == 'gate' or motor_name == 'g':
         return Motor.TUNNEL_GATE_SERVO
+    elif motor_name in {'fan', 'tunnel_fan'}:
+        return Motor.TUNNEL_FAN_SERVO
     else:
         return None
 
@@ -292,6 +293,10 @@ def write_config(motor: Motor, device_thread):
         resp = input(f"Max PWM Duration (usec) [{orig_config.maximum_pwm_duration:.1f}]= ")
         if resp != '':
             config.maximum_pwm_duration = float(resp)
+
+        resp = input(f"Detach [{orig_config.detach}]= ")
+        if resp != '':
+            config.detach = bool(ast.literal_eval(resp))
 
         device_thread.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, (motor, config),
                                    context="write servo config")
@@ -464,6 +469,12 @@ def run_monitor():
                 elif cmd == 'v' or cmd == 'version':
                     device_connection.send_message(SystemCommandKind.REQUEST_VERSION)
 
+                elif cmd in ('fan_on', 'tunnel_fan_on'):
+                    device_connection.send_message(SystemCommandKind.TUNNEL_FAN_ON, context="fan_on")
+
+                elif cmd in ('fan_off', 'tunnel_fan_off'):
+                    device_connection.send_message(SystemCommandKind.TUNNEL_FAN_OFF, context="fan_off")
+
                 elif cmd == "logger":
                     get_input = True
                     if len(params) == 0:
@@ -521,6 +532,7 @@ motor_to_move_command = {
     Motor.TUNNEL_GATE_SERVO: SystemCommandKind.MOVE_GATE_SERVO,
     Motor.PELLET_COVER_SERVO: SystemCommandKind.MOVE_COVER_SERVO,
     Motor.PELLET_LOAD_SERVO: SystemCommandKind.MOVE_LOAD_SERVO,
+    Motor.TUNNEL_FAN_SERVO: SystemCommandKind.TUNNEL_FAN_SET,
 }
 
 
@@ -658,7 +670,7 @@ def print_help():
           " ::Write Configuration")
     print("<motor> trip <cnt>                 "
           " ::<cnt> Round trips")
-    print("<motor> is one of: x, y, z, l[oad], c[over], m[agnet], g[ate]")
+    print("<motor> is one of: x, y, z, l[oad], c[over], m[agnet], g[ate], fan/tunnel_fan")
     print()
     print("<servo> attach/detach              "
           " ::Attach or Detach from a servo")
@@ -697,6 +709,10 @@ def print_help():
           " ::Show Status")
     print("t[are]                             "
           " ::Tare Load Cell/Pressure Sensors")
+    print("fan_on                             "
+          " ::Set tunnel fan ON")
+    print("fan_off                            "
+          " ::Set tunnel fan OFF")
     print("v[ersion]                          "
           " ::Version")
     print("logger [<name>] <level>            "
