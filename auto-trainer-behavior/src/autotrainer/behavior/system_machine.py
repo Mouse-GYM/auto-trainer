@@ -321,11 +321,12 @@ class SystemMachine(StateMachine):
             and algo.can_perform_intersession_analysis()
             and self._intersession.can_perform_segmentation()
         )
+        real_can_perform_analysis = can_perform_analysis
         can_batch_session = False
         cur_sessions_batch = self._batch_project_sessions_list
+        batch_sess_cfg = algo.active_config.batch_session_recording
+        load_cell_engaged = self._analysis.load_cell_monitor.is_engaged
         if can_perform_analysis:
-            load_cell_engaged = self._analysis.load_cell_monitor.is_engaged
-            batch_sess_cfg = algo.active_config.batch_session_recording
             if batch_sess_cfg.enabled or len(cur_sessions_batch) > 0:
                 # > 0:  in case it's disabled while there is some session(s) currently batched
                 cur_sessions_batch.append(cur_project)
@@ -340,7 +341,11 @@ class SystemMachine(StateMachine):
                     can_batch_session = True
                     can_perform_analysis = False
         else:
-            can_batch_session = False
+            can_batch_session = (
+                load_cell_engaged
+                and batch_sess_cfg.enabled  #  or len(cur_sessions_batch) > 0
+            )
+
         # first:
         if (    not can_perform_analysis
             and not can_batch_session
@@ -358,7 +363,7 @@ class SystemMachine(StateMachine):
             self.enter_intersession(reason="capture-ended-and-can-perform-analysis")
         else:
             self._inference.put_to_offline_queue(FrameIndexCategory.SWITCH_TO_ONLINE)
-            algo.end_session(CaptureAnalysisResult.ANALYSIS_DELAYED if can_batch_session
+            algo.end_session(CaptureAnalysisResult.ANALYSIS_DELAYED if real_can_perform_analysis
                              else CaptureAnalysisResult.CAPTURE_ONLY)
 
     @BehaviorAlgorithm.relay_func(wait=False)
