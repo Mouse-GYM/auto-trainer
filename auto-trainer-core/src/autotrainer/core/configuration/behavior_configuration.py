@@ -117,6 +117,7 @@ class _BehaviorConfiguration:
     auto_end_session: AutoEndSessionConfiguration = field(default_factory=AutoEndSessionConfiguration)
     auto_tunnel_sweep: AutoTunnelSweepConfiguration = field(default_factory=AutoTunnelSweepConfiguration)
     batch_session_recording: BatchSessionRecordingConfiguration = field(default_factory=BatchSessionRecordingConfiguration)
+    auto_close_gate_on_intersession: AutoCloseGateOnIntersessionConfiguration = field(default_factory=AutoCloseGateOnIntersessionConfiguration)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -181,6 +182,7 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     add(AutoEndSessionConfiguration, "AutoEndSessionConfiguration")
     add(AutoTunnelSweepConfiguration, "AutoTunnelSweepConfiguration")
     add(BatchSessionRecordingConfiguration, "BatchSessionRecordingConfiguration")
+    add(AutoCloseGateOnIntersessionConfiguration, "AutoCloseGateOnIntersessionConfiguration")
 
 
 def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
@@ -209,3 +211,4 @@ def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
     add(AutoEndSessionConfiguration, "AutoEndSessionConfiguration")
     add(AutoTunnelSweepConfiguration, "AutoTunnelSweepConfiguration")
     add(BatchSessionRecordingConfiguration, "BatchSessionRecordingConfiguration")
+    add(AutoCloseGateOnIntersessionConfiguration, "AutoCloseGateOnIntersessionConfiguration")
