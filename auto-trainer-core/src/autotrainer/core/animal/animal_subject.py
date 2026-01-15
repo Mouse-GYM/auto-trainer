@@ -140,6 +140,7 @@ class AnimalSubject:
         }
         xyz = Offset3DTuple(self.pellet_x, self.pellet_y, self.pellet_z)
         logger.debug("Saving %s to %s ; xyz=%s", self.name, file_path.as_posix(), xyz.humanize())
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         with NamedTemporaryFile("w", delete=False, dir=file_path.parent) as fh:
             json.dump(data, fh, indent=4)
         os.replace(fh.name, file_path)

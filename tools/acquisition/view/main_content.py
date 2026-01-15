@@ -1,6 +1,5 @@
 import time
-import typing
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 
 from PySide6 import QtCore
 from PySide6.QtCore import QTimer, Slot, Signal, Qt, QSize
@@ -50,7 +49,7 @@ class MainContent(ContentWidget):
         self.setObjectName("MainContent")
         self.setStyleSheet("#MainContent {background-color: #f7f7f7}")
 
-        self._content_widgets: typing.List[ContentWidget] = list()
+        self._content_widgets: List[ContentWidget] = []
 
         self.setContentsMargins(0, 0, 0, 0)
 
@@ -148,6 +147,7 @@ class MainContent(ContentWidget):
 
         # finally, register handlers to events:
         app_model.property_changed += self._model_property_changed
+        app_model.configuration_loaded_event += self._on_config_loaded
         #
         inference = app_model.inference
         inference.pose_response_ready += self.refresh_pose
@@ -403,3 +403,9 @@ class MainContent(ContentWidget):
 
     def _behavior_algo_property_changed(self, name, value, _):
         pass  # currently unused
+
+    def _on_config_loaded(self, config):
+        del config  # unused
+        # only re-setting the current selected animal
+        self._hardware_control_content.set_selected_animal(self._app_model.selected_animal)
+        # this allows to set correctly for the possible diamond-triangle config loaded
