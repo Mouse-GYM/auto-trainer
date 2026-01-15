@@ -74,7 +74,6 @@ class PoseProcess(Process):
         model_location: str,
     ):
         """
-        :param model: the PoseModel instance
         :param live_queue: a FixedArrayMultiQueue as the default source of input frames
         :param offline_queue: an optional FixedArrayMultiQueue as a secondary source of input frames
         :param data_queue: an output Queue for pose data passed as tuple of pose data and the mode (live or offline)

@@ -208,7 +208,7 @@ class SystemMachine(StateMachine):
         else:
             if self._intersession.state == IntersessionState.idle and len(self._batch_project_sessions_list) > 0:
                 self._inference.send_message(InferenceCommandMessageKind.ForceProcessOffline)
-                self.enter_intersession(reason="sessions-batch-list")
+                self.enter_intersession(reason="exit-tunnel-with-sessions-batch-list")
 
     def after_enter_intersession(self, *, reason="NA"):
         logger.verbose("enter_intersession: reason=%s", reason)
@@ -216,6 +216,7 @@ class SystemMachine(StateMachine):
         inference = self._inference
         batch_list = self._batch_project_sessions_list
         if len(batch_list) > 0:
+            # set intersession and inference current project to the one from the batch:
             cur_prj = batch_list[0]
             intersession.project = cur_prj
             inference.project = cur_prj

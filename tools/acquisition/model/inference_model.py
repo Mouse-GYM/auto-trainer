@@ -222,6 +222,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # ProcessOffline is not anymore used.
         # the trigger for pose process to switch to offline queue processing is now delivered by
         # camera capture itself, which send an EOF_RECORDING when a video/session record finishes.
+        # See also the **ForceProcessOffline** kind, which is used for batch processing
 
         self._offline_segmentation_thread = Thread(
             target=self._feed_intersession_analysis,
