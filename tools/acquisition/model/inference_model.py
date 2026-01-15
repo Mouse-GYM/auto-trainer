@@ -183,10 +183,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     def pose_algorithm(self) -> PoseAlgorithm:
         return self._algorithm
 
-    @property
-    def offline_queue(self) -> FixedArrayMultiQueue:
-        return self._offline_queue
-
     @staticmethod
     def _check_previous_offline_thread(cause: str, cur_off: Optional[threading.Thread]):
         # protection, if we need more than 1 executing thread at the same time then we need a list to retain the
@@ -199,7 +195,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             logger.warning("%s request but previous offline thread still alive: %s, join might block ~long",
                            cause, cur_off)
         cur_off.join()
-        # self._offline_thread = None
         if was_alive:
             logger.verbose("Waited %.1fs to join previous offline thread", time.perf_counter() - perf_now)
 
