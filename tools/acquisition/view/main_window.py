@@ -845,6 +845,7 @@ class MainWindow(QMainWindow):
         app_model = self._app_model
         load_cell_monitor = app_model.analysis.load_cell_monitor
         if not is_checked and self.detection_results_action.isChecked():
+            logger.verbose("Patching intersession segmentation and detection with simulate")
             inference = app_model.inference
             inference._feed_intersession_analysis_execute = self._simulate_intersession_segmentation
             res = IntersessionResponse(
@@ -887,6 +888,7 @@ class MainWindow(QMainWindow):
             self._orig_inference_analysis_feed = inference._feed_intersession_analysis_execute
             self._orig_inference_analysis_process = inference._intersession_process_execute
         else:
+            logger.verbose("Restoring intersession segmentation and detection to real procedures")
             inference._feed_intersession_analysis_execute = self._orig_inference_analysis_feed
             inference._intersession_process_execute = self._orig_inference_analysis_process
 
