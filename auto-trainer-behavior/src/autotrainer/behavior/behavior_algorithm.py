@@ -4,18 +4,12 @@ import dataclasses
 import enum
 import functools
 import inspect
-import logging
 import math
-import operator
 import os
 import queue
-import statistics
 import threading
-import time
-from collections import deque
 from datetime import datetime
 from functools import partial
-from functools import reduce
 from pathlib import Path
 from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union, Dict
 
@@ -28,7 +22,8 @@ from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
     AnimalSubject, get_perf_now, calculate_std_dev_manual
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
-    BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration
+    BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
+    BatchSessionRecordingConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
@@ -494,13 +489,6 @@ class BehaviorAlgorithm(ObservableObject):
         return self._thread_lock
 
     @property
-    def active_config(self) -> Optional[BehaviorConfiguration]:
-        """Return the current "active" config"""
-        # ensure the user of .active_config get a refreshed view:
-        self.update_configuration(self._active_config)
-        return self._active_config
-
-    @property
     def limits(self) -> Self:
         return self
 
@@ -947,11 +935,12 @@ class BehaviorAlgorithm(ObservableObject):
     #
 
     @property
-    def auto_end_session_config(self) -> Optional[AutoEndSessionConfiguration]:
-        cfg = self._active_config
-        if cfg is None:
-            return None
-        return cfg.auto_end_session
+    def auto_end_session_config(self) -> AutoEndSessionConfiguration:
+        return self._active_config.auto_end_session
+
+    @property
+    def batch_session_recording_config(self) -> BatchSessionRecordingConfiguration:
+        return self._active_config.batch_session_recording
 
     @property
     def auto_correct_motors_drift(self) -> bool:

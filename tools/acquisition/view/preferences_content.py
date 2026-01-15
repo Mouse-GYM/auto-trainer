@@ -552,11 +552,11 @@ class PreferencesContent(QWidget):
         #
         grid_layout.addWidget(QLabel("<b>Batch sessions while in tunnel:</b>"), cur_row, cur_col)
         toggle = QSwitch()
-        toggle.setChecked(algo.active_config.batch_session_recording.enabled)
+        toggle.setChecked(algo.batch_session_recording_config.enabled)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         def batch_session_toggled(x: int):
             enabled = x != 0
-            algo.active_config.batch_session_recording.enabled = enabled
+            algo.batch_session_recording_config.enabled = enabled
             refresh_enabled_states()
         toggle.stateChanged.connect(batch_session_toggled)
         cur_row += 1
@@ -565,7 +565,10 @@ class PreferencesContent(QWidget):
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setToolTip("0 for unlimited")
         spinbox.setRange(0, 1_000)
-        spinbox.setValue(algo.active_config.batch_session_recording.maximum_batch_size)
+        spinbox.setValue(algo.batch_session_recording_config.maximum_batch_size)
+        def max_sess_per_batch_changed(value):
+            algo.batch_session_recording_config.maximum_batch_size = value
+        spinbox.valueChanged.connect(max_sess_per_batch_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         #
         # to enable/disable the inference dependant sub-widgets:

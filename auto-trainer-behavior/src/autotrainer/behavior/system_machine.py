@@ -325,7 +325,7 @@ class SystemMachine(StateMachine):
         real_can_perform_analysis = can_perform_analysis
         can_batch_session = False
         cur_sessions_batch = self._batch_project_sessions_list
-        batch_sess_cfg = algo.active_config.batch_session_recording
+        batch_sess_cfg = algo.batch_session_recording_config
         load_cell_engaged = self._analysis.load_cell_monitor.is_engaged
         if can_perform_analysis:
             if batch_sess_cfg.enabled or len(cur_sessions_batch) > 0:
