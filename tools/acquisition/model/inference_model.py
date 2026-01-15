@@ -214,7 +214,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                            self._intersession_block, configuration)
             logger.info("But offline thread not running, continuing")
 
-        # self._data_monitor_proc.stop_recorded.clear()
         logger.info("performing segmentation on %s", configuration)
         intersession_block = self._intersession_block = IntersessionBlock(configuration=configuration)
 

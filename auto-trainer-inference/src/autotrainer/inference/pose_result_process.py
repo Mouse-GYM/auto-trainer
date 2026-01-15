@@ -138,7 +138,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             logging.config.dictConfig(log_dict_config)
             install_log_exception_hook()
         #
-        cmd_thread = threading.Thread(target=self._monitor_cmd_queue, daemon=True)
+        cmd_thread = threading.Thread(target=self._monitor_cmd_queue, daemon=True, name="monitor_cmd_queue")
         cmd_thread.start()
         logger.info("Running monitor_data_queue")
         try:
@@ -548,6 +548,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
                     if pose_data is None:
                         # end of intersession replay
+                        cur_local_prj = self._project.to_local_value()
                         logger.verbose("detected end of inference offline processing ; project=%s",
                                        cur_local_prj)
                         # we can reset the offline queue here, it's safe :
@@ -575,7 +576,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         )
                         thread_post_process.start()
                         cams_read_h5_dss = []
-                        ib_pose_data_list = []
+                        ib_pose_data_list = [[] for _ in range_cams]
                         ib_pose_data_dict = []
                     else:
                         assert pose_data is not None
