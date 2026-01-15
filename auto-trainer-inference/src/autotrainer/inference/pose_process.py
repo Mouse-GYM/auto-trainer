@@ -251,7 +251,8 @@ class PoseProcess(Process):
         predict = self._pose_model.predict
         perf_add_c = self._perf_monitor.add_cycle
 
-        i_q: Optional[FixedArrayMultiQueue] = None
+        # always begin with input queue, which should be live_input
+        i_q: Optional[FixedArrayMultiQueue] = self._input_queue
 
         def reset_locals():
             nonlocal i_q
