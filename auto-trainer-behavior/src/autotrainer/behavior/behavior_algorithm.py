@@ -341,8 +341,6 @@ class BehaviorAlgorithm(ObservableObject):
         self.triangle_missing_time: float = 1.0  # kept in sync with pellet_missing_time via its property setter
         self.pellet_hand_uncover_distance = PelletDeliveryConfiguration.pellet_hand_uncover_distance
 
-        self.auto_close_gate_on_intersession_config = AutoCloseGateOnIntersessionConfiguration()
-
         self._pellet_count_day = 0  # consumed
         self._pellet_count_session = 0  # consumed
         self._pellet_count_total = 0  # consumed
@@ -573,6 +571,10 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def is_in_session_age(self) -> float:
         return get_perf_now() - self._session_started_perf_c
+
+    @property
+    def auto_close_gate_on_intersession_config(self) -> AutoCloseGateOnIntersessionConfiguration:
+        return self._active_config.auto_close_gate_on_intersession
 
     @property
     def pellet_delivery_enabled(self):
@@ -1178,7 +1180,6 @@ class BehaviorAlgorithm(ObservableObject):
         self._load_head_clamp_cfg(config.head_clamp)
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
-        # self.auto_close_gate_on_intersession_config = config.  # not saved yet to config
         self.reload_diamond_triangle_config()
 
     def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
@@ -1238,6 +1239,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._update_head_clamp_cfg(config.head_clamp)
         config.auto_end_session = self._active_config.auto_end_session
         config.batch_session_recording = self._active_config.batch_session_recording
+        config.auto_close_gate_on_intersession = self._active_config.auto_close_gate_on_intersession
 
     def get_diamond_triangle_drifts(self, reset: bool = False) -> Optional[Offset3DTuple]:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""
