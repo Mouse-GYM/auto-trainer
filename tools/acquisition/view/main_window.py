@@ -565,11 +565,11 @@ class MainWindow(QMainWindow):
         action.setChecked(self.main_content.is_diagnostics_visible)
         action.triggered.connect(lambda: self._toggle_diagnostics_view())
 
-        action = self.capture_trigger_action = QAction("Load Cell", self)
+        action = self.load_cell_trigger_action = QAction("Load Cell", self)
         action.setCheckable(True)
-        action.triggered.connect(self._internal_simulate_trigger)
+        action.triggered.connect(self._internal_simulate_trigger_load_cell)
 
-        action = self.force_headbar_detector_action = QAction("Force Detector", self)
+        action = self.force_headbar_detector_action = QAction("HeadBar", self)
         action.setCheckable(True)
         action.triggered.connect(self._internal_set_force_headbar_detector)
 
@@ -582,7 +582,7 @@ class MainWindow(QMainWindow):
         action = self.mouse_near_pellet_action = QAction("Hands near pellet", self)
         action.triggered.connect(self._internal_mouse_near_pellet)
 
-        action = self.detection_results_action = QAction("Detection-Result", self)
+        action = self.analysis_results_action = QAction("Analysis-Result", self)
         action.setCheckable(True)
         action.triggered.connect(self._internal_detection_result_toggle)
 
@@ -743,12 +743,12 @@ class MainWindow(QMainWindow):
             self.addToolBar(toolbar)
             toolbar.setFloatable(False)
             toolbar.setMovable(False)
-            toolbar.addAction(self.capture_trigger_action)
+            toolbar.addAction(self.load_cell_trigger_action)
             toolbar.addAction(self.force_headbar_detector_action)
             toolbar.addAction(self.pellet_seen_action)
             toolbar.addAction(self.mouse_seen_action)
             toolbar.addAction(self.mouse_near_pellet_action)
-            toolbar.addAction(self.detection_results_action)
+            toolbar.addAction(self.analysis_results_action)
             widget = QWidget()
             widget.setContentsMargins(4, 0, 0, 0)
             self._internal_analysis_widget_toolbar = toolbar.addWidget(widget)
@@ -840,11 +840,11 @@ class MainWindow(QMainWindow):
         time.sleep(1.5)
         return fake_result
 
-    def _internal_simulate_trigger(self):
-        is_checked = self.capture_trigger_action.isChecked()
+    def _internal_simulate_trigger_load_cell(self):
+        is_checked = self.load_cell_trigger_action.isChecked()
         app_model = self._app_model
         load_cell_monitor = app_model.analysis.load_cell_monitor
-        if not is_checked and self.detection_results_action.isChecked():
+        if not is_checked and self.analysis_results_action.isChecked():
             logger.verbose("Patching intersession segmentation and detection with simulate")
             inference = app_model.inference
             inference._feed_intersession_analysis_execute = self._simulate_intersession_segmentation
@@ -882,7 +882,7 @@ class MainWindow(QMainWindow):
 
     def _internal_detection_result_toggle(self):
         inference = self._app_model.inference
-        is_checked = self.detection_results_action.isChecked()
+        is_checked = self.analysis_results_action.isChecked()
         self._internal_analysis_widget_toolbar.setVisible(is_checked)
         if is_checked:
             self._orig_inference_analysis_feed = inference._feed_intersession_analysis_execute
