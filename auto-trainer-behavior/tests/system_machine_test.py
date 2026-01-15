@@ -305,12 +305,8 @@ class TestAutoClamp(MockSystemMachine):
                 intensities[idx] = intensity
             algo.auto_clamp_intensity = intensity
             with mock.patch("autotrainer.behavior.system_machine._consider_disengage_autoclamp_timer", new=patch_timer0):
-                # if hbp_engaged == analysis.headbar_pressure_monitor.is_engaged:
-                #     analysis.headbar_pressure_monitor.is_engaged = not hbp_engaged
-                # analysis.headbar_pressure_monitor.is_engaged = hbp_engaged
-                analysis.headbar_pressure_monitor.property_changed(
-                    HeadbarPressureMonitor.IS_ENGAGED_PROPERTY, hbp_engaged, None,
-                )
+                analysis.headbar_pressure_monitor.is_engaged = hbp_engaged
+            analysis.headbar_pressure_monitor.is_engaged = False
         if state == SystemState.tunnel and hbp_engaged and head_fixation_enabled:
             assert tun_dev.update_head_magnet_intensity.call_args_list == [
                 mock.call(i) for i in intensities
@@ -374,33 +370,34 @@ class TestAutoClamp(MockSystemMachine):
         ]
         assert machine._pellet_device.play_tone.call_args_list == []
 
-    @pytest.mark.parametrize("feature_enabled", [False, True])
-    def test_clean_raw_data_on_session_end(self, machine, project_info, feature_enabled):
-        algo = machine.algorithm
-        machine.project = project_info
-        algo.start_session()
-        algo.intersession_enabled = True
-        # check with cam1 file paths:
-        cam = project_info.camera_1
-        file_paths = list(
-            map(Path, chain(project_info.get_video_path(cam), [
-                project_info.get_intersession_pose_path(cam, suffix="_live")]))
-        )
-        assert len(file_paths) > 0
-        for p in file_paths:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.touch()
-        algo.clean_raw_data_on_inactive_session = feature_enabled
-        def patch_timer(delay, func):
-            m = mock.create_autospec(Timer)
-            m.start.side_effect = func
-            return m
-        with mock.patch("autotrainer.behavior.system_machine._clean_raw_data_timer", new=patch_timer):
-            algo.end_capture_session()
-        for p in file_paths:
-            assert not p.exists() if feature_enabled else p.exists()
 
-    #
+@pytest.mark.parametrize("feature_enabled", [False, True])
+def test_clean_raw_data_on_session_end(machine, project_info, feature_enabled):
+    algo = machine.algorithm
+    machine.project = project_info
+    algo.start_session()
+    algo.intersession_enabled = True
+    # check with cam1 file paths:
+    cam = project_info.camera_1
+    file_paths = list(
+        map(Path, chain(project_info.get_video_path(cam), [
+            project_info.get_intersession_pose_path(cam, suffix="_live")]))
+    )
+    assert len(file_paths) > 0
+    for p in file_paths:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.touch()
+    algo.clean_raw_data_on_inactive_session = feature_enabled
+    def patch_timer(delay, func):
+        m = mock.create_autospec(Timer)
+        m.start.side_effect = func
+        return m
+    with mock.patch("autotrainer.behavior.system_machine._clean_raw_data_timer", new=patch_timer):
+        algo.end_capture_session()
+    for p in file_paths:
+        assert not p.exists() if feature_enabled else p.exists()
+
+#
 
 class TestSessionProcessingEnding(MockSystemMachine):
 

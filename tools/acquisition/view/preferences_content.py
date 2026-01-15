@@ -370,17 +370,15 @@ class PreferencesContent(QWidget):
             enabled = value != 0
             auto_close_gate_cfg.enabled = enabled
             refresh_enabled_states()
-        self._auto_close_gate_during_intersession_toggle.stateChanged.connect(toggle_changed)
+        toggle.stateChanged.connect(toggle_changed)
 
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
         grid_layout.addWidget(QLabel("session minimum duration (sec.):"), cur_row, cur_col)
         spinbox = self._auto_close_gate_sess_minimum_duration_spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda: self._auto_close_gate_sess_minimum_duration_spinbox.setEnabled(
-            self._auto_close_gate_during_intersession_toggle.isChecked()
-        ))
-        spinbox.setRange(0, max(1_000_000, auto_close_gate_cfg.session_min_duration))
+        add_enabled_state(lambda s=spinbox, t=toggle: spinbox.setEnabled(t.isChecked()))
+        spinbox.setRange(0, max(1_000_000., auto_close_gate_cfg.session_min_duration))
         spinbox.setDecimals(1)
         spinbox.setValue(auto_close_gate_cfg.session_min_duration)
         def spinbox_value_changed(value):
@@ -424,12 +422,12 @@ class PreferencesContent(QWidget):
         cur_row += 1
         #
         grid_layout.addWidget(QLabel("Threshold:"), cur_row, cur_col)
-        spinbox = self._auto_clamp_threshold_spinbox = QSpinBox(None)
+        spinbox = QDoubleSpinBox(None)
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setValue(analysis.headbar_pressure_monitor.load_cell_engaged_threshold)
         spinbox.setMinimum(0)
         spinbox.setMaximum(1023)
         spinbox.setWrapping(False)
+        spinbox.setValue(analysis.headbar_pressure_monitor.load_cell_engaged_threshold)
         def update_headbar_pressure_threshold(value):
             analysis.headbar_pressure_monitor.load_cell_engaged_threshold = value
         spinbox.valueChanged.connect(update_headbar_pressure_threshold)
@@ -437,59 +435,93 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Release tone freq (Hz) :"), cur_row, cur_col)
-        spinbox = self._auto_clamp_release_tone_freq = QSpinBox()
+        label = QLabel("PreRelease duration (sec.):")
+        tooltip = "Set to 0 to disable/skip the pre-release intermediate step"
+        label.setToolTip(tooltip)
+        grid_layout.addWidget(label, cur_row, cur_col)
+        spinbox = pre_release_dur_spinbox = QDoubleSpinBox(None)
+        spinbox.setToolTip(tooltip)
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        def auto_clamp_release_tone_freq_changed(value):
-            algo.auto_clamp_release_tone_freq = value
+        spinbox.setRange(0, 100)
+        spinbox.setDecimals(0)
+        spinbox.setSingleStep(1)
+        spinbox.setValue(algo.head_clamp_config.prerelease_duration)
+        def auto_clamp_prerelease_duration_chanded(value):
+            algo.head_clamp_config.prerelease_duration = value
+            refresh_enabled_states()
+        spinbox.valueChanged.connect(auto_clamp_prerelease_duration_chanded)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+        grid_layout.addWidget(QLabel("PreRelease intensity (%):"), cur_row, cur_col)
+        spinbox = QDoubleSpinBox(None)
+        add_enabled_state(lambda s=spinbox, t=toggle, s2=pre_release_dur_spinbox: s.setEnabled(t.isChecked() and s2.value() > 0))
+        spinbox.setRange(0, 100)
+        spinbox.setDecimals(0)
+        spinbox.setSingleStep(1)
+        spinbox.setValue(algo.head_clamp_config.prerelease_intensity)
+        def auto_clamp_prerelease_intensity_chanded(value):
+            algo.head_clamp_config.prerelease_intensity = value
+        spinbox.valueChanged.connect(auto_clamp_prerelease_intensity_chanded)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Release tone freq (Hz) :"), cur_row, cur_col)
+        spinbox = QSpinBox()
+        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setMinimum(0)
         spinbox.setMaximum(100_000)
         spinbox.setValue(algo.auto_clamp_release_tone_freq)
+        def auto_clamp_release_tone_freq_changed(value):
+            algo.auto_clamp_release_tone_freq = value
         spinbox.valueChanged.connect(auto_clamp_release_tone_freq_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         # headClamp:autoClampReleaseToneDelay
         grid_layout.addWidget(QLabel("Release tone delay (sec.) :"), cur_row, cur_col)
-        spinbox = self._auto_clamp_release_tone_delay = QDoubleSpinBox()
+        spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        spinbox.setValue(algo.auto_clamp_release_tone_delay)
         def auto_clamp_release_tone_delay_changed(value):
             algo.auto_clamp_release_tone_delay = value
-        spinbox.setValue(algo.auto_clamp_release_tone_delay)
         spinbox.valueChanged.connect(auto_clamp_release_tone_delay_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         # headClamp:autoClampNoActivityReleaseDelay
         grid_layout.addWidget(QLabel("No-activity release delay (sec.) :"), cur_row, cur_col)
-        spinbox = self._auto_clamp_no_activity_release_delay = QDoubleSpinBox()
+        spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        spinbox.setValue(algo.auto_clamp_no_activity_release_delay)
         def auto_clamp_no_activity_release_delay_changed(value):
             algo.auto_clamp_no_activity_release_delay = value
-        spinbox.setValue(algo.auto_clamp_no_activity_release_delay)
         spinbox.valueChanged.connect(auto_clamp_no_activity_release_delay_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         # headClamp:autoClampReleaseLoadCount
         grid_layout.addWidget(QLabel("Release load count:"), cur_row, cur_col)
-        spinbox = self._auto_clamp_release_load_count = QSpinBox()
+        spinbox = QSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setMinimum(0)
         spinbox.setMaximum(1_000_000)
+        spinbox.setValue(algo.auto_clamp_release_load_count)
         def auto_clamp_release_load_count_changed(value):
             algo.auto_clamp_release_load_count = value
-        spinbox.setValue(algo.auto_clamp_release_load_count)
         spinbox.valueChanged.connect(auto_clamp_release_load_count_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
-        grid_layout.addWidget(QLabel("Before re-engage delay (sec.):"), cur_row, cur_col)
-        spinbox = self._auto_clamp_before_reengage_delay = QDoubleSpinBox()
+        label = QLabel("Before re-engage delay (sec.):")
+        tooltip = "Delay to wait before allow re-engage auto-clamp again"
+        label.setToolTip(tooltip)
+        grid_layout.addWidget(label, cur_row, cur_col)
+        spinbox = QDoubleSpinBox()
+        spinbox.setToolTip(tooltip)
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setRange(0, 600)
-        spinbox.setValue(algo.auto_clamp_before_reengage_delay)
         spinbox.setDecimals(1)
+        spinbox.setValue(algo.auto_clamp_before_reengage_delay)
         def auto_clamp_before_reengage_delay_changed(value):
             algo.auto_clamp_before_reengage_delay = value
         spinbox.valueChanged.connect(auto_clamp_before_reengage_delay_changed)

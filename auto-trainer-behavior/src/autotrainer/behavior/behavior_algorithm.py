@@ -69,19 +69,24 @@ class BehaviorAlgoProps(str, enum.Enum):
 
     ALGO_PAUSED = 'algo_paused'
 
-    AUTO_CLAMP_INTENSITY = 'auto_clamp_intensity'
+    # head-clamp / auto-clamp related:
     BASELINE_INTENSITY = 'baseline_intensity'
+    HEAD_FIXATION_ENABLED = 'head_fixation_enabled'  # this is head-clamp
+
+    # global:
     DAY_PELLET_COUNT = 'day_pellet_count'  # consumed
     TOTAL_PELLET_COUNT = 'total_pellet_count'  # consumed
     DAY_PELLET_PRESENTED = 'day_pellet_presented'
     TOTAL_PELLET_PRESENTED = 'total_pellet_presented'
     DAY_SUCCESSFUL_REACHES = 'day_successful_reaches'
     TOTAL_SUCCESSFUL_REACHES = 'total_successful_reaches'
-    HEAD_FIXATION_ENABLED = 'head_fixation_enabled'
+
     INTERSESSION_ENABLED = 'intersession_enabled'
     INTERSESSION_PELLET_SHIFT_ENABLED = 'intersession_pellet_shift_enabled'
+
     PELLET_DELIVERY_ENABLED = 'pellet_delivery_enabled'
     PELLET_COVER_ENABLED = 'pellet_cover_enabled'
+
     SESSION_PELLET_COUNT = 'session_pellet_count'
     SESSION_MOUSE_SEEN = 'session_mouse_seen'
 
@@ -95,12 +100,13 @@ class BehaviorAlgoProps(str, enum.Enum):
     INTERSESSION_STATE = 'intersession_state'
     CAPTURE_STATUS = 'capture_status'
 
-    USE_TRIANGLE_PELLET_DISTANCE_TOO_FAR = "use_triangle_pellet_distance_too_far"
-    TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"
+    USE_TRIANGLE_PELLET_DISTANCE_TOO_FAR = "use_triangle_pellet_distance_too_far"  # unused
+    TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"  # unused
 
-    PRESENCE_MISSING = 'presence_missing'
-    PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'
-    HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'
+    PRESENCE_MISSING = 'presence_missing'  # unused
+    PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'  # unused
+
+    HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'  # used !
 
     DIAMOND_TRIANGLE_CONFIG = 'diamond_triangle_config'
 
@@ -284,12 +290,10 @@ class BehaviorAlgorithm(ObservableObject):
         self._head_fixation_enabled = False
         self._clean_raw_data_on_inactive_session = False
         self._auto_correct_motors_drift = False
-        self._auto_clamp_intensity = 100
-        self._auto_clamp_release_tone_freq = 7000
-        self._auto_clamp_release_tone_delay = 0.1
-        self._auto_clamp_release_load_count = HeadClampConfiguration.auto_clamp_release_load_count
-        self._auto_clamp_no_activity_release_delay = HeadClampConfiguration.auto_clamp_no_activity_release_delay
-        self._auto_clamp_before_reengage_delay = HeadClampConfiguration.before_reengage_delay
+
+        # now using self._active_config.head_clamp mainly,
+        # and also:
+        self._baseline_intensity = self._active_config.head_clamp.min_baseline_intensity
 
         self._recording_age_release_pellet_threshold = 0.25
         self._recording_prebuffer_duration = 0
@@ -325,10 +329,6 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._loaded_config: Optional[BehaviorConfiguration] = None
 
-        self.min_baseline_intensity: float = 5.0
-        self.max_baseline_intensity: float = 90.0
-        self._baseline_intensity = self.min_baseline_intensity
-        self.baseline_intensity_increment: float = 15.0
         self.max_pellets_per_session: int = 10
         self.max_pellets_per_headfix_session: int = 10
         self.max_pellets_per_day: int = 50
@@ -630,6 +630,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def baseline_intensity(self):
+        """Head magnet "baseline" intensity ; set from animal/subject"""
         return self._baseline_intensity
 
     @baseline_intensity.setter
@@ -640,62 +641,74 @@ class BehaviorAlgorithm(ObservableObject):
             self._on_property_changed(BehaviorAlgoProps.BASELINE_INTENSITY, value, prev)
 
     @property
+    def head_clamp_config(self) -> HeadClampConfiguration:
+        """The whole HeadClamp config, can be modified in place,
+        although no event/change cb, if any is configured on behavior algo, will be emitted in that case"""
+        return self._active_config.head_clamp
+
+    @property
     def auto_clamp_intensity(self):
-        return self._auto_clamp_intensity
+        return self._active_config.head_clamp.auto_clamp_intensity
 
     @auto_clamp_intensity.setter
     def auto_clamp_intensity(self, value):
-        prev, self._auto_clamp_intensity = self._auto_clamp_intensity, value
+        cfg = self._active_config.head_clamp
+        prev, cfg.auto_clamp_intensity = cfg.auto_clamp_intensity, value
         if value != prev:
-            self._on_property_changed(BehaviorAlgoProps.AUTO_CLAMP_INTENSITY, value, prev)
+            # prop unused
+            #     self._on_property_changed(BehaviorAlgoProps.AUTO_CLAMP_INTENSITY, value, prev)
             EventManager.default().post_event_content(BehaviorEventKind.autoClampIntensityChanged, context=value)
 
     @property
     def auto_clamp_release_tone_freq(self):
         """Frequency of the tone played when auto-clamp is released in Hz"""
-        return self._auto_clamp_release_tone_freq
+        return self._active_config.head_clamp.auto_clamp_release_tone_freq
 
     @auto_clamp_release_tone_freq.setter
     def auto_clamp_release_tone_freq(self, value):
-        prev, self._auto_clamp_release_tone_freq = self._auto_clamp_release_tone_freq, value
+        cfg = self._active_config.head_clamp
+        prev, cfg.auto_clamp_release_tone_freq = cfg.auto_clamp_release_tone_freq, value
         if value != prev:
-            self._on_property_changed("auto_clamp_release_tone_freq", value, prev)
+            # prop unused
+            # self._on_property_changed("auto_clamp_release_tone_freq", value, prev)
             EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseToneFreqChanged, context=value)
 
     @property
     def auto_clamp_release_tone_delay(self):
-        return self._auto_clamp_release_tone_delay
+        return self._active_config.head_clamp.auto_clamp_release_tone_delay
 
     @auto_clamp_release_tone_delay.setter
     def auto_clamp_release_tone_delay(self, value):
-        prev, self._auto_clamp_release_tone_delay = self._auto_clamp_release_tone_delay, value
+        cfg = self._active_config.head_clamp
+        prev, cfg.auto_clamp_release_tone_delay = cfg.auto_clamp_release_tone_delay, value
         if value != prev:
-            self._on_property_changed("auto_clamp_release_tone_delay", value, prev)
+            # prop unused
+            # self._on_property_changed("auto_clamp_release_tone_delay", value, prev)
             EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseDelayChanged, context=value)
 
     @property
     def auto_clamp_release_load_count(self):
-        return self._auto_clamp_release_load_count
+        return self._active_config.head_clamp.auto_clamp_release_load_count
 
     @auto_clamp_release_load_count.setter
     def auto_clamp_release_load_count(self, value):
-        self._auto_clamp_release_load_count = value
+        self._active_config.head_clamp.auto_clamp_release_load_count = value
 
     @property
     def auto_clamp_no_activity_release_delay(self):
-        return self._auto_clamp_no_activity_release_delay
+        return self._active_config.head_clamp.auto_clamp_no_activity_release_delay
 
     @auto_clamp_no_activity_release_delay.setter
     def auto_clamp_no_activity_release_delay(self, value):
-        self._auto_clamp_no_activity_release_delay = value
+        self._active_config.head_clamp.auto_clamp_no_activity_release_delay = value
 
     @property
     def auto_clamp_before_reengage_delay(self) -> float:
-        return self._auto_clamp_before_reengage_delay
+        return self._active_config.head_clamp.before_reengage_delay
 
     @auto_clamp_before_reengage_delay.setter
     def auto_clamp_before_reengage_delay(self, value):
-        self._auto_clamp_before_reengage_delay = value
+        self._active_config.head_clamp.before_reengage_delay = value
 
     #
 
@@ -1166,7 +1179,6 @@ class BehaviorAlgorithm(ObservableObject):
         self._loaded_config = copy.deepcopy(config)
         self._active_config = copy.deepcopy(config)
         self._load_pellet_cfg(config.pellet_delivery)
-        self._load_head_clamp_cfg(config.head_clamp)
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
         self.reload_diamond_triangle_config()
@@ -1185,18 +1197,6 @@ class BehaviorAlgorithm(ObservableObject):
         self.auto_correct_motors_drift = cfg.auto_correct_motors_drift
         self.pellet_hand_uncover_distance = cfg.pellet_hand_uncover_distance
 
-    def _load_head_clamp_cfg(self, cfg: HeadClampConfiguration):
-        self.min_baseline_intensity = cfg.min_baseline_intensity
-        self.max_baseline_intensity = cfg.max_baseline_intensity
-        self.baseline_intensity_increment = cfg.baseline_intensity_increment
-
-        self.auto_clamp_intensity = cfg.auto_clamp_intensity
-        self.auto_clamp_release_tone_freq = cfg.auto_clamp_release_tone_freq
-        self.auto_clamp_release_tone_delay = cfg.auto_clamp_release_tone_delay
-        self.auto_clamp_release_load_count = cfg.auto_clamp_release_load_count
-        self.auto_clamp_no_activity_release_delay = cfg.auto_clamp_no_activity_release_delay
-        self.auto_clamp_before_reengage_delay = cfg.before_reengage_delay
-
     def _update_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         cfg.is_enabled = self._pellet_delivery_enabled
         cfg.is_intersession_analysis_enabled = self._intersession_enabled
@@ -1211,21 +1211,9 @@ class BehaviorAlgorithm(ObservableObject):
         cfg.triangle_pellet_diff_too_far_threshold = self._triangle_pellet_diff_too_far_threshold
         cfg.pellet_hand_uncover_distance = self.pellet_hand_uncover_distance
 
-    def _update_head_clamp_cfg(self, cfg: HeadClampConfiguration):
-        cfg.min_baseline_intensity = self.min_baseline_intensity
-        cfg.max_baseline_intensity = self.max_baseline_intensity
-        cfg.baseline_intensity_increment = self.baseline_intensity_increment
-
-        cfg.auto_clamp_intensity = self._auto_clamp_intensity
-        cfg.auto_clamp_release_tone_freq = self._auto_clamp_release_tone_freq
-        cfg.auto_clamp_release_tone_delay = self._auto_clamp_release_tone_delay
-        cfg.auto_clamp_release_load_count = self._auto_clamp_release_load_count
-        cfg.auto_clamp_no_activity_release_delay = self._auto_clamp_no_activity_release_delay
-        cfg.before_reengage_delay = self._auto_clamp_before_reengage_delay
-
     def update_configuration(self, config: BehaviorConfiguration):
         self._update_pellet_cfg(config.pellet_delivery)
-        self._update_head_clamp_cfg(config.head_clamp)
+        config.head_clamp = self._active_config.head_clamp
         config.auto_end_session = self._active_config.auto_end_session
         config.batch_session_recording = self._active_config.batch_session_recording
         config.auto_close_gate_on_intersession = self._active_config.auto_close_gate_on_intersession
