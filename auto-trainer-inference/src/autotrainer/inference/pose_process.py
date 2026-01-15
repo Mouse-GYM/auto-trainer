@@ -168,10 +168,9 @@ class PoseProcess(Process):
         logger.notice("setting processing live")
         self._input_queue = self._live_input_queue
         self._mode = InferenceMode.Live
-        # self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
 
     def _set_process_offline(self):
-        logger.notice("got processing offline")
+        logger.debug("got processing offline")
         # self._input_queue = self._offline_input_queue
         # do not change immediately the used input queue to offline,
         # we'll wait the camera capture sends the EOF_RECORDING frame index batch,
@@ -290,6 +289,7 @@ class PoseProcess(Process):
             mode_used = InferenceMode.Live if i_q is self._live_input_queue else InferenceMode.Offline
 
             if (frames_indices[:, -1] < 0).any():
+                # live or "signaling" (frameIndexCategory)
                 if __debug__:
                     if not (frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all():
                         logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices.tolist())

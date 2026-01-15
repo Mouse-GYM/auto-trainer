@@ -416,7 +416,7 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
-        if self.state == SystemState.intersession:
+        if self._state == SystemState.intersession:
             # TODO new need event kind
             # EventManager.default().post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
             return
@@ -427,7 +427,7 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _load_cell_monitor_property_changed(self, name: str, value, _):
-        if self.state == SystemState.intersession:
+        if self._state == SystemState.intersession:
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
                                                       context=value)
             return
@@ -438,7 +438,7 @@ class SystemMachine(StateMachine):
             if value:
                 self._analysis.global_animal_presence_monitor.stop()
                 algo.presence_missing = False
-                if self.state == SystemState.cage:
+                if self._state == SystemState.cage:
                     # when app start inference is slow and takes several 10s to become live,
                     # so we have to check it:
                     if self._inference.status == InferenceStatus.live and not algo.algo_paused:
@@ -849,7 +849,7 @@ class SystemMachine(StateMachine):
     def _handle_detection_result(self, res: IntersessionResponse):
         # it's supposed to be the one related to the analysed session:
         intersession_prj = self._intersession.project
-        logger.success("Intersession result: prj=%s result=%s", intersession_prj, res)
+        logger.success("Intersession analysis result: prj=%s result=%s", intersession_prj, res)
         # so we must/should have:
         # assert intersession_prj.when == self._intersession.detection_config.session_when
         #

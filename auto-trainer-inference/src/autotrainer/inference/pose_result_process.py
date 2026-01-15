@@ -70,18 +70,12 @@ def open_h5_file(file_path: Path):
 
 #
 
-def _send_command(func):
-    def wrapped(self, *args, **kwargs):
-        self._send_msg(func.__name__, args, kwargs)
-    return wrapped
-
-
 class InferenceMonitorDataMsg(str, Enum):
 
     SET_PROJECT_INFO = "set_project_info"
     SET_POSE_ALGO = "set_pose_algo"
     POSE_RESULT_READY = "pose_result_ready"
-    INTERSESSION_RESULT_READY = "intersession_result_ready"
+    INTERSESSION_SEGMENTATION_FINISHED = "intersession_segmentation_finished"
     START_NEW_INTERSESSION_BATCH_ITEM = "start_new_intersesson_batch_item"
 
 
@@ -180,7 +174,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
     def _send_msg(self, msg, *args, **kwargs):
         self._msg_queue.put((msg, (args, kwargs)))
 
-    def _intersession_post_process(
+    def _intersession_offline_process(
         self,
         project_info: ProjectInfo,
         perf_c_start_offline,
@@ -257,7 +251,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             logger.exception("Error during intersession_inference: %s", err)
             success = False
 
-        self._send_msg(self.Msg.INTERSESSION_RESULT_READY, project_info.session, success)
+        self._send_msg(self.Msg.INTERSESSION_SEGMENTATION_FINISHED, project_info.session, success)
 
     def _monitor_data_queue(self, project: ProjectInfo):
         pose_data: Optional[List[numpy.ndarray]]
@@ -273,7 +267,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         cams_read_h5_idx: List[int] = []
         recording_in_progress = False
         next_prev_mode = None
-        cur_local_prj = None
         tot_written_to_live = None
         cnt_data_received = 0
         skip_update = False
@@ -560,8 +553,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             logger.debug("joining previous thread_post_process")
                             thread_post_process.join()
                         thread_post_process = threading.Thread(
-                            name="OfflinePostProcess",
-                            target=self._intersession_post_process,
+                            name="OfflineProcess",
+                            target=self._intersession_offline_process,
                             args=(
                                 cur_local_prj,
                                 perf_c_start_offline,

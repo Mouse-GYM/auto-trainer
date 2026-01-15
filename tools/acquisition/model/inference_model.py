@@ -461,7 +461,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             except Exception as err:
                 logger.exception("pose_response_ready event callback failed: %s", err)
 
-        elif msg is InferenceMonitorDataProc.Msg.INTERSESSION_RESULT_READY:
+        elif msg is InferenceMonitorDataProc.Msg.INTERSESSION_SEGMENTATION_FINISHED:
             ib = self._intersession_block
             if ib is None:
                 logger.critical("Got %s but intersession_block is None ; args=%s", msg, args)
@@ -480,7 +480,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 break
             msg, context = raw
             try:
-                if isinstance(msg, InferenceMonitorDataProc.Msg):
+                if isinstance(msg, InferenceMonitorDataMsg):
                     self._handle_monitor_data_proc_msg(msg, context)
                     continue
                 logger.debug("Processing msg %s ...", msg)
