@@ -4,23 +4,25 @@ from datetime import datetime
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from transitions import Machine
 
 from autotrainer.core import (ProjectInfo, EventManager, SensorAnalysis, LoadCellMonitor, Offset3DTuple,
-                              HeadbarPressureMonitor, transitions_allow_functions, SystemMessageHandler, get_perf_now)
+                              HeadbarPressureMonitor, transitions_allow_functions, SystemMessageHandler, get_perf_now,
+                              FrameIndexCategory)
 from autotrainer.core import ApiEventKind as BehaviorEventKind
+
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 
-from autotrainer.inference import PoseResponse, InferenceStatus
+from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind
 from autotrainer.inference.analysis import IntersessionResponse
 
 from . import CaptureAnalysisResult, RecordingEndingReason
-from ..core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine, IntersessionState
@@ -30,6 +32,7 @@ from .pellet_device_protocol import PelletDeviceProtocol
 from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
+from ..inference.pose_result_process import InferenceMonitorDataProc, InferenceMonitorDataMsg
 
 logger = get_verbose_logger(__name__)
 
@@ -71,7 +74,8 @@ class SystemMachine(StateMachine):
             model_override=True,
         )
 
-        self._project_info = project_info
+        self._project_info: Optional[ProjectInfo] = project_info
+        self._batch_project_sessions_list: List[ProjectInfo] = []
 
         self._timer_consider_start_session = no_op_timer
         self._timer_consider_end_session = no_op_timer
@@ -128,6 +132,7 @@ class SystemMachine(StateMachine):
             inference.pose_response_ready += self._pose_changed
             inference.detection_result_ready += self._handle_detection_result
             inference.property_changed += self._handle_inference_property_changed
+            inference.segmentation_finished += self._inference_segmentation_finished
 
         self._pellet_device = pellet_device
 
@@ -178,9 +183,9 @@ class SystemMachine(StateMachine):
     @project.setter
     def project(self, value: ProjectInfo):
         self._project_info = value
-        EventManager.default().project = self._project_info
-        self._algorithm.project = self._project_info
-        self._intersession.project = self._project_info
+        EventManager.default().project = value
+        self._algorithm.project = value
+        self._intersession.project = value
 
     def before_enter_tunnel(self, *, reason: str = "NA"):
         EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
@@ -195,16 +200,40 @@ class SystemMachine(StateMachine):
             self._evaluate_auto_clamp(self._analysis.headbar_pressure_monitor.is_engaged)
 
     def after_exit_tunnel(self, *, reason: str = "NA"):
+        logger.verbose("after_exit_tunnel: %s", reason)
         self._update_magnet_position(self.algorithm.baseline_intensity)
         EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
         if self._algorithm.is_in_session:
             self._algorithm.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
+        else:
+            if self._intersession.state == IntersessionState.idle and len(self._batch_project_sessions_list) > 0:
+                self._inference.send_message(InferenceCommandMessageKind.ForceProcessOffline)
+                self.enter_intersession(reason="exit-tunnel-with-sessions-batch-list")
 
-    def after_enter_intersession(self):
-        self._intersession.perform_segmentation()
+    def after_enter_intersession(self, *, reason="NA"):
+        logger.verbose("enter_intersession: reason=%s", reason)
+        intersession = self._intersession
+        inference = self._inference
+        batch_list = self._batch_project_sessions_list
+        if len(batch_list) > 0:
+            # set intersession and inference current project to the one from the batch:
+            cur_prj = batch_list[0]
+            intersession.project = cur_prj
+            inference.project = cur_prj
+            inference.put_to_data_hander(InferenceMonitorDataMsg.START_NEW_INTERSESSION_BATCH_ITEM)
+        else:
+            cur_prj = self._project_info.to_local_value()
+
+        if self._pellet_machine.state == PelletState.monitoring:
+            self._pellet_machine.move_retract()
+
+        logger.info("processing session project %s", cur_prj)
+
+        intersession.perform_segmentation()
         algo = self._algorithm
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
         if auto_close_gate_cfg.enabled:
+            # todo: should consider all the session in possible batch
             duration = get_perf_now() - self._session_started_perf_c  # could/should be todo: have session duration recorded in project-session info.
             if auto_close_gate_cfg.session_min_duration <= duration:
                 self._consider_close_gate_during_intersession()
@@ -220,10 +249,6 @@ class SystemMachine(StateMachine):
 
     @staticmethod
     def _clean_raw_data(project: ProjectInfo, *, wait_before_clean: float = 10):
-        # NB: convert to local value immediately,
-        # so that if the shared values are modified in between the timer triggers,
-        # then the good values are still used
-        project = project.to_local_value()
 
         def do_clean():
             for cam_name in (project.camera_1, project.camera_2):
@@ -264,6 +289,10 @@ class SystemMachine(StateMachine):
     # not needed given _consider_auto_end_session() has it.
     def _session_capture_started(self):
         self._session_started_perf_c = get_perf_now()
+        self._inference.project = self._project_info  # ensure inference has the correct project info
+        self._intersession.project = self._project_info  # same for intersession
+        algo = self._algorithm
+        # self._update_magnet_position(algo.baseline_intensity)  todo: once tests fixed
         self._consider_auto_end_session()  # this will post-pone the auto-end of the needed delay
 
     @BehaviorAlgorithm.relay_func
@@ -276,62 +305,88 @@ class SystemMachine(StateMachine):
         # TODO: make this configurable.
         # if self._tunnel_device is not None:
         #    self._update_magnet_position(self.algorithm.baseline_intensity)
-        project = self.project
+        cur_project = self.project
+        if cur_project is not None:
+            cur_project = cur_project.to_local_value()
         algo = self.algorithm
         logger.verbose(
             "session ended: intersession.state=%s system_machine.state=%s algo.system_state=%s "
             "pellet_machine.state=%s intersession_enabled=%s session_mouse_seen=%s",
-            # " segment_config=%s detection_config=%s",
             self._intersession.state, self.state, algo.system_state,
             self._pellet_machine.state,
             algo.intersession_enabled, algo.session_mouse_seen,
-            # self._intersession._segmentation_configuration,
-            # self._intersession._detection_configuration,
         )
         #
         can_perform_analysis = (
-            algo.can_perform_intersession_analysis()
+            cur_project is not None
+            and algo.can_perform_intersession_analysis()
             and self._intersession.can_perform_segmentation()
         )
-        # first:
-        if not algo.session_mouse_seen and project is not None:
-            # assert not can_perform_analysis  # could have
-            if algo.clean_raw_data_on_inactive_session:
-                self._clean_raw_data(project)
-        #
-        if can_perform_analysis and self.state in {
-            SystemState.tunnel,
-            SystemState.cage,
-        }:
-            self.enter_intersession()
-        else:
-            inference = self._inference
-            if inference is not None:
-                if self._intersession.state != IntersessionState.idle:
-                    logger.warning(
-                        "intersession state not idle: %s in progress, not setting inference back to online. "
-                        "segment_config=%s detection_config=%s",
-                        self._intersession.state,
-                        self._intersession._segmentation_configuration,
-                        self._intersession._detection_configuration,
-                    )
+        real_can_perform_analysis = can_perform_analysis
+        can_batch_session = False
+        cur_sessions_batch = self._batch_project_sessions_list
+        batch_sess_cfg = algo.batch_session_recording_config
+        load_cell_engaged = self._analysis.load_cell_monitor.is_engaged
+        if can_perform_analysis:
+            if batch_sess_cfg.enabled or len(cur_sessions_batch) > 0:
+                # > 0:  in case it's disabled while there is some session(s) currently batched
+                cur_sessions_batch.append(cur_project)
+                if 0 < batch_sess_cfg.maximum_batch_size <= len(cur_sessions_batch):
+                    logger.verbose("reached maximum_batch_size, doing batch-intersession analysis")
+                elif not load_cell_engaged:
+                    logger.verbose("load-cell disengaged, doing batch-intersession analysis")
+                elif not batch_sess_cfg.enabled:
+                    logger.verbose("batch disabled, doing batch-intersession analysis")
                 else:
-                    inference.set_inference_to_online()
-            #
-            algo.end_session(CaptureAnalysisResult.CAPTURE_ONLY)
+                    logger.info("adding session %s to current batch list len=%s", cur_project, len(cur_sessions_batch))
+                    can_batch_session = True
+                    can_perform_analysis = False
+        else:
+            can_batch_session = (
+                load_cell_engaged
+                and batch_sess_cfg.enabled  #  or len(cur_sessions_batch) > 0
+            )
 
-    @BehaviorAlgorithm.relay_func
+        # first:
+        if (    not can_perform_analysis
+            and not can_batch_session
+            and not algo.session_mouse_seen
+            and cur_project is not None
+        ):
+            if algo.clean_raw_data_on_inactive_session:
+                self._clean_raw_data(cur_project)
+        #
+        if (can_perform_analysis or len(cur_sessions_batch) > 0) and not can_batch_session:
+            if len(cur_sessions_batch) == 1 and self._project_info == cur_sessions_batch[0]:
+                # no need if it's the latest/current project-session-info already.
+                cur_sessions_batch.clear()
+                # it will be handled normally anyway
+            self.enter_intersession(reason="capture-ended-and-can-perform-analysis")
+        else:
+            self._inference.put_to_offline_queue(FrameIndexCategory.SWITCH_TO_ONLINE)
+            algo.end_session(CaptureAnalysisResult.ANALYSIS_DELAYED if real_can_perform_analysis
+                             else CaptureAnalysisResult.CAPTURE_ONLY)
+
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _intersession_ended(self, result: CaptureAnalysisResult):
-        # having to check state, some test bypass the full stack
-        if self._state == SystemState.intersession:
-            self._timer_consider_close_gate.cancel()
-            self._tunnel_device.open_tunnel_gate()  # always ensure open gate on intersession ended
-            logger.debug("_intersession_ended: load_cell.engaged=%s",
-                         self._analysis.load_cell_monitor.is_engaged)
-            if self._analysis.load_cell_monitor.is_engaged and not self._algorithm.algo_paused:
-                self.exit_intersession_to_tunnel()
-            else:
-                self.exit_intersession_to_cage()
+        logger.verbose("intersession ended: result=%s prj=%s", result, self._intersession.project)
+        cur_batch = self._batch_project_sessions_list
+        if len(cur_batch) > 0:
+            del cur_batch[0]
+            if len(cur_batch) > 0:  #  and not self._algorithm.algo_paused:
+                # continue remaining session(s) in batch in all cases
+                self.reenter_intersession(reason="reenter-batch-session")
+                return
+            # force intersession & inference project-info back to current/live one:
+            self._intersession.project = self._project_info
+            self._inference.project = self._project_info
+
+        self._timer_consider_close_gate.cancel()
+        self._tunnel_device.open_tunnel_gate()  # always ensure open gate on intersession ended
+        if self._analysis.load_cell_monitor.is_engaged and not self._algorithm.algo_paused:
+            self.exit_intersession_to_tunnel()
+        else:
+            self.exit_intersession_to_cage()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _handle_inference_property_changed(self, name: str, new_value, prev_value):
@@ -350,9 +405,18 @@ class SystemMachine(StateMachine):
                 # self._inference.property_changed -= self._handle_inference_property_changed
                 # NO: in case of stop->start acquisition of/inside main app we still need it.
 
+    def _inference_segmentation_finished(self, success):
+        logger.verbose("got inference segmentation finished: %s", success)
+        inference = self._inference
+        inference.put_to_offline_queue(FrameIndexCategory.EOF_OFFLINE_PROCESSING)
+        cur_batch_list = self._batch_project_sessions_list
+        logger.debug("cur_batch_list=%s", cur_batch_list)
+        if len(cur_batch_list) <= 1:
+            inference.put_to_offline_queue(FrameIndexCategory.SWITCH_TO_ONLINE)
+
     @BehaviorAlgorithm.relay_func(wait=False)
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
-        if self.state == SystemState.intersession:
+        if self._state == SystemState.intersession:
             # TODO new need event kind
             # EventManager.default().post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
             return
@@ -363,7 +427,7 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _load_cell_monitor_property_changed(self, name: str, value, _):
-        if self.state == SystemState.intersession:
+        if self._state == SystemState.intersession:
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
                                                       context=value)
             return
@@ -374,7 +438,7 @@ class SystemMachine(StateMachine):
             if value:
                 self._analysis.global_animal_presence_monitor.stop()
                 algo.presence_missing = False
-                if self.state == SystemState.cage:
+                if self._state == SystemState.cage:
                     # when app start inference is slow and takes several 10s to become live,
                     # so we have to check it:
                     if self._inference.status == InferenceStatus.live and not algo.algo_paused:
@@ -764,6 +828,8 @@ class SystemMachine(StateMachine):
             return
         if algo.start_session(reason=reason):
             self._update_magnet_position(algo.baseline_intensity)
+            # now done in callback _session_capture_started()
+            # but break many tests, looking after..
 
     @BehaviorAlgorithm.relay_func(wait=False)
     # called by a timer, so can use wait=False (to not always recreate event for the wait sync)
@@ -777,16 +843,17 @@ class SystemMachine(StateMachine):
             logger.debug("_consider_end_session[%s]: not in session ; state=%s pellet=%s",
                          reason, self.state, self._pellet_machine.state)
             return
+        algo.end_capture_session(reason=reason)
 
-        if algo.end_capture_session(reason=reason):
-            # force analysis to False,
-            # this will trigger a new start session if mouse still there
-            self._analysis.load_cell_monitor.is_engaged = False
-                # maybe not necessary, if also checked at end of at end of end cpture session execution.
-                # or when pellet goes back to monitor state
-
-    @BehaviorAlgorithm.relay_func(wait=True)
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _handle_detection_result(self, res: IntersessionResponse):
+        # it's supposed to be the one related to the analysed session:
+        intersession_prj = self._intersession.project
+        logger.success("Intersession analysis result: prj=%s result=%s", intersession_prj, res)
+        # so we must/should have:
+        # assert intersession_prj.when == self._intersession.detection_config.session_when
+        #
+        #
         algo = self._algorithm
         if res.food_consumed > 0:
             algo.increase_pellets_consumed(res.food_consumed)
@@ -841,11 +908,17 @@ class SystemMachine(StateMachine):
     def may_exit_tunnel(self):
         """Exit tunnel"""
 
-    def enter_intersession(self):
+    def enter_intersession(self, *, reason: str="NA"):
         """Enter intersession"""
 
     def may_enter_intersession(self):
-        """Enter intersession"""
+        """May Enter intersession"""
+
+    def reenter_intersession(self, *, reason: str="NA"):
+        """ReEnter intersession (from previous intersession)"""
+
+    def may_reenter_intersession(self):
+        """May ReEnter intersession"""
 
     def exit_intersession(self):
         """Exit intersession"""
@@ -894,6 +967,13 @@ class SystemMachine(StateMachine):
         dict(
             trigger=enter_intersession,
             source=(SystemState.cage, SystemState.tunnel),
+            dest=SystemState.intersession,
+            after=after_enter_intersession,
+        ),
+
+        dict(
+            trigger=reenter_intersession,
+            source=SystemState.intersession,
             dest=SystemState.intersession,
             after=after_enter_intersession,
         ),

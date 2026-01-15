@@ -37,6 +37,7 @@ class CaptureAnalysisResult(str, enum.Enum):
     CAPTURE_ONLY = "capture_only"
     ANALYSIS_SUCCEEDED = "analysis_succeeded"
     ANALYSIS_FAILED = "analysis_failed"
+    ANALYSIS_DELAYED = "analysis_delayed"
 
 
 class TrainingMode(str, enum.Enum):  # todo: eventually find better place

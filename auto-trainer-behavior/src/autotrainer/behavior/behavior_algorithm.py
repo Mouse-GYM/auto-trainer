@@ -4,18 +4,12 @@ import dataclasses
 import enum
 import functools
 import inspect
-import logging
 import math
-import operator
 import os
 import queue
-import statistics
 import threading
-import time
-from collections import deque
 from datetime import datetime
 from functools import partial
-from functools import reduce
 from pathlib import Path
 from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union, Dict
 
@@ -28,7 +22,8 @@ from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
     AnimalSubject, get_perf_now, calculate_std_dev_manual
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
-    BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration
+    BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
+    BatchSessionRecordingConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
@@ -279,6 +274,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._thread_lock = threading.RLock()
         self._project_info = None
 
+        self._active_config = BehaviorConfiguration()
+
         self._pellet_delivery_enabled = True
         self._pellet_cover_enabled = True
 
@@ -339,8 +336,6 @@ class BehaviorAlgorithm(ObservableObject):
         self.triangle_missing_time: float = 1.0  # kept in sync with pellet_missing_time via its property setter
         self.pellet_hand_uncover_distance = PelletDeliveryConfiguration.pellet_hand_uncover_distance
 
-        self.auto_close_gate_on_intersession_config = AutoCloseGateOnIntersessionConfiguration()
-
         self._pellet_count_day = 0  # consumed
         self._pellet_count_session = 0  # consumed
         self._pellet_count_total = 0  # consumed
@@ -384,6 +379,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._start_day()
         #
         self._shift_xyz_handler = ShiftXYZHandler()
+        # once all is initialized, sync active config with all the manual default params set above on all attributes
+        self.update_configuration(self._active_config)
 
     @classmethod
     def _check_start_thread(cls: "BehaviorAlgorithm"):
@@ -564,6 +561,10 @@ class BehaviorAlgorithm(ObservableObject):
         return get_perf_now() - self._session_started_perf_c
 
     @property
+    def auto_close_gate_on_intersession_config(self) -> AutoCloseGateOnIntersessionConfiguration:
+        return self._active_config.auto_close_gate_on_intersession
+
+    @property
     def pellet_delivery_enabled(self):
         return self._pellet_delivery_enabled
 
@@ -730,11 +731,13 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def presence_missing(self) -> bool:
+        # NB: presence_missing is actually unused
         return self._presence_missing
 
     @presence_missing.setter
     def presence_missing(self, value):
         prev, self._presence_missing = self._presence_missing, value
+        # NB: presence_missing is actually unused
         self._on_property_changed(BehaviorAlgoProps.PRESENCE_MISSING, value, prev)
 
     @property
@@ -932,11 +935,12 @@ class BehaviorAlgorithm(ObservableObject):
     #
 
     @property
-    def auto_end_session_config(self) -> Optional[AutoEndSessionConfiguration]:
-        cfg = self._loaded_config
-        if cfg is None:
-            return None
-        return cfg.auto_end_session
+    def auto_end_session_config(self) -> AutoEndSessionConfiguration:
+        return self._active_config.auto_end_session
+
+    @property
+    def batch_session_recording_config(self) -> BatchSessionRecordingConfiguration:
+        return self._active_config.batch_session_recording
 
     @property
     def auto_correct_motors_drift(self) -> bool:
@@ -959,8 +963,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     def _start_capture_session(self, *, reason: str):
         if self._is_in_session:
-            logger.warning("%s: start_session() called but already in session",
-                           reason)
+            logger.warning("%s: start_session() called but already in session", reason)
             return False
         if self._algo_paused:
             logger.error("%s: refusing start session when algo paused", reason)
@@ -1161,11 +1164,11 @@ class BehaviorAlgorithm(ObservableObject):
 
     def load_configuration(self, config: BehaviorConfiguration):
         self._loaded_config = copy.deepcopy(config)
+        self._active_config = copy.deepcopy(config)
         self._load_pellet_cfg(config.pellet_delivery)
         self._load_head_clamp_cfg(config.head_clamp)
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
-        # self.auto_close_gate_on_intersession_config = config.  # not saved yet to config
         self.reload_diamond_triangle_config()
 
     def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
@@ -1220,10 +1223,12 @@ class BehaviorAlgorithm(ObservableObject):
         cfg.auto_clamp_no_activity_release_delay = self._auto_clamp_no_activity_release_delay
         cfg.before_reengage_delay = self._auto_clamp_before_reengage_delay
 
-    def update_configuration(self, configuration: BehaviorConfiguration):
-        self._update_pellet_cfg(configuration.pellet_delivery)
-        self._update_head_clamp_cfg(configuration.head_clamp)
-        configuration.auto_end_session = self._loaded_config.auto_end_session
+    def update_configuration(self, config: BehaviorConfiguration):
+        self._update_pellet_cfg(config.pellet_delivery)
+        self._update_head_clamp_cfg(config.head_clamp)
+        config.auto_end_session = self._active_config.auto_end_session
+        config.batch_session_recording = self._active_config.batch_session_recording
+        config.auto_close_gate_on_intersession = self._active_config.auto_close_gate_on_intersession
 
     def get_diamond_triangle_drifts(self, reset: bool = False) -> Optional[Offset3DTuple]:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""

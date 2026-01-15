@@ -54,7 +54,7 @@ def intersession_process(
         df_3d=centered_df_3d,
         debug=_segment_reach_debug,
     )
-    logger.success("process intersession pose data complete %s", results_dict)
+    logger.verbose("process intersession pose data complete %s", results_dict)
     return IntersessionResponse(
         pellet_x=results_dict['shift_x'],
         pellet_y=results_dict['shift_y'],

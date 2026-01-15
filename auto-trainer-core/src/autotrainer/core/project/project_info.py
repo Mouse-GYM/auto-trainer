@@ -149,6 +149,9 @@ class ProjectInfo(_ProjectInfo):
                                    # see:
                                    )
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(session={self.session!r} when={self.when!r})"
+
     def __eq__(self, other):
         if isinstance(other, ProjectInfo):
             return (

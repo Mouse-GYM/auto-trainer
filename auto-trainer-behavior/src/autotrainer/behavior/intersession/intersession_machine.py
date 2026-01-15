@@ -18,7 +18,7 @@ logger = get_verbose_logger(__name__)
 
 
 class IntersessionMachineEvents(StateMachineEvents):
-    on_analysis_started: Callable[[], None]
+    on_analysis_started: Callable[[], None]  # unused
     on_analysis_ended: Callable[[CaptureAnalysisResult], None]
 
 
@@ -49,7 +49,8 @@ class IntersessionMachine(StateMachine):
         return self._project_info
 
     @project.setter
-    def project(self, project):
+    def project(self, project: ProjectInfo):
+        logger.verbose("project -> %s", project)
         self._project_info = project
 
     def reset_to_idle(self):
@@ -89,11 +90,11 @@ class IntersessionMachine(StateMachine):
                                                       context=segment_config.nonce)
 
     def after_end_analysis(self, success):
+        self._segmentation_configuration = None
+        self._detection_configuration = None
         result = CaptureAnalysisResult.ANALYSIS_SUCCEEDED if success else CaptureAnalysisResult.ANALYSIS_FAILED
         self._algorithm.end_session(result)
         self.events.on_analysis_ended(result)
-        self._segmentation_configuration = None
-        self._detection_configuration = None
 
     def can_perform_segmentation(self):
         p = self._project_info is not None
@@ -123,6 +124,10 @@ class IntersessionMachine(StateMachine):
         return can_do_detection
 
     def _segmentation_complete(self, nonce: str, success: bool, *, segment_config: SegmentationConfiguration):
+        import traceback
+        # caller_stack = "".join(traceback.format_stack(limit=4))
+        logger.verbose("segmentation_complete: nonce=%s success=%s config=%s",
+                     nonce, success, segment_config)
         if segment_config.nonce != nonce:
             # NB: should not happen anymore
             logger.error("mismatched segmentation nonce: passed=%s cur_seg_config=%s success=%s",

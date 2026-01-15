@@ -173,28 +173,32 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 0
         grid_layout = QGridLayout()
+        grid_layout.setContentsMargins(0, 6, 0, 0)
+
         def add_empty(min_width=0, min_height=0):
             nonlocal cur_row, cur_col
-            empty = QWidget()
-            empty.setContentsMargins(min_width, min_height, 0, 0)
+            empty = QLabel("")
+            # empty.setContentsMargins(min_width, min_height, 0, 0)
             empty.setMinimumWidth(min_width)
+            empty.setMaximumWidth(min_width)
             empty.setMinimumHeight(min_height)
-            grid_layout.addWidget(empty, cur_row, cur_col)
+            empty.setMaximumHeight(min_height)
+            grid_layout.addWidget(empty, cur_row, cur_col, Qt.AlignmentFlag.AlignCenter)
             if min_width != 0:
                 cur_col += 1
             if min_height != 0:
                 cur_row += 1
-        add_height_separator = lambda: add_empty(min_height=6)
-        add_width_separator = lambda: add_empty(min_width=6)
+        add_height_separator = lambda: add_empty(min_height=2)
+        add_width_separator = lambda: add_empty(min_width=2)
 
         grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        grid_layout.setSpacing(4)
+        grid_layout.setSpacing(2)
         grid_layout.setHorizontalSpacing(10)
         main_layout.addLayout(grid_layout)
 
-        add_empty(min_height=4)
+        # add_height_separator()
 
-        grid_layout.addWidget(QLabel("Deliver Pellets:"), cur_row, cur_col)
+        grid_layout.addWidget(QLabel("<b>Deliver Pellets:</b>"), cur_row, cur_col)
         toggle = self._deliver_pellet_toggle = QSwitch()
         add_enabled_state(lambda: self._deliver_pellet_toggle.setEnabled(self._inference_enabled_toggle.isChecked()))
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -225,7 +229,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
-        grid_layout.addWidget(QLabel("Cover Pellets:"), cur_row, cur_col)
+        grid_layout.addWidget(QLabel("<b>Cover Pellets:</b>"), cur_row, cur_col)
         toggle = self._pellet_cover_toggle = QSwitch()
         toggle.setToolTip(
             "Covers the pellet when the mouse is not in the tunnel.  Release then generates a tone when the tunnel is "
@@ -285,7 +289,8 @@ class PreferencesContent(QWidget):
         cur_row += 1
         #
         add_height_separator()
-        grid_layout.addWidget(QLabel("Intersession Pellet Shift:"), cur_row, cur_col)
+        #
+        grid_layout.addWidget(QLabel("<b>Intersession Pellet Shift:</b>"), cur_row, cur_col)
         toggle = self._allow_intersession_shift_toggle = QSwitch()
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         toggle.setToolTip("Enables adjustment of the pellet delivery position based on post-session reach analysis.")
@@ -300,7 +305,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         #
-        grid_layout.addWidget(QLabel("Auto-correct motors drift:"), cur_row, cur_col)
+        grid_layout.addWidget(QLabel("<b>Auto-correct motors drift:</b>"), cur_row, cur_col)
         toggle = self._auto_correct_motors_drift_toggle = QSwitch()
         add_enabled_state(lambda: self._auto_correct_motors_drift_toggle.setEnabled(self._inference_enabled_toggle.isChecked()))
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -312,10 +317,10 @@ class PreferencesContent(QWidget):
         toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
-
         #
         add_height_separator()
-        grid_layout.addWidget(QLabel("<b>Triangle-pellet distance for pellet too far detection:</b>"), cur_row, cur_col)
+        #
+        grid_layout.addWidget(QLabel("<b>Triangle-pellet distance too far detection:</b>"), cur_row, cur_col)
         toggle = self._use_triangle_pellet_distance_toggle = QSwitch()
         add_enabled_state(lambda: self._use_triangle_pellet_distance_toggle.setEnabled(self._inference_enabled_toggle.isChecked()))
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -353,9 +358,9 @@ class PreferencesContent(QWidget):
         spinbox.valueChanged.connect(triangle_pellet_diff_too_far_threshold_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
-
         #
         add_height_separator()
+        #
         grid_layout.addWidget(QLabel("<b>Auto-close gate during intersession:</b>"), cur_row, cur_col)
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
         toggle = self._auto_close_gate_during_intersession_toggle = QSwitch()
@@ -402,7 +407,7 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 2
 
-        add_empty(min_width=4, min_height=4)
+        # add_empty(min_width=4, min_height=4)
 
         # headClamp: autoClampReleaseToneFreq
         label = QLabel("<b>Auto-Clamp:</b>")
@@ -491,7 +496,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
-        add_empty(min_height=4)
+        add_height_separator()
         #
         grid_layout.addWidget(QLabel("<b>Tunnel Sweep:</b>"), cur_row, cur_col)
         toggle = self._tunnel_auto_sweep_toggle = QSwitch()
@@ -542,6 +547,29 @@ class PreferencesContent(QWidget):
         spinbox.valueChanged.connect(value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
+        #
+        add_height_separator()
+        #
+        grid_layout.addWidget(QLabel("<b>Batch sessions while in tunnel:</b>"), cur_row, cur_col)
+        toggle = QSwitch()
+        toggle.setChecked(algo.batch_session_recording_config.enabled)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        def batch_session_toggled(x: int):
+            enabled = x != 0
+            algo.batch_session_recording_config.enabled = enabled
+            refresh_enabled_states()
+        toggle.stateChanged.connect(batch_session_toggled)
+        cur_row += 1
+        grid_layout.addWidget(QLabel("Maximum sessions per batch"), cur_row, cur_col)
+        spinbox = QSpinBox()
+        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        spinbox.setToolTip("0 for unlimited")
+        spinbox.setRange(0, 1_000)
+        spinbox.setValue(algo.batch_session_recording_config.maximum_batch_size)
+        def max_sess_per_batch_changed(value):
+            algo.batch_session_recording_config.maximum_batch_size = value
+        spinbox.valueChanged.connect(max_sess_per_batch_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         #
         # to enable/disable the inference dependant sub-widgets:
         refresh_enabled_states()

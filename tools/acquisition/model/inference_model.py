@@ -1,3 +1,4 @@
+import inspect
 import logging.config
 import multiprocessing
 import os
@@ -5,10 +6,11 @@ import queue
 import signal
 import threading
 import time
+import traceback
 import typing
 from itertools import chain
 from pathlib import Path
-from typing import Optional, List, Dict, TextIO, Tuple
+from typing import Optional, List, Dict, TextIO, Tuple, Any
 from threading import Thread
 
 import cv2
@@ -26,11 +28,10 @@ from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     InferenceMode, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
-from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
+from autotrainer.inference.pose_result_process import InferenceMonitorDataProc, InferenceMonitorDataMsg
 from autotrainer.inference.analysis import intersession_process
 
-from tools.acquisition.model.project_dependent_protocol import ProjectDependentProtol
-
+from autotrainer.core.project import ProjectDependentProtol
 
 logger = get_verbose_logger(__name__)
 
@@ -81,9 +82,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to inference process
         self._notif_msg_queue = mp_ctx.Queue(maxsize=64)
         self._data_monitor_cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to monitor data result process
+        self._data_monitor_cmd_ack_event = mp_ctx.Event()
 
         self._offline_queue: Optional[FixedArrayMultiQueue] = None
-        self._offline_thread: Optional[Thread] = None
+        self._offline_segmentation_thread: Optional[Thread] = None
+        self._offline_analysis_thread: Optional[Thread] = None
 
         self._is_enabled = False
         self._model_location = ""
@@ -126,8 +129,18 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     def project(self, value: ProjectInfo):
         self._project = value
         logger.debug("Putting new project info to data monitor queue: %s", value)
-        self._data_monitor_cmd_queue.put(
-            (InferenceMonitorDataProc.Msg.SET_PROJECT_INFO, (value,), None))
+        self._data_monitor_cmd_ack_event.clear()
+        self._data_monitor_cmd_queue.put((InferenceMonitorDataMsg.SET_PROJECT_INFO, (value,), None))
+        cur_proc = self._data_monitor_proc
+        if cur_proc is None:
+            # can happen on startup before inference running/started
+            logger.verbose("data_monitor_proc not yet started, won't wait ack event")
+            # when it will start it will get the put project-info
+        else:
+            assert cur_proc.is_alive()  # supposedly, if not then it's big issue
+            logger.debug("waiting ack, proc=%s", cur_proc)
+            self._data_monitor_cmd_ack_event.wait()
+            logger.debug("ack obtained")
 
     @property
     def is_enabled(self) -> bool:
@@ -170,36 +183,32 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     def pose_algorithm(self) -> PoseAlgorithm:
         return self._algorithm
 
-    def _check_previous_offline_thread(self, cause: str):
-        cur_off = self._offline_thread
-        if cur_off is not None:
-            # protection, if we need more than 1 executing thread at the same time then we need a list to retain the
-            # threads instead of only one of them.
-            perf_now = time.perf_counter()
-            was_alive = cur_off.is_alive()
-            if was_alive:
-                logger.warning("%s request but previous offline thread still alive: %s, join might block ~long",
-                               cause, cur_off)
-            cur_off.join()
-            self._offline_thread = None
-            if was_alive:
-                logger.verbose("Waited %.1fs to join previous offline thread", time.perf_counter() - perf_now)
+    @staticmethod
+    def _check_previous_offline_thread(cause: str, cur_off: Optional[threading.Thread]):
+        # protection, if we need more than 1 executing thread at the same time then we need a list to retain the
+        # threads instead of only one of them.
+        if cur_off is None:
+            return
+        perf_now = time.perf_counter()
+        was_alive = cur_off.is_alive()
+        if was_alive:
+            logger.warning("%s request but previous offline thread still alive: %s, join might block ~long",
+                           cause, cur_off)
+        cur_off.join()
+        if was_alive:
+            logger.verbose("Waited %.1fs to join previous offline thread", time.perf_counter() - perf_now)
 
     def perform_segmentation(self, configuration: SegmentationConfiguration) -> Optional[SegmentationConfiguration]:
         with self._thread_lock:
             return self._perform_segmentation(configuration)
 
-    def _perform_segmentation(self, configuration: SegmentationConfiguration):
-        offline_thread = self._offline_thread
+    def _perform_segmentation(self, configuration: SegmentationConfiguration) -> Optional[SegmentationConfiguration]:
+        self._check_previous_offline_thread("perform_segmentation", self._offline_segmentation_thread)
         if self._intersession_block is not None:
             logger.warning("_intersession_block not None, segmentation already started. block=%s segment_cfg=%s",
                            self._intersession_block, configuration)
-            if offline_thread is not None and not offline_thread.is_alive():
-                logger.info("But offline thread not running, continuing")
-            else:
-                return None
-        self._check_previous_offline_thread("perform_segmentation")
-        self._data_monitor_proc.stop_recorded.clear()
+            logger.info("But offline thread not running, continuing")
+
         logger.info("performing segmentation on %s", configuration)
         intersession_block = self._intersession_block = IntersessionBlock(configuration=configuration)
 
@@ -207,14 +216,15 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         # ProcessOffline is not anymore used.
         # the trigger for pose process to switch to offline queue processing is now delivered by
         # camera capture itself, which send an EOF_RECORDING when a video/session record finishes.
+        # See also the **ForceProcessOffline** kind, which is used for batch processing
 
-        self._offline_thread = Thread(
+        self._offline_segmentation_thread = Thread(
             target=self._feed_intersession_analysis,
             args=(intersession_block,),
             name="feed_intersession_analysis",
             daemon=True,
         )
-        self._offline_thread.start()
+        self._offline_segmentation_thread.start()
         return configuration
 
     def perform_detection(self, configuration: DetectionConfiguration) -> Optional[DetectionConfiguration]:
@@ -226,27 +236,25 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             logger.warning("_intersession_detection not None, skipping perform_detection")
             return None
         logger.info("performing detection analysis on %s", configuration)
-        self._check_previous_offline_thread("perform_detection")
+        self._check_previous_offline_thread("perform_detection", self._offline_analysis_thread)
         intersession_detection = self._intersession_detection = IntersessionDetection(configuration)
         project = self._project.to_local_value()
-        self._offline_thread = Thread(target=self._intersession_process, name="intersession_process",
-                                      args=(project, intersession_detection,))
-        self._offline_thread.start()
+        thread = self._offline_analysis_thread = Thread(
+            target=self._intersession_process, name="intersession_process",
+            args=(project, intersession_detection,))
+        thread.start()
         return configuration
 
-    def set_inference_to_online(self):
-        offline_queue = self._offline_queue
-        if offline_queue is not None:
-            ib = self._intersession_block
-            if ib is not None:
-                logger.warning("set_inference_to_online but intersession block: %s", ib)
-            else:
-                logger.notice("Setting inference back to online with SWITCH_TO_ONLINE")
-                empty = numpy.zeros(offline_queue.shape, dtype=numpy.uint8)
-                # should pad in case the cams index are unsync...
-                # self._offline_queue.pad_to_batch_size(empty)
-                # NO: the offline queue should be always sync, as only 1 writer at the same time.
-                self._offline_queue.put_frame_index_category(empty, FrameIndexCategory.SWITCH_TO_ONLINE)
+    def put_to_offline_queue(self, frame_index: FrameIndexCategory):
+        offline_q = self._offline_queue
+        if offline_q is None:
+            return
+        # logger.verbose("HERE: %s", "".join(traceback.format_stack(limit=3)))
+        # should pad in case the cams index are unsync...
+        # self._offline_queue.pad_to_batch_size(empty)
+        # NO: the offline queue should be always sync, as only 1 writer at the same time.
+        empty_frame = numpy.zeros(offline_q.shape, dtype=numpy.uint8)
+        offline_q.put_frame_index_category(empty_frame, frame_index)
 
     def start(self, live_queue: FixedArrayMultiQueue) -> bool:
 
@@ -267,6 +275,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 pose_data_queue=self._output_data_queue,
                 msg_queue=self._notif_msg_queue,
                 cmd_queue=self._data_monitor_cmd_queue,
+                cmd_ack_event=self._data_monitor_cmd_ack_event,
                 frames_per_cam=live_queue.frames_per_camera,
                 monitored_parts_offsets=list(self._pair_offsets_2_handler),
             )
@@ -345,16 +354,23 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             logger.verbose("process pool joined and terminated %s", pool)
             self._process_pool = None
 
-        thread = self._offline_thread
-        if thread is not None:
-            thread.join(3)
-            if thread.is_alive():
-                logger.warning("offline thread still alive")
+        for thread in (self._offline_segmentation_thread, self._offline_analysis_thread):
+            if thread is not None:
+                logger.debug("joining thread %s", thread)
+                thread.join(3)
+                if thread.is_alive():
+                    logger.warning("offline thread still alive")
 
         # always:
         self._intersession_block = None
-        self._offline_thread = None
+        self._offline_segmentation_thread = None
+        self._offline_analysis_thread = None
         self._intersession_detection = None
+
+    def put_to_data_hander(self, msg):
+        self._data_monitor_cmd_ack_event.clear()
+        self._data_monitor_cmd_queue.put((msg, None, None))
+        self._data_monitor_cmd_ack_event.wait()
 
     def terminate(self):
         logger.debug("terminating..")
@@ -415,7 +431,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         prev, self._status = self._status, status
         self._on_property_changed(self.STATUS, status, prev)
 
-    def _send_message(self, kind: InferenceCommandMessageKind, context: typing.Any = None):
+    def send_message(self, kind: InferenceCommandMessageKind, context: Any = None):
+        self._send_message(kind, context)
+
+    def _send_message(self, kind: InferenceCommandMessageKind, context: Any = None):
         cmd_queue = self._cmd_queue
         # logger.debug("sending command msg %s qsize=%s", kind, cmd_queue.qsize())
         cmd_queue.put((kind, context))
@@ -442,7 +461,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             except Exception as err:
                 logger.exception("pose_response_ready event callback failed: %s", err)
 
-        elif msg is InferenceMonitorDataProc.Msg.INTERSESSION_RESULT_READY:
+        elif msg is InferenceMonitorDataProc.Msg.INTERSESSION_SEGMENTATION_FINISHED:
             ib = self._intersession_block
             if ib is None:
                 logger.critical("Got %s but intersession_block is None ; args=%s", msg, args)
@@ -461,7 +480,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 break
             msg, context = raw
             try:
-                if isinstance(msg, InferenceMonitorDataProc.Msg):
+                if isinstance(msg, InferenceMonitorDataMsg):
                     self._handle_monitor_data_proc_msg(msg, context)
                     continue
                 logger.debug("Processing msg %s ...", msg)
@@ -520,39 +539,20 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         except Exception as err:
             logger.exception("_feed_intersession_analysis: error: %s", err)
             got_error = err
-            # do not use anymore InferenceCommandMessageKind.ProcessLive
-            # self._send_message(InferenceCommandMessageKind.ProcessLive)
-            # given we send EOF_OFFLINE_PROCESSING in the following finally clause,
-            # the callback is will be done by the monitor data thread instead.
         else:
             got_error = None
 
         #
         if got_error is not None:
             EventManager.default().post_event_content(ApiEventKind.intersessionSegmentationError, context=str(got_error))
-            logger.error(f"feed_intersession_analysis stopped given error=%s status=%s", got_error, self._status)
+            logger.error("feed_intersession_analysis stopped given error=%s status=%s", got_error, self._status)
             intersession_block.configuration.complete(intersession_block.configuration.nonce, False)
             self._intersession_block = None
+            self.segmentation_finished(False)
             return
-        #
-        # in any case sleep a bit to allow pose process to finishes consume:
-        offline_q = self._offline_queue
-        empty_frame = numpy.zeros((self._frame_height, self._frame_width), dtype=numpy.uint8)
-        # NO:
-        # eventual pad current batch of each cam:
-        # offline_q.pad_to_batch_size(empty_frame)
-        # the main feed loop already ensures same nbr of frames is sent for each cam.
-        # also post a EOF_OFFLINE_PROCESSING or SWITCH_TO_ONLINE to notify pose process
-        # when it has reached end of offline processing:
-        offline_q.put_frame_index_category(
-            empty_frame,
-            FrameIndexCategory.EOF_OFFLINE_PROCESSING if got_error is None
-            else FrameIndexCategory.SWITCH_TO_ONLINE,
-        )
-        # in turn the data monitor thread will detect that as well (via a None sentinel in the data queue),
-        # and close its open file handles.
 
         logger.info("feed intersession finished. intersession_block=%s", intersession_block)
+        self.segmentation_finished(True)
         # DO NOT:
         # self._intersession_block = None
         # it is/must be done by monitor data thread
@@ -788,5 +788,4 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             self.detection_result_ready(result)
 
         intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
-
         self._intersession_detection = None
