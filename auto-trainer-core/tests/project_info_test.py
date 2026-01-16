@@ -113,3 +113,18 @@ def test_can_use_with_with_statement(root):
         pass
     after = prj.to_local_value()
     assert after == before
+
+
+@pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")
+def test_fast_path(root):
+    prj = ProjectInfo(root=root)
+    prj.calculate_next_session_index()
+    assert prj.session == 1
+    prj.calculate_next_session_index()
+    assert prj.session == 2
+    local_prj = prj.to_local_value()
+    local_prj.calculate_next_session_index()
+    assert local_prj.session == 3
+    assert prj.session == 2  # still
+    prj.calculate_next_session_index()
+    assert prj.session == 4, "slow path taken"

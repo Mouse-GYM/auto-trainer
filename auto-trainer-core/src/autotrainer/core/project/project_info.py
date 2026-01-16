@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
 from pathlib import Path
-from typing import Tuple, NamedTuple, Union, Optional
+from typing import Tuple, NamedTuple, Union, Optional, ClassVar
 
 from typing_extensions import Self
 
@@ -95,7 +95,7 @@ class _ProjectInfo:
     root: str = ""
     device_id: str = ""
     _when: Union[mp.Value, RawValueHolder] = None
-    when = ValueHolderDescriptor(
+    when: ClassVar[datetime] = ValueHolderDescriptor(  # noqa
         convert_from=datetime.fromtimestamp,
         convert_to=lambda v: v.timestamp(),
     )
@@ -103,7 +103,7 @@ class _ProjectInfo:
     camera_1: str = ""
     camera_2: str = ""
     _session: Union[mp.Value, RawValueHolder] = None
-    session = ValueHolderDescriptor()
+    session: ClassVar[int] = ValueHolderDescriptor()  # noqa
 
 
 class ProjectInfo(_ProjectInfo):
@@ -383,12 +383,25 @@ class ProjectInfo(_ProjectInfo):
         location, _ = self.get_day_path(when=when)
         logger.debug(f"calculating next session index in %s", location)
         path = Path(location)
-        if not path.exists() or not path.is_dir():
+        existed = path.exists()
+        was_dir = path.is_dir()
+        path.mkdir(parents=True, exist_ok=True)  # this ensure 2 consecutive won't get same
+        if not existed or not was_dir:
             with self:
                 self.session = 1
                 self.when = when
             return
+        tentative_p, _, _ = self.get_session_path(session=self.session + 1, skip_ensure=True)
+        tentative_p = Path(tentative_p)
+        if not tentative_p.exists():
+            logger.info("found fast next session: %s", tentative_p)
+            with self:
+                self.session += 1
+                self.when = when
+                tentative_p.mkdir(exist_ok=True, parents=True)
+            return
 
+        # slower code way
         session_dirs = [x.name[-3:] for x in path.iterdir() if x.is_dir() and "session" in x.name]
 
         def int_map_fcn(value: str):
@@ -411,6 +424,8 @@ class ProjectInfo(_ProjectInfo):
             with self:
                 self.session = greater_val + 1
                 self.when = when
+
+
 
     def to_local_value(self) -> Self:
         """Detach, if it was, from the possible shared memory values used for `when` & `session`.
