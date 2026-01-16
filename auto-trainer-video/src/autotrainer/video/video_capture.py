@@ -434,6 +434,14 @@ class VideoCapture(Process):
         logger.notice("%s: starting capture loop ..", self)
         self._set_status(CaptureProcessStatus.RUNNING)
         while self._is_running:
+
+            if fault_count > 5:
+                logger.critical("Too many capture loop processing errors ; giving up")
+                self._set_error(RuntimeError("too many capture failure"))
+                self._end_capture(None)
+                self._user_terminate(None)
+                break
+
             t_perf_now = time.perf_counter()
             try:
                 if not self._is_capturing:
@@ -448,6 +456,11 @@ class VideoCapture(Process):
                 #     sync_barrier()
 
                 frame, when = capture()
+                if frame is None:
+                    logger.error("Failed to capture a frame (frame = None) ; frame_idx=%s", cur_frame_idx)
+                    fault_count += 1
+                    continue
+
                 perf_now_ns = time.perf_counter_ns()
                 cur_frame_idx += 1
 
@@ -591,10 +604,7 @@ class VideoCapture(Process):
                 logger.exception("Error during capture loop: %s", err)
                 self._set_error(err)
                 fault_count += 1
-                if fault_count > 5:
-                    logger.critical("Too many capture loop processing errors ; giving up")
-                    self._end_capture(None)
-                    self._user_terminate(None)
+
         # end while self._is_running
 
     def _terminate_capture_loop(self):
