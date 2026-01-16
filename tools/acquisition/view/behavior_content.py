@@ -110,9 +110,9 @@ class BehaviorContent(ContentWidget):
         left_cur_row += 1
 
         left_layout.addWidget(QLabel("Head Magnet Baseline:"), left_cur_row, 0)
-        label = self._baseline_label = QLabel(f"{self._behavior_model.algorithm.baseline_intensity}%")
+        label = self._head_magnet_baseline_label = QLabel(f"{self._behavior_model.algorithm.baseline_intensity:.1f}%")
         label.setContentsMargins(0, 4, 0, 0)
-        left_layout.addWidget(self._baseline_label, left_cur_row, 1)
+        left_layout.addWidget(self._head_magnet_baseline_label, left_cur_row, 1)
         left_cur_row += 1
         button = self._make_baseline_button = QPushButton("Make Current Position Baseline")
         button.setContentsMargins(0, 0, 0, 0)
@@ -249,7 +249,7 @@ class BehaviorContent(ContentWidget):
         if name == props.INTERSESSION_ENABLED:
             self._intersession_toggle.setChecked(value)
         elif name == props.BASELINE_INTENSITY:
-            self._baseline_label.setText(f"{value}%")
+            self._head_magnet_baseline_label.setText(f"{value:.1f}%")
         elif name == props.HEAD_FIXATION_ENABLED:
             self._head_fixation_toggle.setChecked(value)
         elif name == props.DAY_PELLET_COUNT:

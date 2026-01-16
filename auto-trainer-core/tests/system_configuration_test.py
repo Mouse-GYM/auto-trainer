@@ -118,6 +118,10 @@ def _fill_v0():
     for k, v in behavior_default_config_dict.items():
         if k not in v0_behavior:
             v0_behavior[k] = copy.deepcopy(v)
+    v0_headclamp = v0_behavior['head_clamp']
+    for k, v in behavior_default_config_dict['head_clamp'].items():
+        if k not in v0_headclamp:
+            v0_headclamp[k] = copy.deepcopy(v)
 
 _fill_v0()
 
