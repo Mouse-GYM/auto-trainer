@@ -85,6 +85,7 @@ class SystemMachine(StateMachine):
         # delay to wait, when/once a pellet load is executed (on start),
         # and that a session is active, to trigger an eventual end_session()
 
+        self._auto_clamp_in_progress = False
         self._timer_consider_close_gate = no_op_timer
         self._timer_auto_clamp_evaluate = no_op_timer
         self._timer_auto_clamp_disengage = no_op_timer
@@ -201,6 +202,7 @@ class SystemMachine(StateMachine):
 
     def after_exit_tunnel(self, *, reason: str = "NA"):
         logger.verbose("after_exit_tunnel: %s", reason)
+        self._timer_auto_clamp_disengage.cancel()
         self._update_magnet_position(self.algorithm.baseline_intensity)
         EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
         if self._algorithm.is_in_session:
@@ -291,7 +293,7 @@ class SystemMachine(StateMachine):
         self._session_started_perf_c = get_perf_now()
         self._inference.project = self._project_info  # ensure inference has the correct project info
         self._intersession.project = self._project_info  # same for intersession
-        algo = self._algorithm
+        self._auto_clamp_in_progress = False
         # self._update_magnet_position(algo.baseline_intensity)  todo: once tests fixed
         self._consider_auto_end_session()  # this will post-pone the auto-end of the needed delay
 
@@ -423,7 +425,8 @@ class SystemMachine(StateMachine):
 
         if name == HeadbarPressureMonitor.IS_ENGAGED_PROPERTY:
             EventManager.default().post_event_content(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
-            self._evaluate_auto_clamp()
+            if value:
+                self._evaluate_auto_clamp()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _load_cell_monitor_property_changed(self, name: str, value, _):
@@ -459,6 +462,9 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func
     def _evaluate_auto_clamp(self):
+        if self._auto_clamp_in_progress:
+            logger.debug("auto_clamp already in progress")
+            return
         is_headbar_pressure_engaged = self._analysis.headbar_pressure_monitor.is_engaged
         self._timer_auto_clamp_evaluate.cancel()  # in case of
         self._timer_auto_clamp_evaluate = no_op_timer
@@ -485,6 +491,7 @@ class SystemMachine(StateMachine):
             return
         algo = self._algorithm
         logger.info("auto-clamp setting position to %s", algo.auto_clamp_intensity)
+        self._auto_clamp_in_progress = True
         self._update_magnet_position(algo.auto_clamp_intensity)
         self._disengage_auto_clamp_load_count = 0
         self._timer_auto_clamp_disengage.cancel()
@@ -623,6 +630,7 @@ class SystemMachine(StateMachine):
         logger.info("Disengaging auto-clamp to intensity %s", baseline_intensity)
         self._last_disengage_autoclamp_perf_c = get_perf_now()
         self._update_magnet_position(baseline_intensity)
+        self._auto_clamp_in_progress = False
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pre_disengage_auto_clamp(self):
@@ -652,7 +660,6 @@ class SystemMachine(StateMachine):
             # eventually todo: ensure it's not None always
             logger.warning("Uncomplete setup, tunnel_device None")
             return
-
         logger.debug(
             "changing magnet to baseline intensity in %.2f seconds", algo.auto_clamp_release_tone_delay)
         timer = self._timer_auto_clamp_disengage = _auto_clamp_release_timer(
