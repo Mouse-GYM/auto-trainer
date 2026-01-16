@@ -899,7 +899,7 @@ class MainWindow(QMainWindow):
         self._app_model.add_animal(self._animal_dropdown.currentText(), select=True)
 
     def _animal_changed(self, _):
-        if self._animal_dropdown.currentIndex() == -1:
+        if self._animal_dropdown.currentIndex() in (0, -1):
             self._app_model.selected_animal = None
         else:
             animal_id = self._animal_dropdown.currentData()
@@ -934,12 +934,16 @@ class MainWindow(QMainWindow):
             animal_dropdown = self._animal_dropdown
             animal_dropdown.blockSignals(True)
             if value is None:
-                animal_dropdown.setCurrentIndex(-1)
+                animal_dropdown.setCurrentIndex(0)
             else:
                 assert isinstance(value, AnimalSubject)
-                index = self._animal_dropdown.findText(value.name)
+                index = animal_dropdown.findText(value.name)
                 if index != -1:
-                    self._animal_dropdown.setCurrentIndex(index)
+                    animal_dropdown.setCurrentIndex(index)
+                else:
+                    logger.warning("Cannot select animal %s given not in current list")
+                    animal_dropdown.addItem(value.name, value.id)
+
             animal_dropdown.blockSignals(False)
             self._refresh_prev_next_phases()
 
@@ -977,6 +981,7 @@ class MainWindow(QMainWindow):
         combo = self._animal_dropdown
         combo.blockSignals(True)
         combo.clear()
+        combo.addItem("", None)
         for idx, animal in enumerate(animals):
             combo.addItem(animal.name, animal.id)
         combo.blockSignals(False)
@@ -987,7 +992,7 @@ class MainWindow(QMainWindow):
             if index != -1:
                 combo.setCurrentIndex(index)
         else:
-            combo.setCurrentIndex(-1)
+            combo.setCurrentIndex(0)
 
     @staticmethod
     def _update_log_level(value: int):

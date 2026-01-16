@@ -5,6 +5,7 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import (QLabel, QSpinBox, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QGridLayout,
                                QFormLayout, QStackedLayout, QSizePolicy, QComboBox, QDoubleSpinBox)
 
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.core import AnimalSubject, Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 
@@ -234,6 +235,7 @@ class HardwareControlContent(ContentWidget):
 
         self.command_changed.connect(lambda x: self._command_label.setText(x))
 
+        self._app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
         self._hardware_model.property_changed += self._model_property_changed
 
     def _set_pos_limits(self):
@@ -257,32 +259,47 @@ class HardwareControlContent(ContentWidget):
         self._tare_button.setEnabled(is_active)
 
     def set_selected_animal(self, animal: Optional[AnimalSubject]):
-        if animal is not None:
-            self._set_pos_limits()
-            xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_z)
-            algo = self._app_model.behavior.algorithm
-            cfg = algo.diamond_triangle_config
-            if animal.is_pellet_dcs or cfg is not None:
-                logger.debug("Displaying animal data with Diamond coordinate system")
-                self._is_motor_cs_label.hide()
+        self._set_pos_limits()
+        algo = self._app_model.behavior.algorithm
+        cfg = algo.diamond_triangle_config
+        if cfg is None:
+            logger.notice("Displaying animal data with Motor coordinate system")
+            self._is_motor_cs_label.show()
+            if animal is None:
+                xyz = Offset3DTuple(0, 0, 0)
+            else:
+                if animal.is_pellet_dcs:
+                    animal.pellet_x = animal.pellet_y = animal.pellet_z = 0
+                    animal.is_pellet_dcs = False
+                xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_z)
+        else:
+            logger.debug("Displaying animal data with Diamond coordinate system")
+            self._is_motor_cs_label.hide()
+            if animal is None:
+                xyz = Offset3DTuple(0, 0, 0)
+                xyz = cfg.motor_to_diamond(xyz)
+            else:
+                xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_z)
                 if not animal.is_pellet_dcs:
                     xyz = cfg.motor_to_diamond(xyz)
-            else:
-                assert not animal.is_pellet_dcs and cfg is None
-                logger.notice("Displaying animal data with Motor coordinate system")
-                self._is_motor_cs_label.show()
 
-            for widget, value in (
-                (self._x_pos, xyz.x),
-                (self._y_pos, xyz.y),
-                (self._z_pos, xyz.z),
-                (self._head_magnet_position_spinbox, animal.baseline_magnet_intensity)
-            ):
-                assert isinstance(widget, (QDoubleSpinBox, QSpinBox))
-                widget.blockSignals(True)
-                widget.setValue(value)
-                widget.blockSignals(False)
-            self.update()
+        if animal is None:
+            baseline_magnet_intensity = 0
+        else:
+            baseline_magnet_intensity = animal.baseline_magnet_intensity
+
+        for widget, value in (
+            (self._x_pos, xyz.x),
+            (self._y_pos, xyz.y),
+            (self._z_pos, xyz.z),
+            (self._head_magnet_position_spinbox, baseline_magnet_intensity)
+        ):
+            assert isinstance(widget, (QDoubleSpinBox, QSpinBox))
+            widget.blockSignals(True)
+            widget.setValue(value)
+            widget.blockSignals(False)
+
+        self.update()
 
     def _update_head_magnet_position(self):
         self._hardware_model.update_head_magnet_intensity(self._head_magnet_position_spinbox.value())
@@ -321,3 +338,9 @@ class HardwareControlContent(ContentWidget):
             else:
                 self.command_changed.emit("None")
                 self.setEnabled(True)
+
+    def _behavior_algo_property_changed(self, name, value, _):
+        if name == BehaviorAlgoProps.DIAMOND_TRIANGLE_CONFIG:
+            # force execute set-selected-animal
+            self.set_selected_animal(self._app_model.selected_animal)
+            # this will set as desired the UI elements.
