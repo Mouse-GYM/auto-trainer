@@ -6,8 +6,6 @@ os.environ["OPENCV_LOG_LEVEL"] = "SILENT"
 # noinspection PyPep8
 from autotrainer.video import VideoManager
 
-VideoManager.open()
-
 print("Random Image Generator")
 print("\tCamera 0: random://0")
 
@@ -33,4 +31,3 @@ else:
 print("File Playback")
 print("\tCamera X: playback:///<path_to_file>")
 
-VideoManager.close()
