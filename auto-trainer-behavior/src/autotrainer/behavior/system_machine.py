@@ -21,6 +21,7 @@ from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 
 from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind
 from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.pose_result_process import InferenceMonitorDataMsg, InferenceMonitorDataProc
 
 from . import CaptureAnalysisResult, RecordingEndingReason
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
@@ -32,7 +33,7 @@ from .pellet_device_protocol import PelletDeviceProtocol
 from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
-from ..inference.pose_result_process import InferenceMonitorDataProc, InferenceMonitorDataMsg
+
 
 logger = get_verbose_logger(__name__)
 
@@ -202,11 +203,12 @@ class SystemMachine(StateMachine):
 
     def after_exit_tunnel(self, *, reason: str = "NA"):
         logger.verbose("after_exit_tunnel: %s", reason)
+        algo = self._algorithm
         self._timer_auto_clamp_disengage.cancel()
-        self._update_magnet_position(self.algorithm.baseline_intensity)
+        self._update_magnet_position(algo.baseline_intensity)
         EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
-        if self._algorithm.is_in_session:
-            self._algorithm.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
+        if algo.is_in_session:
+            algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
         else:
             if self._intersession.state == IntersessionState.idle and len(self._batch_project_sessions_list) > 0:
                 self._inference.send_message(InferenceCommandMessageKind.ForceProcessOffline)
@@ -440,7 +442,6 @@ class SystemMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
             if value:
                 self._analysis.global_animal_presence_monitor.stop()
-                algo.presence_missing = False
                 if self._state == SystemState.cage:
                     # when app start inference is slow and takes several 10s to become live,
                     # so we have to check it:
@@ -511,16 +512,42 @@ class SystemMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.headfixAutoTare)
         return False
 
+    def _evaluate_home_on_excessive_drift(self):
+        algo = self._algorithm
+        home_on_drift_cfg = algo.home_on_excessive_drift_distane_config
+        nb_points = algo.diamond_triangle_drift_data_points_size
+        #
+        if not (
+            home_on_drift_cfg.enabled
+            and nb_points >= home_on_drift_cfg.min_samples
+        ):
+            return
+        # also reset if distance is good,
+        # so that we'll have to get min_samples data point before next check
+        cur_drift = algo.get_diamond_triangle_drifts(reset=True, show_log=True)
+        drift_dist = math.nan if cur_drift is None else cur_drift.distance
+        # logger.notice("Measured motor drift: dist=%.2fmm offset=%s",
+        #                drift_dist,
+        #                None if cur_drift is None else cur_drift.humanize())
+        if drift_dist < home_on_drift_cfg.excessive_distance_threshold:
+            return
+        logger.notice("Measured motor drift too high (%.1fmm), executing home procedure",
+                      drift_dist)
+        self._pellet_machine.move_home()
+        if algo.is_in_session:
+            algo.end_capture_session(reason=RecordingEndingReason.MOTOR_DRIFT_HOMING)
+
     # @BehaviorAlgorithm.relay_func(wait=False)
     # not needed, already called by _pose_changed which has already it.
     def _handle_diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         if offset is None:
             return
+        algo = self._algorithm
         if (
-            self._state == SystemState.tunnel
+            # self._state == SystemState.tunnel
             # TODO: we could also decide to check in SystemState.cage as well,
             #  as far as we can ensure pellet is at deliver/send position
-            and self._pellet_machine.state == PelletState.monitoring
+            self._pellet_machine.state == PelletState.monitoring
             and self._pellet_machine.can_use_pellet_command()
         ):
             last_pos = self._pellet_device.last_position
@@ -529,12 +556,15 @@ class SystemMachine(StateMachine):
                     self._is_handling_diamond_triangle = True
                     logger.info("Starting handling diamond-triangle offset ; current offset=%s pos=%s",
                                 offset.humanize(), last_pos.humanize())
-                self._algorithm.handle_diamond_triangle_offset(offset, last_pos)
+                    # ensure we get refreshed data:
+                    algo.get_diamond_triangle_drifts(reset=True, show_log=True)
+                algo.handle_diamond_triangle_offset(offset, last_pos)
+                # if not algo.is_in_session:
+                self._evaluate_home_on_excessive_drift()
         else:
             if self._is_handling_diamond_triangle:
-                algo = self._algorithm
                 self._is_handling_diamond_triangle = False
-                algo.get_diamond_triangle_drifts()  # trigger calculate current mean/stdev
+                algo.get_diamond_triangle_drifts(show_log=True)
 
     def _handle_triangle_pellet_offset_changed(self, offset: Optional[Offset3DTuple]):
         if offset is None:  # not sure we should not let it pass to algo

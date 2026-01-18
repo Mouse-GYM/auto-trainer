@@ -16,6 +16,7 @@ def algo(monkeypatch, mock_get_perf_now) -> BehaviorAlgorithm:
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True
     algo = BehaviorAlgorithm()
+    algo.pellet_delivery_enabled = algo.pellet_cover_enabled = True
     return algo
     # in case need cleanup
 
@@ -31,9 +32,6 @@ def test_properties(algo):
     assert algo.diamond_recently_seen is False
     assert algo.triangle_recently_seen is False
     assert algo.pellet_recently_seen is False
-    assert algo.presence_missing is False
-    algo.presence_missing = True
-    assert algo.presence_missing is True
     assert algo.triangle_pellet_offset == Offset3DTuple(math.nan, math.nan, math.nan)
     o3d = algo.triangle_pellet_offset = Offset3DTuple(1, 1, 1)
     assert algo.triangle_pellet_offset == o3d

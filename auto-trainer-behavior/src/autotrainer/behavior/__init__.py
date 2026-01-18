@@ -52,6 +52,7 @@ class RecordingEndingReason(str, enum.Enum):
     EXIT_TUNNEL = "ExitTunnel"
     PELLET_LOADING = "PelletLoading"
     MISSING_ANIMAL_ACTIVITY_TIMEOUT = "MissingAnimalActivityTimeout"
+    MOTOR_DRIFT_HOMING = "MotorDriftHoming"
 
 
 # Protocol first (less strict)

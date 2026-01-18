@@ -1,3 +1,5 @@
+import copy
+import dataclasses
 import multiprocessing
 from typing import Optional, Callable
 
@@ -107,7 +109,21 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         analysis.auto_tunnel_sweep_monitor.config = config.auto_tunnel_sweep
 
     def save_configuration(self) -> BehaviorConfiguration:
+        config = self._system_machine.algorithm.active_config
+        # makes copy on purpose, to ensure caller isn't able to modify current active config directly on that:
+        return copy.deepcopy(config)
+
         config = BehaviorConfiguration()
+        # orig_fields = dataclasses.fields(config)
+        assigned = {}
+        class ConfigWrap(BehaviorConfiguration):
+            def __setattr__(self, key, value):
+                assigned[key] = value
+
+        wrap = ConfigWrap()
+        save_config = config
+        config = wrap
+
         algo = self._system_machine.algorithm
         algo.update_configuration(config)
 
@@ -121,6 +137,13 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         config.global_animal_presence = analysis.global_animal_presence_monitor.config
         config.external_doors = analysis.external_doors_monitor.config
         config.auto_tunnel_sweep = analysis.auto_tunnel_sweep_monitor.config
+
+        dataclasses.replace(save_config, **assigned)
+        config = save_config
+        orig_fields = {f.name for f in dataclasses.fields(config)}
+        missed = orig_fields - set(assigned)
+        if len(missed) > 0:
+            logger.warning("Fields %s not assigned / missed during save_config", missed)
 
         return config
 
