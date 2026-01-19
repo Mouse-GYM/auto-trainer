@@ -198,6 +198,7 @@ class SystemMachine(StateMachine):
     def after_enter_tunnel(self, *, reason: str = "NA"):
         self._consider_start_session(reason=reason)
         if self._analysis is not None:
+            self._auto_clamp_in_progress = False  # always when enter tunnel
             self._evaluate_auto_clamp()
 
     def after_exit_tunnel(self, *, reason: str = "NA"):
@@ -293,7 +294,6 @@ class SystemMachine(StateMachine):
         self._session_started_perf_c = get_perf_now()
         self._inference.project = self._project_info  # ensure inference has the correct project info
         self._intersession.project = self._project_info  # same for intersession
-        self._auto_clamp_in_progress = False
         # self._update_magnet_position(algo.baseline_intensity)  todo: once tests fixed
         self._consider_auto_end_session()  # this will post-pone the auto-end of the needed delay
 
@@ -494,9 +494,9 @@ class SystemMachine(StateMachine):
         self._auto_clamp_in_progress = True
         self._update_magnet_position(algo.auto_clamp_intensity)
         self._disengage_auto_clamp_load_count = 0
-        self._timer_auto_clamp_disengage.cancel()
+        self._timer_auto_clamp_disengage.cancel()  # in case of
         t_delay = algo.auto_clamp_no_activity_release_delay
-        if t_delay >= 0:
+        if t_delay > 0:
             logger.debug("starting new timer for disengage_auto_clamp in %.2f seconds", t_delay)
             new_timer = self._timer_auto_clamp_disengage = _consider_disengage_autoclamp_timer(
                 t_delay, self._disengage_auto_clamp,
@@ -650,6 +650,7 @@ class SystemMachine(StateMachine):
     @BehaviorAlgorithm.relay_func(wait=False)
     def _disengage_auto_clamp(self):
         logger.info("disengaging auto-clamp ..")
+        self._timer_auto_clamp_disengage.cancel()  # needed
         pellet_dev = self._pellet_device
         algo = self._algorithm
         clamp_cfg = algo.head_clamp_config
@@ -771,7 +772,6 @@ class SystemMachine(StateMachine):
     def _pellet_loading(self):
         algo = self._algorithm
 
-        self._timer_auto_clamp_disengage.cancel()
         self._timer_consider_start_session.cancel()  # we will get a pellet_loaded event once it's finished
 
         self._disengage_auto_clamp_load_count += 1
