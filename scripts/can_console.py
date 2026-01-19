@@ -532,7 +532,7 @@ motor_to_move_command = {
     Motor.TUNNEL_GATE_SERVO: SystemCommandKind.MOVE_GATE_SERVO,
     Motor.PELLET_COVER_SERVO: SystemCommandKind.MOVE_COVER_SERVO,
     Motor.PELLET_LOAD_SERVO: SystemCommandKind.MOVE_LOAD_SERVO,
-    Motor.TUNNEL_FAN_SERVO: SystemCommandKind.TUNNEL_FAN_SET,
+    # Motor.TUNNEL_FAN_SERVO: SystemCommandKind.TUNNEL_FAN_SET,  # digital io
 }
 
 

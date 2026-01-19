@@ -289,14 +289,15 @@ class CanDevice(Device):
             SystemCommandKind.OPEN_TUNNEL_GATE: lambda _: handle_servo_sequence(Motor.TUNNEL_GATE_SERVO, self._open_tunnel_gate),
             SystemCommandKind.CLOSE_TUNNEL_GATE: lambda _: handle_servo_sequence(Motor.TUNNEL_GATE_SERVO, self._close_tunnel_gate),
 
-            SystemCommandKind.TUNNEL_FAN_SET: partial(handle_servo_move, Motor.TUNNEL_FAN_SERVO),
+            SystemCommandKind.TUNNEL_FAN_ON: \
+                lambda _: self._interface.set_digital_output(DigitalOutputs(1), True),
+            SystemCommandKind.TUNNEL_FAN_OFF:
+                lambda _: self._interface.set_digital_output(DigitalOutputs(1), False),
 
-            SystemCommandKind.TUNNEL_FAN_ON: lambda _: \
-                handle_servo_sequence(Motor.TUNNEL_FAN_SERVO,
-                                      MotorSteps("tunnel_fan_on", [{"_servo_max_pos": Motor.TUNNEL_FAN_SERVO}])),
-            SystemCommandKind.TUNNEL_FAN_OFF: lambda _: \
-                handle_servo_sequence(Motor.TUNNEL_FAN_SERVO,
-                                      MotorSteps("tunnel_fan_off", [{"_servo_min_pos": Motor.TUNNEL_FAN_SERVO}])),
+            # digital only allow 2 "position"
+            # SystemCommandKind.TUNNEL_FAN_SET: partial(handle_servo_move, Motor.TUNNEL_FAN_SERVO),
+
+            #
 
             SystemCommandKind.DELAY: self._interface.delay,
 
