@@ -1015,7 +1015,6 @@ class BehaviorAlgorithm(ObservableObject):
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)
             return False
-
         logger.success("%s: stopping session recording ; system_state=%s capture=%s intersession_state=%s",
                        reason, self._system_state, self._capture_status, self._intersession_state)
         self._is_in_session = False  # must be ~first, to ensure next actions/callbacks don't see it as True
