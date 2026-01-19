@@ -32,7 +32,8 @@ class AutoCloseGateOnIntersessionConfiguration:
 
 @dataclass
 class HomeOnExcessiveDriftDistance:
-    """Execute, after pellet-sent, home to reset motors if measured drift distance is higher than threshold"""
+    """Execute, when in monitoring (should equal to be in deliver position), home to reset motors if measured drift distance is higher than threshold"""
+
     enabled: bool = False
     excessive_distance_threshold: float = 5  # mm
 
