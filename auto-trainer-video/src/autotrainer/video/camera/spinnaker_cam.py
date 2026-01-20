@@ -6,9 +6,12 @@ from typing import Tuple, List, Dict, Optional, Type
 import numpy
 import PySpin
 
+from autotrainer.core.logging import get_verbose_logger
+
 from .camera_base import CameraBase
 
-logger = logging.getLogger(__name__)
+
+logger = get_verbose_logger(__name__)
 
 
 sSystem = None
@@ -269,8 +272,10 @@ class SpinCam(CameraBase):
         self._camera = None
 
     def capture(self) -> Tuple[numpy.ndarray, int]:
+        first_capture = False
         if not self._acquisition_started:
             self._acquisition_started = True
+            first_capture = True
             logger.info("Beginning acquisition")
             self._camera.BeginAcquisition()
             if self._is_primary:
@@ -282,8 +287,18 @@ class SpinCam(CameraBase):
 
         image_converted = self._image_processor.Convert(image_result, PySpin.PixelFormat_Mono8)
 
-        frame = numpy.ndarray([self._height, self._width], "ubyte")
-        frame[:, :] = image_converted.GetNDArray()
+        # NB: no need create copy, GetNDArray() already returns a new array
+        # frame = numpy.ndarray([self._height, self._width], "ubyte")
+        # frame[:, :] = image_converted.GetNDArray()
+        frame = image_converted.GetNDArray()  # type: numpy.ndarray
+        expected_shape = (self._height, self._width)
+        if first_capture:  # instead we do a small check on first frame:
+            logger.notice("first frame: shape=%s (expected=%s) dtype=%s itemsize=%s",
+                          frame.shape, expected_shape, frame.dtype, frame.itemsize)
+            if frame.shape != expected_shape:
+                logger.warning("Frame shape not as expected: %s vs %s", frame.shape, expected_shape)
+        if frame.shape != expected_shape:
+            frame = frame.reshape(expected_shape)
 
         self._last_when = image_result.GetTimeStamp()
 
