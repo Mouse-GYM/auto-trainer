@@ -4,26 +4,41 @@ from enum import IntEnum
 from typing import Tuple, List, Dict, Optional, Type
 
 import numpy
+import PySpin
 
 from .camera_base import CameraBase
 
 logger = logging.getLogger(__name__)
 
 
-_spin_cam_cls: Optional[Type["SpinCam"]] = None
+sSystem = None
 
-def _stop_spincam():
-    global _spin_cam_cls
-    if _spin_cam_cls is not None:
-        logger.info("stopping SpinCam lib")
-        _spin_cam_cls.stop()
-        _spin_cam_cls = None
+def _start_spincam_lib_instance():
+    global sSystem
+    if sSystem is None:
+        logger.info("getting spincam library instance")
+        sSystem = PySpin.System.GetInstance()
+        if sSystem is None:
+            raise RuntimeError("PySpin.System.GetInstance() returned None")
+    return sSystem
 
 
-import PySpin
+def _stop_spincam_lib_instance(cls: Type["SpinCam"]):
+    global sSystem
+    for key, spincam in cls._cameras.items():
+        _release_spincam(spincam)
+    cls._cameras.clear()
+    if sSystem is not None:
+        logger.info("releasing SpinCam lib")
+        sSystem.ReleaseInstance()
+        sSystem = None
 
-atexit.register(_stop_spincam)
 
+def _release_spincam(spincam: "SpinCam"):
+    cam = spincam._camera
+    if cam is not None:
+        cam.DeInit()
+        spincam._cameras.pop(spincam._serial_number, None)
 
 
 class AcquisitionMode(IntEnum):
@@ -33,30 +48,14 @@ class AcquisitionMode(IntEnum):
 
 
 class SpinCam(CameraBase):
-    _sSystem = None
 
-    _cameras: Dict[str, "SpinCam"] = {}
-
-    @classmethod
-    def start(cls):
-        if cls._sSystem is None:
-            logger.info("getting spincam library instance")
-            cls._sSystem = PySpin.System.GetInstance()
-
-    @classmethod
-    def stop(cls):
-        for key in cls._cameras:
-            cls._cameras[key].__release()
-        cls._cameras.clear()
-        if cls._sSystem is not None:
-            cls._sSystem.ReleaseInstance()
-            cls._sSystem = None
+    _cameras: Dict[str, "SpinCam"] = {}  # class level cache
 
     @classmethod
     def list(cls) -> List[str]:
-        cls.start()
+        _start_spincam_lib_instance()
         serial_numbers = []
-        cam_list = cls._sSystem.GetCameras()
+        cam_list = sSystem.GetCameras()
         try:
             for cam in cam_list:
                 serial_numbers.append(cam.TLDevice.DeviceSerialNumber.ToString())
@@ -80,6 +79,8 @@ class SpinCam(CameraBase):
 
         super().__init__(name)
 
+        self._serial_number = serial_number
+
         self._width = 1440
         self._height = 1080
 
@@ -96,9 +97,9 @@ class SpinCam(CameraBase):
         self._pause_log = False
         self._acquisition_started = False
 
-        self.start()  # always
+        _start_spincam_lib_instance()
 
-        cam_list = self._sSystem.GetCameras()
+        cam_list = sSystem.GetCameras()
         try:
             self._camera = cam_list.GetBySerial(serial_number)
         finally:
@@ -108,13 +109,7 @@ class SpinCam(CameraBase):
         self._image_processor.SetColorProcessing(PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR)
 
     def __del__(self):
-        self.__release()
-
-    def __release(self):
-        cam = self._camera
-        if cam is not None:
-            cam.DeInit()
-            self._camera = None
+        _release_spincam(self)
 
     @property
     def fps(self) -> float:
@@ -270,7 +265,8 @@ class SpinCam(CameraBase):
             spincam.LineInverter.SetValue(True)
         elif self._is_secondary:
             spincam.TriggerMode.SetValue(PySpin.TriggerMode_Off)
-        self.__release()
+        _release_spincam(self)
+        self._camera = None
 
     def capture(self) -> Tuple[numpy.ndarray, int]:
         if not self._acquisition_started:
@@ -395,4 +391,4 @@ class SpinCam(CameraBase):
         return set_value
 
 
-_spin_cam_cls = SpinCam
+atexit.register(lambda: _stop_spincam_lib_instance(SpinCam))
