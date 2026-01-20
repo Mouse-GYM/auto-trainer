@@ -259,6 +259,7 @@ class VideoCapture(Process):
         #     msg_q.put(status)
 
     def _set_error(self, error: Exception):
+        logger.error(f"set_error: %s", error)
         self._set_status(CaptureProcessStatus.FAILED)
         if self._errors:
             self._errors.value = f"{error}"[:len(self._errors)].encode()
@@ -267,13 +268,14 @@ class VideoCapture(Process):
         logger.info(f"<{self._name}> process started: %s", self._network_queue)
         try:
             if self._camera_url is None:
-                logger.error(f"<{self._name}> camera url not specified")
+                self._set_error(ValueError("camera_url not specified"))
                 return False
 
-            self._camera = VideoManager.create_camera(self._camera_url, self._name)
-            if self._camera is None:
-                raise RuntimeError(
-                    f"Could not create camera {self._name} url={self._camera_url} idx={self._camera_idx}")
+            try:
+                self._camera = VideoManager.create_camera(self._camera_url, self._name)
+            except BaseException as err:
+                self._set_error(RuntimeError(f"Could not create camera {self._name}: {err}"))
+                return False
 
             self._camera.prepare_capture()
 

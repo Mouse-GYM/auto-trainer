@@ -26,12 +26,13 @@ def _get_spincam_cls():
         from .camera.spinnaker_cam import SpinCam
     except ModuleNotFoundError:
         logger.warning("SpinCam module not available. SpinCam disabled.")
+        raise
     except Exception as err:
         logger.exception("Cannot import SpinCam: %s. SpinCam disabled.", err)
+        raise
     else:
         _spincam_cls = SpinCam
         return SpinCam
-    return None
 
 
 class CameraKind(str, Enum):
@@ -57,16 +58,15 @@ class VideoManager:
 
     @classmethod
     def list_spin_cameras(cls) -> List[str]:
-        spincam_cls = _get_spincam_cls()
-        if spincam_cls is None:
+        try:
+            spincam_cls = _get_spincam_cls()
+        except Exception:
             return []
         return spincam_cls.list()
 
     @classmethod
     def get_spin_camera(cls, serial_number: str, name: str = "") -> Optional[CameraBase]:
         spincam_cls = _get_spincam_cls()
-        if spincam_cls is None:
-            return None
         return spincam_cls.create(serial_number, name)
 
     @classmethod
