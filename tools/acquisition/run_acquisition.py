@@ -6,7 +6,7 @@ import sys
 import verboselogs
 from PySide6 import QtGui
 
-from autotrainer.core import EventManager
+from autotrainer.core import EventManager, ApiEventKind
 from autotrainer.core.event import try_register_api_event_plugin
 from autotrainer.core.logging import (get_verbose_logger, MULTIPROC_LOG_FORMAT, PreciseTimeFormatter, DateTimeFormats,
                                       get_log_queue_listener, thread_id_filter, get_console_handler, get_root_handler,
@@ -150,11 +150,14 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     window.on_activated()
 
+    EventManager.default().post_event_content(ApiEventKind.applicationLaunched)
+
     def finish(orig_close=window.close):
         # NB: close everything before window close,
         # this ensure help prevent access, by some background thread(s), to UI elements when the window has already
         # been closed, which if can/will trigger segfault/app crash (and possibly leave behind background MP handler process(es) alive)
         logger.verbose("Closing event manager and behavior algo thread handler..")
+        EventManager.default().post_event_content(ApiEventKind.applicationTerminating)
         event_manager.close()
         BehaviorAlgorithm.close_algorithm_handler()
         logger.debug("Closing window ..")
