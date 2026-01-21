@@ -4,6 +4,12 @@ import numpy as np
 import pandas as pd
 
 
+from autotrainer.core.logging import get_verbose_logger
+
+
+logger = get_verbose_logger(__name__)
+
+
 def segment_reaches_f11(
     *,
     df_3d: pd.DataFrame,
@@ -90,20 +96,33 @@ def segment_reaches_f11(
     pellet_state = 0 # 0 is lost, 1 is placed
     pellet_events = []
 
+    pellet_home_max_dist_axis = 1.5
+    # how close, on each axis, the pellet inferred location must be from the "pellet_home" (or deliver) known location,
+    # to be considered at it.
+
     #
 
     for dp, st, tpX, tpY, tpZ, pp in zip(dist_p, dist_st, dist_tpX, dist_tpY, dist_tpZ, pellet_p):
         frm_counter += 1
+        idx = frm_counter
         if debug >= 3:
-            print(f"{frm_counter} > {dp=} {st} {tpX} {tpX} {tpY} {tpZ}")
+            print(
+                f"{frm_counter} > {dp=:.1f} {st=:.1f} {pp=:.1f} {tpX=:.1f} {tpY=:.1f} {tpZ=:.1f}\n"
+                f"    P=({pellet_x_vals[idx]:.1f}, {pellet_y_vals[idx]:.1f}, {pellet_z_vals[idx]:.1f})"
+                f"    T=({triangle_x_vals[idx]:.1f}, {triangle_y_vals[idx]:.1f}, {triangle_z_vals[idx]:.1f})"
+            )
 
         if pellet_state == 0: # Searching for placement
             testA = dp <= min_dist_from_orig
             testB = pp == 1 # is the pellet detected in frame
             testC = st > 12 or np.isnan(st) # was the cover open or not installed?
-            testDx = (2 < tpX < 4.5) and not np.isnan(tpX)
-            testDy = (1 < tpY < 5) and not np.isnan(tpY)
-            testDz = (1.5 < tpZ < 4) and not np.isnan(tpZ)
+            # testDx = (2 < abs(tpX) < 4.5) and not np.isnan(tpX)
+            # testDy = (1 < abs(tpY) < 5) and not np.isnan(tpY)
+            # testDz = (1.5 < abs(tpZ) < 4) and not np.isnan(tpZ)
+            testDx = abs(pellet_x_vals[idx] - pellet_home[0]) < pellet_home_max_dist_axis
+            testDy = abs(pellet_y_vals[idx] - pellet_home[1]) < pellet_home_max_dist_axis
+            testDz = abs(pellet_z_vals[idx] - pellet_home[2]) < pellet_home_max_dist_axis
+            #
             testD = testDx and testDy and testDz # was the pellet a correct distance from the triangle?
 
             if testA and testB and testC and testD:
@@ -136,7 +155,7 @@ def segment_reaches_f11(
                 count = 0
                 frame_at_count_begin = frm_counter
 
-            if count >= time2lost*frame_rate:
+            if count >= time2lost * frame_rate:
                 frames_on_lost.append(frame_at_count_begin)
                 pellet_dict['lost'] = frame_at_count_begin
                 right_test = dist_hvpp_R[frame_at_count_begin] < min_dist_for_grab
@@ -169,5 +188,8 @@ def segment_reaches_f11(
             if count >= min_inter_pellet_interval*frame_rate:
                 pellet_state = 0
                 count = 0
+
+    logger.verbose("segment_reaches: pellet_home=%s frames_on_found=%s pellet_events=%s",
+                   pellet_home, frames_on_found, pellet_events)
     # end big for
     return dist_p, Z_dist_p, dist_hvpp_R, pellet_events, pellet_home, frames_on_found

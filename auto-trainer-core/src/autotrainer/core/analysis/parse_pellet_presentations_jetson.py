@@ -100,6 +100,9 @@ def segment_reaches(
         debug=debug,
     )
 
+    if debug >= 1:
+        print(f"segment_reaches_f1: events={pellet_events}")
+
     pellets_consumed, pellets_presented, successful_reaches, shift_xyz, reach_events = segment_reaches_f2(
         available_shift_xyz=available_shift_xyz,
         df_3d=df_3d,

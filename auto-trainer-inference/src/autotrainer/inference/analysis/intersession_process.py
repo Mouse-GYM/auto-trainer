@@ -29,12 +29,14 @@ def intersession_process(
     project: ProjectInfo,
     *,
     calib_dir: Optional[Path] = None,
+    debug_level: int = _segment_reach_debug,
 ) -> IntersessionResponse:
     """
     Called after pose processing for intersession analysis.
 
     :param project: current project info for finding/defining file names
     :param calib_dir: calibration directory if not default.
+    :param debug_level: integer debug level.
     :return: information required to update behavior for future sessions
     """
     location, _, _ = project.get_session_path()
@@ -52,7 +54,7 @@ def intersession_process(
         center_method=center_method,
         available_shift_xyz=AvailableShiftXYZ,
         df_3d=centered_df_3d,
-        debug=_segment_reach_debug,
+        debug=debug_level,
     )
     logger.verbose("process intersession pose data complete %s", results_dict)
     return IntersessionResponse(
