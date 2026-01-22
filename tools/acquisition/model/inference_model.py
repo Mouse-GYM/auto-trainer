@@ -314,28 +314,28 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         proc = self._pose_process
         self._set_status(InferenceStatus.stopping)
         if proc is not None:
-            self._send_message(InferenceCommandMessageKind.Terminate)
-
-            logger.debug(f"<pellet> waiting for process termination")
-
+            if proc.is_alive():
+                self._send_message(InferenceCommandMessageKind.Terminate)
+            logger.debug("<inference> waiting for process termination: %s", proc)
             t_timeout_sigint = time.perf_counter() + 30
             t_timeout_sigterm = time.perf_counter() + 60
             while True:
                 perf_c = time.perf_counter()
                 if perf_c > t_timeout_sigterm:
                     logger.warning("sending SIGTERM to %s", proc)
-                    # proc.terminate()
-                    os.kill(proc.pid, signal.SIGTERM)
+                    proc.terminate()
+                    # os.kill(proc.pid, signal.SIGTERM)
                     break
                 if perf_c > t_timeout_sigint:
                     t_timeout_sigint += 10
                     logger.warning("sending SIGINT to %s", proc)
-                    os.kill(proc.pid, signal.SIGINT)
+                    proc.kill()
+                    # os.kill(proc.pid, signal.SIGINT)
                 if not proc.is_alive():
                     break
                 time.sleep(0.1)
             proc.join()
-            logger.info("<pellet> process exited with %s", proc.exitcode)
+            logger.info("<inference> process exited with %s", proc.exitcode)
             self._pose_process = None
 
             self._set_status(InferenceStatus.stopped)
