@@ -21,6 +21,7 @@ from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemC
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.pose_elements import SceneElement
+from autotrainer.core.event.api_event_kind import ApiEventKind
 
 from autotrainer.inference import InferenceStatus, PoseResponse
 
@@ -64,6 +65,9 @@ class MainWindow(QMainWindow):
         is_dev: bool = False,
     ):
         super().__init__(None)
+
+        self._default_event_manager = EventManager.default()
+        self._post_api_event = self._default_event_manager.post_event_content
 
         self._orig_inference_analysis_feed = None
         self._orig_inference_analysis_process = None
@@ -330,6 +334,8 @@ class MainWindow(QMainWindow):
     def _make_diamond_triangle_calib_run(self, calib_duration: float = DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
         logger.notice("Starting diamond-triangle calibration .. duration=%.1f second(s)", calib_duration)
 
+        self._post_api_event(ApiEventKind.calibrationDcsStarted)
+
         app_model = self._app_model
         app_model.status = AppModelStatus.CALIBRATION_DCS
 
@@ -387,11 +393,14 @@ class MainWindow(QMainWindow):
         action.setChecked(False)
         #
         self._diamond_triangle_calib_run = None  # MUST be before
+        self._post_api_event(ApiEventKind.calibrationDcsEnded)
+        #
         self._handle_diamond_triangle_calib_run(
             positions=positions,
             offsets=offsets,
             diamond_locs3d=diamond_locs3d,
         )
+
 
     def on_calibrate_diamond_triangle(self, is_toggled):
         if is_toggled and self._diamond_triangle_calib_run is None:
@@ -417,6 +426,7 @@ class MainWindow(QMainWindow):
             result_dir: Path = None
             def handle_3d_calib():
                 nonlocal error, result_dir
+                self._post_api_event(ApiEventKind.calibration3dStarted)
                 try:
                     result_dir = make_3d_calib(self._app_model)
                 except Exception as err:
@@ -449,6 +459,7 @@ class MainWindow(QMainWindow):
 
             def wait_3d_calib_done(thread):
                 executor_thread.join()
+                self._post_api_event(ApiEventKind.calibration3dEnded)
                 InvokeMethod(show_result)
 
             executor_thread = threading.Thread(target=handle_3d_calib, name="3d-calibration", daemon=True)
@@ -491,7 +502,6 @@ class MainWindow(QMainWindow):
             InvokeMethod(self._make_show_msg_box(title, text, QMessageBox.Icon.Warning))
 
     def on_activated(self):
-        EventManager.default()
         self._check_diamond_triangle_config()
         self.main_content.on_activated()
 
