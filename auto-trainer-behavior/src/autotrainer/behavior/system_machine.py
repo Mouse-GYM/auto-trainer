@@ -883,7 +883,8 @@ class SystemMachine(StateMachine):
             # of send-pellet action/move.
             remains = algo.record_prebuffer_duration - send_end_age
         if remains > 0:
-            timer = make_daemon_timer(remains, partial(self._consider_start_session, reason=reason, is_from_timer=True))
+            logger.verbose("Starting timer for consider_start_session in %.1f secs (record_prebuffer)", remains)
+            timer = make_daemon_timer(remains, lambda: self._consider_start_session(reason=reason, is_from_timer=True))
             self._timer_consider_start_session = timer
             timer.start()
             return
