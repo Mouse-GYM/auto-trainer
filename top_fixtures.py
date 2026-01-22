@@ -2,11 +2,14 @@ import contextlib
 import logging
 import queue
 import threading
+import collections.abc
+from contextlib import AbstractContextManager
 
 from pathlib import Path
 from functools import partial
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Union, ContextManager, Generator
 from unittest import mock
+# from collections.abc import Generator
 
 import pytest
 
@@ -224,6 +227,14 @@ class MockSystemMachine:
         yield machine  # noqa
 
     @property
+    def algo(self):
+        return self._machine.algorithm
+
+    @property
+    def sensor_analysis(self):
+        return self._machine.analysis
+
+    @property
     def inference(self) -> InferenceProtocol:
         return self._machine._inference
 
@@ -235,10 +246,31 @@ class MockSystemMachine:
     def msg_handler(self) -> MessageHandler:
         return self._machine._msg_handler
 
+    @property
+    def tunnel_dev(self) -> Union[mock.MagicMock, TunnelDeviceProtocol]:
+        return self._machine._tunnel_device
+
+    @property
+    def pellet_dev(self) -> Union[mock.MagicMock, PelletDeviceProtocol]:
+        return self._machine._pellet_device
+
     #
 
+    def start_session_in_tunnel(self):
+        algo = self.algo
+        assert not algo.is_in_session
+        self._machine.enter_tunnel(reason="manual")
+        algo.start_session()
+        assert algo.is_in_session
+
     @contextlib.contextmanager
-    def mock_analysis(
+    def patch_timer(self, place, new=None) -> ContextManager[Union[mock.MagicMock, DaemonTimer]]:  # noqa
+        kw = {"autospec": DaemonTimer} if new is None else {"new": new}
+        with mock.patch(place, **kw) as mock_t:
+            yield mock_t  # noqa
+
+    @contextlib.contextmanager
+    def mock_intersession_analysis(
         self,
         results: Optional[IntersessionResponse] = None,
         *,
