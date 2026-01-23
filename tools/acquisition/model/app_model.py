@@ -746,6 +746,7 @@ class AppModel(ObservableObject):
                 return False
             self._acquisition_started = True
 
+        self._event_manager.post_event_content(ApiEventKind.acquisitionStarted)
         self.property_changed(self.Props.ACQUISITION_RUNNING, True, False)
         self.status = AppModelStatus.ACQUIRING
 
@@ -927,6 +928,7 @@ class AppModel(ObservableObject):
             if self._reload_plans_needed:
                 self._reload_plans_needed = False
                 self.reload_training_plans()
+            self._event_manager.post_event_content(ApiEventKind.acquisitionEnded)
 
     def _capture_stop(self):
 

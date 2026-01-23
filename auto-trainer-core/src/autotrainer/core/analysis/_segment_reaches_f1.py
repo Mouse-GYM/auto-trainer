@@ -4,6 +4,12 @@ import numpy as np
 import pandas as pd
 
 
+from autotrainer.core.logging import get_verbose_logger
+
+
+logger = get_verbose_logger(__name__)
+
+
 def segment_reaches_f11(
     *,
     df_3d: pd.DataFrame,
@@ -30,13 +36,15 @@ def segment_reaches_f11(
     triangle_z_vals = triangle_xyz_p['z'].values
     star_xyz_p = df_3d['Star']
     # star_p = star_xyz_p['p']
-    dist_st = np.sqrt((star_xyz_p['x'].values - triangle_x_vals)**2+
-                         (star_xyz_p['y'].values - triangle_y_vals)**2+
-                         (star_xyz_p['z'].values - triangle_z_vals)**2)
+    dist_st = np.sqrt(
+          (star_xyz_p['x'].values - triangle_x_vals) ** 2
+        + (star_xyz_p['y'].values - triangle_y_vals) ** 2
+        + (star_xyz_p['z'].values - triangle_z_vals) ** 2
+    )
 
-    dist_tpX = triangle_x_vals - pellet_x_vals
-    dist_tpY = triangle_y_vals - pellet_y_vals
-    dist_tpZ = triangle_z_vals - pellet_z_vals
+    # dist_tpX = triangle_x_vals - pellet_x_vals
+    # dist_tpY = triangle_y_vals - pellet_y_vals
+    # dist_tpZ = triangle_z_vals - pellet_z_vals
 
     tongue_mid_xyz_p = df_3d['Tongue_mid']
     tongue_mid_p = tongue_mid_xyz_p['p']
@@ -70,8 +78,8 @@ def segment_reaches_f11(
     time2place = .05
     n_frames_2_place = time2place * frame_rate
 
-    # Minimum distance (mm) a pellet can be from origin and still be 'placed'
-    min_dist_from_orig = 2
+    # Maximum distance (mm) a pellet can be from origin and still be 'placed'
+    max_dist_from_orig = 2
 
     # Duration in seconds that a pellet must be away from the origin to be considered 'lost'
     time2lost = 0.1
@@ -92,30 +100,30 @@ def segment_reaches_f11(
 
     #
 
-    for dp, st, tpX, tpY, tpZ, pp in zip(dist_p, dist_st, dist_tpX, dist_tpY, dist_tpZ, pellet_p):
+    for dp, st, pp in zip(dist_p, dist_st, pellet_p):
         frm_counter += 1
+        idx = frm_counter
         if debug >= 3:
-            print(f"{frm_counter} > {dp=} {st} {tpX} {tpX} {tpY} {tpZ}")
+            print(
+                f"{frm_counter} > {dp=:.1f} {st=:.1f} {pp=:.1f} \n"  # {tpX=:.1f} {tpY=:.1f} {tpZ=:.1f}\n"
+                f"    P=({pellet_x_vals[idx]:.1f}, {pellet_y_vals[idx]:.1f}, {pellet_z_vals[idx]:.1f})"
+                f"    T=({triangle_x_vals[idx]:.1f}, {triangle_y_vals[idx]:.1f}, {triangle_z_vals[idx]:.1f})"
+            )
 
         if pellet_state == 0: # Searching for placement
-            testA = dp <= min_dist_from_orig
+            testA = dp <= max_dist_from_orig
             testB = pp == 1 # is the pellet detected in frame
             testC = st > 12 or np.isnan(st) # was the cover open or not installed?
-            testDx = (2 < tpX < 4.5) and not np.isnan(tpX)
-            testDy = (1 < tpY < 5) and not np.isnan(tpY)
-            testDz = (1.5 < tpZ < 4) and not np.isnan(tpZ)
-            testD = testDx and testDy and testDz # was the pellet a correct distance from the triangle?
 
-            if testA and testB and testC and testD:
-                count += 1
-            else:
+            if not (testA and testB and testC):  #  and testD:
                 if count != 0:
                     if debug >= 1:
-                        print(f"tests failed: {count}: {testA=} {testB=} {testC=} {testD=} ; {testDx} {testDy} {testDz}")
+                        print(f"tests failed: {count}: {testA=} {testB=} {testC=}")
                     count = 0
+                    frame_at_count_begin = frm_counter
+                continue
 
-                frame_at_count_begin = frm_counter
-
+            count += 1
             if count >= n_frames_2_place:
                 pellet_dict = {
                     'placed': frame_at_count_begin,
@@ -126,17 +134,18 @@ def segment_reaches_f11(
                 pellet_events.append(pellet_dict)
                 frames_on_found.append(frame_at_count_begin)
                 pellet_state = 1
+                count = 0
 
         elif pellet_state == 1: # Searching for pellet lost
-            if dp > min_dist_from_orig or pp == 0:
+            if dp > max_dist_from_orig or pp == 0:
                 count += 1
             else:
                 if debug >= 1:
-                    print(f"state==1: {count=} ; {dp} > {min_dist_from_orig} ; {pp=}")
+                    print(f"state==1: {count=} ; {dp} > {max_dist_from_orig} ; {pp=}")
                 count = 0
                 frame_at_count_begin = frm_counter
 
-            if count >= time2lost*frame_rate:
+            if count >= time2lost * frame_rate:
                 frames_on_lost.append(frame_at_count_begin)
                 pellet_dict['lost'] = frame_at_count_begin
                 right_test = dist_hvpp_R[frame_at_count_begin] < min_dist_for_grab
@@ -164,10 +173,14 @@ def segment_reaches_f11(
                     print(f"R/L/T conf : {r_hand_p[frame_at_count_begin]}/{l_hand_p[frame_at_count_begin]}/{tongue_mid_p[frame_at_count_begin]}")
                 pellet_events[-1] = pellet_dict
                 pellet_state = 2
+
         elif pellet_state == 2: # Waiting minimum inter-pellet interval
             count += 1
-            if count >= min_inter_pellet_interval*frame_rate:
+            if count >= min_inter_pellet_interval * frame_rate:
                 pellet_state = 0
                 count = 0
+
+    logger.verbose("segment_reaches: pellet_home=%s frames_on_found=%s pellet_events=%s",
+                   pellet_home, frames_on_found, pellet_events)
     # end big for
     return dist_p, Z_dist_p, dist_hvpp_R, pellet_events, pellet_home, frames_on_found

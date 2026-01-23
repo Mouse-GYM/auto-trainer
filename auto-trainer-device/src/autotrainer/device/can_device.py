@@ -106,7 +106,7 @@ class CanDevice(Device):
 
     default_command_write_failed_repeat_count: int = 3
     default_command_ack_timeout_duration: float = 3  # seconds
-    default_command_ack_timeout_repeat_count: int = 2
+    default_command_ack_timeout_repeat_count: int = 3
 
     _motor_to_status_kind = {
         Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_MOTOR_X,

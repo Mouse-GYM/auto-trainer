@@ -22,7 +22,11 @@ def main():
     parser.add_argument("session", type=int)
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--calib-dir", type=Path, required=True)
+    parser.add_argument("--log-level", type=lambda val: int(val) if val.isdigit() else val,
+                        default=logging.WARNING)
+    parser.add_argument("--analysis-debug-level", type=int, help="integer", default=0)
     args = parser.parse_args()
+    logging.root.setLevel(args.log_level)
     # and then execute:
     project_info = ProjectInfo(
         root=args.data_dir,
@@ -30,11 +34,15 @@ def main():
         when=args.date,
         session=args.session,
     )
-    print(project_info.get_session_path())
-    result = intersession_process(project_info, calib_dir=args.calib_dir)
-    pprint(result)
+    result = intersession_process(
+        project_info,
+        calib_dir=args.calib_dir,
+        debug_level=args.analysis_debug_level,
+    )
+    print(f"{project_info.get_session_path()}: {result}")
+    # pprint(result)
 
 
 if __name__ == "__main__":
-    setup_logging("autotrainer", logger_level=logging.DEBUG)
+    setup_logging("autotrainer", logger_level=logging.WARNING)
     sys.exit(main())

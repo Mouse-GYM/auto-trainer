@@ -28,7 +28,7 @@ def prepare_video_capture(file_name):
 
 
 def process_video(network, front_source, side_source, batch_size: int, user_max_frames: int, report_profile: bool,
-                  output_file_name: str, input_file_name: str):
+                  output_file_name: str, input_file_name: str, width: int, height: int):
     front_capture, front_frame_count = prepare_video_capture(front_source)
 
     side_capture, side_frame_count = prepare_video_capture(side_source)
@@ -41,7 +41,7 @@ def process_video(network, front_source, side_source, batch_size: int, user_max_
 
     idx = 0
 
-    frames = numpy.ndarray((batch_size * 2, 200, 300, 3))
+    frames = numpy.ndarray((batch_size * 2, width, height, 3))
 
     frame_count = 0
 
@@ -78,6 +78,7 @@ def process_video(network, front_source, side_source, batch_size: int, user_max_
                 idx += 1
 
             pose = configuration.predict(frames)
+            pose = numpy.asarray(pose)
 
             if output_file is not None:
                 output_file.write(pose.tobytes())
@@ -114,11 +115,14 @@ def main():
     parser.add_argument("pellet", help="the DeepLabCut pellet to use")
     parser.add_argument("front", help="the front camera video source file")
     parser.add_argument("side", help="the side camera video source file")
+    parser.add_argument("-n", "--network", help="the DLC model dir")
     parser.add_argument("-b", "--batchsize", help="the batch size for DLC", type=int, default=5)
     parser.add_argument("-f", "--frames", help="the number of frames to process", type=int, default=-1)
     parser.add_argument("-p", "--profile", help="report profiling data", type=bool, default=False)
     parser.add_argument("-o", "--output", help="save pose output to specified file")
     parser.add_argument("-i", "--input", help="read pose output from specified file for comparison")
+    parser.add_argument("--width", type=int)
+    parser.add_argument("--height", type=int)
 
     args = parser.parse_args()
 
@@ -132,7 +136,7 @@ def main():
         logger.info("Saving pose output.  Performance values less accurate than usual")
 
     process_video(args.network, args.front, args.side, args.batchsize, args.frames, args.profile, args.output,
-                  args.input)
+                  args.input, args.width, args.height)
 
     return True
 

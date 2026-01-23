@@ -191,8 +191,12 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
         project_info=project_info,
     )
     algo = machine.algorithm
+    # most tests rely on:
+    cfg = algo.pellet_delivery_config
+    cfg.is_enabled = True
+    cfg.is_pellet_cover_enabled = True
+    cfg.pellet_hand_uncover_distance = None  # disabled
     algo.capture_status = CaptureProcessStatus.RUNNING
-    algo.pellet_hand_uncover_distance = None  # disabled
     return machine
 
 

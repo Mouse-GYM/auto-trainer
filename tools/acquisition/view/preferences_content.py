@@ -305,39 +305,62 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         #
-        grid_layout.addWidget(QLabel("<b>Auto-correct motors drift:</b>"), cur_row, cur_col)
-        toggle = self._auto_correct_motors_drift_toggle = QSwitch()
-        add_enabled_state(lambda: self._auto_correct_motors_drift_toggle.setEnabled(self._inference_enabled_toggle.isChecked()))
+        grid_layout.addWidget(QLabel("<b>Home On Excessive Drift:</b>"), cur_row, cur_col)
+        toggle = QSwitch()
+        add_enabled_state(
+            lambda t=toggle: t.setEnabled(self._inference_enabled_toggle.isChecked()))
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        toggle.setChecked(self._app_model.behavior.algorithm.auto_correct_motors_drift)
-        def auto_correct_motors_drift_toggle_changed(value: int):
+        toggle.setChecked(algo.home_on_excessive_drift_distane_config.enabled)
+        def home_on_excessive_toggle_changed(value: int):
             enabled = value != 0
-            logger.verbose("auto_correct_motors_drift_toggle_changed: %s", enabled)
-            self._app_model.behavior.algorithm.auto_correct_motors_drift = enabled
-        toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
+            algo.home_on_excessive_drift_distane_config.enabled = enabled
+            refresh_enabled_states()
+        toggle.stateChanged.connect(home_on_excessive_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
+
+        grid_layout.addWidget(QLabel("Excessive distance threshold (mm) :"), cur_row, cur_col)
+        spinbox = QDoubleSpinBox()
+        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isEnabled() and t.isChecked()))
+        spinbox.setRange(0, 99)
+        spinbox.setValue(algo.home_on_excessive_drift_distane_config.excessive_distance_threshold)
+        def excessive_distance_threshold_changed(value):
+            algo.home_on_excessive_drift_distane_config.excessive_distance_threshold = value
+        spinbox.valueChanged.connect(excessive_distance_threshold_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+        #
+        # grid_layout.addWidget(QLabel("<b>Auto-correct motors drift:</b>"), cur_row, cur_col)
+        # toggle = self._auto_correct_motors_drift_toggle = QSwitch()
+        # add_enabled_state(lambda: self._auto_correct_motors_drift_toggle.setEnabled(self._inference_enabled_toggle.isChecked()))
+        # toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        # toggle.setChecked(self._app_model.behavior.algorithm.auto_correct_motors_drift)
+        # def auto_correct_motors_drift_toggle_changed(value: int):
+        #     enabled = value != 0
+        #     logger.verbose("auto_correct_motors_drift_toggle_changed: %s", enabled)
+        #     self._app_model.behavior.algorithm.auto_correct_motors_drift = enabled
+        # toggle.stateChanged.connect(auto_correct_motors_drift_toggle_changed)
+        # grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        # cur_row += 1
         #
         add_height_separator()
         #
         grid_layout.addWidget(QLabel("<b>Triangle-pellet distance too far detection:</b>"), cur_row, cur_col)
-        toggle = self._use_triangle_pellet_distance_toggle = QSwitch()
-        add_enabled_state(lambda: self._use_triangle_pellet_distance_toggle.setEnabled(self._inference_enabled_toggle.isChecked()))
+        toggle = QSwitch()
+        add_enabled_state(lambda t=toggle: t.setEnabled(self._inference_enabled_toggle.isChecked()))
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         toggle.setChecked(algo.use_triangle_pellet_distance_too_far)
         def use_triangle_pellet_distance_changed(value):
             enabled = value != 0
             algo.use_triangle_pellet_distance_too_far = enabled
             refresh_enabled_states()
-        self._use_triangle_pellet_distance_toggle.stateChanged.connect(use_triangle_pellet_distance_changed)
+        toggle.stateChanged.connect(use_triangle_pellet_distance_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         #
         grid_layout.addWidget(QLabel("Maximum expected distance (mm):"), cur_row, cur_col)
         spinbox = self._triangle_pellet_expected_distance_spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda s=spinbox, t=self._use_triangle_pellet_distance_toggle:
-            s.setEnabled(t.isEnabled() and t.isChecked())
-        )
+        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isEnabled() and t.isChecked()))
         spinbox.setRange(0, 99)
         spinbox.setValue(algo.triangle_pellet_expected_distance)
         def triangle_pellet_expected_distance_changed(value):
@@ -347,10 +370,8 @@ class PreferencesContent(QWidget):
         cur_row += 1
         #
         grid_layout.addWidget(QLabel("Triangle-Pellet diff too far threshold (mm):"), cur_row, cur_col)
-        spinbox = self._triangle_pellet_diff_too_far_threshold_spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda s=spinbox, t=self._use_triangle_pellet_distance_toggle:
-            s.setEnabled(t.isEnabled() and t.isChecked())
-        )
+        spinbox = QDoubleSpinBox()
+        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isEnabled() and t.isChecked()))
         spinbox.setRange(0, 20)
         spinbox.setValue(algo.triangle_pellet_diff_too_far_threshold)
         def triangle_pellet_diff_too_far_threshold_changed(value):
@@ -363,21 +384,20 @@ class PreferencesContent(QWidget):
         #
         grid_layout.addWidget(QLabel("<b>Auto-close gate during intersession:</b>"), cur_row, cur_col)
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
-        toggle = self._auto_close_gate_during_intersession_toggle = QSwitch()
+        toggle = QSwitch()
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         toggle.setChecked(auto_close_gate_cfg.enabled)
         def toggle_changed(value):
             enabled = value != 0
-            auto_close_gate_cfg.enabled = enabled
+            algo.auto_close_gate_on_intersession_config.enabled = enabled
             refresh_enabled_states()
         toggle.stateChanged.connect(toggle_changed)
-
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
         grid_layout.addWidget(QLabel("session minimum duration (sec.):"), cur_row, cur_col)
-        spinbox = self._auto_close_gate_sess_minimum_duration_spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda s=spinbox, t=toggle: spinbox.setEnabled(t.isChecked()))
+        spinbox = QDoubleSpinBox()
+        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setRange(0, max(1_000_000., auto_close_gate_cfg.session_min_duration))
         spinbox.setDecimals(1)
         spinbox.setValue(auto_close_gate_cfg.session_min_duration)
@@ -389,9 +409,7 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("delay after cage enter to close (sec.):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda s=spinbox: s.setEnabled(
-            self._auto_close_gate_during_intersession_toggle.isChecked()
-        ))
+        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setRange(0, 60)
         spinbox.setDecimals(1)
         spinbox.setValue(auto_close_gate_cfg.delay_after_cage_enter)
@@ -443,7 +461,7 @@ class PreferencesContent(QWidget):
         spinbox.setToolTip(tooltip)
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setRange(0, 100)
-        spinbox.setDecimals(0)
+        spinbox.setDecimals(1)
         spinbox.setSingleStep(1)
         spinbox.setValue(algo.head_clamp_config.prerelease_duration)
         def auto_clamp_prerelease_duration_chanded(value):

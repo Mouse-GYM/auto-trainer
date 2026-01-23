@@ -9,7 +9,7 @@ from autotrainer.core.logging import get_verbose_logger
 from .animal_presence_configuration import GlobalAnimalPresenceConfig
 from .external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 from .presence_detection_configuration import PresenceDetectionConfig
-from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor
+from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor, Offset3DTuple
 
 from ..analysis import LoadCellAutoTareConfiguration
 from ..analysis import HeadbarPressureConfiguration
@@ -31,23 +31,48 @@ class AutoCloseGateOnIntersessionConfiguration:
 
 
 @dataclass
+class HomeOnExcessiveDriftDistance:
+    """Execute, when in monitoring (should equal to be in deliver position), home to reset motors if measured drift distance is higher than threshold"""
+
+    enabled: bool = False
+    excessive_distance_threshold: float = 5  # mm
+
+    min_samples: int = 30
+    # only considerate if/when nbr of samples is greater than this.
+    # This can compensate small unsync between inference results and motor status positions,
+    # when the start of the sampling would be done right after the pellet-arm finished moving.
+    # The current inference is giving us ~15 datapoints per second,
+    # and almost same for the motor status position: ~10 / sec.
+    # So this requires/takes ~2 seconds of duration to get what's necessary.
+
+
+@dataclass
 class PelletDeliveryConfiguration:
     """
     Behavior model options related to pellet delivery.
     """
+
     is_enabled: bool = False
+    """When disabled not automatic behavior movement will be peformed, but eventually on application start"""
+
     is_pellet_cover_enabled: bool = False
+    """If enabled: cover pellet when session starts, and wait uncover condition"""
+
+    # not really related to pellet delivery but has been here since start:
     is_intersession_analysis_enabled: bool = False
     is_intersession_pellet_shift_enabled: bool = True
-    max_pellets_per_session: int = 10
-    max_pellets_per_day: int = 50
+
+    max_pellets_per_session: int = 10  # actually unused
+    max_pellets_per_day: int = 50  # actually unused
     max_pellet_missing_seconds: float = 1.0  # how long to wait before load pellet when pellet missing/not seen
     # this help ensure we don't execute a load pellet if we get an incorrect pose_result with pellet seen == False,
     # which can happen eventually (missed inference detection basically).
     pellet_hand_uncover_distance: Optional[float] = 5  # mm ; None means disabled.
 
-    auto_correct_motors_drift: bool = False
+    auto_correct_motors_drift: bool = False  # attempt "live" motor drift correction -- DISABLED in code
+
     use_triangle_pellet_distance_too_far: bool = False
+    """If enabled then a triangle-pellet too far distance also trigger a load-pellet"""
     triangle_pellet_expected_distance: float = 5  # mm
     triangle_pellet_diff_too_far_threshold: float = 1  # mm
 
@@ -121,6 +146,7 @@ class _BehaviorConfiguration:
     auto_tunnel_sweep: AutoTunnelSweepConfiguration = field(default_factory=AutoTunnelSweepConfiguration)
     batch_session_recording: BatchSessionRecordingConfiguration = field(default_factory=BatchSessionRecordingConfiguration)
     auto_close_gate_on_intersession: AutoCloseGateOnIntersessionConfiguration = field(default_factory=AutoCloseGateOnIntersessionConfiguration)
+    home_on_excessive_drift_distance: HomeOnExcessiveDriftDistance = field(default_factory=HomeOnExcessiveDriftDistance)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -167,51 +193,43 @@ class BehaviorConfiguration(_BehaviorConfiguration):
         super().__init__(**kwargs)
 
 
-def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
-    def add(klass, tag):
-        dumper.add_representer(klass, make_camelize_representer(f"!{tag}"))
+_cls_2_tag = {
+    PelletDeliveryConfiguration: "PelletDeliveryConfiguration",
+    LoadCellConfiguration: "LoadCellConfiguration",
+    HeadClampConfiguration: "HeadClampConfiguration",
+    HeadbarPressureConfiguration: "HeadbarPressureConfiguration",
+    LoadCellAutoTareConfiguration: "LoadCellAutoTareConfiguration",
+    BehaviorConfiguration: "BehaviorConfiguration",
+    AudioSpectrumThrashMonitorConfig: "AudioMonitorConfiguration",
+    GlobalAnimalPresenceConfig: "AnimalPresenceConfiguration",
+    EmergencyAlarmConfiguration: "EmergencyAlarmConfiguration",
+    PresenceDetectionConfig: "PresenceDetectionConfiguration",
+    ExternalDoorsMonitorConfig: "ExternalDoorsMonitorConfiguration",
+    AutoEndSessionConfiguration: "AutoEndSessionConfiguration",
+    AutoTunnelSweepConfiguration: "AutoTunnelSweepConfiguration",
+    BatchSessionRecordingConfiguration: "BatchSessionRecordingConfiguration",
+    AutoCloseGateOnIntersessionConfiguration: "AutoCloseGateOnIntersessionConfiguration",
+    HomeOnExcessiveDriftDistance: "HomeOnExcessiveDriftDistance",
+}
 
-    add(PelletDeliveryConfiguration, "PelletDeliveryConfiguration")
-    add(LoadCellConfiguration, "LoadCellConfiguration")
-    add(HeadClampConfiguration, "HeadClampConfiguration")
-    add(HeadbarPressureConfiguration, "HeadbarPressureConfiguration")
-    add(LoadCellAutoTareConfiguration, "LoadCellAutoTareConfiguration")
-    add(BehaviorConfiguration, "BehaviorConfiguration")
-    add(AudioSpectrumThrashMonitorConfig, "AudioMonitorConfiguration")
-    add(GlobalAnimalPresenceConfig, "AnimalPresenceConfiguration")
-    add(EmergencyAlarmConfiguration, "EmergencyAlarmConfiguration")
-    add(PresenceDetectionConfig, "PresenceDetectionConfiguration")
-    add(ExternalDoorsMonitorConfig, "ExternalDoorsMonitorConfiguration")
-    add(AutoEndSessionConfiguration, "AutoEndSessionConfiguration")
-    add(AutoTunnelSweepConfiguration, "AutoTunnelSweepConfiguration")
-    add(BatchSessionRecordingConfiguration, "BatchSessionRecordingConfiguration")
-    add(AutoCloseGateOnIntersessionConfiguration, "AutoCloseGateOnIntersessionConfiguration")
+
+def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
+    def add(klass, tagname):
+        dumper.add_representer(klass, make_camelize_representer(f"!{tagname}"))
+
+    for cls, tag in _cls_2_tag.items():
+        add(cls, tag)
 
 
 def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
 
-    def add(klass, tag=None):
-        if tag is None:
-            tag = klass.__name__
-        safe_loader.add_constructor(f"!{tag}", make_decamelize_constructor(klass))
+    def add(klass, tagname):
+        safe_loader.add_constructor(f"!{tagname}", make_decamelize_constructor(klass))
 
-    add(BehaviorConfiguration, "BehaviorConfiguration")
-    add(PelletDeliveryConfiguration, "PelletDeliveryConfiguration")
-    add(LoadCellConfiguration, "LoadCellConfiguration")
-    add(HeadbarPressureConfiguration, "HeadbarPressureConfiguration")
-    add(HeadClampConfiguration, "HeadClampConfiguration")
-    add(LoadCellAutoTareConfiguration, "LoadCellAutoTareConfiguration")
-    add(AudioSpectrumThrashMonitorConfig, "AudioMonitorConfiguration")
-    #
-    add(GlobalAnimalPresenceConfig, "AnimalPresenceConfiguration")
+    for cls, tag in _cls_2_tag.items():
+        add(cls, tag)
+
     add(GlobalAnimalPresenceConfig, "MousePresenceConfiguration")
     # keeping temporarily MousePresenceConfiguration, was renamed to AnimalPresenceConfiguration. Back-compatibility.
     # todo: remove some when later.
     #
-    add(EmergencyAlarmConfiguration, "EmergencyAlarmConfiguration")
-    add(PresenceDetectionConfig, "PresenceDetectionConfiguration")
-    add(ExternalDoorsMonitorConfig, "ExternalDoorsMonitorConfiguration")
-    add(AutoEndSessionConfiguration, "AutoEndSessionConfiguration")
-    add(AutoTunnelSweepConfiguration, "AutoTunnelSweepConfiguration")
-    add(BatchSessionRecordingConfiguration, "BatchSessionRecordingConfiguration")
-    add(AutoCloseGateOnIntersessionConfiguration, "AutoCloseGateOnIntersessionConfiguration")

@@ -57,8 +57,8 @@ class PelletMachine(StateMachine):
         if algorithm is None:
             algorithm = BehaviorAlgorithm()
         self._algorithm = algorithm
-        algorithm.session_starting += self._session_started
-        algorithm.session_capture_ending += self._session_capture_ended
+        # algorithm.session_starting += self._session_started
+        # algorithm.session_capture_ending += self._session_capture_ended
         algorithm.relay_transitions(self)
 
         self._message_handler = msg_handler
@@ -193,20 +193,23 @@ class PelletMachine(StateMachine):
     @BehaviorAlgorithm.relay_func
     def _session_started(self):
         # ensure we reset the diamond triangle drifts measures
-        self._algorithm.get_diamond_triangle_drifts(reset=True)
+        pass
+        # self._algorithm.get_diamond_triangle_drifts(reset=True)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _session_capture_ended(self, reason: RecordingEndingReason):
+        pass
         # todo: this entire func/block should be moved to system machine or behavior algo imho
-        algo = self._algorithm
-        logger.debug("session_capture_ended(%s): session_mouse_seen=%s algo.intersession_state=%s",
-                     reason, algo.session_mouse_seen, algo.intersession_state)
-        dev = self._pellet_device
-        # optional apply of measured motor drifts,
-        drifts = algo.get_diamond_triangle_drifts(reset=True)  # always, to reset the recorded values list too.
-        correct_drift = algo.auto_correct_motors_drift
-        if drifts is not None and correct_drift:
-            dev.set_motors_drift(drifts)
+        # algo = self._algorithm
+        # logger.debug("session_capture_ended(%s): session_mouse_seen=%s algo.intersession_state=%s",
+        #              reason, algo.session_mouse_seen, algo.intersession_state)
+        # dev = self._pellet_device
+        # DISABLED in favor of HomeOnExcessiveDistance
+        # optional apply auto-correct of measured motor drifts,
+        # if algo.auto_correct_motors_drift:
+        #     drifts = algo.get_diamond_triangle_drifts()
+        #     if drifts is not None:
+        #         dev.set_motors_drift(drifts)
 
     def _before_move_retract(self):
         if self._algorithm.pellet_cover_enabled:
