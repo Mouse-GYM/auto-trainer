@@ -76,9 +76,10 @@ class SpinCam(CameraBase):
 
     def __init__(self, serial_number, name: str = ""):
 
-        self._camera = None
+        self._camera: Optional[PySpin.Camera] = None
         self._node_map = None
         self._node_map_tl_device = None
+        self._start_frames = []
 
         super().__init__(name)
 
@@ -108,8 +109,9 @@ class SpinCam(CameraBase):
         finally:
             cam_list.Clear()
 
-        self._image_processor = PySpin.ImageProcessor()
-        self._image_processor.SetColorProcessing(PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR)
+        # not needed
+        # self._image_processor = PySpin.ImageProcessor()
+        # self._image_processor.SetColorProcessing(PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR)
 
     def __del__(self):
         _release_spincam(self)
@@ -252,7 +254,7 @@ class SpinCam(CameraBase):
             self._configure_as_primary()
             logger.info(f"<{self.name}> configured as primary")
 
-        if self._is_secondary:
+        elif self._is_secondary:
             self._configure_as_secondary()
             logger.info(f"<{self.name}> configured as secondary")
 
@@ -284,30 +286,50 @@ class SpinCam(CameraBase):
                 self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
 
         image_result = self._camera.GetNextImage()
+        if image_result.IsIncomplete():
+            # fail early
+            image_result.Release()
+            raise RuntimeError(f"Incomplete spincam image on frame_idx={self._frame_count}")
 
-        image_converted = self._image_processor.Convert(image_result, PySpin.PixelFormat_Mono8)
+        self._last_when = image_result.GetTimeStamp()
+        frame = image_result.GetNDArray()  # get the frame/array as acquired by hardware itself
 
-        # NB: no need create copy, GetNDArray() already returns a new array
-        # frame = numpy.ndarray([self._height, self._width], "ubyte")
-        # frame[:, :] = image_converted.GetNDArray()
-        frame = image_converted.GetNDArray()  # type: numpy.ndarray
         expected_shape = (self._height, self._width)
-        if first_capture:  # instead we do a small check on first frame:
+
+        if first_capture:
+            self._capture_start = self._last_when
             logger.notice("first frame: shape=%s (expected=%s) dtype=%s itemsize=%s",
                           frame.shape, expected_shape, frame.dtype, frame.itemsize)
             if frame.shape != expected_shape:
                 logger.warning("Frame shape not as expected: %s vs %s", frame.shape, expected_shape)
-        if frame.shape != expected_shape:
-            frame = frame.reshape(expected_shape)
 
-        self._last_when = image_result.GetTimeStamp()
-
-        if self._frame_count == 0:
-            self._capture_start = self._last_when
+        if __debug__:
+            # ensure no frame in the first 150, shares its internal buffer with any of the other first 150 of them:
+            if self._frame_count < 150:
+                # image_converted = self._image_processor.Convert(image_result, PySpin.PixelFormat_Mono8)
+                # frame_conv = image_converted.GetNDArray()  # type: numpy.ndarray
+                logger.spam("frame-%s: shape=%s dtype=%s",
+                             self._frame_count, frame.shape, frame.dtype)
+                if len(self._start_frames) > 0:
+                    for prev_idx, (prev_frame, prev_frame_copy, prev_conv, prev_conv_copy) in enumerate(self._start_frames):
+                        if (prev_frame != prev_frame_copy).any():
+                            logger.critical("Detected prev frame (idx=%s) got corrupted", prev_idx)
+                        if (frame == prev_frame).all() and (frame != prev_frame_copy).any():
+                            logger.critical("Detected frame (idx=%s) shares internal buffer with prev frame idx=%s",
+                                            self._frame_count, prev_idx)
+                        # if (frame_conv == prev_conv).all() and (frame_conv != prev_conv_copy).any():
+                        #     logger.critical("Detected converted frame (idx=%s) shares internal buffer with prev converted frame idx=%s",
+                        #                     self._frame_count, prev_idx)
+                self._start_frames.append((frame, frame.copy(), None, None))
+            else:
+                self._start_frames.clear()
 
         self._frame_count += 1
 
         image_result.Release()
+
+        if frame.shape != expected_shape:
+            frame = frame.reshape(expected_shape)
 
         return frame, self._last_when
 
