@@ -16,7 +16,7 @@ import time
 from functools import partial
 from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict
 
-from autotrainer.core import Offset3DTuple
+from autotrainer.core import Offset3DTuple, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.message import SystemDataArgsKwargs
 
@@ -66,6 +66,9 @@ from .device_interface import (
 )
 
 
+_similar_data_refresh_delay = os.getenv("AUTOTRAINER_DEVICE_SIMILAR_DATA_REFRESH_DELAY") or 5
+_similar_data_refresh_delay = float(_similar_data_refresh_delay)
+
 # some sentinels object:
 
 # this is used from CAN reader thread to put to CAN writer thread message queue :
@@ -107,6 +110,11 @@ class CanDevice(Device):
     default_command_write_failed_repeat_count: int = 3
     default_command_ack_timeout_duration: float = 3  # seconds
     default_command_ack_timeout_repeat_count: int = 3
+
+    same_data_refresh_delay: float = _similar_data_refresh_delay
+    """When > 0: if new data value is equal to previous value,
+    and elapsed time since last one is smaller than this delay: skip data update.
+    """
 
     _motor_to_status_kind = {
         Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_MOTOR_X,
@@ -186,6 +194,9 @@ class CanDevice(Device):
 
         self._commands_queue = queue.Queue()
         self._commands_handler_thread: Optional[threading.Thread] = None
+
+        self._previous_stepper_status_perf_c = {}  # (None, -math.inf)
+        self._previous_servo_status_perf_c = {}  # (None, -math.inf)
 
     def _init_handlers(self):
 
@@ -357,6 +368,30 @@ class CanDevice(Device):
             # as we do for written motor configs ? but probably better to not do it here.
             self._api.send_message(SystemStatusMessageKind.MOTOR_CONFIGURATION, m)
 
+        previous_stimuli_data_perf_c = (None, -math.inf)
+        def handle_stimuli_msg(m):
+            nonlocal previous_stimuli_data_perf_c
+            new_data = [m.stimulus_1, m.stimulus_2, m.stimulus_3, m.stimulus_4]
+            prev_data, prev_perf_c = previous_stimuli_data_perf_c
+            p_now = get_perf_now()
+            if new_data != prev_data or p_now - prev_perf_c > self.same_data_refresh_delay:
+                previous_stimuli_data_perf_c = (new_data, p_now)
+                self._api.send_message(SystemStatusMessageKind.STIMULUS_INPUTS, new_data)
+
+        previous_door_data_perf_c = (None, -math.inf)
+        def handle_door_msg(m: DoorData):
+            nonlocal previous_door_data_perf_c
+            new_data = (m.door1, m.door2, m.door3, m.ext_button)
+            p_now = get_perf_now()
+            prev_data, prev_perf_c = previous_door_data_perf_c
+            if new_data != prev_data or p_now - prev_perf_c > self.same_data_refresh_delay:
+                previous_door_data_perf_c = (new_data, p_now)
+                send_msg = self._api.send_message
+                send_msg(SystemStatusMessageKind.FRONT_DOOR, m.door1 != 0),
+                send_msg(SystemStatusMessageKind.DRAWER_DOOR, m.door2 != 0),
+                send_msg(SystemStatusMessageKind.SPARE_DOOR, m.door3 != 0),
+                send_msg(SystemStatusMessageKind.EXT_BUTTON, m.ext_button != 0)
+
         self._data_handlers = {
             Status: no_op_handler,  # No-op for Status messages
             Tone: no_op_handler,
@@ -369,14 +404,7 @@ class CanDevice(Device):
 
             MagnetDigitalInputs: set_current_digital,
 
-            PelletDigitalInputs: lambda message: (
-                self._api.send_message(SystemStatusMessageKind.STIMULUS_INPUTS,
-                                       [message.stimulus_1,
-                                        message.stimulus_2,
-                                        message.stimulus_3,
-                                        message.stimulus_4])
-                if self._api is not None else None
-            ),
+            PelletDigitalInputs: handle_stimuli_msg,
 
             AudioData: lambda message: (
                 self._api.send_message(SystemStatusMessageKind.AUDIO_SPECTRUM,
@@ -395,12 +423,7 @@ class CanDevice(Device):
             Version: lambda message: \
                 self._api.send_message(SystemStatusMessageKind.FIRMWARE_VERSION, message.version),
 
-            DoorData: lambda message: (
-                self._api.send_message(SystemStatusMessageKind.FRONT_DOOR, message.door1 != 0),
-                self._api.send_message(SystemStatusMessageKind.DRAWER_DOOR, message.door2 != 0),
-                self._api.send_message(SystemStatusMessageKind.SPARE_DOOR, message.door3 != 0),
-                self._api.send_message(SystemStatusMessageKind.EXT_BUTTON, message.ext_button != 0)
-            ) if self._api is not None else None,
+            DoorData: handle_door_msg,
 
             Acknowledge: self._handle_ack,
         }
@@ -731,6 +754,7 @@ class CanDevice(Device):
         self._pending_kind = None
         self._pending_context = None  # last
 
+
     def _report_stepper_status(self, message: StepperStatus):
         """
         Report stepper status to the API.
@@ -751,7 +775,12 @@ class CanDevice(Device):
             self._last_pos = self._last_pos.replace(**{coord_char: message.position})
         kind = CanDevice._motor_to_status_kind.get(message.motor, None)
         if self._api is not None and kind is not None:
-            self.api.send_message(kind, message)
+            prev_data, prev_perf_c = self._previous_stepper_status_perf_c.get(kind, (None, -math.inf))
+            perf_now = get_perf_now()
+            data = (message.position, message.send_position, message.is_at_limit, message.position_error)
+            if data != prev_data or perf_now - prev_perf_c > self.same_data_refresh_delay:
+                self._previous_stepper_status_perf_c[kind] = (data, perf_now)
+                self.api.send_message(kind, message)
 
     def _report_servo_status(self, motor, position):
         """
@@ -762,8 +791,16 @@ class CanDevice(Device):
             position: The current position of the motor
         """
         kind = CanDevice._motor_to_status_kind.get(motor, None)
-        if self._api is not None and kind is not None:
+        if kind is None:
+            return
+        # if self._api is not None and kind is not None:
+        prev_data, prev_perf_c = self._previous_servo_status_perf_c.get(kind, (None, -math.inf))
+        perf_now = get_perf_now()
+        if prev_data != position or perf_now - prev_perf_c > self.same_data_refresh_delay:
+            self._previous_servo_status_perf_c[kind] = (position, perf_now)
             self.api.send_message(kind, position)
+
+    #
 
     def _make_servo_steps(self, motor):
         cfg = self._motor_configs.get(motor, None)
