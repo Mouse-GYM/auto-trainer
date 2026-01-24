@@ -200,8 +200,6 @@ class SystemMachine(StateMachine):
         self._enter_tunnel_pellet_seen = self._algorithm.pellet_recently_seen
         if self._state == SystemState.cage:
             # always when enter tunnel, but only if was in cage before.
-            self._timer_auto_clamp_evaluate.cancel()  # in case of
-            self._timer_auto_clamp_disengage.cancel()  # better needed
             self._execute_disengage_auto_clamp_if_in_progress()
         logger.debug("before_enter_tunnel: state=%s pellet_state=%s pellet_recently_seen=%s",
                      self._state, pellet_state, self._enter_tunnel_pellet_seen)
