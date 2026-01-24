@@ -201,8 +201,7 @@ class SystemMachine(StateMachine):
             # always when enter tunnel, but only if was in cage before.
             self._timer_auto_clamp_evaluate.cancel()  # in case of
             self._timer_auto_clamp_disengage.cancel()  # better needed
-            self._auto_clamp_in_progress = False
-            self._update_magnet_position(self._algorithm.baseline_intensity)
+            self._execute_disengage_auto_clamp_if_in_progress()
         logger.debug("before_enter_tunnel: state=%s pellet_state=%s pellet_recently_seen=%s",
                      self._state, pellet_state, self._enter_tunnel_pellet_seen)
 
@@ -214,8 +213,9 @@ class SystemMachine(StateMachine):
     def after_exit_tunnel(self, *, reason: str = "NA"):
         logger.verbose("after_exit_tunnel: %s", reason)
         algo = self._algorithm
-        self._timer_auto_clamp_disengage.cancel()
-        self._update_magnet_position(algo.baseline_intensity)
+        self._timer_consider_start_session.cancel()
+        self._timer_consider_end_session.cancel()
+        self._execute_disengage_auto_clamp_if_in_progress()
         EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
         if algo.is_in_session:
             algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
@@ -262,7 +262,7 @@ class SystemMachine(StateMachine):
             # always ensure open gate on intersession ended (to cage)
             self._timer_consider_close_gate.cancel()
             self._tunnel_device.open_tunnel_gate()
-            self._execute_disengage_auto_clamp()
+            self._execute_disengage_auto_clamp_if_in_progress()
             self.exit_intersession_to_cage()
 
     def after_exit_intersession_to_cage(self):
@@ -492,14 +492,13 @@ class SystemMachine(StateMachine):
         self._timer_auto_clamp_evaluate = no_op_timer
         algo = self._algorithm
         if not algo.head_fixation_enabled:
-            logger.info("auto-clamp disabled (no action taken)")
+            logger.info("auto-clamp: disabled (no action taken)")
             return
-        logger.verbose("headbar pressure engaged: %s", is_headbar_pressure_engaged)
+        if not self._analysis.load_cell_monitor.is_engaged:
+            logger.info("auto-clamp: load-cell not engaged (no action taken)")
+            return
         if not is_headbar_pressure_engaged:
-            logger.info("auto-clamp detector not engaged (no action taken)")
-            return
-        if self._state == SystemState.cage:
-            logger.info("auto-clamp in cage (no action taken)")
+            logger.info("auto-clamp: detector not engaged (no action taken)")
             return
         p_now = get_perf_now()
         disengage_age = p_now - self._last_disengage_autoclamp_perf_c
@@ -676,9 +675,11 @@ class SystemMachine(StateMachine):
     # AUTO-CLAMP / HEAD-BAR
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _execute_disengage_auto_clamp(self):
+    def _execute_disengage_auto_clamp_if_in_progress(self):
         self._timer_auto_clamp_evaluate.cancel()  # in case of
         self._timer_auto_clamp_disengage.cancel()  # better needed
+        if not self._auto_clamp_in_progress:
+            return
         baseline_intensity = self._algorithm.baseline_intensity
         logger.info("Disengaging auto-clamp to intensity %s", baseline_intensity)
         self._last_disengage_autoclamp_perf_c = get_perf_now()
@@ -696,11 +697,11 @@ class SystemMachine(StateMachine):
             self._update_magnet_position(clamp_cfg.prerelease_intensity)
             logger.debug("started timer for really disengage auto-clamp in %.1fs", pre_duration)
             timer = self._timer_auto_clamp_disengage = _auto_clamp_release_timer(
-                pre_duration, self._execute_disengage_auto_clamp
+                pre_duration, self._execute_disengage_auto_clamp_if_in_progress
             )
             timer.start()
         else:
-            self._execute_disengage_auto_clamp()
+            self._execute_disengage_auto_clamp_if_in_progress()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _disengage_auto_clamp(self):

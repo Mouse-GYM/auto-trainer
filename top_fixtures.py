@@ -23,7 +23,8 @@ from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 
-from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, BehaviorAlgorithm, InferenceProtocol
+from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, BehaviorAlgorithm, \
+    InferenceProtocol, SystemState
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.pellet import PelletState
 
@@ -263,9 +264,12 @@ class MockSystemMachine:
     def start_session_in_tunnel(self):
         algo = self.algo
         assert not algo.is_in_session
+        assert self._machine.state == SystemState.cage
+        self.sensor_analysis.load_cell_monitor.is_engaged = True
         self._machine.enter_tunnel(reason="manual")
         algo.start_session()
         assert algo.is_in_session
+        assert self._machine.state == SystemState.tunnel
 
     @contextlib.contextmanager
     def patch_timer(self, place, new=None) -> ContextManager[Union[mock.MagicMock, DaemonTimer]]:  # noqa

@@ -35,9 +35,11 @@ class _AutoClampTestCase(MockSystemMachine):
         algo.intersession_enabled = True
         pressure_mon = self.sensor_analysis.headbar_pressure_monitor
         self.start_session_in_tunnel()
-        algo.update_mouse_seen(True)
+        assert self.update_magnet_mock.call_args_list == []
+        algo.update_mouse_seen(True)  # to have intersession started
         with self.mock_intersession_analysis():
             machine.exit_tunnel()
+            assert self.update_magnet_mock.call_args_list == []
             assert machine.state == SystemState.intersession
             assert machine.intersession.state == IntersessionState.segmentation
             with caplog.at_level(logging.INFO):
@@ -57,7 +59,7 @@ class TestDisabled(_AutoClampTestCase):
         assert algo.system_state != SystemState.tunnel
         with caplog.at_level(logging.INFO):
             pressure_monitor.is_engaged = True
-        assert "auto-clamp disabled (no action taken)" in caplog.text
+        assert "auto-clamp: disabled (no action taken)" in caplog.text
 
     def test_when_in_session(self, machine, caplog):
         algo = machine.algorithm
@@ -67,13 +69,13 @@ class TestDisabled(_AutoClampTestCase):
         assert algo.is_in_session
         with caplog.at_level(logging.INFO):
             pressure_monitor.is_engaged = True
-        assert "auto-clamp disabled (no action taken)" in caplog.text
+        assert "auto-clamp: disabled (no action taken)" in caplog.text
+        assert self.update_magnet_mock.call_args_list == []
 
     def test_when_intersession_with_exit_tunnel(self, machine, caplog):
         super().test_when_intersession_with_exit_tunnel(machine, caplog)  # same
-        assert "auto-clamp disabled (no action taken)" in caplog.text
-        # assert self.tunnel_dev.update_head_magnet_intensity.call_args_list == []
-        # actually twice baseline
+        assert "auto-clamp: disabled (no action taken)" in caplog.text
+        assert self.update_magnet_mock.call_args_list == []
 
 class TestEnabled(_AutoClampTestCase):
 
@@ -90,16 +92,12 @@ class TestEnabled(_AutoClampTestCase):
         assert algo.system_state != SystemState.tunnel
         with caplog.at_level(logging.INFO):
             pressure_monitor.is_engaged = True
-        assert "auto-clamp in cage (no action taken)" in caplog.text
+        assert "auto-clamp: load-cell not engaged (no action taken)" in caplog.text
 
     def test_when_intersession_with_exit_tunnel(self, machine, caplog):
         super().test_when_intersession_with_exit_tunnel(machine, caplog)  # same
         assert f"auto-clamp setting position to " in caplog.text
-        assert self.tunnel_dev.update_head_magnet_intensity.call_args_list == [
-            mock.call(self.algo.baseline_intensity),
-            mock.call(self.algo.auto_clamp_intensity),
-            mock.call(self.algo.baseline_intensity),
-        ]
+        assert self.update_magnet_mock.call_args_list == [mock.call(self.algo.auto_clamp_intensity)]
 
     @pytest.mark.parametrize("baseline_intensity", [10, 80])
     @pytest.mark.parametrize("no_activity_release_delay", [0, 60])
@@ -120,10 +118,7 @@ class TestEnabled(_AutoClampTestCase):
 
         update_magnet_mock = self.update_magnet_mock
 
-        assert update_magnet_mock.call_args_list == [
-            mock.call(algo.baseline_intensity),
-        ]
-        self.tunnel_dev.reset_mock()
+        assert update_magnet_mock.call_args_list == []
 
         pressure_mon = self.sensor_analysis.headbar_pressure_monitor
         with self.patch_timer("autotrainer.behavior.system_machine._consider_disengage_autoclamp_timer") as consider_disengage_timer:
@@ -145,6 +140,7 @@ class TestEnabled(_AutoClampTestCase):
             algo.auto_clamp_release_load_count = 3
             with self.patch_timer("autotrainer.behavior.system_machine._auto_clamp_release_timer") as release_clamp_timer:
                 for load_attempt in range(algo.auto_clamp_release_load_count):
+                    assert release_clamp_timer.call_count == 0
                     self.pellet.force_load_pellet()
 
         if release_tone_delay > 0:
@@ -162,8 +158,7 @@ class TestEnabled(_AutoClampTestCase):
             assert release_clamp_timer.call_args[0][0] == cfg.prerelease_duration
             update_magnet_mock.reset_mock()
             func = release_clamp_timer.call_args[0][1]
-            with self.patch_timer("autotrainer.behavior.system_machine._auto_clamp_release_timer") as release_clamp_timer:
-                func()
+            func()
         else:
             assert release_clamp_timer.call_count == 0
 
@@ -176,20 +171,17 @@ class TestEnabled(_AutoClampTestCase):
         assert machine._auto_clamp_in_progress
         self.headbar_pressure.is_engaged = False
         assert machine._auto_clamp_in_progress
+        self.tunnel_dev.reset_mock()
         with caplog.at_level(logging.DEBUG):
             self.headbar_pressure.is_engaged = True
         assert "auto_clamp already in progress" in caplog.text
+        assert self.update_magnet_mock.call_count == 0
 
-    @pytest.mark.parametrize("start_session", [False, True])
-    def test_exit_tunnel_reset_to_baseline(self, machine, start_session):
-        algo = machine.algorithm
-        machine.enter_tunnel()
+    def test_exit_tunnel_without_engaged(self, machine):
+        self.start_session_in_tunnel()
         assert machine.state == SystemState.tunnel
-        if start_session:
-            self.start_session_in_tunnel()
-            assert self.update_magnet_mock.call_args_list == [mock.call(algo.baseline_intensity)]
-            self.tunnel_dev.reset_mock()
+        assert self.update_magnet_mock.call_args_list == []
         machine.exit_tunnel()
         assert machine.state == SystemState.cage
-        assert self.update_magnet_mock.call_args_list == ([mock.call(algo.baseline_intensity)] if not start_session else [])
+        assert self.update_magnet_mock.call_args_list == []
         assert self.pellet_dev.play_tone.call_args_list == []

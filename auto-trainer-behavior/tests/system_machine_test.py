@@ -40,15 +40,11 @@ def test_enter_exit_tunnel(mock_system, machine):
 
     NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, set_capture_triggered)
 
-    tun_dev = machine._tunnel_device
-
     # Current code assumes intersession analysis is off by default.
     assert algo.intersession_enabled is False
 
     # Defaults
     assert machine.state == SystemState.cage
-    # assert machine.mock_headfix.current_position == 0
-    assert tun_dev.update_head_magnet_intensity.call_args_list == []
     assert algo.is_in_session is False
     assert not algo.pellet_recently_seen
     algo.update_pellet_seen(True)
@@ -61,9 +57,6 @@ def test_enter_exit_tunnel(mock_system, machine):
     assert algo.is_in_session is True
     assert is_capture_triggered is True
     assert machine.state == SystemState.tunnel
-    assert tun_dev.update_head_magnet_intensity.call_args_list == [
-        mock.call(algo.baseline_intensity)
-    ]
 
     mock_system.make_load_cell_inactive()
 
