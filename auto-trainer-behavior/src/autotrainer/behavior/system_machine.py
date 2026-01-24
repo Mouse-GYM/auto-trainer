@@ -87,6 +87,7 @@ class SystemMachine(StateMachine):
         # If 0 (or lower) : immediatelly consider end session on start of pellet-load.
 
         self._auto_clamp_in_progress = False
+        self._auto_clamp_disengage_in_progress = False
         self._timer_consider_close_gate = no_op_timer
         self._timer_auto_clamp_evaluate = no_op_timer
         self._timer_auto_clamp_disengage = no_op_timer
@@ -685,6 +686,7 @@ class SystemMachine(StateMachine):
         self._last_disengage_autoclamp_perf_c = get_perf_now()
         self._update_magnet_position(baseline_intensity)
         self._auto_clamp_in_progress = False
+        self._auto_clamp_disengage_in_progress = False
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pre_disengage_auto_clamp(self):
@@ -705,6 +707,10 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _disengage_auto_clamp(self):
+        if self._auto_clamp_disengage_in_progress:
+            logger.debug("skipping new disengage while disengage alreaady in progress")
+            return
+        self._auto_clamp_disengage_in_progress = True
         logger.info("disengaging auto-clamp ..")
         self._timer_auto_clamp_evaluate.cancel()  # in case of
         self._timer_auto_clamp_disengage.cancel()  # also
