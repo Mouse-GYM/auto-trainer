@@ -1155,7 +1155,7 @@ class AppModel(ObservableObject):
 
         if path.exists() and path.is_dir():
             files = [x.name for x in path.glob("*.json")]
-            loaded = [AnimalSubject.from_file(str(path.joinpath(x))) for x in files]
+            loaded = [AnimalSubject.from_file(path.joinpath(x)) for x in files]
             animals = sorted((x for x in loaded if x is not None), key=lambda a: a.name)
 
         pref_animal = self._preferences.selected_animal
