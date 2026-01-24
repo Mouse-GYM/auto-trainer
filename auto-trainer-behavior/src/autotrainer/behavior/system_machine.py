@@ -453,7 +453,8 @@ class SystemMachine(StateMachine):
         if self._state == SystemState.intersession:
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
                                                       context=value)
-            return
+            # return
+            # allow following code still, we want it always. it's checking state further more.
 
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
             algo = self._algorithm
@@ -477,7 +478,10 @@ class SystemMachine(StateMachine):
                     if inter_state == IntersessionState.idle:
                         self.exit_tunnel(reason="load_cell_disengaged_when_tunnel")
                     else:
-                        logger.verbose("skipping exit_tunnel due to intersession still in progress: %s", inter_state)
+                        # this does same than exit_tunnel, without updating the current state,
+                        # which is either segmentation or detection
+                        self.after_exit_tunnel(reason="load_cell_disengaged_when_tunnel")
+                        # logger.verbose("skipping exit_tunnel due to intersession still in progress: %s", inter_state)
                 else:
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                                               context=self._state)
