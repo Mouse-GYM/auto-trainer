@@ -16,6 +16,7 @@ logger = get_verbose_logger(__name__)
 
 class GlobalAnimalPresenceMonitor(BaseDetector):
 
+    use_daemon = True
     feature_enabled = True
 
     def __init__(
@@ -62,7 +63,7 @@ class GlobalAnimalPresenceMonitor(BaseDetector):
                 new_engaged = True
             else:
                 new_engaged = False
-                timer_delay = min(300, max(top_cam_miss, load_cell_miss))
+                timer_delay = max(top_cam_miss, load_cell_miss)
         logger.debug("engaged=%s top_cam_miss=%.1f load_cell_miss=%.1f ; new_delay=%.1f",
                      new_engaged, top_cam_miss, load_cell_miss, timer_delay)
         self.is_engaged = new_engaged

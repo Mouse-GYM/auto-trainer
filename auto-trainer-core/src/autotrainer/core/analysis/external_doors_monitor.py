@@ -91,4 +91,4 @@ class ExternalDoorsMonitor(BaseDetector):
             })
             new_perf_c = get_perf_now() if is_open else prev_perf_c
             doors_state[door] = (is_open, new_perf_c)
-            self.refresh_state()
+            self.check_state()
