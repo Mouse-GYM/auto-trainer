@@ -63,7 +63,7 @@ class AnimalSubject:
     name: str = ""
     id: str = None   # handled in post_init
 
-    baseline_magnet_intensity: int = 0
+    baseline_magnet_intensity: float = 0  # % unit
 
     is_pellet_dcs: bool = False
     pellet_x: float = 0
@@ -82,9 +82,9 @@ class AnimalSubject:
         return f"{self.__class__.__name__}(name={self.name})"
 
     @classmethod
-    def from_file(cls, file_path: str) -> Optional[Self]:
+    def from_file(cls, file_path: Path) -> Optional[Self]:
         animal = AnimalSubject()
-        with open(file_path, "r") as file:
+        with file_path.open("r") as file:
             try:
                 data = json.load(file)
                 if "id" not in data:
@@ -92,6 +92,7 @@ class AnimalSubject:
                     animal = _load_old_format(data)
                 else:
                     reach = data.pop('reach')
+                    baseline_intensity = reach.pop('baselineMagnetIntensity')
                     pellet_dev = reach.pop('pelletDevice', None)
                     pellet_dcs = reach.pop('pelletDcs', None)
                     if pellet_dcs is None:
@@ -103,6 +104,7 @@ class AnimalSubject:
                     animal = AnimalSubject(
                         id=data.pop('id'),
                         name=data.pop('name'),
+                        baseline_magnet_intensity=baseline_intensity,
                         is_pellet_dcs=pellet_dcs is not None,
                         pellet_x=pellet_x,
                         pellet_y=pellet_y,
@@ -128,7 +130,11 @@ class AnimalSubject:
             "baselineMagnetIntensity": self.baseline_magnet_intensity,
         }
         key = "pelletDcs" if self.is_pellet_dcs else "pelletDevice"
-        reach[key] = {'x': self.pellet_x, 'y': self.pellet_y, 'z': self.pellet_z}
+        reach[key] = {
+            'x': self.pellet_x,
+            'y': self.pellet_y,
+            'z': self.pellet_z,
+        }
         data = {
             "id": self.id,
             "name": self.name,
