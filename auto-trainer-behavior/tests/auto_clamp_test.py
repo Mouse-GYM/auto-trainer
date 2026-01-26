@@ -185,3 +185,10 @@ class TestEnabled(_AutoClampTestCase):
         assert machine.state == SystemState.cage
         assert self.update_magnet_mock.call_args_list == []
         assert self.pellet_dev.play_tone.call_args_list == []
+
+    def test_when_algo_paused(self, caplog):
+        self.start_session_in_tunnel()
+        self.algo.algo_paused = True
+        with caplog.at_level(logging.DEBUG):
+            self.headbar_pressure.is_engaged = True
+        assert "auto_clamp: algo-paused, skipping evaluate" in caplog.text
