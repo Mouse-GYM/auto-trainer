@@ -214,7 +214,7 @@ class SystemMachine(StateMachine):
         algo = self._algorithm
         self._timer_consider_start_session.cancel()
         self._timer_consider_end_session.cancel()
-        self._execute_disengage_auto_clamp_if_in_progress()
+        self._disengage_auto_clamp()
         EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
         if algo.is_in_session:
             algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
@@ -809,18 +809,20 @@ class SystemMachine(StateMachine):
             algo = self._algorithm
             tunnel_dev = self._tunnel_device
             self.cancel_timers()
+            # don't leave in-progress:
+            self._auto_clamp_in_progress = self._auto_clamp_disengage_in_progress = False
             if new_value:
                 if algo.is_in_session:
                     if algo.intersession_state == IntersessionState.idle:
                         algo.end_capture_session(reason=RecordingEndingReason.ALGO_PAUSED)
                 tunnel_dev.open_tunnel_gate()
-                tunnel_dev.update_head_magnet_intensity(0)
+                self._update_magnet_position(0)
                 # self._pellet_machine.move_home()  # pellet_machine is disabled once algo_paused is set.
                 # so directly call the device command:
                 pellet_dev.send_home()
             else:
                 tunnel_dev.open_tunnel_gate()
-                tunnel_dev.update_head_magnet_intensity(algo.baseline_intensity)
+                self._update_magnet_position(algo.baseline_intensity)
                 pellet_dev.send_pellet()
                 #
                 # trigger load cell property changed check, so that new session will be started if mouse still in tunnel
