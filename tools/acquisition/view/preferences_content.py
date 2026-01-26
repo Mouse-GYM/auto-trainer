@@ -946,9 +946,9 @@ class PreferencesContent(QWidget):
         toggle.setChecked(alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume)
         def toggle_changed(value):
             toggled = value != 0
-            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg = alarm_monitor.config
             cfg.auto_resume_on_audio_load_cell_thrash_resume = toggled
-            alarm_monitor.config = cfg
+            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
         toggle.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
@@ -1019,9 +1019,9 @@ class PreferencesContent(QWidget):
             for w in audio_load_cell_sub_widgets:
                 w.setEnabled(toggled)
             if toggled != alarm_monitor.config.use_audio_load_cell_thrash:
-                cfg = copy.deepcopy(alarm_monitor.config)
+                cfg = alarm_monitor.config
                 cfg.use_audio_load_cell_thrash = toggled
-                alarm_monitor.config = cfg
+                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
         self._use_audio_load_cell_thrashing_toggle.stateChanged.connect(toggle_changed)
         toggle_changed(int(alarm_cfg.use_audio_load_cell_thrash))
 
@@ -1049,9 +1049,9 @@ class PreferencesContent(QWidget):
         toggle.setChecked(alarm_cfg.auto_resume_on_presence_seen_after_exit_tunnel)
         def toggle_changed(value):
             toggled = value != 0
-            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg = alarm_monitor.config
             cfg.auto_resume_on_presence_seen_after_exit_tunnel = toggled
-            alarm_monitor.config = cfg
+            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
         toggle.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
@@ -1073,10 +1073,10 @@ class PreferencesContent(QWidget):
             toggled = value != 0
             for w in animal_missing_sub_widgets:
                 w.setEnabled(toggled)
-            if toggled != alarm_monitor.config.use_presence_missing_after_exit_tunnel:
-                cfg = copy.deepcopy(alarm_monitor.config)
+            cfg = alarm_monitor.config
+            if toggled != cfg.use_presence_missing_after_exit_tunnel:
                 cfg.use_presence_missing_after_exit_tunnel = toggled
-                alarm_monitor.config = cfg
+                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
         self._use_animal_missing_toggle.stateChanged.connect(toggle_changed)
         toggle_changed(int(alarm_cfg.use_presence_missing_after_exit_tunnel))
 
@@ -1100,9 +1100,9 @@ class PreferencesContent(QWidget):
         toggle.setChecked(alarm_cfg.auto_resume_on_external_doors_close)
         def toggle_changed(value):
             toggled = value != 0
-            cfg = copy.deepcopy(alarm_monitor.config)
+            cfg = alarm_monitor.config
             cfg.auto_resume_on_external_doors_close = toggled
-            alarm_monitor.config = cfg
+            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
         toggle.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
@@ -1125,10 +1125,10 @@ class PreferencesContent(QWidget):
             toggled = value != 0
             for w in use_external_doors_sub_widgets:
                 w.setEnabled(toggled)
-            if toggled != alarm_monitor.config.use_external_doors_open:
-                cfg = copy.deepcopy(alarm_monitor.config)
+            cfg = alarm_monitor.config
+            if toggled != cfg.use_external_doors_open:
                 cfg.use_external_doors_open = toggled
-                alarm_monitor.config = cfg
+                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
         self._use_external_doors_open_toggle.stateChanged.connect(toggle_changed)
         toggle_changed(int(alarm_cfg.use_external_doors_open))
 

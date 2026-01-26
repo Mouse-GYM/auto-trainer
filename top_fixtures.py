@@ -23,6 +23,8 @@ from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, BehaviorAlgorithm, InferenceProtocol
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.pellet import PelletState
+from tools.acquisition.model.behavior_model import BehaviorModel
+from tools.acquisition.model.hardware_model import HardwareModel
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +129,7 @@ def pose_algo():
 
 
 @pytest.fixture
-def inference(pose_algo):
+def inference():
     inference = InferenceProtocol()
     inference.status = InferenceStatus.live
     yield inference
@@ -350,3 +352,13 @@ def mock_system(machine) -> MockSystemMachine:
     # instance.machine_(machine)  # pytest fixture refuse direct call, so:
     instance._init(machine)
     return instance
+
+
+@pytest.fixture
+def hardware_model(system_msg_handler):
+    return HardwareModel(system_msg_handler)
+
+
+@pytest.fixture
+def behavior_model(sensor_analysis, system_msg_handler, hardware_model, inference):
+    return BehaviorModel(system_msg_handler, sensor_analysis, hardware_model, inference)

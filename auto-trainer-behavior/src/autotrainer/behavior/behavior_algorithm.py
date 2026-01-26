@@ -495,7 +495,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._on_property_changed(BehaviorAlgoProps.ALGO_PAUSED, value, prev)
 
     @property
-    def top_camera_presence_detection(self) -> PresenceDetectionAttrs:
+    def top_camera_presence_detection(self) -> Optional[PresenceDetectionAttrs]:
         return self._topcam_presence
 
     @property
