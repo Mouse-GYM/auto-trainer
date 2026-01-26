@@ -60,7 +60,7 @@ class BaseDetector(ObservableObject):
     def check_state(self):
         with self._lock:
             if not self._running:
-                return
+                return None
             next_delay = self._check_state()
             if next_delay is None:
                 next_delay = self.default_timer_delay
@@ -71,9 +71,10 @@ class BaseDetector(ObservableObject):
                 # detector that will resume by explicit refresh
                 self._cur_timer.cancel()
                 self._cur_timer = no_op_timer
+        return next_delay
 
     def _start(self):
-        """Allow any sub-class to customize its start procedure. super() should be called."""
+        """Allow any subclass to customize its start procedure. super() should be called."""
 
     def start(self):
         with self._lock:
@@ -92,48 +93,49 @@ class BaseDetector(ObservableObject):
                 self._thread_queue = thread, cmd_queue
             else:
                 self.check_state()
-                # self._make_new_timer(0.01)
 
     def _daemon_run(self, cmd_queue):
+        delay = self.default_timer_delay
         while True:
-            delay = self.default_timer_delay
-            if delay is None or delay <= 0.1:
-                delay = 0.1
+            if delay is None:
+                delay = self.default_timer_delay
+                if delay is None:
+                    delay = 1
+            # Now limit max delay to 60 seconds,
+            # so that any change in config will be handled at most every 60 seconds.
+            # Some detector, like global animal presence, could use very long delay between check,
+            # so this ensures that if its setting relating to the delay is changed, then the new one will be handled,
+            # ~relatively quickly.
+            # Otherwise, we would need to restart any of them that has its config updated.
+            delay = min(60., delay)
             try:
                 r = cmd_queue.get(timeout=delay)
                 assert r is None  # we only support None exit sentinel
                 break
             except queue.Empty:
                 pass
-            self.check_state()
+            delay = self.check_state()
 
     def _stop(self):
         pass
 
     def stop(self):
         with self._lock:
+            self._cur_timer.cancel()
             if not self._running:
                 return
             self._logger.verbose("%s: stopping monitor", self.__class__.__name__)
             self._running = False
-            self._cur_timer.cancel()
             self._stop()
             thread_queue = self._thread_queue
             if thread_queue is not None:
                 thread, q = self._thread_queue
                 q.put(None)
-                self._logger.debug("Joining thread")
+                self._logger.debug("Joining check thread %s", thread)
                 thread.join()
+                self._logger.debug("joined check thread %s", thread)
                 self._thread_queue = None
 
     def restart(self):
         self.stop()
         self.start()
-
-    def refresh_state(self):
-        """Ensure check_state is called "~now" (i.e very shortly)"""
-        with self._lock:
-            if not self._running:
-                return
-            # self._make_new_timer(0.01)  # todo: could call self.check_state() directly instead
-            self.check_state()
