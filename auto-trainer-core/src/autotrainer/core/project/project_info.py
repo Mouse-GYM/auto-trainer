@@ -53,7 +53,7 @@ class IntervalSource(NamedTuple):
 class SessionSource(NamedTuple):
     location: str
     prefix: str
-    session_index: int
+    session_index: int  # trial index
 
 
 class IntervalFileInfo(NamedTuple):
@@ -232,7 +232,7 @@ class ProjectInfo(_ProjectInfo):
         (location, today) = self.get_day_path(True, when=when)
 
         s_idx = session if session >= 0 else self.session
-        session_str = f"session{s_idx:03}"
+        session_str = f"trial{s_idx:03}"
         location = os.path.join(location, session_str)
 
         if not skip_ensure and self.ensure_exists:
@@ -385,7 +385,7 @@ class ProjectInfo(_ProjectInfo):
         path = Path(location)
         existed = path.exists()
         was_dir = path.is_dir()
-        path.mkdir(parents=True, exist_ok=True)  # this ensure 2 consecutive won't get same
+        path.mkdir(parents=True, exist_ok=True)  # this ensures 2 consecutive won't get same
         if not existed or not was_dir:
             with self:
                 self.session = 1
@@ -402,7 +402,7 @@ class ProjectInfo(_ProjectInfo):
             return
 
         # slower code way
-        session_dirs = [x.name[-3:] for x in path.iterdir() if x.is_dir() and "session" in x.name]
+        session_dirs = [x.name[-3:] for x in path.iterdir() if x.is_dir() and "trial" in x.name]
 
         def int_map_fcn(value: str):
             try:

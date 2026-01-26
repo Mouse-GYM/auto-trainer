@@ -87,17 +87,17 @@ class BehaviorContent(ContentWidget):
         left_layout.addWidget(label, left_cur_row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         left_cur_row += 1
 
-        left_layout.addWidget(QLabel("Intersession:"), left_cur_row, 0)
+        left_layout.addWidget(QLabel("Intertrial:"), left_cur_row, 0)
         label = self._intersession_state_label = QLabel(self._behavior_model.system_machine.intersession.state)
         label.setContentsMargins(0, 0, 0, 4)
         left_layout.addWidget(label, left_cur_row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         left_cur_row += 1
 
-        left_layout.addWidget(QLabel("Intersession Analysis:"), left_cur_row, 0)
+        left_layout.addWidget(QLabel("Intertrial Analysis:"), left_cur_row, 0)
         toggle = self._intersession_toggle = QSwitch()
         toggle.stateChanged.connect(self._intersession_toggle_state_changed)
         toggle.setToolTip(
-            "Enables reach detection and segmentation after each session where the mouse is seen.  This may modify "
+            "Enables reach detection and segmentation after each trial where the mouse is seen.  This may modify "
             "pellet counts and adjust the pellet delivery position.")
         left_layout.addWidget(toggle, left_cur_row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         left_cur_row += 1
@@ -151,7 +151,7 @@ class BehaviorContent(ContentWidget):
         right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1
 
-        right_layout.addWidget(QLabel("Prev. session:"), right_cur_row, 0)
+        right_layout.addWidget(QLabel("Prev. trial:"), right_cur_row, 0)
         label = self._prev_pellet_shift_label = XYZQLabel()
         right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1

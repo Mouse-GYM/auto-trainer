@@ -54,7 +54,7 @@ class TrainingPhaseProgressContent(CardWidget):
         hbox.addWidget(make_unit_label("sec"))
         left.addLayout(hbox, r, c + 1)
         r += 1
-        left.addWidget(QLabel("Sessions"), r, c)
+        left.addWidget(QLabel("Trials"), r, c)
         label = self._sessions_label = QLabel("")
         left.addWidget(label, r, c + 1)
         r += 1
