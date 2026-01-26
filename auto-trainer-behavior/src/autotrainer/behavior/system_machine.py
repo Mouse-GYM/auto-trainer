@@ -709,8 +709,11 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _disengage_auto_clamp(self):
+        if not self._auto_clamp_in_progress:
+            logger.debug("skipping disengage auto-clamp if not in progress")
+            return
         if self._auto_clamp_disengage_in_progress:
-            logger.debug("skipping new disengage while disengage alreaady in progress")
+            logger.debug("skipping new disengage while disengage already in progress")
             return
         self._auto_clamp_disengage_in_progress = True
         logger.info("disengaging auto-clamp ..")
