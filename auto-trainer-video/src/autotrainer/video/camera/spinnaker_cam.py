@@ -310,19 +310,20 @@ class SpinCam(CameraBase):
                 # frame_conv = image_converted.GetNDArray()  # type: numpy.ndarray
                 logger.spam("frame-%s: shape=%s dtype=%s",
                              self._frame_count, frame.shape, frame.dtype)
-                if len(self._start_frames) > 0:
-                    for prev_idx, (prev_frame, prev_frame_copy, prev_conv, prev_conv_copy) in enumerate(self._start_frames):
-                        if (prev_frame != prev_frame_copy).any():
-                            logger.critical("Detected prev frame (idx=%s) got corrupted", prev_idx)
-                        if (frame == prev_frame).all() and (frame != prev_frame_copy).any():
-                            logger.critical("Detected frame (idx=%s) shares internal buffer with prev frame idx=%s",
-                                            self._frame_count, prev_idx)
+                self._start_frames.append((frame, frame.copy(), None, None))
+                for prev_idx, (prev_frame, prev_frame_copy, prev_conv, prev_conv_copy) in enumerate(self._start_frames):
+                    if (prev_frame != prev_frame_copy).any():
+                        logger.critical("Detected prev frame (idx=%s) got corrupted", prev_idx)
+                    if prev_idx == self._frame_count:
+                        break
+                    if (frame == prev_frame).all() and (frame != prev_frame_copy).any():
+                        logger.critical("Detected frame (idx=%s) shares internal buffer with prev frame idx=%s",
+                                        self._frame_count, prev_idx)
                         # if (frame_conv == prev_conv).all() and (frame_conv != prev_conv_copy).any():
                         #     logger.critical("Detected converted frame (idx=%s) shares internal buffer with prev converted frame idx=%s",
                         #                     self._frame_count, prev_idx)
-                self._start_frames.append((frame, frame.copy(), None, None))
-            else:
-                self._start_frames.clear()
+                if self._frame_count >= 149:
+                    self._start_frames.clear()  # don't keep unnecessarily all that
 
         self._frame_count += 1
 
