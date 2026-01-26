@@ -486,6 +486,10 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _evaluate_auto_clamp(self):
+        algo = self._algorithm
+        if algo.algo_paused:
+            logger.debug("auto_clamp: algo-paused, skipping evaluate")
+            return
         if self._auto_clamp_in_progress:
             logger.debug("auto_clamp already in progress")
             return
@@ -493,7 +497,6 @@ class SystemMachine(StateMachine):
         self._timer_auto_clamp_evaluate.cancel()  # in case of
         self._timer_auto_clamp_disengage.cancel()  # also
         self._timer_auto_clamp_evaluate = no_op_timer
-        algo = self._algorithm
         if not algo.head_fixation_enabled:
             logger.info("auto-clamp: disabled (no action taken)")
             return
