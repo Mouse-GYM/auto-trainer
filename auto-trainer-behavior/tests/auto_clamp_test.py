@@ -192,3 +192,14 @@ class TestEnabled(_AutoClampTestCase):
         with caplog.at_level(logging.DEBUG):
             self.headbar_pressure.is_engaged = True
         assert "auto_clamp: algo-paused, skipping evaluate" in caplog.text
+
+    def test_reset_to_baseline_when_disabled(self, caplog):
+        algo = self.algo
+        self.start_session_in_tunnel()
+        with caplog.at_level(logging.DEBUG):
+            self.headbar_pressure.is_engaged = True
+        assert "auto-clamp setting position to" in caplog.text
+        caplog.clear()
+        with caplog.at_level(logging.DEBUG):
+            algo.head_fixation_enabled = False
+        assert "auto-clamp disabled (backing off to baseline intensity)" in caplog.text
