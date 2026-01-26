@@ -109,25 +109,21 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         analysis.auto_tunnel_sweep_monitor.config = config.auto_tunnel_sweep
 
     def save_configuration(self) -> BehaviorConfiguration:
-        config = self._system_machine.algorithm.active_config
-        # makes copy on purpose, to ensure caller isn't able to modify current active config directly on that:
-        return copy.deepcopy(config)
+        algo = self._system_machine.algorithm
 
-        config = BehaviorConfiguration()
-        # orig_fields = dataclasses.fields(config)
         assigned = {}
+        created = False
         class ConfigWrap(BehaviorConfiguration):
             def __setattr__(self, key, value):
-                assigned[key] = value
+                if created:
+                    assigned[key] = value
 
-        wrap = ConfigWrap()
-        save_config = config
-        config = wrap
-
-        algo = self._system_machine.algorithm
-        algo.update_configuration(config)
+        config = ConfigWrap()
+        created = True
 
         analysis = self._analysis
+
+        # NB: monitors/detectors configuration:
         config.load_cell = analysis.load_cell_monitor.save_configuration()
         config.auto_tare = analysis.load_cell_tare_monitor.save_configuration()
         config.headbar_pressure = analysis.headbar_pressure_monitor.save_configuration()
@@ -138,12 +134,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         config.external_doors = analysis.external_doors_monitor.config
         config.auto_tunnel_sweep = analysis.auto_tunnel_sweep_monitor.config
 
-        dataclasses.replace(save_config, **assigned)
-        config = save_config
+        config = dataclasses.replace(algo.active_config, **assigned)
         orig_fields = {f.name for f in dataclasses.fields(config)}
         missed = orig_fields - set(assigned)
         if len(missed) > 0:
-            logger.warning("Fields %s not assigned / missed during save_config", missed)
+            logger.debug("Fields %s not assigned / missed during save_config", missed)
 
         return config
 

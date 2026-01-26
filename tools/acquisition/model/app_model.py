@@ -1145,7 +1145,7 @@ class AppModel(ObservableObject):
             default_location = Path.home().joinpath("Documents/RawDataLocal/Animals")
 
             try:
-                default_location.mkdir(parents=True)
+                default_location.mkdir(parents=True, exist_ok=True)
                 self._preferences.animal_location = str(default_location)
             except Exception as e:
                 logger.error(f"Failed to create default animal location {default_location}: {e}")
