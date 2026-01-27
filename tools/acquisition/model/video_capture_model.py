@@ -56,6 +56,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
     STILL_IMAGE_CAPTURE_INTERVAL_PROP = "still_image_capture_interval"
     SHAPE_PROP = "shape"
     TEXT_OVERLAY_PROP = "text_overlay"
+    TEXT_OVERLAY_COLOR_PROP = "text_overlay_color"
     DISPLAY_DOTS_DETECTION_PROP = "display_dots_detection"
 
     def __init__(
@@ -77,6 +78,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             mp_ctx = get_mp_ctx()
 
         self._text_overlay: Optional[str] = None
+        self._text_color: Optional[str] = "yellow"
 
         self._id = CameraId.Left
 
@@ -248,13 +250,18 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._on_property_changed(self.DISPLAY_DOTS_DETECTION_PROP, value, prev)
 
     @property
-    def text_overlay(self):
+    def text_overlay(self) -> Optional[str]:
         return self._text_overlay
 
     @text_overlay.setter
-    def text_overlay(self, value):
+    def text_overlay(self, value: Optional[str]):
         prev, self._text_overlay = self._text_overlay, value
         self._on_property_changed(self.TEXT_OVERLAY_PROP, value, prev)
+
+    def set_text_overlay(self, value: Optional[str], *, color: str = "yellow"):
+        self._text_color = color
+        self.property_changed(self.TEXT_OVERLAY_COLOR_PROP, color, None)
+        self.text_overlay = value
 
     @property
     def is_trace_enabled(self) -> bool:

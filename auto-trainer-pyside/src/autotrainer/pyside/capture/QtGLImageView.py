@@ -95,7 +95,14 @@ class QGLImageView(QWidget):
         self._raw_img_scale_w = scale_w
         self._raw_img_scale_h = scale_h
 
-    def set_data(self, image: QImage, text_overlay: str="", *, presence_detection: Optional[PresenceDetectionAttrs]):
+    def set_data(
+        self,
+        image: QImage,
+        *,
+        text_overlay: Optional[str] = None,
+        text_color: Qt.GlobalColor = Qt.GlobalColor.yellow,
+        presence_detection: Optional[PresenceDetectionAttrs],
+    ):
         # retain a ref the used image to keep it alive after calling function also return
         self._cur_image = image
         pixmap = QPixmap.fromImage(image)
@@ -103,13 +110,13 @@ class QGLImageView(QWidget):
             painter = QPainter(pixmap)
             font = QFont("Sans-serif", 12)
             painter.setFont(font)
-            painter.setPen(Qt.GlobalColor.yellow)
+            painter.setPen(text_color)
             with painter:
                 painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter, text_overlay)
 
         if presence_detection is not None:
             painter = QPainter(pixmap)
-            color = Qt.green if presence_detection.presence_detected else Qt.red
+            color = Qt.GlobalColor.green if presence_detection.presence_detected else Qt.GlobalColor.red
             brush = QBrush(color)
             painter.setBrush(brush)
             with painter:
