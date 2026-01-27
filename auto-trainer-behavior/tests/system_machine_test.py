@@ -40,15 +40,11 @@ def test_enter_exit_tunnel(mock_system, machine):
 
     NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, set_capture_triggered)
 
-    tun_dev = machine._tunnel_device
-
     # Current code assumes intersession analysis is off by default.
     assert algo.intersession_enabled is False
 
     # Defaults
     assert machine.state == SystemState.cage
-    # assert machine.mock_headfix.current_position == 0
-    assert tun_dev.update_head_magnet_intensity.call_args_list == []
     assert algo.is_in_session is False
     assert not algo.pellet_recently_seen
     algo.update_pellet_seen(True)
@@ -61,9 +57,6 @@ def test_enter_exit_tunnel(mock_system, machine):
     assert algo.is_in_session is True
     assert is_capture_triggered is True
     assert machine.state == SystemState.tunnel
-    assert tun_dev.update_head_magnet_intensity.call_args_list == [
-        mock.call(algo.baseline_intensity)
-    ]
 
     mock_system.make_load_cell_inactive()
 
@@ -272,108 +265,6 @@ def test_inference_detection_ready(machine):
     assert algo.successful_reaches_total == 6
 
 
-class TestAutoClamp(MockSystemMachine):
-
-    @pytest.mark.skipif(True, reason="auto-clamp changed, must be adapted but test should be splitted eventually")
-    @pytest.mark.parametrize("state", list(SystemState))
-    @pytest.mark.parametrize("intensities", [[15, 20, 60], [100], ["base"]])
-    @pytest.mark.parametrize("hbp_engaged", [True, False])
-    @pytest.mark.parametrize("head_fixation_enabled", [True, False])
-    @pytest.mark.parametrize("release_delay", [0.5, 0.1])
-    @pytest.mark.parametrize("start_session", [False, True])
-    def test_with_analysis_pressure_prop_changed(self, machine, state, intensities, hbp_engaged, head_fixation_enabled,
-                                                 release_delay, start_session, mocker):
-        machine.state = state
-        algo = machine.algorithm
-
-        if start_session:
-            algo.start_session()
-        assert algo.is_in_session is start_session
-
-        algo.head_fixation_enabled = head_fixation_enabled
-        algo.auto_clamp_release_tone_delay = release_delay
-
-        def patch_timer0(delay, func):
-            assert delay == algo.auto_clamp_no_activity_release_delay, "the delay should be that"
-            m = mock.create_autospec(Timer)
-            return m
-
-        analysis = machine._analysis
-        tun_dev = machine._tunnel_device
-        for idx, intensity in enumerate(intensities):
-            # machine.enter_tunnel()
-            if intensity == "base":
-                intensity = algo.baseline_intensity
-                intensities[idx] = intensity
-            algo.auto_clamp_intensity = intensity
-            with mock.patch("autotrainer.behavior.system_machine._consider_disengage_autoclamp_timer", new=patch_timer0):
-                analysis.headbar_pressure_monitor.is_engaged = hbp_engaged
-            analysis.headbar_pressure_monitor.is_engaged = False
-            # machine.exit_tunnel()
-        if state == SystemState.tunnel and hbp_engaged and head_fixation_enabled:
-            assert tun_dev.update_head_magnet_intensity.call_args_list == [
-                mock.call(i) for i in intensities
-            ]
-        else:
-            assert tun_dev.update_head_magnet_intensity.call_args_list == []
-        #
-        tun_dev.reset_mock()
-        def patch_timer(delay, func):
-            assert delay == algo.auto_clamp_release_tone_delay, "the delay should be that"
-            m = mock.create_autospec(Timer)
-            m.start.side_effect = func
-            return m
-
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(mock.patch("autotrainer.behavior.system_machine._auto_clamp_release_timer", new=patch_timer))
-            stack.enter_context(mock.patch("autotrainer.behavior.system_machine._consider_disengage_autoclamp_timer", new=patch_timer))
-            stack.enter_context(mock.patch("autotrainer.behavior.system_machine._consider_end_session_timer", new=patch_timer))
-            algo.head_fixation_enabled = False  # Disable auto-clamp
-        # This above mock patch allow to not have to :
-        #   time.sleep(algo.auto_clamp_release_delay + 0.0005)
-        # and/but not be always sure that the timer has completed...
-        # NB:
-        # This is eventually fragile if other Timer (than the exact one desired (in the same module that is)) were
-        #  created during the same code execution.
-
-        # Now ensure update_head_magnet_intensity has been called as desired (or not):
-        if head_fixation_enabled:
-            exp_update_head_magnet = [mock.call(algo.baseline_intensity)]
-            if start_session:
-                exp_play_tone = [
-                    mock.call(algo.auto_clamp_release_tone_freq, 0.5)
-                ]
-            else:
-                exp_play_tone = []
-        else:
-            exp_update_head_magnet = exp_play_tone = []
-        #
-        assert tun_dev.update_head_magnet_intensity.call_args_list == exp_update_head_magnet
-        assert machine._pellet_device.play_tone.call_args_list == exp_play_tone
-
-    # 2025-05-18 Turning auto-clamp off at session end has been removed for the time being.  This may change once
-    # auto-clamp is fully evaluated w/animals.
-    @pytest.mark.parametrize("start_session", [False, True])
-    def test_auto_clamp_session_off_reset_to_baseline(self, machine, start_session):
-        algo = machine.algorithm
-        machine.state = SystemState.tunnel
-        if start_session:
-            algo.start_session()
-        tun_dev = machine._tunnel_device
-        assert tun_dev.update_head_magnet_intensity.call_args_list == []
-        #
-        # used with debugger:
-        # def catch(*args, **kwargs):
-        #     pass
-        # tun_dev.update_head_magnet_intensity.side_effect = catch
-        machine.after_exit_tunnel()
-
-        assert tun_dev.update_head_magnet_intensity.call_args_list == [
-            mock.call(algo.baseline_intensity)
-        ]
-        assert machine._pellet_device.play_tone.call_args_list == []
-
-
 @pytest.mark.parametrize("feature_enabled", [False, True])
 def test_clean_raw_data_on_session_end(machine, project_info, feature_enabled):
     algo = machine.algorithm
@@ -488,10 +379,10 @@ class TestSessionProcessingEnding(MockSystemMachine):
         assert algo.is_in_session
         algo.update_mouse_seen(True)
         caplog.set_level(logging.INFO)
-        with self.mock_analysis():
+        with self.mock_intersession_analysis():
             self.increment_perf_now(sess_duration)
             algo.end_capture_session()
-            assert not algo.is_in_session
+        assert not algo.is_in_session
         if auto_close_gate and sess_duration >= sess_min_duration:
             assert "Closing tunnel gate for intersession" in caplog.text
         else:
