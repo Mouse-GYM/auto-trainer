@@ -103,7 +103,7 @@ class TestEnabled(_AutoClampTestCase):
     @pytest.mark.parametrize("no_activity_release_delay", [0, 60])
     @pytest.mark.parametrize("release_tone_delay", [0, 1])
     @pytest.mark.parametrize("prerelease_duration, prerelease_intensity", [[0, None], [5, 50], [10, 75]])
-    def test_when_in_session(self, machine, baseline_intensity, no_activity_release_delay, release_tone_delay, prerelease_duration, prerelease_intensity):
+    def test_when_in_session(self, machine, baseline_intensity, no_activity_release_delay, release_tone_delay, prerelease_duration, prerelease_intensity, caplog):
         algo = self.algo
         algo.baseline_intensity = baseline_intensity
         #
@@ -134,14 +134,18 @@ class TestEnabled(_AutoClampTestCase):
             assert consider_disengage_timer.call_args[0][0] == no_activity_release_delay
             disengage_func = consider_disengage_timer.call_args[0][1]
             with self.patch_timer("autotrainer.behavior.system_machine._auto_clamp_release_timer") as release_clamp_timer:
-                disengage_func()
+                with caplog.at_level(logging.INFO):
+                    disengage_func()
 
         else:
             algo.auto_clamp_release_load_count = 3
             with self.patch_timer("autotrainer.behavior.system_machine._auto_clamp_release_timer") as release_clamp_timer:
                 for load_attempt in range(algo.auto_clamp_release_load_count):
                     assert release_clamp_timer.call_count == 0
-                    self.pellet.force_load_pellet()
+                    with caplog.at_level(logging.INFO):
+                        self.pellet.force_load_pellet()
+
+        assert "auto-clamp: starting disengage procedure.." in caplog.text
 
         if release_tone_delay > 0:
             assert release_clamp_timer.call_count == 1
@@ -203,3 +207,32 @@ class TestEnabled(_AutoClampTestCase):
         with caplog.at_level(logging.DEBUG):
             algo.head_fixation_enabled = False
         assert "auto-clamp disabled (backing off to baseline intensity)" in caplog.text
+
+    def test_does_disengage_when_exit_tunnel(self, caplog):
+        self.start_session_in_tunnel()
+        with caplog.at_level(logging.DEBUG):
+            self.headbar_pressure.is_engaged = True
+        assert "auto-clamp setting position to" in caplog.text
+        caplog.clear()
+        with caplog.at_level(logging.INFO):
+            self.exit_tunnel()
+        assert "auto-clamp: starting disengage procedure.." in caplog.text
+
+    def test_keep_disengage_when_exit_tunnel(self, caplog):
+        algo = self.algo
+        algo.auto_clamp_release_load_count = 1  # for doing a single load-pellet to trigger disengage
+        algo.active_config.head_clamp.prerelease_duration = 3  # > 0 for having multi-steps disengage procedure
+        self.start_session_in_tunnel()
+        with caplog.at_level(logging.DEBUG):
+            self.headbar_pressure.is_engaged = True
+        assert "auto-clamp setting position to" in caplog.text
+        caplog.clear()
+        with caplog.at_level(logging.INFO):
+            self.pellet.force_load_pellet()
+        assert "auto-clamp: starting disengage procedure.." in caplog.text
+        caplog.clear()
+        self.tunnel_dev.reset_mock()  # ensure cleared
+        with caplog.at_level(logging.DEBUG):
+            self.exit_tunnel()
+        assert "skipping new disengage while disengage already in progress" in caplog.text
+        assert self.tunnel_dev.update_head_magnet_intensity.call_count == 0

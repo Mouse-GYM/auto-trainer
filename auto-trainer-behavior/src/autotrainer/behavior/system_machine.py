@@ -719,7 +719,7 @@ class SystemMachine(StateMachine):
             logger.debug("skipping new disengage while disengage already in progress")
             return
         self._auto_clamp_disengage_in_progress = True
-        logger.info("disengaging auto-clamp ..")
+        logger.info("auto-clamp: starting disengage procedure..")
         self._timer_auto_clamp_evaluate.cancel()  # in case of
         self._timer_auto_clamp_disengage.cancel()  # also
         pellet_dev = self._pellet_device

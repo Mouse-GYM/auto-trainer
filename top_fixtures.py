@@ -271,6 +271,15 @@ class MockSystemMachine:
         assert algo.is_in_session
         assert self._machine.state == SystemState.tunnel
 
+    def exit_tunnel(self):
+        assert self._machine.state != SystemState.cage
+        load_cell = self.sensor_analysis.load_cell_monitor
+        if load_cell.is_engaged:
+            load_cell.is_engaged = False
+        else:
+            self._machine.exit_tunnel(reason="manual")
+        assert self._machine.state == SystemState.cage
+
     @contextlib.contextmanager
     def patch_timer(self, place, new=None) -> ContextManager[Union[mock.MagicMock, DaemonTimer]]:  # noqa
         kw = {"autospec": DaemonTimer} if new is None else {"new": new}
