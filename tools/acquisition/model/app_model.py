@@ -28,7 +28,7 @@ from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
 from autotrainer.core.project import ProjectDependentProtol
-from autotrainer.core.configuration import SystemConfigurationDumper
+from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer
 from autotrainer.core.pose_elements import SceneElement
@@ -233,7 +233,7 @@ class AppModel(ObservableObject):
         self._inference_queue = None
 
         calib_src_dir = (
-            Path("~/Autotrainer/4mm_6r_8c_4x") if calib_dir is None
+            Path(f"~/Autotrainer/{DEFAULT_3D_CALIB_DIR_NAME}") if calib_dir is None
             else calib_dir
         ).expanduser()
         if calib_src_dir.exists():

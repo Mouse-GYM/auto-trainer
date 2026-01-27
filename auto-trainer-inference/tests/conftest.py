@@ -6,6 +6,7 @@ import pytest
 
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core.analysis.config import load_calib_stereo_params
+from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference.pose_algorithm import PoseAlgorithm
 
 
@@ -14,7 +15,7 @@ this_dir = Path(__file__).parent
 
 @pytest.fixture
 def calib_dir_path():
-    return this_dir.joinpath('4mm_6r_8c_4x')
+    return this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME)
 
 
 @pytest.fixture

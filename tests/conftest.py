@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from autotrainer.behavior import BehaviorAlgorithm
+from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
 from autotrainer.device import MotorConfigurationFile, CompoundMovements
@@ -69,7 +70,7 @@ def user_pref(tmp_path, trainer_config_dir, animals_dir, settings_ini_path):
 @pytest.fixture
 def calib_dir():
     # could be todo: copy it top-level, or generate new temporary one as above for system config.
-    return top_fixtures.repo_root_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
+    return top_fixtures.repo_root_dir.joinpath(f"auto-trainer-inference/tests/{DEFAULT_3D_CALIB_DIR_NAME}")
 
 
 @pytest.fixture

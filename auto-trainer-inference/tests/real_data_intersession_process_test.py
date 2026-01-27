@@ -10,6 +10,7 @@ import numpy
 import verboselogs
 
 from autotrainer.core import Offset3DTuple
+from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference import PoseResponse, PoseLocation
 from autotrainer.inference.analysis import intersession_process, IntersessionResponse
 
@@ -82,7 +83,7 @@ def test_fp_and_xp_not_same(project_info, caplog):
     caplog.set_level(verboselogs.VERBOSE)
     res = intersession_process(
         project_info,
-        calib_dir=this_dir.joinpath("4mm_6r_8c_4x"),
+        calib_dir=this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME),
     )
     assert "Correcting expected_frame_count from " in caplog.text
     assert isinstance(res, IntersessionResponse)
@@ -103,7 +104,7 @@ def test_index_error(project_info, caplog):
     with pytest.raises(IndexError, match="index 378 is out of bounds for axis 0"):
         intersession_process(
             project_info,
-            calib_dir=this_dir.joinpath("4mm_6r_8c_4x"),
+            calib_dir=this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME),
         )
     # TODO: fix underlying issue
 
@@ -117,7 +118,7 @@ agx001_20251015_15_expected_result = IntersessionResponse(
 def test_intersession_process_agx001_20251015_15(agx001_20251015_15):
     res = intersession_process(
         agx001_20251015_15,
-        calib_dir=this_dir.joinpath("4mm_6r_8c_4x"),
+        calib_dir=this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME),
     )
     assert res == agx001_20251015_15_expected_result
 
@@ -126,7 +127,7 @@ def test_intersession_process_agx001_20251015_15(agx001_20251015_15):
 def test_intersession_process_bench_agx001_20251015_15(agx001_20251015_15, benchmark):
     res =  benchmark(lambda: intersession_process(
         agx001_20251015_15,
-        calib_dir=this_dir.joinpath("4mm_6r_8c_4x"),
+        calib_dir=this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME),
     ))
     assert res == agx001_20251015_15_expected_result
 

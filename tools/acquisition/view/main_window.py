@@ -4,6 +4,7 @@ import math
 import shutil
 import threading
 import time
+from datetime import datetime
 from functools import partial
 from itertools import chain
 from pathlib import Path
@@ -18,10 +19,12 @@ import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
     calculate_std_dev_manual
+from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.event.api_event_kind import ApiEventKind
+from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 
 from autotrainer.inference import InferenceStatus, PoseResponse
 
@@ -442,15 +445,24 @@ class MainWindow(QMainWindow):
                 self._app_model.status = AppModelStatus.IDLE
                 logger.verbose("3d-calib thread joined, error=%s", error)
                 if error is None:
-                    target = Path(self._preferences.configuration_location).joinpath("4mm_6r_8c_4x")
+                    target = Path(self._preferences.configuration_location).joinpath(DEFAULT_3D_CALIB_DIR_NAME)
                     if target.exists():
                         rsp = QMessageBox.question(
                             self,
-                            "3D calibration success", f"Calibration dir already exists, do you want overwrite ?",
+                            "3D calibration success",
+                            f"Calibration dir already exists ({target}),\n\n"
+                            f"do you want to replace ?",
                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                         if rsp != QMessageBox.StandardButton.Yes:
                             return
-                    shutil.copytree(result_dir, target, dirs_exist_ok=True)
+                        now = datetime.now()
+                        backup_path = target.parent.joinpath(f"{target.name}_{now.strftime(DATE_TIME_FORMAT)}")
+                        target.rename(backup_path)
+                        logger.debug("Previous 3d-calib moved to %s", backup_path)
+                    shutil.copytree(
+                        result_dir, target,
+                        dirs_exist_ok=False,  # default already, but to be sure we want be clean
+                    )
                     QMessageBox.information(
                         self,
                         "3D calibration success", f"Result saved into {target}", QMessageBox.StandardButton.Ok)

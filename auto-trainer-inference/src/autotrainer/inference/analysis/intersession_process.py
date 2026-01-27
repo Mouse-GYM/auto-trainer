@@ -8,13 +8,13 @@ from autotrainer.core import ProjectInfo, video_write_ext
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement
 
+from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
+
 # todo: prepare_jetson_data could or should probably be moved in here/inference, given only used here..
 from autotrainer.core.analysis.prepare_jetson_data import process_raw_data
-
 from autotrainer.core.analysis.parse_pellet_presentations_jetson import segment_reaches
 
 from . import IntersessionResponse
-
 
 logger = get_verbose_logger(__name__)
 
@@ -41,7 +41,9 @@ def intersession_process(
     """
     location, _, _ = project.get_session_path()
     logger.info("process intersession pose data using %s", location)
-    calib_src_dir = Path("~/Autotrainer/4mm_6r_8c_4x").expanduser() if calib_dir is None else calib_dir
+    calib_src_dir = (
+        Path(f"~/Autotrainer/{DEFAULT_3D_CALIB_DIR_NAME}") if calib_dir is None else calib_dir
+    ).expanduser()
     if not calib_src_dir.is_dir():
         logger.warning("calib_src_dir %s is not a directory",  calib_src_dir)
     calib_src_dir = calib_src_dir.as_posix()

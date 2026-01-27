@@ -8,6 +8,9 @@ from autotrainer.core.logging import get_verbose_logger
 logger = get_verbose_logger(__name__)
 
 
+DEFAULT_3D_CALIB_DIR_NAME = "4mm_6r_8c_4x"
+
+
 def generic_constructor(loader, tag, node):
     cls_name = node.__class__.__name__
     if cls_name == "SequenceNode":

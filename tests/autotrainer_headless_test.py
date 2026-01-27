@@ -76,12 +76,6 @@ def user_pref(tmp_path, trainer_config_dir, animals_dir, settings_ini_path):
 
 
 @pytest.fixture
-def calib_dir():
-    # could be todo: copy it top-level, or generate new temporary one as above for system config.
-    return top_fixtures.repo_root_dir.joinpath("auto-trainer-inference/tests/4mm_6r_8c_4x")
-
-
-@pytest.fixture
 def app_model(user_pref, calib_dir, diamond_config_path, system_config, monkeypatch):
     # for now:
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
