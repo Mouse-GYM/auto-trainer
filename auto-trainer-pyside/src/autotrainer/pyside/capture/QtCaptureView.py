@@ -187,21 +187,27 @@ class QCaptureView(QWidget):
         self._image.set_data_size(width, height)
 
     def update_image(self):
-        frame = self._next_frame_data
-        if frame is None or not self._is_frame_dirty:
+        if not self._is_frame_dirty:
             return
 
-        image = QImage(  # noqa
-            frame.array,  # frame.array.data can also be used
-            frame.width, frame.height,
-            QImage.Format.Format_Grayscale8,
-        )
-
-        image = image.scaled(self._image_width, self._image_height,
-                             # NB: this keep the aspect ratio of the image:
-                             Qt.AspectRatioMode.KeepAspectRatio,
-                             # so result image may not be same than requested W x H
-                             )
+        frame = self._next_frame_data
+        if frame is None:
+            image = QImage(  # noqa
+                self._image_width, self._image_height,
+                QImage.Format.Format_Grayscale8,
+            )
+            image.fill(Qt.GlobalColor.black)
+        else:
+            image = QImage(  # noqa
+                frame.array,  # frame.array.data can also be used
+                frame.width, frame.height,
+                QImage.Format.Format_Grayscale8,
+            )
+            image = image.scaled(self._image_width, self._image_height,
+                                 # NB: this keep the aspect ratio of the image:
+                                 Qt.AspectRatioMode.KeepAspectRatio,
+                                 # so result image may not be same than requested W x H
+                                 )
         if (image.width(), image.height()) == (self._image_width, self._image_height):
             self._image.set_scale_aspect_ratio(1, 1)
         else:
