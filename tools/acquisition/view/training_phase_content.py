@@ -147,7 +147,7 @@ class TrainingPhaseCard(CardWidget):
         grid.addWidget(QLabel("Advance Conditions"), r, c)
         grid.addWidget(QLabel("Yes" if phase.advance_predicate is not None else "No"), r, c + 1)
         r += 1
-        grid.addWidget(QLabel("Session Actions"), r, c)
+        grid.addWidget(QLabel("Trial Actions"), r, c)
         grid.addWidget(QLabel(str(len(phase.session_actions))), r, c + 1)
 
         self._apply_background(grid)

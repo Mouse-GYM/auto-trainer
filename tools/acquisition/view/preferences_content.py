@@ -141,7 +141,7 @@ class PreferencesContent(QWidget):
         analysis_layout.addWidget(QLabel("Live Analysis:"))
         toggle = self._inference_enabled_toggle = QSwitch()
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        toggle.setToolTip("Enables real-time pose inference during live sessions (mouse in tunnel).")
+        toggle.setToolTip("Enables real-time pose inference during live trials (mouse in tunnel).")
         toggle.setChecked(app_model.inference.is_enabled)
         def inference_enabled_state_changed(x: int):
             enabled = x != 0
@@ -290,10 +290,10 @@ class PreferencesContent(QWidget):
         #
         add_height_separator()
         #
-        grid_layout.addWidget(QLabel("<b>Intersession Pellet Shift:</b>"), cur_row, cur_col)
+        grid_layout.addWidget(QLabel("<b>Intertrial Pellet Shift:</b>"), cur_row, cur_col)
         toggle = self._allow_intersession_shift_toggle = QSwitch()
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        toggle.setToolTip("Enables adjustment of the pellet delivery position based on post-session reach analysis.")
+        toggle.setToolTip("Enables adjustment of the pellet delivery position based on post trial reach analysis.")
         add_enabled_state(lambda: self._allow_intersession_shift_toggle.setEnabled(self._inference_enabled_toggle.isChecked()))
         toggle.setChecked(algo.intersession_pellet_shift_enabled)
         def allow_intersession_shift_toggle_state_changed(x: int):
@@ -382,7 +382,7 @@ class PreferencesContent(QWidget):
         #
         add_height_separator()
         #
-        grid_layout.addWidget(QLabel("<b>Auto-close gate during intersession:</b>"), cur_row, cur_col)
+        grid_layout.addWidget(QLabel("<b>Auto-close gate during intertrial analysis:</b>"), cur_row, cur_col)
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
         toggle = QSwitch()
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -395,7 +395,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("session minimum duration (sec.):"), cur_row, cur_col)
+        grid_layout.addWidget(QLabel("trial minimum duration (sec.):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setRange(0, max(1_000_000., auto_close_gate_cfg.session_min_duration))
@@ -600,7 +600,7 @@ class PreferencesContent(QWidget):
         #
         add_height_separator()
         #
-        grid_layout.addWidget(QLabel("<b>Batch sessions while in tunnel:</b>"), cur_row, cur_col)
+        grid_layout.addWidget(QLabel("<b>Batch trials while in tunnel:</b>"), cur_row, cur_col)
         toggle = QSwitch()
         toggle.setChecked(algo.batch_session_recording_config.enabled)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
@@ -610,7 +610,7 @@ class PreferencesContent(QWidget):
             refresh_enabled_states()
         toggle.stateChanged.connect(batch_session_toggled)
         cur_row += 1
-        grid_layout.addWidget(QLabel("Maximum sessions per batch"), cur_row, cur_col)
+        grid_layout.addWidget(QLabel("Maximum trials per batch"), cur_row, cur_col)
         spinbox = QSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setToolTip("0 for unlimited")
