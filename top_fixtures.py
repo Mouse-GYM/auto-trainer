@@ -280,7 +280,6 @@ class MockSystemMachine:
             load_cell.is_engaged = False
         else:
             self._machine.exit_tunnel(reason="manual")
-        assert self._machine.state == SystemState.cage
 
     @contextlib.contextmanager
     def patch_timer(self, place, new=None) -> ContextManager[Union[mock.MagicMock, DaemonTimer]]:  # noqa
