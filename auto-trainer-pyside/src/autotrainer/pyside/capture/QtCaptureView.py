@@ -36,6 +36,7 @@ class QCaptureView(QWidget):
         super().__init__()
 
         self._text_overlay: Optional[str] = None
+        self._text_color: Qt.GlobalColor = Qt.GlobalColor.yellow
         self._image_width = image_width
         self._image_height = image_height
         self._fps = 0
@@ -133,8 +134,9 @@ class QCaptureView(QWidget):
     def set_presence_detection(self, detection: Optional[PresenceDetectionAttrs]):
         self._presence_detection = detection
 
-    def set_text_overlay(self, value):
+    def set_text_overlay(self, value: str, color: Qt.GlobalColor = Qt.GlobalColor.yellow):
         self._text_overlay = value
+        self._text_color = color
         self._is_frame_dirty = True
         InvokeMethod(self.update_image)
         logger.debug("got new text overlay: %r", value)
@@ -185,21 +187,27 @@ class QCaptureView(QWidget):
         self._image.set_data_size(width, height)
 
     def update_image(self):
-        frame = self._next_frame_data
-        if frame is None or not self._is_frame_dirty:
+        if not self._is_frame_dirty:
             return
 
-        image = QImage(  # noqa
-            frame.array,  # frame.array.data can also be used
-            frame.width, frame.height,
-            QImage.Format_Grayscale8,
-        )
-
-        image = image.scaled(self._image_width, self._image_height,
-                             # NB: this keep the aspect ratio of the image:
-                             Qt.AspectRatioMode.KeepAspectRatio,
-                             # so result image may not be same than requested W x H
-                             )
+        frame = self._next_frame_data
+        if frame is None:
+            image = QImage(  # noqa
+                self._image_width, self._image_height,
+                QImage.Format.Format_Grayscale8,
+            )
+            image.fill(Qt.GlobalColor.black)
+        else:
+            image = QImage(  # noqa
+                frame.array,  # frame.array.data can also be used
+                frame.width, frame.height,
+                QImage.Format.Format_Grayscale8,
+            )
+            image = image.scaled(self._image_width, self._image_height,
+                                 # NB: this keep the aspect ratio of the image:
+                                 Qt.AspectRatioMode.KeepAspectRatio,
+                                 # so result image may not be same than requested W x H
+                                 )
         if (image.width(), image.height()) == (self._image_width, self._image_height):
             self._image.set_scale_aspect_ratio(1, 1)
         else:
@@ -213,8 +221,12 @@ class QCaptureView(QWidget):
                 painter.drawImage(0, 0, image)
             image = padded
 
-        self._image.set_data(image, self._text_overlay,
-                             presence_detection=self._presence_detection)
+        self._image.set_data(
+            image,
+            text_overlay=self._text_overlay,
+            text_color=self._text_color,
+            presence_detection=self._presence_detection,
+        )
         self._is_frame_dirty = False
 
         # self._fps_label.setText(f"{self._fps:.1f}")

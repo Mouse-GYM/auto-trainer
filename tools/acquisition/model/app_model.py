@@ -1571,28 +1571,23 @@ class AppModel(ObservableObject):
 
     #
 
-    def _on_emergency_stopped(self, source):
+    def _on_emergency_handle(self, source, command):
         rpc = self._rpc_service
         if rpc is None:
             return
         message = ApiCommandRequestResponse(
             result=ApiCommandReqeustResult.SUCCESS,
-            command=ApiCommand.EMERGENCY_STOP,
+            command=command,
             data=dict(reason=source),
         )
         dct = dataclasses.asdict(message)
         logger.verbose("RPC: sending %s", dct)
         rpc.send_dict(ApiTopic.EMERGENCY, message=dct)
 
+    def _on_emergency_stopped(self, source: str):
+        self._right_camera.set_text_overlay(f"Emergency:\n{source}", color="red")
+        self._on_emergency_handle(source, ApiCommand.EMERGENCY_STOP)
+
     def _on_emergency_resumed(self, source):
-        rpc = self._rpc_service
-        if rpc is None:
-            return
-        message = ApiCommandRequestResponse(
-            result=ApiCommandReqeustResult.SUCCESS,
-            command=ApiCommand.EMERGENCY_RESUME,
-            data=dict(reason=source),
-        )
-        dct = dataclasses.asdict(message)
-        logger.verbose("RPC: sending %s", dct)
-        rpc.send_dict(ApiTopic.EMERGENCY, message=dct)
+        self._right_camera.set_text_overlay(None)
+        self._on_emergency_handle(source, ApiCommand.EMERGENCY_RESUME)

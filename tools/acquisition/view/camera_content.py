@@ -1,18 +1,22 @@
-from typing import Dict
+from typing import Dict, Optional
 
-from autotrainer.pyside.content_widget import ContentWidget
 from numpy import ndarray
 
 from PySide6.QtCore import Slot, Qt
 from PySide6.QtWidgets import QGridLayout, QSizePolicy
 
 from autotrainer.core import NotificationCenter, TriggerNotification, Notification
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference import PoseLocation
-from autotrainer.pyside.capture.QtCaptureView import ImageData
 from autotrainer.video import VideoRecordMode
+
+from autotrainer.pyside.capture.QtCaptureView import ImageData
 from autotrainer.pyside import QCaptureView
+from autotrainer.pyside.content_widget import ContentWidget
 
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
+
+logger = get_verbose_logger(__name__)
 
 
 class CameraContent(ContentWidget):
@@ -20,6 +24,9 @@ class CameraContent(ContentWidget):
         super().__init__()
 
         self._model = capture_model
+
+        self._text_overlay: Optional[str] = None
+        self._text_overlay_color = Qt.GlobalColor.yellow
 
         layout = QGridLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -122,6 +129,17 @@ class CameraContent(ContentWidget):
         elif name == VideoCaptureModel.CAMERA_LIST_PROP:
             self._capture_view.setCameras(self._model.camera_list)
         elif name == VideoCaptureModel.TEXT_OVERLAY_PROP:
-            self._capture_view.set_text_overlay(value)
+            self._text_overlay = value
+            self._capture_view.set_text_overlay(
+                value,
+                color=self._text_overlay_color,
+            )
+        elif name == VideoCaptureModel.TEXT_OVERLAY_COLOR_PROP:
+            color = getattr(Qt.GlobalColor, value, None)
+            if color is None:
+                logger.warning("unknown text overlay color %s", value)
+                color = Qt.GlobalColor.yellow
+            self._text_overlay_color = color
+            self._capture_view.set_text_overlay(self._text_overlay, color=self._text_overlay_color)
         elif name == VideoCaptureModel.DISPLAY_DOTS_DETECTION_PROP:
             self._capture_view.set_display_dots_detection(value)
