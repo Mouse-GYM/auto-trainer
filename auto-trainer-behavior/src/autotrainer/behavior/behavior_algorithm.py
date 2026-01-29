@@ -12,7 +12,7 @@ import threading
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union, Dict, Deque
+from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union, Dict, Deque, get_type_hints
 
 from typing import Callable
 
@@ -238,19 +238,46 @@ class ShiftXYZHandler(ObservableObject):
 
 #
 
+class BehaviorAlgoEvents:
+    """Define the behavior algo events and their signature"""
+
+    session_starting = Callable[[], None]
+    session_capture_ending = Callable[[RecordingEndingReason], None]  # reason
+
+    class batch_analysis_starting:  # noqa
+        def __call__(self, *, batch_len: int):
+            """When a session batch analysis starts"""
+
+    session_processing_starting = Callable[[], None]
+    session_ending = Callable[[CaptureAnalysisResult], None]
+
+    class batch_analysis_ending:  # noqa
+        def __call__(self, *, failed_count: int):
+            """When a session batch analysis is finished"""
+
+    cover_servo_status_changed = Callable[[CoverServoStatus], None]
+
+    pellets_presented_evt = Callable[[int], None]
+    pellets_consumed_evt = Callable[[int], None]
+    successful_reaches_evt = Callable[[int], None]
+
+
 class BehaviorAlgorithm(ObservableObject):
     # dynamic events type hints,
     # helps IDE search/completion/type-verification:
-    session_starting: Callable[[], None]
-    session_capture_ending: Callable[[RecordingEndingReason], None]  # reason
-    session_processing_starting: Callable[[], None]
-    session_ending: Callable[[CaptureAnalysisResult], None]
+    session_starting: BehaviorAlgoEvents.session_starting
+    session_capture_ending: BehaviorAlgoEvents.session_capture_ending
 
-    cover_servo_status_changed: Callable[[CoverServoStatus], None]
+    batch_analysis_starting: BehaviorAlgoEvents.batch_analysis_starting
+    session_processing_starting: BehaviorAlgoEvents.session_processing_starting
+    session_ending: BehaviorAlgoEvents.session_ending
+    batch_analysis_ending: BehaviorAlgoEvents.batch_analysis_ending
 
-    pellets_presented_evt: Callable[[int], None]
-    pellets_consumed_evt: Callable[[int], None]
-    successful_reaches_evt: Callable[[int], None]
+    cover_servo_status_changed: BehaviorAlgoEvents.cover_servo_status_changed
+
+    pellets_presented_evt: BehaviorAlgoEvents.pellets_presented_evt
+    pellets_consumed_evt: BehaviorAlgoEvents.pellets_consumed_evt
+    successful_reaches_evt: BehaviorAlgoEvents.successful_reaches_evt
 
     #
 
@@ -264,17 +291,7 @@ class BehaviorAlgorithm(ObservableObject):
         diamond_triangle_offset_config_path: Optional[Path] = None,
         topcam_presence: Optional[PresenceDetectionAttrs] = None,
     ):
-        super().__init__(event_names=(
-            "session_starting",
-            "session_capture_ending",
-            "session_processing_starting",
-            "session_ending",
-            "cover_servo_status_changed",
-            "pellet_motor_drift_changed",
-            "pellets_presented_evt",  # Some unfortunate names for now given existing property names
-            "pellets_consumed_evt",
-            "successful_reaches_evt"
-        ))
+        super().__init__(event_names=tuple(attr for attr in dir(BehaviorAlgoEvents) if not attr.startswith('_')))
 
         self._thread_lock = threading.RLock()
         self._project_info = None

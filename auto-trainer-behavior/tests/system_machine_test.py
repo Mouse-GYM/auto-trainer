@@ -12,7 +12,6 @@ import pytest
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.inference import PoseResponse, PoseLocation
-from tests.behavior_algo_test import algo
 
 from top_fixtures import MockSystemMachine
 

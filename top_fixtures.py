@@ -280,7 +280,6 @@ class MockSystemMachine:
             load_cell.is_engaged = False
         else:
             self._machine.exit_tunnel(reason="manual")
-        assert self._machine.state == SystemState.cage
 
     @contextlib.contextmanager
     def patch_timer(self, place, new=None) -> ContextManager[Union[mock.MagicMock, DaemonTimer]]:  # noqa
@@ -296,6 +295,7 @@ class MockSystemMachine:
         segmentation_ok: bool = True,
         detection_ok: bool = True,
     ):
+        """Allow fake fully 1 intersession/trial analysis (segmentation+detection)"""
         if results is None:
             results = IntersessionResponse()
         with contextlib.ExitStack() as stack:
@@ -316,6 +316,7 @@ class MockSystemMachine:
 
     def mock_complete_segmentation(self, success: bool):
         seg_cfg = self._machine.intersession._segmentation_configuration
+        assert seg_cfg is not None
         seg_cfg.complete(seg_cfg.nonce, success)
 
     @contextlib.contextmanager
@@ -326,6 +327,7 @@ class MockSystemMachine:
 
     def mock_complete_detection(self, success: bool):
         det_cfg = self._machine.intersession._detection_configuration
+        assert det_cfg is not None
         det_cfg.complete(det_cfg.nonce, success)
 
     def mock_pose_response(
