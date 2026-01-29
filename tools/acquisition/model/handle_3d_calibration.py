@@ -307,5 +307,16 @@ def make_3d_calib(
 
     logger.notice("Processing capture in %s", src_dir)
     process_capture(src_dir.as_posix())
+
+    # strip the session prefix from any path in the resulting processed directory:
+    prefixed_str = f"{sess_path.prefix}_"
+    renamed = 0
+    for path in src_dir.rglob("*"):
+        if path.name.startswith(prefixed_str):
+            path.rename(path.parent.joinpath(path.name[len(prefixed_str):]))
+            renamed += 1
+    logger.debug("renamed %s files from session and 3d processing", renamed)
+
     logger.success("Successfully processed capture")
+
     return src_dir
