@@ -33,6 +33,7 @@ from .pellet_device_protocol import PelletDeviceProtocol
 from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
+from ..core.analysis.detector import BaseDetector
 
 logger = get_verbose_logger(__name__)
 
@@ -132,6 +133,9 @@ class SystemMachine(StateMachine):
             analysis.auto_tunnel_sweep_monitor.property_changed += self._auto_tunnel_sweep_property_changed
             # analysis.pellet_misplaced_monitor.dcs_config = algo.diamond_triangle_config
             #   handled by property changed.
+            # set current configs from monitors:
+            algo.active_config.auto_tunnel_sweep = analysis.auto_tunnel_sweep_monitor.config
+            # analysis.pellet_misplaced_monitor.config  # not in system config for now
 
         self._inference = inference
         if inference is not None:
@@ -556,7 +560,7 @@ class SystemMachine(StateMachine):
 
     def _evaluate_home_on_excessive_drift(self):
         algo = self._algorithm
-        home_on_drift_cfg = algo.home_on_excessive_drift_distane_config
+        home_on_drift_cfg = algo.home_on_excessive_drift_distance_config
         nb_points = algo.diamond_triangle_drift_data_points_size
         #
         if not (
@@ -848,7 +852,7 @@ class SystemMachine(StateMachine):
             self._analysis.pellet_misplaced_monitor.dcs_config = new_value
 
     def _auto_tunnel_sweep_property_changed(self, name, value, _):
-        if name == "is_engaged":
+        if name == BaseDetector.IS_ENGAGED:
             if value:
                 self._pellet_device.set_tunnel_fan_on()
             else:

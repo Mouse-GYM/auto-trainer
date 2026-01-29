@@ -24,7 +24,7 @@ from autotrainer.core import ObservableObject, EventManager, post_trigger_enable
     AnimalSubject, get_perf_now, calculate_std_dev_manual
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
-    BatchSessionRecordingConfiguration
+    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistance
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
@@ -1159,19 +1159,19 @@ class BehaviorAlgorithm(ObservableObject):
         return self._hands_near_pellet_seen
 
     @property
-    def active_config(self):
+    def active_config(self) -> BehaviorConfiguration:
         return self._active_config
 
     @property
-    def home_on_excessive_drift_distane_config(self):
+    def home_on_excessive_drift_distance_config(self) -> HomeOnExcessiveDriftDistance:
         return self._active_config.home_on_excessive_drift_distance
 
     @property
-    def pellet_delivery_config(self):
+    def pellet_delivery_config(self) -> PelletDeliveryConfiguration:
         return self._active_config.pellet_delivery
 
     @property
-    def pellet_hands_min_distance(self):
+    def pellet_hands_min_distance(self) -> float:
         return self._pellet_hands_min_distance
 
     @pellet_hands_min_distance.setter
@@ -1187,7 +1187,7 @@ class BehaviorAlgorithm(ObservableObject):
         #     BehaviorAlgoProps.PELLET_HANDS_DISTANCE, value, self._pellet_hands_min_distance)
 
     @property
-    def pellet_hand_uncover_distance(self):
+    def pellet_hand_uncover_distance(self) -> Optional[float]:
         return self._active_config.pellet_delivery.pellet_hand_uncover_distance
 
     @pellet_hand_uncover_distance.setter
@@ -1241,7 +1241,7 @@ class BehaviorAlgorithm(ObservableObject):
         if show_log:
             if n_vals > 0:
                 logger.verbose(
-                    "Current motor (diamond-triangle) mean drift: dist=%.2fmm %s ; min=%s max=%s n_vals=%s stdev=%s",
+                    "motor drift: dist=%.2fmm %s ; min=%s max=%s n_vals=%s stdev=%s",
                     math.nan if new_drift is None else new_drift.distance,
                     None if new_drift is None else new_drift.humanize(n_digits=2),
                     min(values, key=lambda v: v.distance).humanize(n_digits=1),

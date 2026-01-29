@@ -20,10 +20,10 @@ class BaseDetector(ObservableObject):
     def __init__(self):
         super().__init__()
         self._running = False
-        self._t_started = math.nan
+        self._t_started = -math.inf
         self._is_engaged = False
-        self._engaged_perf_c = math.nan
-        self._disengaged_perf_c = math.nan
+        self._engaged_perf_c = -math.inf
+        self._disengaged_perf_c = -math.inf
         self._cur_timer = no_op_timer
         self._thread_queue: Optional[Tuple[threading.Thread, queue.Queue]] = None
         self._lock = threading.RLock()
