@@ -35,11 +35,13 @@ class TestAutoTunnelSweep(MockSystemMachine):
         sweep.config.misplaced_trigger_delay = 0
         sweep.start()
 
-    def test_it_triggers_with_pellet_misplaced(self, caplog):
+    @pytest.mark.parametrize("start_session", [False, True])
+    def test_it_triggers_with_pellet_misplaced(self, caplog, start_session):
         sweep = self.tunnel_sweep
         misplaced = self.sensor_analysis.pellet_misplaced_monitor
         pellet_dev = self.pellet_dev
-        self.start_session_in_tunnel()
+        if start_session:
+            self.start_session_in_tunnel()
         assert not sweep.is_engaged
         with caplog.at_level(logging.DEBUG):
             misplaced.is_engaged = True

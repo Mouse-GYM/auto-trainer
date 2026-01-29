@@ -24,7 +24,7 @@ from autotrainer.core import ObservableObject, EventManager, post_trigger_enable
     AnimalSubject, get_perf_now, calculate_std_dev_manual
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
-    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistance
+    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
@@ -1163,7 +1163,7 @@ class BehaviorAlgorithm(ObservableObject):
         return self._active_config
 
     @property
-    def home_on_excessive_drift_distance_config(self) -> HomeOnExcessiveDriftDistance:
+    def home_on_excessive_drift_distance_config(self) -> HomeOnExcessiveDriftDistanceConfiguration:
         return self._active_config.home_on_excessive_drift_distance
 
     @property
