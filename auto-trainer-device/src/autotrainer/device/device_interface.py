@@ -14,10 +14,11 @@ There is a main interface class (DeviceInterface) that defines the API for acces
 hardware.
 """
 import dataclasses
+import os
 import typing
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import List, Union
+from typing import List, Union, Optional
 
 from autotrainer.core import Offset3DTuple, get_verbose_logger
 from autotrainer.core.message import Motor
@@ -391,8 +392,17 @@ class Acknowledge(Source):
 _zero_position = Offset3DTuple(0, 0, 0)
 
 
+_device_float_precision = os.getenv("AUTOTRAINER_DEVICE_FLOAT_PRECISION", "2")
+if _device_float_precision is not None and len(_device_float_precision) > 0:
+    _device_float_precision = int(_device_float_precision)
+else:
+    _device_float_precision = None
+
+
 class DeviceInterface:
     """Base class that provides low-level communication with a device, such as serial, or CAN"""
+
+    float_precision: Optional[int] = _device_float_precision
 
     def __init__(self):
         super().__init__()
@@ -402,6 +412,9 @@ class DeviceInterface:
         self._max_motor_drift_error_threshold = 2  # mm
         self._motors_drift_error = [False, False, False]
         self._prev_send_pos = _zero_position
+
+    def round_float(self, value: float) -> float:
+        return value if self.float_precision is None else round(value, self.float_precision)
 
     def open(self) -> bool:
         """ Opens the interface

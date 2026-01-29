@@ -422,11 +422,11 @@ class CanInterface(DeviceInterface):
             JerryCANCmdType.ANALOG_OUT: self._translate_analog_out,
             JerryCANCmdType.LOAD_CELL_READ: lambda msg: LoadCellReading(
                 target=_addr2tgt(msg.dst_id),
-                load=float(msg.load_cell_read.load_mv) / 1000.0 * self.load_cell_factor,
+                load=self.round_float(float(msg.load_cell_read.load_mv) / 1000.0 * self.load_cell_factor),
             ),
             JerryCANCmdType.PRESSURE_READ: lambda msg: PressureReading(
                 target=_addr2tgt(msg.dst_id),
-                pressure=float(msg.pressure_read.pressure)
+                pressure=self.round_float(float(msg.pressure_read.pressure)),
             ),
             JerryCANCmdType.RGB_LED: lambda msg: ColorLed(
                 target=_addr2tgt(msg.dst_id),
@@ -442,8 +442,8 @@ class CanInterface(DeviceInterface):
             JerryCANCmdType.STEPPER_STATUS: self._handle_stepper_status,
             JerryCANCmdType.TEMP_HUM_READ: lambda msg: SensorStatus(
                 target=_addr2tgt(msg.dst_id),
-                temperature_c=float(msg.temp_hum_read.temperature) / 100.0,
-                humidity_percent=float(msg.temp_hum_read.humidity) / 100.0
+                temperature_c=self.round_float(float(msg.temp_hum_read.temperature) / 100.0),
+                humidity_percent=self.round_float(float(msg.temp_hum_read.humidity) / 100.0),
             ),
             JerryCANCmdType.ACKNOWLEDGE: lambda msg: Acknowledge(uuid=msg.uuid),
             # no-op handlers, to silence the warning if unknown message type
@@ -1834,8 +1834,7 @@ class CanInterface(DeviceInterface):
 
         return door
 
-    @staticmethod
-    def _translate_servo_status(message) -> Optional[ServoStatus]:
+    def _translate_servo_status(self, message) -> Optional[ServoStatus]:
         """
         Translate servo status response messages.
 
@@ -1851,7 +1850,7 @@ class CanInterface(DeviceInterface):
         if motor == Motor.NONE:
             return None
 
-        return ServoStatus(target, motor, message.servo_status.position)
+        return ServoStatus(target, motor, self.round_float(message.servo_status.position))
 
     def _handle_stepper_status(self, message):
         status = self._translate_stepper_status(message)
@@ -1881,11 +1880,12 @@ class CanInterface(DeviceInterface):
         motor_send_pos = turns_to_mm(message.stepper_status.send_position)
         if self._auto_correct_motor_drift:
             motor_send_pos += self._active_motors_drift[motor_axis_idx]
+        round_val = self.round_float
         status = StepperStatus(
             target=target,
             motor=motor,
-            position=turns_to_mm(message.stepper_status.position),
-            send_position=motor_send_pos,
+            position=round_val(turns_to_mm(message.stepper_status.position)),
+            send_position=round_val(motor_send_pos),
             limit_switch=message.stepper_status.limit_switch == 1,
             position_error=self._motors_drift_error[motor_axis_idx],
         )

@@ -41,8 +41,6 @@ _MeasuresList = List[float]
 # TODO: Separate true analysis from data recording to file(s) for post-analysis.
 class SensorAnalysis(ObservableObject):
 
-    IS_HEADBAR_SWITCH_ENGAGED_PROPERTY = "is_headbar_switch_engaged"
-
     def __init__(self, *, topcam_presence: Optional[PresenceDetectionAttrs] = None):
         super().__init__()
 
@@ -241,10 +239,7 @@ class SensorAnalysis(ObservableObject):
         self._headbar_pressure_monitor.update(pressure, first_measure.when, first_measure.timestamp)
 
         # Headbar digital switch - no real implementation at this time.
-        self._is_headbar_switch_engaged = self._on_property_changed(SensorAnalysis.IS_HEADBAR_SWITCH_ENGAGED_PROPERTY,
-                                                                    numpy.mean(switch) > 0.5,
-                                                                    self._is_headbar_switch_engaged)
-
+        self._is_headbar_switch_engaged = numpy.mean(switch) > 0.5
         # (Auto-)tare detection.
         self._tare_detector.update(weights)
 
