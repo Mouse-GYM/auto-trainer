@@ -367,6 +367,8 @@ class MockSystemMachine:
                 break
             self.increment_perf_now(1e-9)
             self.pellet._pellet_device_ack_received(token)
+            if not until_none:
+                break
 
     def mock_pellet_missing(self, mouse_seen: bool = False):
         self.mock_pose_response(pellet_seen=False, mouse_seen=mouse_seen)
