@@ -236,3 +236,34 @@ class TestEnabled(_AutoClampTestCase):
             self.exit_tunnel()
         assert "skipping new disengage while disengage already in progress" in caplog.text
         assert self.tunnel_dev.update_head_magnet_intensity.call_count == 0
+
+    def test_before_reengage_delay(self, caplog):
+        algo = self.algo
+        pellet = self.pellet
+        algo.head_clamp_config.before_reengage_delay = 30
+        algo.auto_clamp_release_load_count = 1  # for doing a single load-pellet to trigger disengage
+        algo.head_clamp_config.auto_clamp_release_tone_delay = 0
+        self.start_session_in_tunnel()
+        with caplog.at_level(logging.DEBUG):
+            self.headbar_pressure.is_engaged = True
+        assert "auto-clamp setting position to" in caplog.text
+        self.headbar_pressure.is_engaged = False
+        caplog.clear()
+        with caplog.at_level(logging.INFO):
+            pellet.force_load_pellet()
+        assert "auto-clamp: starting disengage procedure.." in caplog.text
+        assert "Disengaging auto-clamp to intensity" in caplog.text
+        algo.update_pellet_seen(True)
+        self.mock_pellet_ack(until_none=True)
+        with caplog.at_level(logging.DEBUG):
+            self.headbar_pressure.is_engaged = True
+        self.headbar_pressure.is_engaged = False
+        assert f"delaying evaluate auto-clamp in {algo.head_clamp_config.before_reengage_delay:.1f}s" in caplog.text
+        half_delay = algo.head_clamp_config.before_reengage_delay // 2
+        self.increment_perf_now(half_delay)
+        #
+        caplog.clear()
+        with caplog.at_level(logging.DEBUG):
+            self.headbar_pressure.is_engaged = True
+        self.headbar_pressure.is_engaged = False
+        assert f"delaying evaluate auto-clamp in {half_delay:.1f}s" in caplog.text
