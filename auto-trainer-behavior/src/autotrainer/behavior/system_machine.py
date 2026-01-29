@@ -526,7 +526,7 @@ class SystemMachine(StateMachine):
         disengage_age = p_now - self._last_disengage_autoclamp_perf_c
         remains = algo.auto_clamp_before_reengage_delay - disengage_age
         if remains > 0:
-            logger.debug("delaying evaluate auto-clamp in %.1fs due to recent disengage ; age=%.1fs",
+            logger.verbose("delaying evaluate auto-clamp in %.1fs due to recent disengage ; age=%.1fs",
                          remains, disengage_age)
             timer = make_daemon_timer(remains, self._evaluate_auto_clamp)
             self._timer_auto_clamp_evaluate = timer
@@ -745,10 +745,6 @@ class SystemMachine(StateMachine):
             freq = clamp_cfg.auto_clamp_release_tone_freq
             logger.debug("sending tone (freq=%s) to indicate auto-clamp disabled", freq)
             pellet_dev.play_tone(freq, 0.5)
-        if self._tunnel_device is None:  # condition seems not necessary... but some test assert it
-            # eventually todo: ensure it's not None always
-            logger.warning("Uncompleted setup, tunnel_device None")
-            return
         after_tone_delay = algo.auto_clamp_release_tone_delay
         if after_tone_delay > 0:
             logger.debug(

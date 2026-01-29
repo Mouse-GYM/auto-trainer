@@ -1210,9 +1210,10 @@ class BehaviorAlgorithm(ObservableObject):
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
         self.reload_diamond_triangle_config()
-        self._active_config = copy.deepcopy(config)  # set it at the end,
-        # so that possible on_property_changed event can be relayed if some changed.
-        self._loaded_config = copy.deepcopy(config)  # and keep separate copy for eventual reset_config()
+        self._active_config = config  # set it as new active one only at the end,
+        #   so that possible on_property_changed event can be relayed if some changed.
+        # and/but keep separate copy for eventual reset_config():
+        self._loaded_config = copy.deepcopy(config)
 
     def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
         self.intersession_enabled = cfg.is_intersession_analysis_enabled

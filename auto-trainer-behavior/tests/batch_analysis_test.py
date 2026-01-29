@@ -57,8 +57,7 @@ class TestBatchAnalysis(MockSystemMachine):
                 else:
                     assert machine.intersession.state == IntersessionState.idle
             algo.update_pellet_seen(True)
-            while pellet._api_status_token is not None:
-                self.mock_pellet_ack()
+            self.mock_pellet_ack(until_none=True)
         assert machine.state == SystemState.tunnel
         assert machine.intersession.state == IntersessionState.idle
         assert self.batch_start_count == self.batch_end_count == 1
@@ -98,8 +97,7 @@ class TestBatchAnalysis(MockSystemMachine):
             algo.update_mouse_seen(True)
             pellet.force_load_pellet()
             algo.update_pellet_seen(True)
-            while pellet._api_status_token is not None:
-                self.mock_pellet_ack()
+            self.mock_pellet_ack(until_none=True)
 
         if last_trial_with_mouse:
             algo.update_mouse_seen(True)
