@@ -1,3 +1,4 @@
+import pickle
 from pathlib import Path
 
 import yaml
@@ -6,6 +7,7 @@ import pytest
 
 from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core.analysis.config import load_calib_stereo_params
+from autotrainer.core.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference.pose_algorithm import PoseAlgorithm
 
@@ -32,7 +34,13 @@ def calib_metadata(calib_dir_path):
 
 
 @pytest.fixture
-def pose_algo(calib_dir_path, stereo_params, calib_metadata):
+def cam_offsets(calib_dir_path):
+    with calib_dir_path.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME).open('rb') as fh:
+        return pickle.load(fh)
+
+
+@pytest.fixture
+def pose_algo(calib_dir_path, stereo_params, calib_metadata, cam_offsets):
     calib_info = calibration_FLIR.get_calibration_info(calib_dir_path.as_posix())
     square_size = calib_info[0]
     return PoseAlgorithm(
@@ -40,4 +48,12 @@ def pose_algo(calib_dir_path, stereo_params, calib_metadata):
         stereo_params=stereo_params,
         calib_metadata=calib_metadata,
         square_size=square_size,
+        cam_offsets=cam_offsets,
     )
+
+@pytest.fixture
+def initialized_pose_algo(pose_algo):
+    parts = ['Pellet', 'RH_flat', 'RH_spread', 'RH_grab', 'LH_flat', 'LH_spread', 'LH_grab',
+             'Star', 'Tongue_mid', 'Tongue_tip', 'Nose', 'Triangle', 'Mouth', 'Diamond']
+    pose_algo.initialize(parts)
+    return pose_algo

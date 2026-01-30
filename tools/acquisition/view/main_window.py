@@ -1,6 +1,7 @@
 import collections
 import dataclasses
 import math
+import pickle
 import shutil
 import threading
 import time
@@ -19,6 +20,7 @@ import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
     calculate_std_dev_manual
+from autotrainer.core.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME, make_cam_offsets_dict
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
@@ -220,6 +222,7 @@ class MainWindow(QMainWindow):
         positions: List[Offset3DTuple],  # motor coordinate system positions
         offsets: List[Offset3DTuple],  # diamond-triangle offsets (inference coordinate system)
         diamond_locs3d: List[Offset3DTuple],  # diamond loc3d (inference coordinate system)
+        raw_diamond_3d: List[Offset3DTuple],
     ):
         self._timer_calibrate_diamond_triangle.cancel()
         if len(offsets) < 3 or len(diamond_locs3d) < 10:
@@ -273,16 +276,19 @@ class MainWindow(QMainWindow):
         assert isinstance(stdev_dia_loc3d, Offset3DTuple)
         logger.info("diamond-inference-position: avg=%s stdev=%s", avg_dia_loc3, stdev_dia_loc3d)
         #
+        avg_rawdia_loc3, stdev_rawdia_loc3d = calculate_std_dev_manual(raw_diamond_3d)
+        logger.info("raw-diamond-inference-position: avg=%s stdev=%s", avg_rawdia_loc3, stdev_rawdia_loc3d)
+        #
         noisy = False
-        for val in chain(stdev_offset, stdev_pos, stdev_dia_loc3d):
+        for val in chain(stdev_offset, stdev_pos, stdev_dia_loc3d, stdev_rawdia_loc3d):
             if val >= DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE:
                 noisy = True
         if noisy:
             rsp = QMessageBox.warning(
                 self, "Confirmation", f"The data is noisy, do you want retry longer ?",
-                QMessageBox.Yes | QMessageBox.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
-            if rsp == QMessageBox.Yes:
+            if rsp == QMessageBox.StandardButton.Yes:
                 self._diamond_triangle_calib_run = self._make_diamond_triangle_calib_run(2 * DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION)
                 self.on_calibrate_diamond_triangle(True)
             return
@@ -299,8 +305,8 @@ class MainWindow(QMainWindow):
             rsp = QMessageBox.question(
                 self, "Confirmation",
                 f"The configuration file ({save_path.as_posix()}) already exists, are you sure you want to proceed ?",
-                QMessageBox.Yes | QMessageBox.No)
-            if rsp != QMessageBox.Yes:
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if rsp != QMessageBox.StandardButton.Yes:
                 return
             dialog = QFileDialog(self, "Save to configuration file", save_path.parent.as_posix(),
                                  "All yaml files (*.yaml *.yml)")
@@ -316,21 +322,40 @@ class MainWindow(QMainWindow):
                                 f"Successfully computed values for diamond-triangle position & offset.\n"
                                 f"\nSaving to {save_path.as_posix()}\n\n"
                                 f"Calibration is being used immediately by now.",
-                                QMessageBox.Ok,
+                                QMessageBox.StandardButton.Ok,
                                 )
         new_cfg = DiamondTriangleOffsetConfig(
             used_position=avg_pos,
             measured_offset=avg_offset,
             diamond_coord=avg_dia_loc3,
+            raw_diamond_coord=avg_rawdia_loc3,
         )
         logger.success("Saving new config %s to %s", new_cfg, save_path.as_posix())
         new_cfg.to_file(save_path)
+        # also write new camera_offsets.pkl to calib dir:
+        cam_offsets = make_cam_offsets_dict()
+        cam_off = avg_rawdia_loc3 * new_cfg.flips_inference_motor  # looks need to be (1, -1, 1)
+        cam_offsets.update(
+            x_off=cam_off.x,
+            y_off=cam_off.y,
+            z_off=cam_off.z,
+        )
+        calib_dir = Path(self._preferences.configuration_location).joinpath(DEFAULT_3D_CALIB_DIR_NAME)
+        cam_offsets_path = calib_dir.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
+        if cam_offsets_path.exists():
+            now = datetime.now()
+            backup_path = cam_offsets_path.parent.joinpath(f"{cam_offsets_path.name}_{now.strftime(DATE_TIME_FORMAT)}")
+            shutil.copy(cam_offsets_path, backup_path)
+        logger.info("Writing new camera-offsets %s to file %s", cam_offsets, cam_offsets_path)
+        with cam_offsets_path.open("wb") as fh:
+            pickle.dump(cam_offsets, fh)
         #
         app_model = self._app_model
+        app_model.reload_calib(calib_dir)
         algo = app_model.behavior.algorithm
         algo.diamond_triangle_config = new_cfg
         animal = app_model.selected_animal
-        # to ensure animal will gets its x/y/z in DCS
+        # to ensure animal will get its x/y/z in DCS
         app_model.selected_animal = None
         app_model.selected_animal = animal
 
@@ -346,6 +371,7 @@ class MainWindow(QMainWindow):
         action = self.calib_diamond_triangle_action
 
         diamond_locs3d = []
+        raw_diamond_3d = []
 
         def record_offsets(pose_response: PoseResponse):
             nonlocal start_perf_c, offsets, positions, recording
@@ -358,8 +384,11 @@ class MainWindow(QMainWindow):
                 offsets.append(new_offset)
                 positions.append(app_model.hardware.last_position)
             dia_loc3d = pose_response.locations_3d.get(SceneElement.Diamond)
+            raw_dia_3d = pose_response.raw_loc_3d.get(SceneElement.Diamond)
             if dia_loc3d is not None:
                 diamond_locs3d.append(dia_loc3d)
+            if raw_dia_3d is not None:
+                raw_diamond_3d.append(raw_dia_3d)
             if time.perf_counter() - start_perf_c > calib_duration:
                 # required, to execute the function in the UI/main thread:
                 # reminder this record_offsets is executed by some thread handler/worker in some callback
@@ -402,8 +431,8 @@ class MainWindow(QMainWindow):
             positions=positions,
             offsets=offsets,
             diamond_locs3d=diamond_locs3d,
+            raw_diamond_3d=raw_diamond_3d,
         )
-
 
     def on_calibrate_diamond_triangle(self, is_toggled):
         if is_toggled and self._diamond_triangle_calib_run is None:
@@ -445,27 +474,35 @@ class MainWindow(QMainWindow):
                 self._app_model.status = AppModelStatus.IDLE
                 logger.verbose("3d-calib thread joined, error=%s", error)
                 if error is None:
-                    target = Path(self._preferences.configuration_location).joinpath(DEFAULT_3D_CALIB_DIR_NAME)
-                    if target.exists():
+                    backup_path = None
+                    target_calib_dir = Path(self._preferences.configuration_location).joinpath(DEFAULT_3D_CALIB_DIR_NAME)
+                    if target_calib_dir.exists():
                         rsp = QMessageBox.question(
                             self,
                             "3D calibration success",
-                            f"Calibration dir already exists ({target}),\n\n"
+                            f"Calibration dir already exists ({target_calib_dir}),\n\n"
                             f"do you want to replace ?",
                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                         if rsp != QMessageBox.StandardButton.Yes:
                             return
                         now = datetime.now()
-                        backup_path = target.parent.joinpath(f"{target.name}_{now.strftime(DATE_TIME_FORMAT)}")
-                        target.rename(backup_path)
+                        backup_path = target_calib_dir.parent.joinpath(f"{target_calib_dir.name}_{now.strftime(DATE_TIME_FORMAT)}")
+                        target_calib_dir.rename(backup_path)
                         logger.debug("Previous 3d-calib moved to %s", backup_path)
                     shutil.copytree(
-                        result_dir, target,
+                        result_dir, target_calib_dir,
                         dirs_exist_ok=False,  # default already, but to be sure we want be clean
                     )
+                    if backup_path is not None:
+                        prev_cam_offsets = backup_path.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
+                        new_cam_offsets = target_calib_dir.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
+                        if prev_cam_offsets.exists() and not new_cam_offsets.exists():
+                            shutil.copyfile(prev_cam_offsets, target_calib_dir)
+                            logger.verbose("copied previous %s given no new one", DEFAULT_CAM_OFFSET_FILE_NAME)
+                    self._app_model.reload_calib(target_calib_dir)
                     QMessageBox.information(
                         self,
-                        "3D calibration success", f"Result saved into {target}", QMessageBox.StandardButton.Ok)
+                        "3D calibration success", f"Result saved into {target_calib_dir}", QMessageBox.StandardButton.Ok)
                 else:
                     QMessageBox.warning(self, "3D calibration failed", f"Error received: {error}", QMessageBox.StandardButton.Ok)
 

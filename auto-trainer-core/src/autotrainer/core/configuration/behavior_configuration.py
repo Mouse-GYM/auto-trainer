@@ -180,6 +180,7 @@ class _BehaviorConfiguration:
         )
 
 
+@dataclasses.dataclass
 class BehaviorConfiguration(_BehaviorConfiguration):
     # NB: having to subclass _BehaviorConfiguration dataclass type to allow customize init signature (and body):
 

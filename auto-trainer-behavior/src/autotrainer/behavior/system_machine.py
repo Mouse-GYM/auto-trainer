@@ -242,7 +242,7 @@ class SystemMachine(StateMachine):
             cur_prj = batch_list[0]
             intersession.project = cur_prj
             inference.project = cur_prj
-            inference.put_to_data_hander(InferenceMonitorDataMsg.START_NEW_INTERSESSION_BATCH_ITEM)
+            inference.put_to_data_handler(InferenceMonitorDataMsg.START_NEW_INTERSESSION_BATCH_ITEM)
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
                 self._batch_failed_count = 0

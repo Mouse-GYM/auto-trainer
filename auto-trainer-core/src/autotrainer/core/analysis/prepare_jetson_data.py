@@ -27,6 +27,20 @@ logger = get_verbose_logger(__name__)
 video_write_ext = ".mp4" if sys.platform.startswith("linux") else ".mkv"
 
 
+DEFAULT_CAM_OFFSET_FILE_NAME = "camera_offsets.pkl"
+
+DEFAULT_CAM_OFFSET_VALS = {
+    'camLele': 12.5,
+    'camRele': 30,
+    'camLazi': 55,
+    'camRazi': 5,
+}
+
+def make_cam_offsets_dict():
+    return DEFAULT_CAM_OFFSET_VALS.copy()
+
+
+
 def identify_dropped_frames(timestamp_file, frame_rate):
     """
     Identify dropped frames in a video based on inter-frame intervals.
@@ -470,7 +484,7 @@ def reorient_and_center(filtered_df_3d, centered_path_3d, src_dir, bpts, center_
     square_size, _, _, _ = cal_flir.get_calibration_info(src_dir)
     cam_names = cal_flir.get_video_list(src_dir)
 
-    path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')
+    path_offsets = os.path.join(src_dir, DEFAULT_CAM_OFFSET_FILE_NAME)
     if os.path.isfile(path_offsets):
         with open(path_offsets, "rb") as handle:
             cam_offsets = pickle.load(handle)
@@ -565,10 +579,12 @@ def reorient_and_center_step1(
             else:
                 center_3d = pd.read_hdf(os.path.join(path_centering, files_3D[0]))
                 center_len = num_frames
+        else:
+            raise ValueError(f"Unhandled center_method[0]: {center_method[0]}")
 
         if center_len > 0:
-            if not bp2use in center_3d.columns.get_level_values('bodyparts').unique():
-                print('Bodypart not found')
+            if bp2use not in center_3d.columns.get_level_values('bodyparts').unique():
+                logger.warning('Body part %s not found', bp2use)
             else:
                 center_xyz = [0, 0, 0]
                 speed_ax = []
@@ -598,13 +614,16 @@ def reorient_and_center_step1(
 
         # Save the offsets to a pickle file
         if save_offsets:
-            path_offsets = os.path.join(src_dir, 'camera_offsets.pkl')
+            path_offsets = os.path.join(src_dir, DEFAULT_CAM_OFFSET_FILE_NAME)
             logger.notice("Saving camera-offsets to %s", path_offsets)
             with open(path_offsets, 'wb') as fh:
                 pickle.dump(cam_offsets, fh)
 
     if orig_cam_offsets is not None and cam_offsets != orig_cam_offsets:
         logger.warning("Loaded cam_offsets != generated: %s vs %s", orig_cam_offsets, cam_offsets)
+
+    # if orig_cam_offsets is not None:
+    #     cam_offsets = orig_cam_offsets
 
     # Reorient based on camera angles
     for bp in range(len(bpts)):

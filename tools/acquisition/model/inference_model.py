@@ -90,7 +90,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
         self._is_enabled = False
         self._model_location = ""
-        self._algorithm = pose_algorithm
+        self._pose_algorithm = pose_algorithm
+        self._pose_parts: List[str] = []
         self._calib_dir = calib_dir
 
         self._msg_thread = None
@@ -143,6 +144,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             logger.debug("ack obtained")
 
     @property
+    def pose_parts(self) -> List[str]:
+        return self._pose_parts
+
+    @property
     def is_enabled(self) -> bool:
         return self._is_enabled
 
@@ -181,7 +186,16 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
     @property
     def pose_algorithm(self) -> PoseAlgorithm:
-        return self._algorithm
+        return self._pose_algorithm
+
+    @pose_algorithm.setter
+    def pose_algorithm(self, value):
+        self._pose_algorithm = value
+        proc = self._data_monitor_proc
+        if proc is not None and proc.is_alive():
+            logger.debug("putting new pose_algo to data-monitor-proc")
+            self._data_monitor_cmd_queue.put(
+                (InferenceMonitorDataProc.Msg.SET_POSE_ALGO, (value,), None))
 
     @staticmethod
     def _check_previous_offline_thread(cause: str, cur_off: Optional[threading.Thread]):
@@ -367,7 +381,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         self._offline_analysis_thread = None
         self._intersession_detection = None
 
-    def put_to_data_hander(self, msg):
+    def put_to_data_handler(self, msg):
         self._data_monitor_cmd_ack_event.clear()
         self._data_monitor_cmd_queue.put((msg, None, None))
         self._data_monitor_cmd_ack_event.wait()
@@ -485,25 +499,14 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                     continue
                 logger.debug("Processing msg %s ...", msg)
                 if msg == InferenceStatusMessageKind.Initialized:
+                    self._pose_parts = context
                     self._set_status(InferenceStatus.waiting)
-                    pose_algo = self._algorithm
+                    pose_algo = self._pose_algorithm
                     pose_algo.initialize(context)
-                    # NB: we create a copy of the pose_algo,
-                    # because with registered events callback to other objects,
-                    # the current one cannot be pickled/serialized with them.
-                    # could/should be TODO: implement serialize in PoseAlgo which only include the config/params
-                    new_pose_algo = PoseAlgorithm(
-                        stereo_params=pose_algo.stereo_params,
-                        calib_metadata=pose_algo.calib_metadata,
-                        cam_names=pose_algo.cam_names,
-                        square_size=pose_algo.square_size,
-                        cam_offsets=pose_algo.cam_offsets,
-                    )
-                    new_pose_algo.initialize(context)
                     self._data_monitor_cmd_queue.put(
-                        (InferenceMonitorDataProc.Msg.SET_POSE_ALGO, (new_pose_algo,), None))
+                        (InferenceMonitorDataProc.Msg.SET_POSE_ALGO, (pose_algo,), None))
                     self._send_message(InferenceCommandMessageKind.Start)
-                    self.algo_initialised(self._algorithm)
+                    # self.algo_initialised(self._pose_algorithm)  # unused
                 elif msg == InferenceStatusMessageKind.Loading:
                     self._set_status(InferenceStatus.loading)
                 elif msg == InferenceStatusMessageKind.Performance:

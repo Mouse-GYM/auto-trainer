@@ -1081,7 +1081,7 @@ class BehaviorAlgorithm(ObservableObject):
         return cfg.is_enabled and cfg.is_pellet_cover_enabled and not self._algo_paused
 
     def can_release_pellet(self) -> bool:
-        """Say if should should release pellet"""
+        """Say if algo should release pellet"""
         # self._check_date()
         if self._algo_paused:
             return False

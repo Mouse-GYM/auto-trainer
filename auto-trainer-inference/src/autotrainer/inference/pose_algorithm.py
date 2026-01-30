@@ -24,27 +24,29 @@ PoseTuple = namedtuple("PoseTuple", ["x", "y"])
 
 @dataclass(frozen=True)
 class PoseLocation:
-    name: str
     index: int
     x: float
     y: float
+
+    def __repr__(self):
+        return f"PoseLocation(index={self.index}, x={self.x:.2f}, y={self.y:.2f})"
 
 
 @dataclass(frozen=True)
 class PoseResponse:
     """Defines response of various input"""
 
-    sequence: int
+    sequence: int = 0
     """Simple index to track responses"""
 
     parts_flags: Tuple[
         Dict[str, bool],
         Dict[str, bool],
         Dict[str, bool],
-    ]
+    ] = dataclasses.field(default_factory=lambda: ({}, {}, {}))
     """Tuple indicating part seen for left, right, and both (same frame)"""
 
-    locations: List[Dict[str, PoseLocation]]
+    locations: List[Dict[str, PoseLocation]] = dataclasses.field(default_factory=list)
     """X, Y locations for each part for each camera, if above threshold, otherwise -1, -1 (or not present)"""
 
     parts_3d_offsets: Dict[str, Dict[str, Offset3DTuple]] = dataclasses.field(default_factory=dict)
@@ -52,6 +54,8 @@ class PoseResponse:
 
     locations_3d: Dict[str, Offset3DTuple] = dataclasses.field(default_factory=dict)
     """3D locations of the monitored parts/elements"""
+
+    raw_loc_3d: Dict[str, Offset3DTuple] = dataclasses.field(default_factory=dict)
 
     @property
     def pellet_seen(self) -> bool:
@@ -117,7 +121,7 @@ class PoseResponse:
         return Offset3DTuple(value)
 
 
-class PoseAlgorithm(ObservableObject):
+class PoseAlgorithm:
     """
     The PoseAlgorithm is the autotrainer-specific interpretation of the output from a pose model.
 
@@ -288,6 +292,7 @@ class PoseAlgorithm(ObservableObject):
             p_thresh=p_thresh,
             min_cluster=min_cluster,
         )
+        raw_df_3d = df_3d
         # but reorient and center looks required:
         center_method = (1, SceneElement.Diamond)
         df_3d = reorient_and_center_step1(
@@ -303,7 +308,7 @@ class PoseAlgorithm(ObservableObject):
             save_offsets=False,
             src_dir="/dev/null",
         )
-        return df_3d
+        return raw_df_3d, df_3d
 
     def process(self,
         all_frames: List[numpy.ndarray],
@@ -395,7 +400,8 @@ class PoseAlgorithm(ObservableObject):
             v0_raw = process_hands_results.iloc[0:len(selected_cams_frames[0])]
             v1_raw = process_hands_results.iloc[len(selected_cams_frames[0]):]
             for elem in SceneElement.L_Hand, SceneElement.R_Hand:
-                if __debug__ and elem not in process_hands_results:
+                if __debug__ and elem not in process_hands_results.columns:
+                    logger.warning("%s not present in hands results", elem)
                     continue
                 # uses last(most recent) one:
                 if self.process_frames_select_frames_method == "last_one":
@@ -406,14 +412,15 @@ class PoseAlgorithm(ObservableObject):
                     v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
                     v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
                 if v0['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                    locations_1[elem] = PoseLocation(elem, -1, v0['x'], v0['y'])
+                    locations_1[elem] = PoseLocation(-1, v0['x'], v0['y'])
                 if v1['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                    locations_2[elem] = PoseLocation(elem, -1, v1['x'], v1['y'])
+                    locations_2[elem] = PoseLocation(-1, v1['x'], v1['y'])
 
         locations_3d = {}
+        raw_3d = {}
         parts_3d_offsets = defaultdict(dict)
         if len(pairs_3d_offsets) > 0:
-            df_3d = self._handle_offsets_pose_data(*(
+            raw_df_3d, df_3d = self._handle_offsets_pose_data(*(
                 numpy.asarray([
                     [frame[gpi(p)] for p in self._measure_offset_parts]
                     for frame in frames
@@ -422,11 +429,13 @@ class PoseAlgorithm(ObservableObject):
             ))
             for part1, part2 in pairs_3d_offsets:
                 if parts_flag_3.get(part1):
+                    raw_3d[part1] = Offset3DTuple(raw_df_3d[part1].iloc[-1, 0:3])
                     loc1 = locations_3d[part1] = Offset3DTuple(
                         df_3d[part1].iloc[-1, 0:3])  # last frame, 3 first columns (x, y, z)
                 else:
                     loc1 = None
                 if parts_flag_3.get(part2):
+                    raw_3d[part2] = Offset3DTuple(raw_df_3d[part2].iloc[-1, 0:3])
                     loc2 = locations_3d[part2] = Offset3DTuple(df_3d[part2].iloc[-1, 0:3])
                     if loc1 is not None:
                         parts_3d_offsets[part1][part2] = tuple(loc1 - loc2)
@@ -436,7 +445,8 @@ class PoseAlgorithm(ObservableObject):
             parts_flags=(parts_flag_1, parts_flag_2, parts_flag_3),
             locations=[locations_1, locations_2],
             parts_3d_offsets=dict(parts_3d_offsets),
-            locations_3d=locations_3d
+            locations_3d=locations_3d,
+            raw_loc_3d=raw_3d,
         )
         return response
 
@@ -445,5 +455,5 @@ class PoseAlgorithm(ObservableObject):
         for pose in frames:
             for idx, part in enumerate(self._parts_list):
                 if pose[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PLOT_THRESHOLD:
-                    locations[part] = PoseLocation(part, idx, pose[idx, 0], pose[idx, 1])
+                    locations[part] = PoseLocation(idx, pose[idx, 0], pose[idx, 1])
         return locations

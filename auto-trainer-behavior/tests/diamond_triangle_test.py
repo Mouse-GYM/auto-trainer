@@ -1,3 +1,4 @@
+import copy
 from pathlib import Path
 
 import pytest
@@ -31,6 +32,7 @@ def test_save_diamond_triangle(tmp_path):
         used_position=zero_offset,
         measured_offset=one_offset,
         diamond_coord=one_offset + one_offset,
+        raw_diamond_coord=one_offset + one_offset + one_offset,
     )
     cfg.to_file(dst)
     cfg2 = DiamondTriangleOffsetConfig.load_config(dst)
@@ -41,4 +43,9 @@ def test_save_diamond_triangle(tmp_path):
     assert cfg2 == cfg
     #
     cfg2.used_position += one_offset
+    assert cfg2 != cfg
+    #
+    cfg2 = copy.deepcopy(cfg)
+    assert cfg2 == cfg
+    cfg2.raw_diamond_coord -= one_offset
     assert cfg2 != cfg
