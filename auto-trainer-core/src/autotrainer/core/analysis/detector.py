@@ -53,6 +53,7 @@ class BaseDetector(ObservableObject):
         self._cur_timer.cancel()  # safer
         timer = self._cur_timer = make_daemon_timer(delay, self.check_state)
         timer.start()
+        self._logger.verbose("created timer to check_state within %.1fs", delay)
 
     def _check_state(self) -> Optional[float]:
         raise NotImplementedError
@@ -68,7 +69,7 @@ class BaseDetector(ObservableObject):
                 # "recurrent/timed" detector
                 self._make_new_timer(next_delay)
             else:
-                # detector that will resume by explicit refresh
+                # daemon detector or detector that will resume by explicit refresh
                 self._cur_timer.cancel()
                 self._cur_timer = no_op_timer
         return next_delay
@@ -96,7 +97,8 @@ class BaseDetector(ObservableObject):
                 self.check_state()
 
     def _daemon_run(self, cmd_queue):
-        delay = self.default_timer_delay
+        delay = None
+        self._logger.info("%s running", self.__class__.__name__)
         while True:
             if delay is None:
                 delay = self.default_timer_delay
@@ -119,7 +121,7 @@ class BaseDetector(ObservableObject):
                 assert r is None
                 break
             delay = self.check_state()
-        self._logger.verbose("exiting main loop")
+        self._logger.verbose("%s: exiting main loop", self.__class__.__name__)
 
     def _stop(self):
         pass
@@ -137,14 +139,16 @@ class BaseDetector(ObservableObject):
         if thread_queue is not None:
             thread, q = self._thread_queue
             # assert isinstance(q, queue.Queue)
-            q.put(None)
+            if thread.is_alive():
+                q.put(None)
             self._logger.debug("Joining check thread %s", thread)
             thread.join(3)
-            self._logger.debug("joined check thread %s", thread)
+            self._logger.verbose("joined check thread %s", thread)
             if thread.is_alive():
                 logger.warning("check thread still alive, but continuing anyway")
             self._thread_queue = None
 
     def restart(self):
+        self._logger.notice("Restarting %s", self.__class__.__name__)
         self.stop()
         self.start()

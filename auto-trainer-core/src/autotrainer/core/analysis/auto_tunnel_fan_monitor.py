@@ -84,11 +84,9 @@ class AutoTunnelSweepMonitor(BaseDetector):
                     with self._lock:
                         timer = self._cur_timer
                         if not timer.finished.is_set():
-                            logger.debug("timer already in progress")
+                            self._logger.debug("timer already in progress")
                         else:
-                            logger.verbose("created timer to engage within %.1fs", delay)
                             self._make_new_timer(delay)
-                else:
-                    self.check_state()
-            else:
-                self.check_state()
+                    return
+            # all other cases (pellet misplaced not engaged or trigger delay <= 0):
+            self.check_state()
