@@ -14,6 +14,8 @@ logger = get_verbose_logger(__name__)
 
 class BaseDetector(ObservableObject):
 
+    IS_ENGAGED = "is_engaged"
+
     use_daemon: bool = False
     default_timer_delay: Optional[float] = None
 
@@ -28,8 +30,6 @@ class BaseDetector(ObservableObject):
         self._thread_queue: Optional[Tuple[threading.Thread, queue.Queue]] = None
         self._lock = threading.RLock()
         self._logger = get_verbose_logger(self.__class__.__module__)
-
-    IS_ENGAGED = "is_engaged"
 
     @property
     def is_engaged(self):
