@@ -572,10 +572,7 @@ class SystemMachine(StateMachine):
         # so that we'll have to get min_samples data point before next check
         cur_drift = algo.get_diamond_triangle_drifts(reset=True, show_log=True)
         drift_dist = math.nan if cur_drift is None else cur_drift.distance
-        # logger.notice("Measured motor drift: dist=%.2fmm offset=%s",
-        #                drift_dist,
-        #                None if cur_drift is None else cur_drift.humanize())
-        if drift_dist < home_on_drift_cfg.excessive_distance_threshold:
+        if math.isnan(drift_dist) or drift_dist < home_on_drift_cfg.excessive_distance_threshold:
             return
         logger.notice("Measured motor drift too high (%.1fmm), executing home procedure",
                       drift_dist)
