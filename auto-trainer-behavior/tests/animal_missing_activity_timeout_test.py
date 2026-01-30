@@ -63,9 +63,12 @@ class TestConsiderAutoEndSession(MockSystemMachine):
             mock.call(AlmostEqualFloat(half_delay), machine._consider_auto_end_session)
         ]
         assert m_timer.return_value.cancel.call_args_list == [mock.call()]
+        assert self.capture_end_count == 0
+        assert algo.is_in_session
         self.increment_perf_now(half_delay + 1)
         with self.patch_timer() as m_timer_3:
             machine._consider_auto_end_session()
+        assert not algo.is_in_session
         assert m_timer_3.call_args_list == []
         assert m_timer_2.return_value.cancel.call_args_list == 2 * [mock.call()]
         # NB: canceled 2 times, once by _consider_auto_end_session and once by end_session itself.
@@ -84,6 +87,7 @@ class TestConsiderAutoEndSession(MockSystemMachine):
         algo.update_mouse_seen(True)
         with self.patch_timer() as m_timer_2:
             machine._consider_auto_end_session()
+        assert algo.is_in_session
         assert m_timer_2.call_args_list == [
             mock.call(AlmostEqualFloat(timeout_delay), machine._consider_auto_end_session)
         ]
@@ -94,4 +98,5 @@ class TestConsiderAutoEndSession(MockSystemMachine):
             self.start_session_in_tunnel()
         assert m_timer.return_value.cancel.call_args_list == []
         self.exit_tunnel()
+        assert not self.algo.is_in_session
         assert m_timer.return_value.cancel.call_args_list == [mock.call()]
