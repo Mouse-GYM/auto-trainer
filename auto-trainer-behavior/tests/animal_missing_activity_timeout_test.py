@@ -24,7 +24,7 @@ from autotrainer.inference.analysis.intersession_process import IntersessionResp
 # for small diff of timers delay:
 class AlmostEqualFloat(float):
     def __eq__(self, other):
-        return self - other < 0.001
+        return abs(self - other) < 0.001
 
 
 class TestConsiderAutoEndSession(MockSystemMachine):
