@@ -41,6 +41,7 @@ logger = get_verbose_logger(__name__)
 _clean_raw_data_timer = make_daemon_timer
 _auto_clamp_release_timer = make_daemon_timer
 _consider_end_session_timer = make_daemon_timer
+_consider_auto_end_session_timer = make_daemon_timer
 _check_missing_timer = make_daemon_timer
 _consider_disengage_autoclamp_timer = make_daemon_timer
 
@@ -309,18 +310,25 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_auto_end_session(self):
-        self._timer_consider_auto_end_session.cancel()  # in case of
+        self._timer_consider_auto_end_session.cancel()  # required
         algo = self._algorithm
         cfg = algo.auto_end_session_config
         if not algo.is_in_session or cfg is None or cfg.no_activity_delay_minutes <= 0:
             return
-        last_activity_age = min(algo.is_in_session_age, algo.mouse_seen_age)  # reminder: this is the nose part which is accounted for mouse_seen
+        mouse_seen_age = algo.mouse_seen_age  # reminder: this is the nose part which is accounted for mouse_seen
+        in_session_age = algo.is_in_session_age
+        if math.isinf(mouse_seen_age):
+            last_activity_age = in_session_age
+        else:
+            last_activity_age = min(mouse_seen_age, in_session_age)
         remains = 60 * cfg.no_activity_delay_minutes - last_activity_age
         if remains <= 0:
             algo.end_capture_session(reason=RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT)
         else:
             logger.info("started new timer for consider_auto_end_session in %.1fs", remains)
-            timer = self._timer_consider_auto_end_session = make_daemon_timer(remains, self._consider_auto_end_session)
+            timer = self._timer_consider_auto_end_session = _consider_auto_end_session_timer(
+                remains, self._consider_auto_end_session
+            )
             timer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)

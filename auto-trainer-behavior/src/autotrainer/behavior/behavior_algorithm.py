@@ -1141,6 +1141,8 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_pellet_count += 1
 
     def update_mouse_seen(self, seen: bool = True):
+        if seen:
+            self._mouse_seen_last_perf_c = get_perf_now()
         if self._is_in_session and seen:
             prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
             if not prev_seen:
