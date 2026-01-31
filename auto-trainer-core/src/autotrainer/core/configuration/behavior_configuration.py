@@ -31,7 +31,7 @@ class AutoCloseGateOnIntersessionConfiguration:
 
 
 @dataclass
-class HomeOnExcessiveDriftDistance:
+class HomeOnExcessiveDriftDistanceConfiguration:
     """Execute, when in monitoring (should equal to be in deliver position), home to reset motors if measured drift distance is higher than threshold"""
 
     enabled: bool = False
@@ -146,7 +146,7 @@ class _BehaviorConfiguration:
     auto_tunnel_sweep: AutoTunnelSweepConfiguration = field(default_factory=AutoTunnelSweepConfiguration)
     batch_session_recording: BatchSessionRecordingConfiguration = field(default_factory=BatchSessionRecordingConfiguration)
     auto_close_gate_on_intersession: AutoCloseGateOnIntersessionConfiguration = field(default_factory=AutoCloseGateOnIntersessionConfiguration)
-    home_on_excessive_drift_distance: HomeOnExcessiveDriftDistance = field(default_factory=HomeOnExcessiveDriftDistance)
+    home_on_excessive_drift_distance: HomeOnExcessiveDriftDistanceConfiguration = field(default_factory=HomeOnExcessiveDriftDistanceConfiguration)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -209,7 +209,7 @@ _cls_2_tag = {
     AutoTunnelSweepConfiguration: "AutoTunnelSweepConfiguration",
     BatchSessionRecordingConfiguration: "BatchSessionRecordingConfiguration",
     AutoCloseGateOnIntersessionConfiguration: "AutoCloseGateOnIntersessionConfiguration",
-    HomeOnExcessiveDriftDistance: "HomeOnExcessiveDriftDistance",
+    HomeOnExcessiveDriftDistanceConfiguration: "HomeOnExcessiveDriftDistance",
 }
 
 

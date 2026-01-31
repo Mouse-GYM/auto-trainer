@@ -228,7 +228,7 @@ class MockSystemMachine:
         global fake_perf_now
         fake_perf_now += inc
 
-    @pytest.fixture()
+    @pytest.fixture(autouse=True)
     def machine(self, machine: SystemMachine) -> SystemMachine:  # noqa
         self._init(machine)
         yield machine  # noqa

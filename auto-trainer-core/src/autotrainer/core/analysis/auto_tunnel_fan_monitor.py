@@ -64,7 +64,7 @@ class AutoTunnelSweepMonitor(BaseDetector):
         p_now = get_perf_now()
         rate_remain = cfg.rate_limit_delay + cfg.misplaced_trigger_delay - (p_now - self._disengaged_perf_c)
         if rate_remain > 0:
-            logger.verbose("delaying for %.1fs due to rate limit", rate_remain)
+            logger.verbose("delaying tunnel sweep for %.1fs due to rate limit", rate_remain)
             return rate_remain
         self.is_engaged = True
         prev_timer_disengage = self._timer_end_engaged
@@ -75,14 +75,18 @@ class AutoTunnelSweepMonitor(BaseDetector):
 
     def _on_pellet_misplaced_property_changed(self, name, value, _):
         if not self._running or not self._config.enabled:
-            logger.verbose("not enabled")
+            logger.verbose("auto tunnel sweep not enabled")
             return
-        if name == "is_engaged":
+        if name == BaseDetector.IS_ENGAGED:
             if value:
-                timer = self._cur_timer
-                if timer is no_op_timer or timer.finished.is_set():
-                    delay = self._config.misplaced_trigger_delay
-                    logger.verbose("created timer to engage within %.1fs", delay)
-                    self._make_new_timer(delay)
-            else:
-                self.check_state()
+                delay = self._config.misplaced_trigger_delay
+                if delay > 0:
+                    with self._lock:
+                        timer = self._cur_timer
+                        if not timer.finished.is_set():
+                            self._logger.debug("timer already in progress")
+                        else:
+                            self._make_new_timer(delay)
+                    return
+            # all other cases (pellet misplaced not engaged or trigger delay <= 0):
+            self.check_state()

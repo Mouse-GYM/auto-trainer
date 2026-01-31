@@ -310,10 +310,10 @@ class PreferencesContent(QWidget):
         add_enabled_state(
             lambda t=toggle: t.setEnabled(self._inference_enabled_toggle.isChecked()))
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        toggle.setChecked(algo.home_on_excessive_drift_distane_config.enabled)
+        toggle.setChecked(algo.home_on_excessive_drift_distance_config.enabled)
         def home_on_excessive_toggle_changed(value: int):
             enabled = value != 0
-            algo.home_on_excessive_drift_distane_config.enabled = enabled
+            algo.home_on_excessive_drift_distance_config.enabled = enabled
             refresh_enabled_states()
         toggle.stateChanged.connect(home_on_excessive_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
@@ -323,9 +323,9 @@ class PreferencesContent(QWidget):
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isEnabled() and t.isChecked()))
         spinbox.setRange(0, 99)
-        spinbox.setValue(algo.home_on_excessive_drift_distane_config.excessive_distance_threshold)
+        spinbox.setValue(algo.home_on_excessive_drift_distance_config.excessive_distance_threshold)
         def excessive_distance_threshold_changed(value):
-            algo.home_on_excessive_drift_distane_config.excessive_distance_threshold = value
+            algo.home_on_excessive_drift_distance_config.excessive_distance_threshold = value
         spinbox.valueChanged.connect(excessive_distance_threshold_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1

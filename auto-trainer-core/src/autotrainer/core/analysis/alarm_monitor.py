@@ -28,11 +28,12 @@ class EmergencyReason(str, enum.Enum):
 
 class EmergencyAlarmMonitor(BaseDetector):
 
-    IS_ENGAGED = "is_engaged"
     CONFIG = "config"
     PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED = "presence_in_cage_after_exit_tunnel_engaged"
     AUDIO_LOAD_CELL_THRASHING_ENGAGED = "audio_load_cell_thrashing_engaged"
     EXT_DOORS_OPEN_ENGAGED = "ext_doors_open_engaged"
+
+    use_daemon = True
 
     def __init__(
         self,
