@@ -28,28 +28,7 @@ sudo sh install_spinnaker_arm.sh
 ```
 ## Platform Specific Requirements 
 
-### Jetson
-
-* Ubuntu 20 and JetPack 5.1.2 installed from the SDK manager
-  * Later 5.1.x JetPack if that is all that is available may be ok, but is untested
-
-* We want to disable the "tracker" gnome indexing service:
-  * It's unnecessary to the app, and can induce some bad overhead on CPU and IO.
-  * See, for instance: https://askubuntu.com/a/348692
-
-* Add user to `dialout` group `sudo usermod -a -G dialout [username]`.  Requires logout or reboot depending on UART.
-* Access to two UARTs for full feature support requires at least additional port via USB->serial interface
-* HDF5
-* xcb-cursor
-* CAN-setup 
-
-Please execute:
-
-```bash
-./prepare_unit.sh
-```
-
-and be prepared to confirm/answer Y to the tracker service disable question.
+Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
 
 ## Package Installation
 
