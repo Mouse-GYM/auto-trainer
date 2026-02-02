@@ -318,6 +318,10 @@ class AppModel(ObservableObject):
         self._plans_files_observer.start()
 
     @property
+    def app_lock(self) -> threading.RLock:
+        return self._app_lock
+
+    @property
     def status(self) -> AppModelStatus:
         return self._status
 
@@ -923,12 +927,12 @@ class AppModel(ObservableObject):
             analysis = self._analysis
             analysis.project_info = None
             self.status = AppModelStatus.IDLE
-            self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
             self._acquisition_stopping = False
             if self._reload_plans_needed:
                 self._reload_plans_needed = False
                 self.reload_training_plans()
             self._event_manager.post_event_content(ApiEventKind.acquisitionEnded)
+            self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
 
     def _capture_stop(self):
 
@@ -1107,8 +1111,6 @@ class AppModel(ObservableObject):
 
         for camera in self._cameras:
             camera.on_close()
-
-        EventManager.try_close_default()
 
         self.hardware.disconnect()
 

@@ -16,7 +16,11 @@ def main():
 
     from tools.pellet_delivery.run_pellet_delivery_ui import run_pellet_delivery_ui
 
-    return run_pellet_delivery_ui(allow_emulation)
+    try:
+        return run_pellet_delivery_ui(allow_emulation)
+    finally:
+        from autotrainer.core.event import EventManager
+        EventManager.try_close_default()
 
 
 if __name__ == '__main__':

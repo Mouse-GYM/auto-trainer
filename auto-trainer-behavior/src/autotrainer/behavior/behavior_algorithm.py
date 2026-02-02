@@ -9,6 +9,7 @@ import math
 import os
 import queue
 import threading
+import time
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -426,11 +427,22 @@ class BehaviorAlgorithm(ObservableObject):
     @classmethod
     def _handler_thread_run(cls: "BehaviorAlgorithm", input_queue: queue.Queue):
         logger.verbose("Running for handling/executing all algo decision/transition ..")
+        prev_perf_c_report = time.perf_counter()
+        tot_msgs = 0
         while True:
-            raw = input_queue.get()
+            p_now = time.perf_counter()
+            if p_now - prev_perf_c_report > 5:
+                logger.debug("%.1f msgs/s", tot_msgs / (p_now - prev_perf_c_report))
+                tot_msgs = 0
+                prev_perf_c_report = p_now
+            try:
+                raw = input_queue.get(timeout=1)
+            except queue.Empty:
+                continue
             if raw is None:
                 input_queue.task_done()
                 break
+            tot_msgs += 1
             func, args, kwargs, event = raw
             try:
                 func(*args) if kwargs is None else func(*args, **kwargs)
@@ -457,8 +469,14 @@ class BehaviorAlgorithm(ObservableObject):
                 setattr(machine_transitions, trig, cls.relay_func(meth))
 
     @classmethod
-    def put_func_call(cls: "BehaviorAlgorithm", func, args: Tuple[Any], kwargs: Optional[Dict]=None,
-                      *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
+    def put_func_call(
+        cls: "BehaviorAlgorithm",
+        func: Callable,
+        args: Tuple[Any] = (),
+        kwargs: Optional[Dict]=None,
+        *,
+        wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE,
+    ):
         """Put a function call request to the algo dedicated thread, and eventually wait on its completion.
         See also `BehaviorAlgorithm.set_put_func_call_mode`.
         """
@@ -1352,9 +1370,12 @@ class BehaviorAlgorithm(ObservableObject):
         handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue  # noqa
         if handler_queue is not None:
             BehaviorAlgorithm._handler_thread_queue = (threading.main_thread(), None)
-            handler_queue.put(None)
-            handler_thread.join()
+            if handler_thread.is_alive():
+                handler_queue.put(None)
+            handler_thread.join(3)
             logger.info("Closed algorithm thread handler")
+            if handler_thread.is_alive():
+                logger.warning("handler thread still alive")
 
     # finally:
     relay_func = staticmethod(relay_func)

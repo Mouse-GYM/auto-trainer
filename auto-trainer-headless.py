@@ -82,6 +82,10 @@ if __name__ == '__main__':
         logger.exception("Fatal error: %s", err)
         exit_code = 1
     finally:
+        from autotrainer.core.event import EventManager
+        from autotrainer.behavior import BehaviorAlgorithm
+        BehaviorAlgorithm.close_algorithm_handler()
+        EventManager.try_close_default()
         stop_multiproc_logging()
     #
     sys.exit(exit_code)

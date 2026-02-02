@@ -310,7 +310,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     def stop(self):
         if self._status in {InferenceStatus.stopped, InferenceStatus.stopping}:
             return
-        logger.debug("stopping..")
+        logger.debug("stopping inference..")
         proc = self._pose_process
         self._set_status(InferenceStatus.stopping)
         if proc is not None:

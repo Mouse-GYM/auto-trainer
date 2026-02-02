@@ -138,9 +138,15 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
         window.app_model.rpc_service = plugin.service
 
     # conveniently allow close/exit app with SIGINT (ctrl-c) :
+    sigint_received = 0
     def handle_sigint(signum, frame):
+        nonlocal sigint_received
+        sigint_received += 1
         logger.notice("Got signal %s ; closing window..", signum)
-        app.exit(0)
+        window.close()
+        if sigint_received > 2:
+            logger.critical("too many sigint, exiting with SIG_TERMINATE ..")
+            os.kill(os.getpid(), signal.SIGTERM)
 
     signal.signal(signal.SIGINT, handle_sigint)
 
@@ -152,19 +158,11 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     EventManager.default().post_event_content(ApiEventKind.applicationLaunched)
 
-    def finish(orig_close=window.close):
-        # NB: close everything before window close,
-        # this ensure help prevent access, by some background thread(s), to UI elements when the window has already
-        # been closed, which if can/will trigger segfault/app crash (and possibly leave behind background MP handler process(es) alive)
+    logger.info("Executing app now ..")
+    try:
+        return app.exec()
+    finally:
         logger.verbose("Closing event manager and behavior algo thread handler..")
-        EventManager.default().post_event_content(ApiEventKind.applicationTerminating)
+        event_manager.post_event_content(ApiEventKind.applicationTerminating)
         event_manager.close()
         BehaviorAlgorithm.close_algorithm_handler()
-        logger.debug("Closing window ..")
-        orig_close()
-
-    app.aboutToQuit.connect(finish)
-    window.close = finish
-
-    logger.info("Executing app now ..")
-    return app.exec()

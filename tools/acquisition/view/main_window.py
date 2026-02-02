@@ -80,6 +80,10 @@ class MainWindow(QMainWindow):
         self._preferences = user_preferences
         self._update_log_level(self._preferences.log_level)
         self._title = f"Auto Trainer - Acquisition v{app_version}"
+        self._closing = False
+        self._close_event = None
+        self._start_capture_thread = None
+        self._stop_capture_thread = None
 
         self.setWindowTitle(self._title)
 
@@ -167,7 +171,10 @@ class MainWindow(QMainWindow):
         self.running_status_changed.emit(is_toggled)
         if is_toggled:
             self._status_label.setText("Starting acquisition...")
-            def doit():
+            def exec_start_capture(prev_thread=self._start_capture_thread):
+                if prev_thread is not None:
+                    logger.verbose("joining previous start thread")
+                    prev_thread.join()
                 logger.info("starting subprocesses")
                 try:
                     started = app_model.on_capture_start()
@@ -182,17 +189,26 @@ class MainWindow(QMainWindow):
                     self._status_label.setText("Startup failed")
                     self.running_status_changed.emit(False)
                 self.run_action.setEnabled(True)
-            threading.Thread(target=doit, daemon=True).start()
+                self._start_capture_thread = None
+            thread = threading.Thread(target=exec_start_capture, daemon=True)
+            self._start_capture_thread = thread
+            thread.start()
         else:
             self._status_label.setText("Stopping acquisition...")
-            def doit():
+            def exec_stop_capture(prev_start=self._start_capture_thread,
+                                  prev_stop=self._stop_capture_thread):
+                if prev_start is not None:
+                    logger.verbose("joining previous start thread")
+                    prev_start.join()
                 logger.info("stopping subprocesses")
                 app_model.on_capture_stop()
                 self.running_status_changed.emit(False)
                 self.run_action.setEnabled(True)
                 self._status_label.setText("")
                 self._acquisition_started = False
-            threading.Thread(target=doit, daemon=True).start()
+            thread = threading.Thread(target=exec_stop_capture, daemon=True)
+            self._stop_capture_thread = thread
+            thread.start()
 
     def on_previous_plan_phase(self):
         app_model = self._app_model
@@ -517,16 +533,47 @@ class MainWindow(QMainWindow):
         self._check_diamond_triangle_config()
         self.main_content.on_activated()
 
-    def closeEvent(self, event):
-        logger.debug("MainWindow.closeEvent: %s", event)
-        self._timer_calibrate_diamond_triangle.cancel()
-        self._app_model.on_close()  # close app_model before all/any window/GUI parts/elements
+    def _finish_close(self):
+        logger.info("finishing close ..")
         self.main_content.close()
         dialogs = self._open_dialogs
         self._open_dialogs = []
         for dialog in dialogs:
             dialog.close()
-        event.accept()
+        super().close()
+
+    def close(self):
+        logger.debug("received close")
+        with self._app_model.app_lock:
+            event = self._close_event
+            if self._closing:
+                if event is not None:
+                    event.accept()
+                    self._close_event = None
+                else:
+                    logger.warning("already closing")
+                return
+            if event is not None:
+                event.ignore()
+                self._close_event = None
+            self._closing = True
+
+        def execute_close():
+            self.on_capture_start_stop(False)
+            stop_thread = self._stop_capture_thread
+            self._timer_calibrate_diamond_triangle.cancel()
+            if stop_thread is not None:
+                logger.debug("joining stop capture thread")
+                stop_thread.join()
+            self._app_model.on_close()
+            InvokeMethod(self._finish_close)
+        close_thread = threading.Thread(target=execute_close)
+        close_thread.start()
+
+    def closeEvent(self, event):
+        logger.debug("received closeEvent: %s", event)
+        self._close_event = event
+        self.close()
 
     def moveEvent(self, e):
         self._preferences.last_window_x = self.pos().x()
