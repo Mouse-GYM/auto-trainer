@@ -7,7 +7,7 @@ from contextlib import AbstractContextManager
 
 from pathlib import Path
 from functools import partial
-from typing import List, Any, Optional, Union, ContextManager, Generator
+from typing import List, Any, Optional, Union, ContextManager, Generator, Callable
 from unittest import mock
 # from collections.abc import Generator
 
@@ -228,6 +228,9 @@ class MockSystemMachine:
         global fake_perf_now
         fake_perf_now += inc
 
+    def get_current_perf_now(self) -> float:
+        return fake_perf_now
+
     @pytest.fixture(autouse=True)
     def machine(self, machine: SystemMachine) -> SystemMachine:  # noqa
         self._init(machine)
@@ -294,6 +297,7 @@ class MockSystemMachine:
         *,
         segmentation_ok: bool = True,
         detection_ok: bool = True,
+        concurrent_func: Optional[Callable] = None,
     ):
         """Allow fake fully 1 intersession/trial analysis (segmentation+detection)"""
         if results is None:
@@ -302,11 +306,13 @@ class MockSystemMachine:
             stack.enter_context(self.mock_perform_segmentation())
             stack.enter_context(self.mock_perform_detection())
             yield
+            if concurrent_func is not None:
+                concurrent_func()
             self.mock_complete_segmentation(segmentation_ok)
             if segmentation_ok:
                 self.mock_complete_detection(detection_ok)
             if detection_ok:
-                self._machine._inference.detection_result_ready(results)
+                self.inference.detection_result_ready(results)
 
     @contextlib.contextmanager
     def mock_perform_segmentation(self):

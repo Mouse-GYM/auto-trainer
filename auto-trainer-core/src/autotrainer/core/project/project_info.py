@@ -425,8 +425,6 @@ class ProjectInfo(_ProjectInfo):
                 self.session = greater_val + 1
                 self.when = when
 
-
-
     def to_local_value(self) -> Self:
         """Detach, if it was, from the possible shared memory values used for `when` & `session`.
         This ensures that the "detached" instance won't have its `when` and `session` values updated
