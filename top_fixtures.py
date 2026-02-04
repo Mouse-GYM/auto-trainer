@@ -148,6 +148,7 @@ def inference():
 
 @pytest.fixture
 def system_msg_queue():
+    # Unused
     q = queue.Queue()
     try:
         yield q
@@ -173,6 +174,7 @@ def sensor_analysis():
 
 @pytest.fixture
 def system_msg_handler(system_msg_queue, sensor_analysis):
+    # Unused
     handler = SystemMessageHandler(system_msg_queue, sensor_analysis=sensor_analysis)
     handler.start()
     try:
@@ -180,6 +182,43 @@ def system_msg_handler(system_msg_queue, sensor_analysis):
     finally:
         handler.request_terminate()
         handler.wait_terminated()
+
+
+class FakeMsgQueue:
+
+    def put_nowait(self, item):
+        pass
+    def put(self, *args, **kwargs):
+        pass
+    def get(self, *args, **kwargs):
+        raise RuntimeError("not supposed to happen")
+    def get_nowait(self):
+        raise RuntimeError("not supposed to happen")
+
+
+class FakeSystemMsgHandler(SystemMessageHandler):
+
+    def __init__(self, input_queue, *, sensor_analysis):
+        super().__init__(input_queue, sensor_analysis=sensor_analysis)
+
+    def start(self):
+        pass
+
+    def request_terminate(self):
+        pass
+
+    def wait_terminated(self):
+        pass
+
+
+@pytest.fixture
+def fake_msg_queue():
+    return FakeMsgQueue()
+
+
+@pytest.fixture
+def fake_system_msg_handler(fake_msg_queue, sensor_analysis):
+    return FakeSystemMsgHandler(fake_msg_queue, sensor_analysis=sensor_analysis)
 
 
 @pytest.fixture
@@ -426,10 +465,10 @@ def mock_system(machine) -> MockSystemMachine:
 
 
 @pytest.fixture
-def hardware_model(system_msg_handler):
-    return HardwareModel(system_msg_handler)
+def hardware_model(fake_system_msg_handler):
+    return HardwareModel(fake_system_msg_handler)
 
 
 @pytest.fixture
-def behavior_model(sensor_analysis, system_msg_handler, hardware_model, inference):
-    return BehaviorModel(system_msg_handler, sensor_analysis, hardware_model, inference)
+def behavior_model(sensor_analysis, fake_system_msg_handler, hardware_model, inference):
+    return BehaviorModel(fake_system_msg_handler, sensor_analysis, hardware_model, inference)

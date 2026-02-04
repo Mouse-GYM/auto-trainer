@@ -831,7 +831,6 @@ class SystemMachine(StateMachine):
                 tunnel_dev.open_tunnel_gate()
                 self._update_magnet_position(algo.baseline_intensity)
                 pellet_dev.send_pellet()
-                self._consider_start_session
                 #
                 # trigger load cell property changed check, so that new session will be started if mouse still in tunnel
                 self._load_cell_monitor_property_changed(

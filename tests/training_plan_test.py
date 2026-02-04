@@ -45,14 +45,14 @@ class TestTrainingPlan(MockSystemMachine):
             dst_dir.joinpath(p.name).write_bytes(p.read_bytes())
 
     @pytest.fixture()
-    def app_model(self, machine, user_pref, system_msg_handler, system_config, calib_dir, training_plans):
-        machine._msg_handler = system_msg_handler
+    def app_model(self, machine, user_pref, fake_system_msg_handler, system_config, calib_dir, training_plans, sensor_analysis):
+        machine._msg_handler = fake_system_msg_handler
         user_pref.save()
         msg_handler = machine._msg_handler
         app_model = AppModel(
             user_pref,
             system_message_handler=msg_handler,
-            sensor_analysis=msg_handler.analysis,
+            sensor_analysis=sensor_analysis,
             inference_model=machine._inference,
             calib_dir=calib_dir,
             system_machine=machine,
@@ -64,6 +64,7 @@ class TestTrainingPlan(MockSystemMachine):
         finally:
             app_model.on_capture_stop()
             app_model.on_close()
+
 
     def test_training_plan(self, app_model, user_pref, machine, caplog):
         try:
