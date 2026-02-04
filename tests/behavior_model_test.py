@@ -1,4 +1,4 @@
-
+from unittest import mock
 
 def test_save_config_include_sensor_analysis_monitors_and_detectors(behavior_model):
     save = behavior_model.save_configuration
@@ -36,3 +36,25 @@ def test_save_config_include_sensor_analysis_monitors_and_detectors(behavior_mod
     val = analysis.audio_thrashing_monitor.config.threshold_percent
     new = analysis.audio_thrashing_monitor.config.threshold_percent = val + 5
     assert save().audio.threshold_percent == new
+
+
+def test_emergency_pause_then_resume(mock_system, app_model):
+    algo = app_model.behavior.algorithm
+    assert not algo.algo_paused
+    tunnel_dev = mock_system.tunnel_dev
+    pellet_dev = mock_system.pellet_dev
+    tunnel_dev.reset_mock()  # ensure clear
+    pellet_dev.reset_mock()  # ensure clear
+    #
+    app_model.behavior.emergency_stop(source="testing")
+    assert algo.algo_paused
+    assert tunnel_dev.open_tunnel_gate.call_args_list == [mock.call()]
+    assert pellet_dev.send_pellet.call_args_list == []
+    assert tunnel_dev.update_head_magnet_intensity.call_args_list == [mock.call(0)]
+    tunnel_dev.reset_mock()  # ensure clear
+    pellet_dev.reset_mock()  # ensure clear
+    app_model.behavior.emergency_resume(source="testing")
+    assert not algo.algo_paused
+    assert tunnel_dev.open_tunnel_gate.call_args_list == [mock.call()]
+    assert pellet_dev.send_pellet.call_args_list == [mock.call()]
+    assert tunnel_dev.update_head_magnet_intensity.call_args_list == [mock.call(algo.baseline_intensity)]

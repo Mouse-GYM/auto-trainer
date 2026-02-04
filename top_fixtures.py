@@ -243,6 +243,10 @@ class MockSystemMachine:
         yield machine  # noqa
 
     @property
+    def system_machine(self) -> SystemMachine:
+        return self._machine
+
+    @property
     def algo(self):
         return self._machine.algorithm
 
@@ -411,7 +415,7 @@ class MockSystemMachine:
         self.increment_perf_now(algo.recording_age_release_pellet_threshold)
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_system(machine) -> MockSystemMachine:
     """Allow use BaseSystemMachineTest instance helper methods in a simple function test, without having to subclass,
     just use the 'mock_system' fixture"""

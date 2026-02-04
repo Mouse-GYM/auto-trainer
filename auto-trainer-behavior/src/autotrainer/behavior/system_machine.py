@@ -433,15 +433,7 @@ class SystemMachine(StateMachine):
         if name == InferenceProtocol.STATUS:
             logger.verbose("Inference status change: %s -> %s ; system_state=%s",
                            prev_value, new_value, self.state)
-            if (
-                new_value == InferenceStatus.live
-                and self.state == SystemState.cage
-            ):
-                if self._analysis.load_cell_monitor.is_engaged and not self._algorithm.algo_paused:
-                    self.enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
-                # this is only used at app starts, so unregister:
-                # self._inference.property_changed -= self._handle_inference_property_changed
-                # NO: in case of stop->start acquisition of/inside main app we still need it.
+            self._consider_enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
 
     def _inference_segmentation_finished(self, success):
         logger.verbose("got inference segmentation finished: %s", success)
@@ -479,15 +471,7 @@ class SystemMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
             if value:
                 self._analysis.global_animal_presence_monitor.stop()
-                if self._state == SystemState.cage:
-                    # when app start inference is slow and takes several 10s to become live,
-                    # so we have to check it:
-                    if self._inference.status == InferenceStatus.live and not algo.algo_paused:
-                        self.enter_tunnel(reason="load_cell_engaged_when_in_cage")
-                    # see _handle_inference_property_changed
-                else:
-                    EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
-                                                              context=self._state)
+                self._consider_enter_tunnel(reason="load_cell_engaged_when_in_cage")
             else:
                 if self._inference.status == InferenceStatus.live:
                     self._analysis.global_animal_presence_monitor.start()
@@ -847,6 +831,7 @@ class SystemMachine(StateMachine):
                 tunnel_dev.open_tunnel_gate()
                 self._update_magnet_position(algo.baseline_intensity)
                 pellet_dev.send_pellet()
+                self._consider_start_session
                 #
                 # trigger load cell property changed check, so that new session will be started if mouse still in tunnel
                 self._load_cell_monitor_property_changed(
@@ -866,8 +851,7 @@ class SystemMachine(StateMachine):
                 self._pellet_device.set_tunnel_fan_off()
 
     def _update_magnet_position(self, position: float):
-        if self._tunnel_device is not None:
-            self._tunnel_device.update_head_magnet_intensity(position)
+        self._tunnel_device.update_head_magnet_intensity(position)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pellet_loading(self):
@@ -895,6 +879,16 @@ class SystemMachine(StateMachine):
 
     def _pellet_sent(self):
         self._consider_start_session(reason="pellet-sent")
+
+    def _consider_enter_tunnel(self, reason: str="NA"):
+        if not (
+            self._state == SystemState.cage
+            and self._inference.status == InferenceStatus.live
+            and not self._algorithm.algo_paused
+            and self._analysis.load_cell_monitor.context.is_engaged
+        ):
+            return
+        self.enter_tunnel(reason=reason)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_start_session(self, reason: str = "NA"):

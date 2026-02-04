@@ -74,10 +74,14 @@ def calib_dir():
 
 
 @pytest.fixture
-def app_model(user_pref, calib_dir, diamond_config_path, system_config, monkeypatch):
+def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_config, monkeypatch):
     # for now:
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True  # to be safe to start with
     #
-    app = AppModel(user_pref, calib_dir=calib_dir)
+    app = AppModel(
+        user_pref,
+        system_machine=mock_system.system_machine,
+        calib_dir=calib_dir,
+    )
     return app
