@@ -327,14 +327,17 @@ class MainWindow(QMainWindow):
         new_cfg = DiamondTriangleOffsetConfig(
             used_position=avg_pos,
             measured_offset=avg_offset,
-            diamond_coord=avg_dia_loc3,
+            # once fully calibrated twice,
+            # what we get from triangulate+reorient_and_center is fully centered on diamond, which is ~0/0/0.
+            diamond_coord=Offset3DTuple(0, 0, 0),  # avg_dia_loc3,
+            # so this allows to not have to calibrate twice.
             raw_diamond_coord=avg_rawdia_loc3,
         )
         logger.success("Saving new config %s to %s", new_cfg, save_path.as_posix())
         new_cfg.to_file(save_path)
         # also write new camera_offsets.pkl to calib dir:
         cam_offsets = make_cam_offsets_dict()
-        cam_off = avg_rawdia_loc3 * new_cfg.flips_inference_motor  # looks need to be (1, -1, 1)
+        cam_off = avg_rawdia_loc3
         cam_offsets.update(
             x_off=cam_off.x,
             y_off=cam_off.y,
