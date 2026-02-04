@@ -1,30 +1,12 @@
 
-import contextlib
-import logging
-import math
-import time
-from itertools import chain
-from pathlib import Path
-from threading import Timer
-from typing import ContextManager, Union
 from unittest import mock
 
 import pytest
 
-from autotrainer.core.multiproc import DaemonTimer
-from top_fixtures import MockSystemMachine
+from top_fixtures import MockSystemMachine, AlmostEqualFloat
 
 from autotrainer.behavior import CaptureAnalysisResult, IntersessionState, RecordingEndingReason
 from autotrainer.behavior import SystemState, SystemMachine
-from autotrainer.behavior.pellet import PelletState
-from autotrainer.behavior.pellet.pellet_machine import PelletMachine
-from autotrainer.inference.analysis.intersession_process import IntersessionResponse
-
-
-# for small diff of timers delay:
-class AlmostEqualFloat(float):
-    def __eq__(self, other):
-        return abs(self - other) < 0.001
 
 
 class TestConsiderAutoEndSession(MockSystemMachine):
