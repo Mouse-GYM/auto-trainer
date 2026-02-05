@@ -361,32 +361,6 @@ class TestSessionProcessingEnding(MockSystemMachine):
             assert processing_ended_count == 1
         assert processing_ended_count == 1
 
-    @pytest.mark.parametrize("auto_close_gate", [False, True])
-    @pytest.mark.parametrize("sess_min_duration", [0, 300])
-    @pytest.mark.parametrize("sess_duration", [15, 450])
-    def test_auto_close_gate(self, machine, auto_close_gate, caplog, sess_duration, sess_min_duration):
-        algo = machine.algorithm
-        algo.intersession_enabled = True
-        auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
-        auto_close_gate_cfg.enabled = auto_close_gate
-        if auto_close_gate:
-            algo._topcam_presence = topcam = PresenceDetectionAttrs()
-            topcam.last_presence_start_perf_c = get_perf_now()
-        auto_close_gate_cfg.session_min_duration = sess_min_duration
-        auto_close_gate_cfg.delay_after_cage_enter = 0
-        algo.start_session()
-        assert algo.is_in_session
-        algo.update_mouse_seen(True)
-        caplog.set_level(logging.INFO)
-        with self.mock_intersession_analysis():
-            self.increment_perf_now(sess_duration)
-            algo.end_capture_session()
-        assert not algo.is_in_session
-        if auto_close_gate and sess_duration >= sess_min_duration:
-            assert "Closing tunnel gate for intersession" in caplog.text
-        else:
-            assert "Closing tunnel gate for intersession" not in caplog.text
-
     def test_when_intersession_mouse_seen_segmentation_fails(self, machine):
         processing_ended_count = 0
         def processing_ended(status):

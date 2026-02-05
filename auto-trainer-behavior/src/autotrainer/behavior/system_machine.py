@@ -17,6 +17,7 @@ from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 
 from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind
@@ -33,7 +34,7 @@ from .pellet_device_protocol import PelletDeviceProtocol
 from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
-from ..core.analysis.detector import BaseDetector
+
 
 logger = get_verbose_logger(__name__)
 
@@ -44,7 +45,7 @@ _consider_end_session_timer = make_daemon_timer
 _consider_auto_end_session_timer = make_daemon_timer
 _check_missing_timer = make_daemon_timer
 _consider_disengage_autoclamp_timer = make_daemon_timer
-
+_consider_close_gate_timer = make_daemon_timer
 
 #
 
@@ -80,6 +81,7 @@ class SystemMachine(StateMachine):
         self._batch_project_sessions_list: List[ProjectInfo] = []
         self._batch_processing_in_progress: bool = False
         self._batch_failed_count: int = 0
+        self._batch_sessions_total_duration: float = 0
 
         self._timer_consider_start_session = no_op_timer
         self._timer_consider_end_session = no_op_timer
@@ -103,6 +105,7 @@ class SystemMachine(StateMachine):
         self._is_handling_diamond_triangle = False
 
         self._enter_tunnel_pellet_seen = False
+
         self._session_started_perf_c = -math.inf
 
         self._tunnel_device = tunnel_device
@@ -258,16 +261,7 @@ class SystemMachine(StateMachine):
         algo.session_processing_starting()
 
         intersession.perform_segmentation()
-        auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
-        if auto_close_gate_cfg.enabled:
-            # todo: should consider all the session in possible batch
-            duration = get_perf_now() - self._session_started_perf_c
-            # could/should be todo: have session duration recorded in project-session info.
-            if auto_close_gate_cfg.session_min_duration <= duration:
-                self._consider_close_gate_during_intersession()
-            else:
-                logger.verbose("Not considering to auto-close gate when mouse in cage confirmed ; session duration=%s",
-                           duration)
+        self._consider_close_gate_during_intersession()
 
     def after_exit_intersession(self):
         if self._analysis.load_cell_monitor.is_engaged:
@@ -346,10 +340,8 @@ class SystemMachine(StateMachine):
         if reason == RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT:
             logger.notice("Forcing tare load cell due to %s", reason)
             self._tunnel_device.tare_load_cell()
-        # 5/16/25 should not remove auto-clamp at session end for current testing.
-        # TODO: make this configurable.
-        # if self._tunnel_device is not None:
-        #    self._update_magnet_position(self.algorithm.baseline_intensity)
+        p_now = get_perf_now()
+        self._batch_sessions_total_duration += p_now - self._session_started_perf_c
         cur_project = self.project
         if cur_project is not None:
             cur_project = cur_project.to_local_value()
@@ -426,6 +418,7 @@ class SystemMachine(StateMachine):
                 self.reenter_intersession(reason="reenter-batch-session")
                 return
             self._batch_processing_in_progress = False
+            self._batch_sessions_total_duration = 0
             logger.info("batch analysis ending, failed=%s", self._batch_failed_count)
             # force intersession & inference project-info back to current/live one:
             self._intersession.project = self._project_info
@@ -768,17 +761,25 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_close_gate_during_intersession(self):
+        self._timer_consider_close_gate.cancel()  # always
         algo = self._algorithm
-        if algo.algo_paused:
-            # algo has been paused, so cancel totally.
-            return
-        if self._state != SystemState.intersession:
-            # only valid for intersession
-            logger.debug("not anymore intersession, skipping auto-close-gate")
+        close_cfg = algo.auto_close_gate_on_intersession_config
+        if not close_cfg.enabled:
+            logger.debug("auto_close_gate disabled, skipping auto-close-gate")
             return
         topcam_pres = algo.top_camera_presence_detection
         if topcam_pres is None:
-            logger.debug("Topcam presence not enabled, skipping auto-close-gate")
+            logger.warning("topcam presence not enabled, forced skipping auto-close-gate")
+            return
+        if algo.algo_paused:
+            logger.debug("algo disabled, skipping auto-close-gate")
+            return
+        if self._state != SystemState.intersession:
+            logger.debug("not anymore intersession, skipping auto-close-gate")
+            return
+        duration = self._batch_sessions_total_duration
+        if duration < close_cfg.session_min_duration:
+            logger.debug("session duration too short, skipping auto-close-gate")
             return
         load_cell_mon = self._analysis.load_cell_monitor.context
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
@@ -788,7 +789,7 @@ class SystemMachine(StateMachine):
             and topcam_pres.last_presence_start_perf_c >= load_cell_mon.last_disengaged_perf_c
             # ensure load-cell is not re-entered by the mouse:
             and topcam_pres.last_presence_start_perf_c > load_cell_mon.last_engaged_perf_c
-            and perf_now - topcam_pres.last_presence_start_perf_c > auto_close_gate_cfg.delay_after_cage_enter
+            and perf_now - topcam_pres.last_presence_start_perf_c > close_cfg.delay_after_cage_enter
         ):
             logger.notice(
                 "Closing tunnel gate for intersession ;"
@@ -801,10 +802,12 @@ class SystemMachine(StateMachine):
             # retry:
             delay = min(
                 1.0,
-                max(0.01,
+                max(0.1,
                     auto_close_gate_cfg.delay_after_cage_enter - (perf_now - topcam_pres.last_presence_start_perf_c))
             )
-            timer = self._timer_consider_close_gate = make_daemon_timer(delay, self._consider_close_gate_during_intersession)
+            # logger.debug("starting timer for consider_close_gate in %.1fs", delay)
+            timer = self._timer_consider_close_gate = _consider_close_gate_timer(
+                delay, self._consider_close_gate_during_intersession)
             timer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)
