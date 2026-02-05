@@ -10,6 +10,8 @@ def get_mp_ctx():
 class DaemonTimer(threading.Timer):
     """A Timer that does not block main process exit"""
 
+    finished: threading.Event
+
     def __init__(self, delay, func, args=None, kwargs=None):
         super().__init__(delay, func, args=args, kwargs=kwargs)
         self.daemon = True

@@ -41,6 +41,7 @@ logger = get_verbose_logger(__name__)
 # NB: this is to ensure we can patch the exact desired one (and only that one) from tests:
 _clean_raw_data_timer = make_daemon_timer
 _auto_clamp_release_timer = make_daemon_timer
+_consider_start_session_timer = make_daemon_timer
 _consider_end_session_timer = make_daemon_timer
 _consider_auto_end_session_timer = make_daemon_timer
 _check_missing_timer = make_daemon_timer
@@ -432,8 +433,6 @@ class SystemMachine(StateMachine):
         if name == InferenceProtocol.STATUS:
             logger.verbose("Inference status change: %s -> %s ; system_state=%s",
                            prev_value, new_value, self.state)
-            if new_value not in {InferenceStatus.live, InferenceStatus.intersession}:
-                self._timer_consider_end_session.cancel()  # maybe not necessary
             if (
                 new_value == InferenceStatus.live
                 and self.state == SystemState.cage
@@ -881,16 +880,7 @@ class SystemMachine(StateMachine):
             self._disengage_auto_clamp()
 
         if algo.is_in_session and self._state != SystemState.intersession:
-            delay_consider_end_session = self._delay_timer_consider_end_session
-            if delay_consider_end_session > 0:
-                prev_timer = self._timer_consider_end_session
-                if prev_timer.finished.is_set():
-                    timer = self._timer_consider_end_session = _consider_end_session_timer(
-                        delay_consider_end_session,
-                        lambda: self._consider_end_session(reason=RecordingEndingReason.PELLET_LOADING))
-                    timer.start()
-            else:
-                self._consider_end_session(reason=RecordingEndingReason.PELLET_LOADING)
+            self._consider_end_session(reason=RecordingEndingReason.PELLET_LOADING)
 
     def _pellet_loaded(self):
         self._algorithm.pellet_loaded()
@@ -907,7 +897,7 @@ class SystemMachine(StateMachine):
         self._consider_start_session(reason="pellet-sent")
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _consider_start_session(self, reason: str = "NA", is_from_timer: bool=False):
+    def _consider_start_session(self, reason: str = "NA"):
         self._timer_consider_start_session.cancel()  # in case of
         self._timer_consider_start_session = no_op_timer
         algo = self._algorithm
@@ -919,10 +909,10 @@ class SystemMachine(StateMachine):
         send_begin_age = pellet_machine.get_pellet_send_begin_age(perf_now)
         send_end_age = pellet_machine.get_pellet_send_end_age(perf_now)
         logger.verbose(
-            "consider_start_session(timer=%s): load_cell.engaged=%s "
+            "consider_start_session: load_cell.engaged=%s "
             "state=%s pellet-state=%s recently_seen=%s seen_age=%.1f in_session=%s "
             "send_begin_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
-            is_from_timer, self._analysis.load_cell_monitor.is_engaged,
+            self._analysis.load_cell_monitor.is_engaged,
             self._state, self._pellet_machine.state, algo.pellet_recently_seen, pellet_seen_age,
             algo.is_in_session, send_begin_age, send_end_age, algo.capture_status_age)
         # NB/TODO: maybe we should consider if pellet was seen and disappeared before we start the session,
@@ -956,22 +946,32 @@ class SystemMachine(StateMachine):
             remains = algo.record_prebuffer_duration - send_end_age
         if remains > 0:
             logger.verbose("Starting timer for consider_start_session in %.1f secs (record_prebuffer)", remains)
-            timer = make_daemon_timer(remains, lambda: self._consider_start_session(reason=reason, is_from_timer=True))
+            timer = _consider_start_session_timer(
+                remains, lambda: self._consider_start_session(reason=reason))
             self._timer_consider_start_session = timer
             timer.start()
             return
         algo.start_session(reason=reason)
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    # called by a timer, so can use wait=False (to not always recreate event for the wait sync)
     def _consider_end_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
         algo = self._algorithm
-        self._timer_consider_end_session.cancel()  # in case of
         if not algo.is_in_session:
             logger.debug("_consider_end_session: reason=%s but not in session ; state=%s pellet=%s",
                          reason, self._state, self._pellet_machine.state)
             return
-        algo.end_capture_session(reason=reason)
+        delay = self._delay_timer_consider_end_session
+        if delay > 0:
+            prev_timer = self._timer_consider_end_session
+            # check if there is not an eventual previous timer not finished,
+            # in case timer delay is greater than load duration and that many load-pellet happens due
+            # to missed load.
+            if prev_timer.finished.is_set():
+                timer = self._timer_consider_end_session = _consider_end_session_timer(
+                    delay, lambda: algo.end_capture_session(reason=reason))
+                timer.start()
+        else:
+            algo.end_capture_session(reason=reason)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _handle_detection_result(self, res: IntersessionResponse):

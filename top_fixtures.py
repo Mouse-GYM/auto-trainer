@@ -46,6 +46,12 @@ def get_fake_perf_now():
     return fake_perf_now
 
 
+# for small diff of timers delay:
+class AlmostEqualFloat(float):
+    def __eq__(self, other):
+        return abs(self - other) < 0.001
+
+
 @pytest.fixture
 def mock_get_perf_now(monkeypatch):
     global fake_perf_now
@@ -288,6 +294,9 @@ class MockSystemMachine:
     def patch_timer(self, place, new=None) -> ContextManager[Union[mock.MagicMock, DaemonTimer]]:  # noqa
         kw = {"autospec": DaemonTimer} if new is None else {"new": new}
         with mock.patch(place, **kw) as mock_t:
+            # for some reason the finished event isn't present on the mocks, despite the autospec. so set it:
+            mock_finished = mock_t.return_value.finished = mock.create_autospec(threading.Event)
+            mock_finished.is_set.return_value = False
             yield mock_t  # noqa
 
     @contextlib.contextmanager
