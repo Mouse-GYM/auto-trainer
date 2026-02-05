@@ -31,6 +31,10 @@ class _EmergencyAlarmConfiguration:
     use_external_doors_open: bool = False
     auto_resume_on_external_doors_close: bool = False
 
+    # 4rd
+    use_global_animal_presence: bool = False
+    auto_resume_on_global_animal_presence: bool = False
+
 
 class EmergencyAlarmConfiguration(_EmergencyAlarmConfiguration):
 

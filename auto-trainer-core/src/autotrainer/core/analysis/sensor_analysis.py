@@ -91,6 +91,7 @@ class SensorAnalysis(ObservableObject):
             load_cell_monitor=self._load_cell_monitor,
             audio_monitor=self._audio_thrashing_monitor,
             external_doors_monitor=self._external_doors_monitor,
+            global_animal_presence_monitor=self._global_animal_presence_monitor,
             topcam_presence_attrs=topcam_presence,
         )
 

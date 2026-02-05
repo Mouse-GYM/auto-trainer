@@ -785,7 +785,9 @@ class MainWindow(QMainWindow):
             emergency_button.setText("Resume" if is_toggled else "Emergency")
             self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED - Source: {source}" if is_toggled else self._title)
             if source != "user-button":
+                emergency_button.blockSignals(True)  # prevent overwrite of reason with user-button
                 emergency_button.setChecked(is_toggled)
+                emergency_button.blockSignals(False)
 
         def emergency_stop_triggered(is_toggled: bool):
             logger.verbose("emergency_stop_triggered: %s", is_toggled)
