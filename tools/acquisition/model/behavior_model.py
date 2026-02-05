@@ -71,7 +71,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         logger.debug("alarm-mon: %s : %s -> %s", name, old_value, value)
         if name == EmergencyAlarmMonitor.IS_ENGAGED:
             if value:
-                self.emergency_stop(f"alarm-monitor: {self._analysis.emergency_alarm_monitor.engaged_reasons}")
+                reasons = " ".join(self._analysis.emergency_alarm_monitor.engaged_reasons)
+                self.emergency_stop(f"alarm-monitor: {reasons}")
             else:
                 self.emergency_resume("alarm-monitor-resumed")
 
