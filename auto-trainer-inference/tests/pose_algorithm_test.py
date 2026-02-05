@@ -3,6 +3,7 @@ from typing import Dict, List
 
 import numpy
 
+from autotrainer.core import Offset3DTuple
 from autotrainer.inference import PoseAlgorithm
 from autotrainer.inference import PoseResponse, PoseLocation
 from autotrainer.core.pose_elements import SceneElement
@@ -42,9 +43,7 @@ def verify_all_empty(
             location = locations.get(part)
             if cdx == except_camera and part == except_part:
                 assert location is not None
-                assert location.index == algo.get_part_index(location.name)
-                assert location.name == part
-                assert location.name == f"Part{idx:02}"
+                assert location.index == algo.get_part_index(part)
                 assert location.x != -1
                 assert location.y != -1
             else:
@@ -106,7 +105,3 @@ def test_algorithm_output():
     verify_all_false(response.parts_flags[0], "Part05")
     verify_all_false(response.parts_flags[1], "Part05")
     verify_all_false(response.parts_flags[2])
-
-
-if __name__ == '__main__':
-    test_algorithm_output()

@@ -160,14 +160,14 @@ def test_intersession_process_bench_agx001_20251015_15(agx001_20251015_15, bench
     (5, "all_most_likely"),
     (10, "all_most_likely"),
 ])
-def test_pose_algo_process_frames_agx001_20251015_15(pose_algo, agx001_20251015_15, frames_per_batch_per_cam, select_frames_method):
-    parts = ['Pellet', 'RH_flat', 'RH_spread', 'RH_grab', 'LH_flat', 'LH_spread', 'LH_grab',
-             'Star', 'Tongue_mid', 'Tongue_tip', 'Nose', 'Triangle', 'Mouth', 'Diamond']
+def test_pose_algo_process_frames_agx001_20251015_15(initialized_pose_algo, agx001_20251015_15, frames_per_batch_per_cam, select_frames_method):
+    # if (frames_per_batch_per_cam, select_frames_method) != (3, "all_most_likely"):
+    #     return
+    pose_algo = initialized_pose_algo
     pairs_3d = [
         ('Diamond', 'Triangle'),
     ]
     pose_algo.process_frames_select_frames_method = select_frames_method
-    pose_algo.initialize(parts)
     sp = agx001_20251015_15.get_session_path()
     fhs = []
     tables = []
@@ -185,7 +185,7 @@ def test_pose_algo_process_frames_agx001_20251015_15(pose_algo, agx001_20251015_
         for idx in range(cur_frame_idx, cur_frame_idx + frames_per_batch):
             f = table[idx][1]
             assert isinstance(f, numpy.ndarray)
-            frames.append(f.reshape((len(parts), -1)))
+            frames.append(f.reshape((pose_algo.part_count, -1)))
     cur_frame_idx += frames_per_batch
 
     res = pose_algo.process_frames(*all_frames, pairs_3d_offsets=pairs_3d)
@@ -193,7 +193,6 @@ def test_pose_algo_process_frames_agx001_20251015_15(pose_algo, agx001_20251015_
 
     expected = PoseResponse(
         sequence=1,
-
         parts_flags=(
         {'Pellet': True, 'RH_flat': False, 'RH_spread': False, 'RH_grab': False, 'LH_flat': False, 'LH_spread': False,
          'LH_grab': False, 'Star': True, 'Tongue_mid': False, 'Tongue_tip': False, 'Nose': True, 'Triangle': True,
@@ -204,28 +203,57 @@ def test_pose_algo_process_frames_agx001_20251015_15(pose_algo, agx001_20251015_
         {'Pellet': True, 'RH_flat': False, 'RH_spread': False, 'RH_grab': False, 'LH_flat': False, 'LH_spread': False,
          'LH_grab': False, 'Star': True, 'Tongue_mid': False, 'Tongue_tip': False, 'Nose': True, 'Triangle': True,
          'Mouth': True, 'Diamond': True}),
-
         locations=[
-        {'Pellet': PoseLocation(name='Pellet', index=0, x=107.18849468231201, y=124.11833190917969),
-         'Star': PoseLocation(name='Star', index=7, x=157.89800357818604, y=98.02168691158295),
-         'Nose': PoseLocation(name='Nose', index=10, x=81.19415855407715, y=89.2825698852539),
-         'Triangle': PoseLocation(name='Triangle', index=11, x=100.96263575553894, y=154.61319971084595),
-         'Mouth': PoseLocation(name='Mouth', index=12, x=61.63555586338043, y=103.7043285369873),
-         'Diamond': PoseLocation(name='Diamond', index=13, x=30.862200021743774, y=71.6781370639801)},
-        {'Pellet': PoseLocation(name='Pellet', index=0, x=84.202712059021, y=127.75618600845337),
-         'LH_flat': PoseLocation(name='LH_flat', index=4, x=142.5007290840149, y=57.30223035812378),
-         'Star': PoseLocation(name='Star', index=7, x=136.81033945083618, y=121.13375759124756),
-         'Nose': PoseLocation(name='Nose', index=10, x=104.89548110961914, y=74.90717458724976),
-         'Triangle': PoseLocation(name='Triangle', index=11, x=65.31067943572998, y=152.19582509994507),
-         'Mouth': PoseLocation(name='Mouth', index=12, x=106.30647206306458, y=91.57262086868286),
-         'Diamond': PoseLocation(name='Diamond', index=13, x=37.36961615085602, y=66.14892673492432),
-         'L_Hand': PoseLocation(name='L_Hand', index=-1, x=142.5007290840149, y=57.30223035812378)}],
-
+        {'Pellet': PoseLocation(index=0, x=107.19, y=124.12), 'Star': PoseLocation(index=7, x=157.90, y=98.02),
+         'Nose': PoseLocation(index=10, x=81.19, y=89.28), 'Triangle': PoseLocation(index=11, x=100.96, y=154.61),
+         'Mouth': PoseLocation(index=12, x=61.64, y=103.70), 'Diamond': PoseLocation(index=13, x=30.86, y=71.68)},
+        {'Pellet': PoseLocation(index=0, x=84.20, y=127.76), 'LH_flat': PoseLocation(index=4, x=142.50, y=57.30),
+         'Star': PoseLocation(index=7, x=136.81, y=121.13), 'Nose': PoseLocation(index=10, x=104.90, y=74.91),
+         'Triangle': PoseLocation(index=11, x=65.31, y=152.20), 'Mouth': PoseLocation(index=12, x=106.31, y=91.57),
+         'Diamond': PoseLocation(index=13, x=37.37, y=66.15), 'L_Hand': PoseLocation(index=-1, x=142.50, y=57.30)}],
         parts_3d_offsets={
-        'Diamond': {'Triangle': Offset3DTuple(3.7954362324560265, -10.707559950520782, -12.157127561207961)}},
+            'Diamond': {'Triangle': Offset3DTuple(3.795436232456033, -10.707559950520785, -12.157127561207963)}},
+        locations_3d={'Diamond': Offset3DTuple(4.4811595880728605, -17.23875682380808, -9.14015255443137),
+                      'Triangle': Offset3DTuple(0.6857233556168274, -6.531196873287296, 3.0169750067765926)},
+        raw_loc_3d={'Diamond': Offset3DTuple(7.030296810299305, -2.0547245837788077, 23.23066772764739),
+                    'Triangle': Offset3DTuple(7.899437087298312, 1.9681540063437364, 22.627052821611116)})
 
-        locations_3d={'Diamond': Offset3DTuple(-66.66986318624589, -68.63968712410409, 18.349303122667),
-                      'Triangle': Offset3DTuple(-70.46529941870192, -57.932127173583304, 30.50643068387496)})
+
+    # expected2 = PoseResponse(
+    #     sequence=1,
+    #
+    #     parts_flags=(
+    #     {'Pellet': True, 'RH_flat': False, 'RH_spread': False, 'RH_grab': False, 'LH_flat': False, 'LH_spread': False,
+    #      'LH_grab': False, 'Star': True, 'Tongue_mid': False, 'Tongue_tip': False, 'Nose': True, 'Triangle': True,
+    #      'Mouth': True, 'Diamond': True},
+    #     {'Pellet': True, 'RH_flat': False, 'RH_spread': False, 'RH_grab': False, 'LH_flat': True, 'LH_spread': False,
+    #      'LH_grab': False, 'Star': True, 'Tongue_mid': False, 'Tongue_tip': False, 'Nose': True, 'Triangle': True,
+    #      'Mouth': True, 'Diamond': True},
+    #     {'Pellet': True, 'RH_flat': False, 'RH_spread': False, 'RH_grab': False, 'LH_flat': False, 'LH_spread': False,
+    #      'LH_grab': False, 'Star': True, 'Tongue_mid': False, 'Tongue_tip': False, 'Nose': True, 'Triangle': True,
+    #      'Mouth': True, 'Diamond': True}),
+    #
+    #     locations=[
+    #     {'Pellet': PoseLocation(index=0, x=107.18849468231201, y=124.11833190917969),
+    #      'Star': PoseLocation(index=7, x=157.89800357818604, y=98.02168691158295),
+    #      'Nose': PoseLocation(index=10, x=81.19415855407715, y=89.2825698852539),
+    #      'Triangle': PoseLocation(index=11, x=100.96263575553894, y=154.61319971084595),
+    #      'Mouth': PoseLocation(index=12, x=61.63555586338043, y=103.7043285369873),
+    #      'Diamond': PoseLocation(index=13, x=30.862200021743774, y=71.6781370639801)},
+    #     {'Pellet': PoseLocation(index=0, x=84.202712059021, y=127.75618600845337),
+    #      'LH_flat': PoseLocation(index=4, x=142.5007290840149, y=57.30223035812378),
+    #      'Star': PoseLocation(index=7, x=136.81033945083618, y=121.13375759124756),
+    #      'Nose': PoseLocation(index=10, x=104.89548110961914, y=74.90717458724976),
+    #      'Triangle': PoseLocation(index=11, x=65.31067943572998, y=152.19582509994507),
+    #      'Mouth': PoseLocation(index=12, x=106.30647206306458, y=91.57262086868286),
+    #      'Diamond': PoseLocation(index=13, x=37.36961615085602, y=66.14892673492432),
+    #      'L_Hand': PoseLocation(index=-1, x=142.5007290840149, y=57.30223035812378)}],
+    #
+    #     parts_3d_offsets={
+    #     'Diamond': {'Triangle': Offset3DTuple(3.7954362324560265, -10.707559950520782, -12.157127561207961)}},
+    #
+    #     locations_3d={'Diamond': Offset3DTuple(-66.66986318624589, -68.63968712410409, 18.349303122667),
+    #                   'Triangle': Offset3DTuple(-70.46529941870192, -57.932127173583304, 30.50643068387496)})
 
     assert_pose_response_almost_equal(res, expected)
 

@@ -27,6 +27,7 @@ from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandl
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
+from autotrainer.core.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
 from autotrainer.core.project import ProjectDependentProtol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_verbose_logger
@@ -176,6 +177,7 @@ class AppModel(ObservableObject):
         self._acquisition_stopping = False
         self._reload_plans_needed = False
         self._prev_diamond_coord: Offset3DTuple = Offset3DTuple(math.nan, math.nan, math.nan)
+        self._prev_raw_diamond_coord: Offset3DTuple = Offset3DTuple(math.nan, math.nan, math.nan)
         self._prev_valid_diamond_perf_c: float = -math.inf
         self._check_diamond_coord_enabled = True
         self._trigger_emergency_on_bad_diamond_coord = False
@@ -232,39 +234,10 @@ class AppModel(ObservableObject):
 
         self._inference_queue = None
 
-        calib_src_dir = (
-            Path(f"~/Autotrainer/{DEFAULT_3D_CALIB_DIR_NAME}") if calib_dir is None
-            else calib_dir
-        ).expanduser()
-        if calib_src_dir.exists():
-            self._stereo_params = load_calib_stereo_params(
-                calib_src_dir.joinpath('camera_matrix', 'stereo_params.pickle')
-            )
-            metadata_path = calib_src_dir.joinpath('calibration_userset.yaml')
-            with metadata_path.open() as fh:
-                self._calib_metadata = yaml.safe_load(fh)
+        self._pose_algorithm: PoseAlgorithm = None
+        self._inference: InferenceModel = None  # noqa
 
-            square_size, _, _, _ = calibration_FLIR.get_calibration_info(calib_src_dir.as_posix())
-            cam_names = calibration_FLIR.get_video_list(calib_src_dir.as_posix())
-            path_offsets = calib_src_dir.joinpath('camera_offsets.pkl')
-            with open(path_offsets, "rb") as fh:
-                cam_offsets = pickle.load(fh)
-        else:
-            self._stereo_params = None
-            self._calib_metadata = None
-            square_size = None
-            cam_names = None
-            cam_offsets = None
-            logger.warning("calib_src_dir=%r does not exist", calib_src_dir.as_posix())
-
-        self._pose_algorithm = PoseAlgorithm(
-            stereo_params=self._stereo_params,
-            calib_metadata=self._calib_metadata,
-            cam_names=cam_names,
-            square_size=square_size,
-            cam_offsets=cam_offsets,
-        )
-
+        self.reload_calib(calib_dir)
         self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir) if inference_model is None else inference_model
 
         #
@@ -325,6 +298,45 @@ class AppModel(ObservableObject):
     def status(self, value):
         prev, self._status = self._status, value
         self._on_property_changed(self.Props.STATUS, value, prev)
+
+    def reload_calib(self, calib_dir: Optional[Path]):
+        calib_src_dir = (
+            Path(f"~/Autotrainer/{DEFAULT_3D_CALIB_DIR_NAME}") if calib_dir is None
+            else calib_dir
+        ).expanduser()
+        logger.info("loading calib from %s", calib_src_dir)
+        if calib_src_dir.exists():
+            stereo_params = load_calib_stereo_params(
+                calib_src_dir.joinpath('camera_matrix', 'stereo_params.pickle')
+            )
+            metadata_path = calib_src_dir.joinpath('calibration_userset.yaml')
+            with metadata_path.open() as fh:
+                calib_metadata = yaml.safe_load(fh)
+            square_size, _, _, _ = calibration_FLIR.get_calibration_info(calib_src_dir.as_posix())
+            cam_names = calibration_FLIR.get_video_list(calib_src_dir.as_posix())
+            path_offsets = calib_src_dir.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
+            with open(path_offsets, "rb") as fh:
+                cam_offsets = pickle.load(fh)
+        else:
+            stereo_params = None
+            calib_metadata = None
+            square_size = None
+            cam_names = None
+            cam_offsets = None
+            logger.warning("calib_src_dir=%r does not exist", calib_src_dir.as_posix())
+
+        pose_algo = PoseAlgorithm(
+            stereo_params=stereo_params,
+            calib_metadata=calib_metadata,
+            cam_names=cam_names,
+            square_size=square_size,
+            cam_offsets=cam_offsets,
+        )
+        inference = self._inference
+        if inference is not None:
+            pose_algo.initialize(inference.pose_parts)
+            inference.pose_algorithm = pose_algo
+        self._pose_algorithm = pose_algo
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_release_pellet(self):
@@ -1300,6 +1312,7 @@ class AppModel(ObservableObject):
             self._update_status_text_overlay()
 
     def _on_pose_response_ready(self, response: PoseResponse):
+        # TODO: move to behavior algo or analysis (as BaseDetector subclass)
         if not self._check_diamond_coord_enabled or self._behavior.algorithm.algo_paused:
             return
         cfg = self._behavior.algorithm.diamond_triangle_config
@@ -1309,18 +1322,20 @@ class AppModel(ObservableObject):
         # maybe todo: make these configurable:
         min_check_delay = 5  # seconds ; if no valid check/measure within this delay -> error + emergency
         delay_inference_begin = 3  # seconds ; wait inference started for that duration before consider min_check_delay
-        max_dist_diff = 0.75  # mm ; if distance between obtained & expected above that -> invalid measure
+        max_dist_diff = 1  # mm ; if distance between obtained & expected above that -> invalid measure
         #
-        p_now = time.perf_counter()
         loc3d = response.locations_3d.get(SceneElement.Diamond)
-        if loc3d is None:
+        raw3d = response.raw_loc_3d.get(SceneElement.Diamond)
+        if loc3d is None or raw3d is None:
             return
         self._prev_diamond_coord = loc3d
         diff = loc3d - cfg.diamond_coord
-        if diff.distance > max_dist_diff:
+        raw_diff = raw3d - cfg.raw_diamond_coord
+        p_now = time.perf_counter()
+        if diff.distance > max_dist_diff or raw_diff.distance > max_dist_diff:
             if not self._warned_bad_diamond_coord:
-                logger.warning("Diamond coordinate invalid: %s ; dist=%.2f ; pose=%s",
-                               loc3d.humanize(n_digits=2), diff.distance, response)
+                logger.warning("Diamond coordinate invalid: %s ; dist=%.2f raw=%.2f ; pose=%s",
+                               loc3d.humanize(n_digits=2), diff.distance, raw_diff.distance, response)
                 self._warned_bad_diamond_coord = True
         else:
             self._prev_valid_diamond_perf_c = p_now

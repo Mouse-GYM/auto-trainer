@@ -26,8 +26,8 @@ class DiamondTriangleOffsetConfig:
     used_position: Offset3DTuple  # motor coordinate used
     measured_offset: Offset3DTuple  # inference coordinate offset between diamond and triangle (diamond - triangle)
 
-    diamond_coord: Offset3DTuple = _offset_nans
-    # inference diamond coordinate
+    raw_diamond_coord: Offset3DTuple = _offset_nans  # output from triangulate_3d
+    diamond_coord: Offset3DTuple = _offset_nans  # inference diamond coordinate, output from reorient_and_center
 
     DEFAULT_CONFIG_PATH: ClassVar = DEFAULT_DIAMOND_TRIANGLE_CONFIG_PATH
 
@@ -40,11 +40,12 @@ class DiamondTriangleOffsetConfig:
     flips_motor_diamond: ClassVar[Offset3DTuple] = flips_inference_motor * flips_inference_diamond
 
     # custom init to ensure kwarg only :
-    def __init__(self, *, used_position, measured_offset, diamond_coord=_offset_nans):
+    def __init__(self, *, used_position, measured_offset, diamond_coord=_offset_nans, raw_diamond_coord=_offset_nans):
         super().__init__()
         self.used_position = used_position
         self.measured_offset = measured_offset
         self.diamond_coord = diamond_coord
+        self.raw_diamond_coord = raw_diamond_coord
 
     @property
     def fully_valid(self):
@@ -53,6 +54,7 @@ class DiamondTriangleOffsetConfig:
                 self.used_position,
                 self.measured_offset,
                 self.diamond_coord,
+                self.raw_diamond_coord,
             )))
 
     @classmethod
@@ -73,7 +75,7 @@ class DiamondTriangleOffsetConfig:
         return None
 
     @classmethod
-    def from_file(cls, path: Path):
+    def from_file(cls, path: Path) -> Self:
         with path.expanduser().open() as fh:
             dct = yaml.safe_load(fh)
         return cls(**dict((k, Offset3DTuple(dct[k])) for k in dct))
