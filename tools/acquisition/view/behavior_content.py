@@ -139,14 +139,15 @@ class BehaviorContent(ContentWidget):
         right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1
 
+        right_layout.addWidget(QLabel("Success:"), right_cur_row, 0)
+        label = self._successful_reaches_label = DailyAndTotalCountsLabel(day=algo.successful_reaches_day,
+                                                                          total=algo.successful_reaches_total)
+        right_layout.addWidget(label, right_cur_row, 1)
+        right_cur_row += 1
+
         right_layout.addWidget(QLabel("Consumed:"), right_cur_row, 0)
         self._pellets_consumed_label = DailyAndTotalCountsLabel(day=algo.day_pellet_count, total=algo.total_pellet_count)
         right_layout.addWidget(self._pellets_consumed_label, right_cur_row, 1)
-        right_cur_row += 1
-
-        right_layout.addWidget(QLabel("Success:"), right_cur_row, 0)
-        label = self._successful_reaches_label = DailyAndTotalCountsLabel(day=algo.successful_reaches_day, total=algo.successful_reaches_total)
-        right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1
 
         label = QLabel("<b>Pellet Shift XYZ</b>")
