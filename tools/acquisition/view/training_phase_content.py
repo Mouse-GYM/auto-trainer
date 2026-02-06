@@ -11,6 +11,8 @@ from autotrainer.pyside.StackedContent import StackedWidget
 
 from autotrainer.training import TrainingPlan, TrainingPhase
 
+from autotrainer.pyside.content_widget import invoke_method
+
 logger = get_verbose_logger(__name__)
 
 
@@ -214,6 +216,7 @@ class TrainingPhaseContent(StackedWidget):
         card = self._empty_card = CardWidget(title="Current Phase")
         self.addWidget(card)
 
+    @invoke_method
     def set_training_phase(self, phase: Optional[TrainingPhase], *, force_refresh: bool=False):
         self._training_phase = phase
         if phase is None:

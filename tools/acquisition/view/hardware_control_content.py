@@ -13,7 +13,7 @@ from autotrainer.model import EnvironmentProvider, HardwareVersion
 
 from autotrainer.pyside import CardWidget
 from autotrainer.pyside.StackedContent import StackedLayout
-from autotrainer.pyside.content_widget import ContentWidget
+from autotrainer.pyside.content_widget import ContentWidget, invoke_method
 from tools.acquisition.model.app_model import AppModel
 
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -255,9 +255,11 @@ class HardwareControlContent(ContentWidget):
                 pos.setRange(*r)
                 getattr(self, f"_{c}_range_label").setText(f"[ {r[0]:>5.1f} : {r[1]:<5.1f}]")
 
+    @invoke_method
     def set_is_capture_active(self, is_active: bool):
         self._tare_button.setEnabled(is_active)
 
+    @invoke_method
     def set_selected_animal(self, animal: Optional[AnimalSubject]):
         self._set_pos_limits()
         algo = self._app_model.behavior.algorithm
@@ -313,6 +315,7 @@ class HardwareControlContent(ContentWidget):
         else:
             self._card_widget.header.setTitle("Hardware Control")
 
+    @invoke_method
     def _model_property_changed(self, property_name: str, value, _):
         if property_name == HardwareModel.TUNNEL_VERSION_PROPERTY:
             self._update_title(value)
@@ -339,6 +342,7 @@ class HardwareControlContent(ContentWidget):
                 self.command_changed.emit("None")
                 self.setEnabled(True)
 
+    @invoke_method
     def _behavior_algo_property_changed(self, name, value, _):
         if name == BehaviorAlgoProps.DIAMOND_TRIANGLE_CONFIG:
             # force execute set-selected-animal

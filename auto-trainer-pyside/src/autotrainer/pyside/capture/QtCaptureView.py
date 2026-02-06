@@ -8,15 +8,17 @@ from PySide6.QtCore import Qt, Signal, Slot, QSize
 from PySide6.QtGui import QImage, QPainter, QTextDocument
 from PySide6.QtWidgets import QWidget, QLabel, QComboBox, QHBoxLayout, QVBoxLayout, QStackedLayout, QSizePolicy
 
-from autotrainer.inference import PoseLocation
-from autotrainer.pyside.CardWidget import CardWidget
-from .QtGLImageView import QGLImageView
-from .QtCaptureSettings import QCaptureSettings
-
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
-from ..StackedContent import StackedLayout
-from ..content_widget import InvokeMethod
+
+from autotrainer.inference import PoseLocation
+
+from autotrainer.pyside.CardWidget import CardWidget
+
+from autotrainer.pyside.StackedContent import StackedLayout
+from autotrainer.pyside.capture.QtGLImageView import QGLImageView
+from autotrainer.pyside.capture.QtCaptureSettings import QCaptureSettings
+
 
 logger = get_verbose_logger(__name__)
 
@@ -129,17 +131,17 @@ class QCaptureView(QWidget):
 
         self.set_is_editable(False)
 
-        self.recording_indicator_changed.connect(lambda b: self._setRecordingEnabledIndicator(b))
+        self.recording_indicator_changed.connect(self._set_recording_enabled_indicator)
 
     def set_presence_detection(self, detection: Optional[PresenceDetectionAttrs]):
         self._presence_detection = detection
 
     def set_text_overlay(self, value: str, color: Qt.GlobalColor = Qt.GlobalColor.yellow):
+        logger.debug("got new text overlay: %r", value)
         self._text_overlay = value
         self._text_color = color
         self._is_frame_dirty = True
-        InvokeMethod(self.update_image)
-        logger.debug("got new text overlay: %r", value)
+        self.update_image()
 
     def set_display_dots_detection(self, value):
         self._display_dots_detection = value
@@ -147,7 +149,6 @@ class QCaptureView(QWidget):
 
     def set_is_capture_active(self, is_active: bool):
         self._camera.setEnabled(not is_active)
-
         if not is_active:
             self._is_recording.setVisible(False)
         else:
@@ -228,7 +229,6 @@ class QCaptureView(QWidget):
             presence_detection=self._presence_detection,
         )
         self._is_frame_dirty = False
-
         # self._fps_label.setText(f"{self._fps:.1f}")
 
     @Slot(ImageData, float)
@@ -247,7 +247,7 @@ class QCaptureView(QWidget):
         self._image.set_points(self._next_frame_points)
         self._are_points_dirty = False
 
-    @Slot(list)
+    @Slot(dict)
     def refresh_pose(self, points: Dict[str, PoseLocation]):
         self._next_frame_points = points
         self._are_points_dirty = True
@@ -260,11 +260,10 @@ class QCaptureView(QWidget):
             self._camera_name.setText("None")
         self.camera_changed.emit(camera)
 
-    def _setRecordingEnabledIndicator(self, b: bool):
+    def _set_recording_enabled_indicator(self, b: bool):
         self._is_recording.setVisible(b)
 
     def _update_summary(self):
-
         if self._settings.isCaptureEnabled:
             recording = ""
             image_capture = ""

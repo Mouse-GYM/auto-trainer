@@ -9,6 +9,7 @@ from autotrainer.core.logging import get_verbose_logger
 from autotrainer.pyside import CardWidget
 from autotrainer.training import TrainingPlan
 
+from autotrainer.pyside.content_widget import invoke_method
 
 logger = get_verbose_logger(__name__)
 
@@ -93,6 +94,7 @@ class TrainingPlanProgressContent(CardWidget):
             side_widget.setLayout(side)
             main_layout.addWidget(side_widget)
 
+    @invoke_method
     def set_training_plan_progress(self, plan: Optional[TrainingPlan]):
         logger.verbose("Setting training plan progress to %s", plan)
         if plan is None:

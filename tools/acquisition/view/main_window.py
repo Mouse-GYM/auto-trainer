@@ -34,7 +34,7 @@ from autotrainer.behavior import TrainingMode
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.inference.analysis import IntersessionResponse
-from autotrainer.pyside.content_widget import InvokeMethod
+from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 
 from autotrainer.training import TrainingPlan
 
@@ -486,6 +486,7 @@ class MainWindow(QMainWindow):
                 else:
                     error = None
 
+            @invoke_method
             def show_result():
                 self.run_action.setEnabled(True)
                 self.make_3d_calib_action.setChecked(False)
@@ -528,7 +529,7 @@ class MainWindow(QMainWindow):
             def wait_3d_calib_done(thread):
                 executor_thread.join()
                 self._post_api_event(ApiEventKind.calibration3dEnded)
-                InvokeMethod(show_result)
+                show_result()
 
             executor_thread = threading.Thread(target=handle_3d_calib, name="3d-calibration", daemon=True)
             executor_thread.start()
@@ -537,16 +538,15 @@ class MainWindow(QMainWindow):
                                              args=(executor_thread,), daemon=True)
             waiter_thread.start()
 
-    def _make_show_msg_box(self, title, text, icon):
-        def show():
-            box = QMessageBox()
-            box.setWindowTitle(title)
-            # box.setModal(True)
-            box.setText(text)
-            box.setIcon(icon)
-            box.show()
-            self._add_box_to_open_dialogs(box)
-        return show
+    @invoke_method
+    def _show_msg_box(self, title, text, icon):
+        box = QMessageBox()
+        box.setWindowTitle(title)
+        # box.setModal(True)
+        box.setText(text)
+        box.setIcon(icon)
+        box.show()
+        self._add_box_to_open_dialogs(box)
 
     def _check_diamond_triangle_config(self):
         algo = self._app_model.behavior.algorithm
@@ -567,7 +567,7 @@ class MainWindow(QMainWindow):
                     "1) Using Hardware Control Set + Send buttons: move the triangle near the desired deliver position\n\n"
                     "2) Execute a new coordinate calibration via menu Tools -> Calibrate Coordinate System\n\n")
             #
-            InvokeMethod(self._make_show_msg_box(title, text, QMessageBox.Icon.Warning))
+            self._show_msg_box(title, text, QMessageBox.Icon.Warning)
 
     def on_activated(self):
         self._check_diamond_triangle_config()
@@ -828,6 +828,7 @@ class MainWindow(QMainWindow):
         emergency_button.setObjectName("EmergencyButton")
         emergency_button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
 
+        @invoke_method
         def update_emergency_ui(is_toggled: bool, source: str):
             emergency_button.setText("Resume" if is_toggled else "Emergency")
             self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED - Source: {source}" if is_toggled else self._title)
@@ -921,13 +922,15 @@ class MainWindow(QMainWindow):
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
 
     def _show_error(self, title: str, message: str):
+        @invoke_method
         def show_in_gui_thread(title=title, message=message):
             dlg = QMessageBox(self)
             dlg.setWindowTitle(title)
             dlg.setText(message)
             dlg.exec()
-        InvokeMethod(show_in_gui_thread)
+        show_in_gui_thread()
 
+    @invoke_method
     def _preferences_property_changed(self, name, value, _):
         if name == "log_level":
             self._update_log_level(value)
@@ -1017,6 +1020,7 @@ class MainWindow(QMainWindow):
             animal: AnimalSubject = self._app_model.get_animal_by_id(animal_id)
             self._app_model.selected_animal = animal
 
+    @invoke_method
     def _refresh_prev_next_phases(self):
         attached = self._app_model.attached_plan
         if attached is None or self._app_model.training_mode != TrainingMode.MANUAL_WITH_PROTOCOL:
@@ -1032,6 +1036,7 @@ class MainWindow(QMainWindow):
             action.setIcon(qta.icon(name))
             action.setEnabled(can_do)
 
+    @invoke_method
     def _app_model_property_changed(self, name: str, value, _):
         props = self._app_model.Props
         #
@@ -1079,6 +1084,7 @@ class MainWindow(QMainWindow):
         elif name == props.TRAINING_PHASE:
             self._refresh_prev_next_phases()
 
+    @invoke_method
     def _reload_animals(self, animals: List[AnimalSubject]):
         # get current selected animal before adding them,
         # given when adding that's modifying the currently selected one too,
@@ -1110,6 +1116,7 @@ class MainWindow(QMainWindow):
         # controlled via console and file handlers now
         get_console_handler().setLevel(value)
 
+    @invoke_method
     def _inference_property_changed(self, name: str, value, old_value):
         inference = self._app_model.inference
         if name == inference.STATUS:
@@ -1117,9 +1124,7 @@ class MainWindow(QMainWindow):
             if value == InferenceStatus.live:
                 self._check_diamond_triangle_config()
 
-    def _behavior_algo_property_changed(self, name, value, _):
-        pass
-
+    @invoke_method
     def _set_training_plans(self):
         app_model = self._app_model
         combo = self._training_plan_combo
@@ -1164,5 +1169,6 @@ class MainWindow(QMainWindow):
                 combo.setCurrentIndex(plan_combo_index)
         combo.blockSignals(False)  # required to not induce loop
 
+    @invoke_method
     def _on_app_model_configuration_loaded(self, config):
         self._set_training_plans()

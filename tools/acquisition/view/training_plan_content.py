@@ -10,6 +10,7 @@ from autotrainer.pyside.StackedContent import StackedWidget
 
 from autotrainer.training import TrainingPlan
 
+from autotrainer.pyside.content_widget import invoke_method
 
 logger = get_verbose_logger(__name__)
 
@@ -64,6 +65,7 @@ class TrainingPlanContent(StackedWidget):
                     widget.setStyleSheet("")
         self.update()
 
+    @invoke_method
     def set_training_plan(self, plan: Optional[TrainingPlan]):
         logger.verbose("Setting training plan to %s", plan)
         if plan is None:

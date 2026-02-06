@@ -12,7 +12,7 @@ from autotrainer.video import VideoRecordMode
 
 from autotrainer.pyside.capture.QtCaptureView import ImageData
 from autotrainer.pyside import QCaptureView
-from autotrainer.pyside.content_widget import ContentWidget
+from autotrainer.pyside.content_widget import ContentWidget, invoke_method
 
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
@@ -74,16 +74,20 @@ class CameraContent(ContentWidget):
         row, col = data.shape
         self._capture_view.refresh_image(ImageData(data, col, row), fps)
 
+    @invoke_method
     def set_is_editable(self, is_editable: bool):
         self._capture_view.set_is_editable(is_editable)
 
+    @invoke_method
     def set_is_capture_active(self, is_active: bool):
         self._capture_view.set_is_capture_active(is_active)
 
+    @invoke_method
     def update_image(self):
         self._capture_view.update_image()
         self._capture_view.update_pose()
 
+    @invoke_method
     def refresh_pose(self, points: Dict[str, PoseLocation]):
         self._capture_view.refresh_pose(points)
 
@@ -105,10 +109,12 @@ class CameraContent(ContentWidget):
     def _still_image_capture_interval_changed(self, interval: float):
         self._model.still_image_capture_interval = interval
 
+    @invoke_method
     def _trigger_received(self, notification: Notification):
         if self._model.is_enabled and self._model.record_mode == VideoRecordMode.TRIGGER:
             self._capture_view.recording_indicator_changed.emit(notification.context)
 
+    @invoke_method
     def _model_property_changed(self, name, value, _):
         if name == VideoCaptureModel.CAMERA_PROP:
             self._capture_view.setCamera(value)

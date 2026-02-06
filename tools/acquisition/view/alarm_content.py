@@ -11,7 +11,7 @@ from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrash
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.pyside import CardWidget, StatusIcon
-from autotrainer.pyside.content_widget import ContentWidget
+from autotrainer.pyside.content_widget import ContentWidget, invoke_method
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -201,6 +201,7 @@ class AlarmContent(ContentWidget):
     def set_is_capture_active(self, is_editable: bool):
         self._card_widget.setEnabled(is_editable)
 
+    @invoke_method
     def _hardware_model_property_changed(self, name: str, value, _):
         if name == HardwareModel.FRONT_DOOR_PROPERTY:
             self.front_door_changed.emit(value)
@@ -209,14 +210,17 @@ class AlarmContent(ContentWidget):
         elif name == HardwareModel.DEVICE_ACK_TIMEOUT_ENGAGED:
             self.device_ack_timeout_changed.emit(value)
 
+    @invoke_method
     def _load_cell_property_changed(self, name: str, new_value, _):
         if name == LoadCellMonitor.IS_THRASHING_DETECTED_PROPERTY:
             self.load_cell_thrashing_changed.emit(new_value)
 
+    @invoke_method
     def _audio_thrashing_property_changed(self, name, new_value, _):
         if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
             self.audio_thrashing_changed.emit(new_value)
 
+    @invoke_method
     def _alarm_monitor_property_changed(self, name, value, old_value):
         p = EmergencyAlarmMonitor
         logger.debug("got %s -> %s (was %s)", name, value, old_value)
@@ -253,10 +257,12 @@ class AlarmContent(ContentWidget):
                 return
             self.external_door_status_changed.emit(value)
 
+    @invoke_method
     def _global_animal_presence_property_changed(self, name, value, _):
         if name == "is_engaged":
             self.global_animal_presence_changed.emit(value)
 
+    @invoke_method
     def _pellet_misplaced_property_changed(self, name, value, _):
         if name == "is_engaged":
             self._pellet_misplaced_status.setStatus(value)
