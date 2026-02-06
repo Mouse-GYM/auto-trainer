@@ -59,7 +59,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         self._project: Optional[ProjectInfo] = None
         self._hardware_model = hardware_model
         #
-        self._source_algo_paused = "na"
+        self._source_emergency: Optional[str] = None
         #
         system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
             f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
@@ -155,13 +155,17 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         if self._hardware_model.head_magnet_intensity is not None:
             self._system_machine.algorithm.baseline_intensity = self._hardware_model.head_magnet_intensity
 
+    @property
+    def source_emergency(self) -> Optional[str]:
+        return self._source_emergency
+
     def emergency_stop(self, source: str):
         algo = self._system_machine.algorithm
         logger.info("emergency_stop called: %s - current=%s", source, algo.algo_paused)
         if algo.algo_paused:
             return
         algo.algo_paused = True
-        self._source_algo_paused = source
+        self._source_emergency = source
         EventManager.default().post_event_content(ApiEventKind.emergencyStop, dict(reason=source))
         self.emergency_stopped(source)
 
@@ -170,10 +174,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         logger.info("emergency_resume called: %s - current=%s", source, algo.algo_paused)
         if not algo.algo_paused:
             return
-        if self._source_algo_paused == "user-button" and source != "user-button":
+        if self._source_emergency == "user-button" and source != "user-button":
             logger.notice("Refusing resume from emergency given was set by user ; resume source=%s", source)
             return
         algo.algo_paused = False
+        self._source_emergency = None
         # restart full analysis so that monitors/detectors counters/context are reset, as if app was just started:
         self._analysis.restart()
         EventManager.default().post_event_content(ApiEventKind.emergencyResume, dict(reason=source))
