@@ -66,4 +66,5 @@ def intersession_process(
         food_consumed=results_dict['pellets_consumed'],
         successful_reaches=results_dict['successful_reaches'],
         pellets_presented=results_dict['pellets_presented'],
+        total_reaches=results_dict['total_reaches'],
     )

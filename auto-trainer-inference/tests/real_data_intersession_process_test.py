@@ -18,6 +18,8 @@ import pytest
 
 
 this_dir = Path(__file__).parent.resolve()
+data_dir = this_dir.joinpath("data")
+calib_dir = this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME)
 
 
 def assert_deep_almost_equal(obj1, obj2, *, places=3, delta=None):
@@ -65,15 +67,6 @@ def assert_pose_response_almost_equal(
     assert_deep_almost_equal(r1.parts_3d_offsets, r2.parts_3d_offsets, delta=off_delta)
 
 
-@pytest.fixture
-def agx001_20251015_15(project_info):
-    project_info.root = this_dir.as_posix()
-    project_info.session = 15
-    project_info.device_id = "agx001"
-    project_info.when = datetime(2025, 10, 15)
-    return project_info
-
-
 @pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")
 def test_fp_and_xp_not_same(project_info, caplog):
     project_info.session = 2
@@ -104,21 +97,30 @@ def test_index_error(project_info, caplog):
     with pytest.raises(IndexError, match="index 378 is out of bounds for axis 0"):
         intersession_process(
             project_info,
-            calib_dir=this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME),
+            calib_dir=calib_dir,
         )
     # TODO: fix underlying issue
 
 
 agx001_20251015_15_expected_result = IntersessionResponse(
     pellet_x=-1, pellet_y=1, pellet_z=1,
-    food_consumed=0, successful_reaches=0, pellets_presented=1,
+    food_consumed=0, successful_reaches=0, pellets_presented=1, total_reaches=1
 )
+
+
+@pytest.fixture
+def agx001_20251015_15(project_info):
+    project_info.root = data_dir.as_posix()
+    project_info.session = 15
+    project_info.device_id = "agx001"
+    project_info.when = datetime(2025, 10, 15)
+    return project_info
 
 
 def test_intersession_process_agx001_20251015_15(agx001_20251015_15):
     res = intersession_process(
         agx001_20251015_15,
-        calib_dir=this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME),
+        calib_dir=calib_dir,
     )
     assert res == agx001_20251015_15_expected_result
 
@@ -127,9 +129,29 @@ def test_intersession_process_agx001_20251015_15(agx001_20251015_15):
 def test_intersession_process_bench_agx001_20251015_15(agx001_20251015_15, benchmark):
     res =  benchmark(lambda: intersession_process(
         agx001_20251015_15,
-        calib_dir=this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME),
+        calib_dir=calib_dir,
     ))
     assert res == agx001_20251015_15_expected_result
+
+
+agx001_20260205_11_expected_result = IntersessionResponse(
+    pellet_x=-1,
+    pellet_y=1,
+    pellet_z=1,
+    food_consumed=0,
+    successful_reaches=0,
+    pellets_presented=1,
+    total_reaches=2,
+)
+
+
+def test_agx001_20260205_11(project_info):
+    project_info.root = data_dir.as_posix()
+    project_info.session = 11
+    project_info.device_id = "agx001"
+    project_info.when = datetime(2026, 2, 5)
+    res = intersession_process(project_info, calib_dir=calib_dir)
+    assert res == agx001_20260205_11_expected_result
 
 
 @pytest.mark.parametrize("frames_per_batch_per_cam,select_frames_method", [

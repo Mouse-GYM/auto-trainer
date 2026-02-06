@@ -874,7 +874,7 @@ class MainWindow(QMainWindow):
             label = QLabel("R:")
             label.setToolTip("Pellets Reached")
             hbox.addWidget(label)
-            spinbox = self._internal_pellet_reached_spinbox = QSpinBox()
+            spinbox = self._internal_pellet_total_reached_spinbox = QSpinBox()
             spinbox.setToolTip(label.toolTip())
             hbox.addWidget(spinbox)
             label = QLabel("C:")
@@ -883,6 +883,13 @@ class MainWindow(QMainWindow):
             spinbox = self._internal_pellet_consumed_spinbox = QSpinBox()
             spinbox.setToolTip(label.toolTip())
             hbox.addWidget(spinbox)
+            label = QLabel("S:")
+            label.setToolTip("Success")
+            hbox.addWidget(label)
+            spinbox = self._internal_success_reaches_spinbox = QSpinBox()
+            spinbox.setToolTip(label.toolTip())
+            hbox.addWidget(spinbox)
+            #
             hbox.addWidget(QLabel("Shift:"))
             spinbox = self._internal_shift_x_spinbox = QDoubleSpinBox()
             spinbox.setToolTip("X shift")
@@ -961,7 +968,8 @@ class MainWindow(QMainWindow):
             inference._feed_intersession_analysis_execute = self._simulate_intersession_segmentation
             res = IntersessionResponse(
                 pellets_presented=self._internal_pellet_presented_spinbox.value(),
-                successful_reaches=self._internal_pellet_reached_spinbox.value(),
+                total_reaches=self._internal_pellet_total_reached_spinbox.value(),
+                successful_reaches=self._internal_success_reaches_spinbox.value(),
                 food_consumed=self._internal_pellet_consumed_spinbox.value(),
                 pellet_x=self._internal_shift_x_spinbox.value(),
                 pellet_y=self._internal_shift_y_spinbox.value(),

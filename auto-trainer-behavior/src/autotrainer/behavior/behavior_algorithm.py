@@ -80,6 +80,8 @@ class BehaviorAlgoProps(str, enum.Enum):
     TOTAL_PELLET_COUNT = 'total_pellet_count'  # consumed
     DAY_PELLET_PRESENTED = 'day_pellet_presented'
     TOTAL_PELLET_PRESENTED = 'total_pellet_presented'
+    DAY_REACHES = 'day_reaches'
+    TOTAL_REACHES = 'total_reaches'
     DAY_SUCCESSFUL_REACHES = 'day_successful_reaches'
     TOTAL_SUCCESSFUL_REACHES = 'total_successful_reaches'
 
@@ -345,6 +347,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._pellet_count_total = 0  # consumed
         self._pellets_presented_day: int = 0
         self._pellets_presented_total: int = 0
+        self._reaches_day: int = 0
+        self._reaches_total: int = 0
         self._successful_reaches_day: int = 0
         self._successful_reaches_total: int = 0
 
@@ -903,6 +907,24 @@ class BehaviorAlgorithm(ObservableObject):
             self.pellets_presented_evt(quantity)
 
     #
+
+    @property
+    def reaches_day(self):
+        return self._reaches_day
+
+    @reaches_day.setter
+    def reaches_day(self, value):
+        prev, self._reaches_day = self._reaches_day, value
+        self._on_property_changed(BehaviorAlgoProps.DAY_REACHES, value, prev)
+
+    @property
+    def reaches_total(self):
+        return self._reaches_total
+
+    @reaches_total.setter
+    def reaches_total(self, value):
+        prev, self._reaches_total = self._reaches_total, value
+        self._on_property_changed(BehaviorAlgoProps.TOTAL_REACHES, value, prev)
 
     @property
     def successful_reaches_day(self):

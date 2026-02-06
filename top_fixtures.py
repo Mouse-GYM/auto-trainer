@@ -81,11 +81,11 @@ def motor_config(monkeypatch):
 
 
 @pytest.fixture
-def project_info(tmp_path):
+def project_info(tmp_path) -> ProjectInfo:
     root = tmp_path.joinpath("root")
     root.mkdir()
     prj = ProjectInfo(root=root.as_posix())
-    yield prj
+    return prj
 
 
 @pytest.fixture(autouse=True)

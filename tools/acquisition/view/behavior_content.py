@@ -133,12 +133,18 @@ class BehaviorContent(ContentWidget):
         right_layout.addWidget(self._pellets_presented_label, right_cur_row, 1)
         right_cur_row += 1
 
+        right_layout.addWidget(QLabel("Reaches:"), right_cur_row, 0)
+        label = self._reaches_label = DailyAndTotalCountsLabel(day=algo.reaches_day,
+                                                               total=algo.reaches_total)
+        right_layout.addWidget(label, right_cur_row, 1)
+        right_cur_row += 1
+
         right_layout.addWidget(QLabel("Consumed:"), right_cur_row, 0)
         self._pellets_consumed_label = DailyAndTotalCountsLabel(day=algo.day_pellet_count, total=algo.total_pellet_count)
         right_layout.addWidget(self._pellets_consumed_label, right_cur_row, 1)
         right_cur_row += 1
 
-        right_layout.addWidget(QLabel("Reached:"), right_cur_row, 0)
+        right_layout.addWidget(QLabel("Success:"), right_cur_row, 0)
         label = self._successful_reaches_label = DailyAndTotalCountsLabel(day=algo.successful_reaches_day, total=algo.successful_reaches_total)
         right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1
@@ -260,6 +266,10 @@ class BehaviorContent(ContentWidget):
             self._pellets_presented_label.update_values(day=value)
         elif name == props.TOTAL_PELLET_PRESENTED:
             self._pellets_presented_label.update_values(total=value)
+        elif name == props.DAY_REACHES:
+            self._reaches_label.update_values(day=value)
+        elif name == props.TOTAL_REACHES:
+            self._reaches_label.update_values(total=value)
         elif name == props.DAY_SUCCESSFUL_REACHES:
             self._successful_reaches_label.update_values(day=value)
         elif name == props.TOTAL_SUCCESSFUL_REACHES:
