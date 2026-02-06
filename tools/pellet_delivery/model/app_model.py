@@ -395,8 +395,6 @@ class AppModel(ObservableObject):
             self._message_handler.request_terminate()
             self._message_handler.wait_terminated()
 
-        EventManager.try_close_default()
-
     def _message_handler_property_changed(self, name: str, value, _old_value):
         if name == SystemMessageHandler.FIRMWARE_VERSION_PROPERTY:
             self.firmware_version = value

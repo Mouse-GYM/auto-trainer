@@ -16,7 +16,11 @@ def main():
 
     from tools.head_fix.run_head_fix_ui import run_head_fix_ui
 
-    return run_head_fix_ui(allow_emulation)
+    try:
+        return run_head_fix_ui(allow_emulation)
+    finally:
+        from autotrainer.core.event import EventManager
+        EventManager.try_close_default()
 
 
 if __name__ == '__main__':
