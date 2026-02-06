@@ -141,7 +141,7 @@ agx001_20260205_11_expected_result = IntersessionResponse(
     food_consumed=0,
     successful_reaches=0,
     pellets_presented=1,
-    total_reaches=2,
+    total_reaches=1,
 )
 
 
