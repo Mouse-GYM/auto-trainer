@@ -71,7 +71,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
         logger.debug("alarm-mon: %s : %s -> %s", name, old_value, value)
         if name == EmergencyAlarmMonitor.IS_ENGAGED:
             if value:
-                self.emergency_stop(f"alarm-monitor: {self._analysis.emergency_alarm_monitor.engaged_reasons}")
+                reasons = " ".join(self._analysis.emergency_alarm_monitor.engaged_reasons)
+                self.emergency_stop(f"alarm-monitor: {reasons}")
             else:
                 self.emergency_resume("alarm-monitor-resumed")
 
@@ -162,7 +163,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     def emergency_stop(self, source: str):
         algo = self._system_machine.algorithm
         logger.info("emergency_stop called: %s - current=%s", source, algo.algo_paused)
-        if algo.algo_paused:
+        if algo.algo_paused and source == self._source_algo_paused:
             return
         algo.algo_paused = True
         self._source_emergency = source

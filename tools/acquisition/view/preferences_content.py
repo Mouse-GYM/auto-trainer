@@ -930,6 +930,13 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 0
 
+        def add_sep():
+            nonlocal cur_row
+            widget = QWidget()
+            widget.setMinimumHeight(5)
+            grid_layout.addWidget(widget, cur_row, cur_col)
+            cur_row += 1
+
         audio_load_cell_sub_widgets = []
 
         label = QLabel("<b>Use Audio & Load Cell Thrashing Alarm:</b>")
@@ -1025,10 +1032,7 @@ class PreferencesContent(QWidget):
         self._use_audio_load_cell_thrashing_toggle.stateChanged.connect(toggle_changed)
         toggle_changed(int(alarm_cfg.use_audio_load_cell_thrash))
 
-        widget = QWidget()
-        widget.setMinimumHeight(5)
-        grid_layout.addWidget(widget, cur_row, cur_col)
-        cur_row += 1
+        add_sep()
 
         animal_missing_sub_widgets = []
 
@@ -1119,8 +1123,6 @@ class PreferencesContent(QWidget):
             analysis.external_doors_monitor.check_state()
         spinbox.valueChanged.connect(value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
-        cur_row += 1
-
         def toggle_changed(value):
             toggled = value != 0
             for w in use_external_doors_sub_widgets:
@@ -1131,6 +1133,36 @@ class PreferencesContent(QWidget):
                 alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
         self._use_external_doors_open_toggle.stateChanged.connect(toggle_changed)
         toggle_changed(int(alarm_cfg.use_external_doors_open))
+        cur_row += 1
+
+        # add_sep()
+
+        grid_layout.addWidget(QLabel("<b>Use Global Animal Presence:</b>"), cur_row, cur_col)
+        toggle = self._use_global_animal_presence_toggle = QSwitch()
+        toggle.setChecked(alarm_cfg.use_global_animal_presence)
+        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
+        toggle = QSwitch()
+        toggle.setChecked(alarm_cfg.auto_resume_on_global_animal_presence)
+        def toggle_changed(value):
+            toggled = value != 0
+            cfg = alarm_monitor.config
+            cfg.auto_resume_on_global_animal_presence = toggled
+            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
+        toggle.setEnabled(alarm_cfg.use_global_animal_presence)
+        toggle.stateChanged.connect(toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        def use_toggle_changed(value, toggle_use=toggle):
+            toggled = value != 0
+            toggle_use.setEnabled(toggled)
+            cfg = alarm_monitor.config
+            if toggled != cfg.use_global_animal_presence:
+                cfg.use_global_animal_presence = toggled
+                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
+        self._use_global_animal_presence_toggle.stateChanged.connect(use_toggle_changed)
+        cur_row += 1
 
         tab = QWidget(None)
         tab.setLayout(main_layout)

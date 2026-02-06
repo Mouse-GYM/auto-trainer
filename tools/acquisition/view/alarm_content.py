@@ -34,13 +34,15 @@ class AlarmContent(ContentWidget):
     use_external_door_changed = Signal(bool)
     external_door_status_changed = Signal(bool)
 
+    use_global_animal_presence = Signal(bool)
+    global_animal_presence_changed = Signal(bool)
+
     #
 
     load_cell_thrashing_changed = Signal(bool, name="load_cell_thrashing_changed")
     audio_thrashing_changed = Signal(bool, name="audio_thrashing_changed")
     front_door_changed = Signal(bool, name="front_door_changed")
     slide_door_changed = Signal(bool, name="slide_door_changed")
-    global_animal_presence_changed = Signal(bool)
     device_ack_timeout_changed = Signal(bool)
 
     def __init__(self, app_model: AppModel, hardware_model: HardwareModel):
@@ -122,6 +124,15 @@ class AlarmContent(ContentWidget):
         self.use_external_door_changed.emit(emergency_alarm_cfg.use_external_doors_open)
         self.external_door_status_changed.connect(icon.setStatus)
 
+        if GlobalAnimalPresenceMonitor.feature_enabled:
+            icon = self._animal_missing_status = make_alarm_icon(name="animal-immobile")
+            label = self._animal_missing_label = make_label("Animal Immobile:")
+            form_layout_alarms.addRow(label, icon)
+            self.use_global_animal_presence.connect(label.setEnabled)
+            self.use_global_animal_presence.connect(icon.setInUse)
+            self.use_global_animal_presence.emit(emergency_alarm_cfg.use_global_animal_presence)
+            self.global_animal_presence_changed.connect(icon.setStatus)
+
         #
 
         form_layout_detectors = QFormLayout()
@@ -148,12 +159,6 @@ class AlarmContent(ContentWidget):
         self._slide_door_status = StatusIcon.doorIcon(name="det-slide-door")
         form_layout_detectors.addRow("Sliding Door:", self._slide_door_status)
         self.slide_door_changed.connect(self._slide_door_status.setStatus)
-
-        if GlobalAnimalPresenceMonitor.feature_enabled:
-            icon = self._animal_missing_status = make_detector_icon(name="det-immobile")
-            label = self._animal_missing_label = QLabel("Animal Immobile:")
-            form_layout_detectors.addRow(label, icon)
-            self.global_animal_presence_changed.connect(icon.setStatus)
 
         icon = self._device_ack_timeout_status = make_detector_icon(name="det-device-ack")
         form_layout_detectors.addRow("Device Ack Timeout:", icon)
@@ -223,6 +228,7 @@ class AlarmContent(ContentWidget):
             self.use_load_cell_audio_thrash_changed.emit(value.use_audio_load_cell_thrash)
             self.use_presence_in_cage_after_exit_tunnel_changed.emit(value.use_presence_missing_after_exit_tunnel)
             self.use_external_door_changed.emit(value.use_external_doors_open)
+            self.use_global_animal_presence.emit(value.use_global_animal_presence)
 
         elif name == p.IS_ENGAGED:
             if not value:
