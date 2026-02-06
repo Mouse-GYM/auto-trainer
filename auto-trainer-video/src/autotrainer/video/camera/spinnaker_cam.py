@@ -100,6 +100,7 @@ class SpinCam(CameraBase):
 
         self._pause_log = False
         self._acquisition_started = False
+        self._skip_duplicate_frame_copy = False
 
         _start_spincam_lib_instance()
 
@@ -278,12 +279,14 @@ class SpinCam(CameraBase):
         if not self._acquisition_started:
             self._acquisition_started = True
             first_capture = True
-            logger.info("Beginning acquisition")
+            logger.info("Beginning acquisition ; skip_dup_copy=%s", self._skip_duplicate_frame_copy)
             self._camera.BeginAcquisition()
             if self._is_primary:
                 self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
                 self._camera.LineSource.SetValue(PySpin.LineSource_Counter0Active)
                 self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
+
+        expected_shape = (self._height, self._width)
 
         image_result = self._camera.GetNextImage()
         if image_result.IsIncomplete():
@@ -292,9 +295,11 @@ class SpinCam(CameraBase):
             raise RuntimeError(f"Incomplete spincam image on frame_idx={self._frame_count}")
 
         self._last_when = image_result.GetTimeStamp()
-        frame = image_result.GetNDArray()  # get the frame/array as acquired by hardware itself
 
-        expected_shape = (self._height, self._width)
+        frame = orig_frame = image_result.GetNDArray()  # get the frame/array as acquired by hardware itself
+        # image_converted = self._image_processor.Convert(image_result, PySpin.PixelFormat_Mono8)
+        # frame = image_converted.GetNDArray()
+        # reminder: the frame we get directly from camera is already in our desired format (shape + dtype).
 
         if first_capture:
             self._capture_start = self._last_when
@@ -303,34 +308,32 @@ class SpinCam(CameraBase):
             if frame.shape != expected_shape:
                 logger.warning("Frame shape not as expected: %s vs %s", frame.shape, expected_shape)
 
-        if __debug__:
-            # ensure no frame in the first 150, shares its internal buffer with any of the other first 150 of them:
-            if self._frame_count < 150:
-                # image_converted = self._image_processor.Convert(image_result, PySpin.PixelFormat_Mono8)
-                # frame_conv = image_converted.GetNDArray()  # type: numpy.ndarray
-                logger.spam("frame-%s: shape=%s dtype=%s",
-                             self._frame_count, frame.shape, frame.dtype)
-                self._start_frames.append((frame, frame.copy(), None, None))
-                for prev_idx, (prev_frame, prev_frame_copy, prev_conv, prev_conv_copy) in enumerate(self._start_frames):
-                    if (prev_frame != prev_frame_copy).any():
-                        logger.critical("Detected prev frame (idx=%s) got corrupted", prev_idx)
-                    if prev_idx == self._frame_count:
-                        break
-                    if (frame == prev_frame).all() and (frame != prev_frame_copy).any():
-                        logger.critical("Detected frame (idx=%s) shares internal buffer with prev frame idx=%s",
-                                        self._frame_count, prev_idx)
-                        # if (frame_conv == prev_conv).all() and (frame_conv != prev_conv_copy).any():
-                        #     logger.critical("Detected converted frame (idx=%s) shares internal buffer with prev converted frame idx=%s",
-                        #                     self._frame_count, prev_idx)
-                if self._frame_count >= 149:
-                    self._start_frames.clear()  # don't keep unnecessarily all that
-
-        self._frame_count += 1
+        if not self._skip_duplicate_frame_copy:
+            frame = frame.copy()
 
         image_result.Release()
 
         if frame.shape != expected_shape:
             frame = frame.reshape(expected_shape)
+
+        if __debug__:
+            # ensure no frame in the first 150, shares its internal buffer with any of the other first 150 of them:
+            if self._frame_count < 150:
+                logger.spam("frame-%s: shape=%s dtype=%s",
+                             self._frame_count, orig_frame.shape, orig_frame.dtype)
+                self._start_frames.append((orig_frame, orig_frame.copy()))
+                for prev_idx, (prev_frame, prev_frame_copy) in enumerate(self._start_frames):
+                    if (prev_frame != prev_frame_copy).any():
+                        logger.critical("Detected prev frame (idx=%s) got corrupted", prev_idx)
+                    if prev_idx == self._frame_count:
+                        break
+                    if (orig_frame == prev_frame).all() and (orig_frame != prev_frame_copy).any():
+                        logger.critical("Detected frame (idx=%s) shares internal buffer with prev frame idx=%s",
+                                        self._frame_count, prev_idx)
+                if self._frame_count >= 149:
+                    self._start_frames.clear()  # don't keep unnecessarily all that
+
+        self._frame_count += 1
 
         return frame, self._last_when
 
@@ -356,6 +359,8 @@ class SpinCam(CameraBase):
         elif name == "gamma":
             self._set_bounded_bool_property_node(self._camera.GammaEnable, True)
             self._set_bounded_float_property_node(self._camera.Gamma, float(value))
+        elif name == "skip_duplicate_frame_copy":
+            self._skip_duplicate_frame_copy = value.lower() in {"true", "yes", "on", "1"}
         else:
             return super().set_property(name, value)
 
