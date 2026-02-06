@@ -199,8 +199,11 @@ def segment_reaches_f2(
 
     batch_frm = 10
     batch_dist = 5
-    position_window = 20
-    speed_window = 20
+
+    # can cause some (quickly succeeding) reaches count to be missed though
+    position_window = 100
+    speed_window = 100
+
     batch_speed = 5
     batch_stall = 25
     reach_init_speed = -0.025
