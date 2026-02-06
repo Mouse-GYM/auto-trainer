@@ -76,21 +76,19 @@ class TestEmergency(MockSystemMachine):
         assert pellet_dev.send_pellet.call_args_list == [mock.call()]
         assert tunnel_dev.update_head_magnet_intensity.call_args_list == [mock.call(algo.baseline_intensity)]
 
-    def test_engage_twice_do_not_execute_twice(self, app_model):
+    def test_engage_many_times_keeps_last_reason(self, app_model):
         algo = app_model.behavior.algorithm
         assert not algo.algo_paused
         tunnel_dev = self.tunnel_dev
         pellet_dev = self.pellet_dev
-        tunnel_dev.reset_mock()  # ensure clear
-        pellet_dev.reset_mock()  # ensure clear
         #
         app_model.behavior.emergency_stop(source="testing")
+        assert app_model.behavior.source_emergency == "testing"
         tunnel_dev.reset_mock()  # ensure clear
         pellet_dev.reset_mock()  # ensure clear
         #
-        assert app_model.behavior.source_emergency == "testing"
         app_model.behavior.emergency_stop(source="testing2")
-        assert app_model.behavior.source_emergency == "testing"
+        assert app_model.behavior.source_emergency == "testing2"
         assert tunnel_dev.open_tunnel_gate.call_args_list == []
         assert pellet_dev.send_pellet.call_args_list == []
         assert tunnel_dev.update_head_magnet_intensity.call_args_list == []

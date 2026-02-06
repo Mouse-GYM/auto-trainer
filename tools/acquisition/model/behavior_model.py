@@ -163,7 +163,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     def emergency_stop(self, source: str):
         algo = self._system_machine.algorithm
         logger.info("emergency_stop called: %s - current=%s", source, algo.algo_paused)
-        if algo.algo_paused and source == self._source_algo_paused:
+        if algo.algo_paused and source == self._source_emergency:
             return
         algo.algo_paused = True
         self._source_emergency = source
