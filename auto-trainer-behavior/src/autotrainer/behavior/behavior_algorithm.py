@@ -1229,7 +1229,8 @@ class BehaviorAlgorithm(ObservableObject):
         with self._thread_lock:
             # in case of need bigger:
             self._diamond_triangle_prev_drifts = collections.deque(
-                maxlen=max(150, int(1.5 * config.home_on_excessive_drift_distance.min_samples)))
+                # use 50% more, in case of:
+                maxlen=int(1.5 * config.home_on_excessive_drift_distance.min_samples))
         self._load_pellet_cfg(config.pellet_delivery)
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
