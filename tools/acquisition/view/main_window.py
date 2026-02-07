@@ -631,6 +631,7 @@ class MainWindow(QMainWindow):
 
     def _show_preferences(self):
         dialog = PreferencesDialog(self._preferences, self._app_model)
+        self._add_box_to_open_dialogs(dialog)
         dialog.exec()
 
     def _create_actions(self):
@@ -696,7 +697,7 @@ class MainWindow(QMainWindow):
         action.triggered.connect(self._internal_detection_result_toggle)
 
         action = self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
-        action.triggered.connect(lambda: self._show_preferences())
+        action.triggered.connect(self._show_preferences)
 
         action = self.emergency_stop_action = QAction("Emergency", self)
         action.setCheckable(True)
