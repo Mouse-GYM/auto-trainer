@@ -96,6 +96,11 @@ def diamond_config_path(monkeypatch):
     return path
 
 
+@pytest.fixture
+def diamond_triangle_config(diamond_config_path) -> DiamondTriangleOffsetConfig:
+    return DiamondTriangleOffsetConfig.load_config(diamond_config_path)
+
+
 ##
 
 

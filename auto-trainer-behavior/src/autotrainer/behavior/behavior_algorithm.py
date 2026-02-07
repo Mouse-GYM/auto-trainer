@@ -98,7 +98,7 @@ class BehaviorAlgoProps(str, enum.Enum):
     COVER_PELLET_DISTANCE = "cover_pellet_distance"
     RELEASE_PELLET_DISTANCE = "release_pellet_distance"
 
-    IS_IN_SESSION = 'is_in_session'
+    IS_IN_SESSION = 'is_in_session'  # property unused
     INTERSESSION_STATE = 'intersession_state'
     CAPTURE_STATUS = 'capture_status'
 
@@ -1049,7 +1049,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_capture_ending(reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
-        self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)
+        self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)  # unused
         self.get_diamond_triangle_drifts()  # convenience to log current values
         return True
 
