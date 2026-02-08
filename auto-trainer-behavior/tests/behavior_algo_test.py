@@ -7,7 +7,8 @@ from autotrainer.behavior import BehaviorAlgorithm
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.behavior_algorithm import CoverServoStatus
 from autotrainer.behavior.pellet import PelletState
-from autotrainer.core import BehaviorConfiguration, Offset3DTuple
+from autotrainer.core import BehaviorConfiguration, Offset3DTuple, ProjectInfo
+from autotrainer.video import CaptureProcessStatus
 
 
 @pytest.fixture
@@ -21,23 +22,140 @@ def algo(monkeypatch, mock_get_perf_now) -> BehaviorAlgorithm:
     # in case need cleanup
 
 
-def test_properties(algo):
-    algo.auto_clamp_release_tone_freq = 42
-    assert algo.auto_clamp_release_tone_freq == 42
+def test_project_info(algo):
+    prj = algo.project
+    new_prj = ProjectInfo()
+    algo.project = new_prj
+    assert prj != algo.project
+    assert algo.project is new_prj
+
+
+def test_auto_clamp_release_tone_freq(algo):
+    prev = algo.auto_clamp_release_tone_freq
+    assert prev \
+            == algo.auto_clamp_release_tone_freq \
+            == algo.head_clamp_config.auto_clamp_release_tone_freq \
+            == algo.active_config.head_clamp.auto_clamp_release_tone_freq
+    algo.auto_clamp_release_tone_freq += 42
+    assert prev + 42 \
+           == algo.auto_clamp_release_tone_freq \
+           == algo.head_clamp_config.auto_clamp_release_tone_freq \
+           == algo.active_config.head_clamp.auto_clamp_release_tone_freq
+
+
+def test_cover_servo_status(algo):
     assert algo.cover_servo_status is CoverServoStatus.OK
     assert not algo.cover_servo_status.is_error
     algo.cover_servo_status = CoverServoStatus.COVER_POSITION_ERROR
     assert algo.cover_servo_status.is_error
+
+
+def test_diamond_triangle_seen(algo):
     assert math.isinf(algo.triangle_last_seen) and algo.triangle_last_seen < 0
     assert algo.diamond_recently_seen is False
     assert algo.triangle_recently_seen is False
     assert algo.pellet_recently_seen is False
+
+
+def test_triangle_pellet_offset(algo):
     assert algo.triangle_pellet_offset == Offset3DTuple(math.nan, math.nan, math.nan)
     o3d = algo.triangle_pellet_offset = Offset3DTuple(1, 1, 1)
     assert algo.triangle_pellet_offset == o3d
-    t = algo.triangle_pellet_diff_too_far_threshold + 1
-    algo.triangle_pellet_diff_too_far_threshold = t
-    assert algo.triangle_pellet_diff_too_far_threshold == t
+
+
+def test_triangle_pellet_diff_too_far_threshold(algo):
+    prev = algo.triangle_pellet_diff_too_far_threshold
+    assert prev \
+            == algo.triangle_pellet_diff_too_far_threshold \
+            == algo.pellet_delivery_config.triangle_pellet_diff_too_far_threshold \
+            == algo.active_config.pellet_delivery.triangle_pellet_diff_too_far_threshold
+    algo.triangle_pellet_diff_too_far_threshold += 5
+    assert prev + 5 \
+           == algo.triangle_pellet_diff_too_far_threshold \
+           == algo.pellet_delivery_config.triangle_pellet_diff_too_far_threshold \
+           == algo.active_config.pellet_delivery.triangle_pellet_diff_too_far_threshold
+
+
+def test_pellet_delivery_enabled(algo):
+    prev = algo.pellet_delivery_enabled
+    assert prev == algo.pellet_delivery_enabled == algo.pellet_delivery_config.is_enabled == algo.active_config.pellet_delivery.is_enabled
+    algo.pellet_delivery_enabled = not algo.pellet_delivery_enabled
+    assert not prev == algo.pellet_delivery_enabled == algo.pellet_delivery_config.is_enabled == algo.active_config.pellet_delivery.is_enabled
+
+
+def test_pellet_missing_time(algo):
+    prev = algo.pellet_missing_time
+    assert prev \
+           == algo.pellet_missing_time \
+           == algo.pellet_delivery_config.max_pellet_missing_seconds \
+           == algo.active_config.pellet_delivery.max_pellet_missing_seconds
+    algo.pellet_missing_time += 5
+    assert prev + 5 \
+           == algo.pellet_missing_time \
+           == algo.pellet_delivery_config.max_pellet_missing_seconds \
+           == algo.active_config.pellet_delivery.max_pellet_missing_seconds
+
+
+def test_auto_clamp_intensity(algo):
+    prev = algo.auto_clamp_intensity
+    assert prev \
+           == algo.auto_clamp_intensity \
+           == algo.head_clamp_config.auto_clamp_intensity \
+           == algo.active_config.head_clamp.auto_clamp_intensity
+    algo.auto_clamp_intensity += 5
+    assert prev + 5 \
+           == algo.auto_clamp_intensity \
+           == algo.head_clamp_config.auto_clamp_intensity \
+           == algo.active_config.head_clamp.auto_clamp_intensity
+
+
+def test_auto_clamp_before_reengage_delay(algo):
+    prev = algo.auto_clamp_before_reengage_delay
+    algo.auto_clamp_before_reengage_delay += 5
+    assert prev + 5 == algo.auto_clamp_before_reengage_delay == algo.active_config.head_clamp.before_reengage_delay
+
+
+def test_default_diamond_triangle_offset_config_path(algo):
+    assert algo.diamond_triangle_offset_config_path == DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH
+
+
+def test_pellet_hands_min_distance(algo):
+    prev = algo.pellet_hands_min_distance
+    algo.pellet_hands_min_distance += 5
+    assert prev + 5 == algo.pellet_hands_min_distance
+
+
+def test_use_triangle_pellet_distance_too_far(algo):
+    prev = algo.use_triangle_pellet_distance_too_far
+    assert prev \
+           == algo.use_triangle_pellet_distance_too_far \
+           == algo.active_config.pellet_delivery.use_triangle_pellet_distance_too_far \
+           == algo.pellet_delivery_config.use_triangle_pellet_distance_too_far
+    algo.use_triangle_pellet_distance_too_far = not prev
+    assert not prev \
+           == algo.use_triangle_pellet_distance_too_far \
+           == algo.active_config.pellet_delivery.use_triangle_pellet_distance_too_far \
+           == algo.pellet_delivery_config.use_triangle_pellet_distance_too_far
+
+
+def test_triangle_pellet_expected_distance(algo):
+    prev = algo.triangle_pellet_expected_distance
+    assert prev \
+           == algo.triangle_pellet_expected_distance \
+           == algo.active_config.pellet_delivery.triangle_pellet_expected_distance \
+           == algo.pellet_delivery_config.triangle_pellet_expected_distance
+    algo.triangle_pellet_expected_distance += 5
+    assert prev + 5 \
+               == algo.triangle_pellet_expected_distance \
+               == algo.active_config.pellet_delivery.triangle_pellet_expected_distance \
+               == algo.pellet_delivery_config.triangle_pellet_expected_distance
+
+
+def test_capture_status(algo):
+    cs = algo.capture_status
+    assert cs == CaptureProcessStatus.UNKNOWN
+    algo.capture_status = CaptureProcessStatus.RUNNING
+    assert algo.capture_status == CaptureProcessStatus.RUNNING
 
 
 def test_set_put_func_call_mode(algo):
@@ -88,7 +206,7 @@ def test_end_session_if_not_running_fails(algo):
     assert algo.is_in_session is False
 
 
-def test_delivery_disabled(algo):
+def test_delivery_disabled_defaults(algo):
     algo.pellet_delivery_enabled = False
     assert algo.can_load_pellet() is False
     assert algo.can_send_pellet() is False
@@ -197,3 +315,9 @@ def test_can_load_when_pellet_triangle_too_far(algo, use_dist_too_far, bad_dist)
     algo.triangle_pellet_offset = correct_offset
     assert algo.is_triangle_pellet_distance_too_far() is False
     assert algo.can_load_pellet(pellet_state=PelletState.monitoring) is False
+
+
+def test_handle_diamond_triangle_offset_without_config(algo):
+    assert algo.diamond_triangle_drift_data_points_size == 0
+    algo.handle_diamond_triangle_offset(Offset3DTuple(0, 0, 0), Offset3DTuple(0, 0, 0))
+    assert algo.diamond_triangle_drift_data_points_size == 0

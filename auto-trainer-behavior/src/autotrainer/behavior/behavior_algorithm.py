@@ -776,10 +776,6 @@ class BehaviorAlgorithm(ObservableObject):
         return get_perf_now() - self._diamond_last_seen_perf_c < self.limits.triangle_missing_time
 
     @property
-    def pellet_last_seen(self) -> float:
-        return self._pellet_last_seen_perf_c
-
-    @property
     def triangle_pellet_offset(self) -> Offset3DTuple:  # not used
         return self._triangle_pellet_last_offset
 
