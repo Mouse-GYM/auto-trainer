@@ -448,13 +448,13 @@ def segment_reaches_f2(
         if r['outcome'] in {'missed', 'dropped'}:
             fail_ct += 1
             #
-            shift_x = r_hand_data['x'][r['max']]  # noqa
+            shift_x = r_hand_data['x'][r['max']] - pellet_home[0]  # noqa
             # x_off += shift_x
             #
-            shift_y = r_hand_data['y'][r['max']]  # noqa
+            shift_y = r_hand_data['y'][r['max']] - pellet_home[1] # noqa
             # y_off += shift_y
             #
-            shift_z = r_hand_data['z'][r['max']]  # noqa
+            shift_z = r_hand_data['z'][r['max']] - pellet_home[2]  # noqa
             # z_off += shift_z
 
     prev_shift = Offset3DTuple(shift_x, shift_y, shift_z)
