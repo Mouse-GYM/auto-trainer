@@ -32,58 +32,42 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
 
 ## Package Installation
 
-Create a Conda environment if needed or activate an existing one:
+1) Create a Conda environment ; only once first time:
+`conda create -n auto-trainer-1 python=3.8`
 
-`conda create -n "auto-trainer-1" python=3.8`
+2) activate it: `conda activate auto-trainer-1` ; every time.
 
-Clone https://github.com/Mouse-GYM/auto-trainer.
+3) FLIR ; only once first time.
+To include support for Teledyne/Blackfly cameras, install the appropriate wheel for your platform, *e.g.,*
+`pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_aarch64.whl`
+or
+`pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_x86_64.whl`
+or
+`pip install .\library\spinnaker_python-3.2.0.57-cp38-cp38-win_amd64.whl`
 
-`git clone https://github.com/Mouse-GYM/auto-trainer.git .`
+4) **Jetson Only** and only once first time:
+`conda install --channel=conda-forge ffmpeg=6.0.0`
+`pip install --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v512 tensorflow==2.12.0+nv23.06`
+`pip install ./path/to/pyjerrycan-1.2.5-cp38-cp38-linux_aarch64.whl`
 
-Activate an appropriate branch, *e.g.,*
+5) Once first time: clone https://github.com/Mouse-GYM/auto-trainer.
+`git clone https://github.com/Mouse-GYM/auto-trainer.git`
+`cd auto-trainer`
 
+6) Activate an appropriate branch, *e.g.,*
 `git checkout develop`
 
 From the repository directory perform the following Python package installation steps.
+`pip install -e .`
 
-`pip install -r requirements.txt`
-
-`conda install --channel=conda-forge ffmpeg=6.0.0`
-
-### Tensorflow
-Fix the tensorflow install depending on the platform:
-
-*Jetson Only*
-
-`pip uninstall tensorflow`
-
-`pip install --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v512 tensorflow==2.12.0+nv23.06`
-
-*Note:* There will be a pip dependency error message that does not affect the current functionality.
-
-### FLIR
-
-To include support for Teledyne/Blackfly cameras, install the appropriate wheel for your platform, *e.g.,* 
-
-`pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_aarch64.whl`
-
-or 
-
-`pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_x86_64.whl`
-
-or
-
-`pip install .\library\spinnaker_python-3.2.0.57-cp38-cp38-win_amd64.whl`
 
 ### LD_PRELOAD
 
 A command similar to following must be used or added to `.bashrc`/`.bash_profile`
 
 ```shell
-
 # NB: long line: copy to the end:
 export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libffi.so.7:/usr/lib/aarch64-linux-gnu/libgomp.so.1:/lib/aarch64-linux-gnu/libGLdispatch.so.0:/home/$USER/anaconda3/envs/auto-trainer-1/lib/python3.8/site-packages/scikit_learn.libs/libgomp-d22c30c5.so.1.0.0:/home/$USER/anaconda3/envs/auto-trainer-1/lib/python3.8/site-packages/torch/lib/libgomp-d22c30c5.so.1
-
 ```
 
 The exact filenames of the last two in particular may be slightly different based on versioning.  There will be an

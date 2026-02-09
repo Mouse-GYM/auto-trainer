@@ -126,7 +126,7 @@ To list all test cases, from repo base/root dir:
 `pytest --collect-only --quiet`
 
 Then you can use any of the outputted lines (1 per test case) as arg to pytest to execute that specific test case.
-You can also given many at once.
+You can also give many at once.
 
 ## Modules
 
