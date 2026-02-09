@@ -141,7 +141,7 @@ def segment_reaches_f11(
                 count += 1
             else:
                 if debug >= 1:
-                    print(f"state==1: {count=} ; {dp} > {max_dist_from_orig} ; {pp=}")
+                    print(f"state==1: {count=} ; {dp:.3f} > {max_dist_from_orig} ; {pp=}")
                 count = 0
                 frame_at_count_begin = frm_counter
 

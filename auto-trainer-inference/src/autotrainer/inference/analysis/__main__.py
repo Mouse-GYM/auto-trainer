@@ -8,7 +8,7 @@ from datetime import datetime, date
 import verboselogs
 
 from autotrainer.core import get_verbose_logger, ProjectInfo
-from autotrainer.core.logging import setup_logging
+from autotrainer.core.logging import setup_logging, get_console_handler
 
 from autotrainer.inference.analysis import intersession_process
 
@@ -27,6 +27,7 @@ def main():
     parser.add_argument("--analysis-debug-level", type=int, help="integer", default=0)
     args = parser.parse_args()
     logging.root.setLevel(args.log_level)
+    get_console_handler().setLevel(args.log_level)
     # and then execute:
     project_info = ProjectInfo(
         root=args.data_dir,
@@ -44,5 +45,5 @@ def main():
 
 
 if __name__ == "__main__":
-    setup_logging("autotrainer", logger_level=logging.WARNING)
+    setup_logging("autotrainer")
     sys.exit(main())

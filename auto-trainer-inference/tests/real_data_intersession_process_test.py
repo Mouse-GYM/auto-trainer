@@ -103,7 +103,10 @@ def test_index_error(project_info, caplog):
 
 
 agx001_20251015_15_expected_result = IntersessionResponse(
-    pellet_x=-1, pellet_y=1, pellet_z=1,
+    # pellet_x=-1, pellet_y=1, pellet_z=1,
+    pellet_x=0, pellet_y=0, pellet_z=0,
+    # food_consumed=0, successful_reaches=0, pellets_presented=1,
+    # pellet_x=-1, pellet_y=1, pellet_z=1,
     food_consumed=0, successful_reaches=0, pellets_presented=1, total_reaches=1
 )
 

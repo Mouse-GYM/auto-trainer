@@ -104,7 +104,7 @@ class BehaviorAlgoProps(str, enum.Enum):
     INTERSESSION_STATE = 'intersession_state'
     CAPTURE_STATUS = 'capture_status'
 
-    TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"  # unused
+    # TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"  # unused
 
     # PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'  # unused
 
@@ -231,6 +231,7 @@ class ShiftXYZHandler(ObservableObject):
         self.last_shift_xyz = shift_xyz
         res = self._handle_new_shift_xyz_func(shift_xyz)
         if res is not None:
+            res = self._apply_shift_limits(res)
             self.last_processed_shift_xyz = res
             func = self._handle_processed_shift_func
             if func is None:
@@ -238,6 +239,28 @@ class ShiftXYZHandler(ObservableObject):
             else:
                 func(res)  # noqa
                 # not sure why need noqa otherwise PyCharm think it's None .. despite the previous if .. :/
+
+    @staticmethod
+    def _apply_shift_limits(offset: Offset3DTuple):
+        shift_x, shift_y, shift_z = offset
+        if shift_x < 1:  # Ideal x is 1.5
+            shift_x = -1
+        elif shift_x > 2:
+            shift_x = 1
+        #
+        if shift_y < -3.5:  # Ideal y is -3
+            shift_y = -1
+        elif shift_y > -2.5:
+            shift_y = 1
+        #
+        if shift_z < -1.5:  # Ideal z is -1
+            shift_z = -1
+        elif shift_z > -0.5:
+            shift_z = 1
+        res = Offset3DTuple(shift_x, shift_y, shift_z)
+        if res != offset:
+            logger.verbose("limited shift from %s to %s", offset.humanize(), res.humanize())
+        return res
 
 #
 

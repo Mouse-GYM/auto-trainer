@@ -2,14 +2,14 @@ import inspect
 import os
 import glob
 import pickle
-from typing import Tuple, Dict, Union
+from typing import Tuple, Dict, Union, List
 
 import numpy as np
 import pandas as pd
 from scipy.signal import savgol_coeffs, filtfilt
 
 import autotrainer.core.analysis._segment_reaches_f1 as segment_reaches_f11_module
-from autotrainer.core import get_verbose_logger
+from autotrainer.core import get_verbose_logger, Offset3DTuple
 from autotrainer.core.analysis import prepare_jetson_data as prep_jet
 
 
@@ -183,7 +183,7 @@ def segment_reaches_f2(
     frames_on_found,
     dist_hvpp_R,
     debug,
-):
+) -> Tuple[int, int, int, int, Offset3DTuple, List[Dict]]:
     frm_ct = np.shape(df_3d)[0]
     ############################
     #### Reach-related variables
@@ -213,22 +213,21 @@ def segment_reaches_f2(
     dist_thresh_end = 5
     confidence = 0.9
 
-    if len(pellet_events):
-        for p in range(len(pellet_events)):
-            if pellet_events[p]['lost'] >= 0:
-                end_search = pellet_events[p]['lost']+position_window
-                if end_search >= frm_ct:
-                    end_search = frm_ct-1
-                # print(np.round((Z_dist_p[pellet_events[p]['placed']:end_search])))
-                # print(pellet_events[p]['placed'],end_search)
-                if np.nanmin(Z_dist_p[pellet_events[p]['placed']:end_search]) <= pellet_drop_dist:
-                    if debug >= 2:
-                        print(f'DROP: Z dist at {get_ln()}')
-                    pellet_events[p]['outcome'] = 'dropped'
-                
-    else:
+    if len(pellet_events) == 0:
         print(f"Pellet never found for {vid_name_base}")
-    
+
+    for p in range(len(pellet_events)):
+        if pellet_events[p]['lost'] >= 0:
+            end_search = pellet_events[p]['lost']+position_window
+            if end_search >= frm_ct:
+                end_search = frm_ct-1
+            # print(np.round((Z_dist_p[pellet_events[p]['placed']:end_search])))
+            # print(pellet_events[p]['placed'],end_search)
+            if np.nanmin(Z_dist_p[pellet_events[p]['placed']:end_search]) <= pellet_drop_dist:
+                if debug >= 2:
+                    print(f'DROP: Z dist at {get_ln()}')
+                pellet_events[p]['outcome'] = 'dropped'
+
     pellet_dict = {
         'x': pellet_home[0],
         'y': pellet_home[1],
@@ -420,6 +419,7 @@ def segment_reaches_f2(
     shift_y: float = 0
     shift_z: float = 0
 
+    pellets_presented = len(pellet_events) - 1
     total_reaches = 0
     successful_reaches = 0
     pellets_consumed = 0
@@ -438,48 +438,41 @@ def segment_reaches_f2(
             elif p['method'] == 'left_hand':
                 shift_x = 1
 
-    x_off: float = 0
-    y_off: float = 0
-    z_off: float = 0
+    # unused now
+    # x_off: float = 0
+    # y_off: float = 0
+    # z_off: float = 0
     fail_ct = 0
-    if len(reach_events):
-        for r in reach_events:
-            if r['outcome'] == 'missed' or r['outcome'] == 'dropped':
-                fail_ct += 1
-                x_off += r_hand_data['x'][r['max']]
-                y_off += r_hand_data['y'][r['max']]
-                z_off += r_hand_data['z'][r['max']]
-                
-    if fail_ct > 0:
-        x_off = x_off/fail_ct
-        y_off = y_off/fail_ct
-        z_off = z_off/fail_ct
-        
-        if x_off < 1: # Ideal x is 1.5
-            shift_x = -1
-        elif x_off > 2:
-            shift_x = 1
-        if y_off < -3.5: # Ideal y is -3
-            shift_y = -1
-        elif y_off > -2.5:
-            shift_y = 1
-        if z_off < -1.5: # Ideal z is -1
-            shift_z = -1
-        elif z_off > -0.5:
-            shift_z = 1
+    # loop over all reach events, and check for/get what we need:
+    for r in reach_events:
+        if r['outcome'] in {'missed', 'dropped'}:
+            fail_ct += 1
+            #
+            shift_x = r_hand_data['x'][r['max']]  # noqa
+            # x_off += shift_x
+            #
+            shift_y = r_hand_data['y'][r['max']]  # noqa
+            # y_off += shift_y
+            #
+            shift_z = r_hand_data['z'][r['max']]  # noqa
+            # z_off += shift_z
 
+    prev_shift = Offset3DTuple(shift_x, shift_y, shift_z)
     if not (available_shift_xyz[0, 0] <= shift_x <= available_shift_xyz[0, 1]):
         shift_x = 0
     if not (available_shift_xyz[1, 0] <= shift_y <= available_shift_xyz[1, 1]):
         shift_y = 0
-    if not (available_shift_xyz[2, 0] <= shift_y <= available_shift_xyz[2, 1]):
+    if not (available_shift_xyz[2, 0] <= shift_z <= available_shift_xyz[2, 1]):
         shift_z = 0
+    shift = Offset3DTuple(shift_x, shift_y, shift_z)
+    if shift != prev_shift:
+        logger.verbose("shifts outside available, %s limited to %s",
+                       prev_shift.humanize(), shift.humanize())
 
     if debug >= 1:
         print(reach_events)
 
-    pellets_presented = len(pellet_events) -1
-    return pellets_consumed, pellets_presented, successful_reaches, total_reaches, (shift_x, shift_y, shift_z), reach_events
+    return pellets_consumed, pellets_presented, successful_reaches, total_reaches, shift, reach_events
 
 
 def find_last_placement(frmq, pellet_events):
