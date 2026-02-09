@@ -11,6 +11,7 @@ class IntersessionResponse:
     food_consumed: int = 0
     successful_reaches: int = 0
     pellets_presented: int = 0
+    total_reaches: int = 0
 
 
 # importing function/name from a module where the function name equals the module name imported from,

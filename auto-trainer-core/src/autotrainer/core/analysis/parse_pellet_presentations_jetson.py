@@ -1,23 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Jan 20 12:52:44 2025
-
-@author: agx001
-"""
-
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jan 16 16:15:29 2024
-
-@author: wrw
-"""
-
 import inspect
 import os
 import glob
 import pickle
-from typing import Tuple
+from typing import Tuple, Dict, Union
 
 import numpy as np
 import pandas as pd
@@ -58,10 +43,11 @@ def segment_reaches(
     df_3d,
     overwrite: bool = True,
     debug: int = 0,
-):
+) -> Dict[str, Union[float, int]]:
     results_dict = {
-        'pellets_consumed': 0,
         'pellets_presented': 0,
+        'total_reaches': 0,
+        'pellets_consumed': 0,
         'successful_reaches': 0,
         'shift_x': 0,
         'shift_y': 0,
@@ -103,7 +89,7 @@ def segment_reaches(
     if debug >= 1:
         print(f"segment_reaches_f1: events={pellet_events}")
 
-    pellets_consumed, pellets_presented, successful_reaches, shift_xyz, reach_events = segment_reaches_f2(
+    pellets_consumed, pellets_presented, successful_reaches, total_reaches, shift_xyz, reach_events = segment_reaches_f2(
         available_shift_xyz=available_shift_xyz,
         df_3d=df_3d,
         coeffs=coeffs,
@@ -122,13 +108,15 @@ def segment_reaches(
     with open(save_file_path, 'wb') as f:
         pickle.dump(reach_events, f)
 
-    return segment_reaches_f3(
-        results_dict=results_dict,
-        pellets_consumed=pellets_consumed,
-        pellets_presented=pellets_presented,
-        successful_reaches=successful_reaches,
-        shift_xyz=shift_xyz,
-    )
+    results_dict['pellets_presented'] = pellets_presented
+    results_dict['total_reaches'] = total_reaches
+    results_dict['pellets_consumed'] = pellets_consumed
+    results_dict['successful_reaches'] = successful_reaches
+    results_dict['shift_x'] = shift_xyz[0]
+    results_dict['shift_y'] = shift_xyz[1]
+    results_dict['shift_z'] = shift_xyz[2]
+
+    return results_dict
 
 
 def segment_reaches_f1(
@@ -211,8 +199,11 @@ def segment_reaches_f2(
 
     batch_frm = 10
     batch_dist = 5
+
+    # can cause some (quickly succeeding) reaches count to be missed though
     position_window = 100
     speed_window = 100
+
     batch_speed = 5
     batch_stall = 25
     reach_init_speed = -0.025
@@ -429,9 +420,13 @@ def segment_reaches_f2(
     shift_y: float = 0
     shift_z: float = 0
 
+    total_reaches = 0
     successful_reaches = 0
     pellets_consumed = 0
-    if len(pellet_events):
+
+    if len(pellet_events) > 0:
+        total_reaches += len(reach_events)
+
         for p in pellet_events[:-1]:
             if p['outcome'] == 'eaten':
                 pellets_consumed += 1
@@ -442,7 +437,7 @@ def segment_reaches_f2(
                 shift_z = -1
             elif p['method'] == 'left_hand':
                 shift_x = 1
-                
+
     x_off: float = 0
     y_off: float = 0
     z_off: float = 0
@@ -484,28 +479,7 @@ def segment_reaches_f2(
         print(reach_events)
 
     pellets_presented = len(pellet_events) -1
-    return pellets_consumed, pellets_presented, successful_reaches, (shift_x, shift_y, shift_z), reach_events
-
-
-def segment_reaches_f3(
-    *,
-    results_dict,
-    pellets_consumed,
-    pellets_presented,
-    successful_reaches,
-    shift_xyz,
-):
-    # with open(save_file_path, 'w') as file:
-    #     for event in reach_events:
-    #         file.write(f"{event[0]}\t{event[1]}\n")
-    results_dict['pellets_consumed'] = pellets_consumed
-    results_dict['pellets_presented'] = pellets_presented
-    results_dict['successful_reaches'] = successful_reaches
-    results_dict['shift_x'] = shift_xyz[0]
-    results_dict['shift_y'] = shift_xyz[1]
-    results_dict['shift_z'] = shift_xyz[2]
-    
-    return results_dict
+    return pellets_consumed, pellets_presented, successful_reaches, total_reaches, (shift_x, shift_y, shift_z), reach_events
 
 
 def find_last_placement(frmq, pellet_events):
