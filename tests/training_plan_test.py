@@ -13,7 +13,7 @@ import pytest
 from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode, SystemState, \
     IntersessionState
 from autotrainer.behavior.pellet import PelletState
-from autotrainer.behavior.behavior_algorithm import ShiftXYZBufferHandler
+from autotrainer.behavior.behavior_algorithm import ShiftXYZBufferHandler, ShiftXYZBufferHandlerConfig
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
@@ -91,7 +91,9 @@ class TestTrainingPlan(MockSystemMachine):
         # NB: do not try change some settings after config is loaded,
         # the loaded parameters/settings (from config file) will be reused/reset with training plan enter.
 
-        shift_xyz_buffer_handler = ShiftXYZBufferHandler(size=2)  # will also check this
+        shift_xyz_buffer_handler = ShiftXYZBufferHandler(
+            config=ShiftXYZBufferHandlerConfig(minimum_reach_fail=2)
+        )  # will also check this
         algo.shift_xyz_handler.set_handle_new_shift_xyz(shift_xyz_buffer_handler)
 
         app_model.training_mode = TrainingMode.AUTOMATIC
@@ -138,7 +140,7 @@ class TestTrainingPlan(MockSystemMachine):
         # assert plan_start_phase.advance_predicate.evaluate(plan_start_phase, plan._system_context) is True, "phase should be able advance"
         assert plan.current_phase != plan_start_phase, "the phase should have advanced"
 
-        assert "Received processed shift xyz: (1.5, 1.0, 1.0)" in caplog.text, \
+        assert "Received processed shift xyz: (0.0, -3.0, -0.8)" in caplog.text, \
             "should be the some avg/mean of the 2 previous sessions, with limits applied"
 
         assert algo.total_pellet_count == sum(r.food_consumed for r in results)

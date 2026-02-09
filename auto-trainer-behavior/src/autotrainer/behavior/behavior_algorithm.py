@@ -196,7 +196,9 @@ class ShiftXYZHandler(ObservableObject):
 
     def __init__(self):
         super().__init__()
-        default_handler = ShiftXYZBufferHandler(config=ShiftXYZBufferHandlerConfig())
+        default_handler = ShiftXYZBufferHandler(
+            config=ShiftXYZBufferHandlerConfig(minimum_reach_fail=int(os.getenv("HANDLE_SHIFT_XYZ_BUFFER_SIZE", 10)))
+        )
         self._handle_new_intersession_res_func: ShiftXYZCallbackHandlerT = default_handler
         self._handle_processed_shift_func: Optional[ShiftXYZCallbackHandlerT] = None
         self._last_shift_xyz: Optional[Offset3DTuple] = None
