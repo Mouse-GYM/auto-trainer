@@ -976,7 +976,6 @@ class SystemMachine(StateMachine):
         # so we must/should have:
         # assert intersession_prj.when == self._intersession.detection_config.session_when
         #
-        #
         algo = self._algorithm
         if res.food_consumed > 0:
             algo.increase_pellets_consumed(res.food_consumed)
@@ -984,6 +983,8 @@ class SystemMachine(StateMachine):
             algo.increase_successful_reaches(res.successful_reaches)
         if res.pellets_presented > 0:
             algo.increase_pellets_presented(res.pellets_presented)
+        algo.pellet_reaches_day += res.total_reaches
+        algo.pellet_reaches_total += res.total_reaches
         #
         shift_xyz = Offset3DTuple(res.pellet_x, res.pellet_y, res.pellet_z)
         algo.shift_xyz_handler.put_new_shift_xyz(shift_xyz)
