@@ -986,8 +986,8 @@ class SystemMachine(StateMachine):
         algo.pellet_reaches_day += res.total_reaches
         algo.pellet_reaches_total += res.total_reaches
         #
-        shift_xyz = Offset3DTuple(res.pellet_x, res.pellet_y, res.pellet_z)
-        algo.shift_xyz_handler.put_new_shift_xyz(shift_xyz)
+        # shift_xyz = Offset3DTuple(res.pellet_x, res.pellet_y, res.pellet_z)
+        algo.shift_xyz_handler.put_intersession_response(res)
 
     def _handle_processed_shift_xyz(self, shift_xyz: Offset3DTuple):
         logger.verbose("Received processed shift xyz: %s", shift_xyz.humanize(n_digits=1))

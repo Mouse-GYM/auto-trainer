@@ -455,23 +455,6 @@ def segment_reaches_f2(
             rmaxVp_y += r_hand_data['y'][r['max']] - pellet_home[1]
             rmaxVp_z += r_hand_data['z'][r['max']] - pellet_home[2]
 
-    if fail_ct > 0:
-        rmaxVp_x /= fail_ct
-        rmaxVp_y /= fail_ct
-        rmaxVp_z /= fail_ct
-
-    # prev_shift = Offset3DTuple(shift_x, shift_y, shift_z)
-    # if not (available_shift_xyz[0, 0] <= shift_x <= available_shift_xyz[0, 1]):
-    #     shift_x = 0
-    # if not (available_shift_xyz[1, 0] <= shift_y <= available_shift_xyz[1, 1]):
-    #     shift_y = 0
-    # if not (available_shift_xyz[2, 0] <= shift_z <= available_shift_xyz[2, 1]):
-    #     shift_z = 0
-    # shift = Offset3DTuple(shift_x, shift_y, shift_z)
-    # if shift != prev_shift:
-    #     logger.verbose("shifts outside available, %s limited to %s",
-    #                    prev_shift.humanize(), shift.humanize())
-
     if debug >= 1:
         print(reach_events)
 
