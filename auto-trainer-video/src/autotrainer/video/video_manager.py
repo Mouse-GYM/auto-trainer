@@ -1,6 +1,6 @@
 import sys
 from enum import Enum
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from urllib.parse import urlparse
 
 import cv2
@@ -14,14 +14,25 @@ from .camera.opencv_cam import OpenCVCam
 
 logger = get_verbose_logger(__name__)
 
-_have_spin_cam = False
 
-if sys.version_info.major == 3 and sys.version_info.minor == 8 and not sys.platform.startswith("darwin"):
+_spincam_cls = None
+
+def _get_spincam_cls():
+    global _spincam_cls
+    if _spincam_cls is not None:
+        return _spincam_cls
+    # if sys.version_info.major == 3 and sys.version_info.minor == 8 and not sys.platform.startswith("darwin"):
     try:
         from .camera.spinnaker_cam import SpinCam
-        _have_spin_cam = True
+    except ModuleNotFoundError:
+        logger.warning("SpinCam module not available. SpinCam disabled.")
+        raise
     except Exception as err:
-        logger.debug("Cannot import SpinCam: %s, but continuing", err)
+        logger.exception("Cannot import SpinCam: %s. SpinCam disabled.", err)
+        raise
+    else:
+        _spincam_cls = SpinCam
+        return SpinCam
 
 
 class CameraKind(str, Enum):
@@ -32,44 +43,31 @@ class CameraKind(str, Enum):
 
 
 class VideoManager:
-    @classmethod
-    def open(cls):
-        if _have_spin_cam:
-            logger.verbose("Starting SpinCam")
-            SpinCam.start()
 
     @classmethod
-    def close(cls):
-        if _have_spin_cam:
-            logger.verbose("Stopping SpinCam")
-            SpinCam.stop()
-
-    @classmethod
-    def list_usb_cameras(cls) -> list:
-        cameras = list()
-
+    def list_usb_cameras(cls) -> List[int]:
+        cameras = []
         for idx in range(6):
             capture = cv2.VideoCapture(idx)
             if capture.isOpened():
                 ret, frame = capture.read()
                 if ret and frame is not None:
                     cameras.append(idx)
-
+                capture.release()
         return cameras
 
     @classmethod
-    def list_spin_cameras(cls) -> list:
-        if _have_spin_cam:
-            return SpinCam.list()
-        else:
-            return list()
+    def list_spin_cameras(cls) -> List[str]:
+        try:
+            spincam_cls = _get_spincam_cls()
+        except Exception:
+            return []
+        return spincam_cls.list()
 
     @classmethod
-    def get_spin_camera(cls, serial_number: str, name: str = ""):
-        if _have_spin_cam:
-            return SpinCam.create(serial_number, name)
-        else:
-            return None
+    def get_spin_camera(cls, serial_number: str, name: str = "") -> Optional[CameraBase]:
+        spincam_cls = _get_spincam_cls()
+        return spincam_cls.create(serial_number, name)
 
     @classmethod
     def parse_params(cls, camera_url: str) -> Dict[str, str]:
@@ -96,6 +94,10 @@ class VideoManager:
             camera = OpenCVCam(int(parsed.hostname), name)
         else:
             logger.warning("No such cam scheme: %s", parsed.scheme)
+            return None
+
+        if camera is None:
+            logger.error("Cannot create %s-cam ; is library installed ?", parsed.scheme)
             return None
 
         camera.init()

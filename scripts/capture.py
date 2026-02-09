@@ -19,8 +19,6 @@ def capture_video(camera_url: str, frame_count: int, output_path: str, image_int
     logger.info(f"Camera URL: {camera_url}")
     logger.info(f"Output Path: {output_path}")
 
-    VideoManager.open()
-
     camera = VideoManager.create_camera(camera_url, "capture_camera")
 
     camera.prepare_capture()
@@ -61,8 +59,6 @@ def capture_video(camera_url: str, frame_count: int, output_path: str, image_int
 
     if record is not None:
         record.cancel()
-
-    VideoManager.close()
 
 
 def main():

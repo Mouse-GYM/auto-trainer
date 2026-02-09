@@ -34,6 +34,7 @@ logger = get_verbose_logger(__name__)
 
 class CaptureCommandKind(IntEnum):
     """Commands accepted by VideoCaptureProcess through the command Queue"""
+
     TERMINATE = 1
     """Fully terminate the Process"""
 
@@ -54,7 +55,7 @@ class CaptureCommandKind(IntEnum):
 
 
 class CaptureProcessStatus(IntEnum):
-    """ Valid VideoCaptureProcess states available through the status Value"""
+    """Valid VideoCaptureProcess states available through the status Value"""
 
     TERMINATED = -2
     """The capture loop is terminated"""
@@ -258,6 +259,7 @@ class VideoCapture(Process):
         #     msg_q.put(status)
 
     def _set_error(self, error: Exception):
+        logger.error(f"set_error: %s", error)
         self._set_status(CaptureProcessStatus.FAILED)
         if self._errors:
             self._errors.value = f"{error}"[:len(self._errors)].encode()
@@ -266,12 +268,14 @@ class VideoCapture(Process):
         logger.info(f"<{self._name}> process started: %s", self._network_queue)
         try:
             if self._camera_url is None:
-                logger.error(f"<{self._name}> camera url not specified")
+                self._set_error(ValueError("camera_url not specified"))
                 return False
 
-            VideoManager.open()
-
-            self._create_camera()
+            try:
+                self._camera = VideoManager.create_camera(self._camera_url, self._name)
+            except BaseException as err:
+                self._set_error(RuntimeError(f"Could not create camera {self._name}: {err}"))
+                return False
 
             self._camera.prepare_capture()
 
@@ -612,7 +616,6 @@ class VideoCapture(Process):
             logger.info(f"<{self._name}> capture loop ended")
 
             self._camera.end_capture()
-            VideoManager.close()
 
             if self._record is not None:
                 self._record.cancel()
@@ -637,9 +640,6 @@ class VideoCapture(Process):
         finally:
             logger.debug(f"<{self._name}> terminated")
             self._set_status(CaptureProcessStatus.TERMINATED)
-
-    def _create_camera(self):
-        self._camera = VideoManager.create_camera(self._camera_url, self._name)
 
     def _handle_command(self, cmd: CaptureCommandKind, context: object):
         logger.info(f"<%s> executing %s", self._name, cmd)
