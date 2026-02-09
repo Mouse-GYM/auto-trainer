@@ -1,4 +1,4 @@
-
+import dataclasses
 from dataclasses import dataclass
 
 
@@ -8,10 +8,20 @@ class IntersessionResponse:
     pellet_x: float = 0
     pellet_y: float = 0
     pellet_z: float = 0
-    food_consumed: int = 0
-    successful_reaches: int = 0
-    pellets_presented: int = 0
-    total_reaches: int = 0
+
+    food_consumed: int = 0  # total pellets consumed during session/trial
+    successful_reaches: int = 0  # whose these are successful reaches (Right-Hand)
+    pellets_presented: int = 0  # there were that many total pellets presented
+    total_reaches: int = 0  # there were this many total reaches (both hands)
+
+    def humanize(self, n_digits=2):
+        rounded = dataclasses.replace(
+            self,
+            pellet_x=round(self.pellet_x, n_digits),
+            pellet_y=round(self.pellet_y, n_digits),
+            pellet_z=round(self.pellet_z, n_digits),
+        )
+        return repr(rounded)
 
 
 # importing function/name from a module where the function name equals the module name imported from,

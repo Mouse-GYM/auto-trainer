@@ -40,8 +40,8 @@ def main():
         calib_dir=args.calib_dir,
         debug_level=args.analysis_debug_level,
     )
-    print(f"{project_info.get_session_path()}: {result}")
-    # pprint(result)
+    sess_path = project_info.get_session_path()
+    print(f"{sess_path.prefix}: {result.humanize()}")
 
 
 if __name__ == "__main__":

@@ -30,6 +30,15 @@ def get_coeffs():
     return coeffs
 
 
+def find_last_placement(frmq, pellet_events):
+    for i, pe in enumerate(pellet_events[:-1]):
+        if i == (len(pellet_events)-2):
+            break
+        elif pe['placed'] < frmq < pellet_events[i+1]['placed']:
+            break
+    return i
+
+
 def get_ln():
     """Prints the current line number."""
     return inspect.currentframe().f_back.f_lineno
@@ -432,53 +441,40 @@ def segment_reaches_f2(
                 pellets_consumed += 1
                 if p['method'] == 'right_hand':
                     successful_reaches += 1
-            if p['method'] == 'tongue':
-                shift_x = 1
-                shift_z = -1
-            elif p['method'] == 'left_hand':
-                shift_x = 1
 
-    # unused now
-    # x_off: float = 0
-    # y_off: float = 0
-    # z_off: float = 0
+    rmaxVp_x = 0
+    rmaxVp_y = 0
+    rmaxVp_z = 0
     fail_ct = 0
+
     # loop over all reach events, and check for/get what we need:
     for r in reach_events:
         if r['outcome'] in {'missed', 'dropped'}:
             fail_ct += 1
-            #
-            shift_x = r_hand_data['x'][r['max']] - pellet_home[0]  # noqa
-            # x_off += shift_x
-            #
-            shift_y = r_hand_data['y'][r['max']] - pellet_home[1] # noqa
-            # y_off += shift_y
-            #
-            shift_z = r_hand_data['z'][r['max']] - pellet_home[2]  # noqa
-            # z_off += shift_z
+            rmaxVp_x += r_hand_data['x'][r['max']] - pellet_home[0]
+            rmaxVp_y += r_hand_data['y'][r['max']] - pellet_home[1]
+            rmaxVp_z += r_hand_data['z'][r['max']] - pellet_home[2]
 
-    prev_shift = Offset3DTuple(shift_x, shift_y, shift_z)
-    if not (available_shift_xyz[0, 0] <= shift_x <= available_shift_xyz[0, 1]):
-        shift_x = 0
-    if not (available_shift_xyz[1, 0] <= shift_y <= available_shift_xyz[1, 1]):
-        shift_y = 0
-    if not (available_shift_xyz[2, 0] <= shift_z <= available_shift_xyz[2, 1]):
-        shift_z = 0
-    shift = Offset3DTuple(shift_x, shift_y, shift_z)
-    if shift != prev_shift:
-        logger.verbose("shifts outside available, %s limited to %s",
-                       prev_shift.humanize(), shift.humanize())
+    if fail_ct > 0:
+        rmaxVp_x /= fail_ct
+        rmaxVp_y /= fail_ct
+        rmaxVp_z /= fail_ct
+
+    # prev_shift = Offset3DTuple(shift_x, shift_y, shift_z)
+    # if not (available_shift_xyz[0, 0] <= shift_x <= available_shift_xyz[0, 1]):
+    #     shift_x = 0
+    # if not (available_shift_xyz[1, 0] <= shift_y <= available_shift_xyz[1, 1]):
+    #     shift_y = 0
+    # if not (available_shift_xyz[2, 0] <= shift_z <= available_shift_xyz[2, 1]):
+    #     shift_z = 0
+    # shift = Offset3DTuple(shift_x, shift_y, shift_z)
+    # if shift != prev_shift:
+    #     logger.verbose("shifts outside available, %s limited to %s",
+    #                    prev_shift.humanize(), shift.humanize())
 
     if debug >= 1:
         print(reach_events)
 
+    shift = Offset3DTuple(rmaxVp_x, rmaxVp_y, rmaxVp_z)
+
     return pellets_consumed, pellets_presented, successful_reaches, total_reaches, shift, reach_events
-
-
-def find_last_placement(frmq, pellet_events):
-    for i, pe in enumerate(pellet_events[:-1]):
-        if i == (len(pellet_events)-2):
-            break
-        elif pe['placed'] < frmq < pellet_events[i+1]['placed']:
-            break
-    return i
