@@ -543,6 +543,7 @@ class SystemMachine(StateMachine):
         return False
 
     def _evaluate_home_on_excessive_drift(self):
+        # might be todo: convert to a detector
         algo = self._algorithm
         home_on_drift_cfg = algo.home_on_excessive_drift_distance_config
         nb_points = algo.diamond_triangle_drift_data_points_size
@@ -554,7 +555,7 @@ class SystemMachine(StateMachine):
             return
         # also reset if distance is good,
         # so that we'll have to get min_samples data point before next check
-        cur_drift = algo.get_diamond_triangle_drifts(reset=True, show_log=True)
+        cur_drift = algo.get_diamond_triangle_drifts(reset=True, show_log=False)
         drift_dist = math.nan if cur_drift is None else cur_drift.distance
         if math.isnan(drift_dist) or drift_dist < home_on_drift_cfg.excessive_distance_threshold:
             return
@@ -584,7 +585,8 @@ class SystemMachine(StateMachine):
                     logger.info("Starting handling diamond-triangle offset ; current offset=%s pos=%s",
                                 offset.humanize(), last_pos.humanize())
                     # ensure we get refreshed data:
-                    algo.get_diamond_triangle_drifts(reset=True, show_log=True)
+                    algo.get_diamond_triangle_drifts(reset=True, show_log=False)
+                    # don't show log, to not show most likely bad value due to previous motor move
                 algo.handle_diamond_triangle_offset(offset, last_pos)
                 # if not algo.is_in_session:
                 self._evaluate_home_on_excessive_drift()

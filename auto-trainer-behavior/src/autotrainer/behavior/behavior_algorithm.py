@@ -100,7 +100,7 @@ class BehaviorAlgoProps(str, enum.Enum):
     COVER_PELLET_DISTANCE = "cover_pellet_distance"
     RELEASE_PELLET_DISTANCE = "release_pellet_distance"
 
-    IS_IN_SESSION = 'is_in_session'
+    IS_IN_SESSION = 'is_in_session'  # property unused
     INTERSESSION_STATE = 'intersession_state'
     CAPTURE_STATUS = 'capture_status'
 
@@ -364,7 +364,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._diamond_triangle_drift: Optional[Offset3DTuple] = None
         self._diamond_triangle_prev_drifts: Deque[Offset3DTuple] = collections.deque(maxlen=150)
-        self._diamond_triangle_last_drift_report = -math.inf
+        self._diamond_triangle_next_drift_report = -math.inf
 
         self._cover_pellet_distance_ctx = CheckElementDistanceContext(
             distance_property_name=BehaviorAlgoProps.COVER_PELLET_DISTANCE,
@@ -1071,8 +1071,8 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_capture_ending(reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
-        self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)
-        self.get_diamond_triangle_drifts()  # convenience to log current values
+        self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)  # unused
+        self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
         return True
 
     def end_session(self, result: CaptureAnalysisResult):
@@ -1251,7 +1251,8 @@ class BehaviorAlgorithm(ObservableObject):
         with self._thread_lock:
             # in case of need bigger:
             self._diamond_triangle_prev_drifts = collections.deque(
-                maxlen=max(150, int(1.5 * config.home_on_excessive_drift_distance.min_samples)))
+                # use 50% more, in case of:
+                maxlen=int(1.5 * config.home_on_excessive_drift_distance.min_samples))
         self._load_pellet_cfg(config.pellet_delivery)
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
@@ -1268,7 +1269,7 @@ class BehaviorAlgorithm(ObservableObject):
     def diamond_triangle_drift_data_points_size(self) -> int:
         return len(self._diamond_triangle_prev_drifts)
 
-    def get_diamond_triangle_drifts(self, reset: bool = False, show_log: bool = True) -> Optional[Offset3DTuple]:
+    def get_diamond_triangle_drifts(self, reset: bool = False, show_log: bool = False) -> Optional[Offset3DTuple]:
         """Get the mean of the last seen/saved diamond triangle calculated drifts"""
         with self._thread_lock:
             values = list(self._diamond_triangle_prev_drifts)
@@ -1285,8 +1286,10 @@ class BehaviorAlgorithm(ObservableObject):
         # self._on_property_changed(BehaviorAlgoProps.PELLET_MOTOR_DRIFT, new_drift, prev)  # property unused atm
         #
         if show_log:
-            if n_vals > 0:
-                logger.verbose(
+            if n_vals > 4:  # only log if enough data points
+                dist = new_drift.distance
+                method = logger.error if dist >= 5 else (logger.warning if dist >= 3.5 else logger.verbose)
+                method(
                     "motor drift: dist=%.2fmm %s ; min=%s max=%s n_vals=%s stdev=%s",
                     math.nan if new_drift is None else new_drift.distance,
                     None if new_drift is None else new_drift.humanize(n_digits=2),
@@ -1296,7 +1299,7 @@ class BehaviorAlgorithm(ObservableObject):
                     stdev_drift.humanize(n_digits=1)
                 )
             else:
-                logger.verbose("No motor drift measure available")
+                logger.verbose("Not enough motor drift measure available")
         return new_drift
 
     def handle_diamond_triangle_offset(
@@ -1307,20 +1310,14 @@ class BehaviorAlgorithm(ObservableObject):
         cfg = self._diamond_triangle_offset_config
         if cfg is None:
             return
-        prev = self._diamond_triangle_drift
         drift = cfg.inference_to_motor(offset) - motor_position
-        if prev is None:
-            prev = Offset3DTuple(0, 0, 0)
-        if __debug__:
-            t_perf_now = get_perf_now()
-            if any(abs(d) >= 2.5 for d in drift):
-                if t_perf_now > self._diamond_triangle_last_drift_report + 1:  # max 1 / s
-                    logger.debug("Measured motor drift: dist=%.2fmm %s (prev=%s) ; pos=%s offset=%s",
-                                 drift.distance,
-                                 drift.humanize(), prev.humanize(), motor_position.humanize(), offset.humanize())
-                    self._diamond_triangle_last_drift_report = t_perf_now
         with self._thread_lock:
             self._diamond_triangle_prev_drifts.append(drift)
+        p_now = time.perf_counter()
+        do_report = p_now >= self._diamond_triangle_next_drift_report
+        if do_report:
+            self.get_diamond_triangle_drifts(show_log=True)
+            self._diamond_triangle_next_drift_report = p_now + 2  # log every 2s for now
 
     def handle_cover_pellet_offset(self, offset: Offset3DTuple):
         self._handle_check_element_distance(self._cover_pellet_distance_ctx, offset)
