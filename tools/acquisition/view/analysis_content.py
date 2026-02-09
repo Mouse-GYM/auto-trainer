@@ -10,7 +10,7 @@ from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import PerfMonitor, SensorAnalysis, LoadCellMonitor, Offset3DTuple, SystemMessageHandler
 from autotrainer.pyside import PGWidget, CardWidget, QtIndicator
 from autotrainer.pyside.StackedContent import StackedLayout
-from autotrainer.pyside.content_widget import ContentWidget
+from autotrainer.pyside.content_widget import ContentWidget, invoke_method
 
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
@@ -206,7 +206,6 @@ class AnalysisContent(ContentWidget):
 
         inference_model.star_triangle_offset_changed += self._star_triangle_offset_changed
         inference_model.diamond_triangle_offset_changed += self._diamond_triangle_offset_changed
-        inference_model.triangle_pellet_offset_changed += self._triangle_pellet_offset_changed
 
         self._analysis.load_cell_monitor.property_changed += self._load_cell_monitor_property_changed
 
@@ -223,6 +222,7 @@ class AnalysisContent(ContentWidget):
         if is_active:
             self._perf_monitor.reset()
 
+    @invoke_method
     def use_cache(self):
         selected = self._selected_graph
         for plot_name, plot in self._measurement_plots.items():
@@ -234,6 +234,7 @@ class AnalysisContent(ContentWidget):
         self._headbar_switch_engaged.setState(self._analysis.is_headbar_switch_engaged)
         self._headbar_pressure_monitor_engaged.setState(self._analysis.headbar_pressure_monitor.is_engaged)
 
+    @invoke_method
     def _measurement_received(self, measurements):
         values = measurements[_weight_graph.measure_idx]
         self._perf_monitor.add_cycles(len(values))
@@ -244,12 +245,14 @@ class AnalysisContent(ContentWidget):
             if graph.measure_idx >= 0 and selected is not None and graph.name == selected.name:
                 plot.cache_data(measurements[graph.measure_idx])
 
+    @invoke_method
     def _audio_received(self, spectrum):
         selected = self._selected_graph
         if selected is not None and selected.name == _audio_graph.name:
             audio_plot = self._measurement_plots[_audio_graph.name]
             audio_plot.replace_cache(spectrum)
 
+    @invoke_method
     def _load_cell_monitor_property_changed(self, name, value, _):
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
             if value:
@@ -259,22 +262,17 @@ class AnalysisContent(ContentWidget):
         elif name == LoadCellMonitor.LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY:
             self._load_cell_engaged_threshold_spinbox.setValue(value)
 
+    @invoke_method
     def _diamond_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         self.diamond_triangle_offset_changed.emit(_render_offset_3d_value(offset))
 
+    @invoke_method
     def _star_triangle_offset_changed(self, offset: Optional[Offset3DTuple]):
         self.star_triangle_offset_changed.emit(
             "n/a" if offset is None else f"{offset.distance:.1f} mm"
         )
 
-    @staticmethod
-    def _triangle_pellet_offset_changed(offset: Optional[Offset3DTuple]):
-        # todo: do we display on UI ?
-        if offset is None:
-            return
-        # too noisy:
-        # logger.spam("triangle pellet offset: %s distance=%.3f", offset, offset.distance)
-
+    @invoke_method
     def _on_user_pref_changed(self, name: str, value, old_value):
         if name == UserPreferences.MEASUREMENT_GRAPH:
             self.measurement_graph_changed.emit(value)

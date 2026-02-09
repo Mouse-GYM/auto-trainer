@@ -1,3 +1,5 @@
+import functools
+import threading
 from typing import Callable
 
 from PySide6.QtWidgets import QWidget
@@ -7,15 +9,21 @@ from PySide6.QtGui import QGuiApplication
 
 
 class InvokeMethod(QObject):
+
     def __init__(self, method: Callable, *args, **kwargs):
         """
         Invokes a method on the main thread. Taking care of garbage collection "bugs".
         """
         super().__init__()
 
-        main_thread = QGuiApplication.instance().thread()
-        self.moveToThread(main_thread)
-        self.setParent(QGuiApplication.instance())
+        if threading.current_thread() is threading.main_thread():
+            method(*args, **kwargs)
+            return
+
+        app = QGuiApplication.instance()
+        main_qthread = app.thread()
+        self.moveToThread(main_qthread)
+        self.setParent(app)
         self.method = method
         self.args = args
         self.kwargs = kwargs
@@ -29,6 +37,16 @@ class InvokeMethod(QObject):
         self.method(*self.args, **self.kwargs)
         # trigger garbage collector
         self.setParent(None)
+
+
+def invoke_method(func):
+    """Allow to decorate/wrap a function to invoke it in main UI thread"""
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        InvokeMethod(func, *args, **kwargs)
+
+    return wrapped
 
 
 class ContentWidget(QWidget):

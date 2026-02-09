@@ -11,6 +11,7 @@ logger = get_verbose_logger(__name__)
 
 
 class DiagnosticsContent(QWidget):
+
     def __init__(self, model: AppModel):
         super().__init__()
 

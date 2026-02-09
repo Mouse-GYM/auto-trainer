@@ -16,7 +16,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 
 from autotrainer.pyside import Separator, CardWidget
 from autotrainer.pyside.StackedContent import StackedWidget, StackedLayout
-from autotrainer.pyside.content_widget import ContentWidget
+from autotrainer.pyside.content_widget import ContentWidget, invoke_method
 
 from autotrainer.training import TrainingPlan, TrainingPhase
 from tools.acquisition.model.app_model import AppModel
@@ -359,14 +359,17 @@ class MainContent(ContentWidget):
     def is_diagnostics_visible(self) -> bool:
         return self._is_diagnostics_visible
 
+    @invoke_method
     def set_is_editable(self, is_editable: bool):
         for widget in self._content_widgets:
             widget.set_is_editable(is_editable)
 
+    @invoke_method
     def set_is_capture_active(self, is_active: bool):
         for widget in self._content_widgets:
             widget.set_is_capture_active(is_active)
 
+    @invoke_method
     def on_activated(self):
         self._app_model.on_activated()
 
@@ -377,10 +380,12 @@ class MainContent(ContentWidget):
         for widget in self._content_widgets:
             widget.on_activated()
 
+    @invoke_method
     def set_diagnostics_visible(self, is_visible: bool):
         self._diagnostics_content.setVisible(is_visible)
         self._is_diagnostics_visible = is_visible
 
+    @invoke_method
     def _model_property_changed(self, name: str, value, _):
         app_model = self._app_model
         props = AppModel.Props
@@ -401,9 +406,7 @@ class MainContent(ContentWidget):
         elif name in {props.TRAINING_PLAN_PROP, props.TRAINING_PHASE_PROP}:
             self.training_plan_changed.emit(app_model.training_plan)
 
-    def _behavior_algo_property_changed(self, name, value, _):
-        pass  # currently unused
-
+    @invoke_method
     def _on_config_loaded(self, config):
         del config  # unused
         # only re-setting the current selected animal

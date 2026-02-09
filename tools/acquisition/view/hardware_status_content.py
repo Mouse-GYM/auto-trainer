@@ -7,7 +7,7 @@ from autotrainer.core import MessageHandler, Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 
 from autotrainer.pyside import CardWidget
-from autotrainer.pyside.content_widget import ContentWidget
+from autotrainer.pyside.content_widget import ContentWidget, invoke_method
 from autotrainer.pyside.xyz_label import XYZQLabel
 
 from tools.acquisition.model.app_model import AppModel
@@ -135,6 +135,7 @@ class HardwareStatusContent(ContentWidget):
         self.load_arm_changed.connect(lambda x: self._load_arm.setText(str(round(x, 1))))
         self.cover_arm_changed.connect(lambda x: self._cover_arm.setText(str(round(x, 1))))
 
+    @invoke_method
     def _model_property_changed(self, property_name: str, value, _):
         # If any of the values may be coming from a different thread (e.g., the device), a signal is generally needed
         # rather than direct set/update.

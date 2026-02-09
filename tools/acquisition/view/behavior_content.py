@@ -9,7 +9,7 @@ from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, ShiftXYZHandler
 from autotrainer.pyside import CardWidget, QSwitch
 from autotrainer.pyside.StackedContent import StackedLayout
-from autotrainer.pyside.content_widget import ContentWidget
+from autotrainer.pyside.content_widget import ContentWidget, invoke_method
 from autotrainer.pyside.xyz_label import XYZQLabel
 from autotrainer.pyside.DayTotalCount import DailyAndTotalCountsLabel
 
@@ -251,6 +251,7 @@ class BehaviorContent(ContentWidget):
     def _make_position_baseline(self):
         self._behavior_model.use_current_head_magnet_position_as_baseline()
 
+    @invoke_method
     def _algorithm_property_changed(self, name, value, _):
         props = BehaviorAlgoProps
         if name == props.INTERSESSION_ENABLED:
@@ -276,10 +277,12 @@ class BehaviorContent(ContentWidget):
         elif name == props.TOTAL_SUCCESSFUL_REACHES:
             self._successful_reaches_label.update_values(total=value)
 
+    @invoke_method
     def _app_model_property_changed(self, name, value, _):
         if name == AppModel.Props.SELECTED_ANIMAL:
             self._prev_pellet_shift_label.update_coordinate(x=math.nan, y=math.nan, z=math.nan)
 
+    @invoke_method
     def _inference_model_property_changed(self, name, value, _):
         if name == "is_enabled":
             self._intersession_toggle.setEnabled(value)
@@ -291,6 +294,7 @@ class BehaviorContent(ContentWidget):
             else:
                 self._model_location_label.setText("Inference model not specified")
 
+    @invoke_method
     def _shift_xyz_property_changed(self, name, value, _):
         if name == ShiftXYZHandler.LAST_SHIFT_XYZ:
             self._prev_pellet_shift_label.update_coordinate(value)

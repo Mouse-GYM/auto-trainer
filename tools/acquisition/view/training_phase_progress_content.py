@@ -14,6 +14,8 @@ from autotrainer.core.logging import get_verbose_logger
 from autotrainer.pyside import CardWidget
 from autotrainer.training import TrainingPlan, TrainingPhase
 
+from autotrainer.pyside.content_widget import invoke_method
+
 logger = get_verbose_logger(__name__)
 
 
@@ -102,6 +104,7 @@ class TrainingPhaseProgressContent(CardWidget):
             side_widget.setLayout(side)
             main_layout.addWidget(side_widget)
 
+    @invoke_method
     def set_training_phase_progress(self, phase: Optional[TrainingPhase]):
         logger.verbose("Setting training phase to %s", phase)
         if phase is None:
