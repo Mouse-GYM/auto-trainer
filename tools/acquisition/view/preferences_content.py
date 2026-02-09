@@ -298,11 +298,20 @@ class PreferencesContent(QWidget):
         toggle.setChecked(algo.intersession_pellet_shift_enabled)
         def allow_intersession_shift_toggle_state_changed(x: int):
             enabled = x != 0
-            if enabled:
-                behavior.algorithm.intersession_enabled = True
             algo.intersession_pellet_shift_enabled = enabled
+            refresh_enabled_states()
         toggle.stateChanged.connect(allow_intersession_shift_toggle_state_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+        grid_layout.addWidget(QLabel("Minimum Reach Fail"), cur_row, cur_col)
+        spinbox = QSpinBox()
+        spinbox.setValue(algo.active_config.shift_xyz_handler.buffer.minimum_reach_fail)
+        spinbox.setRange(1, 99)
+        add_enabled_state(lambda t=toggle, s=spinbox: s.setEnabled(t.isChecked()))
+        def minimum_reach_fail_changed(value: int):
+            algo.active_config.shift_xyz_handler.buffer.minimum_reach_fail = value
+        spinbox.valueChanged.connect(minimum_reach_fail_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
         grid_layout.addWidget(QLabel("<b>Home On Excessive Drift:</b>"), cur_row, cur_col)

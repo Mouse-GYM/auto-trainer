@@ -13,7 +13,8 @@ import pytest
 from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode, SystemState, \
     IntersessionState
 from autotrainer.behavior.pellet import PelletState
-from autotrainer.behavior.behavior_algorithm import ShiftXYZBufferHandler, ShiftXYZBufferHandlerConfig
+from autotrainer.behavior.behavior_algorithm import ShiftXYZBufferHandler
+from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
@@ -44,6 +45,12 @@ class TestTrainingPlan(MockSystemMachine):
         for p in this_dir.joinpath("training/protocols").glob("*.json"):
             dst_dir.joinpath(p.name).write_bytes(p.read_bytes())
 
+    @pytest.fixture(autouse=True)
+    def _set_shift_xyz_config(self, system_config, trainer_config_dir):
+        cfg = system_config.behavior.shift_xyz_handler
+        cfg.buffer.minimum_reach_fail = 2
+        system_config.save_default(trainer_config_dir)
+
     @pytest.fixture()
     def app_model(self, machine, user_pref, fake_system_msg_handler, system_config, calib_dir, training_plans, sensor_analysis):
         machine._msg_handler = fake_system_msg_handler
@@ -64,7 +71,6 @@ class TestTrainingPlan(MockSystemMachine):
         finally:
             app_model.on_capture_stop()
             app_model.on_close()
-
 
     def test_training_plan(self, app_model, user_pref, machine, caplog):
         try:
@@ -90,11 +96,6 @@ class TestTrainingPlan(MockSystemMachine):
         assert algo.intersession_enabled is True  # required
         # NB: do not try change some settings after config is loaded,
         # the loaded parameters/settings (from config file) will be reused/reset with training plan enter.
-
-        shift_xyz_buffer_handler = ShiftXYZBufferHandler(
-            config=ShiftXYZBufferHandlerConfig(minimum_reach_fail=2)
-        )  # will also check this
-        algo.shift_xyz_handler.set_handle_new_shift_xyz(shift_xyz_buffer_handler)
 
         app_model.training_mode = TrainingMode.AUTOMATIC
         app_model.on_capture_start()

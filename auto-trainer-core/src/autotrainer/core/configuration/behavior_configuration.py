@@ -22,6 +22,20 @@ logger = get_verbose_logger(__name__)
 
 
 
+@dataclasses.dataclass
+class ShiftXYZBufferHandlerConfig:
+    minimum_reach_fail: int = 10
+    target_x: float = 1.5
+    target_y: float = -3
+    target_z: float = -1
+
+
+@dataclasses.dataclass
+class ShiftXYZHandlerConfig:
+    selected: str = "ShiftXYZBufferHandler"
+    buffer: ShiftXYZBufferHandlerConfig = field(default_factory=ShiftXYZBufferHandlerConfig)
+
+
 @dataclass
 class AutoCloseGateOnIntersessionConfiguration:
 
@@ -133,6 +147,7 @@ class BatchSessionRecordingConfiguration:
 @dataclass
 class _BehaviorConfiguration:
     pellet_delivery: PelletDeliveryConfiguration = field(default_factory=PelletDeliveryConfiguration)
+    shift_xyz_handler: ShiftXYZHandlerConfig = field(default_factory=ShiftXYZHandlerConfig)
     head_clamp: HeadClampConfiguration = field(default_factory=HeadClampConfiguration)
     load_cell: LoadCellConfiguration = field(default_factory=LoadCellConfiguration)
     headbar_pressure: HeadbarPressureConfiguration = field(default_factory=HeadbarPressureConfiguration)
@@ -182,7 +197,7 @@ class _BehaviorConfiguration:
 
 @dataclasses.dataclass
 class BehaviorConfiguration(_BehaviorConfiguration):
-    # NB: having to subclass _BehaviorConfiguration dataclass type to allow customize init signature (and body):
+    # NB: having to subclass _BehaviorConfiguration dataclass type to allow to customize init signature (and body):
 
     def __init__(self,
                  *,
@@ -210,7 +225,9 @@ _cls_2_tag = {
     AutoTunnelSweepConfiguration: "AutoTunnelSweepConfiguration",
     BatchSessionRecordingConfiguration: "BatchSessionRecordingConfiguration",
     AutoCloseGateOnIntersessionConfiguration: "AutoCloseGateOnIntersessionConfiguration",
-    HomeOnExcessiveDriftDistanceConfiguration: "HomeOnExcessiveDriftDistance",
+    HomeOnExcessiveDriftDistanceConfiguration: "HomeOnExcessiveDriftDistance",  # missed Configuration suffix
+    ShiftXYZHandlerConfig: "ShiftXYZHandlerConfiguration",
+    ShiftXYZBufferHandlerConfig: "ShiftXYZBufferHandlerConfiguration",
 }
 
 

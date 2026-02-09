@@ -13,7 +13,7 @@ import time
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union, Dict, Deque, get_type_hints
+from typing import Optional, Tuple, List, ClassVar, Any, Union, Dict, Deque
 
 from typing import Callable
 
@@ -25,7 +25,8 @@ from autotrainer.core import ObservableObject, EventManager, post_trigger_enable
     AnimalSubject, get_perf_now, calculate_std_dev_manual
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
-    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration
+    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, ShiftXYZBufferHandlerConfig, \
+    ShiftXYZHandlerConfig
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
@@ -33,7 +34,7 @@ from autotrainer.video import CaptureProcessStatus
 
 from autotrainer.inference.analysis import IntersessionResponse
 
-from . import CaptureAnalysisResult, TrainingMode, RecordingEndingReason
+from . import CaptureAnalysisResult, RecordingEndingReason
 
 from .pellet import PelletState
 from .system_machine_state import SystemState
@@ -147,14 +148,6 @@ ShiftXYZCallbackHandlerT = Callable[[IntersessionResponse], Optional[Offset3DTup
 # or return a "result/processed" xyz, that can be passed along.
 
 BufferShiftXYZCallbackHandlerT = Callable[[List[Offset3DTuple]], Offset3DTuple]
-
-
-@dataclasses.dataclass
-class ShiftXYZBufferHandlerConfig:
-    minimum_reach_fail: int = 10
-    target_x: float = 1.5
-    target_y: float = -3
-    target_z: float = -1
 
 
 class ShiftXYZBufferHandler:
@@ -1259,8 +1252,16 @@ class BehaviorAlgorithm(ObservableObject):
             logger.notice("Resetting config to previous loaded")
             self.load_configuration(prev)
 
+    def _load_shift_xyz_handler_config(self, cfg: ShiftXYZHandlerConfig):
+        sel = cfg.selected
+        if sel == "ShiftXYZBufferHandler":
+            handler = ShiftXYZBufferHandler(config=cfg.buffer)
+        else:
+            raise ValueError(f"Unknown/unhandled shift-xyz handler {sel}")
+        self._shift_xyz_handler.set_handle_new_shift_xyz(handler)
+
     def load_configuration(self, config: BehaviorConfiguration):
-        with self._thread_lock:
+        with self._thread_lock:  # not sure really needed
             # in case of need bigger:
             self._diamond_triangle_prev_drifts = collections.deque(
                 # use 50% more, in case of:
@@ -1269,6 +1270,7 @@ class BehaviorAlgorithm(ObservableObject):
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
         self.reload_diamond_triangle_config()
+        self._load_shift_xyz_handler_config(config.shift_xyz_handler)
         self._active_config = config  # set it as new active one only at the end,
         #   so that possible on_property_changed event can be relayed if some changed.
         # and/but keep separate copy for eventual reset_config():
