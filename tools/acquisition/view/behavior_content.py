@@ -134,8 +134,8 @@ class BehaviorContent(ContentWidget):
         right_cur_row += 1
 
         right_layout.addWidget(QLabel("Reaches:"), right_cur_row, 0)
-        label = self._reaches_label = DailyAndTotalCountsLabel(day=algo.reaches_day,
-                                                               total=algo.reaches_total)
+        label = self._pellet_reaches_label = DailyAndTotalCountsLabel(day=algo.pellet_reaches_day,
+                                                                      total=algo.pellet_reaches_total)
         right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1
 
@@ -268,10 +268,10 @@ class BehaviorContent(ContentWidget):
             self._pellets_presented_label.update_values(day=value)
         elif name == props.TOTAL_PELLET_PRESENTED:
             self._pellets_presented_label.update_values(total=value)
-        elif name == props.DAY_REACHES:
-            self._reaches_label.update_values(day=value)
-        elif name == props.TOTAL_REACHES:
-            self._reaches_label.update_values(total=value)
+        elif name == props.DAY_PELLET_REACHES:
+            self._pellet_reaches_label.update_values(day=value)
+        elif name == props.TOTAL_PELLET_REACHES:
+            self._pellet_reaches_label.update_values(total=value)
         elif name == props.DAY_SUCCESSFUL_REACHES:
             self._successful_reaches_label.update_values(day=value)
         elif name == props.TOTAL_SUCCESSFUL_REACHES:

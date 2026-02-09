@@ -80,8 +80,8 @@ class BehaviorAlgoProps(str, enum.Enum):
     TOTAL_PELLET_COUNT = 'total_pellet_count'  # consumed
     DAY_PELLET_PRESENTED = 'day_pellet_presented'
     TOTAL_PELLET_PRESENTED = 'total_pellet_presented'
-    DAY_REACHES = 'day_reaches'
-    TOTAL_REACHES = 'total_reaches'
+    DAY_PELLET_REACHES = 'day_pellet_reaches'
+    TOTAL_PELLET_REACHES = 'total_pellet_reaches'
     DAY_SUCCESSFUL_REACHES = 'day_successful_reaches'
     TOTAL_SUCCESSFUL_REACHES = 'total_successful_reaches'
 
@@ -830,6 +830,8 @@ class BehaviorAlgorithm(ObservableObject):
             and last_dist_diff >= cfg.triangle_pellet_diff_too_far_threshold
         )
 
+    # counts
+
     @property
     def day_pellet_count(self) -> int:
         return self._pellet_count_day
@@ -877,10 +879,6 @@ class BehaviorAlgorithm(ObservableObject):
             self.pellets_consumed_evt(quantity)
 
     @property
-    def session_mouse_seen(self):
-        return self._session_mouse_seen
-
-    @property
     def pellets_presented_day(self):
         return self._pellets_presented_day
 
@@ -906,25 +904,23 @@ class BehaviorAlgorithm(ObservableObject):
         if quantity:
             self.pellets_presented_evt(quantity)
 
-    #
-
     @property
-    def reaches_day(self):
+    def pellet_reaches_day(self):
         return self._reaches_day
 
-    @reaches_day.setter
-    def reaches_day(self, value):
+    @pellet_reaches_day.setter
+    def pellet_reaches_day(self, value):
         prev, self._reaches_day = self._reaches_day, value
-        self._on_property_changed(BehaviorAlgoProps.DAY_REACHES, value, prev)
+        self._on_property_changed(BehaviorAlgoProps.DAY_PELLET_REACHES, value, prev)
 
     @property
-    def reaches_total(self):
+    def pellet_reaches_total(self):
         return self._reaches_total
 
-    @reaches_total.setter
-    def reaches_total(self, value):
+    @pellet_reaches_total.setter
+    def pellet_reaches_total(self, value):
         prev, self._reaches_total = self._reaches_total, value
-        self._on_property_changed(BehaviorAlgoProps.TOTAL_REACHES, value, prev)
+        self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_REACHES, value, prev)
 
     @property
     def successful_reaches_day(self):
@@ -1199,6 +1195,10 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def mouse_seen_age(self) -> float:
         return get_perf_now() - self._mouse_seen_last_perf_c
+
+    @property
+    def session_mouse_seen(self):
+        return self._session_mouse_seen
 
     @property
     def hands_near_pellet_seen(self):

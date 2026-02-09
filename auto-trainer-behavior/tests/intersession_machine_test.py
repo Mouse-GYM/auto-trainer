@@ -2,11 +2,14 @@ import datetime
 from unittest import mock
 
 import pytest
+
 from autotrainer.core import ProjectInfo
 from transitions import MachineError
 
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, SystemState
 from autotrainer.behavior.intersession import IntersessionState
+from autotrainer.inference.analysis import IntersessionResponse
+
 from top_fixtures import MockSystemMachine
 
 
@@ -62,3 +65,23 @@ def test_intersession(
         IntersessionState.detection,
         IntersessionState.idle,
     ]
+
+
+def test_intersession_increase_algo_counts(mock_system):
+    algo = mock_system.algo
+    algo.intersession_enabled = True
+    mock_system.start_session_in_tunnel()
+    assert algo.is_in_session
+    algo.update_mouse_seen(True)
+    res = IntersessionResponse(
+        pellets_presented=4,
+        total_reaches=3,
+        food_consumed=2,
+        successful_reaches=1,
+    )
+    with mock_system.mock_intersession_analysis(results=res):
+        mock_system.exit_tunnel()
+    assert algo.pellets_presented_day == algo.pellets_presented_total == 4
+    assert algo.pellet_reaches_day == algo.pellet_reaches_total == 3
+    assert algo.day_pellet_count == algo.total_pellet_count == 2
+    assert algo.successful_reaches_day == algo.successful_reaches_total == 1
