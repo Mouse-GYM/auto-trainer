@@ -43,7 +43,6 @@ if __version__ is None:
         try:
             __version__ = importlib_metadata.version("auto-trainer")
         except importlib_metadata.PackageNotFoundError:
-            import warnings
             warnings.warn(f"auto-trainer version not available, all bets are off, "
                           f"was project installed at all ?")
             __version__ = "0.0.0"
