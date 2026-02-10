@@ -1,0 +1,47 @@
+name: Autobump on merge
+on:
+  workflow_run:
+    workflows: ["Run unit tests"]
+    # branches: [develop]
+    types:
+      - completed
+concurrency:  # allow cancel if new commit pushed
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bump:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.8
+      - name: Install dependencies
+        shell: bash  # this is to get color output
+        env:
+          TERM: xterm-256color
+        run: |
+          pip config --user set install.progress_bar off
+          pip config --user set install.color always
+          pip config --user set global.color always
+          # NB: colors only apply to some of pip error/warning messages, or its progress bar but we disabled it. 
+          pip install --upgrade pip  # might be risky
+          pip -V
+          cat "${HOME}/.config/pip/pip.conf"
+          pip install build setuptools_scm
+#      - name: Build wheel
+#        run: |
+#          rm -rf dist
+#          python -m build -w .
+#      - name: Check result
+#        run: |
+#          ls -lt dist
+#          unzip -l dist/*whl
+      - name: Bump version and push tag
+        uses: anothrNick/github-tag-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # if you don't want to set write permissions use a PAT token
+          TAG_PREFIX: v
+          PRERELEASE: true
+          DEFAULT_BUMP: patch
+          DRY_RUN: true
