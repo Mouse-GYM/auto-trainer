@@ -149,6 +149,8 @@ ShiftXYZCallbackHandlerT = Callable[[IntersessionResponse], Optional[Offset3DTup
 
 BufferShiftXYZCallbackHandlerT = Callable[[List[Offset3DTuple]], Offset3DTuple]
 
+ProcessedShiftXYZCallbackHandlerT = Optional[Callable[[Offset3DTuple], None]]
+
 
 class ShiftXYZBufferHandler:
 
@@ -193,7 +195,7 @@ class ShiftXYZHandler(ObservableObject):
             config=ShiftXYZBufferHandlerConfig(minimum_reach_fail=int(os.getenv("HANDLE_SHIFT_XYZ_BUFFER_SIZE", 10)))
         )
         self._handle_new_intersession_res_func: ShiftXYZCallbackHandlerT = default_handler
-        self._handle_processed_shift_func: Optional[ShiftXYZCallbackHandlerT] = None
+        self._handle_processed_shift_func: ProcessedShiftXYZCallbackHandlerT = None
         self._last_shift_xyz: Optional[Offset3DTuple] = None
         self._last_processed_shift_xyz: Optional[Offset3DTuple] = None
 
@@ -232,7 +234,7 @@ class ShiftXYZHandler(ObservableObject):
     def set_handle_new_shift_xyz(self, func: ShiftXYZCallbackHandlerT):
         self._handle_new_intersession_res_func = func
 
-    def set_handle_processed_shift_xyz(self, func: Optional[ShiftXYZCallbackHandlerT]):
+    def set_handle_processed_shift_xyz(self, func: ProcessedShiftXYZCallbackHandlerT):
         self._handle_processed_shift_func = func
 
     def put_intersession_response(self, res: IntersessionResponse):
