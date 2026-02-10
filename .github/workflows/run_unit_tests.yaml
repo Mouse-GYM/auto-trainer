@@ -40,6 +40,7 @@ jobs:
         env:
           TERM: xterm-256color
         run: |
+          set -x
           pip config --user set install.progress_bar off
           pip config --user set install.color always
           pip config --user set global.color always
@@ -60,6 +61,7 @@ jobs:
           coverage run -m pytest -v -s ${{ github.event.inputs.pytest_extra_args }}
       - name: Coverage
         run: |
+          set -x
           coverage combine
           coverage html
           #
