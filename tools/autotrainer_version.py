@@ -2,6 +2,7 @@
 import sys
 import subprocess
 import warnings
+from pathlib import Path
 
 
 if sys.version_info[:2] >= (3, 10):
@@ -12,6 +13,9 @@ else:
     import importlib_metadata
 
 
+top_dir = Path(__file__).parent.parent.resolve()
+
+
 # always get from setuptools-scm (git) if available:
 
 def _get_from_setuptools_scm():
@@ -20,7 +24,7 @@ def _get_from_setuptools_scm():
     except ImportError:
         return None
     try:
-        out = subprocess.check_output([sys.executable, "-m", "setuptools_scm"])
+        out = subprocess.check_output([sys.executable, "-m", "setuptools_scm"], cwd=top_dir)
     except subprocess.CalledProcessError as err:
         # warnings.warn(f"setuptools_scm failed to get version: {err}", UserWarning)
         return None
