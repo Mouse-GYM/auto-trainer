@@ -1,5 +1,3 @@
-import math
-import time
 from dataclasses import dataclass
 from math import floor
 from datetime import datetime
@@ -7,7 +5,6 @@ from typing_extensions import Self
 
 import numpy
 
-from .. import make_camelize_representer
 from ..observable_object import ObservableObject
 from ..event import EventManager, ApiEventKind
 

@@ -14,11 +14,14 @@ from typing_extensions import Self
 
 import numpy
 
+from autotrainer.api.api_event_kind import ApiDetectorKind, ApiEventKind
+
 from autotrainer.core.logging import get_verbose_logger
-from .. import build_kwargs_apply_mapping, make_camelize_representer, get_perf_now
+from .detector import BaseDetector
+
+from .. import build_kwargs_apply_mapping, make_camelize_representer, get_perf_now, EventManager
 from ..multiproc import make_daemon_timer, no_op_timer
 from ..observable_object import ObservableObject
-from ..event import EventManager, ApiEventKind
 
 logger = get_verbose_logger(__name__)
 
@@ -99,7 +102,7 @@ class LoadCellMonitorContext:
         return age - self.thrashing_last_disengaged_perf_c
 
 
-class LoadCellMonitor(ObservableObject):
+class LoadCellMonitor(BaseDetector):
     """
     Monitor the load cell data stream and perform any required analysis.  The current implementation is used to
     determine when the animal is in the tunnel.  At this time, this is specifically used downstream as a factor in
@@ -199,16 +202,18 @@ class LoadCellMonitor(ObservableObject):
     def _set_thrashing_detected(self, value):
         ctx = self._context
         prev = ctx.thrashing_detected
-        if value != prev:
-            new_ctx = dataclasses.replace(ctx, thrashing_detected=value)
-            logger.debug("load_cell_monitor.thrashing_detected=%s", value)
-            perf_now = get_perf_now()
-            if value:
-                new_ctx.thrashing_last_engaged_perf_c = perf_now
-            else:
-                new_ctx.thrashing_last_disengaged_perf_c = perf_now
-            self._context = new_ctx
-            self._on_property_changed(self.IS_THRASHING_DETECTED_PROPERTY, value, prev)
+        if value == prev:
+            return
+        new_ctx = dataclasses.replace(ctx, thrashing_detected=value)
+        logger.debug("load_cell_monitor.thrashing_detected=%s", value)
+        perf_now = get_perf_now()
+        if value:
+            new_ctx.thrashing_last_engaged_perf_c = perf_now
+        else:
+            new_ctx.thrashing_last_disengaged_perf_c = perf_now
+        self._context = new_ctx
+        self.property_changed(self.IS_THRASHING_DETECTED_PROPERTY, value, prev)
+        self.post_detector_event(ApiDetectorKind.loadCellThrash, value)
 
     def load_configuration(self, configuration: LoadCellConfiguration):
         # force the on_property_changed event too (if new value differs) :

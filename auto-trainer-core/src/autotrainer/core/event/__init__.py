@@ -1,7 +1,8 @@
 
 from typing import Optional
 
-from .api_event_kind import ApiEventKind
+from autotrainer.api.api_event_kind import ApiEventKind
+
 from .event_info import EventInfo
 from .event_manager import EventManager
 from .event_manager_plugin import EventManagerPlugin
@@ -9,6 +10,11 @@ from ..logging import get_verbose_logger
 
 logger = get_verbose_logger(__name__)
 
+
+__all__ = [
+    "ApiEventKind",
+    "try_register_api_event_plugin",
+]
 
 
 def try_register_api_event_plugin() -> Optional["ApiEventPlugin"]:

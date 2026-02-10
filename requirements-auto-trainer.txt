@@ -11,5 +11,5 @@
 -e auto-trainer-behavior/
 
 # available public on PyPi :
-auto-trainer-training >= 0.9.9
-auto-trainer-api >= 0.9.6
+auto-trainer-training == 0.9.9
+auto-trainer-api == 0.9.9

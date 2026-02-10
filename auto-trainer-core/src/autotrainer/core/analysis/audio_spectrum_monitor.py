@@ -9,8 +9,12 @@ from collections import deque
 from functools import reduce, partial
 from typing import Optional, List
 
-from autotrainer.core import ObservableObject, get_perf_now
+from autotrainer.api.api_event_kind import ApiDetectorKind
+from autotrainer.core import ObservableObject, get_perf_now, EventManager
+from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.logging import get_verbose_logger
+
+from autotrainer.core.event import ApiEventKind
 
 
 logger = get_verbose_logger(__name__)
@@ -30,7 +34,7 @@ class AudioSpectrumThrashMonitorConfig:
     # with 8kHz: 3 goes from ~100-100 to ~135 and 5/6 goes from ~110 -> ~140
 
 
-class AudioSpectrumThrashMonitor(ObservableObject):
+class AudioSpectrumThrashMonitor(BaseDetector):
 
     AUDIO_THRASHING_DETECTED_PROPERTY = 'audio_thrashing_detected'
 
@@ -65,13 +69,15 @@ class AudioSpectrumThrashMonitor(ObservableObject):
     @is_thrashing_detected.setter
     def is_thrashing_detected(self, value):
         prev, self._cur_detected = self._cur_detected, value
-        if prev != value:
-            perf_now = get_perf_now()
-            if value:
-                self._last_engaged_perf_c = perf_now
-            else:
-                self._last_disengaged_perf_c = perf_now
-            self._on_property_changed(self.AUDIO_THRASHING_DETECTED_PROPERTY, value, prev)
+        if prev == value:
+            return
+        perf_now = get_perf_now()
+        if value:
+            self._last_engaged_perf_c = perf_now
+        else:
+            self._last_disengaged_perf_c = perf_now
+        self.property_changed(self.AUDIO_THRASHING_DETECTED_PROPERTY, value, prev)
+        self.post_detector_event(ApiDetectorKind.audioThrash, value)
 
     @property
     def engaged_age(self):
