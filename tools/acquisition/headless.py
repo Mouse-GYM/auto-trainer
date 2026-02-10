@@ -8,9 +8,10 @@ from pathlib import Path
 from multiprocessing import set_start_method
 
 
+
 def _exec_main():
 
-    from autotrainer.core.logging import get_verbose_logger
+    from autotrainer.core.logging import get_verbose_logger, get_console_handler
 
     from tools.acquisition.model.user_preferences import UserPreferences
     from tools.acquisition.model.app_model import AppModel
