@@ -13,7 +13,7 @@ import time
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Callable, Optional, Tuple, List, ClassVar, Any, Union, Dict, Deque, get_type_hints
+from typing import Optional, Tuple, List, ClassVar, Any, Union, Dict, Deque
 
 from typing import Callable
 
@@ -25,13 +25,16 @@ from autotrainer.core import ObservableObject, EventManager, post_trigger_enable
     AnimalSubject, get_perf_now, calculate_std_dev_manual
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
-    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration
+    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, ShiftXYZBufferHandlerConfig, \
+    ShiftXYZHandlerConfig
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.video import CaptureProcessStatus
 
-from . import CaptureAnalysisResult, TrainingMode, RecordingEndingReason
+from autotrainer.inference.analysis import IntersessionResponse
+
+from . import CaptureAnalysisResult, RecordingEndingReason
 
 from .pellet import PelletState
 from .system_machine_state import SystemState
@@ -104,7 +107,7 @@ class BehaviorAlgoProps(str, enum.Enum):
     INTERSESSION_STATE = 'intersession_state'
     CAPTURE_STATUS = 'capture_status'
 
-    TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"  # unused
+    # TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"  # unused
 
     # PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'  # unused
 
@@ -114,7 +117,7 @@ class BehaviorAlgoProps(str, enum.Enum):
 
 #
 
-# this define the default behavior for handling  relay of function call to the dedicated algo thread handler,
+# this defines the default behavior for handling  relay of function call to the dedicated algo thread handler,
 # True: "wait" that the function is executed on the algo handler thread before proceeding,
 # False: do not wait that the function is executed, submit it, and then continue immediately.
 #
@@ -140,8 +143,8 @@ def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_
 #
 # shift xyz handling:
 
-ShiftXYZCallbackHandlerT = Callable[[Offset3DTuple], Optional[Offset3DTuple]]
-# takes an xyz, and returns None for no further action.
+ShiftXYZCallbackHandlerT = Callable[[IntersessionResponse], Optional[Offset3DTuple]]
+# takes an intersession/trial analysis response, and returns None for no further action.
 # or return a "result/processed" xyz, that can be passed along.
 
 BufferShiftXYZCallbackHandlerT = Callable[[List[Offset3DTuple]], Offset3DTuple]
@@ -153,38 +156,43 @@ class ShiftXYZBufferHandler:
     def make_average(buffer: List[Offset3DTuple]):
         return sum(buffer) / len(buffer)
 
-    def __init__(self, size: int):
+    def __init__(
+        self,
+        *,
+        config: ShiftXYZBufferHandlerConfig,
+    ):
         self._buffer = []
-        self._size = size
         self._reduce_func = self.make_average
+        self._config = config
+        self._total_fail_ct = 0
+        self._running_rmaxVp = Offset3DTuple(0.0, 0.0, 0.0)
 
-    @property
-    def size(self):
-        return self._size
-
-    @size.setter
-    def size(self, value):
-        self._size = value
-
-    def __call__(self, xyz: Offset3DTuple):
-        buff = self._buffer
-        buff.append(xyz)
-        if len(buff) < self._size:
+    def __call__(self, rsp: IntersessionResponse):
+        self._running_rmaxVp += (rsp.pellet_x, rsp.pellet_y, rsp.pellet_z)
+        self._total_fail_ct += rsp.pellets_presented - rsp.successful_reaches
+        cfg = self._config
+        if self._total_fail_ct < cfg.minimum_reach_fail:
             return None
-        res = self._reduce_func(buff)
-        buff.clear()
-        return res
-
-    def set_reduce_buffer_func(self, func: BufferShiftXYZCallbackHandlerT):
-        self._reduce_func = func
+        avg_rmax_vp = self._running_rmaxVp / self._total_fail_ct
+        off_target_x = cfg.target_x - avg_rmax_vp[0]
+        off_target_y = cfg.target_y - avg_rmax_vp[1]
+        off_target_z = cfg.target_z - avg_rmax_vp[2]
+        shift_x = off_target_x if abs(off_target_x) > 0.5 else 0
+        shift_y = off_target_y if abs(off_target_y) > 0.5 else 0
+        shift_z = off_target_z if abs(off_target_z) > 0.5 else 0
+        self._total_fail_ct = 0
+        self._running_rmaxVp = Offset3DTuple(0.0, 0.0, 0.0)
+        return Offset3DTuple(shift_x, shift_y, shift_z)
 
 
 class ShiftXYZHandler(ObservableObject):
 
     def __init__(self):
         super().__init__()
-        default_handler = ShiftXYZBufferHandler(int(os.getenv("HANDLE_SHIFT_XYZ_BUFFER_SIZE", 10)))
-        self._handle_new_shift_xyz_func: ShiftXYZCallbackHandlerT = default_handler
+        default_handler = ShiftXYZBufferHandler(
+            config=ShiftXYZBufferHandlerConfig(minimum_reach_fail=int(os.getenv("HANDLE_SHIFT_XYZ_BUFFER_SIZE", 10)))
+        )
+        self._handle_new_intersession_res_func: ShiftXYZCallbackHandlerT = default_handler
         self._handle_processed_shift_func: Optional[ShiftXYZCallbackHandlerT] = None
         self._last_shift_xyz: Optional[Offset3DTuple] = None
         self._last_processed_shift_xyz: Optional[Offset3DTuple] = None
@@ -219,17 +227,18 @@ class ShiftXYZHandler(ObservableObject):
 
     @property
     def handle_new_shift_xyz_func(self) -> Optional[Union[ShiftXYZCallbackHandlerT]]:
-        return self._handle_new_shift_xyz_func
+        return self._handle_new_intersession_res_func
 
     def set_handle_new_shift_xyz(self, func: ShiftXYZCallbackHandlerT):
-        self._handle_new_shift_xyz_func = func
+        self._handle_new_intersession_res_func = func
 
     def set_handle_processed_shift_xyz(self, func: Optional[ShiftXYZCallbackHandlerT]):
         self._handle_processed_shift_func = func
 
-    def put_new_shift_xyz(self, shift_xyz: Offset3DTuple):
-        self.last_shift_xyz = shift_xyz
-        res = self._handle_new_shift_xyz_func(shift_xyz)
+    def put_intersession_response(self, res: IntersessionResponse):
+        shift = Offset3DTuple(res.pellet_x, res.pellet_y, res.pellet_z)
+        self.last_shift_xyz = shift
+        res = self._handle_new_intersession_res_func(res)
         if res is not None:
             self.last_processed_shift_xyz = res
             func = self._handle_processed_shift_func
@@ -237,7 +246,7 @@ class ShiftXYZHandler(ObservableObject):
                 logger.debug("handle_processed_shift_func undefined")
             else:
                 func(res)  # noqa
-                # not sure why need noqa otherwise PyCharm think it's None .. despite the previous if .. :/
+                # not sure why need noqa otherwise PyCharm think it's None, despite the previous if :/
 
 #
 
@@ -1243,8 +1252,16 @@ class BehaviorAlgorithm(ObservableObject):
             logger.notice("Resetting config to previous loaded")
             self.load_configuration(prev)
 
+    def _load_shift_xyz_handler_config(self, cfg: ShiftXYZHandlerConfig):
+        sel = cfg.selected
+        if sel == "ShiftXYZBufferHandler":
+            handler = ShiftXYZBufferHandler(config=cfg.buffer)
+        else:
+            raise ValueError(f"Unknown/unhandled shift-xyz handler {sel}")
+        self._shift_xyz_handler.set_handle_new_shift_xyz(handler)
+
     def load_configuration(self, config: BehaviorConfiguration):
-        with self._thread_lock:
+        with self._thread_lock:  # not sure really needed
             # in case of need bigger:
             self._diamond_triangle_prev_drifts = collections.deque(
                 # use 50% more, in case of:
@@ -1253,6 +1270,7 @@ class BehaviorAlgorithm(ObservableObject):
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
         self.reload_diamond_triangle_config()
+        self._load_shift_xyz_handler_config(config.shift_xyz_handler)
         self._active_config = config  # set it as new active one only at the end,
         #   so that possible on_property_changed event can be relayed if some changed.
         # and/but keep separate copy for eventual reset_config():

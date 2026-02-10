@@ -548,7 +548,7 @@ def setup_logging(
     # sys.stdout = LoggerWriter(logging.root.info)
     # sys.stderr = LoggerWriter(logging.root.warning)
 
-    logger.info("Setup logging ; base_logger=%s", repr_logger(base_logger))
+    # logger.debug("Setup logging ; base_logger=%s", repr_logger(base_logger))
 
     get_verbose_logger("transitions").setLevel(logger_level)
     get_verbose_logger("tools").setLevel(logger_level)

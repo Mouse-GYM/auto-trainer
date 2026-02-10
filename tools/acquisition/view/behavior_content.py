@@ -159,7 +159,7 @@ class BehaviorContent(ContentWidget):
         right_cur_row += 1
 
         right_layout.addWidget(QLabel("Prev. trial:"), right_cur_row, 0)
-        label = self._prev_pellet_shift_label = XYZQLabel()
+        label = self._prev_pellet_shift_label = XYZQLabel(n_digits=2)
         right_layout.addWidget(label, right_cur_row, 1)
         right_cur_row += 1
 

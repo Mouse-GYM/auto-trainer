@@ -14,6 +14,7 @@ from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgor
     IntersessionState
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.behavior_algorithm import ShiftXYZBufferHandler
+from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
@@ -44,6 +45,12 @@ class TestTrainingPlan(MockSystemMachine):
         for p in this_dir.joinpath("training/protocols").glob("*.json"):
             dst_dir.joinpath(p.name).write_bytes(p.read_bytes())
 
+    @pytest.fixture(autouse=True)
+    def _set_shift_xyz_config(self, system_config, trainer_config_dir):
+        cfg = system_config.behavior.shift_xyz_handler
+        cfg.buffer.minimum_reach_fail = 2
+        system_config.save_default(trainer_config_dir)
+
     @pytest.fixture()
     def app_model(self, machine, user_pref, fake_system_msg_handler, system_config, calib_dir, training_plans, sensor_analysis):
         machine._msg_handler = fake_system_msg_handler
@@ -64,7 +71,6 @@ class TestTrainingPlan(MockSystemMachine):
         finally:
             app_model.on_capture_stop()
             app_model.on_close()
-
 
     def test_training_plan(self, app_model, user_pref, machine, caplog):
         try:
@@ -90,9 +96,6 @@ class TestTrainingPlan(MockSystemMachine):
         assert algo.intersession_enabled is True  # required
         # NB: do not try change some settings after config is loaded,
         # the loaded parameters/settings (from config file) will be reused/reset with training plan enter.
-
-        shift_xyz_buffer_handler = ShiftXYZBufferHandler(size=2)  # will also check this
-        algo.shift_xyz_handler.set_handle_new_shift_xyz(shift_xyz_buffer_handler)
 
         app_model.training_mode = TrainingMode.AUTOMATIC
         app_model.on_capture_start()
@@ -138,8 +141,8 @@ class TestTrainingPlan(MockSystemMachine):
         # assert plan_start_phase.advance_predicate.evaluate(plan_start_phase, plan._system_context) is True, "phase should be able advance"
         assert plan.current_phase != plan_start_phase, "the phase should have advanced"
 
-        assert "Received processed shift xyz: (1.5, 0.0, -0.2)" in caplog.text, \
-            "should be the avg/mean of the 2 previous sessions"
+        assert "Received processed shift xyz: (0.0, -3.0, -0.8)" in caplog.text, \
+            "should be the some avg/mean of the 2 previous sessions, with limits applied"
 
         assert algo.total_pellet_count == sum(r.food_consumed for r in results)
         assert algo.successful_reaches_total == sum(r.successful_reaches for r in results)
