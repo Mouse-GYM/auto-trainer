@@ -442,11 +442,16 @@ class BehaviorAlgorithm(ObservableObject):
         logger.verbose("Running for handling/executing all algo decision/transition ..")
         prev_perf_c_report = time.perf_counter()
         tot_msgs = 0
+        prev_tot_msgs = None
         while True:
             p_now = time.perf_counter()
             if p_now - prev_perf_c_report > 5:
-                logger.debug("%.1f msgs/s", tot_msgs / (p_now - prev_perf_c_report))
-                tot_msgs = 0
+                if tot_msgs > 0 or prev_tot_msgs != tot_msgs:
+                    logger.debug("%.1f msgs/s", tot_msgs / (p_now - prev_perf_c_report))
+                    prev_tot_msgs = tot_msgs
+                    tot_msgs = 0
+                else:
+                    prev_tot_msgs = tot_msgs
                 prev_perf_c_report = p_now
             try:
                 raw = input_queue.get(timeout=1)
