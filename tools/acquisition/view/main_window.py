@@ -38,6 +38,7 @@ from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 
 from autotrainer.training import TrainingPlan
 
+from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.app_model import AppModel, AppModelStatus
 from tools.acquisition.model.handle_3d_calibration import make_3d_calib
 from tools.acquisition.model.inference_model import InferenceModel
