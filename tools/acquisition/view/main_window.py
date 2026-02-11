@@ -93,7 +93,7 @@ class MainWindow(QMainWindow):
         self._training_plan_index_by_plan_id: Dict[Optional[str], int] = {}
         self._diamond_triangle_calib_run = None
 
-        app_model = self._app_model = AppModel(self._preferences, app_version)
+        app_model = self._app_model = AppModel(self._preferences)
 
         try:
             self.setContentsMargins(0, 0, 0, 0)
