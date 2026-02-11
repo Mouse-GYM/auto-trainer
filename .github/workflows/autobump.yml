@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true  # required for real data test files
-          # fetch-depth: 0  # required to fetch all history and all tags
+          fetch-depth: 0  # required to fetch all history and all tags
           fetch-tags: true
       - name: Set up Python
         uses: actions/setup-python@v5
