@@ -1,3 +1,4 @@
+name: "Run unit tests"  # do not change, dependency by sub-workflow
 on:
   push:
     branches:
