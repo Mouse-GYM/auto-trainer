@@ -51,6 +51,8 @@ jobs:
           pip install -e ".[test]"
 #          pip install -r requirements.txt
 #          pip install -r requirements-test.txt
+      - name: Show current version
+        run: python -m setuptools_scm
       - name: Test with pytest
         run: |
           set -x
