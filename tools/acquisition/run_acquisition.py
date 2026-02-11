@@ -113,7 +113,6 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     from tools.acquisition.view.main_window import MainWindow
     from tools.acquisition.model.user_preferences import UserPreferences
-    from tools.autotrainer_version import __version__ as app_version
 
     app = QApplication(sys.argv)
 
@@ -134,7 +133,7 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
     event_manager = EventManager.default()
     plugin = try_register_api_event_plugin()
 
-    window = MainWindow(app, preferences, configuration, app_version, is_dev)
+    window = MainWindow(app, preferences, configuration, is_dev)
     if plugin is not None:
         window.app_model.rpc_service = plugin.service
 

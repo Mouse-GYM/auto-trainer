@@ -66,7 +66,6 @@ class MainWindow(QMainWindow):
         app: QApplication,
         user_preferences: UserPreferences,
         configuration: str = None,
-        app_version: str = "",
         is_dev: bool = False,
     ):
         super().__init__(None)
