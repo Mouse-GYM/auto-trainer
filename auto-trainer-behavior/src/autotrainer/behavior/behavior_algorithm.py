@@ -149,6 +149,8 @@ ShiftXYZCallbackHandlerT = Callable[[IntersessionResponse], Optional[Offset3DTup
 
 BufferShiftXYZCallbackHandlerT = Callable[[List[Offset3DTuple]], Offset3DTuple]
 
+ProcessedShiftXYZCallbackHandlerT = Optional[Callable[[Offset3DTuple], None]]
+
 
 class ShiftXYZBufferHandler:
 
@@ -164,24 +166,29 @@ class ShiftXYZBufferHandler:
         self._buffer = []
         self._reduce_func = self.make_average
         self._config = config
-        self._total_fail_ct = 0
-        self._running_rmaxVp = Offset3DTuple(0.0, 0.0, 0.0)
+        self._failed_reaches_buffer = []
 
     def __call__(self, rsp: IntersessionResponse):
-        self._running_rmaxVp += (rsp.pellet_x, rsp.pellet_y, rsp.pellet_z)
-        self._total_fail_ct += rsp.pellets_presented - rsp.successful_reaches
+        new_shift = Offset3DTuple(rsp.pellet_x, rsp.pellet_y, rsp.pellet_z)
+        failed_cnt = rsp.pellets_presented - rsp.successful_reaches
+        current_buffer = self._failed_reaches_buffer
+        if failed_cnt > 0:
+            current_buffer.append(new_shift)
+        else:
+            if new_shift != (0, 0, 0):
+                logger.warning("expected 0-shift for all successfully reached pellets: %s",
+                               rsp)
         cfg = self._config
-        if self._total_fail_ct < cfg.minimum_reach_fail:
+        if len(current_buffer) < cfg.minimum_reach_fail:
             return None
-        avg_rmax_vp = self._running_rmaxVp / self._total_fail_ct
-        off_target_x = cfg.target_x - avg_rmax_vp[0]
-        off_target_y = cfg.target_y - avg_rmax_vp[1]
-        off_target_z = cfg.target_z - avg_rmax_vp[2]
-        shift_x = off_target_x if abs(off_target_x) > 0.5 else 0
-        shift_y = off_target_y if abs(off_target_y) > 0.5 else 0
-        shift_z = off_target_z if abs(off_target_z) > 0.5 else 0
-        self._total_fail_ct = 0
-        self._running_rmaxVp = Offset3DTuple(0.0, 0.0, 0.0)
+        mean_off, stdev_off = calculate_std_dev_manual(current_buffer)
+        logger.verbose("ShiftXYZBuffer mean/stdev: %s / %s", mean_off, stdev_off)
+        self._failed_reaches_buffer.clear()
+        target = Offset3DTuple(cfg.target_x, cfg.target_y, cfg.target_z)
+        off_x, off_y, off_z = target - mean_off
+        shift_x = off_x if abs(off_x) > 0.5 else 0
+        shift_y = off_y if abs(off_y) > 0.5 else 0
+        shift_z = off_z if abs(off_z) > 0.5 else 0
         return Offset3DTuple(shift_x, shift_y, shift_z)
 
 
@@ -193,7 +200,7 @@ class ShiftXYZHandler(ObservableObject):
             config=ShiftXYZBufferHandlerConfig(minimum_reach_fail=int(os.getenv("HANDLE_SHIFT_XYZ_BUFFER_SIZE", 10)))
         )
         self._handle_new_intersession_res_func: ShiftXYZCallbackHandlerT = default_handler
-        self._handle_processed_shift_func: Optional[ShiftXYZCallbackHandlerT] = None
+        self._handle_processed_shift_func: ProcessedShiftXYZCallbackHandlerT = None
         self._last_shift_xyz: Optional[Offset3DTuple] = None
         self._last_processed_shift_xyz: Optional[Offset3DTuple] = None
 
@@ -232,7 +239,7 @@ class ShiftXYZHandler(ObservableObject):
     def set_handle_new_shift_xyz(self, func: ShiftXYZCallbackHandlerT):
         self._handle_new_intersession_res_func = func
 
-    def set_handle_processed_shift_xyz(self, func: Optional[ShiftXYZCallbackHandlerT]):
+    def set_handle_processed_shift_xyz(self, func: ProcessedShiftXYZCallbackHandlerT):
         self._handle_processed_shift_func = func
 
     def put_intersession_response(self, res: IntersessionResponse):
@@ -442,11 +449,16 @@ class BehaviorAlgorithm(ObservableObject):
         logger.verbose("Running for handling/executing all algo decision/transition ..")
         prev_perf_c_report = time.perf_counter()
         tot_msgs = 0
+        prev_tot_msgs = None
         while True:
             p_now = time.perf_counter()
             if p_now - prev_perf_c_report > 5:
-                logger.debug("%.1f msgs/s", tot_msgs / (p_now - prev_perf_c_report))
-                tot_msgs = 0
+                if tot_msgs > 0 or prev_tot_msgs != tot_msgs:
+                    logger.debug("%.1f msgs/s", tot_msgs / (p_now - prev_perf_c_report))
+                    prev_tot_msgs = tot_msgs
+                    tot_msgs = 0
+                else:
+                    prev_tot_msgs = tot_msgs
                 prev_perf_c_report = p_now
             try:
                 raw = input_queue.get(timeout=1)

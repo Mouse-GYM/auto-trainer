@@ -58,6 +58,7 @@ from autotrainer.api import (
     ConfigurationResponse, StatusResponse, ApiEventKind,
 )
 
+from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
@@ -139,7 +140,6 @@ class AppModel(ObservableObject):
     def __init__(
         self,
         preferences: UserPreferences,
-        app_version: str = "",
         *,
         calib_dir: Optional[Path] = None,
         sensor_analysis: Optional[SensorAnalysis] = None,
@@ -147,6 +147,8 @@ class AppModel(ObservableObject):
         system_message_handler: Optional[SystemMessageHandler] = None,
         system_machine: Optional[SystemMachine] = None,
     ):
+        logger.notice("Creating app_model with version %s", app_version)
+
         super().__init__(('on_error', 'configuration_loaded_event'))
 
         self._app_lock = threading.RLock()
@@ -1324,7 +1326,7 @@ class AppModel(ObservableObject):
         # maybe todo: make these configurable:
         min_check_delay = 5  # seconds ; if no valid check/measure within this delay -> error + emergency
         delay_inference_begin = 3  # seconds ; wait inference started for that duration before consider min_check_delay
-        max_dist_diff = 1  # mm ; if distance between obtained & expected above that -> invalid measure
+        max_dist_diff = 1.5  # mm ; if distance between obtained & expected above that -> invalid measure
         #
         loc3d = response.locations_3d.get(SceneElement.Diamond)
         raw3d = response.raw_loc_3d.get(SceneElement.Diamond)
