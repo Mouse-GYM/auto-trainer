@@ -105,7 +105,7 @@ def test_index_error(project_info, caplog):
 agx001_20251015_15_expected_result = IntersessionResponse(
     pellet_x=-1.6103162548648218, pellet_y=-2.4711684859384793, pellet_z=-1.2448511625494527,
     food_consumed=0, successful_reaches=0, pellets_presented=1, total_reaches=1,
-    all_shifts=[(-1.6103162548648218, -2.4711684859384793, -1.2448511625494527)],
+    all_shifts=[Offset3DTuple(-1.6103162548648218, -2.4711684859384793, -1.2448511625494527)],
 )
 
 
@@ -139,7 +139,7 @@ agx001_20260205_11_expected_result = IntersessionResponse(
     pellet_x=-0.4815189074758326,
     pellet_y=-5.378078246747098,
     pellet_z=0.350716635920838,
-    all_shifts=[-0.4815189074758326, -5.378078246747098, 0.350716635920838],
+    all_shifts=[Offset3DTuple(-0.4815189074758326, -5.378078246747098, 0.350716635920838)],
     food_consumed=0,
     successful_reaches=0,
     pellets_presented=1,
