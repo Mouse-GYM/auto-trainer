@@ -39,8 +39,12 @@ jobs:
           pip -V
           cat "${HOME}/.config/pip/pip.conf"
           pip install build setuptools_scm
-      - name: Show current version
-        run: python -m setuptools_scm
+      - name: Show current version and details
+        run: |
+          python -m setuptools_scm
+          git log -5
+          git branch
+          git tag -l
 #      - name: Build wheel
 #        run: |
 #          rm -rf dist
@@ -54,6 +58,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # if you don't want to set write permissions use a PAT token
           TAG_PREFIX: v
+          WITH_V: true
           # PRERELEASE: true
           DEFAULT_BUMP: patch
           DRY_RUN: true
