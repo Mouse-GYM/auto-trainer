@@ -1,5 +1,8 @@
 import dataclasses
 from dataclasses import dataclass
+from typing import List
+
+from autotrainer.core import Offset3DTuple
 
 
 @dataclass
@@ -8,6 +11,8 @@ class IntersessionResponse:
     pellet_x: float = 0
     pellet_y: float = 0
     pellet_z: float = 0
+
+    all_shifts: List[Offset3DTuple] = dataclasses.field(default_factory=list)
 
     food_consumed: int = 0  # total pellets consumed during session/trial
     successful_reaches: int = 0  # whose these are successful reaches (Right-Hand)

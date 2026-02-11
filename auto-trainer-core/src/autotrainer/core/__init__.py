@@ -125,6 +125,9 @@ class Offset3DTuple(_Offset3DTuple):
         x, y, z = self
         return f"({x:.0{n_digits}f}, {y:.0{n_digits}f}, {z:.0{n_digits}f})"
 
+    def round(self, n: int=2):
+        return self.__class__(*(round(v, n) for v in self))
+
     def __pow__(self, other, modulo=None) -> Self:
         if modulo is None:
             return self.__class__(*(v ** other for v in self))

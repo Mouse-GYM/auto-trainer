@@ -52,7 +52,7 @@ def segment_reaches(
     df_3d,
     overwrite: bool = True,
     debug: int = 0,
-) -> Dict[str, Union[float, int]]:
+) -> Dict[str, Union[float, int, Dict, List]]:
     results_dict = {
         'pellets_presented': 0,
         'total_reaches': 0,
@@ -98,7 +98,7 @@ def segment_reaches(
     if debug >= 1:
         print(f"segment_reaches_f1: events={pellet_events}")
 
-    pellets_consumed, pellets_presented, successful_reaches, total_reaches, shift_xyz, reach_events = segment_reaches_f2(
+    pellets_consumed, pellets_presented, successful_reaches, total_reaches, shift_xyz, shifts, reach_events = segment_reaches_f2(
         available_shift_xyz=available_shift_xyz,
         df_3d=df_3d,
         coeffs=coeffs,
@@ -124,6 +124,7 @@ def segment_reaches(
     results_dict['shift_x'] = shift_xyz[0]
     results_dict['shift_y'] = shift_xyz[1]
     results_dict['shift_z'] = shift_xyz[2]
+    results_dict['all_shifts'] = shifts
 
     return results_dict
 
@@ -192,7 +193,7 @@ def segment_reaches_f2(
     frames_on_found,
     dist_hvpp_R,
     debug,
-) -> Tuple[int, int, int, int, Offset3DTuple, List[Dict]]:
+) -> Tuple[int, int, int, int, Offset3DTuple, List[Offset3DTuple], List[Dict]]:
     frm_ct = np.shape(df_3d)[0]
     ############################
     #### Reach-related variables
@@ -424,10 +425,6 @@ def segment_reaches_f2(
     if debug >= 1:
         print(pellet_events)
 
-    shift_x: float = 0
-    shift_y: float = 0
-    shift_z: float = 0
-
     pellets_presented = len(pellet_events) - 1
     total_reaches = 0
     successful_reaches = 0
@@ -446,18 +443,25 @@ def segment_reaches_f2(
     rmaxVp_y = 0
     rmaxVp_z = 0
     fail_ct = 0
+    shifts = []
 
     # loop over all reach events, and check for/get what we need:
     for r in reach_events:
         if r['outcome'] in {'missed', 'dropped'}:
             fail_ct += 1
-            rmaxVp_x += r_hand_data['x'][r['max']] - pellet_home[0]
-            rmaxVp_y += r_hand_data['y'][r['max']] - pellet_home[1]
-            rmaxVp_z += r_hand_data['z'][r['max']] - pellet_home[2]
+            o = Offset3DTuple(
+                r_hand_data['x'][r['max']] - pellet_home[0],
+                r_hand_data['y'][r['max']] - pellet_home[1],
+                r_hand_data['z'][r['max']] - pellet_home[2],
+            )
+            shifts.append(o)
+            rmaxVp_x += o.x
+            rmaxVp_y += o.y
+            rmaxVp_z += o.z
 
     if debug >= 1:
         print(reach_events)
 
     shift = Offset3DTuple(rmaxVp_x, rmaxVp_y, rmaxVp_z)
 
-    return pellets_consumed, pellets_presented, successful_reaches, total_reaches, shift, reach_events
+    return pellets_consumed, pellets_presented, successful_reaches, total_reaches, shift, shifts, reach_events

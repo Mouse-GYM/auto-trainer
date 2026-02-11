@@ -970,14 +970,17 @@ class MainWindow(QMainWindow):
             logger.verbose("Patching intersession segmentation and detection with simulate")
             inference = app_model.inference
             inference._feed_intersession_analysis_execute = self._simulate_intersession_segmentation
+            x, y, z = (spinbox.value() for spinbox in (
+                self._internal_shift_x_spinbox, self._internal_shift_y_spinbox, self._internal_shift_z_spinbox))
             res = IntersessionResponse(
                 pellets_presented=self._internal_pellet_presented_spinbox.value(),
                 total_reaches=self._internal_pellet_total_reaches_spinbox.value(),
                 successful_reaches=self._internal_success_reaches_spinbox.value(),
                 food_consumed=self._internal_pellet_consumed_spinbox.value(),
-                pellet_x=self._internal_shift_x_spinbox.value(),
-                pellet_y=self._internal_shift_y_spinbox.value(),
-                pellet_z=self._internal_shift_z_spinbox.value(),
+                pellet_x=x,
+                pellet_y=y,
+                pellet_z=z,
+                all_shifts=[Offset3DTuple(x, y, z)]
             )
             inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
         load_cell_monitor.force_engaged(is_checked)

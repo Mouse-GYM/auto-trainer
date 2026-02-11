@@ -989,7 +989,7 @@ class SystemMachine(StateMachine):
         algo.shift_xyz_handler.put_intersession_response(res)
 
     def _handle_processed_shift_xyz(self, shift_xyz: Offset3DTuple):
-        logger.verbose("Received processed shift xyz: %s", shift_xyz.humanize(n_digits=1))
+        logger.success("Received processed shift xyz: %s", shift_xyz.humanize(n_digits=1))
         dev = self._pellet_device
         algo = self.algorithm
         if dev is None or not algo.intersession_pellet_shift_enabled:

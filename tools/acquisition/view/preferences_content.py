@@ -306,7 +306,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Minimum Reach Fail"), cur_row, cur_col)
         spinbox = QSpinBox()
         spinbox.setValue(algo.active_config.shift_xyz_handler.buffer.minimum_reach_fail)
-        spinbox.setRange(1, 99)
+        spinbox.setRange(2, 99)
         add_enabled_state(lambda t=toggle, s=spinbox: s.setEnabled(t.isChecked()))
         def minimum_reach_fail_changed(value: int):
             algo.active_config.shift_xyz_handler.buffer.minimum_reach_fail = value

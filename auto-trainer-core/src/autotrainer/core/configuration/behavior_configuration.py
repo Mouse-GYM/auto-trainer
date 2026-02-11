@@ -24,7 +24,7 @@ logger = get_verbose_logger(__name__)
 
 @dataclasses.dataclass
 class ShiftXYZBufferHandlerConfig:
-    minimum_reach_fail: int = 10
+    minimum_reach_fail: int = 10  # minimum nbr of failed reach, to consider make the mean of them
     target_x: float = 1.5
     target_y: float = -3
     target_z: float = -1
