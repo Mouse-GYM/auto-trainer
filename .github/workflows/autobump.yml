@@ -17,6 +17,11 @@ jobs:
   bump:
     runs-on: ubuntu-22.04
     steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true  # required for real data test files
+          # fetch-depth: 0  # required to fetch all history and all tags
+          fetch-tags: true
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -34,6 +39,8 @@ jobs:
           pip -V
           cat "${HOME}/.config/pip/pip.conf"
           pip install build setuptools_scm
+      - name: Show current version
+        run: python -m setuptools_scm
 #      - name: Build wheel
 #        run: |
 #          rm -rf dist
