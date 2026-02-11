@@ -1324,7 +1324,7 @@ class AppModel(ObservableObject):
         # maybe todo: make these configurable:
         min_check_delay = 5  # seconds ; if no valid check/measure within this delay -> error + emergency
         delay_inference_begin = 3  # seconds ; wait inference started for that duration before consider min_check_delay
-        max_dist_diff = 1  # mm ; if distance between obtained & expected above that -> invalid measure
+        max_dist_diff = 1.5  # mm ; if distance between obtained & expected above that -> invalid measure
         #
         loc3d = response.locations_3d.get(SceneElement.Diamond)
         raw3d = response.raw_loc_3d.get(SceneElement.Diamond)
