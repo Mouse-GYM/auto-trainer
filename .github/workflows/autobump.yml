@@ -1,4 +1,4 @@
-name: Autobump on merge
+name: Auto bump on merge
 on:
   workflow_run:
     workflows: ["Run unit tests"]
