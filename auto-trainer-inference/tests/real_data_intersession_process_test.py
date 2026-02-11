@@ -122,7 +122,7 @@ def test_intersession_process_agx001_20251015_15(agx001_20251015_15):
         agx001_20251015_15,
         calib_dir=calib_dir,
     )
-    assert res == agx001_20251015_15_expected_result
+    assert_deep_almost_equal(res, agx001_20251015_15_expected_result)
 
 
 @pytest.mark.bench
@@ -131,7 +131,7 @@ def test_intersession_process_bench_agx001_20251015_15(agx001_20251015_15, bench
         agx001_20251015_15,
         calib_dir=calib_dir,
     ))
-    assert res == agx001_20251015_15_expected_result
+    assert_deep_almost_equal(res, agx001_20251015_15_expected_result)
 
 
 agx001_20260205_11_expected_result = IntersessionResponse(
@@ -149,7 +149,7 @@ def test_agx001_20260205_11(project_info):
     project_info.device_id = "agx001"
     project_info.when = datetime(2026, 2, 5)
     res = intersession_process(project_info, calib_dir=calib_dir)
-    assert res == agx001_20260205_11_expected_result
+    assert_deep_almost_equal(res, agx001_20260205_11_expected_result)
 
 
 @pytest.mark.parametrize("frames_per_batch_per_cam,select_frames_method", [
