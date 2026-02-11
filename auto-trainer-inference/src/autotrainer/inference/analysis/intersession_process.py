@@ -60,10 +60,7 @@ def intersession_process(
     )
     logger.verbose("process intersession pose data complete %s", results_dict)
     return IntersessionResponse(
-        pellet_x=results_dict['shift_x'],
-        pellet_y=results_dict['shift_y'],
-        pellet_z=results_dict['shift_z'],
-        all_shifts=results_dict['all_shifts'],
+        rh_max_vp_list=results_dict['rh_max_vp_list'],
         food_consumed=results_dict['pellets_consumed'],
         successful_reaches=results_dict['successful_reaches'],
         pellets_presented=results_dict['pellets_presented'],

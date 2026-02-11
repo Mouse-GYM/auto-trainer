@@ -170,7 +170,7 @@ class ShiftXYZBufferHandler:
 
     def __call__(self, rsp: IntersessionResponse):
         current_buffer = self._failed_reaches_buffer
-        current_buffer.extend(rsp.all_shifts)
+        current_buffer.extend(rsp.rh_max_vp_list)
         cfg = self._config
         if len(current_buffer) < cfg.minimum_reach_fail:
             return None
@@ -237,10 +237,12 @@ class ShiftXYZHandler(ObservableObject):
         self._handle_processed_shift_func = func
 
     def put_intersession_response(self, res: IntersessionResponse):
-        if len(res.all_shifts) >= 2:
-            shift, stdev = calculate_std_dev_manual(res.all_shifts)
+        if len(res.rh_max_vp_list) == 0:
+            return
+        if len(res.rh_max_vp_list) > 1:
+            shift, stdev = calculate_std_dev_manual(res.rh_max_vp_list)
         else:
-            shift = Offset3DTuple(res.pellet_x, res.pellet_y, res.pellet_z)
+            shift = res.rh_max_vp_list[0]
         self.last_shift_xyz = shift
         res = self._handle_new_intersession_res_func(res)
         if res is not None:

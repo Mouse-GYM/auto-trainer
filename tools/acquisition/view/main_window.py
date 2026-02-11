@@ -977,10 +977,7 @@ class MainWindow(QMainWindow):
                 total_reaches=self._internal_pellet_total_reaches_spinbox.value(),
                 successful_reaches=self._internal_success_reaches_spinbox.value(),
                 food_consumed=self._internal_pellet_consumed_spinbox.value(),
-                pellet_x=x,
-                pellet_y=y,
-                pellet_z=z,
-                all_shifts=[Offset3DTuple(x, y, z)]
+                rh_max_vp_list=[Offset3DTuple(x, y, z)]
             )
             inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
         load_cell_monitor.force_engaged(is_checked)

@@ -239,8 +239,8 @@ def test_intersession_enabled(mock_system, machine):
 def test_inference_detection_ready(machine):
     algo = machine.algorithm
     result = IntersessionResponse(
+        rh_max_vp_list=[Offset3DTuple(50, 0, 0)],
         food_consumed=20,
-        pellet_x=50,
         pellets_presented=40,
         successful_reaches=4,
     )
