@@ -1,5 +1,9 @@
 name: Auto bump on merge
 on:
+  pull_request:
+    branches:
+      - main
+      - develop
   workflow_run:
     workflows: ["Run unit tests"]
     # branches: [develop]
@@ -41,7 +45,7 @@ jobs:
       - name: Bump version and push tag
         uses: anothrNick/github-tag-action@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # if you don't want to set write permissions use a PAT token
+          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # if you don't want to set write permissions use a PAT token
           TAG_PREFIX: v
           PRERELEASE: true
           DEFAULT_BUMP: patch
