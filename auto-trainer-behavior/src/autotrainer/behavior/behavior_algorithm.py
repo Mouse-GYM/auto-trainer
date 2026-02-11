@@ -8,6 +8,7 @@ import inspect
 import math
 import os
 import queue
+import statistics
 import threading
 import time
 from datetime import datetime
@@ -168,13 +169,13 @@ class ShiftXYZBufferHandler:
         self._config = config
         self._failed_reaches_buffer: List[Offset3DTuple] = []
 
-    def __call__(self, rsp: IntersessionResponse):
+    def __call__(self, rsp: IntersessionResponse, *, reduce_method=statistics.median):
         current_buffer = self._failed_reaches_buffer
         current_buffer.extend(rsp.rh_max_vp_list)
         cfg = self._config
         if len(current_buffer) < cfg.minimum_reach_fail:
             return None
-        mean_off, stdev_off = calculate_std_dev_manual(current_buffer)
+        mean_off, stdev_off = calculate_std_dev_manual(current_buffer, reduce_method=reduce_method)
         logger.verbose("ShiftXYZBuffer mean/stdev: %s / %s ; buffer=%s",
                        mean_off, stdev_off, [o.round(1) for o in current_buffer])
         self._failed_reaches_buffer.clear()
@@ -240,7 +241,7 @@ class ShiftXYZHandler(ObservableObject):
         if len(res.rh_max_vp_list) == 0:
             return
         if len(res.rh_max_vp_list) > 1:
-            shift, stdev = calculate_std_dev_manual(res.rh_max_vp_list)
+            shift, stdev = calculate_std_dev_manual(res.rh_max_vp_list, reduce_method=statistics.median)
         else:
             shift = res.rh_max_vp_list[0]
         self.last_shift_xyz = shift
