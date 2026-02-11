@@ -166,23 +166,17 @@ class ShiftXYZBufferHandler:
         self._buffer = []
         self._reduce_func = self.make_average
         self._config = config
-        self._failed_reaches_buffer = []
+        self._failed_reaches_buffer: List[Offset3DTuple] = []
 
     def __call__(self, rsp: IntersessionResponse):
-        new_shift = Offset3DTuple(rsp.pellet_x, rsp.pellet_y, rsp.pellet_z)
-        failed_cnt = rsp.pellets_presented - rsp.successful_reaches
         current_buffer = self._failed_reaches_buffer
-        if failed_cnt > 0:
-            current_buffer.append(new_shift)
-        else:
-            if new_shift != (0, 0, 0):
-                logger.warning("expected 0-shift for all successfully reached pellets: %s",
-                               rsp)
+        current_buffer.extend(rsp.rh_max_vp_list)
         cfg = self._config
         if len(current_buffer) < cfg.minimum_reach_fail:
             return None
         mean_off, stdev_off = calculate_std_dev_manual(current_buffer)
-        logger.verbose("ShiftXYZBuffer mean/stdev: %s / %s", mean_off, stdev_off)
+        logger.verbose("ShiftXYZBuffer mean/stdev: %s / %s ; buffer=%s",
+                       mean_off, stdev_off, [o.round(1) for o in current_buffer])
         self._failed_reaches_buffer.clear()
         target = Offset3DTuple(cfg.target_x, cfg.target_y, cfg.target_z)
         off_x, off_y, off_z = target - mean_off
@@ -243,7 +237,12 @@ class ShiftXYZHandler(ObservableObject):
         self._handle_processed_shift_func = func
 
     def put_intersession_response(self, res: IntersessionResponse):
-        shift = Offset3DTuple(res.pellet_x, res.pellet_y, res.pellet_z)
+        if len(res.rh_max_vp_list) == 0:
+            return
+        if len(res.rh_max_vp_list) > 1:
+            shift, stdev = calculate_std_dev_manual(res.rh_max_vp_list)
+        else:
+            shift = res.rh_max_vp_list[0]
         self.last_shift_xyz = shift
         res = self._handle_new_intersession_res_func(res)
         if res is not None:

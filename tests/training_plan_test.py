@@ -14,6 +14,7 @@ from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgor
     IntersessionState
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.behavior_algorithm import ShiftXYZBufferHandler
+from autotrainer.core import Offset3DTuple
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
@@ -114,17 +115,13 @@ class TestTrainingPlan(MockSystemMachine):
                 pellets_presented=3,
                 successful_reaches=2,
                 food_consumed=1,
-                pellet_x=1,
-                pellet_y=0.5,
-                pellet_z=0.5,
+                rh_max_vp_list=[Offset3DTuple(1, 0.5, 0.5)]
             ),
             IntersessionResponse(
                 pellets_presented=3,
                 successful_reaches=2,
                 food_consumed=2,
-                pellet_x=2,
-                pellet_y=-0.5,
-                pellet_z=-1,
+                rh_max_vp_list=[Offset3DTuple(2, -0.5, -1)]
             ),
         ]
 
@@ -154,9 +151,7 @@ class TestTrainingPlan(MockSystemMachine):
             pellets_presented=3,
             successful_reaches=3,
             food_consumed=3,
-            pellet_x=1,
-            pellet_y=0.5,
-            pellet_z=0.5,
+            rh_max_vp_list=[Offset3DTuple(1, 0.5, 0.5)],
         )
         caplog.clear()
         self._make_session(app_model, machine, result)
@@ -167,9 +162,7 @@ class TestTrainingPlan(MockSystemMachine):
             pellets_presented=3,
             successful_reaches=3,
             food_consumed=3,
-            pellet_x=1,
-            pellet_y=0.5,
-            pellet_z=0.5,
+            rh_max_vp_list=[Offset3DTuple(1, 0.5, 0.5)],
         )
         caplog.clear()
         self._make_session(app_model, machine, result)
