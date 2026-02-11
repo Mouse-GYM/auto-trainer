@@ -164,24 +164,29 @@ class ShiftXYZBufferHandler:
         self._buffer = []
         self._reduce_func = self.make_average
         self._config = config
-        self._total_fail_ct = 0
-        self._running_rmaxVp = Offset3DTuple(0.0, 0.0, 0.0)
+        self._failed_reaches_buffer = []
 
     def __call__(self, rsp: IntersessionResponse):
-        self._running_rmaxVp += (rsp.pellet_x, rsp.pellet_y, rsp.pellet_z)
-        self._total_fail_ct += rsp.pellets_presented - rsp.successful_reaches
+        new_shift = Offset3DTuple(rsp.pellet_x, rsp.pellet_y, rsp.pellet_z)
+        failed_cnt = rsp.pellets_presented - rsp.successful_reaches
+        current_buffer = self._failed_reaches_buffer
+        if failed_cnt > 0:
+            current_buffer.append(new_shift)
+        else:
+            if new_shift != (0, 0, 0):
+                logger.warning("expected 0-shift for all successfully reached pellets: %s",
+                               rsp)
         cfg = self._config
-        if self._total_fail_ct < cfg.minimum_reach_fail:
+        if len(current_buffer) < cfg.minimum_reach_fail:
             return None
-        avg_rmax_vp = self._running_rmaxVp / self._total_fail_ct
-        off_target_x = cfg.target_x - avg_rmax_vp[0]
-        off_target_y = cfg.target_y - avg_rmax_vp[1]
-        off_target_z = cfg.target_z - avg_rmax_vp[2]
-        shift_x = off_target_x if abs(off_target_x) > 0.5 else 0
-        shift_y = off_target_y if abs(off_target_y) > 0.5 else 0
-        shift_z = off_target_z if abs(off_target_z) > 0.5 else 0
-        self._total_fail_ct = 0
-        self._running_rmaxVp = Offset3DTuple(0.0, 0.0, 0.0)
+        mean_off, stdev_off = calculate_std_dev_manual(current_buffer)
+        logger.verbose("ShiftXYZBuffer mean/stdev: %s / %s", mean_off, stdev_off)
+        self._failed_reaches_buffer.clear()
+        target = Offset3DTuple(cfg.target_x, cfg.target_y, cfg.target_z)
+        off_x, off_y, off_z = target - mean_off
+        shift_x = off_x if abs(off_x) > 0.5 else 0
+        shift_y = off_y if abs(off_y) > 0.5 else 0
+        shift_z = off_z if abs(off_z) > 0.5 else 0
         return Offset3DTuple(shift_x, shift_y, shift_z)
 
 
