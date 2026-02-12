@@ -225,7 +225,6 @@ class BehaviorContent(ContentWidget):
         self._inference_model_property_changed("model_location", inference_model.model_location, None)
         #
 
-        app_model.property_changed += self._app_model_property_changed
         inference_model.property_changed += self._inference_model_property_changed
         algo.shift_xyz_handler.property_changed += self._shift_xyz_property_changed
 
