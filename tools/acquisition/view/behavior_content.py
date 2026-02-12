@@ -279,12 +279,6 @@ class BehaviorContent(ContentWidget):
             self._successful_reaches_label.update_values(total=value)
 
     @invoke_method
-    def _app_model_property_changed(self, name, value, _):
-        if name == AppModel.Props.SELECTED_ANIMAL:
-            self._prev_pellet_shift_label.update_coordinate(x=math.nan, y=math.nan, z=math.nan)
-            self._prev_processed_pellet_shift_label.update_coordinate(x=math.nan, y=math.nan, z=math.nan)
-
-    @invoke_method
     def _inference_model_property_changed(self, name, value, _):
         if name == "is_enabled":
             self._intersession_toggle.setEnabled(value)
