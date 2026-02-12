@@ -1280,14 +1280,17 @@ class BehaviorAlgorithm(ObservableObject):
         self.day_pellet_count = 0
         self.pellets_presented_day = 0
         self.successful_reaches_day = 0
+        self.pellet_reaches_day = 0
         self.total_pellet_count = 0
         self.pellets_presented_total = 0
         self.successful_reaches_total = 0
+        self.pellet_reaches_total = 0
 
     def _start_day(self):
         self.day_pellet_count = 0  # consumed
         self.pellets_presented_day = 0
         self.successful_reaches_day = 0
+        self.pellet_reaches_day = 0
 
     def _check_date(self):
         today = datetime.now().date()
