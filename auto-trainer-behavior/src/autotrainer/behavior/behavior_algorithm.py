@@ -1152,7 +1152,7 @@ class BehaviorAlgorithm(ObservableObject):
             handler = ShiftXYZBufferHandler(config=cfg.buffer)
         else:
             raise ValueError(f"Unknown/unhandled shift-xyz handler {sel}")
-        self._shift_xyz_handler.set_handle_new_shift_xyz(handler)
+        self._shift_xyz_handler.set_handler(handler)
 
     def load_configuration(self, config: BehaviorConfiguration):
         with self._thread_lock:  # not sure really needed

@@ -11,8 +11,6 @@ from autotrainer.inference.analysis import IntersessionResponse
 
 logger = get_verbose_logger(__name__)
 
-ShiftXYZCallbackHandlerT = Callable[[IntersessionResponse], Optional[Offset3DTuple]]
-BufferShiftXYZCallbackHandlerT = Callable[[List[Offset3DTuple]], Offset3DTuple]
 ProcessedShiftXYZCallbackHandlerT = Optional[Callable[[Offset3DTuple], None]]
 
 
@@ -22,7 +20,9 @@ class ShiftXYZBaseHandler(abc.ABC):
     def reset(self):
         """Ensure cleared state"""
 
-    def __call__(self, rsp: IntersessionResponse, *, reduce_method=statistics.median):
+    def __call__(
+        self, rsp: IntersessionResponse, *, reduce_method=statistics.median
+    ) -> Optional[Offset3DTuple]:
         """Process one intersession response"""
 
 
@@ -104,13 +104,13 @@ class ShiftXYZHandler(ObservableObject):
     #
 
     @property
-    def handle_new_shift_xyz_func(self) -> Optional[Union[ShiftXYZCallbackHandlerT]]:
+    def handler(self) -> Optional[ShiftXYZBaseHandler]:
         return self._intersession_response_handler
 
-    def set_handle_new_shift_xyz(self, handler: ShiftXYZBaseHandler):
+    def set_handler(self, handler: ShiftXYZBaseHandler):
         self._intersession_response_handler = handler
 
-    def set_handle_processed_shift_xyz(self, func: ProcessedShiftXYZCallbackHandlerT):
+    def set_processed_handler(self, func: ProcessedShiftXYZCallbackHandlerT):
         self._processed_shift_handler = func
 
     def put_intersession_response(self, res: IntersessionResponse):
