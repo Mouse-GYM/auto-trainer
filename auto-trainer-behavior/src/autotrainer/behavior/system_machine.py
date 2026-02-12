@@ -123,7 +123,7 @@ class SystemMachine(StateMachine):
         algo.property_changed += self._algorithm_property_changed
         algo.relay_transitions(self)
         # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
-        algo.shift_xyz_handler.set_handle_processed_shift_xyz(self._handle_processed_shift_xyz)
+        algo.shift_xyz_handler.set_processed_handler(self._handle_processed_shift_xyz)
 
         def sync_algo_system_state(_, new_state):
             self._algorithm.system_state = new_state
