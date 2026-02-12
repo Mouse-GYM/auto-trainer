@@ -6,7 +6,8 @@ from PySide6.QtWidgets import (QLabel, QWidget, QVBoxLayout,
                                QHBoxLayout, QStackedLayout, QGridLayout, QPushButton, QSizePolicy)
 
 from autotrainer.inference.analysis import IntersessionResponse
-from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, ShiftXYZHandler
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.behavior.pellet_shift import ShiftXYZHandler
 from autotrainer.pyside import CardWidget, QSwitch
 from autotrainer.pyside.StackedContent import StackedLayout
 from autotrainer.pyside.content_widget import ContentWidget, invoke_method
@@ -281,6 +282,7 @@ class BehaviorContent(ContentWidget):
     def _app_model_property_changed(self, name, value, _):
         if name == AppModel.Props.SELECTED_ANIMAL:
             self._prev_pellet_shift_label.update_coordinate(x=math.nan, y=math.nan, z=math.nan)
+            self._prev_processed_pellet_shift_label.update_coordinate(x=math.nan, y=math.nan, z=math.nan)
 
     @invoke_method
     def _inference_model_property_changed(self, name, value, _):

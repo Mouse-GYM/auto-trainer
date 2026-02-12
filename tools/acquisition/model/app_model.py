@@ -485,12 +485,13 @@ class AppModel(ObservableObject):
             ("(none)", "(none)") if animal is None
             else (animal.name, self.animal_name)
         ))
+        algo = self._behavior.algorithm
+        algo.shift_xyz_handler.reset()
         if animal is None:
             self.training_plan = None
         else:
             logger.debug("animal pellet=%s is_dcs=%s",
                          (animal.pellet_x, animal.pellet_y, animal.pellet_z), animal.is_pellet_dcs)
-            algo = self._behavior.algorithm
             algo.baseline_intensity = animal.baseline_magnet_intensity
             algo.reset_selected_animal_counts(animal)
             if self._training_mode == TrainingMode.MANUAL:
@@ -498,7 +499,6 @@ class AppModel(ObservableObject):
                 self._set_animal_base_positions_and_send_to_deliver(animal)
             else:
                 self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
-
         self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
         self._preferences.selected_animal = "" if animal is None else animal.name
         logger.success("Switched to animal %s", animal)

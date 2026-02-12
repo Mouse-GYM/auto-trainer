@@ -6,15 +6,13 @@ import enum
 import functools
 import inspect
 import math
-import os
 import queue
-import statistics
 import threading
 import time
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Optional, Tuple, List, ClassVar, Any, Union, Dict, Deque
+from typing import Optional, Tuple, ClassVar, Any, Dict, Deque
 
 from typing import Callable
 
@@ -26,18 +24,16 @@ from autotrainer.core import ObservableObject, EventManager, post_trigger_enable
     AnimalSubject, get_perf_now, calculate_std_dev_manual
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
-    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, ShiftXYZBufferHandlerConfig, \
-    ShiftXYZHandlerConfig
+    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, ShiftXYZHandlerConfig
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.video import CaptureProcessStatus
 
-from autotrainer.inference.analysis import IntersessionResponse
-
 from . import CaptureAnalysisResult, RecordingEndingReason
 
 from .pellet import PelletState
+from .pellet_shift import ShiftXYZBufferHandler, ShiftXYZHandler
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 
@@ -140,120 +136,6 @@ def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_
         BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
 
     return wrapped
-
-#
-# shift xyz handling:
-
-ShiftXYZCallbackHandlerT = Callable[[IntersessionResponse], Optional[Offset3DTuple]]
-# takes an intersession/trial analysis response, and returns None for no further action.
-# or return a "result/processed" xyz, that can be passed along.
-
-BufferShiftXYZCallbackHandlerT = Callable[[List[Offset3DTuple]], Offset3DTuple]
-
-ProcessedShiftXYZCallbackHandlerT = Optional[Callable[[Offset3DTuple], None]]
-
-
-class ShiftXYZBufferHandler:
-
-    @staticmethod
-    def make_average(buffer: List[Offset3DTuple]):
-        return sum(buffer) / len(buffer)
-
-    def __init__(
-        self,
-        *,
-        config: ShiftXYZBufferHandlerConfig,
-    ):
-        self._buffer = []
-        self._reduce_func = self.make_average
-        self._config = config
-        self._failed_reaches_buffer: List[Offset3DTuple] = []
-
-    def __call__(self, rsp: IntersessionResponse, *, reduce_method=statistics.median):
-        current_buffer = self._failed_reaches_buffer
-        current_buffer.extend(rsp.rh_max_vp_list)
-        cfg = self._config
-        if len(current_buffer) < cfg.minimum_reach_fail:
-            return None
-        mean_off, stdev_off = calculate_std_dev_manual(current_buffer, reduce_method=reduce_method)
-        logger.verbose("ShiftXYZBuffer mean/stdev: %s / %s ; buffer=%s",
-                       mean_off, stdev_off, [o.round(1) for o in current_buffer])
-        self._failed_reaches_buffer.clear()
-        target = Offset3DTuple(cfg.target_x, cfg.target_y, cfg.target_z)
-        off_x, off_y, off_z = target - mean_off
-        shift_x = off_x if abs(off_x) > 0.5 else 0
-        shift_y = off_y if abs(off_y) > 0.5 else 0
-        shift_z = off_z if abs(off_z) > 0.5 else 0
-        return Offset3DTuple(shift_x, shift_y, shift_z)
-
-
-class ShiftXYZHandler(ObservableObject):
-
-    def __init__(self):
-        super().__init__()
-        default_handler = ShiftXYZBufferHandler(
-            config=ShiftXYZBufferHandlerConfig(minimum_reach_fail=int(os.getenv("HANDLE_SHIFT_XYZ_BUFFER_SIZE", 10)))
-        )
-        self._handle_new_intersession_res_func: ShiftXYZCallbackHandlerT = default_handler
-        self._handle_processed_shift_func: ProcessedShiftXYZCallbackHandlerT = None
-        self._last_shift_xyz: Optional[Offset3DTuple] = None
-        self._last_processed_shift_xyz: Optional[Offset3DTuple] = None
-
-    LAST_SHIFT_XYZ = "last_shift_xyz"
-
-    @property
-    def last_shift_xyz(self) -> Offset3DTuple:
-        return self._last_shift_xyz
-
-    @last_shift_xyz.setter
-    def last_shift_xyz(self, value):
-        prev, self._last_shift_xyz = self._last_shift_xyz, value
-        # use property_changed, which always call the property changed callbacks, even if same value than prev:
-        self.property_changed(self.LAST_SHIFT_XYZ, value, prev)
-
-    #
-
-    LAST_PROCESSED_SHIFT_XYZ = "last_processed_shift_xyz"
-
-    @property
-    def last_processed_shift_xyz(self) -> Offset3DTuple:
-        return self._last_processed_shift_xyz
-
-    @last_processed_shift_xyz.setter
-    def last_processed_shift_xyz(self, value):
-        prev, self._last_processed_shift_xyz = self.last_processed_shift_xyz, value
-        # use property_changed, which always call the property changed callbacks, even if same value than prev:
-        self.property_changed(self.LAST_PROCESSED_SHIFT_XYZ, value, prev)
-
-    #
-
-    @property
-    def handle_new_shift_xyz_func(self) -> Optional[Union[ShiftXYZCallbackHandlerT]]:
-        return self._handle_new_intersession_res_func
-
-    def set_handle_new_shift_xyz(self, func: ShiftXYZCallbackHandlerT):
-        self._handle_new_intersession_res_func = func
-
-    def set_handle_processed_shift_xyz(self, func: ProcessedShiftXYZCallbackHandlerT):
-        self._handle_processed_shift_func = func
-
-    def put_intersession_response(self, res: IntersessionResponse):
-        if len(res.rh_max_vp_list) == 0:
-            return
-        if len(res.rh_max_vp_list) > 1:
-            shift, stdev = calculate_std_dev_manual(res.rh_max_vp_list, reduce_method=statistics.median)
-        else:
-            shift = res.rh_max_vp_list[0]
-        self.last_shift_xyz = shift
-        res = self._handle_new_intersession_res_func(res)
-        if res is not None:
-            self.last_processed_shift_xyz = res
-            func = self._handle_processed_shift_func
-            if func is None:
-                logger.debug("handle_processed_shift_func undefined")
-            else:
-                func(res)  # noqa
-                # not sure why need noqa otherwise PyCharm think it's None, despite the previous if :/
 
 #
 

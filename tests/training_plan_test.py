@@ -13,7 +13,7 @@ import pytest
 from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode, SystemState, \
     IntersessionState
 from autotrainer.behavior.pellet import PelletState
-from autotrainer.behavior.behavior_algorithm import ShiftXYZBufferHandler
+from autotrainer.behavior.pellet_shift import ShiftXYZBufferHandler
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
 from autotrainer.inference import InferenceStatus
