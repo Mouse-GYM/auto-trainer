@@ -28,16 +28,11 @@ class ShiftXYZBaseHandler(abc.ABC):
 
 class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
 
-    @staticmethod
-    def make_average(buffer: List[Offset3DTuple]):
-        return sum(buffer) / len(buffer)
-
     def __init__(
         self,
         *,
         config: ShiftXYZBufferHandlerConfig,
     ):
-        self._reduce_func = self.make_average
         self._config = config
         self._failed_reaches_buffer: List[Offset3DTuple] = []
 
