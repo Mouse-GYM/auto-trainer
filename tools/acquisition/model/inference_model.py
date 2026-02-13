@@ -1,16 +1,12 @@
-import inspect
-import logging.config
 import multiprocessing
 import os
 import queue
 import signal
 import threading
 import time
-import traceback
-import typing
 from itertools import chain
 from pathlib import Path
-from typing import Optional, List, Dict, TextIO, Tuple, Any
+from typing import Optional, List, Dict, Tuple, Any
 from threading import Thread
 
 import cv2
@@ -20,11 +16,11 @@ import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
     InferenceConfiguration, Offset3DTuple, ApiEventKind, get_perf_now
-from autotrainer.core.logging import get_verbose_logger, setup_logging, make_log_dict_config, install_log_exception_hook
+from autotrainer.core.logging import get_verbose_logger, make_log_dict_config
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
     InferenceProtocol, IntersessionBlock, IntersessionDetection
 from autotrainer.core.frame_index import FrameIndexCategory
-from autotrainer.core.multiproc import get_mp_ctx
+from autotrainer.core.multiproc import get_mp_ctx, pool_init
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     InferenceMode, InferenceStatus
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
@@ -49,18 +45,6 @@ def check_frame_count(file_path: Path):
         return None, None
     logger.verbose("Opened %s: tot_frames=%s size=%s", file_path.name, count, file_path.stat().st_size)
     return capture, count
-
-
-def _pool_init(log_dict_cfg):
-    """For process pool below"""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-    if log_dict_cfg is None:
-        setup_logging()
-    else:
-        logging.config.dictConfig(log_dict_cfg)
-        install_log_exception_hook()
-    logger.info("Initialized pool worker")
 
 
 class InferenceIncorrectStatus(RuntimeError):
@@ -274,7 +258,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
         self._process_pool = multiprocessing.Pool(
             processes=1,  # we only need 1 atm
-            initializer=_pool_init,
+            initializer=pool_init,
             initargs=(make_log_dict_config(),),
             maxtasksperchild = int(os.getenv("INFERENCE_PROCESS_POOL_MAX_TASKS_PER_CHILD", 4096)),
         )
