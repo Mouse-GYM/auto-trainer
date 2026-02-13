@@ -55,17 +55,19 @@ class UserPreferences(ObservableObject):
 
         logger.verbose("Using setting ini file: %r", settings.fileName())
 
-        self._serial_number = settings.value("system/serial_number", "00000")
+        self._serial_number: str = settings.value("system/serial_number", "00000", str)  # noqa
+        self._last_configuration: str = settings.value("system/last_configuration", "", str)  # noqa
 
-        self._last_configuration = settings.value("system/last_configuration", "")
+        self._configuration_location: str = settings.value(  # noqa
+            "system/configuration_location",
+            get_default_configuration_location(),
+            str,
+        )
 
-        self._configuration_location = settings.value("system/configuration_location",
-                                                      get_default_configuration_location())
+        self._animal_location: str = settings.value("system/animal_location", "")  # noqa
+        self._selected_animal: str = settings.value("system/selected_animal", "")  # noqa
 
-        self._animal_location = settings.value("system/animal_location", "")
-        self._selected_animal = settings.value("system/selected_animal", "")
-
-        self._log_location: str = settings.value("system/log_location", "")
+        self._log_location: str = settings.value("system/log_location", "")  # noqa
         self._log_level = settings.value("system/log_level", logging.WARNING, int)
 
         self._live_feed_refresh_rate = settings.value("display/refresh_rate", 15, int)

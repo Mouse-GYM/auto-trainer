@@ -9,8 +9,7 @@ from PySide6 import QtGui
 from autotrainer.core import EventManager, ApiEventKind
 from autotrainer.core.event import try_register_api_event_plugin
 from autotrainer.core.logging import (get_verbose_logger, MULTIPROC_LOG_FORMAT, PreciseTimeFormatter, DateTimeFormats,
-                                      get_log_queue_listener, thread_id_filter, get_console_handler, get_root_handler,
-                                      get_log_queue_handler, repr_logger, repr_all_loggers)
+                                      get_log_queue_listener, thread_id_filter, get_console_handler)
 from autotrainer.pyside import CardHeader
 
 from autotrainer.behavior import BehaviorAlgorithm
@@ -35,47 +34,11 @@ def verify_configuration(configuration: str):
     return True
 
 
-def verify_log_location(log_location: str, device_name: str):
-    from pathlib import Path
-    from datetime import datetime
-
-    if not log_location:
-        log_location = Path.home().joinpath("Documents").joinpath("RawDataLocal")
-    else:
-        log_location = Path(log_location)
-
-    if not device_name:
-        device_name = "AutoTrainer"
-
-    date_stamp = datetime.now().strftime("%Y%m%d")
-
-    log_location = log_location.joinpath(date_stamp).joinpath(device_name)
-
-    if not log_location.exists():
-        try:
-            log_location.mkdir(parents=True)
-        except Exception as e:
-            logger.error(f"Failed to create log location {log_location}: {e}")
-            return
-
-    log_files = [x.name[-6:-4] for x in log_location.iterdir() if x.is_file() and device_name in x.name]
-
-    def int_map_fcn(value: str):
-        try:
-            return int(value)
-        except ValueError:
-            # not an int
-            return None
-
-    log_vals = [int(x) for x in log_files if int_map_fcn(x) is not None]
-
-    if len(log_vals) == 0:
-        idx = 1
-    else:
-        log_vals.sort(reverse=True)
-        idx = log_vals[0] + 1
-
-    log_file = f"{log_location}/{date_stamp}_{device_name}_{idx:03d}.log"
+def set_log_location(device: str):
+    from autotrainer.core.logging import get_log_file_location
+    log_file = get_log_file_location(
+        full_format=f"{{log_location}}/{{date_stamp}}/{device}/{{date_stamp}}_{device}_{{idx:03d}}.log"
+    )
     logger.verbose("Setting log file to %s", log_file)
     #
     q_listener = get_log_queue_listener()
@@ -93,17 +56,6 @@ def verify_log_location(log_location: str, device_name: str):
         )
         file_handler.setLevel(verboselogs.SPAM + 1)  # writes everything up to DEBUG which reaches it
         logging.root.addHandler(file_handler)
-
-    # top_logger = get_verbose_logger("autotrainer")
-    # r_h = get_root_handler()
-    # c_h = get_console_handler()
-    # q_h = get_log_queue_handler()
-    # logger.info("all loggers:\n%s", repr_all_loggers())
-    # logger.info("top logger: %s", repr_logger(top_logger))
-    # logger.info("console: level=%s", c_h.level)
-    # logger.info("queue: level=%s", q_h.level)
-    # logger.info("autotrainer: level=%s prop=%s handlers=%s",
-    #             top_logger.level, top_logger.propagate, top_logger.handlers)
 
 
 def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_emulation: bool = False) -> int:
@@ -125,10 +77,11 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
 
     preferences = UserPreferences()
 
-    get_console_handler().setLevel(preferences.log_level)
-    logging.info("Set log level to %s", preferences.log_level)
+    device = "unnamed" if not preferences.serial_number else preferences.serial_number
+    set_log_location(device)
 
-    verify_log_location(preferences.log_location, preferences.serial_number)
+    logging.info("Set log level to %s", preferences.log_level)
+    get_console_handler().setLevel(preferences.log_level)
 
     event_manager = EventManager.default()
     plugin = try_register_api_event_plugin()
