@@ -16,9 +16,14 @@ import time
 from functools import partial
 from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict
 
+from autotrainer.api import ApiEventKind
+from autotrainer.api.api_event_kind import ApiDetectorKind
+
 from autotrainer.core import Offset3DTuple, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.message import SystemDataArgsKwargs
+from autotrainer.core import ObservableObject, get_perf_now, EventManager
+
 
 logger = get_verbose_logger(__name__)
 
@@ -485,6 +490,11 @@ class CanDevice(Device):
                     # continue poll input queue for uuid ack
                     continue
                 self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, True, None)
+                EventManager.default().post_event_content(ApiEventKind.detectorChanged, context={
+                    "detector_id": ApiDetectorKind.deviceAckTimeOut,
+                    "is_active": True,
+                    "is_enabled": True,
+                })
                 logger.warning("timeout waiting ack previous command: %s ; context=%s ; pending_uuid=%s",
                                self._pending_kind, self._pending_context, pending_uuid)
                 pending_uuid = None

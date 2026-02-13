@@ -4,7 +4,8 @@ import threading
 import time
 from typing import Dict, Tuple, Optional, Union
 
-from autotrainer.core import ObservableObject, get_perf_now
+from autotrainer.api import ApiEventKind
+from autotrainer.core import ObservableObject, get_perf_now, EventManager
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 
@@ -30,6 +31,15 @@ class BaseDetector(ObservableObject):
         self._thread_queue: Optional[Tuple[threading.Thread, queue.Queue]] = None
         self._lock = threading.RLock()
         self._logger = get_verbose_logger(self.__class__.__module__)
+
+    def post_detector_event(self, detector_id: int, active: bool, enabled: Optional[bool] = None):
+        if enabled is None:
+            enabled = self._running
+        EventManager.default().post_event_content(ApiEventKind.detectorChanged, context={
+            "detector_id": detector_id,
+            "is_active": active,
+            "is_enabled": enabled,
+        })
 
     @property
     def is_engaged(self):

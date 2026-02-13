@@ -2,6 +2,7 @@ import dataclasses
 import math
 from typing import Optional, Tuple, List
 
+from autotrainer.api.api_event_kind import ApiDetectorKind
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import get_perf_now, Offset3DTuple, calculate_std_dev_manual
 from autotrainer.core.logging import get_verbose_logger
@@ -36,6 +37,13 @@ class PelletMisplacedDetector(BaseDetector):
         self._config = config
         self._prev_data: List[Tuple[float, Offset3DTuple]] = []
         self._dcs_config: Optional[DiamondTriangleOffsetConfig] = None
+
+    @BaseDetector.is_engaged.setter
+    def is_engaged(self, value):
+        prev = self._is_engaged
+        BaseDetector.is_engaged.fset(self, value)
+        if prev != value:
+            self.post_detector_event(ApiDetectorKind.pelletMisplaced, value)
 
     @property
     def dcs_config(self) -> Optional[DiamondTriangleOffsetConfig]:

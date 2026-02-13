@@ -3,6 +3,7 @@ import threading
 import time
 from typing import Dict, Tuple, Optional
 
+from autotrainer.api.api_event_kind import ApiDetectorKind
 from autotrainer.core import ObservableObject, get_perf_now, EventManager, ApiEventKind
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.logging import get_verbose_logger
@@ -17,6 +18,12 @@ DoorsStateT = Dict[SystemStatusMessageKind, Tuple[Optional[bool], Optional[float
 ActiveDoors = {
     SystemStatusMessageKind.FRONT_DOOR,
     SystemStatusMessageKind.DRAWER_DOOR,
+}
+
+
+_door_2_detector_kind = {
+    SystemStatusMessageKind.FRONT_DOOR: ApiDetectorKind.frontDoor,
+    SystemStatusMessageKind.DRAWER_DOOR: ApiDetectorKind.slidingDoor,
 }
 
 
@@ -83,12 +90,11 @@ class ExternalDoorsMonitor(BaseDetector):
         # taking lock not required here, given using dict lookup and set, AND given the check_state timer,
         # also does as well, and also given the dict keys never change.
         prev_open, prev_perf_c = doors_state[door]
-        if is_open != prev_open:
-            logger.notice("%s: is_open: %s -> %s", door, prev_open, is_open)
-            EventManager.default().post_event_content(ApiEventKind.externalDoorDetectorChanged, context={
-                "door": door.value,
-                "is_open": is_open,
-            })
-            new_perf_c = get_perf_now() if is_open else prev_perf_c
-            doors_state[door] = (is_open, new_perf_c)
-            self.check_state()
+        kind = _door_2_detector_kind[door]
+        if is_open == prev_open:
+            return
+        logger.notice("%s: is_open: %s -> %s", door, prev_open, is_open)
+        new_perf_c = get_perf_now() if is_open else prev_perf_c
+        doors_state[door] = (is_open, new_perf_c)
+        self.check_state()
+        self.post_detector_event(kind, is_open)

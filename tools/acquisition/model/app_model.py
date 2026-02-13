@@ -1557,6 +1557,7 @@ class AppModel(ObservableObject):
                 raise RuntimeError(f"No current project info")
             prefs = self._preferences
             return ConfigurationResponse(
+                application_version=self._app_version,
                 device_id=project_info.device_id,
                 configuration_location=self._loaded_config_dir_path.as_posix(),
                 data_location=self._output_location,

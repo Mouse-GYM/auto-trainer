@@ -5,7 +5,10 @@ import threading
 import time
 from typing import Optional, List, Set, Callable
 
-from autotrainer.core import ObservableObject, get_perf_now
+from autotrainer.api.api_event_kind import ApiDetectorKind, ApiEventKind, ApiAlarmKind
+from autotrainer.api.api_event_kind import ApiDetectorKind
+
+from autotrainer.core import ObservableObject, get_perf_now, EventManager
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.analysis.external_doors_monitor import ExternalDoorsMonitor
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
@@ -91,6 +94,17 @@ class EmergencyAlarmMonitor(BaseDetector):
         super()._start()
         self._engaged_reasons.clear()
 
+    @staticmethod
+    def post_alarm_event(detector_id, active, enabled):
+        EventManager.default().post_event_content(
+            ApiEventKind.alarmChanged,
+            context={
+                "detector_id": detector_id,
+                "is_active": active,
+                "is_enabled": enabled,
+            },
+        )
+
     @property
     def config(self) -> EmergencyAlarmConfiguration:
         return self._config
@@ -111,7 +125,10 @@ class EmergencyAlarmMonitor(BaseDetector):
     @audio_load_cell_thrashing_engaged.setter
     def audio_load_cell_thrashing_engaged(self, value):
         prev, self._audio_load_cell_thrashing_engaged = self._audio_load_cell_thrashing_engaged, value
-        self._on_property_changed(self.AUDIO_LOAD_CELL_THRASHING_ENGAGED, value, prev)
+        if value == prev:
+            return
+        self.property_changed(self.AUDIO_LOAD_CELL_THRASHING_ENGAGED, value, prev)
+        self.post_alarm_event(ApiAlarmKind.thrashing, value, self._config.use_audio_load_cell_thrash)
 
     @property
     def presence_in_cage_after_exit_tunnel_engaged(self):
@@ -120,7 +137,10 @@ class EmergencyAlarmMonitor(BaseDetector):
     @presence_in_cage_after_exit_tunnel_engaged.setter
     def presence_in_cage_after_exit_tunnel_engaged(self, value):
         prev, self._presence_in_cage_after_exit_tunnel_engaged = self._presence_in_cage_after_exit_tunnel_engaged, value
-        self._on_property_changed(self.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED, value, prev)
+        if value == prev:
+            return
+        self.property_changed(self.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED, value, prev)
+        self.post_alarm_event(ApiAlarmKind.animalMissing, value, self._config.use_presence_missing_after_exit_tunnel)
 
     @property
     def ext_doors_open_engaged(self):
@@ -129,7 +149,10 @@ class EmergencyAlarmMonitor(BaseDetector):
     @ext_doors_open_engaged.setter
     def ext_doors_open_engaged(self, value):
         prev, self._ext_doors_open_engaged = self._ext_doors_open_engaged, value
-        self._on_property_changed(self.EXT_DOORS_OPEN_ENGAGED, value, prev)
+        if value == prev:
+            return
+        self.property_changed(self.EXT_DOORS_OPEN_ENGAGED, value, prev)
+        self.post_alarm_event(ApiAlarmKind.externalDoors, value, self._config.use_external_doors_open)
 
     @property
     def global_animal_presence_engaged(self):
@@ -138,8 +161,12 @@ class EmergencyAlarmMonitor(BaseDetector):
     @global_animal_presence_engaged.setter
     def global_animal_presence_engaged(self, value):
         prev, self._global_animal_presence_engaged = self._global_animal_presence_engaged, value
-        self._on_property_changed(self.GLOBAL_ANIMAL_PRESENCE_ENGAGED, value, prev)
-
+        if value == prev:
+            return
+        self.property_changed(self.GLOBAL_ANIMAL_PRESENCE_ENGAGED, value, prev)
+        # ApiAlarmKind.animalImmobile
+        # self.post_alarm_event(ApiAlarmKind.animalImmobile, value, self._config.use_global_animal_presence)
+        self.post_detector_event(ApiDetectorKind.animalImmobile, value, self._config.use_global_animal_presence)
     #
     def _expire_audio_load_cell(self, perf_now):
         cfg = self._config
