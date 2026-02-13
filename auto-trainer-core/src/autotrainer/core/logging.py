@@ -11,6 +11,8 @@ import queue
 import signal
 import threading
 import time
+from pathlib import Path
+from datetime import datetime
 from logging import LogRecord
 from queue import Empty
 from multiprocessing import Process
@@ -20,6 +22,8 @@ import sys
 import verboselogs
 import coloredlogs
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 _LogLevelT = Union[str, int]
 
@@ -621,4 +625,34 @@ def get_verbose_logger(name: Optional[str] = None) -> VerboseLoggerWithThreadId:
     return obj
 
 
-logger = get_verbose_logger(__name__)
+def get_log_file_location(*, log_base_dir: str = "", full_format: str):
+    if not log_base_dir:
+        log_base_dir = Path.home().joinpath("Documents/RawDataLocal")
+    else:
+        log_base_dir = Path(log_base_dir)
+
+    date_stamp = datetime.now().strftime("%Y%m%d")
+    # pre-format with index=0, and create parent dir
+    log_location = Path(full_format.format(
+        log_location=log_base_dir,
+        date_stamp=date_stamp,
+        idx=0,
+    ))
+    log_dir = log_location.parent
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as err:
+        logger.error("Failed to create directory for log location %s: %s", log_location, err)
+        raise
+    # then check for index:
+    tot_prev_log_files = len(tuple(log_dir.glob("*.log")))
+    log_location = Path(full_format.format(
+        log_location=log_base_dir,
+        date_stamp=date_stamp,
+        idx=tot_prev_log_files + 1,
+    ))
+
+    return log_location
+
+
+logger = get_verbose_logger(__name__)  # noqa
