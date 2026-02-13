@@ -133,7 +133,7 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
     event_manager = EventManager.default()
     plugin = try_register_api_event_plugin()
 
-    window = MainWindow(app, preferences, configuration, "2.0.1", is_dev)
+    window = MainWindow(app, preferences, configuration, is_dev)
     if plugin is not None:
         window.app_model.rpc_service = plugin.service
 

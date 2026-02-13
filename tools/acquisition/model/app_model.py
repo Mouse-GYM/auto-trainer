@@ -58,6 +58,7 @@ from autotrainer.api import (
     ConfigurationResponse, StatusResponse, ApiEventKind,
 )
 
+from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
@@ -139,7 +140,6 @@ class AppModel(ObservableObject):
     def __init__(
         self,
         preferences: UserPreferences,
-        app_version: str = "",
         *,
         calib_dir: Optional[Path] = None,
         sensor_analysis: Optional[SensorAnalysis] = None,
@@ -147,6 +147,8 @@ class AppModel(ObservableObject):
         system_message_handler: Optional[SystemMessageHandler] = None,
         system_machine: Optional[SystemMachine] = None,
     ):
+        logger.notice("Creating app_model with version %s", app_version)
+
         super().__init__(('on_error', 'configuration_loaded_event'))
 
         self._app_lock = threading.RLock()

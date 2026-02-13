@@ -38,6 +38,7 @@ from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 
 from autotrainer.training import TrainingPlan
 
+from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.app_model import AppModel, AppModelStatus
 from tools.acquisition.model.handle_3d_calibration import make_3d_calib
 from tools.acquisition.model.inference_model import InferenceModel
@@ -66,7 +67,6 @@ class MainWindow(QMainWindow):
         app: QApplication,
         user_preferences: UserPreferences,
         configuration: str = None,
-        app_version: str = "",
         is_dev: bool = False,
     ):
         super().__init__(None)
@@ -93,7 +93,7 @@ class MainWindow(QMainWindow):
         self._training_plan_index_by_plan_id: Dict[Optional[str], int] = {}
         self._diamond_triangle_calib_run = None
 
-        app_model = self._app_model = AppModel(self._preferences, app_version)
+        app_model = self._app_model = AppModel(self._preferences)
 
         try:
             self.setContentsMargins(0, 0, 0, 0)

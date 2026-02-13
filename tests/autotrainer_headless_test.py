@@ -23,8 +23,6 @@ from tools.acquisition.model.user_preferences import UserPreferences
 
 import top_fixtures
 
-headless_path = top_fixtures.repo_root_dir.joinpath("auto-trainer-headless.py")
-
 
 def remove_ansi_escape_sequences(s):
     # Regex for common ANSI escape codes
@@ -122,8 +120,8 @@ def test_start_stop(app_model, settings_ini_path):
 
 
 def test_cli_help():
-    output = subprocess.check_output([sys.executable, headless_path, "-h"]).decode()
-    assert "usage: auto-trainer-headless.py" in output
+    output = subprocess.check_output([sys.executable, "-m", "tools.acquisition.headless", "-h"]).decode()
+    assert "usage: headless" in output
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="hang atm. mostlikely signal related, different on windows")
@@ -139,7 +137,8 @@ def test_launch_cli(system_config, config_file_path, user_pref, calib_dir, diamo
     env['AUTOTRAINER_DIAMOND_TRIANGLE_CONFIG'] = diamond_config_path.as_posix()  # same for this !
     env['AUTOTRAINER_FORCE_CAN_EMULATION_IFACE'] = "1"
     proc = subprocess.Popen([
-        sys.executable, headless_path,
+        sys.executable,
+        "-m", "tools.acquisition.headless",
         "-c", config_file_path.as_posix(),
         "--preferences-file", settings_ini_path.as_posix(),
     ], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
