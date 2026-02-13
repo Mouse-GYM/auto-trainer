@@ -7,29 +7,25 @@ import faulthandler
 from pathlib import Path
 from multiprocessing import set_start_method
 
+# NB: do not put any imports of autotrainer* or any module not part from standard python lib.
 
 
-def _exec_main():
+def _exec_main(args):
 
-    from autotrainer.core.logging import get_verbose_logger, get_console_handler
+    from autotrainer.core.logging import get_verbose_logger, get_console_handler, set_log_location
 
     from tools.acquisition.model.user_preferences import UserPreferences
     from tools.acquisition.model.app_model import AppModel
 
     logger = get_verbose_logger("autotrainer.headless")
 
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument("-c", "--configuration", help="configuration file", default=None, type=Path)
-    parser.add_argument("--preferences-file", help="user preference ini file", default=None, type=Path)
-
-    args = parser.parse_args()
     configuration = args.configuration
-
     if configuration and not os.path.exists(configuration):
         return -1
 
     preferences = UserPreferences(settings_file_path=args.preferences_file)
+    device = "unnamed" if not preferences.serial_number else preferences.serial_number
+    set_log_location(device)
 
     get_console_handler().setLevel(preferences.log_level)
 
@@ -69,13 +65,20 @@ def main():
     faulthandler.enable()
     set_start_method("spawn")
 
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-c", "--configuration", help="configuration file", default=None, type=Path)
+    parser.add_argument("--preferences-file", help="user preference ini file", default=None, type=Path)
+
+    args = parser.parse_args()
+
     # must be AFTER set_start_method below:
     from autotrainer.core.logging import setup_logging, get_console_handler, stop_multiproc_logging
 
     logger = setup_logging(logger_level=logging.DEBUG, time_precision=6, multiprocess_enabled=True)
 
     try:
-        return _exec_main()
+        return _exec_main(args)
     except KeyboardInterrupt:
         logger.notice("KeyboardInterrupt")
         exit_code = 0

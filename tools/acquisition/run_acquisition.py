@@ -3,13 +3,11 @@ import os
 import signal
 import sys
 
-import verboselogs
 from PySide6 import QtGui
 
 from autotrainer.core import EventManager, ApiEventKind
 from autotrainer.core.event import try_register_api_event_plugin
-from autotrainer.core.logging import (get_verbose_logger, MULTIPROC_LOG_FORMAT, PreciseTimeFormatter, DateTimeFormats,
-                                      get_log_queue_listener, thread_id_filter, get_console_handler)
+from autotrainer.core.logging import (get_verbose_logger, get_console_handler, set_log_location)
 from autotrainer.pyside import CardHeader
 
 from autotrainer.behavior import BehaviorAlgorithm
@@ -34,30 +32,6 @@ def verify_configuration(configuration: str):
     return True
 
 
-def set_log_location(device: str):
-    from autotrainer.core.logging import get_log_file_location
-    log_file = get_log_file_location(
-        full_format=f"{{log_location}}/{{date_stamp}}/{device}/{{date_stamp}}_{device}_{{idx:03d}}.log"
-    )
-    logger.verbose("Setting log file to %s", log_file)
-    #
-    q_listener = get_log_queue_listener()
-    if q_listener is not None:
-        q_listener.add_file_handler(log_file)
-    else:
-        file_handler = logging.FileHandler(log_file)
-        file_handler.addFilter(thread_id_filter)
-        file_handler.setFormatter(
-            PreciseTimeFormatter(
-                MULTIPROC_LOG_FORMAT,
-                datefmt=DateTimeFormats.year_precise,
-                time_precision=6,
-            )
-        )
-        file_handler.setLevel(verboselogs.SPAM + 1)  # writes everything up to DEBUG which reaches it
-        logging.root.addHandler(file_handler)
-
-
 def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_emulation: bool = False) -> int:
     from PySide6.QtWidgets import QApplication
 
@@ -76,7 +50,6 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
     EnvironmentProvider.enable_can_emulation(allow_can_emulation)
 
     preferences = UserPreferences()
-
     device = "unnamed" if not preferences.serial_number else preferences.serial_number
     set_log_location(device)
 

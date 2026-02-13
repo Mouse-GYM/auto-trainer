@@ -15,7 +15,6 @@ def set_log_location():
     log_file = get_log_file_location(
         full_format=f"{{log_location}}/pellet_ui/{{date_stamp}}_{{idx:03d}}.log"
     )
-
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s\t [%(name)s] %(message)s"))
     logging.root.addHandler(file_handler)
