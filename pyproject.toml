@@ -88,3 +88,7 @@ include = [
     "tools",
 ]
 namespaces = true
+
+[tool.setuptools.package-data]
+# package = ["file", ...]
+tools = ["autotrainer_version.txt"]

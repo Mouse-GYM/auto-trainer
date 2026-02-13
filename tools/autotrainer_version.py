@@ -14,6 +14,8 @@ else:
 
 
 top_dir = Path(__file__).parent.parent.resolve()
+# .parent -> tools dir
+# .parent.parent -> top dir
 
 
 # always get from setuptools-scm (git) if available:
@@ -22,6 +24,8 @@ def _get_from_setuptools_scm():
     try:
         import setuptools_scm
     except ImportError:
+        return None
+    if not top_dir.joinpath(".git").is_dir():
         return None
     try:
         out = subprocess.check_output([sys.executable, "-m", "setuptools_scm"], cwd=top_dir)
