@@ -1,7 +1,7 @@
 import dataclasses
 import itertools
 import operator
-from typing import List, Dict, Optional, Tuple, Callable, ClassVar
+from typing import List, Dict, Optional, Tuple, Callable, ClassVar, Literal, Union
 from collections import namedtuple, defaultdict
 from dataclasses import dataclass
 
@@ -139,8 +139,7 @@ class PoseAlgorithm:
     MIN_CONFIDENCE_PLOT_THRESHOLD = 0.9
     MIN_CONFIDENCE_PRESENT_THRESHOLD = 0.9
 
-    process_frames_select_frames_method: ClassVar[str] = "last_one"
-    # other possibility: "all_most_likely"
+    process_frames_select_frames_method: Literal['all_most_likely', 'last_one'] = "all_most_likely"
 
     def __init__(
         self,
