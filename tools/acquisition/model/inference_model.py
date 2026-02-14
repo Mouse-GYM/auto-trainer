@@ -22,9 +22,9 @@ from autotrainer.behavior import SegmentationConfiguration, DetectionConfigurati
 from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx, pool_init
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
-    InferenceMode, InferenceStatus
+    InferenceMode, InferenceStatus, InferenceMonitorDataMsg
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
-from autotrainer.inference.pose_result_process import InferenceMonitorDataProc, InferenceMonitorDataMsg
+from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
 from autotrainer.inference.analysis import intersession_process
 
 from autotrainer.core.project import ProjectDependentProtol

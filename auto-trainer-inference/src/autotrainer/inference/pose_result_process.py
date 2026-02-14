@@ -7,8 +7,6 @@ import statistics
 import signal
 import threading
 import time
-import functools
-from enum import Enum
 from itertools import chain
 from multiprocessing import synchronize
 from pathlib import Path
@@ -20,11 +18,12 @@ import pandas
 
 from autotrainer.core import ProjectInfo
 from autotrainer.core.frame_index import FrameIndexCategory
-from autotrainer.core.multiproc import get_mp_ctx, pool_init
+from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook
 
-from autotrainer.inference import InferenceMode, PoseAlgorithm
+from autotrainer.inference import InferenceMode, PoseAlgorithm, InferenceMonitorDataMsg
 from .analysis.intersession_inference import intersession_inference
+from .pose_result_live_process import _pool_init, _pool_process_data
 
 logger = get_verbose_logger(__name__)
 
@@ -64,47 +63,13 @@ def _close_h5(fhs: List[Optional[h5py.File]]):
             fhs[idx] = None
 
 
-def open_h5_file(file_path: Path):
+def _open_h5_file(file_path: Path):
     datasets = h5py.File(file_path)["df_with_missing"]["table"]
     logger.debug("%s: %s entries", file_path, len(datasets))
     return datasets
 
-#
-
-class InferenceMonitorDataMsg(str, Enum):
-
-    SET_PROJECT_INFO = "set_project_info"
-    SET_POSE_ALGO = "set_pose_algo"
-    POSE_RESULT_READY = "pose_result_ready"
-    INTERSESSION_SEGMENTATION_FINISHED = "intersession_segmentation_finished"
-    START_NEW_INTERSESSION_BATCH_ITEM = "start_new_intersession_batch_item"
-
-
-# process pool usage:
-
-_pose_algo: Optional[PoseAlgorithm] = None
-_monitored_parts_offsets = None
-_output_data_queue = None
-
-
-def _pool_init(pose_algo, output_data_queue, monitored_parts_offsets, log_config):
-    pool_init(log_config)
-    global _pose_algo, _output_data_queue, _monitored_parts_offsets
-    _pose_algo = pose_algo
-    _output_data_queue = output_data_queue
-    _monitored_parts_offsets = monitored_parts_offsets
-    logger.success("Initialized with %s and %s", pose_algo, monitored_parts_offsets)
-
-
-def _pool_process_data(pose_data):
-    # logger.debug("received workload %s", type(pose_data))
-    # assert isinstance(_output_data_queue, multiprocessing.Queue)
-    rsp = _pose_algo.process(pose_data, pairs_3d_offsets=_monitored_parts_offsets)  # noqa
-    _output_data_queue.put((InferenceMonitorDataMsg.POSE_RESULT_READY, ((rsp,), None)))
-
 
 #
-
 
 class InferenceMonitorDataProc(multiprocessing.Process):
 
@@ -601,7 +566,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             for cam in cams
                         ]
                         cams_read_h5_dss = [
-                            open_h5_file(cam_pose_path)
+                            _open_h5_file(cam_pose_path)
                             for cam_pose_path in pose_paths
                         ]
                         cams_read_h5_idx = [0] * n_cams

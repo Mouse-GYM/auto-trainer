@@ -5,8 +5,7 @@ from autotrainer.core.project import ProjectDependentProtol
 from autotrainer.core.configuration.inference_configuration import InferenceConfiguration
 
 import autotrainer.inference.analysis
-from autotrainer.inference import InferenceStatus, PoseAlgorithm
-from autotrainer.inference.pose_result_process import InferenceMonitorDataMsg
+from autotrainer.inference import InferenceStatus, PoseAlgorithm, InferenceMonitorDataMsg
 
 from . import SegmentationConfiguration, DetectionConfiguration
 
