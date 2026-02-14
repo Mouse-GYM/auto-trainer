@@ -7,6 +7,7 @@ import statistics
 import signal
 import threading
 import time
+import functools
 from enum import Enum
 from itertools import chain
 from multiprocessing import synchronize
@@ -83,21 +84,24 @@ class InferenceMonitorDataMsg(str, Enum):
 
 _pose_algo: Optional[PoseAlgorithm] = None
 _monitored_parts_offsets = None
+_output_data_queue = None
 
 
-def _pool_init(pose_algo, monitored_parts_offsets, log_config):
+def _pool_init(pose_algo, output_data_queue, monitored_parts_offsets, log_config):
     pool_init(log_config)
-    global _pose_algo, _monitored_parts_offsets
+    global _pose_algo, _output_data_queue, _monitored_parts_offsets
     _pose_algo = pose_algo
+    _output_data_queue = output_data_queue
     _monitored_parts_offsets = monitored_parts_offsets
     logger.success("Initialized with %s and %s", pose_algo, monitored_parts_offsets)
 
 
 def _pool_process_data(pose_data):
     # logger.debug("received workload %s", type(pose_data))
-    # pose_algo = _pose_algo
-    # monitored_parts_offsets = _monitored_parts_offsets
-    return _pose_algo.process(pose_data, pairs_3d_offsets=_monitored_parts_offsets)  # noqa
+    # assert isinstance(_output_data_queue, multiprocessing.Queue)
+    rsp = _pose_algo.process(pose_data, pairs_3d_offsets=_monitored_parts_offsets)  # noqa
+    _output_data_queue.put((InferenceMonitorDataMsg.POSE_RESULT_READY, ((rsp,), None)))
+
 
 #
 
@@ -116,8 +120,9 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         msg_queue: multiprocessing.Queue,
         frames_per_cam: int,
         monitored_parts_offsets,
+        mp_manager=None,
     ):
-        mp_ctx = get_mp_ctx()
+        mp_ctx = get_mp_ctx() if mp_manager is None else mp_manager
         log_dict_config = make_log_dict_config()
         super().__init__(
             name=self.__class__.__name__,
@@ -195,13 +200,13 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             except Exception as err:
                 logger.error("Error closing previous pool: %s", err)
             self._process_pool = None
-        self._process_pool = multiprocessing.pool.Pool(
+        self._process_pool = get_mp_ctx().Pool(
             processes=4,
             initializer=_pool_init,
-            initargs=(pose_algo, monitored_parts_offsets, make_log_dict_config()),
-            maxtasksperchild=150 * 60 * 60 * 3,  # there is max 150/s atm ;
-                # but we do less given inference speed, anyway: this gives us 3h of processing at max input speed.
-                # but given we do less: this will last longer, about ~2x
+            initargs=(pose_algo, self._msg_queue, monitored_parts_offsets, make_log_dict_config()),
+            maxtasksperchild=150 * 60 * 60,  # there is max 150/s atm ;
+                # but we do less given inference speed, anyway: this gives us 1h of processing at max input speed.
+                # but given we do less: this will last longer, at least ~3-4 more
         )
 
     def _monitor_cmd_queue(self):
@@ -341,7 +346,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         perf_c_log_counters = time.perf_counter()
         t_perf_live_check_data_queue_size = time.perf_counter() + 5
 
-        async_data_tasks = []
+        async_data_tasks = []  # for pose_algo.process async work tasks
 
         def get_next_pose_data(timeout: Optional[float] = 0.05):
             nonlocal pose_data
@@ -567,10 +572,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             logger.verbose("Skipping incomplete frame index pose_data: %s",frames_indices.tolist())
                         continue
 
-                    async_data_tasks.append(
-                        pool.apply_async(_pool_process_data, args=(pose_data,),
-                                         callback=lambda rsp: self._send_msg(self.Msg.POSE_RESULT_READY, rsp)))
-                    if len(async_data_tasks) > 16:
+                    async_data_tasks.append(pool.apply_async(_pool_process_data, args=(pose_data,)))
+                    if len(async_data_tasks) > 8:
                         first_async_res = async_data_tasks[0]  # type: multiprocessing.pool.ApplyResult
                         logger.warning("too many pending async processing data, waiting older one..")
                         try:
