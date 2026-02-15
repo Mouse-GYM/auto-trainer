@@ -10,7 +10,7 @@ import time
 from itertools import chain
 from multiprocessing import synchronize
 from pathlib import Path
-from typing import Optional, Dict, List, TextIO
+from typing import Optional, Dict, List, TextIO, Tuple
 
 import h5py
 import numpy
@@ -23,7 +23,7 @@ from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, s
 
 from autotrainer.inference import InferenceMode, PoseAlgorithm, InferenceMonitorDataMsg
 from .analysis.intersession_inference import intersession_inference
-from .pose_result_live_process import _pool_init, _pool_process_data
+from .pose_result_live_process import pool_init_process_pose_data, pool_process_pose_data
 
 logger = get_verbose_logger(__name__)
 
@@ -84,17 +84,17 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         cmd_ack_event: synchronize.Event,
         msg_queue: multiprocessing.Queue,
         frames_per_cam: int,
-        monitored_parts_offsets,
+        monitored_parts_offsets: List[Tuple[str, str]],
         mp_manager=None,
     ):
         mp_ctx = get_mp_ctx() if mp_manager is None else mp_manager
         log_dict_config = make_log_dict_config()
+        self._log_dict_config = log_dict_config
         super().__init__(
             name=self.__class__.__name__,
             target=self._do_run,
             kwargs=dict(
                 project=project,
-                log_dict_config=log_dict_config,
             ),
             # daemon=True,
             # cannot use anymore daemon=True given using multiprocess.pool.Pool,
@@ -119,9 +119,9 @@ class InferenceMonitorDataProc(multiprocessing.Process):
     def stop_recorded(self) -> multiprocessing.Event:  # noqa
         return self._stop_recorded
 
-    def _do_run(self, *, project, log_dict_config: Optional[Dict]):
+    def _do_run(self, *, project):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-
+        log_dict_config = self._log_dict_config
         if log_dict_config is None:
             setup_logging()
         else:
@@ -136,15 +136,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         except BaseException as err:
             logger.exception("Fatal error: %s", err)
         self._is_running = False  # before below put
-        pool = self._process_pool
-        if pool is not None:
-            try:
-                pool.close()
-                pool.terminate()
-                pool.join()
-            except Exception as err:
-                logger.error("Error closing process pool: %s", err)
         self._cmd_queue.put(None)  # ensure monitor cmd thread will exit too
+        self._close_process_pool()
         cmd_thread.join(3)
         flushed = 0
         while True:
@@ -155,20 +148,24 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             flushed += 1
         logger.debug("Exiting ; cmd_thread alive: %s ; cmd_queue_flushed=%s", cmd_thread.is_alive(), flushed)
 
-    def _init_process_pool(self, pose_algo, monitored_parts_offsets):
+    def _close_process_pool(self):
         prev = self._process_pool
-        if prev is not None:
-            try:
-                prev.close()
-                prev.terminate()
-                prev.join()
-            except Exception as err:
-                logger.error("Error closing previous pool: %s", err)
-            self._process_pool = None
+        if prev is None:
+            return
+        try:
+            prev.close()
+            prev.terminate()
+            prev.join()
+        except Exception as err:
+            logger.error("Error closing previous pool: %s", err)
+        self._process_pool = None
+
+    def _init_process_pool(self, pose_algo):
+        self._close_process_pool()
         self._process_pool = get_mp_ctx().Pool(
             processes=4,
-            initializer=_pool_init,
-            initargs=(pose_algo, self._msg_queue, monitored_parts_offsets, make_log_dict_config()),
+            initializer=pool_init_process_pose_data,
+            initargs=(pose_algo, self._msg_queue, self._monitored_parts_offsets, self._log_dict_config),
             maxtasksperchild=150 * 60 * 60,  # there is max 150/s atm ;
                 # but we do less given inference speed, anyway: this gives us 1h of processing at max input speed.
                 # but given we do less: this will last longer, at least ~3-4 more
@@ -184,7 +181,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             logger.debug("Processing cmd %s with %s // %s", cmd, args, kwargs)
             if cmd is self.Msg.SET_POSE_ALGO:
                 pose_algo = args[0]
-                self._init_process_pool(pose_algo, self._monitored_parts_offsets)
+                self._init_process_pool(pose_algo)
                 self._pose_algo = pose_algo
             elif cmd is self.Msg.SET_PROJECT_INFO:
                 self._project = args[0]
@@ -537,7 +534,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             logger.verbose("Skipping incomplete frame index pose_data: %s",frames_indices.tolist())
                         continue
 
-                    async_data_tasks.append(pool.apply_async(_pool_process_data, args=(pose_data,)))
+                    async_data_tasks.append(pool.apply_async(pool_process_pose_data, args=(pose_data,)))
                     if len(async_data_tasks) > 8:
                         first_async_res = async_data_tasks[0]  # type: multiprocessing.pool.ApplyResult
                         logger.warning("too many pending async processing data, waiting older one..")

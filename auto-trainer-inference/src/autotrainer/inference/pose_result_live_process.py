@@ -14,7 +14,7 @@ _output_data_queue = None
 _pose_algo_process = None
 
 
-def _pool_init(pose_algo: PoseAlgorithm, output_data_queue, monitored_parts_offsets, log_config):
+def pool_init_process_pose_data(pose_algo: PoseAlgorithm, output_data_queue, monitored_parts_offsets, log_config):
     pool_init(log_config)
     global _pose_algo_process, _output_data_queue
     _output_data_queue = output_data_queue
@@ -22,10 +22,10 @@ def _pool_init(pose_algo: PoseAlgorithm, output_data_queue, monitored_parts_offs
     logger.success("Initialized with %s and %s", pose_algo, monitored_parts_offsets)
 
 
-def _pool_process_data(pose_data):
+def pool_process_pose_data(pose_data):
     # logger.debug("received workload %s", type(pose_data))
     # assert isinstance(_output_data_queue, multiprocessing.Queue)
     rsp = _pose_algo_process(pose_data)  # noqa
     # (cmd, (args, kwargs)) :
     _output_data_queue.put((InferenceMonitorDataMsg.POSE_RESULT_READY, ((rsp,), None)))
-    # same as _send_msg below.
+    # same as _send_msg in InferenceMonitorDataProc.
