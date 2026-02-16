@@ -11,8 +11,8 @@ from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Dict
 
-from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize
-from PySide6.QtGui import QAction, QIcon, QKeySequence
+from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize, QKeyCombination
+from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
                                QSpinBox, QDoubleSpinBox)
@@ -644,17 +644,17 @@ class MainWindow(QMainWindow):
         action = self.run_action = QAction(QIcon(qta.icon("ei.play")), "Start", self)
         action.setToolTip("Start or stop acquisition")
         action.setCheckable(True)
-        action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
+        action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_R))
         action.triggered.connect(self.on_capture_start_stop)
 
         action = self.next_training_phase_action = QAction(QIcon(qta.icon("fa5s.arrow-alt-circle-right")), "Next Phase", self)
         action.setVisible(False)
-        action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
+        action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_R))
         action.triggered.connect(self.on_next_plan_phase)
 
         action = self.previous_training_phase_action = QAction(QIcon(qta.icon("fa5s.arrow-alt-circle-left")), "Previous Phase", self)
         action.setVisible(False)
-        action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
+        action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_R))
         action.triggered.connect(self.on_previous_plan_phase)
 
         self._diamond_triangle_calib_run = None
@@ -703,7 +703,7 @@ class MainWindow(QMainWindow):
         action.setCheckable(True)
 
         action = self.quit_action = QAction("Quit")
-        action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_Q))
+        action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_Q))
         action.triggered.connect(lambda: self._app.quit())
 
     def _configure_menubar(self):
