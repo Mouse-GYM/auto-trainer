@@ -28,6 +28,12 @@ dependencies = [
 
     'deeplabcut >= 2.3.11, < 2.4',  # famous deeplab
     # keep same major.minor by safety
+    'tensorpack >= 0.11, < 1',
+    'tf-slim >= 1.1, < 2',
+    # NB: tensorpack and tf-slim are used/required by deeplabcut, even tough they are not depended on by it,
+    # so we explicitly add them here.
+
+    'torch >= 1.13.1, < 2',
 
     'events >= 0.5, < 1',   # dynamic events callback handling
     'transitions >= 0.9.2, < 1',  # machine state transition handling
