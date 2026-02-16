@@ -1,17 +1,16 @@
 
 import logging.config
-import multiprocessing
+import multiprocessing.pool
 import os
 import queue
 import statistics
 import signal
 import threading
 import time
-from enum import Enum
 from itertools import chain
 from multiprocessing import synchronize
 from pathlib import Path
-from typing import Optional, Dict, List, TextIO
+from typing import Optional, Dict, List, TextIO, Tuple
 
 import h5py
 import numpy
@@ -22,8 +21,9 @@ from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook
 
-from autotrainer.inference import InferenceMode, PoseAlgorithm
+from autotrainer.inference import InferenceMode, PoseAlgorithm, InferenceMonitorDataMsg
 from .analysis.intersession_inference import intersession_inference
+from .pose_result_live_process import pool_init_process_pose_data, pool_process_pose_data
 
 logger = get_verbose_logger(__name__)
 
@@ -63,21 +63,13 @@ def _close_h5(fhs: List[Optional[h5py.File]]):
             fhs[idx] = None
 
 
-def open_h5_file(file_path: Path):
+def _open_h5_file(file_path: Path):
     datasets = h5py.File(file_path)["df_with_missing"]["table"]
     logger.debug("%s: %s entries", file_path, len(datasets))
     return datasets
 
+
 #
-
-class InferenceMonitorDataMsg(str, Enum):
-
-    SET_PROJECT_INFO = "set_project_info"
-    SET_POSE_ALGO = "set_pose_algo"
-    POSE_RESULT_READY = "pose_result_ready"
-    INTERSESSION_SEGMENTATION_FINISHED = "intersession_segmentation_finished"
-    START_NEW_INTERSESSION_BATCH_ITEM = "start_new_intersesson_batch_item"
-
 
 class InferenceMonitorDataProc(multiprocessing.Process):
 
@@ -92,18 +84,21 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         cmd_ack_event: synchronize.Event,
         msg_queue: multiprocessing.Queue,
         frames_per_cam: int,
-        monitored_parts_offsets,
+        monitored_parts_offsets: List[Tuple[str, str]],
+        mp_manager=None,
     ):
-        mp_ctx = get_mp_ctx()
+        mp_ctx = get_mp_ctx() if mp_manager is None else mp_manager
         log_dict_config = make_log_dict_config()
+        self._log_dict_config = log_dict_config
         super().__init__(
             name=self.__class__.__name__,
             target=self._do_run,
             kwargs=dict(
                 project=project,
-                log_dict_config=log_dict_config,
             ),
-            daemon=True,
+            # daemon=True,
+            # cannot use anymore daemon=True given using multiprocess.pool.Pool,
+            # which refuse to work with daemon=True. This should be ok though.
         )
         self._project = project
         self._data_queue = pose_data_queue
@@ -118,14 +113,15 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._stop_recorded = mp_ctx.Event()
         self._pose_algo: Optional[PoseAlgorithm] = None
         self._is_running = True
+        self._process_pool: Optional[multiprocessing.pool.Pool] = None
 
     @property
     def stop_recorded(self) -> multiprocessing.Event:  # noqa
         return self._stop_recorded
 
-    def _do_run(self, *, project, log_dict_config: Optional[Dict]):
+    def _do_run(self, *, project):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-
+        log_dict_config = self._log_dict_config
         if log_dict_config is None:
             setup_logging()
         else:
@@ -141,6 +137,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             logger.exception("Fatal error: %s", err)
         self._is_running = False  # before below put
         self._cmd_queue.put(None)  # ensure monitor cmd thread will exit too
+        self._close_process_pool()
         cmd_thread.join(3)
         flushed = 0
         while True:
@@ -151,6 +148,33 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             flushed += 1
         logger.debug("Exiting ; cmd_thread alive: %s ; cmd_queue_flushed=%s", cmd_thread.is_alive(), flushed)
 
+    def _close_process_pool(self):
+        prev = self._process_pool
+        if prev is None:
+            return
+        logger.verbose("Closing previous process pool %s", prev)
+        try:
+            prev.close()
+            # prev.terminate()
+            prev.join()
+        except Exception as err:
+            logger.error("Error closing previous pool: %s", err)
+        else:
+            logger.debug("previous pool closed")
+        self._process_pool = None
+
+    def _init_process_pool(self, pose_algo):
+        self._close_process_pool()
+        logger.notice("Initializing new workers process pool")
+        self._process_pool = get_mp_ctx().Pool(
+            processes=4,
+            initializer=pool_init_process_pose_data,
+            initargs=(pose_algo, self._msg_queue, self._monitored_parts_offsets, self._log_dict_config),
+            maxtasksperchild=150 * 60 * 60,  # there is max 150/s atm ;
+                # but we do less given inference speed, anyway: this gives us 1h of processing at max input speed.
+                # but given we do less: this will last longer, at least ~3-4 more
+        )
+
     def _monitor_cmd_queue(self):
         while self._is_running:
             raw = self._cmd_queue.get()
@@ -160,12 +184,13 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             cmd, args, kwargs = raw
             logger.debug("Processing cmd %s with %s // %s", cmd, args, kwargs)
             if cmd is self.Msg.SET_POSE_ALGO:
-                self._pose_algo =  args[0]
+                pose_algo = args[0]
+                self._pose_algo = pose_algo
             elif cmd is self.Msg.SET_PROJECT_INFO:
                 self._project = args[0]
             elif cmd is self.Msg.START_NEW_INTERSESSION_BATCH_ITEM:
                 # Without session batching the stop-recorded event is normally set via the data handler thread,
-                # when it receive the EOF_RECORDING which is initially sent by the camera capture processes to the
+                # when it receives the EOF_RECORDING which is initially sent by the camera capture processes to the
                 # main pose/inference thread-process itself.
                 # While with session batching we have to set it "explicitly", after enter intersession.
                 self._stop_recorded.set()  # so here it is.
@@ -211,7 +236,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
             min_nbr_pd = min(map(len, ib_pose_data_list))
 
-            # current analyse code also require exact same frame number in all cameras,
+            # current analysis code also require exact same frame number in all cameras,
             # let's trim what's necessary:
             for cam in self._cams:
                 paths = list(map(Path, project_info.get_video_path(cam, allow_overwrite=True)))
@@ -271,6 +296,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         cnt_data_received = 0
         skip_update = False
         pose_data = []
+        prev_pose_algo = None
 
         thread_post_process: Optional[threading.Thread] = None
         ib_pose_data_list = []
@@ -285,6 +311,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
         perf_c_log_counters = time.perf_counter()
         t_perf_live_check_data_queue_size = time.perf_counter() + 5
+
+        async_data_tasks = []  # for pose_algo.process async work tasks
 
         def get_next_pose_data(timeout: Optional[float] = 0.05):
             nonlocal pose_data
@@ -374,6 +402,13 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 tot_skipped = 0
                 writes_h5_live_durations.clear()
 
+            # purge current ready async results from waiting list:
+            while len(async_data_tasks) > 0:
+                older_async_res = async_data_tasks[0]  # type: multiprocessing.pool.ApplyResult
+                if not older_async_res.ready():
+                    break
+                del async_data_tasks[0]
+
             prev_mode = next_prev_mode  # don't forget
 
             try:
@@ -394,7 +429,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 perf_now = time.perf_counter()
                 if perf_now >= t_perf_live_check_data_queue_size:
                     data_queue_size = self._data_queue.qsize()
-                    skip_update = data_queue_size > 7
+                    skip_update = data_queue_size > 3
                     if skip_update:
                         logger.warning("data queue size=%s ; skip_update", data_queue_size)
                     t_perf_live_check_data_queue_size = perf_now + (0.5 if skip_update else 2.5)
@@ -412,6 +447,12 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             pose_algo = self._pose_algo
             if pose_algo is None:
                 continue
+            if pose_algo is not prev_pose_algo:
+                # this is for when pose_algo is changed
+                async_data_tasks.clear()
+                self._init_process_pool(pose_algo)
+                prev_pose_algo = pose_algo
+            pool = self._process_pool  # after init process pool
 
             if recording_in_progress and frames_indices is not None:
                 # thx to camera capture which send a full EOF_RECORDING batch frames indices,
@@ -502,8 +543,14 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             logger.verbose("Skipping incomplete frame index pose_data: %s",frames_indices.tolist())
                         continue
 
-                    response = pose_algo.process(pose_data, pairs_3d_offsets=self._monitored_parts_offsets)
-                    self._send_msg(self.Msg.POSE_RESULT_READY, response)
+                    async_data_tasks.append(pool.apply_async(pool_process_pose_data, args=(pose_data,)))
+                    if len(async_data_tasks) > 8:  # reminder: we have 4 workers atm.
+                        first_async_res = async_data_tasks[0]  # type: multiprocessing.pool.ApplyResult
+                        logger.warning("too many pending async processing data, waiting older one..")
+                        try:
+                            first_async_res.wait()
+                        except Exception as err:
+                            logger.exception("Error on wait async res: %s", err)
 
                 elif mode == InferenceMode.Offline:
 
@@ -519,13 +566,13 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         logger.notice("Opening live files for offline processing ; prev_mode=%s frames=%s",
                                       prev_mode, frames_indices.tolist())
                         cur_local_prj = self._project.to_local_value()
-                        # re-obtain the paths, projectinfo might be from a batch session
+                        # re-obtain the paths, project info might be from a batch session
                         pose_paths = [
                             Path(cur_local_prj.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live"))
                             for cam in cams
                         ]
                         cams_read_h5_dss = [
-                            open_h5_file(cam_pose_path)
+                            _open_h5_file(cam_pose_path)
                             for cam_pose_path in pose_paths
                         ]
                         cams_read_h5_idx = [0] * n_cams

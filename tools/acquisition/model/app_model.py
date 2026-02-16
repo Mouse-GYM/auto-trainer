@@ -161,6 +161,7 @@ class AppModel(ObservableObject):
         # using a shared process manager,
         # this allows to put shared values, created via the manager, to any multiprocess shared queue, notably.
         self._mp_manager = multiprocessing.get_context("spawn").Manager()
+        mp_ctx = get_mp_ctx()
         # otherwise (new) shared values can only be inherited from newly spawned sub-process(es) and not from already
         # existing sub-process(es).
 
@@ -189,8 +190,6 @@ class AppModel(ObservableObject):
         self._p_inference_live_begin = -math.inf
 
         self._event_manager = EventManager.default()
-
-        mp_ctx = get_mp_ctx()
 
         # not sure this should better be in SystemMachine or BehaviorAlgo or BehaviorModel or eventually HardwareModel ?
         # although here it's also working, so keeping for now.
@@ -240,7 +239,10 @@ class AppModel(ObservableObject):
         self._inference: InferenceModel = None  # noqa
 
         self.reload_calib(calib_dir)
-        self._inference = InferenceModel(self._pose_algorithm, calib_dir=calib_dir) if inference_model is None else inference_model
+        self._inference = InferenceModel(self._pose_algorithm,
+                                         calib_dir=calib_dir,
+                                         mp_manager=self._mp_manager,
+                                         ) if inference_model is None else inference_model
 
         #
 

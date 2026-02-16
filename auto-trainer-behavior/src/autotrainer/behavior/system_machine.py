@@ -20,9 +20,8 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 
-from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind
+from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind, InferenceMonitorDataMsg
 from autotrainer.inference.analysis import IntersessionResponse
-from autotrainer.inference.pose_result_process import InferenceMonitorDataMsg
 
 from . import CaptureAnalysisResult, RecordingEndingReason
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps

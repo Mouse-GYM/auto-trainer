@@ -1,16 +1,12 @@
-import inspect
-import logging.config
 import multiprocessing
 import os
 import queue
 import signal
 import threading
 import time
-import traceback
-import typing
 from itertools import chain
 from pathlib import Path
-from typing import Optional, List, Dict, TextIO, Tuple, Any
+from typing import Optional, List, Dict, Tuple, Any
 from threading import Thread
 
 import cv2
@@ -20,15 +16,15 @@ import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
     InferenceConfiguration, Offset3DTuple, ApiEventKind, get_perf_now
-from autotrainer.core.logging import get_verbose_logger, setup_logging, make_log_dict_config, install_log_exception_hook
+from autotrainer.core.logging import get_verbose_logger, make_log_dict_config
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
     InferenceProtocol, IntersessionBlock, IntersessionDetection
 from autotrainer.core.frame_index import FrameIndexCategory
-from autotrainer.core.multiproc import get_mp_ctx
+from autotrainer.core.multiproc import get_mp_ctx, pool_init
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
-    InferenceMode, InferenceStatus
+    InferenceMode, InferenceStatus, InferenceMonitorDataMsg
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
-from autotrainer.inference.pose_result_process import InferenceMonitorDataProc, InferenceMonitorDataMsg
+from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
 from autotrainer.inference.analysis import intersession_process
 
 from autotrainer.core.project import ProjectDependentProtol
@@ -51,18 +47,6 @@ def check_frame_count(file_path: Path):
     return capture, count
 
 
-def _pool_init(log_dict_cfg):
-    """For process pool below"""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-    if log_dict_cfg is None:
-        setup_logging()
-    else:
-        logging.config.dictConfig(log_dict_cfg)
-        install_log_exception_hook()
-    logger.info("Initialized pool worker")
-
-
 class InferenceIncorrectStatus(RuntimeError):
     """For when in analysis but inference change status"""
 
@@ -73,10 +57,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         pose_algorithm: PoseAlgorithm,
         *,
         calib_dir: Optional[Path] = None,
+        mp_manager=None,
     ):
         super().__init__()
 
-        mp_ctx = get_mp_ctx()
+        mp_ctx = get_mp_ctx() if mp_manager is None else mp_manager
+        self._mp_manager = mp_manager
         self._thread_lock = threading.RLock()  # for perform_detection / perform_segmentation
         self._output_data_queue = mp_ctx.Queue(maxsize=64)  # inference result data queue
         self._cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to inference process
@@ -274,7 +260,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
         self._process_pool = multiprocessing.Pool(
             processes=1,  # we only need 1 atm
-            initializer=_pool_init,
+            initializer=pool_init,
             initargs=(make_log_dict_config(),),
             maxtasksperchild = int(os.getenv("INFERENCE_PROCESS_POOL_MAX_TASKS_PER_CHILD", 4096)),
         )
@@ -292,6 +278,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 cmd_ack_event=self._data_monitor_cmd_ack_event,
                 frames_per_cam=live_queue.frames_per_camera,
                 monitored_parts_offsets=list(self._pair_offsets_2_handler),
+                mp_manager=self._mp_manager,
             )
             proc.start()
 
@@ -427,7 +414,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             if mp_q is not None:
                 clear_queue(mp_q, log_dumped=True, name=name)
                 logger.debug("queue: %s: closing size=%s", name, mp_q.qsize())
-                mp_q.close()
+                if hasattr(mp_q, "close"):
+                    mp_q.close()
 
     def load_configuration(self, configuration: InferenceConfiguration):
         self.model_location = configuration.pose_model_location
@@ -456,7 +444,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
     def _handle_monitor_data_proc_msg(self, msg, ctx):
         args, kwargs = ctx
-        if msg is InferenceMonitorDataProc.Msg.POSE_RESULT_READY:
+        if msg is InferenceMonitorDataMsg.POSE_RESULT_READY:
             response = args[0]
             for pair_key, pair_handler in self._pair_offsets_2_handler.items():
                 part1, part2 = pair_key
@@ -475,7 +463,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             except Exception as err:
                 logger.exception("pose_response_ready event callback failed: %s", err)
 
-        elif msg is InferenceMonitorDataProc.Msg.INTERSESSION_SEGMENTATION_FINISHED:
+        elif msg is InferenceMonitorDataMsg.INTERSESSION_SEGMENTATION_FINISHED:
             ib = self._intersession_block
             if ib is None:
                 logger.critical("Got %s but intersession_block is None ; args=%s", msg, args)
@@ -483,6 +471,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 session_nr, success = args
                 ib.configuration.complete(ib.configuration.nonce, success)
                 self._intersession_block = None
+        else:
+            logger.warning("unknown monitor proc data: %s - ctx=%s", msg, ctx)
 
     def _monitor_msg_queue(self):
         while True:
@@ -491,6 +481,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             except queue.Empty:
                 continue
             if raw is None:
+                logger.notice("received None exit sentinel, exiting loop")
                 break
             msg, context = raw
             try:
@@ -506,7 +497,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                     self._data_monitor_cmd_queue.put(
                         (InferenceMonitorDataProc.Msg.SET_POSE_ALGO, (pose_algo,), None))
                     self._send_message(InferenceCommandMessageKind.Start)
-                    # self.algo_initialised(self._pose_algorithm)  # unused
                 elif msg == InferenceStatusMessageKind.Loading:
                     self._set_status(InferenceStatus.loading)
                 elif msg == InferenceStatusMessageKind.Performance:

@@ -17,11 +17,20 @@ class InferenceStatus(str, Enum):
     intersession = "Intersession"
     stopping = "Stopping"
 
+
+class InferenceMonitorDataMsg(str, Enum):
+
+    SET_PROJECT_INFO = "set_project_info"
+    SET_POSE_ALGO = "set_pose_algo"
+    POSE_RESULT_READY = "pose_result_ready"
+    INTERSESSION_SEGMENTATION_FINISHED = "intersession_segmentation_finished"
+    START_NEW_INTERSESSION_BATCH_ITEM = "start_new_intersession_batch_item"
+
+
 #
 
 from .pose_algorithm import PoseAlgorithm, PoseResponse, PoseLocation, PoseTuple
 from .pose_model import PoseModel
 from .memory import MemoryPoseModel
 from .dlc import DlcPoseModel
-#
 from .pose_process import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, InferenceMode
