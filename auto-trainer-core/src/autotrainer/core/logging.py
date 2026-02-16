@@ -2,21 +2,18 @@ import copy
 import dataclasses
 import functools
 import itertools
+import logging
 import logging.handlers
-import math
 import multiprocessing
 import operator
-import os
-import queue
 import signal
 import threading
 import time
 from pathlib import Path
-from datetime import datetime
 from logging import LogRecord
 from queue import Empty
 from multiprocessing import Process
-from typing import Optional, Dict, Union, TextIO, List
+from typing import Optional, Dict, Union, List
 
 import sys
 import verboselogs
@@ -654,5 +651,30 @@ def get_log_file_location(*, log_base_dir: str = "", full_format: str):
 
     return log_location
 
+
+def set_log_location(device: str):
+    log_file = get_log_file_location(
+        full_format=f"{{log_location}}/{{date_stamp}}/{device}/{{date_stamp}}_{device}_{{idx:03d}}.log"
+    )
+    logger.verbose("Setting log file to %s", log_file)
+    #
+    q_listener = get_log_queue_listener()
+    if q_listener is not None:
+        q_listener.add_file_handler(log_file)
+    else:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.addFilter(thread_id_filter)
+        file_handler.setFormatter(
+            PreciseTimeFormatter(
+                MULTIPROC_LOG_FORMAT,
+                datefmt=DateTimeFormats.year_precise,
+                time_precision=6,
+            )
+        )
+        file_handler.setLevel(verboselogs.SPAM + 1)  # writes everything up to DEBUG which reaches it
+        logging.root.addHandler(file_handler)
+
+
+# finally:
 
 logger = get_verbose_logger(__name__)  # noqa
