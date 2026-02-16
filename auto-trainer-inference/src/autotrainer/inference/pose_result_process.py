@@ -152,16 +152,20 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         prev = self._process_pool
         if prev is None:
             return
+        logger.verbose("Closing previous process pool %s", prev)
         try:
             prev.close()
-            prev.terminate()
+            # prev.terminate()
             prev.join()
         except Exception as err:
             logger.error("Error closing previous pool: %s", err)
+        else:
+            logger.debug("previous pool closed")
         self._process_pool = None
 
     def _init_process_pool(self, pose_algo):
         self._close_process_pool()
+        logger.notice("Initializing new workers process pool")
         self._process_pool = get_mp_ctx().Pool(
             processes=4,
             initializer=pool_init_process_pose_data,
@@ -181,7 +185,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             logger.debug("Processing cmd %s with %s // %s", cmd, args, kwargs)
             if cmd is self.Msg.SET_POSE_ALGO:
                 pose_algo = args[0]
-                self._init_process_pool(pose_algo)
                 self._pose_algo = pose_algo
             elif cmd is self.Msg.SET_PROJECT_INFO:
                 self._project = args[0]
@@ -293,6 +296,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         cnt_data_received = 0
         skip_update = False
         pose_data = []
+        prev_pose_algo = None
 
         thread_post_process: Optional[threading.Thread] = None
         ib_pose_data_list = []
@@ -399,7 +403,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 writes_h5_live_durations.clear()
 
             # purge current ready async results from waiting list:
-            pool = self._process_pool
             while len(async_data_tasks) > 0:
                 older_async_res = async_data_tasks[0]  # type: multiprocessing.pool.ApplyResult
                 if not older_async_res.ready():
@@ -444,6 +447,12 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             pose_algo = self._pose_algo
             if pose_algo is None:
                 continue
+            if pose_algo is not prev_pose_algo:
+                # this is for when pose_algo is changed
+                async_data_tasks.clear()
+                self._init_process_pool(pose_algo)
+                prev_pose_algo = pose_algo
+            pool = self._process_pool  # after init process pool
 
             if recording_in_progress and frames_indices is not None:
                 # thx to camera capture which send a full EOF_RECORDING batch frames indices,
@@ -535,7 +544,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         continue
 
                     async_data_tasks.append(pool.apply_async(pool_process_pose_data, args=(pose_data,)))
-                    if len(async_data_tasks) > 8:
+                    if len(async_data_tasks) > 8:  # reminder: we have 4 workers atm.
                         first_async_res = async_data_tasks[0]  # type: multiprocessing.pool.ApplyResult
                         logger.warning("too many pending async processing data, waiting older one..")
                         try:
