@@ -38,21 +38,21 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
 2) activate it: `conda activate auto-trainer-1` ; every time.
 
 3) FLIR ; only once first time.
-To include support for Teledyne/Blackfly cameras, install the appropriate wheel for your platform, *e.g.,*
-`pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_aarch64.whl`
-or
-`pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_x86_64.whl`
-or
-`pip install .\library\spinnaker_python-3.2.0.57-cp38-cp38-win_amd64.whl`
+   To include support for Teledyne/Blackfly cameras, install the appropriate wheel for your platform, *e.g.,*
+   - `pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_aarch64.whl`
+   - `pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_x86_64.whl`
+   - `pip install .\library\spinnaker_python-3.2.0.57-cp38-cp38-win_amd64.whl`
 
 4) **Jetson Only** and only once first time:
-`conda install --channel=conda-forge ffmpeg=6.0.0`
-`pip install --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v512 tensorflow==2.12.0+nv23.06`
-`pip install ./path/to/pyjerrycan-1.2.5-cp38-cp38-linux_aarch64.whl`
+   - `conda install --channel=conda-forge ffmpeg=6.0.0`
+   - `pip install --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v512 tensorflow==2.12.0+nv23.06`
+   - `pip install ./path/to/pyjerrycan-1.2.5-cp38-cp38-linux_aarch64.whl`
 
 5) Once first time: clone https://github.com/Mouse-GYM/auto-trainer.
-`git clone https://github.com/Mouse-GYM/auto-trainer.git`
-`cd auto-trainer`
+    ```
+    git clone https://github.com/Mouse-GYM/auto-trainer.git
+    cd auto-trainer
+    ```
 
 6) Activate an appropriate branch, *e.g.,*
 `git checkout develop`
@@ -70,5 +70,5 @@ A command similar to following must be used or added to `.bashrc`/`.bash_profile
 export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libffi.so.7:/usr/lib/aarch64-linux-gnu/libgomp.so.1:/lib/aarch64-linux-gnu/libGLdispatch.so.0:/home/$USER/anaconda3/envs/auto-trainer-1/lib/python3.8/site-packages/scikit_learn.libs/libgomp-d22c30c5.so.1.0.0:/home/$USER/anaconda3/envs/auto-trainer-1/lib/python3.8/site-packages/torch/lib/libgomp-d22c30c5.so.1
 ```
 
-The exact filenames of the last two in particular may be slightly different based on versioning.  There will be an
+The exact filenames of the last two in particular may be slightly different based on versioning. There will be an
 error message in the console with the exact filename if it is different from the above.

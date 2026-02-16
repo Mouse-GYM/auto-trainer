@@ -1,7 +1,0 @@
-pytest >= 8.2.0, < 9
-pytest-mock >= 3, < 4
-pytest-randomly >= 3, < 4
-pytest-cov >= 5, < 6
-pytest-benchmark >= 4, < 5
-coverage >= 7, < 8
-coverage-enable-subprocess ~= 1.0
