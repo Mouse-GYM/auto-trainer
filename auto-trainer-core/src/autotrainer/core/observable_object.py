@@ -57,7 +57,8 @@ class ObservableObject(Events):
 
         ```
         def set_age(self, value: int):
-            self._age = self._on_property_changed("age", value, self._age)
+            prev, self._age = self._age, value  # assign the value before call the _on_property_changed event
+            self._on_property_changed("age", value, prev)
         ```
 
         This will only generate an event if the new value is different from the old value and update the member variable

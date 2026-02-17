@@ -68,11 +68,11 @@ class UserPreferences(ObservableObject):
         self._selected_animal: str = settings.value("system/selected_animal", "")  # noqa
 
         self._log_location: str = settings.value("system/log_location", "")  # noqa
-        self._log_level = settings.value("system/log_level", logging.WARNING, int)
+        self._log_level: int = settings.value("system/log_level", logging.WARNING, int)  # noqa
 
-        self._live_feed_refresh_rate = settings.value("display/refresh_rate", 15, int)
+        self._live_feed_refresh_rate: int = settings.value("display/refresh_rate", 15, int)  # noqa
 
-        self._measurement_graph = settings.value("ui/measurement_graph", "")
+        self._measurement_graph: str = settings.value("ui/measurement_graph", "")  # noqa
 
         # Transient values that may come from individual configuration files, but are conveniently accessed from
         # the user preferences.
@@ -107,8 +107,9 @@ class UserPreferences(ObservableObject):
 
     @serial_number.setter
     def serial_number(self, value: str):
-        self._serial_number = self._on_property_changed(self.SERIAL_NUMBER, value, self.serial_number)
-        self._settings.setValue("system/serial_number", self._serial_number)
+        prev, self._serial_number = self._serial_number, value
+        self._settings.setValue("system/serial_number", value)
+        self._on_property_changed(self.SERIAL_NUMBER, value, prev)
 
     @property
     def live_feed_refresh_rate(self) -> int:
@@ -116,9 +117,9 @@ class UserPreferences(ObservableObject):
 
     @live_feed_refresh_rate.setter
     def live_feed_refresh_rate(self, value: int):
-        self._live_feed_refresh_rate = self._on_property_changed(self.LIVE_FEED_REFRESH_RATE, value,
-                                                                 self.live_feed_refresh_rate)
-        self._settings.setValue("display/refresh_rate", self._live_feed_refresh_rate)
+        prev, self._live_feed_refresh_rate = self._live_feed_refresh_rate, value
+        self._settings.setValue("display/refresh_rate", value)
+        self._on_property_changed(self.LIVE_FEED_REFRESH_RATE, value, prev)
 
     @property
     def log_location(self) -> str:
@@ -128,8 +129,8 @@ class UserPreferences(ObservableObject):
     def log_location(self, value: Union[str, Path]):
         value = Path(value).as_posix()
         prev, self._log_location = self._log_location, value
-        self._on_property_changed(self.LOG_LOCATION, value, prev)
         self._settings.setValue("system/log_location", value)
+        self._on_property_changed(self.LOG_LOCATION, value, prev)
 
     @property
     def selected_animal(self) -> str:
@@ -139,9 +140,9 @@ class UserPreferences(ObservableObject):
     def selected_animal(self, value: str):
         # set new value first,
         prev, self._selected_animal = self._selected_animal, value
+        self._settings.setValue("system/selected_animal", value)
         # then eventually trigger the on_property_changed event:
         self._on_property_changed(self.SELECTED_ANIMAL, value, prev)
-        self._settings.setValue("system/selected_animal", value)
 
     @property
     def animal_location(self) -> str:
@@ -160,8 +161,9 @@ class UserPreferences(ObservableObject):
 
     @log_level.setter
     def log_level(self, value: int):
-        self._log_level = self._on_property_changed(self.LOG_LEVEL, value, self.log_level)
-        self._settings.setValue("system/log_level", self._log_level)
+        prev, self._log_level = self._log_level, value
+        self._settings.setValue("system/log_level", value)
+        self._on_property_changed(self.LOG_LEVEL, value, prev)
 
     # Transient Values
 
@@ -171,7 +173,8 @@ class UserPreferences(ObservableObject):
 
     @pellet_port.setter
     def pellet_port(self, value: str):
-        self._pellet_port = self._on_property_changed(self.PELLET_PORT, value, self.pellet_port)
+        prev, self._pellet_port = self._pellet_port, value
+        self._on_property_changed(self.PELLET_PORT, value, prev)
 
     @property
     def tunnel_port(self) -> str:
@@ -179,7 +182,8 @@ class UserPreferences(ObservableObject):
 
     @tunnel_port.setter
     def tunnel_port(self, value: str):
-        self._tunnel_port = self._on_property_changed(self.TUNNEL_PORT, value, self.tunnel_port)
+        prev, self._tunnel_port = self._tunnel_port, value
+        self._on_property_changed(self.TUNNEL_PORT, value, prev)
 
     @property
     def remove_raw_data_when_inactive_session(self) -> bool:
@@ -187,8 +191,8 @@ class UserPreferences(ObservableObject):
 
     @remove_raw_data_when_inactive_session.setter
     def remove_raw_data_when_inactive_session(self, value):
-        self._remove_raw_data_when_inactive_session = self._on_property_changed(
-            self.REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION, value, self._remove_raw_data_when_inactive_session)
+        prev, self._remove_raw_data_when_inactive_session = self._remove_raw_data_when_inactive_session, value
+        self._on_property_changed(self.REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION, value, prev)
 
     @property
     def measurement_graph(self) -> str:
@@ -196,5 +200,6 @@ class UserPreferences(ObservableObject):
 
     @measurement_graph.setter
     def measurement_graph(self, value: str) -> None:
-        self._measurement_graph = self._on_property_changed(self.MEASUREMENT_GRAPH, value, self._measurement_graph)
+        prev, self._measurement_graph = self._measurement_graph, value
         self._settings.setValue("ui/measurement_graph", value)
+        self._on_property_changed(self.MEASUREMENT_GRAPH, value, prev)
