@@ -71,8 +71,8 @@ class HeadbarPressureMonitor(ObservableObject):
 
     @load_cell_engaged_threshold.setter
     def load_cell_engaged_threshold(self, value: float) -> None:
-        self._load_cell_engaged_threshold = self._on_property_changed("threshold", value,
-                                                                      self._load_cell_engaged_threshold)
+        prev, self._load_cell_engaged_threshold = self._load_cell_engaged_threshold, value
+        self._on_property_changed("threshold", value, prev)
 
     @property
     def duration(self) -> float:
@@ -80,7 +80,8 @@ class HeadbarPressureMonitor(ObservableObject):
 
     @duration.setter
     def duration(self, value: float) -> None:
-        self._duration = self._on_property_changed("duration", value, self._duration)
+        prev, self._duration = self._duration, value
+        self._on_property_changed("duration", value, prev)
         self._rebuild_buffers()
 
     @property
