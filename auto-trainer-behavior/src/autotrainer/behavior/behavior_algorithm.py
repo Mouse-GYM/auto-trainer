@@ -174,7 +174,7 @@ class BehaviorAlgorithm(ObservableObject):
     session_ending: BehaviorAlgoEvents.session_ending
     batch_analysis_ending: BehaviorAlgoEvents.batch_analysis_ending
 
-    cover_servo_status_changed: BehaviorAlgoEvents.cover_servo_status_changed
+    cover_servo_status_changed: BehaviorAlgoEvents.cover_servo_status_changed  # unused
 
     pellets_presented_evt: BehaviorAlgoEvents.pellets_presented_evt
     pellets_consumed_evt: BehaviorAlgoEvents.pellets_consumed_evt
@@ -467,8 +467,9 @@ class BehaviorAlgorithm(ObservableObject):
 
     @capture_status.setter
     def capture_status(self, value: CaptureProcessStatus):
+        prev, self._capture_status = self._capture_status, value
         self._last_capture_status_change_perf_c = get_perf_now()
-        self._capture_status = self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, self._capture_status)
+        self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, prev)  # property changed event unused atm
 
     @property
     def capture_status_age(self) -> float:
@@ -855,10 +856,10 @@ class BehaviorAlgorithm(ObservableObject):
 
     @cover_servo_status.setter
     def cover_servo_status(self, status: CoverServoStatus):
-        self._cover_servo_status = self._on_property_changed(BehaviorAlgoProps.COVER_SERVO_STATUS,
-                                                             status, self._cover_servo_status)
+        prev, self._cover_servo_status = self._cover_servo_status, status
         if status is CoverServoStatus.OK:
             logger.notice("Set cover servo status to %s", status)
+        self._on_property_changed(BehaviorAlgoProps.COVER_SERVO_STATUS, status, prev)
 
     #
 
@@ -1265,9 +1266,9 @@ class BehaviorAlgorithm(ObservableObject):
                 ctx.error_detected = True
                 prev_status = self._cover_servo_status
                 new_status = CoverServoStatus(prev_status | ctx.cover_servo_status)
-                self.cover_servo_status_changed(new_status)
-                self._cover_servo_status = self._on_property_changed(
-                    BehaviorAlgoProps.COVER_SERVO_STATUS, new_status, prev_status)
+                self._cover_servo_status = new_status
+                self.cover_servo_status_changed(new_status)  # unused
+                self._on_property_changed(BehaviorAlgoProps.COVER_SERVO_STATUS, new_status, prev_status)  # unused
             elif over_duration > ctx.error_min_duration_threshold / 8 and not ctx.warned_bad_distance:
                 # this is to not have the warning unnecessarily emitted
                 logger.warning("Deviation of %s ongoing ; distance=%.2f expected=%s threshold=%s",

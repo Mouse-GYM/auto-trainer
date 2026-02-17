@@ -174,7 +174,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @is_enabled.setter
     def is_enabled(self, value: bool):
-        self._is_enabled = self._on_property_changed(self.IS_ENABLED_PROP, value, self._is_enabled)
+        prev, self._is_enabled = self._is_enabled, value
+        self._on_property_changed(self.IS_ENABLED_PROP, value, prev)
 
     @property
     def is_recording_enabled(self) -> bool:
@@ -182,8 +183,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @is_recording_enabled.setter
     def is_recording_enabled(self, value: bool):
-        self._is_recording_enabled = self._on_property_changed(self.IS_RECORDING_ENABLED_PROP, value,
-                                                               self._is_recording_enabled)
+        prev, self._is_recording_enabled = self._is_recording_enabled, value
+        self._on_property_changed(self.IS_RECORDING_ENABLED_PROP, value, prev)
 
     @property
     def record_mode(self) -> VideoRecordMode:
@@ -191,7 +192,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @record_mode.setter
     def record_mode(self, value: VideoRecordMode):
-        self._record_mode = self._on_property_changed(self.RECORD_MODE_PROP, value, self._record_mode)
+        prev, self._record_mode = self._record_mode, value
+        self._on_property_changed(self.RECORD_MODE_PROP, value, prev)
 
     @property
     def is_still_capture_enabled(self) -> bool:
@@ -199,8 +201,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @is_still_capture_enabled.setter
     def is_still_capture_enabled(self, value: bool):
-        self._is_still_capture_enabled = self._on_property_changed(self.IS_STILL_CAPTURE_ENABLED_PROP, value,
-                                                                   self._is_still_capture_enabled)
+        prev, self._is_still_capture_enabled = self._is_still_capture_enabled, value
+        self._on_property_changed(self.IS_STILL_CAPTURE_ENABLED_PROP, value, prev)
 
     @property
     def still_image_capture_interval(self) -> float:
@@ -208,8 +210,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @still_image_capture_interval.setter
     def still_image_capture_interval(self, value: float):
-        self._still_image_capture_interval = self._on_property_changed(self.STILL_IMAGE_CAPTURE_INTERVAL_PROP, value,
-                                                                       self._still_image_capture_interval)
+        prev, self._still_image_capture_interval = self._still_image_capture_interval, value
+        self._on_property_changed(self.STILL_IMAGE_CAPTURE_INTERVAL_PROP, value, prev)
 
     @property
     def is_primary(self) -> bool:
@@ -230,7 +232,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     @shape.setter
     def shape(self, value):
-        self._shape = self._on_property_changed(self.SHAPE_PROP, value, self._shape)
+        prev, self._shape = self._shape, value
+        self._on_property_changed(self.SHAPE_PROP, value, prev)
 
     @property
     def last_error(self) -> str:

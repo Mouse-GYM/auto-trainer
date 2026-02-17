@@ -589,7 +589,8 @@ class AppModel(ObservableObject):
 
     @notes.setter
     def notes(self, value: str):
-        self._notes = self._on_property_changed(self.Props.NOTES, value, self._notes)
+        prev, self._notes = self._notes, value
+        self._on_property_changed(self.Props.NOTES, value, prev)
 
     @property
     def rpc_service(self) -> Optional[RpcService]:

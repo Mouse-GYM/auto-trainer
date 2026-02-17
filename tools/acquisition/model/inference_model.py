@@ -139,7 +139,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
     @is_enabled.setter
     def is_enabled(self, value: bool):
-        self._is_enabled = self._on_property_changed("is_enabled", value, self._is_enabled)
+        prev, self._is_enabled = self._is_enabled, value
+        self._on_property_changed("is_enabled", value, prev)
 
     @property
     def is_predict_enabled(self) -> bool:
@@ -147,7 +148,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
     @is_predict_enabled.setter
     def is_predict_enabled(self, value: bool):
-        self._is_predict_enabled = self._on_property_changed("is_predict_enabled", value, self._is_predict_enabled)
+        prev, self._is_predict_enabled = self._is_predict_enabled, value
+        self._on_property_changed("is_predict_enabled", value, prev)
 
     @property
     def model_location(self) -> str:
@@ -155,7 +157,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
     @model_location.setter
     def model_location(self, value: str):
-        self._model_location = self._on_property_changed("model_location", value, self._model_location)
+        prev, self._model_location = self._model_location, value
+        self._on_property_changed("model_location", value, prev)
 
     @property
     def intersession_wait_time(self) -> float:
@@ -163,8 +166,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
     @intersession_wait_time.setter
     def intersession_wait_time(self, value: float):
-        self._intersession_wait_time = self._on_property_changed("intersession_wait_time", value,
-                                                                 self._intersession_wait_time)
+        prev, self._intersession_wait_time = self._intersession_wait_time, value
+        self._on_property_changed("intersession_wait_time", value, prev)
 
     @property
     def status(self) -> InferenceStatus:

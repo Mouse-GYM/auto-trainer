@@ -80,8 +80,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @pending_command.setter
     def pending_command(self, value: Optional[SystemCommandKind]):
-        self._pending_command = self._on_property_changed(HardwareModel.PENDING_COMMAND_PROPERTY, value,
-                                                          self._pending_command)
+        prev, self._pending_command = self._pending_command, value
+        self._on_property_changed(HardwareModel.PENDING_COMMAND_PROPERTY, value, prev)
 
     @property
     def last_position(self) -> Optional[Offset3DTuple]:
@@ -311,8 +311,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
-            self._head_magnet_position = self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value,
-                                                                   self._head_magnet_position)
+            prev, self._head_magnet_position = self._head_magnet_position, value
+            self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value, prev)
         elif name == MessageHandler.STEPPER_X_PROPERTY:
             self._last_coordinates = self._last_coordinates.replace(x=value.position)
             self.send_x = value.send_position

@@ -165,8 +165,9 @@ class LoadCellMonitor(BaseDetector):
 
     @load_cell_engaged_threshold.setter
     def load_cell_engaged_threshold(self, value: float):
-        self._config.weight_active_threshold = self._on_property_changed(
-            LoadCellMonitor.LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY, value, self._config.weight_active_threshold)
+        cfg = self._config
+        prev, cfg.weight_active_threshold = cfg.weight_active_threshold, value
+        self._on_property_changed(LoadCellMonitor.LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY, value, prev)
 
     @property
     def is_engaged(self) -> bool:
