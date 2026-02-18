@@ -10,9 +10,8 @@ from autotrainer.core.pose_elements import SceneElement
 
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 
-# todo: prepare_jetson_data could or should probably be moved in here/inference, given only used here..
-from autotrainer.core.analysis.prepare_jetson_data import process_raw_data
-from autotrainer.core.analysis.parse_pellet_presentations_jetson import segment_reaches
+from autotrainer.inference.analysis.prepare_jetson_data import process_raw_data
+from autotrainer.inference.analysis.parse_pellet_presentations_jetson import segment_reaches
 
 from . import IntersessionResponse
 

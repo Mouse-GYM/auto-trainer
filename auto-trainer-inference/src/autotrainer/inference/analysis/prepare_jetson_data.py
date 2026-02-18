@@ -18,8 +18,8 @@ import pandas as pd
 from scipy.signal import butter, filtfilt
 
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.analysis.config import load_calib_stereo_params
-from autotrainer.core.analysis import calibration_FLIR as cal_flir
+from autotrainer.inference.config import load_calib_stereo_params
+from autotrainer.inference import calibration_FLIR as cal_flir
 
 logger = get_verbose_logger(__name__)
 

@@ -8,10 +8,11 @@ import numpy as np
 import pandas as pd
 from scipy.signal import savgol_coeffs, filtfilt
 
-import autotrainer.core.analysis._segment_reaches_f1 as segment_reaches_f11_module
-from autotrainer.core import get_verbose_logger, Offset3DTuple
-from autotrainer.core.analysis import prepare_jetson_data as prep_jet
 
+from autotrainer.core import get_verbose_logger, Offset3DTuple
+
+import autotrainer.inference.analysis._segment_reaches_f1 as segment_reaches_f11_module
+from autotrainer.inference.analysis import prepare_jetson_data as prep_jet
 
 logger = get_verbose_logger(__name__)
 
