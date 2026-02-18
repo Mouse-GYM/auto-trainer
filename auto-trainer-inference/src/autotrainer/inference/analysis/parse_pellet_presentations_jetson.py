@@ -3,6 +3,7 @@ import os
 import glob
 import pickle
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Tuple, Dict, Union, List
 
@@ -168,7 +169,7 @@ def segment_reaches(
         if len(reaches_dfs) == 0:
             trajectory_dfs = pd.DataFrame(columns=columns)
         else:
-            trajectory_dfs = pd.concat({k: trj for k, trj in enumerate(reaches_dfs)})
+            trajectory_dfs = pd.concat(OrderedDict((k, trj) for k, trj in enumerate(reaches_dfs)))
         trajectory_dfs.to_hdf(reach_event_h5_path, key="trajectory", mode="a")
         logger.verbose("saved in %.1fs reach_events df to %s",
                        time.perf_counter() - p_before,
