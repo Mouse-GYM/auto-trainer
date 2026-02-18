@@ -10,7 +10,7 @@ import glob
 import pickle
 import yaml
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -786,7 +786,9 @@ def triangulate_3d_step1(
     return df_3d
 
 
-def process_raw_data(session, vid_tag, dlc_seg, calib_src_dir, center_method) -> Optional[pd.DataFrame]:
+def process_raw_data(
+    session, vid_tag, dlc_seg, calib_src_dir, center_method
+) -> Optional[Tuple[pd.DataFrame, pd.DataFrame]]:  # df_LR, df_3D
     frame_rate = 150
     p_thresh = 0.9  # confidence threshold for DLC raw output
     min_cluster = 10  # maximum allowed interpolation
@@ -824,4 +826,4 @@ def process_raw_data(session, vid_tag, dlc_seg, calib_src_dir, center_method) ->
     centered_df_3d = reorient_and_center(
         filtered_df_3d, centered_path_3d, calib_src_dir, bodyparts, center_method, frame_rate)
     #
-    return centered_df_3d
+    return df_LR, centered_df_3d

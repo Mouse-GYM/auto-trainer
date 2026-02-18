@@ -49,11 +49,11 @@ def intersession_process(
     vid_tag = "." + video_write_ext
     dlc_seg = "_raw2D"
     center_method = (1, SceneElement.Diamond)
-    centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
+    df_lr, centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
     results_dict = segment_reaches(
         session=location,
         center_method=center_method,
-        available_shift_xyz=AvailableShiftXYZ,
+        df_lr=df_lr,
         df_3d=centered_df_3d,
         debug=debug_level,
     )

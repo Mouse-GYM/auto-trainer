@@ -2,6 +2,8 @@ import inspect
 import os
 import glob
 import pickle
+import time
+from pathlib import Path
 from typing import Tuple, Dict, Union, List
 
 import numpy as np
@@ -49,7 +51,7 @@ def segment_reaches(
     *,
     session,
     center_method,
-    available_shift_xyz,
+    df_lr,
     df_3d,
     overwrite: bool = True,
     debug: int = 0,
@@ -114,6 +116,65 @@ def segment_reaches(
 
     with open(save_file_path, 'wb') as f:
         pickle.dump(reach_events, f)
+
+    def save_reach_events_h5():
+        p_before = time.perf_counter()
+        reach_event_h5_path = Path(vid_dir).joinpath(f"{vid_name_base}_reach_events.h5")
+        reach_df = pd.DataFrame(reach_events, columns=["init", "end", "max", "outcome"])
+        reach_df.to_hdf(reach_event_h5_path, key="reach", mode="w")  # use mode='w' for first write,
+        # subsequent writes to it will be with mode='a'
+
+        column_names = ("left", "right", "3d")
+        index_labels = ("x", "y", "z")
+        columns = pd.MultiIndex.from_product(
+            [column_names, index_labels],
+            names=["view", "coordinates"])
+
+        pellet_dfs = []
+
+        reaches_dfs = []
+        for reach in reach_events:
+            r_end = reach["end"]
+            r_init = reach["init"]
+            l = df_lr[0]['R_Hand'][['x', 'y']].assign(z=0).iloc[r_init:r_end].reset_index(drop=True)
+            r = df_lr[1]['R_Hand'][['x', 'y']].assign(z=0).iloc[r_init:r_end].reset_index(drop=True)
+            three_d = df_3d['R_Hand'][['x', 'y', 'z']].iloc[r_init:r_end].reset_index(drop=True)
+            reaches_dfs.append(pd.DataFrame(
+                {
+                    (w, c): o[c]
+                    for c in 'xyz'
+                    for w, o in (("left", l), ("right", r), ("3d", three_d))
+                },
+                columns=columns,
+            ))
+            l = df_lr[0]['Pellet'][['x', 'y']].assign(z=0).iloc[r_init:r_end].reset_index(drop=True)
+            r = df_lr[1]['Pellet'][['x', 'y']].assign(z=0).iloc[r_init:r_end].reset_index(drop=True)
+            three_d = df_3d['Pellet'][['x', 'y', 'z']].iloc[r_init:r_end].reset_index(drop=True)
+            pellet_dfs.append(pd.DataFrame(
+                {
+                    (w, c): [o[c].loc[:30].mean()]
+                    for c in 'xyz'
+                    for w, o in (("left", l), ("right", r), ("3d", three_d))
+                },
+                columns=columns,
+            ))
+
+        if len(pellet_dfs) == 0:
+            pellet_dfs = pd.DataFrame(columns=columns)
+        else:
+            pellet_dfs = pd.concat(pellet_dfs, ignore_index=True)
+        pellet_dfs.to_hdf(reach_event_h5_path, key="pellet", mode="a")
+
+        if len(reaches_dfs) == 0:
+            trajectory_dfs = pd.DataFrame(columns=columns)
+        else:
+            trajectory_dfs = pd.concat({k: trj for k, trj in enumerate(reaches_dfs)})
+        trajectory_dfs.to_hdf(reach_event_h5_path, key="trajectory", mode="a")
+        logger.verbose("saved in %.1fs reach_events df to %s",
+                       time.perf_counter() - p_before,
+                       reach_event_h5_path)
+
+    save_reach_events_h5()
 
     results_dict['pellets_presented'] = pellets_presented
     results_dict['total_reaches'] = total_reaches
