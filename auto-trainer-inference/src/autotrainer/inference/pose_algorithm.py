@@ -1,7 +1,7 @@
 import dataclasses
 import itertools
 import operator
-from typing import List, Dict, Optional, Tuple, Callable, ClassVar, Literal, Union
+from typing import List, Dict, Optional, Tuple, Literal
 from collections import namedtuple, defaultdict
 from dataclasses import dataclass
 
@@ -9,12 +9,13 @@ import numpy
 import pandas
 
 from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple
-from autotrainer.core.analysis.calibration import triangulate_3d_with_params
-from autotrainer.core.analysis.prepare_jetson_data import process_hand_data, reorient_and_center_step1, \
-    interpolate_coordinates
+from autotrainer.inference.calibration import triangulate_3d_with_params
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.analysis.config import StereoParams
+from autotrainer.inference.config import StereoParams
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
+
+from autotrainer.inference.analysis.prepare_jetson_data import process_hand_data, reorient_and_center_step1
+
 
 logger = get_verbose_logger(__name__)
 
