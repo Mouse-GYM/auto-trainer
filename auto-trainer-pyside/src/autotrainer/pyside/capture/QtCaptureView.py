@@ -56,13 +56,13 @@ class QCaptureView(QWidget):
         self._camera = QComboBox()
         self._camera.currentIndexChanged.connect(self._source_changed)
 
-        self._camera_name = QLabel("")
+        self._camera_name_label = QLabel("")
 
         top_layout = QHBoxLayout()
         top_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         top_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.addWidget(self._camera)
-        top_layout.addWidget(self._camera_name)
+        top_layout.addWidget(self._camera_name_label)
 
         self._card_widget = CardWidget(title="Capture", header_right_layout=top_layout)
 
@@ -133,6 +133,14 @@ class QCaptureView(QWidget):
 
         self.recording_indicator_changed.connect(self._set_recording_enabled_indicator)
 
+    @property
+    def settings(self) -> QCaptureSettings:
+        return self._settings
+
+    @property
+    def image_view(self) -> QGLImageView:
+        return self._image
+
     def set_presence_detection(self, detection: Optional[PresenceDetectionAttrs]):
         self._presence_detection = detection
 
@@ -158,11 +166,7 @@ class QCaptureView(QWidget):
     def set_is_editable(self, is_editable: bool):
         self._content_stack.setCurrentIndex(1 if is_editable else 0)
         self._camera.setVisible(is_editable)
-        self._camera_name.setVisible(not is_editable)
-
-    @property
-    def settings(self) -> QCaptureSettings:
-        return self._settings
+        self._camera_name_label.setVisible(not is_editable)
 
     def setCamera(self, camera):
         if camera in self._cameras:
@@ -185,6 +189,7 @@ class QCaptureView(QWidget):
         self._image.setFixedSize(QSize(self._image_width, self._image_height))
 
     def setShape(self, width: int, height: int):
+        logger.verbose("setShape[%s]: w=%s h=%s", self._camera_name_label.text(), width, height)
         self._image.set_data_size(width, height)
 
     def update_image(self):
@@ -229,7 +234,6 @@ class QCaptureView(QWidget):
             presence_detection=self._presence_detection,
         )
         self._is_frame_dirty = False
-        # self._fps_label.setText(f"{self._fps:.1f}")
 
     @Slot(ImageData, float)
     def refresh_image(self, data: ImageData, fps: float):
@@ -255,9 +259,9 @@ class QCaptureView(QWidget):
     def _source_changed(self, index):
         camera = self._camera.itemData(index)
         if camera:
-            self._camera_name.setText(camera.name)
+            self._camera_name_label.setText(camera.name)
         else:
-            self._camera_name.setText("None")
+            self._camera_name_label.setText("None")
         self.camera_changed.emit(camera)
 
     def _set_recording_enabled_indicator(self, b: bool):

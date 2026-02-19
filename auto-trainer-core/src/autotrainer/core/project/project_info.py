@@ -31,6 +31,8 @@ HOUR_INTERVAL_FORMAT = "h%H"
 
 IMAGE_CAPTURE_SUFFIX = "_images"
 
+REACH_EVENT_SUFFIX = "_reach_events.h5"
+
 
 class ProjectInterval(IntEnum):
     NONE = -1
@@ -106,6 +108,7 @@ class _ProjectInfo:
     session: ClassVar[int] = ValueHolderDescriptor()  # noqa
 
 
+@dataclass
 class ProjectInfo(_ProjectInfo):
 
     # custom/overloaded init to allow normal/exact same than previous argument names
@@ -150,7 +153,7 @@ class ProjectInfo(_ProjectInfo):
                                    )
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(session={self.session!r} when={self.when!r})"
+        return f"{self.__class__.__name__}(device={self.device_id!r}, session={self.session!r}, when={self.when!r})"
 
     def __eq__(self, other):
         if isinstance(other, ProjectInfo):
@@ -173,14 +176,12 @@ class ProjectInfo(_ProjectInfo):
         if hasattr(self._session, "acquire"):
             self._session.release()
 
-    def _get_when_or_now(self, when: Optional[datetime] = None):
-        return (
-            (
-                _get_datetime_now() if self.when is None
-                else self.when
-            ) if when is None
-            else when
-        )
+    def _get_when_or_now(self, when: Optional[datetime] = None) -> datetime:
+        if when is None:
+            when = self.when
+            if when is None:
+                when = _get_datetime_now()
+        return when
 
     def is_valid(self):
         return self.root is not None and len(self.root) > 0
@@ -230,21 +231,18 @@ class ProjectInfo(_ProjectInfo):
     def get_session_path(self, name: str = "", session: int = -1, skip_ensure: bool = False,
                          when: Optional[datetime] = None) -> Optional[SessionSource]:
         (location, today) = self.get_day_path(True, when=when)
-
-        s_idx = session if session >= 0 else self.session
-        session_str = f"trial{s_idx:03}"
+        if session < 0:
+            session = self.session
+        session_str = f"trial{session:03}"
         location = os.path.join(location, session_str)
-
         if not skip_ensure and self.ensure_exists:
             if not _safe_ensure_location(location):
                 return None
-
         d = f"_{self.device_id}" if self.device_id else ""
         prefix = f"{today}{d}_{session_str}"
         s = f"_{name}" if name else ""
         prefix = f"{prefix}{s}"
-
-        return SessionSource(location, prefix, s_idx)
+        return SessionSource(location, prefix, session)
 
     def get_source_path(
         self,
@@ -341,16 +339,17 @@ class ProjectInfo(_ProjectInfo):
     ) -> Union[Tuple[str, str], Tuple[None, None]]:
         """Get the 2-tuple of image paths for given arguments"""
         base = self.get_source_path(name, interval=interval, session=session, skip_ensure=True, when=when)
-
         image_location = os.path.join(base.location, f"{base.prefix}{IMAGE_CAPTURE_SUFFIX}")
-
         if self.ensure_exists:
             if not _safe_ensure_location(image_location):
                 return None, None
-
         image_file_format_str = base.prefix + "_{when}" + ".png"
-
         return image_location, image_file_format_str
+
+    def get_reach_event_path(self):
+        base = self.get_source_path("")
+        loc = os.path.join(base.location, f"{base.prefix}{REACH_EVENT_SUFFIX}")
+        return loc
 
     def get_intersession_pose_path(
         self,

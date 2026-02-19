@@ -1076,6 +1076,8 @@ class AppModel(ObservableObject):
         observer.schedule(self._plans_files_event_handler, path=plans_path.resolve(), recursive=False)
         observer.start()
 
+        self._project_info = self.make_project_info()
+
         return True
 
     def reload_training_plans(self, dir_path: Optional[Path] = None, *, reraise_on_error: bool=False):

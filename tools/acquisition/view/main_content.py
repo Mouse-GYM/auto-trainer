@@ -1,18 +1,22 @@
 import time
 from typing import Tuple, Optional, List
 
+import pandas
+
 from PySide6 import QtCore
-from PySide6.QtCore import QTimer, Slot, Signal, Qt, QSize
+from PySide6.QtCore import QTimer, Slot, Signal, Qt, QSize, QPoint, QPointF
+from PySide6.QtGui import QPixmap, QPainter, QPen, QPolygon, QPolygonF, QImage
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QStackedLayout, QWidget, QSizePolicy, QScrollBar, \
     QScrollArea, QLayout
 
-from autotrainer.core import AnimalSubject
+from autotrainer.core import AnimalSubject, ProjectInfo
 from autotrainer.core.logging import get_verbose_logger
 
 from autotrainer.inference import PoseResponse, PoseAlgorithm, InferenceStatus
 
 from autotrainer.behavior import TrainingMode
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.inference.analysis import IntersessionResponse
 
 from autotrainer.pyside import Separator, CardWidget
 from autotrainer.pyside.StackedContent import StackedWidget, StackedLayout
@@ -298,13 +302,10 @@ class MainContent(ContentWidget):
             self._alarm_content_manual_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._mid_widget_manual)
             self._end_stacked_layout.setCurrentWidget(self._end_widget_manual)
-            plan = None
         else:
             self._protocol_progress_alarm_content_layout.addWidget(alarm_content)
             self._mid_stacked_layout.setCurrentWidget(self._protocol_phase_progress_widget)
             self._end_stacked_layout.setCurrentWidget(self._protocol_phase_end_widget)
-        #     plan = self._app_model.attached_plan
-        # self._update_training_plan(plan)
         self.update()
 
     def _update_training_plan(self, plan: Optional[TrainingPlan]):
@@ -384,6 +385,82 @@ class MainContent(ContentWidget):
     def set_diagnostics_visible(self, is_visible: bool):
         self._diagnostics_content.setVisible(is_visible)
         self._is_diagnostics_visible = is_visible
+
+    @invoke_method
+    def show_analysis_reach_events(
+        self,
+        prj: Optional[ProjectInfo],
+    ):
+        logger.verbose("show_analysis_reach_events: %s", prj)
+        if prj is None:
+            for cam in (self._left_camera_content, self._right_camera_content):
+                cam.camera_view.image_view.set_reach_overlay(None)
+            return
+        loc = prj.get_reach_event_path()
+        df_reach = pandas.read_hdf(loc, key="reach")
+        df_pellet = pandas.read_hdf(loc, key="pellet")
+        df_trajectory = pandas.read_hdf(loc, key="trajectory")
+        logger.debug("reach:\n%s\npellet:\n%s", df_reach, df_pellet)
+        x_y_cols = list("xy")
+        logger.debug("looping over %s reaches", len(df_reach))
+        for (cam_name, cam) in (
+            ("left", self._left_camera_content),
+            ("right", self._right_camera_content),
+        ):
+            assert len(df_trajectory.index.unique(0)) == len(df_reach)
+            img_view = cam.camera_view.image_view
+            width_f, height_f = img_view.size_factor
+            logger.debug("size_factor: %s", img_view.size_factor)
+            image = QImage(img_view.size(), QImage.Format.Format_RGBA8888)
+            px = QPixmap.fromImage(image)
+            px.fill(Qt.GlobalColor.transparent)
+            logger.debug("px: hasAlphaChannel=%s", px.hasAlphaChannel())
+            painter = QPainter(px)
+            pen = QPen()
+            with painter:
+                if len(df_reach) == 0:
+                    pen.setColor(Qt.GlobalColor.yellow)
+                    painter.setPen(pen)
+                    painter.setOpacity(1)
+                    painter.drawText(px.rect(), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter,
+                                     "No Reach Events Last Trial")
+                for r_idx in range(len(df_reach)):
+                    pel_x, pel_y = df_pellet.loc[r_idx, cam_name][x_y_cols]  # noqa
+                    rh_df = df_trajectory.loc[r_idx]
+                    # R_H
+                    pen.setColor(Qt.GlobalColor.yellow)
+                    pen.setWidth(1)
+                    painter.setPen(pen)
+                    painter.setOpacity(0.7)
+                    vals = [
+                        (x * width_f, y * height_f)
+                        for x, y in rh_df[cam_name][x_y_cols].values
+                    ]
+                    logger.debug("r_h vals=%s", vals)
+                    vals = list(map(lambda v: QPointF(v[0], v[1]), vals))
+                    painter.drawPolyline(vals)
+                    # Pellet at reach max
+                    size = 6
+                    center = size // 2
+                    coords = [
+                        (v1 + pel_x * width_f, v2 + pel_y * height_f)
+                        for v1, v2 in (
+                            (center, 0),  # Top
+                            (size, center),  # Right
+                            (center, size),  # Bottom
+                            (0, center)  # Left
+                        )
+                    ]
+                    coords = list(map(lambda v: QPointF(v[0], v[1]), coords))
+                    logger.debug("pellet_max coords=%s", coords)
+                    pen.setWidth(3)
+                    pen.setColor(Qt.GlobalColor.red)
+                    pen.setBrush(Qt.GlobalColor.red)
+                    painter.setPen(pen)
+                    polygon = QPolygonF(coords)
+                    painter.drawPolygon(polygon)
+            cam.camera_view.image_view.set_reach_overlay(px)
+        logger.success("set reach events for %s: %s events", prj, len(df_reach))
 
     @invoke_method
     def _model_property_changed(self, name: str, value, _):

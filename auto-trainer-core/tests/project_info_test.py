@@ -7,6 +7,7 @@ from unittest import mock
 import pytest
 
 from autotrainer.core.project import ProjectInfo
+from autotrainer.core.project.project_info import REACH_EVENT_SUFFIX
 
 device_id = "A1357"
 
@@ -128,3 +129,8 @@ def test_fast_path(root):
     assert prj.session == 2  # still
     prj.calculate_next_session_index()
     assert prj.session == 4, "slow path taken"
+
+
+def test_reach_event(project_info):
+    p = project_info.get_reach_event_path()
+    assert p.endswith(REACH_EVENT_SUFFIX)

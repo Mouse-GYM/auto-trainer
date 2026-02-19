@@ -132,7 +132,6 @@ def segment_reaches(
             names=["view", "coordinates"])
 
         pellet_dfs = []
-
         reaches_dfs = []
         for reach in reach_events:
             r_end = reach["end"]
