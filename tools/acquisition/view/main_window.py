@@ -1209,3 +1209,5 @@ class MainWindow(QMainWindow):
         # logger.debug("enabling show_reach_event_action, rsp=%s", rsp)
         self._previous_intersession_analysis_rsp = (prj, rsp)
         self.show_reach_event_action.setEnabled(True)
+        if self.show_reach_event_action.isChecked():
+            self.on_show_reach_event(True)
