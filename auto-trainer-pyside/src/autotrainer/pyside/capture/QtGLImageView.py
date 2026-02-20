@@ -115,7 +115,7 @@ class QGLImageView(QWidget):
         if px is not None:
             px_item = self._reach_overlay_scene_item = self._scene.addPixmap(px)
             px_item.setZValue(150)
-            logger.info("configured scene item %s ; %s ; %s", px_item, px.size(), self._view.size())
+            # logger.info("configured scene item %s ; %s ; %s", px_item, px.size(), self._view.size())
 
     def set_data(
         self,

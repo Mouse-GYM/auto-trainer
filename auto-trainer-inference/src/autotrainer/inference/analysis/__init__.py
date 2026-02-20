@@ -1,9 +1,8 @@
 import dataclasses
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 from autotrainer.core import Offset3DTuple
-from autotrainer.core.project.project_info import ProjectInfo
 
 
 @dataclass
@@ -15,8 +14,6 @@ class IntersessionResponse:
     successful_reaches: int = 0  # whose these are successful reaches (Right-Hand)
     pellets_presented: int = 0  # there were that many total pellets presented
     total_reaches: int = 0  # there were this many total reaches (both hands)
-
-    project: Optional[ProjectInfo] = None
 
     def humanize(self, n_digits=2):
         rounded = dataclasses.replace(

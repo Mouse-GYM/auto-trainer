@@ -785,8 +785,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
         if processed_ok:
             assert isinstance(result, IntersessionResponse)
-            result.project = project
-            self.detection_result_ready(result)
+            self.detection_result_ready(project, result)
 
         intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
         self._intersession_detection = None

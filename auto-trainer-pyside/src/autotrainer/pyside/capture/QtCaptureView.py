@@ -189,7 +189,7 @@ class QCaptureView(QWidget):
         self._image.setFixedSize(QSize(self._image_width, self._image_height))
 
     def setShape(self, width: int, height: int):
-        logger.verbose("setShape[%s]: w=%s h=%s", self._camera_name_label.text(), width, height)
+        # logger.debug("setShape[%s]: w=%s h=%s", self._camera_name_label.text(), width, height)
         self._image.set_data_size(width, height)
 
     def update_image(self):

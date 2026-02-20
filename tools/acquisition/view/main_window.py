@@ -6,7 +6,7 @@ from datetime import datetime
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QIcon, QKeySequence
@@ -88,7 +88,7 @@ class MainWindow(QMainWindow):
         self._training_plan_index_by_plan_id: Dict[Optional[str], int] = {}
         self._diamond_triangle_calib_run = None
 
-        self._previous_intersession_analysis_rsp: Optional[IntersessionResponse] = None
+        self._previous_intersession_analysis_rsp: Optional[Tuple[ProjectInfo, IntersessionResponse]] = None
 
         app_model = self._app_model = AppModel(self._preferences)
 
@@ -211,21 +211,20 @@ class MainWindow(QMainWindow):
             thread.start()
 
     def on_show_reach_event(self, is_toggled):
-        rsp = self._previous_intersession_analysis_rsp
-        if rsp is None:
-            prj = None
-        else:
-            prj = rsp.project
-        if is_toggled:
-            if prj is None:  # debug code
-                prj = self._app_model.project.to_local_value()
-                import autotrainer.inference
-                prj.root = str(Path(autotrainer.inference.__file__).parent.parent.parent.parent.joinpath("tests/data"))
-                prj.device_id = "agx001"
-                prj.session = 11
-                prj.when = datetime(2026, 2, 5)
-        else:
-            prj = None
+        raw = self._previous_intersession_analysis_rsp
+        if raw is None and is_toggled:
+            # debug code
+            prj = self._app_model.project.to_local_value()
+            import autotrainer.inference
+            prj.root = str(Path(autotrainer.inference.__file__).parent.parent.parent.parent.joinpath("tests/data"))
+            prj.device_id = "agx001"
+            prj.session = 11
+            prj.when = datetime(2026, 2, 5)
+            raw = (prj, True)
+        if raw is None or not is_toggled:
+            self.main_content.show_analysis_reach_events(None)
+            return
+        prj, rsp = raw
         self.main_content.show_analysis_reach_events(prj)
 
     def on_previous_plan_phase(self):
@@ -666,7 +665,7 @@ class MainWindow(QMainWindow):
         action = self.show_reach_event_action = QAction(QIcon(qta.icon("fa5s.bezier-curve")), "Show Reach", self)
         action.setToolTip("Show last reach trajectories")
         action.setCheckable(True)
-        # action.setEnabled(False)
+        action.setEnabled(False)  # comment me to be able to show 20260205_agx001_trial011 on start
         action.triggered.connect(self.on_show_reach_event)
 
         action = self.next_training_phase_action = QAction(QIcon(qta.icon("fa5s.arrow-alt-circle-right")), "Next Phase", self)
@@ -1206,7 +1205,7 @@ class MainWindow(QMainWindow):
         self._set_training_plans()
 
     @invoke_method
-    def _inference_analysis_result_ready(self, rsp: IntersessionResponse):
-        logger.debug("enabling show_reach_event_action, rsp=%s", rsp)
-        self._previous_intersession_analysis_rsp = rsp
+    def _inference_analysis_result_ready(self, prj: ProjectInfo, rsp: IntersessionResponse):
+        # logger.debug("enabling show_reach_event_action, rsp=%s", rsp)
+        self._previous_intersession_analysis_rsp = (prj, rsp)
         self.show_reach_event_action.setEnabled(True)

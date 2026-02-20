@@ -5,7 +5,7 @@ import pandas
 
 from PySide6 import QtCore
 from PySide6.QtCore import QTimer, Slot, Signal, Qt, QSize, QPoint, QPointF
-from PySide6.QtGui import QPixmap, QPainter, QPen, QPolygon, QPolygonF, QImage
+from PySide6.QtGui import QPixmap, QPainter, QPen, QPolygon, QPolygonF, QImage, QFont
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QVBoxLayout, QStackedLayout, QWidget, QSizePolicy, QScrollBar, \
     QScrollArea, QLayout
 
@@ -400,7 +400,8 @@ class MainContent(ContentWidget):
         df_reach = pandas.read_hdf(loc, key="reach")
         df_pellet = pandas.read_hdf(loc, key="pellet")
         df_trajectory = pandas.read_hdf(loc, key="trajectory")
-        logger.debug("reach:\n%s\npellet:\n%s", df_reach, df_pellet)
+        logger.verbose("reach:\n%s\npellet:\n%s\n", df_reach, df_pellet)
+        logger.debug("trajectory:\n%s", df_trajectory)
         x_y_cols = list("xy")
         logger.debug("looping over %s reaches", len(df_reach))
         for (cam_name, cam) in (
@@ -414,15 +415,16 @@ class MainContent(ContentWidget):
             image = QImage(img_view.size(), QImage.Format.Format_RGBA8888)
             px = QPixmap.fromImage(image)
             px.fill(Qt.GlobalColor.transparent)
-            logger.debug("px: hasAlphaChannel=%s", px.hasAlphaChannel())
             painter = QPainter(px)
             pen = QPen()
             with painter:
-                if len(df_reach) == 0:
+                if len(df_reach) == 0 and cam is self._left_camera_content:
                     pen.setColor(Qt.GlobalColor.yellow)
                     painter.setPen(pen)
                     painter.setOpacity(1)
-                    painter.drawText(px.rect(), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter,
+                    font = QFont("Sans-serif", 12)
+                    painter.setFont(font)
+                    painter.drawText(px.rect(), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter,
                                      "No Reach Events Last Trial")
                 for r_idx in range(len(df_reach)):
                     pel_x, pel_y = df_pellet.loc[r_idx, cam_name][x_y_cols]  # noqa
@@ -460,7 +462,7 @@ class MainContent(ContentWidget):
                     polygon = QPolygonF(coords)
                     painter.drawPolygon(polygon)
             cam.camera_view.image_view.set_reach_overlay(px)
-        logger.success("set reach events for %s: %s events", prj, len(df_reach))
+        # logger.verbose("set reach events for %s: %s events", prj, len(df_reach))
 
     @invoke_method
     def _model_property_changed(self, name: str, value, _):
