@@ -968,12 +968,8 @@ class SystemMachine(StateMachine):
             algo.end_capture_session(reason=reason)
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _handle_detection_result(self, res: IntersessionResponse):
-        # it's supposed to be the one related to the analysed session:
-        intersession_prj = self._intersession.project
-        logger.success("Intersession analysis result: prj=%s result=%s", intersession_prj, res)
-        # so we must/should have:
-        # assert intersession_prj.when == self._intersession.detection_config.session_when
+    def _handle_detection_result(self, prj: ProjectInfo, res: IntersessionResponse):
+        logger.success("Intersession analysis result: prj=%s result=%s", prj, res)
         #
         algo = self._algorithm
         if res.food_consumed > 0:

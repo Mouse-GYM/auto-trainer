@@ -369,7 +369,7 @@ class MockSystemMachine:
             if segmentation_ok:
                 self.mock_complete_detection(detection_ok)
             if detection_ok:
-                self.inference.detection_result_ready(results)
+                self.inference.detection_result_ready(self.inference.project, results)
 
     @contextlib.contextmanager
     def mock_perform_segmentation(self):
