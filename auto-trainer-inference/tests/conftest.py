@@ -5,9 +5,9 @@ import yaml
 
 import pytest
 
-from autotrainer.core.analysis import calibration_FLIR
-from autotrainer.core.analysis.config import load_calib_stereo_params
-from autotrainer.core.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
+from autotrainer.inference import calibration_FLIR
+from autotrainer.inference.config import load_calib_stereo_params
+from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference.pose_algorithm import PoseAlgorithm
 

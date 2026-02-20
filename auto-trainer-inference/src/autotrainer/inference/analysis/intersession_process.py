@@ -10,9 +10,8 @@ from autotrainer.core.pose_elements import SceneElement
 
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 
-# todo: prepare_jetson_data could or should probably be moved in here/inference, given only used here..
-from autotrainer.core.analysis.prepare_jetson_data import process_raw_data
-from autotrainer.core.analysis.parse_pellet_presentations_jetson import segment_reaches
+from autotrainer.inference.analysis.prepare_jetson_data import process_raw_data
+from autotrainer.inference.analysis.parse_pellet_presentations_jetson import segment_reaches
 
 from . import IntersessionResponse
 
@@ -50,11 +49,11 @@ def intersession_process(
     vid_tag = "." + video_write_ext
     dlc_seg = "_raw2D"
     center_method = (1, SceneElement.Diamond)
-    centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
+    df_lr, centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
     results_dict = segment_reaches(
         session=location,
         center_method=center_method,
-        available_shift_xyz=AvailableShiftXYZ,
+        df_lr=df_lr,
         df_3d=centered_df_3d,
         debug=debug_level,
     )

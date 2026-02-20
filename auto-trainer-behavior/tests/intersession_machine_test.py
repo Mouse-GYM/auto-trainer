@@ -1,4 +1,6 @@
+import contextlib
 import datetime
+import logging
 from unittest import mock
 
 import pytest
@@ -85,3 +87,30 @@ def test_intersession_increase_algo_counts(mock_system):
     assert algo.pellet_reaches_day == algo.pellet_reaches_total == 3
     assert algo.day_pellet_count == algo.total_pellet_count == 2
     assert algo.successful_reaches_day == algo.successful_reaches_total == 1
+
+
+def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
+    algo = mock_system.algo
+    algo.intersession_enabled = True
+    machine._delay_timer_consider_end_session = 0  # simpler test
+    after_exit_tunnel_msg = "after_exit_tunnel: load_cell_disengaged_when_tunnel"
+    def perform_exit_tunnel():
+        assert machine.state == SystemState.intersession
+        mock_system.exit_tunnel()
+        assert machine.state == SystemState.intersession
+        assert after_exit_tunnel_msg in caplog.text
+
+    mock_system.start_session_in_tunnel()
+    mock_system.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
+
+    with caplog.at_level(logging.DEBUG):
+        with mock_system.mock_intersession_analysis(concurrent_func=perform_exit_tunnel):
+            assert machine.state == SystemState.tunnel
+            mock_system.mock_pose_response(pellet_seen=False, mouse_seen=True, triangle_seen=True)
+            mock_system.increment_perf_now(algo.pellet_missing_time)
+            mock_system.mock_pose_response(pellet_seen=False, mouse_seen=True, triangle_seen=True)
+            assert machine.state == SystemState.intersession
+            assert after_exit_tunnel_msg not in caplog.text
+
+    assert machine.state == SystemState.cage, "Must be back in tunnel after end intersession analysis"
+    assert after_exit_tunnel_msg in caplog.text

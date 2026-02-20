@@ -1,16 +1,20 @@
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QImage, QSurfaceFormat, QBrush, QPixmap, QPen, QPainter, QFont
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QWidget, QGraphicsView, QGraphicsScene, QHBoxLayout, QGraphicsPixmapItem, \
-    QGraphicsEllipseItem
+    QGraphicsEllipseItem, QGraphicsItem
 
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.inference import PoseLocation
+
+
+logger = get_verbose_logger(__name__)
 
 
 class QGLImageView(QWidget):
@@ -31,13 +35,15 @@ class QGLImageView(QWidget):
         self._data_width = None
         self._data_height = None
 
+        self._reach_overlay_scene_item: Optional[QGraphicsPixmapItem] = None
+
         self._scene = QGraphicsScene(0, 0, width, height)
 
         brush = QBrush(Qt.GlobalColor.black)
         self._scene.setBackgroundBrush(brush)
 
         self._widget = QOpenGLWidget()
-        view = QGraphicsView(self._scene)
+        view = self._view = QGraphicsView(self._scene)
         view.setStyleSheet("border: 0x")
 
         sformat = QSurfaceFormat()
@@ -82,6 +88,12 @@ class QGLImageView(QWidget):
 
         self._count = 0
 
+    @property
+    def size_factor(self) -> Tuple[float, float]:
+        width_f = self._raw_img_scale_w / self._width_factor
+        height_f = self._raw_img_scale_h / self._height_factor
+        return width_f, height_f
+
     def set_data_size(self, width: int, height: int):
         # data size is the output model resolution
         self._pixmap = None
@@ -95,6 +107,16 @@ class QGLImageView(QWidget):
         self._raw_img_scale_w = scale_w
         self._raw_img_scale_h = scale_h
 
+    def set_reach_overlay(self, px: Optional[QPixmap]):
+        prev = self._reach_overlay_scene_item
+        if prev is not None:
+            self._scene.removeItem(prev)
+            self._reach_overlay_scene_item = None
+        if px is not None:
+            px_item = self._reach_overlay_scene_item = self._scene.addPixmap(px)
+            px_item.setZValue(150)
+            # logger.info("configured scene item %s ; %s ; %s", px_item, px.size(), self._view.size())
+
     def set_data(
         self,
         image: QImage,
@@ -105,7 +127,7 @@ class QGLImageView(QWidget):
     ):
         # retain a ref the used image to keep it alive after calling function also return
         self._cur_image = image
-        pixmap = QPixmap.fromImage(image)
+        pixmap = QPixmap.fromImage(image.convertToFormat(QImage.Format.Format_RGBA8888))
         if text_overlay:
             painter = QPainter(pixmap)
             font = QFont("Sans-serif", 12)
@@ -131,8 +153,7 @@ class QGLImageView(QWidget):
             self._pixmap.setPixmap(pixmap)
 
     def set_points(self, points: Dict[str, PoseLocation]):
-        width_f = self._raw_img_scale_w / self._width_factor
-        height_f = self._raw_img_scale_h / self._height_factor
+        width_f, height_f = self.size_factor
         # values are in coordinates (self._data_width, self._data_height)
         for elem, widget_point in self._points.items():
             values = points.get(elem, None)

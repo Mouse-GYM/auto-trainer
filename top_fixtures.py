@@ -369,7 +369,7 @@ class MockSystemMachine:
             if segmentation_ok:
                 self.mock_complete_detection(detection_ok)
             if detection_ok:
-                self.inference.detection_result_ready(results)
+                self.inference.detection_result_ready(self.inference.project, results)
 
     @contextlib.contextmanager
     def mock_perform_segmentation(self):
@@ -412,7 +412,6 @@ class MockSystemMachine:
         }
         parts_flags = (parts_flag, parts_flag, parts_flag)
         response = PoseResponse(sequence=1, parts_flags=parts_flags, locations=[])
-        # self.inference.pose_algorithm.pose_changed(response)
         self.inference.pose_response_ready(response)
         if self.pellet._api_status_token is not None and ack_pellet:
             self.pellet._pellet_device_ack_received(self.pellet._api_status_token)

@@ -1,15 +1,11 @@
-
-import os.path
 import collections
 import time
 import dataclasses
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
-from PySide6.QtWidgets import QMessageBox
-
 from autotrainer.core import Offset3DTuple, get_verbose_logger, ProjectInterval
-from autotrainer.core.analysis import calibration_FLIR
+from autotrainer.inference import calibration_FLIR
 from autotrainer.pyside.content_widget import InvokeMethod
 from autotrainer.video import VideoRecordMode, CaptureProcessStatus
 
