@@ -24,7 +24,7 @@ from autotrainer.inference import PoseResponse, InferenceStatus, InferenceComman
 from autotrainer.inference.analysis import IntersessionResponse
 
 from . import CaptureAnalysisResult, RecordingEndingReason
-from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps
+from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps, BehaviorAlgoStatus
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine, IntersessionState
 from .pellet import PelletState
@@ -206,14 +206,14 @@ class SystemMachine(StateMachine):
         self._intersession.project = value
 
     def before_enter_tunnel(self, *, reason: str = "NA"):
-        EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
         pellet_state = self._pellet_machine.state
         self._enter_tunnel_pellet_seen = self._algorithm.pellet_recently_seen
+        logger.debug("before_enter_tunnel: reason=%s state=%s pellet_state=%s pellet_recently_seen=%s",
+                     reason, self._state, pellet_state, self._enter_tunnel_pellet_seen)
         if self._state == SystemState.cage:
             # always when enter tunnel, but only if was in cage before.
             self._execute_disengage_auto_clamp_if_in_progress()
-        logger.debug("before_enter_tunnel: state=%s pellet_state=%s pellet_recently_seen=%s",
-                     self._state, pellet_state, self._enter_tunnel_pellet_seen)
+        EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
 
     def after_enter_tunnel(self, *, reason: str = "NA"):
         self._consider_start_session(reason=reason)
@@ -908,6 +908,8 @@ class SystemMachine(StateMachine):
         self._timer_consider_start_session = no_op_timer
         algo = self._algorithm
         if algo.algo_paused:
+            return
+        if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
             return
         perf_now = get_perf_now()
         pellet_seen_age = algo.pellet_seen_age

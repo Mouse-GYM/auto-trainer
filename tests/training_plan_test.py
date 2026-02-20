@@ -19,7 +19,7 @@ from autotrainer.core.configuration.behavior_configuration import ShiftXYZBuffer
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
-from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.model.app_model import AppModel, AppModelStatus
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.training_plan import get_plan_id
 from top_fixtures import MockSystemMachine
@@ -65,6 +65,7 @@ class TestTrainingPlan(MockSystemMachine):
             calib_dir=calib_dir,
             system_machine=machine,
         )
+        app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
         app_model.check_diamond_coord_enabled = False
         self._animal = app_model.add_animal("mouse1", select=True)
         try:
@@ -92,7 +93,10 @@ class TestTrainingPlan(MockSystemMachine):
         algo = app_model.behavior.algorithm
 
         assert app_model.loaded_configuration is None
+        # NB: load_config -> reload_training_plan require IDLE
+        prev, app_model.status = app_model.status, AppModelStatus.IDLE
         assert app_model.load_configuration() is True
+        app_model.status = prev
 
         assert algo.intersession_enabled is True  # required
         # NB: do not try change some settings after config is loaded,
@@ -100,6 +104,9 @@ class TestTrainingPlan(MockSystemMachine):
 
         app_model.training_mode = TrainingMode.AUTOMATIC
         app_model.on_capture_start()
+        app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
+
+        self.mock_pellet_ack(until_none=True)  # for whole send-pellet/cover pellet sequence(s)
 
         plan = app_model.get_training_plan_by_id(get_plan_id(app_model.training_plans[0]))
         animal = app_model.selected_animal

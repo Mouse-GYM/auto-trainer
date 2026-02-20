@@ -55,7 +55,7 @@ DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is con
 class MainWindow(QMainWindow):
 
     training_mode_changed = Signal(TrainingMode)
-    running_status_changed = Signal(bool)  # True == running
+    running_status_changed = Signal(bool)  # True == running/acquiring
 
     def __init__(
         self,
@@ -146,9 +146,11 @@ class MainWindow(QMainWindow):
         self.main_content.set_is_capture_active(started)
         #
         stopped = not started
-        self._animal_dropdown.setEnabled(stopped)
+        self._animal_dropdown_combo.setEnabled(stopped)
         self._training_plan_combo.setEnabled(stopped)
         self.edit_camera_settings_action.setEnabled(stopped)
+        self.animal_in_device_action.setEnabled(started)
+        self.animal_in_training_action.setEnabled(started)
         self.make_3d_calib_action.setEnabled(stopped)
         #
         run_action = self.run_action
@@ -209,6 +211,20 @@ class MainWindow(QMainWindow):
             thread = threading.Thread(target=exec_stop_capture, daemon=True)
             self._stop_capture_thread = thread
             thread.start()
+
+    def _on_animal_in_device_triggered(self, is_toggled):
+        logger.verbose("_on_animal_in_device_triggered: %s", is_toggled)
+        if is_toggled:
+            self._app_model.status = AppModelStatus.ANIMAL_IN_DEVICE
+        else:
+            self._app_model.status = AppModelStatus.ACQUIRING
+
+    def _on_animal_in_training_triggered(self, is_toggled):
+        logger.verbose("_on_animal_in_training_triggered: %s", is_toggled)
+        if is_toggled:
+            self._app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
+        else:
+            self._app_model.status = AppModelStatus.ANIMAL_IN_DEVICE
 
     def on_show_reach_event(self, is_toggled):
         raw = self._previous_intersession_analysis_rsp
@@ -468,6 +484,16 @@ class MainWindow(QMainWindow):
             raw_diamond_3d=raw_diamond_3d,
         )
 
+    def on_activated(self):
+        logger.success("main window activated")
+        self._check_diamond_triangle_config()
+        self.main_content.on_activated()
+        app_status = self._app_model.status
+        if app_status == AppModelStatus.IDLE:
+            self.on_capture_start_stop(True)
+        else:
+            logger.verbose("AppModelStatus not idle, not starting acquisition", app_status)
+
     def on_calibrate_diamond_triangle(self, is_toggled):
         if is_toggled and self._diamond_triangle_calib_run is None:
             self._diamond_triangle_calib_run = self._make_diamond_triangle_calib_run()
@@ -584,10 +610,6 @@ class MainWindow(QMainWindow):
             #
             self._show_msg_box(title, text, QMessageBox.Icon.Warning)
 
-    def on_activated(self):
-        self._check_diamond_triangle_config()
-        self.main_content.on_activated()
-
     def _finish_close(self):
         logger.info("finishing close ..")
         self.main_content.close()
@@ -662,8 +684,17 @@ class MainWindow(QMainWindow):
         action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
         action.triggered.connect(self.on_capture_start_stop)
 
-        action = self.show_reach_event_action = QAction(QIcon(qta.icon("fa5s.bezier-curve")), "Show Reach", self)
-        action.setToolTip("Show last reach trajectories")
+        action = self.animal_in_device_action = QAction(QIcon(qta.icon("fa5s.vector-square")), "Animal in device", self)
+        action.setCheckable(True)
+        action.setEnabled(False)
+        action.triggered.connect(self._on_animal_in_device_triggered)
+
+        action = self.animal_in_training_action = QAction(QIcon(qta.icon("fa5s.chalkboard-teacher")), "Animal in training", self)
+        action.setCheckable(True)
+        action.setEnabled(False)
+        action.triggered.connect(self._on_animal_in_training_triggered)
+
+        action = self.show_reach_event_action = QAction(QIcon(qta.icon("fa5s.bezier-curve")), "Show Previous Reach", self)
         action.setCheckable(True)
         action.setEnabled(False)  # comment me to be able to show 20260205_agx001_trial011 on start
         action.triggered.connect(self.on_show_reach_event)
@@ -758,13 +789,16 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar)
 
         toolbar.addAction(self.run_action)
+        toolbar.addAction(self.animal_in_device_action)
+        toolbar.addAction(self.animal_in_training_action)
+
         toolbar.addAction(self.show_reach_event_action)
 
         toolbar.addAction(self.previous_training_phase_action)
         toolbar.addAction(self.next_training_phase_action)
 
         spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
 
         toolbar.addWidget(QLabel("Notes:"))
@@ -777,7 +811,7 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self._notes)
 
         toolbar.addWidget(QLabel("Subject:"))
-        combo = self._animal_dropdown = QComboBox()
+        combo = self._animal_dropdown_combo = QComboBox()
         combo.setMinimumWidth(100)
         combo.setEditable(True)
         combo.setDuplicatesEnabled(False)
@@ -1041,13 +1075,13 @@ class MainWindow(QMainWindow):
         self._app_model.notes = value
 
     def _add_animal(self):
-        self._app_model.add_animal(self._animal_dropdown.currentText(), select=True)
+        self._app_model.add_animal(self._animal_dropdown_combo.currentText(), select=True)
 
     def _animal_changed(self, _):
-        if self._animal_dropdown.currentIndex() in (0, -1):
+        if self._animal_dropdown_combo.currentIndex() in (0, -1):
             self._app_model.selected_animal = None
         else:
-            animal_id = self._animal_dropdown.currentData()
+            animal_id = self._animal_dropdown_combo.currentData()
             animal: AnimalSubject = self._app_model.get_animal_by_id(animal_id)
             self._app_model.selected_animal = animal
 
@@ -1074,11 +1108,76 @@ class MainWindow(QMainWindow):
         if name == props.ACQUISITION_RUNNING:
             self.running_status_changed.emit(value)
 
+        elif name == props.STATUS:
+            logger.debug("got new app model status: %s", value)
+            self.blockSignals(True)
+            if value is AppModelStatus.IDLE:
+                for action in (
+                    self.calib_diamond_triangle_action,
+                    self.animal_in_device_action,
+                    self.animal_in_training_action,
+                ):
+                    action.setEnabled(False)
+                    action.setChecked(False)
+                for item in (self.make_3d_calib_action, self.run_action,
+                             self._animal_dropdown_combo, self._training_mode_combo, self._training_plan_combo):
+                    item.setEnabled(True)
+
+            elif value is AppModelStatus.ACQUIRING:
+                for action in (
+                    self.calib_diamond_triangle_action,
+                    self.animal_in_device_action,
+                    self.animal_in_training_action,
+                ):
+                    action.setEnabled(True)
+                    action.setChecked(False)
+                for item in (self._animal_dropdown_combo, self._training_mode_combo, self._training_plan_combo):
+                    item.setEnabled(True)
+                self._app_model.analysis.restart()
+
+            elif value in {AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS}:
+                for item in (
+                    self._training_mode_combo,
+                    self._training_plan_combo,
+                    self._animal_dropdown_combo,
+                    self.calib_diamond_triangle_action,
+                    self.animal_in_device_action,
+                    self.animal_in_training_action,
+                ):
+                    item.setEnabled(False)
+                self._app_model.analysis.stop()
+
+            elif value is AppModelStatus.ANIMAL_IN_DEVICE:
+                self.animal_in_training_action.setChecked(False)
+                for item in (
+                    self._training_mode_combo,
+                    self._training_plan_combo,
+                    self._animal_dropdown_combo,
+                    self.calib_diamond_triangle_action,
+                    self.make_3d_calib_action,
+                ):
+                    item.setEnabled(False)
+                self._app_model.analysis.restart()
+
+            elif value is AppModelStatus.ANIMAL_IN_TRAINING:
+                self.animal_in_device_action.setChecked(True)
+                for item in (
+                    self._training_mode_combo,
+                    self._training_plan_combo,
+                    self._animal_dropdown_combo,
+                    self.calib_diamond_triangle_action,
+                    self.make_3d_calib_action,
+                ):
+                    item.setEnabled(False)
+                self._app_model.analysis.restart()
+
+            self.blockSignals(False)
+
         elif name == props.ANIMALS:
             self._reload_animals(value)
 
         elif name == props.SELECTED_ANIMAL:
-            animal_dropdown = self._animal_dropdown
+            animal_dropdown = self._animal_dropdown_combo
             animal_dropdown.blockSignals(True)
             if value is None:
                 animal_dropdown.setCurrentIndex(0)
@@ -1126,7 +1225,7 @@ class MainWindow(QMainWindow):
         )
 
         # prevent on_animal_changed event:
-        combo = self._animal_dropdown
+        combo = self._animal_dropdown_combo
         combo.blockSignals(True)
         combo.clear()
         combo.addItem("", None)

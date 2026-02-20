@@ -42,6 +42,7 @@ class AlarmCondition:
 
 
 class EmergencyAlarmMonitor(BaseDetector):
+    IS_ENGAGED = "is_engaged"
 
     CONFIG = "config"
     PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED = "presence_in_cage_after_exit_tunnel_engaged"
@@ -115,8 +116,9 @@ class EmergencyAlarmMonitor(BaseDetector):
         self.property_changed(self.CONFIG, value, prev)
 
     @property
-    def engaged_reasons(self) -> List[str]:
-        return sorted(reason.name for reason in self._engaged_reasons)
+    def engaged_reasons(self) -> List[EmergencyReason]:
+        return sorted(self._engaged_reasons)
+        # return sorted(reason.name for reason in self._engaged_reasons)
 
     @property
     def audio_load_cell_thrashing_engaged(self):
