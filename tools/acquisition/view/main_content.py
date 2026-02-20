@@ -386,6 +386,68 @@ class MainContent(ContentWidget):
         self._diagnostics_content.setVisible(is_visible)
         self._is_diagnostics_visible = is_visible
 
+    @staticmethod
+    def _paint_diamond(x, y, painter, *, size=6, width=3, color):
+        center = size // 2
+        coords = [
+            (v1 + x, v2 + y)
+            for v1, v2 in (
+                (center, 0),  # Top
+                (size, center),  # Right
+                (center, size),  # Bottom
+                (0, center)  # Left
+            )
+        ]
+        coords = list(map(lambda v: QPointF(v[0], v[1]), coords))
+        pen = QPen()
+        pen.setWidth(width)
+        pen.setColor(color)
+        pen.setBrush(color)
+        painter.setPen(pen)
+        polygon = QPolygonF(coords)
+        painter.drawPolygon(polygon)
+
+    def _paint_reach_event(
+        self, *,
+        cam, cam_name, px, painter,
+        df_reach, df_pellet, df_trajectory,
+        width_f, height_f,
+    ):
+        x_y_cols = list("xy")
+        pen = QPen()
+        if len(df_reach) == 0:
+            if cam is self._left_camera_content:
+                pen.setColor(Qt.GlobalColor.yellow)
+                painter.setOpacity(1)
+                painter.setPen(pen)
+                font = QFont("Sans-serif", 12)
+                painter.setFont(font)
+                painter.drawText(px.rect(), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter,
+                                 "No Reach Events Last Trial")
+            return
+        painter.setOpacity(0.75)
+        for r_idx in range(len(df_reach)):
+            # the reach indices here are global for the entire trial,
+            r_max_idx = df_reach.loc[r_idx, "max"] - df_reach.loc[r_idx, "init"]
+            # but df_trajectories is 1 sub-df per reach, each indexed from 0 to nbframes_in_reach_event.
+            # so this substract "init" frame index.
+            # R_H
+            pen.setColor(Qt.GlobalColor.yellow)
+            pen.setWidth(1)
+            painter.setPen(pen)
+            vals = [
+                (x * width_f, y * height_f)
+                for x, y in df_trajectory.loc[r_idx][cam_name][x_y_cols].values
+            ]
+            logger.debug("r_h vals=%s", vals)
+            reach_max_x, reach_max_y = vals[r_max_idx]
+            vals = list(map(lambda v: QPointF(v[0], v[1]), vals))
+            painter.drawPolyline(vals)
+            self._paint_diamond(reach_max_x, reach_max_y, painter, color=Qt.GlobalColor.yellow)
+            # Pellet at reach max
+            pel_x, pel_y = df_pellet.loc[r_idx, cam_name][x_y_cols]  # noqa
+            self._paint_diamond(pel_x * width_f, pel_y * height_f, painter, color=Qt.GlobalColor.red)
+
     @invoke_method
     def show_analysis_reach_events(
         self,
@@ -402,7 +464,6 @@ class MainContent(ContentWidget):
         df_trajectory = pandas.read_hdf(loc, key="trajectory")
         logger.verbose("reach:\n%s\npellet:\n%s\n", df_reach, df_pellet)
         logger.debug("trajectory:\n%s", df_trajectory)
-        x_y_cols = list("xy")
         logger.debug("looping over %s reaches", len(df_reach))
         for (cam_name, cam) in (
             ("left", self._left_camera_content),
@@ -416,51 +477,12 @@ class MainContent(ContentWidget):
             px = QPixmap.fromImage(image)
             px.fill(Qt.GlobalColor.transparent)
             painter = QPainter(px)
-            pen = QPen()
             with painter:
-                if len(df_reach) == 0 and cam is self._left_camera_content:
-                    pen.setColor(Qt.GlobalColor.yellow)
-                    painter.setPen(pen)
-                    painter.setOpacity(1)
-                    font = QFont("Sans-serif", 12)
-                    painter.setFont(font)
-                    painter.drawText(px.rect(), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter,
-                                     "No Reach Events Last Trial")
-                for r_idx in range(len(df_reach)):
-                    pel_x, pel_y = df_pellet.loc[r_idx, cam_name][x_y_cols]  # noqa
-                    rh_df = df_trajectory.loc[r_idx]
-                    # R_H
-                    pen.setColor(Qt.GlobalColor.yellow)
-                    pen.setWidth(1)
-                    painter.setPen(pen)
-                    painter.setOpacity(0.7)
-                    vals = [
-                        (x * width_f, y * height_f)
-                        for x, y in rh_df[cam_name][x_y_cols].values
-                    ]
-                    logger.debug("r_h vals=%s", vals)
-                    vals = list(map(lambda v: QPointF(v[0], v[1]), vals))
-                    painter.drawPolyline(vals)
-                    # Pellet at reach max
-                    size = 6
-                    center = size // 2
-                    coords = [
-                        (v1 + pel_x * width_f, v2 + pel_y * height_f)
-                        for v1, v2 in (
-                            (center, 0),  # Top
-                            (size, center),  # Right
-                            (center, size),  # Bottom
-                            (0, center)  # Left
-                        )
-                    ]
-                    coords = list(map(lambda v: QPointF(v[0], v[1]), coords))
-                    logger.debug("pellet_max coords=%s", coords)
-                    pen.setWidth(3)
-                    pen.setColor(Qt.GlobalColor.red)
-                    pen.setBrush(Qt.GlobalColor.red)
-                    painter.setPen(pen)
-                    polygon = QPolygonF(coords)
-                    painter.drawPolygon(polygon)
+                self._paint_reach_event(
+                    cam=cam, cam_name=cam_name, px=px, painter=painter,
+                    df_reach=df_reach, df_pellet=df_pellet, df_trajectory=df_trajectory,
+                    width_f=width_f, height_f=height_f,
+                )
             cam.camera_view.image_view.set_reach_overlay(px)
         # logger.verbose("set reach events for %s: %s events", prj, len(df_reach))
 
