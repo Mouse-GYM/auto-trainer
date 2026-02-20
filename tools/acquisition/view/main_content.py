@@ -422,7 +422,7 @@ class MainContent(ContentWidget):
                 painter.setPen(pen)
                 font = QFont("Sans-serif", 12)
                 painter.setFont(font)
-                painter.drawText(px.rect(), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter,
+                painter.drawText(px.rect(), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter,
                                  "No Reach Events Last Trial")
             return
         painter.setOpacity(0.75)
