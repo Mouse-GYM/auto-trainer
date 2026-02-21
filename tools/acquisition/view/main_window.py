@@ -1,6 +1,3 @@
-import collections
-import dataclasses
-import math
 import pickle
 import shutil
 import threading
@@ -9,9 +6,9 @@ from datetime import datetime
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 
-from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
@@ -19,8 +16,7 @@ from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessa
 import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
-    calculate_std_dev_manual
-from autotrainer.core.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME, make_cam_offsets_dict
+    calculate_std_dev_manual, ProjectInfo
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
@@ -29,10 +25,10 @@ from autotrainer.core.event.api_event_kind import ApiEventKind
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 
 from autotrainer.inference import InferenceStatus, PoseResponse
+from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME, make_cam_offsets_dict
 
 from autotrainer.behavior import TrainingMode
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
-from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 
@@ -41,7 +37,6 @@ from autotrainer.training import TrainingPlan
 from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.app_model import AppModel, AppModelStatus
 from tools.acquisition.model.handle_3d_calibration import make_3d_calib
-from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.training_plan import get_plan_id
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
@@ -93,6 +88,8 @@ class MainWindow(QMainWindow):
         self._training_plan_index_by_plan_id: Dict[Optional[str], int] = {}
         self._diamond_triangle_calib_run = None
 
+        self._previous_intersession_analysis_rsp: Optional[Tuple[ProjectInfo, IntersessionResponse]] = None
+
         app_model = self._app_model = AppModel(self._preferences)
 
         try:
@@ -127,7 +124,8 @@ class MainWindow(QMainWindow):
         self.running_status_changed.connect(self._set_start_or_stop)
         #
         self._reload_animals(self._app_model.animals)
-
+        #
+        app_model.inference.detection_result_ready += self._inference_analysis_result_ready
 
     @property
     def app_model(self) -> AppModel:
@@ -211,6 +209,23 @@ class MainWindow(QMainWindow):
             thread = threading.Thread(target=exec_stop_capture, daemon=True)
             self._stop_capture_thread = thread
             thread.start()
+
+    def on_show_reach_event(self, is_toggled):
+        raw = self._previous_intersession_analysis_rsp
+        if raw is None and is_toggled:
+            # debug code
+            prj = self._app_model.project.to_local_value()
+            import autotrainer.inference
+            prj.root = str(Path(autotrainer.inference.__file__).parent.parent.parent.parent.joinpath("tests/data"))
+            prj.device_id = "agx001"
+            prj.session = 11
+            prj.when = datetime(2026, 2, 5)
+            raw = (prj, True)
+        if raw is None or not is_toggled:
+            self.main_content.show_analysis_reach_events(None)
+            return
+        prj, rsp = raw
+        self.main_content.show_analysis_reach_events(prj)
 
     def on_previous_plan_phase(self):
         app_model = self._app_model
@@ -647,6 +662,12 @@ class MainWindow(QMainWindow):
         action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
         action.triggered.connect(self.on_capture_start_stop)
 
+        action = self.show_reach_event_action = QAction(QIcon(qta.icon("fa5s.bezier-curve")), "Show Reach", self)
+        action.setToolTip("Show last reach trajectories")
+        action.setCheckable(True)
+        action.setEnabled(False)  # comment me to be able to show 20260205_agx001_trial011 on start
+        action.triggered.connect(self.on_show_reach_event)
+
         action = self.next_training_phase_action = QAction(QIcon(qta.icon("fa5s.arrow-alt-circle-right")), "Next Phase", self)
         action.setVisible(False)
         action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
@@ -737,6 +758,7 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar)
 
         toolbar.addAction(self.run_action)
+        toolbar.addAction(self.show_reach_event_action)
 
         toolbar.addAction(self.previous_training_phase_action)
         toolbar.addAction(self.next_training_phase_action)
@@ -1181,3 +1203,11 @@ class MainWindow(QMainWindow):
     @invoke_method
     def _on_app_model_configuration_loaded(self, config):
         self._set_training_plans()
+
+    @invoke_method
+    def _inference_analysis_result_ready(self, prj: ProjectInfo, rsp: IntersessionResponse):
+        # logger.debug("enabling show_reach_event_action, rsp=%s", rsp)
+        self._previous_intersession_analysis_rsp = (prj, rsp)
+        self.show_reach_event_action.setEnabled(True)
+        if self.show_reach_event_action.isChecked():
+            self.on_show_reach_event(True)

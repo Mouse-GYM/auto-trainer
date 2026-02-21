@@ -1,7 +1,7 @@
 from typing import Protocol, Callable, Tuple, Optional, Any
 
 from autotrainer.core import Offset3DTuple, ObservableObject, FrameIndexCategory
-from autotrainer.core.project import ProjectDependentProtol
+from autotrainer.core.project import ProjectDependentProtol, ProjectInfo
 from autotrainer.core.configuration.inference_configuration import InferenceConfiguration
 
 import autotrainer.inference.analysis
@@ -13,7 +13,7 @@ from . import SegmentationConfiguration, DetectionConfiguration
 class InferenceEvents:
 
     segmentation_finished = Callable[[bool], None]
-    detection_result_ready = Callable[[autotrainer.inference.analysis.IntersessionResponse], None]
+    detection_result_ready = Callable[[ProjectInfo, autotrainer.inference.analysis.IntersessionResponse], None]
     pose_response_ready = Callable[[autotrainer.inference.PoseResponse], None]
     algo_initialised = Callable[[autotrainer.inference.PoseAlgorithm], None]  # not used by any listener
     diamond_triangle_offset_changed = Callable[[Optional[Offset3DTuple]], None]

@@ -13,13 +13,12 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List, Dict, Callable, Any, Union, Tuple
+from typing import Optional, List, Dict, Callable, Any, Union
 
 import yaml
-from watchdog.events import FileSystemEventHandler, FileSystemEvent, PatternMatchingEventHandler
+from watchdog.events import FileSystemEvent, PatternMatchingEventHandler
 from watchdog.observers import Observer
 
-from autotrainer.core.analysis import calibration_FLIR
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
                               NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis,
@@ -27,20 +26,19 @@ from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandl
 from autotrainer.core import FixedArrayMultiQueue
 from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
-from autotrainer.core.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
 from autotrainer.core.project import ProjectDependentProtol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer
 from autotrainer.core.pose_elements import SceneElement
-
 from autotrainer.core.project.project_info import DATE_FORMAT, DATE_TIME_FORMAT
-
 from autotrainer.core.video_detection import PresenceDetectionAttrs
-from autotrainer.core.analysis.config import load_calib_stereo_params
+
+from autotrainer.inference import PoseAlgorithm, InferenceStatus, PoseResponse, calibration_FLIR
+from autotrainer.inference.config import load_calib_stereo_params
+from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
 
 from autotrainer.video import CaptureProcessStatus
-from autotrainer.inference import PoseAlgorithm, InferenceStatus, PoseResponse
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine
@@ -1077,6 +1075,8 @@ class AppModel(ObservableObject):
         plans_path.mkdir(parents=True, exist_ok=True)  # observer requires the path/dir to exists, otherwise exception
         observer.schedule(self._plans_files_event_handler, path=plans_path.resolve(), recursive=False)
         observer.start()
+
+        self._project_info = self.make_project_info()
 
         return True
 

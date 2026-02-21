@@ -25,7 +25,7 @@ from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, Infe
     InferenceMode, InferenceStatus, InferenceMonitorDataMsg
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
-from autotrainer.inference.analysis import intersession_process
+from autotrainer.inference.analysis import intersession_process, IntersessionResponse
 
 from autotrainer.core.project import ProjectDependentProtol
 
@@ -761,10 +761,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         return intersession_process(*args, **kwargs)
 
     def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
-        detection_config = intersession_detection.configuration
-        # *** but *** force update with intersession_detection when & session, to be totally sure:
-        project.session = detection_config.session_index
-        project.when = detection_config.session_when
+        det_cfg = intersession_detection.configuration
+        det_sess_when = (det_cfg.session_index, det_cfg.session_when)
+        prj_sess_when = (project.session, project.when)
+        if det_sess_when != prj_sess_when:
+            logger.critical("Detected mismatch project-session: %s vs %s", det_sess_when, prj_sess_when)
+        project.session = det_cfg.session_index
+        project.when = det_cfg.session_when
 
         try:
             async_res = self._process_pool.apply_async(
@@ -781,7 +784,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             processed_ok = True
 
         if processed_ok:
-            self.detection_result_ready(result)
+            assert isinstance(result, IntersessionResponse)
+            self.detection_result_ready(project, result)
 
         intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
         self._intersession_detection = None

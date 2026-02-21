@@ -212,7 +212,7 @@ class TestTrainingPlan(MockSystemMachine):
             self.mock_complete_segmentation(True)
             assert algo.system_state == SystemState.intersession
             assert algo.intersession_state == IntersessionState.detection
-            machine._inference.detection_result_ready(analysis_result)
+            machine._inference.detection_result_ready(machine.project, analysis_result)
             self.mock_complete_detection(True)
             assert algo.intersession_state == IntersessionState.idle
             assert algo.system_state == SystemState.cage

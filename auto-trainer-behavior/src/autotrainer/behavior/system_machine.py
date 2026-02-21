@@ -161,10 +161,6 @@ class SystemMachine(StateMachine):
         intersession_machine.events.state_changed += self._intersession_state_changed
         algo.relay_transitions(intersession_machine)
 
-    @property
-    def analysis(self) -> SensorAnalysis:
-        return self._analysis
-
     def cancel_timers(self):
         for timer in (
             self._timer_consider_start_session,
@@ -181,6 +177,10 @@ class SystemMachine(StateMachine):
         self._timer_consider_end_session = no_op_timer
         self._timer_consider_close_gate = no_op_timer
         self._timer_auto_clamp_disengage = no_op_timer
+
+    @property
+    def analysis(self) -> SensorAnalysis:
+        return self._analysis
 
     @property
     def algorithm(self) -> BehaviorAlgorithm:
@@ -671,11 +671,23 @@ class SystemMachine(StateMachine):
         if algo.is_in_session and not algo.session_mouse_seen and response.mouse_seen:
             logger.success("session first mouse_seen: parts=%s locations=%s", response.parts_flags, response.locations)
         #
+        prev_pellet_seen = algo.pellet_recently_seen
+        #
         algo.update_triangle_seen(response.triangle_seen)
         algo.update_diamond_seen(response.diamond_seen)
         algo.update_star_seen(response.star_seen)
         algo.update_pellet_seen(response.pellet_seen)
         algo.update_mouse_seen(response.mouse_seen)
+        #
+        if not prev_pellet_seen and response.pellet_seen and (
+            self._state == SystemState.tunnel
+            and not algo.is_in_session
+            and self._analysis.load_cell_monitor.is_engaged
+            and self._pellet_machine.state == PelletState.monitoring
+        ):
+            # this is mainly for when app/acquisition starts :
+            # if load-cell is engaged before inference is live then we need this case/if.
+            self._consider_start_session(reason="first-pellet-seen")
         #
         self._handle_pellet_hands_offsets(response)
         self._pellet_machine.pellet_seen(response.pellet_seen)
@@ -968,12 +980,8 @@ class SystemMachine(StateMachine):
             algo.end_capture_session(reason=reason)
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _handle_detection_result(self, res: IntersessionResponse):
-        # it's supposed to be the one related to the analysed session:
-        intersession_prj = self._intersession.project
-        logger.success("Intersession analysis result: prj=%s result=%s", intersession_prj, res)
-        # so we must/should have:
-        # assert intersession_prj.when == self._intersession.detection_config.session_when
+    def _handle_detection_result(self, prj: ProjectInfo, res: IntersessionResponse):
+        logger.success("Intersession analysis result: prj=%s result=%s", prj, res)
         #
         algo = self._algorithm
         if res.food_consumed > 0:
