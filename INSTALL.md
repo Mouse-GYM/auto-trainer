@@ -26,6 +26,7 @@ sudo apt-get install libusb-1.0-0  # (no-op was already the most recent)
 sudo apt-get --fix-broken install
 sudo sh install_spinnaker_arm.sh
 ```
+
 ## Platform Specific Requirements 
 
 Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
@@ -35,29 +36,34 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
 1) Create a Conda environment ; only once first time:
 `conda create -n auto-trainer-1 python=3.8`
 
-2) activate it: `conda activate auto-trainer-1` ; every time.
+2) activate it: `conda activate auto-trainer-1` ; **every time**.
 
-3) FLIR ; only once first time.
+3) Once first time: clone this repository.
+    - create or update the ~/.netrc file so that it contains :
+    ```
+    machine github.com
+    login Mouse-Gym
+    password <PASTE_THE_PAT_HERE>
+    ```
+    and replace `<PAST_THE_PAT_HERE>` by what you will be given for it.
+    - then clone the current repository:
+    `git clone https://github.com/Mouse-GYM/auto-trainer.git`, and enter it: `cd auto-trainer`
+
+4) FLIR ; only once first time.
    To include support for Teledyne/Blackfly cameras, install the appropriate wheel for your platform, *e.g.,*
    - `pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_aarch64.whl`
    - `pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_x86_64.whl`
    - `pip install .\library\spinnaker_python-3.2.0.57-cp38-cp38-win_amd64.whl`
 
-4) **Jetson Only** and only once first time:
+5) **Jetson Only** and only once first time:
    - `conda install --channel=conda-forge ffmpeg=6.0.0`
    - `pip install --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v512 tensorflow==2.12.0+nv23.06`
    - `pip install ./path/to/pyjerrycan-1.2.5-cp38-cp38-linux_aarch64.whl`
 
-5) Once first time: clone https://github.com/Mouse-GYM/auto-trainer.
-    ```
-    git clone https://github.com/Mouse-GYM/auto-trainer.git
-    cd auto-trainer
-    ```
-
 6) Activate an appropriate branch, *e.g.,*
 `git checkout develop`
 
-From the repository directory perform the following Python package installation steps.
+7) From the repository directory perform the following Python package installation steps.
 `pip install -e .`
 
 
