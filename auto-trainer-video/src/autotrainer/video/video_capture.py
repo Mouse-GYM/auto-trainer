@@ -12,7 +12,8 @@ import signal
 from dataclasses import dataclass
 from queue import Queue
 from enum import IntEnum
-from multiprocessing import Process, Value, Array
+from multiprocessing import Process, Value, Array, synchronize
+from multiprocessing.sharedctypes import Synchronized, SynchronizedArray, SynchronizedBase
 from threading import BrokenBarrierError
 from typing import Callable, Dict, Union, Optional, List, Tuple
 
@@ -116,19 +117,19 @@ class CaptureAttrs:
     command_queue: multiprocessing.Queue
     """Input queue for submitting commands to the capture process"""
 
-    status: Value
+    status: Synchronized[int]
     """Flag for status of the capture process - value is read-only to callers"""
 
     image_queue: Optional[Union[Queue, FixedArrayQueue]]
     """Queue for camera frame output"""
 
-    frame: Value
+    frame: Synchronized[int]
     """Current frame index - value is read-only to callers"""
 
     camera: CaptureCameraAttrs
     """Camera attributes for the capture process"""
 
-    errors: Array
+    errors: SynchronizedArray
     """Multiprocessing Array for communicating errors - value is read-only to callers"""
 
     inference: Optional[CaptureInferenceAttrs] = None
@@ -149,9 +150,9 @@ class CaptureAttrs:
 
     camera_index: int = -1
 
-    semaphore: Optional = None
-    barrier: Optional = None
-    event: Optional = None
+    semaphore: Optional[synchronize.Semaphore] = None
+    barrier: Optional[synchronize.Barrier] = None
+    event: Optional[synchronize.Event] = None
 
 
 class VideoCapture(Process):
@@ -540,43 +541,22 @@ class VideoCapture(Process):
                             record_q_list = self._record_queue_list = []
                         record_q.put([])
 
-                        self._set_status(CaptureProcessStatus.RUNNING)
-
                         if net_q is not None:
-                            logger.verbose(
-                                "sending EOF_RECORDING frame indices to signify eof recording. "
-                                "last frame index: %s when=%.4f perf=%.4f",
-                                cur_frame_idx, when / 1e9, perf_now_ns / 1e9)
-
-                            # time.sleep(0.2)
-                            # this is to help ensure consumer has finished reading current frames that are already pushed
-                            # is not big issue to sleep here given this is not hot code path
-
-                            sync_barrier()
-                            # set the tot_frames in different sync_barrier session than the next get_cam_missing_frames
-                            net_q.set_cam_tot_frames(net_q_idx, cnt_net_q_put)
-                            cnt_net_q_put = 0
+                            # we might eventually have written some extra frame(s) vs the other camera(s) used in
+                            # the net_q, so this pad_to_batch_size :
+                            net_q.pad_to_batch_size(net_q_idx, empty_frame, cnt_net_q_put, timeout=5)
                             # convenience: can set back to 0 given will now be same in all cams,
                             # and also aligned with frames_per_camera_per_batch
+                            cnt_net_q_put = 0
+                            # now
+                            logger.info(
+                                "sending EOF_RECORDING batch frame indices to signify eof recording. "
+                                "last frame index: %s when=%.4f perf=%.4f",
+                                cur_frame_idx, when / 1e9, perf_now_ns / 1e9)
+                            net_q.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_RECORDING,
+                                                           cam_idx=net_q_idx, timeout=1)
 
-                            sync_barrier()
-                            d = net_q.get_cam_missing_frames(net_q_idx)
-                            sync_barrier()
-
-                            # logger.debug("padding %s times", d)
-                            timeout = 5
-                            for _ in range(d):
-                                t0 = time.perf_counter()
-                                net_q.put_block(empty_frame, net_q_idx, FrameIndexCategory.PADDING,
-                                                timeout=timeout)
-                                timeout -= time.perf_counter() - t0
-                            for _ in range(self._network_queue.frames_per_camera):
-                                t0 = time.perf_counter()
-                                net_q.put_block(empty_frame, net_q_idx, FrameIndexCategory.EOF_RECORDING,
-                                                timeout=timeout)
-                                timeout -= time.perf_counter() - t0
-
-                            # sync_barrier()
+                        self._set_status(CaptureProcessStatus.RUNNING)
 
                         if is_primary and msg_q is not None:
                             msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE,

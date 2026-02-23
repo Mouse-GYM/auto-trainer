@@ -198,16 +198,16 @@ class AppModel(ObservableObject):
         self._timer_recording_age_enough = _recording_age_enough_timer(0, lambda: None)
         # end not sure
 
-        barrier = self._mp_barrier = mp_ctx.Barrier(2)  # 2 for left + right cams
+        # this is currently used by video capture to synchronize start/stop recording
         sema = self._mp_semaphore = mp_ctx.Semaphore(0)
         event = self._mp_event = mp_ctx.Event()
 
         self._left_camera = VideoCaptureModel("left", self._preferences, 0,
                                               msg_queue=proc_msg_queue,
-                                              semaphore=sema, barrier=barrier, event=event)
+                                              semaphore=sema, event=event)
         self._right_camera = VideoCaptureModel("right", self._preferences, 1,
                                                msg_queue=proc_msg_queue,
-                                               semaphore=sema, barrier=barrier, event=event)
+                                               semaphore=sema, event=event)
 
         self._top_camera_presence_detection = PresenceDetectionAttrs()
         self._top_camera = VideoCaptureModel("web", self._preferences, -1,

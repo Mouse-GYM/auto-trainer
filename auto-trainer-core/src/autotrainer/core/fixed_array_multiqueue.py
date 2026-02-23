@@ -4,6 +4,7 @@ import multiprocessing
 import time
 
 from multiprocessing import RawArray, Value
+from multiprocessing import synchronize
 from multiprocessing.context import BaseContext
 from typing import Tuple, List, Optional
 
@@ -50,10 +51,6 @@ class FixedArrayMultiQueue:
 
         self._name = name
         self._barrier = mp_ctx.Barrier(cam_count)
-        self._semaphore = mp_ctx.Semaphore(cam_count)
-        for _ in range(cam_count):
-            self._semaphore.acquire()  # pre-acquire all
-        self._event = mp_ctx.Event()
         # indexing: [buffer][camera][batch_frame]
         self._buffers: List[List[List[RawArray]]] = []
 
@@ -111,18 +108,6 @@ class FixedArrayMultiQueue:
         return f"{self.__class__.__name__}({self._name!r})"
 
     @property
-    def barrier(self) -> multiprocessing.Barrier:
-        return self._barrier
-
-    @property
-    def semaphore(self) -> multiprocessing.Semaphore:
-        return self._semaphore
-
-    @property
-    def event(self):
-        return self._event
-
-    @property
     def depth(self):
         return self._depth
 
@@ -158,17 +143,29 @@ class FixedArrayMultiQueue:
                 return False
         return True
 
-    def pad_to_batch_size(self, pad_frame, *, timeout: float=10):
+    def pad_to_batch_size(self, cam_idx: int, empty_frame, cnt_net_q_put, *, timeout: float=10):
         """Pad the queue so that all the cams are on same bucket, and the start of it."""
-        todo: List[Tuple[int, int]] = []
-        for cdx in range(self._cam_count):
-            n_pads = self.get_cam_missing_frames(cdx)
-            todo.append((cdx, n_pads))
-        for cdx, n_pads in sorted(todo, key=lambda i: i[1]):  # sort on n_pads
-            for _ in range(n_pads):
-                t0 = time.perf_counter()
-                self.put_block(pad_frame, cdx, FrameIndexCategory.PADDING, timeout=timeout)
-                timeout -= time.perf_counter() - t0
+        barrier_wait = self._barrier.wait
+        #
+        p_start = time.perf_counter()
+        barrier_wait(timeout=timeout)
+        dirty = self.get_dirty_buckets()
+        p_now = time.perf_counter()
+        timeout -= p_now - p_start
+        # set the tot_frames in different sync_barrier session than the next get_cam_missing_frames
+        self.set_cam_tot_frames(cam_idx, cnt_net_q_put)
+        barrier_wait(timeout=timeout)
+        p_now = time.perf_counter()
+        timeout -= p_now - p_start
+        missing = self.get_cam_missing_frames(cam_idx)
+        barrier_wait(timeout=timeout)
+        logger.verbose("padding %s frames (put=%s) to sync with others writers, dirty=%s",
+                     missing, cnt_net_q_put, dirty)
+        for _ in range(missing):
+            t0 = time.perf_counter()
+            self.put_block(empty_frame, cam_idx, FrameIndexCategory.PADDING,
+                           timeout=timeout)
+            timeout -= time.perf_counter() - t0
 
     def get_cam_missing_frames(self, cam_idx: int) -> int:
         """Returns the number of missing frame for camera idx,
@@ -271,11 +268,19 @@ class FixedArrayMultiQueue:
         self._read_index = (read_idx_value + 1) % self._depth
         return True
 
-    def put_frame_index_category(self, frame, frame_idx: FrameIndexCategory, *, timeout: float = 10):
+    def put_frame_index_category(self, frame, frame_idx: FrameIndexCategory, *,
+                                 cam_idx: Optional[int] = None, timeout: float = 10):
         logger.verbose("putting frame index category %s", frame_idx)
         for _ in range(self._frames_per_camera):
             for cdx in range(self._cam_count):
-                t0 = time.perf_counter()
-                # put_block() will take care to raise if timeout occurs
-                self.put_block(frame, cdx, frame_idx, timeout=timeout)
-                timeout -= time.perf_counter() - t0
+                if cam_idx is None or cam_idx == cdx:
+                    t0 = time.perf_counter()
+                    # put_block() will take care to raise if timeout occurs
+                    self.put_block(frame, cdx, frame_idx, timeout=timeout)
+                    timeout -= time.perf_counter() - t0
+
+    def get_dirty_buckets(self) -> List[List[bool]]:
+        return [list(v) for v in self._is_dirty]
+
+    def get_frame_indices(self):
+        return list(self._frame_indices)
