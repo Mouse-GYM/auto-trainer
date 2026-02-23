@@ -147,25 +147,27 @@ class FixedArrayMultiQueue:
         """Pad the queue so that all the cams are on same bucket, and the start of it."""
         barrier_wait = self._barrier.wait
         #
-        p_start = time.perf_counter()
+        p_before = time.perf_counter()
         barrier_wait(timeout=timeout)
         dirty = self.get_dirty_buckets()
         p_now = time.perf_counter()
-        timeout -= p_now - p_start
+        timeout -= p_now - p_before
         # set the tot_frames in different sync_barrier session than the next get_cam_missing_frames
         self.set_cam_tot_frames(cam_idx, cnt_net_q_put)
         barrier_wait(timeout=timeout)
         p_now = time.perf_counter()
-        timeout -= p_now - p_start
+        timeout -= p_now - p_before
         missing = self.get_cam_missing_frames(cam_idx)
+        p_before = p_now
         barrier_wait(timeout=timeout)
         logger.verbose("padding %s frames (put=%s) to sync with others writers, dirty=%s",
                      missing, cnt_net_q_put, dirty)
         for _ in range(missing):
-            t0 = time.perf_counter()
+            p_now = time.perf_counter()
+            timeout -= p_now - p_before
+            p_before = p_now
             self.put_block(empty_frame, cam_idx, FrameIndexCategory.PADDING,
                            timeout=timeout)
-            timeout -= time.perf_counter() - t0
 
     def get_cam_missing_frames(self, cam_idx: int) -> int:
         """Returns the number of missing frame for camera idx,
