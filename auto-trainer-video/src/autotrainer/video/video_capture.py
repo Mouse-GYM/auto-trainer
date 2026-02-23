@@ -545,7 +545,7 @@ class VideoCapture(Process):
                             # we might eventually have written some extra frame(s) vs the other camera(s) used in
                             # the net_q, so this pad_to_batch_size :
                             net_q.pad_to_batch_size(net_q_idx, empty_frame, cnt_net_q_put, timeout=5)
-                            # convenience: can set back to 0 given will now be same in all cams,
+                            # required: must set back to 0 given will now be same in all cams,
                             # and also aligned with frames_per_camera_per_batch
                             cnt_net_q_put = 0
                             # now
