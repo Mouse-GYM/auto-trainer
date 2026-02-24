@@ -415,7 +415,7 @@ class MainWindow(QMainWindow):
         self._post_api_event(ApiEventKind.calibrationDcsStarted)
 
         app_model = self._app_model
-        app_model.status = AppModelStatus.CALIBRATION_DCS
+        prev_status, app_model.status = app_model.status, AppModelStatus.CALIBRATION_DCS
 
         algo = app_model.behavior.algorithm
         action = self.calib_diamond_triangle_action
@@ -477,12 +477,15 @@ class MainWindow(QMainWindow):
         self._diamond_triangle_calib_run = None  # MUST be before
         self._post_api_event(ApiEventKind.calibrationDcsEnded)
         #
-        self._handle_diamond_triangle_calib_run(
-            positions=positions,
-            offsets=offsets,
-            diamond_locs3d=diamond_locs3d,
-            raw_diamond_3d=raw_diamond_3d,
-        )
+        try:
+            self._handle_diamond_triangle_calib_run(
+                positions=positions,
+                offsets=offsets,
+                diamond_locs3d=diamond_locs3d,
+                raw_diamond_3d=raw_diamond_3d,
+            )
+        finally:
+            app_model.status = prev_status
 
     def on_activated(self):
         logger.success("main window activated")
@@ -512,72 +515,75 @@ class MainWindow(QMainWindow):
 
     def on_3d_calibrate(self, is_toggled):
         self.run_action.setEnabled(not is_toggled)
-        if is_toggled:
-            self._app_model.status = AppModelStatus.CALIBRATION_3D
-            error = "Processing unfinished"
-            result_dir: Path = None
-            def handle_3d_calib():
-                nonlocal error, result_dir
-                self._post_api_event(ApiEventKind.calibration3dStarted)
-                try:
-                    result_dir = make_3d_calib(self._app_model)
-                except Exception as err:
-                    logger.exception("3d-calib failed: %s", err)
-                    error = err
-                else:
-                    error = None
+        if not is_toggled:
+            return
+        app_model = self._app_model
+        prev_status, app_model.status = app_model.status, AppModelStatus.CALIBRATION_3D
+        error = "Processing unfinished"
+        result_dir: Path = None
+        def handle_3d_calib():
+            nonlocal error, result_dir
+            self._post_api_event(ApiEventKind.calibration3dStarted)
+            try:
+                result_dir = make_3d_calib(self._app_model)
+            except Exception as err:
+                logger.exception("3d-calib failed: %s", err)
+                error = err
+            else:
+                error = None
 
-            @invoke_method
-            def show_result():
-                self.run_action.setEnabled(True)
-                self.make_3d_calib_action.setChecked(False)
-                self.make_3d_calib_action.setEnabled(True)
-                self._app_model.status = AppModelStatus.IDLE
-                logger.verbose("3d-calib thread joined, error=%s", error)
-                if error is None:
-                    backup_path = None
-                    target_calib_dir = Path(self._preferences.configuration_location).joinpath(DEFAULT_3D_CALIB_DIR_NAME)
-                    if target_calib_dir.exists():
-                        rsp = QMessageBox.question(
-                            self,
-                            "3D calibration success",
-                            f"Calibration dir already exists ({target_calib_dir}),\n\n"
-                            f"do you want to replace ?",
-                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                        if rsp != QMessageBox.StandardButton.Yes:
-                            return
-                        now = datetime.now()
-                        backup_path = target_calib_dir.parent.joinpath(f"{target_calib_dir.name}_{now.strftime(DATE_TIME_FORMAT)}")
-                        target_calib_dir.rename(backup_path)
-                        logger.debug("Previous 3d-calib moved to %s", backup_path)
-                    shutil.copytree(
-                        result_dir, target_calib_dir,
-                        dirs_exist_ok=False,  # default already, but to be sure we want be clean
-                    )
-                    if backup_path is not None:
-                        prev_cam_offsets = backup_path.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
-                        new_cam_offsets = target_calib_dir.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
-                        if prev_cam_offsets.exists() and not new_cam_offsets.exists():
-                            shutil.copyfile(prev_cam_offsets, target_calib_dir)
-                            logger.verbose("copied previous %s given no new one", DEFAULT_CAM_OFFSET_FILE_NAME)
-                    self._app_model.reload_calib(target_calib_dir)
-                    QMessageBox.information(
-                        self,
-                        "3D calibration success", f"Result saved into {target_calib_dir}", QMessageBox.StandardButton.Ok)
-                else:
-                    QMessageBox.warning(self, "3D calibration failed", f"Error received: {error}", QMessageBox.StandardButton.Ok)
+        @invoke_method
+        def show_result():
+            self.run_action.setEnabled(True)
+            self.make_3d_calib_action.setChecked(False)
+            self.make_3d_calib_action.setEnabled(True)
+            app_model.status = prev_status
+            logger.verbose("3d-calib thread joined, error=%s", error)
+            if error is not None:
+                QMessageBox.warning(self, "3D calibration failed", f"Error received: {error}",
+                                    QMessageBox.StandardButton.Ok)
+                return
+            backup_path = None
+            target_calib_dir = Path(self._preferences.configuration_location).joinpath(DEFAULT_3D_CALIB_DIR_NAME)
+            if target_calib_dir.exists():
+                rsp = QMessageBox.question(
+                    self,
+                    "3D calibration success",
+                    f"Calibration dir already exists ({target_calib_dir}),\n\n"
+                    f"do you want to replace ?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if rsp != QMessageBox.StandardButton.Yes:
+                    return
+                now = datetime.now()
+                backup_path = target_calib_dir.parent.joinpath(f"{target_calib_dir.name}_{now.strftime(DATE_TIME_FORMAT)}")
+                target_calib_dir.rename(backup_path)
+                logger.debug("Previous 3d-calib moved to %s", backup_path)
+            shutil.copytree(
+                result_dir, target_calib_dir,
+                dirs_exist_ok=False,  # default already, but to be sure we want be clean
+            )
+            if backup_path is not None:
+                prev_cam_offsets = backup_path.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
+                new_cam_offsets = target_calib_dir.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
+                if prev_cam_offsets.exists() and not new_cam_offsets.exists():
+                    shutil.copyfile(prev_cam_offsets, target_calib_dir)
+                    logger.verbose("copied previous %s given no new one", DEFAULT_CAM_OFFSET_FILE_NAME)
+            self._app_model.reload_calib(target_calib_dir)
+            QMessageBox.information(
+                self,
+                "3D calibration success", f"Result saved into {target_calib_dir}", QMessageBox.StandardButton.Ok)
 
-            def wait_3d_calib_done(thread):
-                executor_thread.join()
-                self._post_api_event(ApiEventKind.calibration3dEnded)
-                show_result()
+        def wait_3d_calib_done(thread):
+            thread.join()
+            self._post_api_event(ApiEventKind.calibration3dEnded)
+            show_result()
 
-            executor_thread = threading.Thread(target=handle_3d_calib, name="3d-calibration", daemon=True)
-            executor_thread.start()
+        executor_thread = threading.Thread(target=handle_3d_calib, name="3d-calibration", daemon=True)
+        executor_thread.start()
 
-            waiter_thread = threading.Thread(target=wait_3d_calib_done, name="wait-3d-calibration",
-                                             args=(executor_thread,), daemon=True)
-            waiter_thread.start()
+        waiter_thread = threading.Thread(target=wait_3d_calib_done, name="wait-3d-calibration",
+                                         args=(executor_thread,), daemon=True)
+        waiter_thread.start()
 
     @invoke_method
     def _show_msg_box(self, title, text, icon):
