@@ -50,9 +50,9 @@ class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
                        mean_off, stdev_off, [o.round(1) for o in current_buffer])
         self._failed_reaches_buffer.clear()
         target = Offset3DTuple(cfg.target_x, cfg.target_y, cfg.target_z)
-        off_x, off_y, off_z = target - mean_off
+        off_x, off_y, off_z = mean_off - target
         shift_x = off_x if abs(off_x) > 0.5 else 0
-        shift_y = off_y if abs(off_y) > 0.5 else 0
+        shift_y = off_y if abs(off_y) > 1 else 0
         shift_z = off_z if abs(off_z) > 0.5 else 0
         return Offset3DTuple(shift_x, shift_y, shift_z)
 
