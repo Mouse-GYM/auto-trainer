@@ -1116,18 +1116,21 @@ class MainWindow(QMainWindow):
 
         elif name == props.STATUS:
             logger.debug("got new app model status: %s", value)
-            self.blockSignals(True)
+
             if value is AppModelStatus.IDLE:
                 for action in (
                     self.calib_diamond_triangle_action,
                     self.animal_in_device_action,
                     self.animal_in_training_action,
                 ):
+                    action.blockSignals(True)
                     action.setEnabled(False)
                     action.setChecked(False)
+                    action.blockSignals(False)
                 for item in (self.make_3d_calib_action, self.run_action,
                              self._animal_dropdown_combo, self._training_mode_combo, self._training_plan_combo):
                     item.setEnabled(True)
+                self._app_model.analysis.stop()
 
             elif value is AppModelStatus.ACQUIRING:
                 for action in (
@@ -1135,8 +1138,10 @@ class MainWindow(QMainWindow):
                     self.animal_in_device_action,
                     self.animal_in_training_action,
                 ):
+                    action.blockSignals(True)
                     action.setEnabled(True)
                     action.setChecked(False)
+                    action.blockSignals(False)
                 for item in (self._animal_dropdown_combo, self._training_mode_combo, self._training_plan_combo):
                     item.setEnabled(True)
                 self._app_model.analysis.restart()
@@ -1154,7 +1159,10 @@ class MainWindow(QMainWindow):
                 self._app_model.analysis.stop()
 
             elif value is AppModelStatus.ANIMAL_IN_DEVICE:
-                self.animal_in_training_action.setChecked(False)
+                for action in (self.animal_in_training_action,):
+                    action.blockSignals(True)
+                    action.setChecked(False)
+                    action.blockSignals(False)
                 for item in (
                     self._training_mode_combo,
                     self._training_plan_combo,
@@ -1166,7 +1174,10 @@ class MainWindow(QMainWindow):
                 self._app_model.analysis.restart()
 
             elif value is AppModelStatus.ANIMAL_IN_TRAINING:
-                self.animal_in_device_action.setChecked(True)
+                for action in (self.animal_in_device_action,):
+                    action.blockSignals(True)
+                    action.setChecked(True)
+                    action.blockSignals(False)
                 for item in (
                     self._training_mode_combo,
                     self._training_plan_combo,
@@ -1177,7 +1188,8 @@ class MainWindow(QMainWindow):
                     item.setEnabled(False)
                 self._app_model.analysis.restart()
 
-            self.blockSignals(False)
+            else:
+                logger.warning("unhandled app model status: %s", value)
 
         elif name == props.ANIMALS:
             self._reload_animals(value)
