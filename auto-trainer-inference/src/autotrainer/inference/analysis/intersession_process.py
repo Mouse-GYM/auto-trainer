@@ -56,7 +56,7 @@ def intersession_process(
     #
     # apply flips to get axis values in desired order before proceeding to segment reaches after:
     for elem in centered_df_3d.columns.get_level_values(0).unique():
-        for axis_idx, (axis, axis_flip) in enumerate(zip("xyz", axis_flips)):
+        for axis, axis_flip in zip("xyz", axis_flips):
             centered_df_3d[(elem, axis)] *= axis_flip
     #
     results_dict = segment_reaches(
