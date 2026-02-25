@@ -316,6 +316,10 @@ class AppModel(ObservableObject):
         return self._behavior.algorithm.thread_lock
 
     @property
+    def acquisition_started(self):
+        return self._acquisition_started
+
+    @property
     def status(self) -> AppModelStatus:
         return self._status
 

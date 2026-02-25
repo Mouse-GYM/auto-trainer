@@ -6,7 +6,7 @@ from datetime import datetime
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Callable
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QIcon, QKeySequence
@@ -119,7 +119,7 @@ class MainWindow(QMainWindow):
         app_model.property_changed += self._app_model_property_changed
         app_model.on_error += self._show_error
         app_model.inference.property_changed += self._inference_property_changed
-        # app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
+
         user_preferences.property_changed += self._preferences_property_changed
         self.running_status_changed.connect(self._set_start_or_stop)
         #
@@ -149,8 +149,6 @@ class MainWindow(QMainWindow):
         self._animal_dropdown_combo.setEnabled(stopped)
         self._training_plan_combo.setEnabled(stopped)
         self.edit_camera_settings_action.setEnabled(stopped)
-        self.animal_in_device_action.setEnabled(started)
-        self.animal_in_training_action.setEnabled(started)
         self.make_3d_calib_action.setEnabled(stopped)
         #
         run_action = self.run_action
@@ -166,10 +164,12 @@ class MainWindow(QMainWindow):
             run_action.setText("Start")
             run_action.setIcon(icon)
 
-    def on_capture_start_stop(self, is_toggled):
+    def _on_capture_start_stop(self, is_toggled, *, post_action: Optional[Callable] = None):
         app_model = self._app_model
         self.run_action.setEnabled(False)
         self.make_3d_calib_action.setEnabled(False)
+        self.animal_in_device_action.setEnabled(False)
+        self.animal_in_training_action.setEnabled(False)
         self.running_status_changed.emit(is_toggled)
         if is_toggled:
             self._status_label.setText("Starting acquisition...")
@@ -187,12 +187,16 @@ class MainWindow(QMainWindow):
                     self._status_label.setText("")
                     self._acquisition_started = True
                     self._check_diamond_triangle_config()
+                    if post_action is not None:
+                        post_action()
                 else:
                     self._status_label.setText("Startup failed")
                     self.running_status_changed.emit(False)
                 self.run_action.setEnabled(True)
+                self.animal_in_device_action.setEnabled(True)
+                self.animal_in_training_action.setEnabled(True)
                 self._start_capture_thread = None
-            thread = threading.Thread(target=exec_start_capture, daemon=True)
+            thread = threading.Thread(target=exec_start_capture, daemon=True, name="StartAcquisition")
             self._start_capture_thread = thread
             thread.start()
         else:
@@ -206,23 +210,40 @@ class MainWindow(QMainWindow):
                 app_model.on_capture_stop()
                 self.running_status_changed.emit(False)
                 self.run_action.setEnabled(True)
+                self.animal_in_device_action.setEnabled(True)
+                self.animal_in_training_action.setEnabled(True)
                 self._status_label.setText("")
                 self._acquisition_started = False
-            thread = threading.Thread(target=exec_stop_capture, daemon=True)
+            thread = threading.Thread(target=exec_stop_capture, daemon=True, name="StopAcquisition")
             self._stop_capture_thread = thread
             thread.start()
 
     def _on_animal_in_device_triggered(self, is_toggled):
         logger.verbose("_on_animal_in_device_triggered: %s", is_toggled)
         if is_toggled:
-            self._app_model.status = AppModelStatus.ANIMAL_IN_DEVICE
+            def post():
+                self._app_model.status = AppModelStatus.ANIMAL_IN_DEVICE
+            if self._app_model.acquisition_started:
+                post()
+            else:
+                self._on_capture_start_stop(True, post_action=post)
         else:
             self._app_model.status = AppModelStatus.ACQUIRING
 
     def _on_animal_in_training_triggered(self, is_toggled):
         logger.verbose("_on_animal_in_training_triggered: %s", is_toggled)
         if is_toggled:
-            self._app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
+            for action in (self.animal_in_device_action,):
+                action.blockSignals(True)
+                action.setChecked(True)
+                action.blockSignals(False)
+
+            def post():
+                self._app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
+            if self._app_model.acquisition_started:
+                post()
+            else:
+                self._on_capture_start_stop(True, post_action=post)
         else:
             self._app_model.status = AppModelStatus.ANIMAL_IN_DEVICE
 
@@ -493,7 +514,7 @@ class MainWindow(QMainWindow):
         self.main_content.on_activated()
         app_status = self._app_model.status
         if app_status == AppModelStatus.IDLE:
-            self.on_capture_start_stop(True)
+            self._on_capture_start_stop(True)
         else:
             logger.verbose("AppModelStatus not idle, not starting acquisition", app_status)
 
@@ -642,7 +663,7 @@ class MainWindow(QMainWindow):
             self._closing = True
 
         def execute_close():
-            self.on_capture_start_stop(False)
+            self._on_capture_start_stop(False)
             stop_thread = self._stop_capture_thread
             self._timer_calibrate_diamond_triangle.cancel()
             if stop_thread is not None:
@@ -688,16 +709,14 @@ class MainWindow(QMainWindow):
         action.setToolTip("Start or stop acquisition")
         action.setCheckable(True)
         action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_R))
-        action.triggered.connect(self.on_capture_start_stop)
+        action.triggered.connect(self._on_capture_start_stop)
 
         action = self.animal_in_device_action = QAction(QIcon(qta.icon("fa5s.vector-square")), "Animal in device", self)
         action.setCheckable(True)
-        action.setEnabled(False)
         action.triggered.connect(self._on_animal_in_device_triggered)
 
         action = self.animal_in_training_action = QAction(QIcon(qta.icon("fa5s.chalkboard-teacher")), "Animal in training", self)
         action.setCheckable(True)
-        action.setEnabled(False)
         action.triggered.connect(self._on_animal_in_training_triggered)
 
         action = self.show_reach_event_action = QAction(QIcon(qta.icon("fa5s.bezier-curve")), "Show Previous Reach", self)
@@ -1108,8 +1127,9 @@ class MainWindow(QMainWindow):
             action.setEnabled(can_do)
 
     @invoke_method
-    def _app_model_property_changed(self, name: str, value, _):
-        props = self._app_model.Props
+    def _app_model_property_changed(self, name: str, value, prev_value):
+        app_model = self._app_model
+        props = app_model.Props
         #
         if name == props.ACQUISITION_RUNNING:
             self.running_status_changed.emit(value)
@@ -1117,20 +1137,28 @@ class MainWindow(QMainWindow):
         elif name == props.STATUS:
             logger.debug("got new app model status: %s", value)
 
+            analysis_action = None
+            self.blockSignals(True)
+
             if value is AppModelStatus.IDLE:
                 for action in (
                     self.calib_diamond_triangle_action,
                     self.animal_in_device_action,
                     self.animal_in_training_action,
                 ):
-                    action.blockSignals(True)
                     action.setEnabled(False)
                     action.setChecked(False)
-                    action.blockSignals(False)
-                for item in (self.make_3d_calib_action, self.run_action,
-                             self._animal_dropdown_combo, self._training_mode_combo, self._training_plan_combo):
+                for item in (
+                    self.make_3d_calib_action,
+                    self.run_action,
+                    self.animal_in_device_action,
+                    self.animal_in_training_action,
+                    self._animal_dropdown_combo,
+                    self._training_mode_combo,
+                    self._training_plan_combo,
+                ):
                     item.setEnabled(True)
-                self._app_model.analysis.stop()
+                analysis_action = app_model.analysis.stop
 
             elif value is AppModelStatus.ACQUIRING:
                 for action in (
@@ -1138,13 +1166,11 @@ class MainWindow(QMainWindow):
                     self.animal_in_device_action,
                     self.animal_in_training_action,
                 ):
-                    action.blockSignals(True)
                     action.setEnabled(True)
                     action.setChecked(False)
-                    action.blockSignals(False)
                 for item in (self._animal_dropdown_combo, self._training_mode_combo, self._training_plan_combo):
                     item.setEnabled(True)
-                self._app_model.analysis.restart()
+                analysis_action = app_model.analysis.restart
 
             elif value in {AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS}:
                 for item in (
@@ -1156,13 +1182,11 @@ class MainWindow(QMainWindow):
                     self.animal_in_training_action,
                 ):
                     item.setEnabled(False)
-                self._app_model.analysis.stop()
+                analysis_action = app_model.analysis.stop
 
             elif value is AppModelStatus.ANIMAL_IN_DEVICE:
-                for action in (self.animal_in_training_action,):
-                    action.blockSignals(True)
-                    action.setChecked(False)
-                    action.blockSignals(False)
+                self.animal_in_device_action.setChecked(True)
+                self.animal_in_training_action.setChecked(False)
                 for item in (
                     self._training_mode_combo,
                     self._training_plan_combo,
@@ -1171,13 +1195,11 @@ class MainWindow(QMainWindow):
                     self.make_3d_calib_action,
                 ):
                     item.setEnabled(False)
-                self._app_model.analysis.restart()
+                analysis_action = app_model.analysis.restart
 
             elif value is AppModelStatus.ANIMAL_IN_TRAINING:
-                for action in (self.animal_in_device_action,):
-                    action.blockSignals(True)
+                for action in (self.animal_in_device_action, self.animal_in_training_action):
                     action.setChecked(True)
-                    action.blockSignals(False)
                 for item in (
                     self._training_mode_combo,
                     self._training_plan_combo,
@@ -1186,10 +1208,15 @@ class MainWindow(QMainWindow):
                     self.make_3d_calib_action,
                 ):
                     item.setEnabled(False)
-                self._app_model.analysis.restart()
+                analysis_action = app_model.analysis.restart
 
             else:
                 logger.warning("unhandled app model status: %s", value)
+
+            self.blockSignals(False)
+
+            if analysis_action is not None:
+                analysis_action()
 
         elif name == props.ANIMALS:
             self._reload_animals(value)
