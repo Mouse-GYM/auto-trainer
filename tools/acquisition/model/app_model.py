@@ -358,7 +358,7 @@ class AppModel(ObservableObject):
         if not valid:
             raise ValueError(f"New status {value} not valid for current status {prev}")
         self._status = value
-        self._on_property_changed(self.Props.STATUS, value, prev)  # unused atm
+        self._on_property_changed(self.Props.STATUS, value, prev)
         algo_status = value.to_behavior_algo_status()
         if algo_status is not None:
             self._behavior.algorithm.status = algo_status
