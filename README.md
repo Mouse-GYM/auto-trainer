@@ -37,16 +37,16 @@ from the core logic of the applications for two reasons:
 
 * Acquisition Application
   *  The local user interface for integrated camera, head fix, pellet delivery, and pose inference modules 
-  * `python auto-trainer-local.py`
+  * `python -m tools.acquisition.gui`
     * [Detailed Instructions](tools/acquisition/README.md)
   * Headless implementation for command line only
-    * `python auto-trainer-headless.py`
+    * `python -m tools.acquisition.headless`
 * Tunnel Test Application
   * Standalone UI for interfacing with the tunnel hardware components
-  * `python head_fix.py`
+  * `python -m tools.head_fix.gui`
 * Pellet Delivery Test Application
   * Standalone UI for interfacing with the pellet delivery system
-  * `python pellet_delivery.py`
+  * `python -m tools.pellet_delivery.gui`
 
 ## Scripts
 
@@ -98,14 +98,15 @@ by default.
 
 Tests that require the Alogus hardware are marked as `@pytest.mark.canbus` and are not run by default.
 
-PyTest is not installed with via the default requirements.txt.  To enable testing use
+PyTest is not installed with via the default installation. To enable testing use
 
-`pip install -r requirements-test.txt`
+`pip install -e .[test]`
 
 You also need git LFS installed & enabled in your clone repo:
 
 1. install with: `sudo apt-get install git-lfs  # or yum or brew eventually`
 2. enable in current clone repo with: `git lfs --install`
+3. `git lfs pull` and `git checkout` or similar command might be needed to fetch the current binary files.
 
 Now, to run *all* default tests from the root directory:
 
@@ -203,9 +204,9 @@ guidelines are in place for future additions and changes to help with and improv
   * Objects that have multiple implementations, such as the different hardware implementations
   * Objects that are likely to be mocked in automated testing.
     * Particularly needed for environments where hardware, inference models, or other unique elements are not present.  One environment is GitHub Actions that run automated testing for Pull Requests.
-* `pip` and `requirements.txt` are currently used, but the goal is to move to something more robust.
-  * `project.toml` in modules should be kept up to date if possible.
-* Versions in `requirements.txt` generally need team-wide notification to update.
+* `pip` and `pyproject.toml` are currently used.
+  * `pyproject.toml` in modules should be kept up to date if possible.
+* Versions in `pyproject.toml` generally need team-wide notification to update.
   * There are several dependencies whose version traces back to the specific environment that is currently required on the Jetson.
 * Docstrings should be in the "Google" style.
   * A lot of existing docstrings are in "reStructuredText" (Sphinx) style, which may be confusing.

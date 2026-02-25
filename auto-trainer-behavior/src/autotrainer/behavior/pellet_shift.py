@@ -6,6 +6,7 @@ from typing import Callable, Optional, List, Union
 
 from autotrainer.core import Offset3DTuple, calculate_std_dev_manual, ObservableObject, get_verbose_logger
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.inference.analysis import IntersessionResponse
 
 
@@ -46,14 +47,23 @@ class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
         if len(current_buffer) < cfg.minimum_reach_fail:
             return None
         mean_off, stdev_off = calculate_std_dev_manual(current_buffer, reduce_method=reduce_method)
-        logger.verbose("ShiftXYZBuffer mean/stdev: %s / %s ; buffer=%s",
-                       mean_off, stdev_off, [o.round(1) for o in current_buffer])
         self._failed_reaches_buffer.clear()
+        #
         target = Offset3DTuple(cfg.target_x, cfg.target_y, cfg.target_z)
-        off_x, off_y, off_z = target - mean_off
+        # reminder: target in config file is in inference coordinate system order. so:
+        target *= DiamondTriangleOffsetConfig.flips_inference_diamond
+        #
+        off_x, off_y, off_z = res_off = mean_off - target
+        assert isinstance(res_off, Offset3DTuple)
+        #
+        logger.verbose(
+            "ShiftXYZBuffer mean/stdev: %s/%s ; off=%s ; buffer=%s",
+           mean_off, stdev_off, res_off.round(1), [o.round(1) for o in current_buffer])
+        #
         shift_x = off_x if abs(off_x) > 0.5 else 0
-        shift_y = off_y if abs(off_y) > 0.5 else 0
+        shift_y = off_y if abs(off_y) > 1 else 0
         shift_z = off_z if abs(off_z) > 0.5 else 0
+        #
         return Offset3DTuple(shift_x, shift_y, shift_z)
 
 
