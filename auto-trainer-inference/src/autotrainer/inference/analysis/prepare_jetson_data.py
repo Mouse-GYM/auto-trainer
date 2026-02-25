@@ -8,6 +8,8 @@ import sys
 import os
 import glob
 import pickle
+
+import pandas
 import yaml
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
@@ -469,8 +471,15 @@ def rotate_3d_points(points, x_degrees: float = 0, y_degrees: float = 0, z_degre
     return rotated_points
 
 
-def reorient_and_center(filtered_df_3d, centered_path_3d, src_dir, bpts, center_method, frame_rate):
-    df_3d = filtered_df_3d  # pd.read_hdf(path_3D)
+def reorient_and_center(
+    filtered_df_3d: pandas.DataFrame,
+    centered_path_3d: pandas.DataFrame,
+    src_dir: str,
+    bpts,
+    center_method: str,
+    frame_rate: int,
+):
+    df_3d = filtered_df_3d
     path_cam_mat = os.path.join(src_dir, 'camera_matrix')
     path_stereo_file = os.path.join(path_cam_mat, "stereo_params.pickle")
     calib_params = load_calib_stereo_params(Path(path_stereo_file))
