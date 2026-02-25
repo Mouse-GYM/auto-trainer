@@ -118,7 +118,6 @@ class EmergencyAlarmMonitor(BaseDetector):
     @property
     def engaged_reasons(self) -> List[EmergencyReason]:
         return sorted(self._engaged_reasons)
-        # return sorted(reason.name for reason in self._engaged_reasons)
 
     @property
     def audio_load_cell_thrashing_engaged(self):
