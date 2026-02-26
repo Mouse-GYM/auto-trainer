@@ -1219,7 +1219,7 @@ class BehaviorAlgorithm(ObservableObject):
         cfg = self._diamond_triangle_offset_config
         if cfg is None:
             return
-        drift = cfg.inference_to_motor(offset) - motor_position
+        drift = cfg.diamond_to_motor(offset) - motor_position
         with self._thread_lock:
             self._diamond_triangle_prev_drifts.append(drift)
         p_now = time.perf_counter()

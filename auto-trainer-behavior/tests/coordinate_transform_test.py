@@ -47,8 +47,11 @@ def test_transform_coordinates(motor_xyz, used_pos, measured_off):
     assert cfg.motor_to_diamond(cfg.inference_to_motor(orig)) == cfg.inference_to_diamond(orig)
     assert cfg.motor_to_diamond(cfg.inference_to_motor(motor_xyz)) == cfg.inference_to_diamond(motor_xyz)
     assert cfg.motor_to_inference(cfg.inference_to_motor(motor_xyz)) == motor_xyz
-    assert cfg.inference_to_diamond(cfg.measured_offset - cfg.motor_to_inference(cfg.used_position)) == (0, 0, 0)
-    assert cfg.motor_to_inference(cfg.used_position) == cfg.measured_offset
-    assert cfg.inference_to_diamond(cfg.motor_to_inference(cfg.used_position) - cfg.measured_offset) == (0, 0, 0)
-    assert cfg.inference_to_motor(cfg.measured_offset) == cfg.used_position
-    assert cfg.inference_to_diamond(cfg.measured_offset) == cfg.motor_to_diamond(cfg.used_position)
+    assert cfg.inference_to_diamond(
+        cfg.diamond_to_inference(cfg.measured_offset)
+        - cfg.motor_to_inference(cfg.used_position)
+    ) == (0, 0, 0)
+    assert cfg.motor_to_diamond(cfg.used_position) == cfg.measured_offset
+    assert cfg.inference_to_diamond(cfg.motor_to_inference(cfg.used_position) - cfg.diamond_to_inference(cfg.measured_offset)) == (0, 0, 0)
+    assert cfg.diamond_to_motor(cfg.measured_offset) == cfg.used_position
+    assert cfg.motor_to_diamond(cfg.used_position) == cfg.measured_offset

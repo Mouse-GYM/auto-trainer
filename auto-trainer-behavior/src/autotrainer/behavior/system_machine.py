@@ -1011,9 +1011,11 @@ class SystemMachine(StateMachine):
             (shift_xyz[2], dev.set_z, BehaviorEventKind.intersessionShiftZ)),
         ):
             if val != 0:
-                val *= cfg.flips_inference_motor[idx]
-                logger.debug("applying %s with %.1f", kind, val)
-                meth(val, absolute=False, sender="processed_shift_xyz")
+                val *= cfg.flips_motor_diamond[idx]
+                logger.debug("applying %s with shift: %.1f", kind, val)
+                token = meth(val, absolute=False, sender="processed_shift_xyz")
+                if token is None:
+                    logger.error("Could not apply %s ; command not successfull", kind)
                 EventManager.default().post_event_content(kind, context=val)
             else:
                 logger.debug("%s == 0 ; skip", kind)
