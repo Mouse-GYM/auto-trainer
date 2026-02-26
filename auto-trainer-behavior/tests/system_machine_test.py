@@ -401,7 +401,7 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     rsp_idx = 0
     se = SceneElement
     locs_3d = {
-        se.Diamond: inference_pos + diamond_cfg.measured_offset,
+        se.Diamond: Offset3DTuple.get_zero(),
         se.Triangle: diamond_cfg.measured_offset,
     }
     presents = {se.Diamond: True, se.Triangle: True, se.Pellet: True}  # keep pellet seen
@@ -410,7 +410,7 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
         nonlocal rsp_idx
         parts_offset = {
             se.Diamond: {
-                se.Triangle: locs_3d[se.Diamond] - locs_3d[se.Triangle],
+                se.Triangle: locs_3d[se.Triangle] - locs_3d[se.Diamond],
             }
         }
         locs = []  # 2d inference location unnecessary
@@ -432,9 +432,9 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     assert algo.get_diamond_triangle_drifts() == (0, 0, 0)
     locs_3d[se.Triangle] += (0.5, 1, -1)
     pose_changed()
-    assert algo.get_diamond_triangle_drifts() == (0.25, -0.5, -0.5)  # given 2 measures now
+    assert algo.get_diamond_triangle_drifts() == (0.25, -0.5, 0.5)  # given 2 measures now
     pose_changed()
-    assert algo.get_diamond_triangle_drifts(reset=True) == (1 / 3, -2 / 3, -2 / 3)  # given 3 measures now
+    assert algo.get_diamond_triangle_drifts(reset=True) == (1 / 3, -2 / 3, 2 / 3)  # given 3 measures now
     assert algo.get_diamond_triangle_drifts() is None
     #
     presents.pop(se.Pellet)
@@ -454,4 +454,4 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     assert pellet_m.state == PelletState.monitoring  # still
     assert pellet_m.can_use_pellet_command()
     pose_changed()
-    assert algo.get_diamond_triangle_drifts() == (0.5, -1, -1)  # back
+    assert algo.get_diamond_triangle_drifts() == (0.5, -1, 1)  # back
