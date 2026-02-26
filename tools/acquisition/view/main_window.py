@@ -1191,6 +1191,9 @@ class MainWindow(QMainWindow):
                 for item in (
                     self._training_mode_combo,
                     self._training_plan_combo,
+                ):
+                    item.setEnabled(True)
+                for item in (
                     self._animal_dropdown_combo,
                     self.calib_diamond_triangle_action,
                     self.make_3d_calib_action,
