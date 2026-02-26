@@ -7,7 +7,10 @@ from datetime import datetime, date
 
 import verboselogs
 
+from autotrainer.behavior.pellet_shift import ShiftXYZBufferHandler
 from autotrainer.core import get_verbose_logger, ProjectInfo
+from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
+from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
 from autotrainer.core.logging import setup_logging, get_console_handler
 
 from autotrainer.inference.analysis import intersession_process
@@ -21,7 +24,8 @@ def main():
     parser.add_argument("date", type=lambda v: datetime.strptime(v, "%Y%m%d"))
     parser.add_argument("session", type=int)
     parser.add_argument("--data-dir", type=Path, required=True)
-    parser.add_argument("--calib-dir", type=Path, required=True)
+    parser.add_argument("--calib-dir", type=Path,
+                        default=Path.home().joinpath("Autotrainer", DEFAULT_3D_CALIB_DIR_NAME))
     parser.add_argument("--log-level", type=lambda val: int(val) if val.isdigit() else val,
                         default=logging.WARNING)
     parser.add_argument("--analysis-debug-level", type=int, help="integer", default=0)
@@ -42,6 +46,9 @@ def main():
     )
     sess_path = project_info.get_session_path()
     print(f"{sess_path.prefix}: {result.humanize()}")
+    handler = ShiftXYZBufferHandler(config=ShiftXYZBufferHandlerConfig())
+    shift = handler.make_shift_from_rh_list(result.rh_max_vp_list)
+    print(f"Shift result: {shift.round(3)}")
 
 
 if __name__ == "__main__":

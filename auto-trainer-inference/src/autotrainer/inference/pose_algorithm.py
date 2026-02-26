@@ -107,7 +107,8 @@ class PoseResponse:
         part1: str,
         part2: str,
     ) -> Optional[Offset3DTuple]:
-        """Return the 3d offsets between part1 and part2,
+        """Return the 3d offsets between part1 and part2, relatively to part1,
+        i.e: returns loc3d[part2] - loc3d[part1]
         if none exist/is available return None instead
         """
         value = self.parts_3d_offsets.get(part1, {}).get(part2, None)
@@ -438,7 +439,7 @@ class PoseAlgorithm:
                     raw_3d[part2] = Offset3DTuple(raw_df_3d[part2].iloc[-1, 0:3])
                     loc2 = locations_3d[part2] = Offset3DTuple(df_3d[part2].iloc[-1, 0:3])
                     if loc1 is not None:
-                        parts_3d_offsets[part1][part2] = tuple(loc1 - loc2)
+                        parts_3d_offsets[part1][part2] = tuple(loc2 - loc1)
 
         response = PoseResponse(
             sequence=self._sequence,

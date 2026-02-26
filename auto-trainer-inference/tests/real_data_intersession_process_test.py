@@ -103,8 +103,8 @@ def test_index_error(project_info, caplog):
 
 
 agx001_20251015_15_expected_result = IntersessionResponse(
+    rh_max_vp_list=[Offset3DTuple(-1.6103162548648218, -2.4711684859384793, 1.2448511625494527)],
     food_consumed=0, successful_reaches=0, pellets_presented=1, total_reaches=1,
-    rh_max_vp_list=[Offset3DTuple(1.6103162548648218, 2.4711684859384793, -1.2448511625494527)],
 )
 
 
@@ -135,11 +135,8 @@ def test_intersession_process_bench_agx001_20251015_15(agx001_20251015_15, bench
 
 
 agx001_20260205_11_expected_result = IntersessionResponse(
-    rh_max_vp_list=[Offset3DTuple(0.4815189074758326, 5.378078246747098, 0.350716635920838)],
-    food_consumed=0,
-    successful_reaches=0,
-    pellets_presented=1,
-    total_reaches=1,
+    rh_max_vp_list=[Offset3DTuple(-0.4815189074758326, -5.378078246747098, -0.350716635920838)],
+    food_consumed=0, successful_reaches=0, pellets_presented=1, total_reaches=1,
 )
 
 
@@ -185,7 +182,7 @@ def test_pose_algo_process_frames_agx001_20251015_15(initialized_pose_algo, agx0
     #     return
     pose_algo = initialized_pose_algo
     pairs_3d = [
-        ('Diamond', 'Triangle'),
+        ('Triangle', 'Diamond'),
     ]
     pose_algo.process_frames_select_frames_method = select_frames_method
     sp = agx001_20251015_15.get_session_path()
@@ -231,49 +228,14 @@ def test_pose_algo_process_frames_agx001_20251015_15(initialized_pose_algo, agx0
          'Star': PoseLocation(index=7, x=136.81, y=121.13), 'Nose': PoseLocation(index=10, x=104.90, y=74.91),
          'Triangle': PoseLocation(index=11, x=65.31, y=152.20), 'Mouth': PoseLocation(index=12, x=106.31, y=91.57),
          'Diamond': PoseLocation(index=13, x=37.37, y=66.15), 'L_Hand': PoseLocation(index=-1, x=142.50, y=57.30)}],
-        parts_3d_offsets={
-            'Diamond': {'Triangle': Offset3DTuple(3.795436232456033, -10.707559950520785, -12.157127561207963)}},
-        locations_3d={'Diamond': Offset3DTuple(4.4811595880728605, -17.23875682380808, -9.14015255443137),
-                      'Triangle': Offset3DTuple(0.6857233556168274, -6.531196873287296, 3.0169750067765926)},
-        raw_loc_3d={'Diamond': Offset3DTuple(7.030296810299305, -2.0547245837788077, 23.23066772764739),
-                    'Triangle': Offset3DTuple(7.899437087298312, 1.9681540063437364, 22.627052821611116)})
-
-
-    # expected2 = PoseResponse(
-    #     sequence=1,
-    #
-    #     parts_flags=(
-    #     {'Pellet': True, 'RH_flat': False, 'RH_spread': False, 'RH_grab': False, 'LH_flat': False, 'LH_spread': False,
-    #      'LH_grab': False, 'Star': True, 'Tongue_mid': False, 'Tongue_tip': False, 'Nose': True, 'Triangle': True,
-    #      'Mouth': True, 'Diamond': True},
-    #     {'Pellet': True, 'RH_flat': False, 'RH_spread': False, 'RH_grab': False, 'LH_flat': True, 'LH_spread': False,
-    #      'LH_grab': False, 'Star': True, 'Tongue_mid': False, 'Tongue_tip': False, 'Nose': True, 'Triangle': True,
-    #      'Mouth': True, 'Diamond': True},
-    #     {'Pellet': True, 'RH_flat': False, 'RH_spread': False, 'RH_grab': False, 'LH_flat': False, 'LH_spread': False,
-    #      'LH_grab': False, 'Star': True, 'Tongue_mid': False, 'Tongue_tip': False, 'Nose': True, 'Triangle': True,
-    #      'Mouth': True, 'Diamond': True}),
-    #
-    #     locations=[
-    #     {'Pellet': PoseLocation(index=0, x=107.18849468231201, y=124.11833190917969),
-    #      'Star': PoseLocation(index=7, x=157.89800357818604, y=98.02168691158295),
-    #      'Nose': PoseLocation(index=10, x=81.19415855407715, y=89.2825698852539),
-    #      'Triangle': PoseLocation(index=11, x=100.96263575553894, y=154.61319971084595),
-    #      'Mouth': PoseLocation(index=12, x=61.63555586338043, y=103.7043285369873),
-    #      'Diamond': PoseLocation(index=13, x=30.862200021743774, y=71.6781370639801)},
-    #     {'Pellet': PoseLocation(index=0, x=84.202712059021, y=127.75618600845337),
-    #      'LH_flat': PoseLocation(index=4, x=142.5007290840149, y=57.30223035812378),
-    #      'Star': PoseLocation(index=7, x=136.81033945083618, y=121.13375759124756),
-    #      'Nose': PoseLocation(index=10, x=104.89548110961914, y=74.90717458724976),
-    #      'Triangle': PoseLocation(index=11, x=65.31067943572998, y=152.19582509994507),
-    #      'Mouth': PoseLocation(index=12, x=106.30647206306458, y=91.57262086868286),
-    #      'Diamond': PoseLocation(index=13, x=37.36961615085602, y=66.14892673492432),
-    #      'L_Hand': PoseLocation(index=-1, x=142.5007290840149, y=57.30223035812378)}],
-    #
-    #     parts_3d_offsets={
-    #     'Diamond': {'Triangle': Offset3DTuple(3.7954362324560265, -10.707559950520782, -12.157127561207961)}},
-    #
-    #     locations_3d={'Diamond': Offset3DTuple(-66.66986318624589, -68.63968712410409, 18.349303122667),
-    #                   'Triangle': Offset3DTuple(-70.46529941870192, -57.932127173583304, 30.50643068387496)})
+        parts_3d_offsets={'Triangle': {'Diamond': Offset3DTuple(3.787355193687686, -10.697681145835073, 12.135112451315234)}},
+        locations_3d={
+            'Diamond': Offset3DTuple(4.474496892621784, -17.238484450625435, 9.131630112545981),
+            'Triangle': Offset3DTuple(0.6871416989340975, -6.540803304790362, -3.0034823387692535)},
+        raw_loc_3d={
+            'Diamond': Offset3DTuple(7.031130763628839, -2.0526320986506033, 23.23216593822239),
+            'Triangle': Offset3DTuple(7.8992932916520004, 1.9640348717618656, 22.627585513107295),
+        })
 
     assert_pose_response_almost_equal(res, expected)
 
