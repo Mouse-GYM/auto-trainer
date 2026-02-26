@@ -29,7 +29,6 @@ def intersession_process(
     project: ProjectInfo,
     *,
     calib_dir: Optional[Path] = None,
-    axis_flips: Tuple[int, int, int] = DiamondTriangleOffsetConfig.flips_inference_diamond,
     debug_level: int = _segment_reach_debug,
 ) -> IntersessionResponse:
     """
@@ -53,11 +52,6 @@ def intersession_process(
     center_method = (1, SceneElement.Diamond)
     #
     df_lr, centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
-    #
-    # apply flips to get axis values in desired order before proceeding to segment reaches after:
-    #for elem in centered_df_3d.columns.get_level_values(0).unique():
-    #    for axis, axis_flip in zip("xyz", axis_flips):
-    #        centered_df_3d[(elem, axis)] *= axis_flip
     #
     results_dict = segment_reaches(
         session=location,
