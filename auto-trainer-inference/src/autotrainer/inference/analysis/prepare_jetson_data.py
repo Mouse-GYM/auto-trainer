@@ -655,7 +655,7 @@ def reorient_and_center_step1(
         x, y, z = rotated_data[:, 0], rotated_data[:, 1], rotated_data[:, 2]
 
         # data = np.vstack((x, y, z)).T
-        data = np.vstack((-x, -z, y)).T
+        data = np.vstack((-x, -z, -y)).T
 
         triangulate[:, bp, :] = data
 

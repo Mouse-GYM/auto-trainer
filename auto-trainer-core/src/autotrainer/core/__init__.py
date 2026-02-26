@@ -117,6 +117,14 @@ class Offset3DTuple(_Offset3DTuple):
 
     __str__ = __repr__
 
+    @staticmethod
+    def get_nan() -> Self:
+        return _nan_offset3d_tuple
+
+    @staticmethod
+    def get_zero() -> Self:
+        return _zero_offset3d_tuple
+
     def replace(self, x: Optional[float] = None, y: Optional[float] = None, z: Optional[float] = None) -> Self:
         return self.__class__(
             self.x if x is None else x,
@@ -124,7 +132,7 @@ class Offset3DTuple(_Offset3DTuple):
             self.z if z is None else z,
         )
 
-    def humanize(self, n_digits: int = 2):
+    def humanize(self, n_digits: int = 2) -> str:
         x, y, z = self
         return f"({x:.0{n_digits}f}, {y:.0{n_digits}f}, {z:.0{n_digits}f})"
 
@@ -138,7 +146,7 @@ class Offset3DTuple(_Offset3DTuple):
             *(pow(v, other, modulo) for v in self)
         )
 
-    def __rpow__(self, other, modulo=None):
+    def __rpow__(self, other, modulo=None) -> Self:
         if modulo is None:
             return self.__class__(*(other ** v for v in self))
         return self.__class__(
@@ -184,6 +192,10 @@ class Offset3DTuple(_Offset3DTuple):
     @property
     def distance(self) -> float:
         return math.sqrt(sum(c**2 for c in self))
+
+
+_nan_offset3d_tuple = Offset3DTuple(math.nan, math.nan, math.nan)
+_zero_offset3d_tuple = Offset3DTuple(0, 0, 0)
 
 #
 

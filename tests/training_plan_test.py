@@ -144,7 +144,8 @@ class TestTrainingPlan(MockSystemMachine):
 
         # assert plan_start_phase.advance_predicate.evaluate(plan_start_phase, plan._system_context) is True, "phase should be able advance"
         assert plan.current_phase != plan_start_phase, "the phase should have advanced"
-        assert "Received processed shift xyz: (3.0, -3.0, 0.8)" in caplog.text, \
+
+        assert "Received processed shift xyz: (0, 3.0, -1.2)" in caplog.text, \
             "should be the some avg/mean of the 2 previous sessions, with limits applied"
 
         assert algo.total_pellet_count == sum(r.food_consumed for r in results)

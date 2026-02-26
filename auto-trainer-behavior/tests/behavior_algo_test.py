@@ -253,6 +253,7 @@ def test_diamond_triangle_drift(algo):
     algo.diamond_triangle_config = DiamondTriangleOffsetConfig(
         used_position=Offset3DTuple(1, 2, 3),
         measured_offset=Offset3DTuple(3, 30, -8),
+        version=DiamondTriangleOffsetConfig.current_config_version,
     )
     o1 = Offset3DTuple(0.5, 1, -1)
     p1 = Offset3DTuple(8, 6, 5)
