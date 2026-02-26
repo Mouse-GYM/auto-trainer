@@ -53,9 +53,9 @@ def test_with_generator():
 
 def test_accessors():
     o = Offset3DTuple(1, 2, 3)
-    assert o.x == 1
-    assert o.y == 2
-    assert o.z == 3
+    assert o.x == o[0] == 1
+    assert o.y == o[1] == 2
+    assert o.z == o[2] == 3
 
 
 @pytest.mark.parametrize("base_cls1,base_cls2", [
@@ -149,10 +149,15 @@ def test_distance(offset, exp_distance):
     [(0, 0, -1), (1, 2, 3), (0, 0, -3)],
     [(1, 2, 3), 3, (3, 6, 9)],
 ])
-def test_multiply(o1, o2, result):
-    o1 = Offset3DTuple(o1) if isinstance(o1, tuple) else o1
-    o2 = Offset3DTuple(o2) if isinstance(o2, tuple) else o2
-    # result = Offset3DTuple(result)
+@pytest.mark.parametrize("offset_side", ["left", "right"])
+def test_multiply(o1, o2, result, offset_side):
+    if offset_side == "left":
+        o1 = Offset3DTuple(o1)
+    else:
+        if isinstance(o2, tuple):
+            o2 = Offset3DTuple(o2)
+        else:
+            o1 = Offset3DTuple(o1)
     assert o1 * o2 == result
     assert o2 * o1 == result
 
@@ -196,3 +201,16 @@ def test_abs(offset, expected):
 def test_power(offset, power, expected):
     assert offset ** power == expected
     assert pow(offset, power) == expected
+
+
+@pytest.mark.parametrize("offset, digits", [
+    [(1.123456789, 4.4567890123, -7.4567890123), 0],
+    [(1.123456789, 4.4567890123, -7.4567890123), 1],
+    [(1.123456789, 4.4567890123, -3.123324564), 4],
+])
+def test_round(offset, digits):
+    offset = Offset3DTuple(offset)
+    expected = tuple(map(lambda v: round(v, digits), offset))
+    result = offset.round(digits)
+    assert isinstance(result, Offset3DTuple)
+    assert result == expected
