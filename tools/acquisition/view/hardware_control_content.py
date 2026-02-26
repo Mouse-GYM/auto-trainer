@@ -245,7 +245,7 @@ class HardwareControlContent(ContentWidget):
             min_xyz = Offset3DTuple(*(limits[c][0] for c in 'xyz'))
             max_xyz = Offset3DTuple(*(limits[c][1] for c in 'xyz'))
             diamond_triangle_cfg = algo.diamond_triangle_config
-            if diamond_triangle_cfg is not None:
+            if diamond_triangle_cfg is not None and diamond_triangle_cfg.fully_valid:
                 min_xyz = diamond_triangle_cfg.motor_to_diamond(min_xyz)
                 max_xyz = diamond_triangle_cfg.motor_to_diamond(max_xyz)
             for idx, pos in enumerate((self._x_pos, self._y_pos, self._z_pos)):
@@ -264,7 +264,7 @@ class HardwareControlContent(ContentWidget):
         self._set_pos_limits()
         algo = self._app_model.behavior.algorithm
         cfg = algo.diamond_triangle_config
-        if cfg is None:
+        if cfg is None or not cfg.fully_valid:
             logger.notice("Displaying animal data with Motor coordinate system")
             self._is_motor_cs_label.show()
             if animal is None:

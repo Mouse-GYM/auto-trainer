@@ -92,15 +92,17 @@ class DiamondTriangleOffsetConfig:
     def from_file(cls, path: Path) -> Self:
         with path.expanduser().open() as fh:
             dct = yaml.safe_load(fh)
-        return cls(**dict((k, Offset3DTuple(dct[k])) for k in dct))
+        if dct is None:
+            # in case of empty file
+            return cls(used_position=_offset_nans, measured_offset=_offset_nans, version=cls.current_config_version)
+        return cls(**dict((k, v if k == "version" else Offset3DTuple(v)) for k, v in dct.items()))
 
     def to_file(self, path: Path):
+        d = dataclasses.asdict(self)
+        for k, v in d.items():
+            if k != "version":
+                d[k] = list(v)  # getting yaml type error with Offset3D not natively supported by yaml
         with path.expanduser().open("w") as fh:
-            # always replace with current_config_version when saved:
-            with_version = dataclasses.replace(self, version=self.current_config_version)
-            d = dataclasses.asdict(with_version)
-            for k, v in d.items():
-                d[k] = list(v)  # getting yaml type error with Offset3D
             yaml.safe_dump(d, fh)
 
     def inference_to_motor(self, inference_xyz: Offset3DTuple) -> Offset3DTuple:

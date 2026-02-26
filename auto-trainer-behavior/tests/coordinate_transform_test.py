@@ -11,6 +11,7 @@ def diamond_triangle_config():
     return DiamondTriangleOffsetConfig(
         used_position=Offset3DTuple(8, 15, 10),
         measured_offset=Offset3DTuple(5, -7, -9),
+        version=DiamondTriangleOffsetConfig.current_config_version,
     )
 
 
@@ -35,7 +36,8 @@ def test_transform_coordinates(motor_xyz, used_pos, measured_off):
     motor_xyz = Offset3DTuple(motor_xyz)
     used_pos = Offset3DTuple(used_pos)
     measured_off = Offset3DTuple(measured_off)
-    cfg = DiamondTriangleOffsetConfig(used_position=used_pos, measured_offset=measured_off)
+    cfg = DiamondTriangleOffsetConfig(used_position=used_pos, measured_offset=measured_off,
+                                      version=DiamondTriangleOffsetConfig.current_config_version)
     motor_xyz = Offset3DTuple(motor_xyz)
     diamond_xyz = cfg.motor_to_diamond(motor_xyz)
     assert np.isclose(cfg.diamond_to_motor(diamond_xyz), motor_xyz).all()

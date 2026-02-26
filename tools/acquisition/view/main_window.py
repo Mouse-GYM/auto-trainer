@@ -117,7 +117,7 @@ class MainWindow(QMainWindow):
             raise RuntimeError(f"Could not load config: {err}") from err
 
         app_model.property_changed += self._app_model_property_changed
-        app_model.on_error += self._show_error
+        app_model.on_error += self._show_message
         app_model.inference.property_changed += self._inference_property_changed
         # app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
         user_preferences.property_changed += self._preferences_property_changed
@@ -363,6 +363,7 @@ class MainWindow(QMainWindow):
             diamond_coord=Offset3DTuple(0, 0, 0),  # avg_dia_loc3,
             # so this allows to not have to calibrate twice.
             raw_diamond_coord=avg_rawdia_loc3,
+            version=DiamondTriangleOffsetConfig.current_config_version,
         )
         logger.success("Saving new config %s to %s", new_cfg, save_path.as_posix())
         new_cfg.to_file(save_path)
@@ -951,7 +952,7 @@ class MainWindow(QMainWindow):
         self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
 
-    def _show_error(self, title: str, message: str):
+    def _show_message(self, title: str, message: str):
         @invoke_method
         def show_in_gui_thread(title=title, message=message):
             dlg = QMessageBox(self)
