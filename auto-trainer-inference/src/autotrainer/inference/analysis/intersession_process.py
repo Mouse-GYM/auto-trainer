@@ -55,9 +55,9 @@ def intersession_process(
     df_lr, centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
     #
     # apply flips to get axis values in desired order before proceeding to segment reaches after:
-    for elem in centered_df_3d.columns.get_level_values(0).unique():
-        for axis, axis_flip in zip("xyz", axis_flips):
-            centered_df_3d[(elem, axis)] *= axis_flip
+    #for elem in centered_df_3d.columns.get_level_values(0).unique():
+    #    for axis, axis_flip in zip("xyz", axis_flips):
+    #        centered_df_3d[(elem, axis)] *= axis_flip
     #
     results_dict = segment_reaches(
         session=location,
