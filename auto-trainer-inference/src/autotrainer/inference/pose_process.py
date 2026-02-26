@@ -260,8 +260,10 @@ class PoseProcess(Process):
             i_q = self._input_queue
             if prev_iq is not i_q:
                 if i_q is self._live_input_queue:
+                    logger.notice("Switched to online/live queue: %s", frames_indices.tolist())
                     self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
                 elif i_q is self._offline_input_queue:
+                    logger.notice("Switched to offline queue: %s", frames_indices.tolist())
                     self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
 
         p_last_data = time.perf_counter()
@@ -302,6 +304,10 @@ class PoseProcess(Process):
                         FrameIndexCategory.SWITCH_TO_ONLINE]
                     ).any()
                 ):
+                    dirty_offline = self._offline_input_queue.get_dirty_buckets()
+                    if any(any(v) for v in dirty_offline):
+                        logger.warning("Detected unexpected non-empty offline queue: %s ; indices=%s",
+                                       dirty_offline, self._offline_input_queue.get_frame_indices())
                     self._set_process_live()
                     reset_locals()
                 # elif required, given _set_process_live called in previous if block:
@@ -311,8 +317,6 @@ class PoseProcess(Process):
                 ):
                     self._input_queue = self._offline_input_queue
                     self._mode = InferenceMode.Offline
-                    logger.notice("Switched to offline queue: %s", frames_indices.tolist())
-                    self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
                     # always get new ref:
                     reset_locals()
 
@@ -328,7 +332,7 @@ class PoseProcess(Process):
 
             frames_indices_out[:] = frames_indices
             # getting frame indices corruption in reader side without this.
-            # It could be eventually explained if the serialisation
+            # It could be eventually explained if the serialization
             # of the frames_indices numpy array happens after the return of the queue put()..
             # which is not totally impossible.
 
@@ -352,7 +356,7 @@ class PoseProcess(Process):
                 logger.notice("Detected end of offline queue processing: %s", frames_indices.tolist())
                 d_q_put((None, InferenceMode.Offline, None))  # tells data monitor this is EOF current offline data
                 # the swap to live queue will be requested explicitly by main app,
-                # there can be many/mulitple offline sessions analysised one after the other,
+                # there can be many/multiple offline sessions analyzed one after the other,
                 # without going back to live at all in-between them.
 
         # end while True

@@ -173,6 +173,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
     def status(self) -> InferenceStatus:
         return self._status
 
+    def _set_status(self, value: InferenceStatus):
+        prev, self._status = self._status, value
+        self._on_property_changed(self.STATUS, value, prev)
+
     @property
     def pose_algorithm(self) -> PoseAlgorithm:
         return self._pose_algorithm
@@ -248,25 +252,30 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         thread.start()
         return configuration
 
-    def put_to_offline_queue(self, frame_index: FrameIndexCategory):
+    def put_to_offline_queue(self, frame_index: FrameIndexCategory, *, reason: str="na"):
         offline_q = self._offline_queue
         if offline_q is None:
+            logger.warning("put_to_offline_queue: reason: %s: skipping %s, as queue is None",
+                           reason, frame_index)
             return
         # logger.verbose("HERE: %s", "".join(traceback.format_stack(limit=3)))
         # should pad in case the cams index are unsync...
         # self._offline_queue.pad_to_batch_size(empty)
         # NO: the offline queue should be always sync, as only 1 writer at the same time.
         empty_frame = numpy.zeros(offline_q.shape, dtype=numpy.uint8)
+        logger.notice("put_to_offline_queue: reason: %s sending %s to offline queue",
+                      reason, frame_index)
         offline_q.put_frame_index_category(empty_frame, frame_index)
 
     def start(self, live_queue: FixedArrayMultiQueue) -> bool:
 
-        self._process_pool = multiprocessing.Pool(
-            processes=1,  # we only need 1 atm
-            initializer=pool_init,
-            initargs=(make_log_dict_config(),),
-            maxtasksperchild = int(os.getenv("INFERENCE_PROCESS_POOL_MAX_TASKS_PER_CHILD", 4096)),
-        )
+        if self._process_pool is None:
+            self._process_pool = multiprocessing.Pool(
+                processes=1,  # we only need 1 atm
+                initializer=pool_init,
+                initargs=(make_log_dict_config(),),
+                maxtasksperchild=int(os.getenv("INFERENCE_PROCESS_POOL_MAX_TASKS_PER_CHILD", 4096)),
+            )
 
         if self._msg_thread is None:
             self._msg_thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue", daemon=True)
@@ -313,10 +322,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
 
     def stop(self):
         if self._status in {InferenceStatus.stopped, InferenceStatus.stopping}:
+            logger.debug("requested stop but already stopped or in progress: %s", self._status)
             return
+        self._set_status(InferenceStatus.stopping)
         logger.debug("stopping inference..")
         proc = self._pose_process
-        self._set_status(InferenceStatus.stopping)
         if proc is not None:
             if proc.is_alive():
                 self._send_message(InferenceCommandMessageKind.Terminate)
@@ -342,8 +352,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             logger.info("<inference> process exited with %s", proc.exitcode)
             self._pose_process = None
 
-            self._set_status(InferenceStatus.stopped)
-
             clear_queue(self._output_data_queue, name="inference_output_data_queue")
             clear_queue(self._notif_msg_queue, name="inference_notif_messages_queue")
             clear_queue(self._cmd_queue, name="inference_cmd_queue")
@@ -363,13 +371,15 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 logger.debug("joining thread %s", thread)
                 thread.join(3)
                 if thread.is_alive():
-                    logger.warning("offline thread still alive")
+                    logger.warning("thread %s still alive", thread)
 
         # always:
         self._intersession_block = None
         self._offline_segmentation_thread = None
         self._offline_analysis_thread = None
         self._intersession_detection = None
+        # finally:
+        self._set_status(InferenceStatus.stopped)
 
     def put_to_data_handler(self, msg):
         self._data_monitor_cmd_ack_event.clear()
@@ -431,10 +441,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             is_enabled=self.is_enabled,
             intersession_wait_time=self.intersession_wait_time
         )
-
-    def _set_status(self, status: InferenceStatus):
-        prev, self._status = self._status, status
-        self._on_property_changed(self.STATUS, status, prev)
 
     def send_message(self, kind: InferenceCommandMessageKind, context: Any = None):
         self._send_message(kind, context)
@@ -509,10 +515,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
                 elif msg == InferenceStatusMessageKind.Running:
                     mode = InferenceMode(context)
                     logger.info(f"predict running with {mode.name} queue")
-                    if mode == InferenceMode.Live:
-                        self._set_status(InferenceStatus.live)
-                    else:
-                        self._set_status(InferenceStatus.intersession)
+                    self._set_status(InferenceStatus.live if mode == InferenceMode.Live
+                                     else InferenceStatus.intersession)
                 elif msg in {
                     InferenceStatusMessageKind.Created,
                     InferenceStatusMessageKind.Terminated,

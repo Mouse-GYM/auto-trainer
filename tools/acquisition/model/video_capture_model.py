@@ -5,7 +5,7 @@ import time
 import logging
 from multiprocessing.context import BaseContext
 from typing import Optional, List, Tuple, cast, Dict, Any
-from multiprocessing import Queue, Value, Array
+from multiprocessing import synchronize
 from threading import Event
 import urllib
 from urllib.parse import urlparse
@@ -68,9 +68,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         mp_ctx: Optional[BaseContext] = None,
         msg_queue: Optional[multiprocessing.Queue] = None,
         presence_detection: Optional[PresenceDetectionAttrs] = None,
-        barrier: Optional = None,
-        semaphore: Optional = None,
-        event: Optional = None,
     ):
         super().__init__()
 
@@ -81,10 +78,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
         self._text_color: Optional[str] = "yellow"
 
         self._id = CameraId.Left
-
-        self._barrier = barrier
-        self._semaphore = semaphore
-        self._event = event
 
         self._name = name
         self._preferences = preferences
@@ -334,9 +327,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
                 is_primary=self._is_primary,
                 msg_queue=self._msg_queue,
                 record_prebuffer_duration=self._cur_conf.record_prebuffer_duration,
-                semaphore=self._semaphore,
-                barrier=self._barrier,
-                event=self._event,
             )
 
             rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1

@@ -346,13 +346,6 @@ class SystemMachine(StateMachine):
         if cur_project is not None:
             cur_project = cur_project.to_local_value()
         algo = self.algorithm
-        logger.verbose(
-            "session ended: intersession.state=%s system_machine.state=%s algo.system_state=%s "
-            "pellet_machine.state=%s intersession_enabled=%s session_mouse_seen=%s",
-            self._intersession.state, self.state, algo.system_state,
-            self._pellet_machine.state,
-            algo.intersession_enabled, algo.session_mouse_seen,
-        )
         #
         can_perform_analysis = (
             cur_project is not None
@@ -383,7 +376,16 @@ class SystemMachine(StateMachine):
                 load_cell_engaged
                 and batch_sess_cfg.enabled  #  or len(cur_sessions_batch) > 0
             )
-
+        #
+        logger.notice(
+            "session ended: intersession.state=%s system_machine.state=%s algo.system_state=%s "
+            "pellet_machine.state=%s intersession_enabled=%s session_mouse_seen=%s "
+            "can_batch=%s can_perform_analysis=%s real=%s",
+            self._intersession.state, self.state, algo.system_state,
+            self._pellet_machine.state,
+            algo.intersession_enabled, algo.session_mouse_seen,
+            can_batch_session, can_perform_analysis, real_can_perform_analysis,
+        )
         # first:
         if (    not can_perform_analysis
             and not can_batch_session
@@ -401,7 +403,7 @@ class SystemMachine(StateMachine):
                 # it will be handled normally anyway
             self.enter_intersession(reason="capture-ended-and-can-perform-analysis")
         else:
-            self._inference.put_to_offline_queue(FrameIndexCategory.SWITCH_TO_ONLINE)
+            self._inference.put_to_offline_queue(FrameIndexCategory.SWITCH_TO_ONLINE, reason='session_capture_ended')
             algo.end_session(CaptureAnalysisResult.ANALYSIS_DELAYED if real_can_perform_analysis
                              else CaptureAnalysisResult.CAPTURE_ONLY)
 
@@ -437,11 +439,11 @@ class SystemMachine(StateMachine):
     def _inference_segmentation_finished(self, success):
         logger.verbose("got inference segmentation finished: %s", success)
         inference = self._inference
-        inference.put_to_offline_queue(FrameIndexCategory.EOF_OFFLINE_PROCESSING)
+        inference.put_to_offline_queue(FrameIndexCategory.EOF_OFFLINE_PROCESSING, reason='segmentation_finished')
         cur_batch_list = self._batch_project_sessions_list
         logger.debug("cur_batch_list=%s", cur_batch_list)
         if len(cur_batch_list) <= 1:
-            inference.put_to_offline_queue(FrameIndexCategory.SWITCH_TO_ONLINE)
+            inference.put_to_offline_queue(FrameIndexCategory.SWITCH_TO_ONLINE, reason='segmentation_finished')
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
@@ -463,10 +465,9 @@ class SystemMachine(StateMachine):
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
                                                       context=value)
             # return
-            # allow following code still, we want it always. it's checking state further more.
+            # allow following code still, we want it always. it's checking state furthermore.
 
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
-            algo = self._algorithm
             EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
             if value:
                 self._analysis.global_animal_presence_monitor.stop()
@@ -477,11 +478,11 @@ class SystemMachine(StateMachine):
                 inter_state = self.intersession.state
                 if self._state != SystemState.cage:
                     if inter_state == IntersessionState.idle:
-                        self.exit_tunnel(reason="load_cell_disengaged_when_tunnel")
+                        self.exit_tunnel(reason="load_cell_disengaged_intersession_idle")
                     else:
                         # this does same than exit_tunnel, without updating the current state,
                         # which is either segmentation or detection
-                        self.after_exit_tunnel(reason="load_cell_disengaged_when_tunnel")
+                        self.after_exit_tunnel(reason="load_cell_disengaged_intersession_in_progress")
                         # logger.verbose("skipping exit_tunnel due to intersession still in progress: %s", inter_state)
                 else:
                     EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
