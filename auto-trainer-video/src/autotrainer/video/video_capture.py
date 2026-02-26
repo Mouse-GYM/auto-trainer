@@ -359,7 +359,7 @@ class VideoCapture(Process):
         primary_acquired_count = 0
 
         sema = self._attrs.semaphore
-        if sema is None or self._record_properties.should_record(False):
+        if sema is None or self._record_properties.should_record(False) or True:
             # should_record(False) -> if continuous recording,
             # in that case no need sync for start/stop recording
             primary_acquire = lambda: True
