@@ -280,10 +280,10 @@ class EventManager:
 
                 self._last_event_info = info
                 self._process_event(info)
-            except Exception as ex:  # Coming from an arbitrary plugin process_event() - cannot predict type of error.
+            except Exception as err:  # Coming from an arbitrary plugin process_event() - cannot predict type of error.
                 # TODO (maybe): track exceptions per plugin.  After some number N exceptions, disable the plugin.
                 if not process_event_error_reported:
-                    logger.error(ex)
+                    logger.exception("process queue info (%s) failed: %s", info, err)
                     process_event_error_reported = True
 
             self._write_queue.task_done()

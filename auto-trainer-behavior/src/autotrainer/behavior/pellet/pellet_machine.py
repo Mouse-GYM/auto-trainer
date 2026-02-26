@@ -45,7 +45,7 @@ class PelletMachine(StateMachine):
         msg_handler: SystemMessageHandler,
         pellet_device: PelletDeviceProtocol,
     ):
-        initial_state = PelletState.monitoring
+        initial_state = PelletState.home
 
         super().__init__(
             initial_state=initial_state,
