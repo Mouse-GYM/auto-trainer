@@ -358,17 +358,6 @@ class VideoCapture(Process):
         released = False
         primary_acquired_count = 0
 
-        if self._attrs.barrier is None:
-            def sync_barrier(_=5):
-                pass
-        else:
-            def sync_barrier(t=5, *, wait_barrier=self._attrs.barrier.wait):
-                try:
-                    wait_barrier(timeout=t)
-                except BrokenBarrierError:
-                    logger.critical("multiproc barrier broken")
-                    raise
-
         sema = self._attrs.semaphore
         if sema is None or self._record_properties.should_record(False):
             # should_record(False) -> if continuous recording,
@@ -432,12 +421,12 @@ class VideoCapture(Process):
                     nonlocal released
                     __debug__ and logger.debug("not primary releasing")
                     primary_sema.release()
-                    # sync_barrier()
                     __debug__ and logger.debug("not primary released")
                     released = False
 
         logger.notice("%s: starting capture loop ..", self)
         self._set_status(CaptureProcessStatus.RUNNING)
+
         while self._is_running:
 
             if fault_count > 5:
@@ -454,11 +443,6 @@ class VideoCapture(Process):
                     record_start_frame_idx = None
                     record_q_list = self._record_queue_list = []
                     continue
-
-                # Not anymore necessary with cameras correctly synced in hardware.
-                # ensure primary capture first
-                # if not is_primary and cur_frame_idx == -1:
-                #     sync_barrier()
 
                 frame, when = capture()
                 if frame is None:
