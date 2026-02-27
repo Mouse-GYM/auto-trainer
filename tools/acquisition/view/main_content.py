@@ -498,7 +498,6 @@ class MainContent(ContentWidget):
         elif name == props.TRAINING_PLAN:
             assert isinstance(value, (type(None), TrainingPlan))
             self.training_plan_changed.emit(value)
-            # self._training_phase_content.set_training_phase(None if value is None else value.current_phase)
         elif name == props.TRAINING_PHASE:
             phase = app_model.training_plan.current_phase
             if phase != value:

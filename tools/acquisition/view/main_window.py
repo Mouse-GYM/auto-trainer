@@ -116,16 +116,16 @@ class MainWindow(QMainWindow):
             app_model.on_close()
             raise RuntimeError(f"Could not load config: {err}") from err
 
-        app_model.property_changed += self._app_model_property_changed
+        app_model.property_changed += self._on_app_model_property_changed
         app_model.on_error += self._show_message
-        app_model.inference.property_changed += self._inference_property_changed
+        app_model.inference.property_changed += self._on_inference_property_changed
 
-        user_preferences.property_changed += self._preferences_property_changed
+        user_preferences.property_changed += self._on_preferences_property_changed
         self.running_status_changed.connect(self._set_start_or_stop)
         #
         self._reload_animals(self._app_model.animals)
         #
-        app_model.inference.detection_result_ready += self._inference_analysis_result_ready
+        app_model.inference.detection_result_ready += self._on_inference_analysis_result_ready
 
     @property
     def app_model(self) -> AppModel:
@@ -146,7 +146,6 @@ class MainWindow(QMainWindow):
         self.main_content.set_is_capture_active(started)
         #
         stopped = not started
-        self._animal_dropdown_combo.setEnabled(stopped)
         self._training_plan_combo.setEnabled(stopped)
         self.edit_camera_settings_action.setEnabled(stopped)
         self.make_3d_calib_action.setEnabled(stopped)
@@ -164,12 +163,13 @@ class MainWindow(QMainWindow):
             run_action.setText("Start")
             run_action.setIcon(icon)
 
-    def _on_capture_start_stop(self, is_toggled, *, post_action: Optional[Callable] = None):
+    def _on_capture_start_stop(self, is_toggled, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING):
         app_model = self._app_model
         self.run_action.setEnabled(False)
         self.make_3d_calib_action.setEnabled(False)
         self.animal_in_device_action.setEnabled(False)
         self.animal_in_training_action.setEnabled(False)
+        self._app_model_status_combo.setEnabled(False)
         self.running_status_changed.emit(is_toggled)
         if is_toggled:
             self._status_label.setText("Starting acquisition...")
@@ -179,23 +179,23 @@ class MainWindow(QMainWindow):
                     prev_thread.join()
                 logger.info("starting subprocesses")
                 try:
-                    started = app_model.on_capture_start()
+                    started = app_model.capture_start(target_status=target_status)
                 except Exception as err:
                     logger.exception("app_model.on_capture_start failed: %s", err)
                     started = False
+                self._start_capture_thread = None
+                # following should normally be executed in main UI thread:
                 if started:
                     self._status_label.setText("")
                     self._acquisition_started = True
                     self._check_diamond_triangle_config()
-                    if post_action is not None:
-                        post_action()
                 else:
                     self._status_label.setText("Startup failed")
                     self.running_status_changed.emit(False)
                 self.run_action.setEnabled(True)
                 self.animal_in_device_action.setEnabled(True)
                 self.animal_in_training_action.setEnabled(True)
-                self._start_capture_thread = None
+                self._app_model_status_combo.setEnabled(True)
             thread = threading.Thread(target=exec_start_capture, daemon=True, name="StartAcquisition")
             self._start_capture_thread = thread
             thread.start()
@@ -206,27 +206,40 @@ class MainWindow(QMainWindow):
                 if prev_start is not None:
                     logger.verbose("joining previous start thread")
                     prev_start.join()
+                if prev_stop is not None:
+                    prev_stop.join()
                 logger.info("stopping subprocesses")
-                app_model.on_capture_stop()
+                app_model.capture_stop()
+                # following should normally be executed in main UI thread:
                 self.running_status_changed.emit(False)
                 self.run_action.setEnabled(True)
                 self.animal_in_device_action.setEnabled(True)
                 self.animal_in_training_action.setEnabled(True)
+                self._app_model_status_combo.setEnabled(True)
                 self._status_label.setText("")
                 self._acquisition_started = False
             thread = threading.Thread(target=exec_stop_capture, daemon=True, name="StopAcquisition")
             self._stop_capture_thread = thread
             thread.start()
 
+    def _on_system_mode_combo_changed(self, idx: int):
+        status = self._app_model_status_combo.itemData(idx)
+        if status == AppModelStatus.IDLE:
+            self._on_capture_start_stop(False)
+        elif status == AppModelStatus.ACQUIRING:
+            self._on_capture_start_stop(True)
+        elif status == AppModelStatus.ANIMAL_IN_DEVICE:
+            self._on_animal_in_device_triggered(True)
+        elif status == AppModelStatus.ANIMAL_IN_TRAINING:
+            self._on_animal_in_training_triggered(True)
+
     def _on_animal_in_device_triggered(self, is_toggled):
         logger.verbose("_on_animal_in_device_triggered: %s", is_toggled)
         if is_toggled:
-            def post():
-                self._app_model.status = AppModelStatus.ANIMAL_IN_DEVICE
             if self._app_model.acquisition_started:
-                post()
+                self._app_model.status = AppModelStatus.ANIMAL_IN_DEVICE
             else:
-                self._on_capture_start_stop(True, post_action=post)
+                self._on_capture_start_stop(True, target_status=AppModelStatus.ANIMAL_IN_DEVICE)
         else:
             self._app_model.status = AppModelStatus.ACQUIRING
 
@@ -238,26 +251,15 @@ class MainWindow(QMainWindow):
                 action.setChecked(True)
                 action.blockSignals(False)
 
-            def post():
-                self._app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
             if self._app_model.acquisition_started:
-                post()
+                self._app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
             else:
-                self._on_capture_start_stop(True, post_action=post)
+                self._on_capture_start_stop(True, target_status=AppModelStatus.ANIMAL_IN_TRAINING)
         else:
             self._app_model.status = AppModelStatus.ANIMAL_IN_DEVICE
 
     def on_show_reach_event(self, is_toggled):
         raw = self._previous_intersession_analysis_rsp
-        if raw is None and is_toggled:
-            # debug code
-            prj = self._app_model.project.to_local_value()
-            import autotrainer.inference
-            prj.root = str(Path(autotrainer.inference.__file__).parent.parent.parent.parent.joinpath("tests/data"))
-            prj.device_id = "agx001"
-            prj.session = 11
-            prj.when = datetime(2026, 2, 5)
-            raw = (prj, True)
         if raw is None or not is_toggled:
             self.main_content.show_analysis_reach_events(None)
             return
@@ -814,9 +816,20 @@ class MainWindow(QMainWindow):
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
 
-        toolbar.addAction(self.run_action)
-        toolbar.addAction(self.animal_in_device_action)
-        toolbar.addAction(self.animal_in_training_action)
+        toolbar.addWidget(QLabel("System Mode:"))
+        combo = self._app_model_status_combo = QComboBox()
+        combo.setMinimumWidth(100)
+        combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        combo.addItem("Idle", userData=AppModelStatus.IDLE)
+        combo.addItem("Running", userData=AppModelStatus.ACQUIRING)
+        combo.addItem("Animal in device", userData=AppModelStatus.ANIMAL_IN_DEVICE)
+        combo.addItem("Animal in training", userData=AppModelStatus.ANIMAL_IN_TRAINING)
+        combo.currentIndexChanged.connect(self._on_system_mode_combo_changed)
+        toolbar.addWidget(combo)
+        # toolbar.addAction(self.run_action)
+        # toolbar.addAction(self.animal_in_device_action)
+        # toolbar.addAction(self.animal_in_training_action)
+        toolbar.addSeparator()
 
         toolbar.addAction(self.show_reach_event_action)
 
@@ -1021,7 +1034,7 @@ class MainWindow(QMainWindow):
         show_in_gui_thread()
 
     @invoke_method
-    def _preferences_property_changed(self, name, value, _):
+    def _on_preferences_property_changed(self, name, value, _):
         if name == "log_level":
             self._update_log_level(value)
         elif name == "remove_raw_data_when_inactive_session":
@@ -1128,7 +1141,7 @@ class MainWindow(QMainWindow):
             action.setEnabled(can_do)
 
     @invoke_method
-    def _app_model_property_changed(self, name: str, value, prev_value):
+    def _on_app_model_property_changed(self, name: str, value, prev_value):
         app_model = self._app_model
         props = app_model.Props
         #
@@ -1140,6 +1153,10 @@ class MainWindow(QMainWindow):
 
             analysis_action = None
             self.blockSignals(True)
+
+            combo_idx = self._app_model_status_combo.findData(value)
+            if combo_idx >= 0:
+                self._app_model_status_combo.setCurrentIndex(combo_idx)
 
             if value is AppModelStatus.IDLE:
                 for action in (
@@ -1296,7 +1313,7 @@ class MainWindow(QMainWindow):
         get_console_handler().setLevel(value)
 
     @invoke_method
-    def _inference_property_changed(self, name: str, value, old_value):
+    def _on_inference_property_changed(self, name: str, value, old_value):
         inference = self._app_model.inference
         if name == inference.STATUS:
             self.calib_diamond_triangle_action.setEnabled(value == InferenceStatus.live)
@@ -1353,7 +1370,7 @@ class MainWindow(QMainWindow):
         self._set_training_plans()
 
     @invoke_method
-    def _inference_analysis_result_ready(self, prj: ProjectInfo, rsp: IntersessionResponse):
+    def _on_inference_analysis_result_ready(self, prj: ProjectInfo, rsp: IntersessionResponse):
         # logger.debug("enabling show_reach_event_action, rsp=%s", rsp)
         self._previous_intersession_analysis_rsp = (prj, rsp)
         self.show_reach_event_action.setEnabled(True)
