@@ -6,7 +6,7 @@ from datetime import datetime
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Callable
 
 from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize, QKeyCombination
 from PySide6.QtGui import QAction, QIcon
@@ -55,7 +55,7 @@ DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is con
 class MainWindow(QMainWindow):
 
     training_mode_changed = Signal(TrainingMode)
-    running_status_changed = Signal(bool)  # True == running
+    running_status_changed = Signal(bool)  # True == running/acquiring
 
     def __init__(
         self,
@@ -117,9 +117,9 @@ class MainWindow(QMainWindow):
             raise RuntimeError(f"Could not load config: {err}") from err
 
         app_model.property_changed += self._app_model_property_changed
-        app_model.on_error += self._show_error
+        app_model.on_error += self._show_message
         app_model.inference.property_changed += self._inference_property_changed
-        # app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
+
         user_preferences.property_changed += self._preferences_property_changed
         self.running_status_changed.connect(self._set_start_or_stop)
         #
@@ -146,7 +146,7 @@ class MainWindow(QMainWindow):
         self.main_content.set_is_capture_active(started)
         #
         stopped = not started
-        self._animal_dropdown.setEnabled(stopped)
+        self._animal_dropdown_combo.setEnabled(stopped)
         self._training_plan_combo.setEnabled(stopped)
         self.edit_camera_settings_action.setEnabled(stopped)
         self.make_3d_calib_action.setEnabled(stopped)
@@ -164,10 +164,12 @@ class MainWindow(QMainWindow):
             run_action.setText("Start")
             run_action.setIcon(icon)
 
-    def on_capture_start_stop(self, is_toggled):
+    def _on_capture_start_stop(self, is_toggled, *, post_action: Optional[Callable] = None):
         app_model = self._app_model
         self.run_action.setEnabled(False)
         self.make_3d_calib_action.setEnabled(False)
+        self.animal_in_device_action.setEnabled(False)
+        self.animal_in_training_action.setEnabled(False)
         self.running_status_changed.emit(is_toggled)
         if is_toggled:
             self._status_label.setText("Starting acquisition...")
@@ -185,12 +187,16 @@ class MainWindow(QMainWindow):
                     self._status_label.setText("")
                     self._acquisition_started = True
                     self._check_diamond_triangle_config()
+                    if post_action is not None:
+                        post_action()
                 else:
                     self._status_label.setText("Startup failed")
                     self.running_status_changed.emit(False)
                 self.run_action.setEnabled(True)
+                self.animal_in_device_action.setEnabled(True)
+                self.animal_in_training_action.setEnabled(True)
                 self._start_capture_thread = None
-            thread = threading.Thread(target=exec_start_capture, daemon=True)
+            thread = threading.Thread(target=exec_start_capture, daemon=True, name="StartAcquisition")
             self._start_capture_thread = thread
             thread.start()
         else:
@@ -204,11 +210,42 @@ class MainWindow(QMainWindow):
                 app_model.on_capture_stop()
                 self.running_status_changed.emit(False)
                 self.run_action.setEnabled(True)
+                self.animal_in_device_action.setEnabled(True)
+                self.animal_in_training_action.setEnabled(True)
                 self._status_label.setText("")
                 self._acquisition_started = False
-            thread = threading.Thread(target=exec_stop_capture, daemon=True)
+            thread = threading.Thread(target=exec_stop_capture, daemon=True, name="StopAcquisition")
             self._stop_capture_thread = thread
             thread.start()
+
+    def _on_animal_in_device_triggered(self, is_toggled):
+        logger.verbose("_on_animal_in_device_triggered: %s", is_toggled)
+        if is_toggled:
+            def post():
+                self._app_model.status = AppModelStatus.ANIMAL_IN_DEVICE
+            if self._app_model.acquisition_started:
+                post()
+            else:
+                self._on_capture_start_stop(True, post_action=post)
+        else:
+            self._app_model.status = AppModelStatus.ACQUIRING
+
+    def _on_animal_in_training_triggered(self, is_toggled):
+        logger.verbose("_on_animal_in_training_triggered: %s", is_toggled)
+        if is_toggled:
+            for action in (self.animal_in_device_action,):
+                action.blockSignals(True)
+                action.setChecked(True)
+                action.blockSignals(False)
+
+            def post():
+                self._app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
+            if self._app_model.acquisition_started:
+                post()
+            else:
+                self._on_capture_start_stop(True, post_action=post)
+        else:
+            self._app_model.status = AppModelStatus.ANIMAL_IN_DEVICE
 
     def on_show_reach_event(self, is_toggled):
         raw = self._previous_intersession_analysis_rsp
@@ -363,6 +400,7 @@ class MainWindow(QMainWindow):
             diamond_coord=Offset3DTuple(0, 0, 0),  # avg_dia_loc3,
             # so this allows to not have to calibrate twice.
             raw_diamond_coord=avg_rawdia_loc3,
+            version=DiamondTriangleOffsetConfig.current_config_version,
         )
         logger.success("Saving new config %s to %s", new_cfg, save_path.as_posix())
         new_cfg.to_file(save_path)
@@ -399,7 +437,7 @@ class MainWindow(QMainWindow):
         self._post_api_event(ApiEventKind.calibrationDcsStarted)
 
         app_model = self._app_model
-        app_model.status = AppModelStatus.CALIBRATION_DCS
+        prev_status, app_model.status = app_model.status, AppModelStatus.CALIBRATION_DCS
 
         algo = app_model.behavior.algorithm
         action = self.calib_diamond_triangle_action
@@ -461,12 +499,25 @@ class MainWindow(QMainWindow):
         self._diamond_triangle_calib_run = None  # MUST be before
         self._post_api_event(ApiEventKind.calibrationDcsEnded)
         #
-        self._handle_diamond_triangle_calib_run(
-            positions=positions,
-            offsets=offsets,
-            diamond_locs3d=diamond_locs3d,
-            raw_diamond_3d=raw_diamond_3d,
-        )
+        try:
+            self._handle_diamond_triangle_calib_run(
+                positions=positions,
+                offsets=offsets,
+                diamond_locs3d=diamond_locs3d,
+                raw_diamond_3d=raw_diamond_3d,
+            )
+        finally:
+            app_model.status = prev_status
+
+    def on_activated(self):
+        logger.success("main window activated")
+        self._check_diamond_triangle_config()
+        self.main_content.on_activated()
+        app_status = self._app_model.status
+        if app_status == AppModelStatus.IDLE:
+            self._on_capture_start_stop(True)
+        else:
+            logger.verbose("AppModelStatus not idle, not starting acquisition", app_status)
 
     def on_calibrate_diamond_triangle(self, is_toggled):
         if is_toggled and self._diamond_triangle_calib_run is None:
@@ -486,72 +537,75 @@ class MainWindow(QMainWindow):
 
     def on_3d_calibrate(self, is_toggled):
         self.run_action.setEnabled(not is_toggled)
-        if is_toggled:
-            self._app_model.status = AppModelStatus.CALIBRATION_3D
-            error = "Processing unfinished"
-            result_dir: Path = None
-            def handle_3d_calib():
-                nonlocal error, result_dir
-                self._post_api_event(ApiEventKind.calibration3dStarted)
-                try:
-                    result_dir = make_3d_calib(self._app_model)
-                except Exception as err:
-                    logger.exception("3d-calib failed: %s", err)
-                    error = err
-                else:
-                    error = None
+        if not is_toggled:
+            return
+        app_model = self._app_model
+        prev_status, app_model.status = app_model.status, AppModelStatus.CALIBRATION_3D
+        error = "Processing unfinished"
+        result_dir: Path = None
+        def handle_3d_calib():
+            nonlocal error, result_dir
+            self._post_api_event(ApiEventKind.calibration3dStarted)
+            try:
+                result_dir = make_3d_calib(self._app_model)
+            except Exception as err:
+                logger.exception("3d-calib failed: %s", err)
+                error = err
+            else:
+                error = None
 
-            @invoke_method
-            def show_result():
-                self.run_action.setEnabled(True)
-                self.make_3d_calib_action.setChecked(False)
-                self.make_3d_calib_action.setEnabled(True)
-                self._app_model.status = AppModelStatus.IDLE
-                logger.verbose("3d-calib thread joined, error=%s", error)
-                if error is None:
-                    backup_path = None
-                    target_calib_dir = Path(self._preferences.configuration_location).joinpath(DEFAULT_3D_CALIB_DIR_NAME)
-                    if target_calib_dir.exists():
-                        rsp = QMessageBox.question(
-                            self,
-                            "3D calibration success",
-                            f"Calibration dir already exists ({target_calib_dir}),\n\n"
-                            f"do you want to replace ?",
-                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                        if rsp != QMessageBox.StandardButton.Yes:
-                            return
-                        now = datetime.now()
-                        backup_path = target_calib_dir.parent.joinpath(f"{target_calib_dir.name}_{now.strftime(DATE_TIME_FORMAT)}")
-                        target_calib_dir.rename(backup_path)
-                        logger.debug("Previous 3d-calib moved to %s", backup_path)
-                    shutil.copytree(
-                        result_dir, target_calib_dir,
-                        dirs_exist_ok=False,  # default already, but to be sure we want be clean
-                    )
-                    if backup_path is not None:
-                        prev_cam_offsets = backup_path.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
-                        new_cam_offsets = target_calib_dir.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
-                        if prev_cam_offsets.exists() and not new_cam_offsets.exists():
-                            shutil.copyfile(prev_cam_offsets, target_calib_dir)
-                            logger.verbose("copied previous %s given no new one", DEFAULT_CAM_OFFSET_FILE_NAME)
-                    self._app_model.reload_calib(target_calib_dir)
-                    QMessageBox.information(
-                        self,
-                        "3D calibration success", f"Result saved into {target_calib_dir}", QMessageBox.StandardButton.Ok)
-                else:
-                    QMessageBox.warning(self, "3D calibration failed", f"Error received: {error}", QMessageBox.StandardButton.Ok)
+        @invoke_method
+        def show_result():
+            self.run_action.setEnabled(True)
+            self.make_3d_calib_action.setChecked(False)
+            self.make_3d_calib_action.setEnabled(True)
+            app_model.status = prev_status
+            logger.verbose("3d-calib thread joined, error=%s", error)
+            if error is not None:
+                QMessageBox.warning(self, "3D calibration failed", f"Error received: {error}",
+                                    QMessageBox.StandardButton.Ok)
+                return
+            backup_path = None
+            target_calib_dir = Path(self._preferences.configuration_location).joinpath(DEFAULT_3D_CALIB_DIR_NAME)
+            if target_calib_dir.exists():
+                rsp = QMessageBox.question(
+                    self,
+                    "3D calibration success",
+                    f"Calibration dir already exists ({target_calib_dir}),\n\n"
+                    f"do you want to replace ?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if rsp != QMessageBox.StandardButton.Yes:
+                    return
+                now = datetime.now()
+                backup_path = target_calib_dir.parent.joinpath(f"{target_calib_dir.name}_{now.strftime(DATE_TIME_FORMAT)}")
+                target_calib_dir.rename(backup_path)
+                logger.debug("Previous 3d-calib moved to %s", backup_path)
+            shutil.copytree(
+                result_dir, target_calib_dir,
+                dirs_exist_ok=False,  # default already, but to be sure we want be clean
+            )
+            if backup_path is not None:
+                prev_cam_offsets = backup_path.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
+                new_cam_offsets = target_calib_dir.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
+                if prev_cam_offsets.exists() and not new_cam_offsets.exists():
+                    shutil.copyfile(prev_cam_offsets, target_calib_dir)
+                    logger.verbose("copied previous %s given no new one", DEFAULT_CAM_OFFSET_FILE_NAME)
+            self._app_model.reload_calib(target_calib_dir)
+            QMessageBox.information(
+                self,
+                "3D calibration success", f"Result saved into {target_calib_dir}", QMessageBox.StandardButton.Ok)
 
-            def wait_3d_calib_done(thread):
-                executor_thread.join()
-                self._post_api_event(ApiEventKind.calibration3dEnded)
-                show_result()
+        def wait_3d_calib_done(thread):
+            thread.join()
+            self._post_api_event(ApiEventKind.calibration3dEnded)
+            show_result()
 
-            executor_thread = threading.Thread(target=handle_3d_calib, name="3d-calibration", daemon=True)
-            executor_thread.start()
+        executor_thread = threading.Thread(target=handle_3d_calib, name="3d-calibration", daemon=True)
+        executor_thread.start()
 
-            waiter_thread = threading.Thread(target=wait_3d_calib_done, name="wait-3d-calibration",
-                                             args=(executor_thread,), daemon=True)
-            waiter_thread.start()
+        waiter_thread = threading.Thread(target=wait_3d_calib_done, name="wait-3d-calibration",
+                                         args=(executor_thread,), daemon=True)
+        waiter_thread.start()
 
     @invoke_method
     def _show_msg_box(self, title, text, icon):
@@ -584,10 +638,6 @@ class MainWindow(QMainWindow):
             #
             self._show_msg_box(title, text, QMessageBox.Icon.Warning)
 
-    def on_activated(self):
-        self._check_diamond_triangle_config()
-        self.main_content.on_activated()
-
     def _finish_close(self):
         logger.info("finishing close ..")
         self.main_content.close()
@@ -614,7 +664,7 @@ class MainWindow(QMainWindow):
             self._closing = True
 
         def execute_close():
-            self.on_capture_start_stop(False)
+            self._on_capture_start_stop(False)
             stop_thread = self._stop_capture_thread
             self._timer_calibrate_diamond_triangle.cancel()
             if stop_thread is not None:
@@ -660,10 +710,17 @@ class MainWindow(QMainWindow):
         action.setToolTip("Start or stop acquisition")
         action.setCheckable(True)
         action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_R))
-        action.triggered.connect(self.on_capture_start_stop)
+        action.triggered.connect(self._on_capture_start_stop)
 
-        action = self.show_reach_event_action = QAction(QIcon(qta.icon("fa5s.bezier-curve")), "Show Reach", self)
-        action.setToolTip("Show last reach trajectories")
+        action = self.animal_in_device_action = QAction(QIcon(qta.icon("fa5s.vector-square")), "Animal in device", self)
+        action.setCheckable(True)
+        action.triggered.connect(self._on_animal_in_device_triggered)
+
+        action = self.animal_in_training_action = QAction(QIcon(qta.icon("fa5s.chalkboard-teacher")), "Animal in training", self)
+        action.setCheckable(True)
+        action.triggered.connect(self._on_animal_in_training_triggered)
+
+        action = self.show_reach_event_action = QAction(QIcon(qta.icon("fa5s.bezier-curve")), "Show Previous Reach", self)
         action.setCheckable(True)
         action.setEnabled(False)  # comment me to be able to show 20260205_agx001_trial011 on start
         action.triggered.connect(self.on_show_reach_event)
@@ -758,13 +815,16 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar)
 
         toolbar.addAction(self.run_action)
+        toolbar.addAction(self.animal_in_device_action)
+        toolbar.addAction(self.animal_in_training_action)
+
         toolbar.addAction(self.show_reach_event_action)
 
         toolbar.addAction(self.previous_training_phase_action)
         toolbar.addAction(self.next_training_phase_action)
 
         spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
 
         toolbar.addWidget(QLabel("Notes:"))
@@ -777,7 +837,7 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self._notes)
 
         toolbar.addWidget(QLabel("Subject:"))
-        combo = self._animal_dropdown = QComboBox()
+        combo = self._animal_dropdown_combo = QComboBox()
         combo.setMinimumWidth(100)
         combo.setEditable(True)
         combo.setDuplicatesEnabled(False)
@@ -951,7 +1011,7 @@ class MainWindow(QMainWindow):
         self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
 
-    def _show_error(self, title: str, message: str):
+    def _show_message(self, title: str, message: str):
         @invoke_method
         def show_in_gui_thread(title=title, message=message):
             dlg = QMessageBox(self)
@@ -1041,13 +1101,13 @@ class MainWindow(QMainWindow):
         self._app_model.notes = value
 
     def _add_animal(self):
-        self._app_model.add_animal(self._animal_dropdown.currentText(), select=True)
+        self._app_model.add_animal(self._animal_dropdown_combo.currentText(), select=True)
 
     def _animal_changed(self, _):
-        if self._animal_dropdown.currentIndex() in (0, -1):
+        if self._animal_dropdown_combo.currentIndex() in (0, -1):
             self._app_model.selected_animal = None
         else:
-            animal_id = self._animal_dropdown.currentData()
+            animal_id = self._animal_dropdown_combo.currentData()
             animal: AnimalSubject = self._app_model.get_animal_by_id(animal_id)
             self._app_model.selected_animal = animal
 
@@ -1068,17 +1128,105 @@ class MainWindow(QMainWindow):
             action.setEnabled(can_do)
 
     @invoke_method
-    def _app_model_property_changed(self, name: str, value, _):
-        props = self._app_model.Props
+    def _app_model_property_changed(self, name: str, value, prev_value):
+        app_model = self._app_model
+        props = app_model.Props
         #
         if name == props.ACQUISITION_RUNNING:
             self.running_status_changed.emit(value)
+
+        elif name == props.STATUS:
+            logger.debug("got new app model status: %s", value)
+
+            analysis_action = None
+            self.blockSignals(True)
+
+            if value is AppModelStatus.IDLE:
+                for action in (
+                    self.calib_diamond_triangle_action,
+                    self.animal_in_device_action,
+                    self.animal_in_training_action,
+                ):
+                    action.setEnabled(False)
+                    action.setChecked(False)
+                for item in (
+                    self.make_3d_calib_action,
+                    self.run_action,
+                    self.animal_in_device_action,
+                    self.animal_in_training_action,
+                    self._animal_dropdown_combo,
+                    self._training_mode_combo,
+                    self._training_plan_combo,
+                ):
+                    item.setEnabled(True)
+                analysis_action = app_model.analysis.stop
+
+            elif value is AppModelStatus.ACQUIRING:
+                for action in (
+                    self.calib_diamond_triangle_action,
+                    self.animal_in_device_action,
+                    self.animal_in_training_action,
+                ):
+                    action.setEnabled(True)
+                    action.setChecked(False)
+                for item in (self._animal_dropdown_combo, self._training_mode_combo, self._training_plan_combo):
+                    item.setEnabled(True)
+                analysis_action = app_model.analysis.restart
+
+            elif value in {AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS}:
+                for item in (
+                    self._training_mode_combo,
+                    self._training_plan_combo,
+                    self._animal_dropdown_combo,
+                    self.calib_diamond_triangle_action,
+                    self.animal_in_device_action,
+                    self.animal_in_training_action,
+                ):
+                    item.setEnabled(False)
+                analysis_action = app_model.analysis.stop
+
+            elif value is AppModelStatus.ANIMAL_IN_DEVICE:
+                self.animal_in_device_action.setChecked(True)
+                self.animal_in_training_action.setChecked(False)
+                for item in (
+                    self._training_mode_combo,
+                    self._training_plan_combo,
+                ):
+                    item.setEnabled(True)
+                for item in (
+                    self._animal_dropdown_combo,
+                    self.calib_diamond_triangle_action,
+                    self.make_3d_calib_action,
+                ):
+                    item.setEnabled(False)
+                analysis_action = app_model.analysis.restart
+
+            elif value is AppModelStatus.ANIMAL_IN_TRAINING:
+                for action in (self.animal_in_device_action, self.animal_in_training_action):
+                    action.setChecked(True)
+                for item in (
+                    self._training_mode_combo,
+                    self._training_plan_combo,
+                    self._animal_dropdown_combo,
+                    self.calib_diamond_triangle_action,
+                    self.make_3d_calib_action,
+                ):
+                    item.setEnabled(False)
+                analysis_action = app_model.analysis.restart
+
+            else:
+                logger.warning("unhandled app model status: %s", value)
+
+            self.blockSignals(False)
+
+            if analysis_action is not None:
+                analysis_action()
 
         elif name == props.ANIMALS:
             self._reload_animals(value)
 
         elif name == props.SELECTED_ANIMAL:
-            animal_dropdown = self._animal_dropdown
+            animal_dropdown = self._animal_dropdown_combo
             animal_dropdown.blockSignals(True)
             if value is None:
                 animal_dropdown.setCurrentIndex(0)
@@ -1126,7 +1274,7 @@ class MainWindow(QMainWindow):
         )
 
         # prevent on_animal_changed event:
-        combo = self._animal_dropdown
+        combo = self._animal_dropdown_combo
         combo.blockSignals(True)
         combo.clear()
         combo.addItem("", None)
@@ -1209,3 +1357,5 @@ class MainWindow(QMainWindow):
         # logger.debug("enabling show_reach_event_action, rsp=%s", rsp)
         self._previous_intersession_analysis_rsp = (prj, rsp)
         self.show_reach_event_action.setEnabled(True)
+        if self.show_reach_event_action.isChecked():
+            self.on_show_reach_event(True)

@@ -93,7 +93,9 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
     algo = mock_system.algo
     algo.intersession_enabled = True
     machine._delay_timer_consider_end_session = 0  # simpler test
-    after_exit_tunnel_msg = "after_exit_tunnel: load_cell_disengaged_when_tunnel"
+    #
+    after_exit_tunnel_msg = "after_exit_tunnel: load_cell_disengaged_intersession_in_progress"
+
     def perform_exit_tunnel():
         assert machine.state == SystemState.intersession
         mock_system.exit_tunnel()

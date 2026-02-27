@@ -100,12 +100,11 @@ class BehaviorAlgoProps(str, enum.Enum):
     COVER_PELLET_DISTANCE = "cover_pellet_distance"
     RELEASE_PELLET_DISTANCE = "release_pellet_distance"
 
-    IS_IN_SESSION = 'is_in_session'  # property unused
-    INTERSESSION_STATE = 'intersession_state'
+    # IS_IN_SESSION = 'is_in_session'  # property unused
+    # INTERSESSION_STATE = 'intersession_state'  # unused
     CAPTURE_STATUS = 'capture_status'
 
     # TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"  # unused
-
     # PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'  # unused
 
     HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'  # used !
@@ -138,6 +137,14 @@ def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_
     return wrapped
 
 #
+
+
+class BehaviorAlgoStatus(str, enum.Enum):
+    IDLE = "idle"  # nothing running
+    ACQUIRING = "acquiring"  # camera + system running, but without animal-in-device
+    ANIMAL_IN_DEVICE = "animal_in_device"  # this is ACQUIRING with animal-in-device
+    ANIMAL_IN_TRAINING = "animal_in_training"  # this is ANIMAL_IN_DEVICE with training behavior algo **enabled**
+
 
 class BehaviorAlgoEvents:
     """Define the behavior algo events and their signature"""
@@ -196,6 +203,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._thread_lock = threading.RLock()
         self._project_info = None
+        self._status = BehaviorAlgoStatus.IDLE
 
         self._active_config = BehaviorConfiguration()
         self._loaded_config: Optional[BehaviorConfiguration] = None
@@ -279,14 +287,14 @@ class BehaviorAlgorithm(ObservableObject):
             cover_servo_status=CoverServoStatus.RELEASE_POSITION_ERROR,
         )
         #
-        self._check_start_thread()
+        self._check_start_thread(thread_lock=self._thread_lock)
         self._today = None
         self._start_day()
         #
         self._shift_xyz_handler = ShiftXYZHandler()
 
     @classmethod
-    def _check_start_thread(cls: "BehaviorAlgorithm"):
+    def _check_start_thread(cls: "BehaviorAlgorithm", *, thread_lock: threading.RLock):
         if cls._no_handler_thread:
             return
         _, handler_queue = cls._handler_thread_queue
@@ -294,11 +302,11 @@ class BehaviorAlgorithm(ObservableObject):
             logger.info("Creating algo handler thread ..")
             handler_queue = queue.Queue(maxsize=64)
             handler_thread = threading.Thread(
-                target=cls._handler_thread_run, args=(handler_queue,),
+                target=cls._handler_thread_run, args=(handler_queue, thread_lock),
                 daemon=True,
                 name="AlgoHandler",
             )
-            cls._handler_thread_queue = (handler_thread, handler_queue)
+            cls._handler_thread_queue = (handler_thread, handler_queue)  # noqa
             handler_thread.start()
 
     @staticmethod
@@ -327,7 +335,7 @@ class BehaviorAlgorithm(ObservableObject):
         return _relay_func(func, wait=wait)
 
     @classmethod
-    def _handler_thread_run(cls: "BehaviorAlgorithm", input_queue: queue.Queue):
+    def _handler_thread_run(cls: "BehaviorAlgorithm", input_queue: queue.Queue, thread_lock):
         logger.verbose("Running for handling/executing all algo decision/transition ..")
         prev_perf_c_report = time.perf_counter()
         tot_msgs = 0
@@ -352,7 +360,8 @@ class BehaviorAlgorithm(ObservableObject):
             tot_msgs += 1
             func, args, kwargs, event = raw
             try:
-                func(*args) if kwargs is None else func(*args, **kwargs)
+                with thread_lock:
+                    func(*args) if kwargs is None else func(*args, **kwargs)
             except Exception as err:
                 logger.exception("Failed executing %s: %s", func, err)
                 # NB: what to do else ?
@@ -426,6 +435,15 @@ class BehaviorAlgorithm(ObservableObject):
         self._project_info = project
 
     @property
+    def status(self) -> BehaviorAlgoStatus:
+        return self._status
+
+    @status.setter
+    def status(self, value: BehaviorAlgoStatus):
+        prev, self._status = self._status, value
+        # self._on_property_changed(self.Props.STATUS, value, prev)
+
+    @property
     def algo_paused(self):
         return self._algo_paused
 
@@ -459,7 +477,7 @@ class BehaviorAlgorithm(ObservableObject):
     @intersession_state.setter
     def intersession_state(self, value: IntersessionState):
         prev, self._intersession_state = self._intersession_state, value
-        self._on_property_changed(BehaviorAlgoProps.INTERSESSION_STATE, value, prev)
+        # self._on_property_changed(BehaviorAlgoProps.INTERSESSION_STATE, value, prev)
 
     @property
     def capture_status(self) -> CaptureProcessStatus:
@@ -944,7 +962,6 @@ class BehaviorAlgorithm(ObservableObject):
 
         self.session_starting()
         EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
-        self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, True, False)  # unused
 
         return True
 
@@ -967,7 +984,6 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_capture_ending(reason)
         EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
         EventManager.default().flush()
-        self.property_changed(BehaviorAlgoProps.IS_IN_SESSION, False, True)  # unused
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
         return True
 
@@ -990,10 +1006,14 @@ class BehaviorAlgorithm(ObservableObject):
     #
 
     def can_send_pellet(self):
+        if self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+            return False
         return self._active_config.pellet_delivery.is_enabled and not self._algo_paused
 
     def can_load_pellet(self, pellet_state: PelletState = PelletState.monitoring) -> bool:
         # is more has_to_load_pellet()
+        if self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+            return False
         cfg = self._active_config.pellet_delivery
         if not cfg.is_enabled or self._algo_paused:
             return False
@@ -1017,12 +1037,16 @@ class BehaviorAlgorithm(ObservableObject):
 
     def can_cover_pellet(self) -> bool:
         """Say if cover-pellet is enabled"""
+        if self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+            return False
         cfg = self._active_config.pellet_delivery
         return cfg.is_enabled and cfg.is_pellet_cover_enabled and not self._algo_paused
 
     def can_release_pellet(self) -> bool:
         """Say if algo should release pellet"""
         # self._check_date()
+        if self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+            return False
         if self._algo_paused:
             return False
 
@@ -1219,7 +1243,7 @@ class BehaviorAlgorithm(ObservableObject):
         cfg = self._diamond_triangle_offset_config
         if cfg is None:
             return
-        drift = cfg.inference_to_motor(offset) - motor_position
+        drift = cfg.diamond_to_motor(offset) - motor_position
         with self._thread_lock:
             self._diamond_triangle_prev_drifts.append(drift)
         p_now = time.perf_counter()

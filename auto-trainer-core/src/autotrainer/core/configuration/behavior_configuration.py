@@ -21,13 +21,28 @@ from ..analysis.auto_tunnel_fan_monitor import AutoTunnelSweepConfiguration
 logger = get_verbose_logger(__name__)
 
 
+@dataclasses.dataclass
+class ShiftXYZTarget:
+
+    # should be in Diamond coordinate system
+    x: float = 1.5
+    y: float = -3
+    z: float = 1
+
 
 @dataclasses.dataclass
-class ShiftXYZBufferHandlerConfig:
-    minimum_reach_fail: int = 10  # minimum nbr of failed reach, to consider make the mean of them
-    target_x: float = 1.5
-    target_y: float = -3
-    target_z: float = -1
+class _ShiftXYZBufferHandlerConfig:
+    minimum_reach_fail: int = 10  # minimum nbr of failed reach, to make the mean/an entire processing of them
+    target: ShiftXYZTarget = field(default_factory=ShiftXYZTarget)
+
+
+@dataclasses.dataclass
+class ShiftXYZBufferHandlerConfig(_ShiftXYZBufferHandlerConfig):
+
+    def __init__(self, **kwargs):
+        for c in "xyz":
+            kwargs.pop(f"target_{c}", None)  # old config
+        super().__init__(**kwargs)
 
 
 @dataclasses.dataclass
@@ -226,6 +241,7 @@ _cls_2_tag = {
     BatchSessionRecordingConfiguration: "BatchSessionRecordingConfiguration",
     AutoCloseGateOnIntersessionConfiguration: "AutoCloseGateOnIntersessionConfiguration",
     HomeOnExcessiveDriftDistanceConfiguration: "HomeOnExcessiveDriftDistance",  # missed Configuration suffix
+    ShiftXYZTarget: "ShiftXYZTarget",
     ShiftXYZHandlerConfig: "ShiftXYZHandlerConfiguration",
     ShiftXYZBufferHandlerConfig: "ShiftXYZBufferHandlerConfiguration",
 }

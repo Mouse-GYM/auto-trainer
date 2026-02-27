@@ -5,7 +5,7 @@ import pytest
 
 from autotrainer.behavior import BehaviorAlgorithm
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
-from autotrainer.behavior.behavior_algorithm import CoverServoStatus
+from autotrainer.behavior.behavior_algorithm import CoverServoStatus, BehaviorAlgoStatus
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import BehaviorConfiguration, Offset3DTuple, ProjectInfo
 from autotrainer.video import CaptureProcessStatus
@@ -18,6 +18,7 @@ def algo(monkeypatch, mock_get_perf_now) -> BehaviorAlgorithm:
     assert BehaviorAlgorithm._no_handler_thread is True
     algo = BehaviorAlgorithm()
     algo.pellet_delivery_enabled = algo.pellet_cover_enabled = True
+    algo.status = BehaviorAlgoStatus.ANIMAL_IN_TRAINING
     return algo
     # in case need cleanup
 
@@ -252,6 +253,7 @@ def test_diamond_triangle_drift(algo):
     algo.diamond_triangle_config = DiamondTriangleOffsetConfig(
         used_position=Offset3DTuple(1, 2, 3),
         measured_offset=Offset3DTuple(3, 30, -8),
+        version=DiamondTriangleOffsetConfig.current_config_version,
     )
     o1 = Offset3DTuple(0.5, 1, -1)
     p1 = Offset3DTuple(8, 6, 5)

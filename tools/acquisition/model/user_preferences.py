@@ -1,4 +1,5 @@
 import logging
+import platform
 import sys
 from pathlib import Path
 from typing import Optional, Union
@@ -55,7 +56,7 @@ class UserPreferences(ObservableObject):
 
         logger.verbose("Using setting ini file: %r", settings.fileName())
 
-        self._serial_number: str = settings.value("system/serial_number", "00000", str)  # noqa
+        self._serial_number: str = settings.value("system/serial_number", platform.node(), str)  # noqa
         self._last_configuration: str = settings.value("system/last_configuration", "", str)  # noqa
 
         self._configuration_location: str = settings.value(  # noqa

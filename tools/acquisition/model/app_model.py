@@ -40,8 +40,9 @@ from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSE
 
 from autotrainer.video import CaptureProcessStatus
 
-from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
-from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
+from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
+    IntersessionMachine
 
 from autotrainer.training import TrainingPlan, TrainingPhase
 
@@ -95,13 +96,30 @@ class TrainingPlansFSEventHandler(PatternMatchingEventHandler):
 
 
 class AppModelStatus(str, enum.Enum):
-    IDLE = "idle"
-    ACQUIRING = "acquiring"
-    CALIBRATION_3D = "calibration_3d"
-    CALIBRATION_DCS = "calibration_dcs"
+    IDLE = "idle"  # nothing running
+    ACQUIRING = "acquiring"  # camera + system running, but without animal-in-device
+    ANIMAL_IN_DEVICE = "animal_in_device"  # this is ACQUIRING with animal-in-device
+    ANIMAL_IN_TRAINING = "animal_in_training"  # this is ANIMAL_IN_DEVICE with training behavior algo **enabled**
+    CALIBRATION_3D = "calibration_3d"  # executing calib 3d
+    CALIBRATION_DCS = "calibration_dcs"  # executing calib dcs
 
     def to_api_app_status(self) -> ApiAppStatus:
+        if self is self.ANIMAL_IN_DEVICE and not hasattr(ApiAppStatus, self.name):
+            return ApiAppStatus.ACQUIRING
+        if self is self.ANIMAL_IN_TRAINING and not hasattr(ApiAppStatus, self.name):
+            return ApiAppStatus.ACQUIRING
         return getattr(ApiAppStatus, self.name)
+
+    def to_behavior_algo_status(self) -> Optional[BehaviorAlgoStatus]:
+        return _to_behavior_algo_status.get(self, None)
+
+
+_to_behavior_algo_status = {
+    AppModelStatus.IDLE: BehaviorAlgoStatus.IDLE,
+    AppModelStatus.ACQUIRING: BehaviorAlgoStatus.ACQUIRING,
+    AppModelStatus.ANIMAL_IN_DEVICE: BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
+    AppModelStatus.ANIMAL_IN_TRAINING: BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
+}
 
 
 def training_mode_to_api_training_mode(mode: TrainingMode) -> ApiTrainingMode:
@@ -149,7 +167,7 @@ class AppModel(ObservableObject):
 
         super().__init__(('on_error', 'configuration_loaded_event'))
 
-        self._app_lock = threading.RLock()
+        # self._app_lock = threading.RLock()  using BehaviorAlgo lock
 
         def log_on_error(title, msg):
             logger.error("%s: %s", title, msg)
@@ -198,16 +216,10 @@ class AppModel(ObservableObject):
         self._timer_recording_age_enough = _recording_age_enough_timer(0, lambda: None)
         # end not sure
 
-        barrier = self._mp_barrier = mp_ctx.Barrier(2)  # 2 for left + right cams
-        sema = self._mp_semaphore = mp_ctx.Semaphore(0)
-        event = self._mp_event = mp_ctx.Event()
-
         self._left_camera = VideoCaptureModel("left", self._preferences, 0,
-                                              msg_queue=proc_msg_queue,
-                                              semaphore=sema, barrier=barrier, event=event)
+                                              msg_queue=proc_msg_queue)
         self._right_camera = VideoCaptureModel("right", self._preferences, 1,
-                                               msg_queue=proc_msg_queue,
-                                               semaphore=sema, barrier=barrier, event=event)
+                                               msg_queue=proc_msg_queue)
 
         self._top_camera_presence_detection = PresenceDetectionAttrs()
         self._top_camera = VideoCaptureModel("web", self._preferences, -1,
@@ -287,6 +299,7 @@ class AppModel(ObservableObject):
         behavior_model.algorithm.property_changed += self._on_behavior_algo_property_changed
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
+        behavior_model.system_machine.intersession.events.property_changed += self._on_intersession_property_changed
 
         self._plans_files_event_handler = TrainingPlansFSEventHandler(self)
         self._plans_files_observer = Observer()
@@ -294,16 +307,58 @@ class AppModel(ObservableObject):
 
     @property
     def app_lock(self) -> threading.RLock:
-        return self._app_lock
+        return self._behavior.algorithm.thread_lock
+
+    @property
+    def acquisition_started(self):
+        return self._acquisition_started
 
     @property
     def status(self) -> AppModelStatus:
         return self._status
 
     @status.setter
-    def status(self, value):
-        prev, self._status = self._status, value
+    def status(self, value: AppModelStatus):
+        prev = self._status
+        if value == prev:
+            return
+        valid = False
+        if prev is AppModelStatus.IDLE:
+            valid = value in {
+                AppModelStatus.ACQUIRING,
+                AppModelStatus.CALIBRATION_3D,
+                AppModelStatus.ANIMAL_IN_DEVICE,
+                AppModelStatus.ANIMAL_IN_TRAINING,
+            }
+        elif prev is AppModelStatus.ACQUIRING:
+            valid = value in {
+                AppModelStatus.IDLE,
+                AppModelStatus.CALIBRATION_DCS,
+                AppModelStatus.ANIMAL_IN_DEVICE,
+                AppModelStatus.ANIMAL_IN_TRAINING,
+            }
+        elif prev is AppModelStatus.ANIMAL_IN_DEVICE:
+            valid = value in {
+                AppModelStatus.IDLE,
+                AppModelStatus.ACQUIRING,
+                AppModelStatus.ANIMAL_IN_TRAINING,
+            }
+        elif prev is AppModelStatus.ANIMAL_IN_TRAINING:
+            valid = value in {AppModelStatus.ANIMAL_IN_DEVICE, AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
+        elif prev is AppModelStatus.CALIBRATION_3D:
+            valid = value is AppModelStatus.IDLE
+        elif prev is AppModelStatus.CALIBRATION_DCS:
+            valid = value in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
+        if not valid:
+            raise ValueError(f"New status {value} not valid for current status {prev}")
+        self._status = value
         self._on_property_changed(self.Props.STATUS, value, prev)
+        algo_status = value.to_behavior_algo_status()
+        if algo_status is not None:
+            self._behavior.algorithm.status = algo_status
+        if value is AppModelStatus.ANIMAL_IN_TRAINING:
+            # NB: need to be after set of algo_status
+            self._behavior.system_machine.pellet.send_pellet()
 
     def reload_calib(self, calib_dir: Optional[Path]):
         calib_src_dir = (
@@ -494,6 +549,12 @@ class AppModel(ObservableObject):
         else:
             logger.debug("animal pellet=%s is_dcs=%s",
                          (animal.pellet_x, animal.pellet_y, animal.pellet_z), animal.is_pellet_dcs)
+            diamond_cfg = algo.diamond_triangle_config
+            if diamond_cfg is None or not diamond_cfg.fully_valid:
+                self.on_error("Notice", "Animal Send Pos reset to 0 due to not fully valid diamond-triangle config")
+                animal.is_pellet_dcs = False
+                animal.pellet_x = animal.pellet_y = animal.pellet_z = 0
+                # self._save_animal_metadata()
             algo.baseline_intensity = animal.baseline_magnet_intensity
             algo.reset_selected_animal_counts(animal)
             if self._training_mode == TrainingMode.MANUAL:
@@ -759,7 +820,7 @@ class AppModel(ObservableObject):
 
     def on_capture_start(self) -> bool:
         """Request to start the acquisition"""
-        with self._app_lock:
+        with self.app_lock:
             if self._acquisition_started:
                 self.on_error("acquisition start", "acquisition already running")
                 return False
@@ -925,7 +986,7 @@ class AppModel(ObservableObject):
 
     def on_capture_stop(self):
         logger.debug("AppModel.on_capture_stop")
-        with self._app_lock:
+        with self.app_lock:
             if not self._acquisition_started:
                 logger.verbose("acquisition not running")
                 return
@@ -1158,11 +1219,8 @@ class AppModel(ObservableObject):
         self.save_configuration()
 
     def _load_animals(self):
-        animals = []
-
         if self._preferences.animal_location is None or len(self._preferences.animal_location) == 0:
             default_location = Path.home().joinpath("Documents/RawDataLocal/Animals")
-
             try:
                 default_location.mkdir(parents=True, exist_ok=True)
                 self._preferences.animal_location = str(default_location)
@@ -1170,8 +1228,8 @@ class AppModel(ObservableObject):
                 logger.error(f"Failed to create default animal location {default_location}: {e}")
                 return
 
+        animals = []
         path = Path(self._preferences.animal_location)
-
         if path.exists() and path.is_dir():
             files = [x.name for x in path.glob("*.json")]
             loaded = [AnimalSubject.from_file(path.joinpath(x)) for x in files]
@@ -1236,11 +1294,13 @@ class AppModel(ObservableObject):
         hardware.set_x(xyz.x)
         hardware.set_y(xyz.y)
         hardware.set_z(xyz.z)
+        pellet_m = self.behavior.system_machine.pellet
         if algo.can_cover_pellet():
-            hardware.cover_pellet()
-        else:
-            hardware.release_pellet()
-        hardware.send_pellet()
+            pellet_m.cover_pellet()
+        elif algo.can_release_pellet():
+            pellet_m.release_pellet()
+        if algo.can_send_pellet():
+            pellet_m.send_pellet()
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
         if name == UserPreferences.SELECTED_ANIMAL:
@@ -1249,11 +1309,12 @@ class AppModel(ObservableObject):
                     self.selected_animal = animal
                     break
 
+    def _on_intersession_property_changed(self, name, value, _):
+        if name == IntersessionMachine.Properties.STATE_PROPERTY:
+            self._update_status_text_overlay()
+
     def _on_behavior_algo_property_changed(self, name: str, value, _):
         props = BehaviorAlgoProps
-        if name == props.INTERSESSION_STATE:
-            self._update_status_text_overlay()
-            return
         #
         animal = self._selected_animal
         if animal is None:

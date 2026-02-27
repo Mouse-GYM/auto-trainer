@@ -120,10 +120,14 @@ class HardwareStatusContent(ContentWidget):
             # and same for Y and Z respectively.
             t[coord_idx] = value
             motor_coord = Offset3DTuple(*t)
-            diamond_coord = motor_coord if cfg is None else cfg.motor_to_diamond(motor_coord)
-            diamond_coord_value = getattr(diamond_coord, coord)
-            suffix = " @ MotorCoordSystem" if cfg is None else None
-            xyz_label.update_coordinate(**{coord: diamond_coord_value}, suffix=suffix)
+            if cfg is not None and cfg.fully_valid:
+                xyz_value = cfg.motor_to_diamond(motor_coord)
+                suffix = None
+            else:
+                xyz_value = motor_coord
+                suffix = " @ MotorCoordSystem"
+            coord_value = getattr(xyz_value, coord)
+            xyz_label.update_coordinate(**{coord: coord_value}, suffix=suffix)
 
         self.head_magnet_changed.connect(lambda x: self._head_magnet.setText(str(round(x, 1))))
         self.pellet_x_changed.connect(partial(xyz_update, self._pellet_xyz, "x"))

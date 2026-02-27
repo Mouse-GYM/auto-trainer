@@ -67,7 +67,7 @@ def segment_reaches_f11(
     # velocity_h_filt_L = filtfilt(coeffs, [1], velocity_h_L)
     # Z_dist_h_L = df_3d['L_Hand']['z'].values-pellet_home[2]
 
-    Z_dist_p = pellet_home[2] - pellet_z_vals
+    Z_dist_p = pellet_z_vals - pellet_home[2]
     Z_dist_p[pellet_p == 0] = np.nan
     # Y_dist_p = np.abs(df_3d['Pellet']['y'].values-pellet_home[1])
 

@@ -193,6 +193,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 # when it receives the EOF_RECORDING which is initially sent by the camera capture processes to the
                 # main pose/inference thread-process itself.
                 # While with session batching we have to set it "explicitly", after enter intersession.
+                logger.debug("setting stop recorded")
                 self._stop_recorded.set()  # so here it is.
             self._cmd_ack_event.set()
 
@@ -469,7 +470,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             continue
                         write_h5_batch(cam_pose_path, cam_h5_live, cam_indices)
                     #
-                    logger.debug("setting stop recorded on %s", self._stop_recorded)
+                    logger.debug("setting stop recorded")
                     self._stop_recorded.set()  # this is for the feeder thread to know when it can open the data files
 
             cnt_data_received += 1
@@ -488,6 +489,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     logger.notice("Detected new record in progress ; session=%s ; mode=%s frames indices: %s",
                                    cur_local_prj.session, mode, frames_indices.tolist())
                     self._stop_recorded.clear()
+                    logger.debug("cleared stop_recorded")
                     cams_frame_idx_fhs = []
                     pose_paths = []
                     cur_h5_live_batch = [[] for _ in range_cams]  # safer
@@ -581,7 +583,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         if __debug__:
                             ib_pose_data_dict = [{} for _ in range_cams]
                         tot_skipped = 0
-                        logger.debug("setting stop recorded on %s", self._stop_recorded)
+                        logger.debug("setting stop recorded")
                         self._stop_recorded.set()  # this is for the feeder thread to know when it can open the data files
 
                     # after check for event start/restart of offline processing:
@@ -594,6 +596,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         # we can reset the offline queue here, it's safe :
                         # the pose process has switched to its online queue at this point
                         self._stop_recorded.clear()
+                        logger.debug("cleared stop_recorded")
                         _close_fhs(cams_frame_idx_fhs)  # defensive as supposed to be close already
                         cams_frame_idx_fhs = None
                         if thread_post_process is not None:

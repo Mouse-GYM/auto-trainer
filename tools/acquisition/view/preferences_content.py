@@ -2,6 +2,7 @@ import ast
 import copy
 import logging
 import math
+import platform
 
 import verboselogs
 from PySide6 import QtCore
@@ -76,6 +77,12 @@ class PreferencesContent(QWidget):
         self.update()
 
     def _create_general_tab(self):
+        form_layout = QFormLayout(None)
+
+        self._device_id_label = QLabel()
+        plat_node_name = platform.node()
+        self._device_id_label.setText(plat_node_name)
+
         self._device_id_edit = QLineEdit(None, None)
         self._device_id_edit.setText(self._preferences.serial_number)
         self._device_id_edit.textChanged.connect(self._device_id_changed)
@@ -88,9 +95,29 @@ class PreferencesContent(QWidget):
         self._animal_location_edit.setText(self._preferences.animal_location)
         self._animal_location_edit.textChanged.connect(self._animal_location_changed)
 
-        form_layout = QFormLayout(None)
+        form_layout.addRow("Device Id:", self._device_id_label)
 
-        form_layout.addRow("Device Id:", self._device_id_edit)
+        toggle = self._toggle_use_alternate_device_id = QSwitch()
+        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        form_layout.addRow("Use alternate:", toggle)
+        def on_use_alternate_device_id_toggled(value: int):
+            toggled = value != 0
+            idx = form_layout.getWidgetPosition(self._device_id_label)[0]
+            form_layout.itemAt(idx).widget().setStyleSheet("" if toggled else "font-weight: bold;")
+            for w in (self._device_id_edit, self._label_warning_device_id):
+                idx = form_layout.getWidgetPosition(w)[0]
+                form_layout.setRowVisible(idx, toggled)
+            if not toggled:
+                self._device_id_edit.setText(plat_node_name)
+
+        form_layout.addRow("<b>Alternate Device Id:</b>", self._device_id_edit)
+        self._label_warning_device_id = QLabel("<b>Some services may not operate as expected with an alternate Device Id</b>")
+        form_layout.addRow("<b>Warning:</b>", self._label_warning_device_id)
+
+        is_alternate_device_id = plat_node_name != self._preferences.serial_number
+        toggle.setChecked(is_alternate_device_id)
+        on_use_alternate_device_id_toggled(is_alternate_device_id)
+        toggle.stateChanged.connect(on_use_alternate_device_id_toggled)
 
         layout = QHBoxLayout()
         layout.addWidget(self._data_location_edit)
@@ -122,12 +149,6 @@ class PreferencesContent(QWidget):
         states_refresh = []
         add_enabled_state = states_refresh.append
         def refresh_enabled_states():
-            pm = behavior.system_machine.pellet
-            logger.debug("delivery=%s cover=%s can_cover=%s can_release=%s can_send=%s can_load=%s can_analysis=%s pm.covered=%s",
-                         algo.pellet_delivery_enabled, algo.pellet_cover_enabled,
-                         algo.can_cover_pellet(), algo.can_release_pellet(),
-                         algo.can_send_pellet(), algo.can_load_pellet(),
-                         algo.can_perform_intersession_analysis(), pm.covered_state)
             for r in states_refresh:
                 r()
 

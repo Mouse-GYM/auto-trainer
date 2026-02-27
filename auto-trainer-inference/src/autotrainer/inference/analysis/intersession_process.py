@@ -1,10 +1,11 @@
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy
 
 from autotrainer.core import ProjectInfo, video_write_ext
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement
 
@@ -49,7 +50,9 @@ def intersession_process(
     vid_tag = "." + video_write_ext
     dlc_seg = "_raw2D"
     center_method = (1, SceneElement.Diamond)
+    #
     df_lr, centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
+    #
     results_dict = segment_reaches(
         session=location,
         center_method=center_method,

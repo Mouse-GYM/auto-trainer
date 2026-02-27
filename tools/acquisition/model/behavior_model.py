@@ -4,11 +4,12 @@ import multiprocessing
 from typing import Optional, Callable
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, SystemState, IntersessionState
-from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
 from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler, EventManager, ApiEventKind)
 from autotrainer.core.analysis import EmergencyAlarmMonitor
+from autotrainer.core.analysis.alarm_monitor import EmergencyReason
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -70,9 +71,25 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
     def _alarm_monitor_property_changed(self, name, value, old_value):
         logger.debug("alarm-mon: %s : %s -> %s", name, old_value, value)
         if name == EmergencyAlarmMonitor.IS_ENGAGED:
+            alarm_mon = self._analysis.emergency_alarm_monitor
+            algo_status = self._system_machine.algorithm.status
             if value:
-                reasons = " ".join(self._analysis.emergency_alarm_monitor.engaged_reasons)
-                self.emergency_stop(f"alarm-monitor: {reasons}")
+                if algo_status is BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+                    valid_reasons = list(EmergencyReason)
+                elif algo_status is BehaviorAlgoStatus.ANIMAL_IN_DEVICE:
+                    valid_reasons = {EmergencyReason.DOORS_OPEN,
+                                     EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL,
+                                     EmergencyReason.GLOBAL_ANIMAL_PRESENCE}
+                else:
+                    valid_reasons = list()
+                reasons = alarm_mon.engaged_reasons
+                value = any(val in valid_reasons for val in reasons)
+                if value:
+                    reasons = " ".join(reason.name for reason in reasons)
+                    self.emergency_stop(f"alarm-monitor: {reasons}")
+                else:
+                    logger.verbose("skipping emergency stop ; algo status=%s reasons=%s",
+                                   algo_status, reasons)
             else:
                 self.emergency_resume("alarm-monitor-resumed")
 
