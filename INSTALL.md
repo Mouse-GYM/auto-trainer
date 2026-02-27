@@ -19,12 +19,13 @@ Anaconda is required for full feature support.  Tested with `Anaconda3-2023.09-0
 #### arm64 example
 
 ```bash
-gunzip spinnaker-3.2.0.57-arm64-pkg-20.04.tar.gz 
-tar -xvf spinnaker-3.2.0.57-arm64-pkg-20.04.tar 
-cd spinnaker-3.2.0.57-arm64/
+gunzip spinnaker-3.2.0.62-arm64-pkg-20.04.tar.gz
+tar -xvf spinnaker-3.2.0.62-arm64-pkg-20.04.tar
+cd spinnaker-3.2.0.62-arm64/
 sudo apt-get install libusb-1.0-0  # (no-op was already the most recent)
 sudo apt-get --fix-broken install
-sudo sh install_spinnaker_arm.sh
+sudo ./remove_spinnaker_arm.sh  # remove previous version if any
+sudo ./install_spinnaker_arm.sh
 ```
 
 ## Platform Specific Requirements 
@@ -51,9 +52,9 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
 
 4) FLIR ; only once first time.
    To include support for Teledyne/Blackfly cameras, install the appropriate wheel for your platform, *e.g.,*
-   - `pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_aarch64.whl`
-   - `pip install ./library/spinnaker_python-3.2.0.57-cp38-cp38-linux_x86_64.whl`
-   - `pip install .\library\spinnaker_python-3.2.0.57-cp38-cp38-win_amd64.whl`
+   - `pip install ./library/spinnaker_python-3.2.0.62-cp38-cp38-linux_aarch64.whl`
+   - `pip install ./library/spinnaker_python-3.2.0.62-cp38-cp38-linux_x86_64.whl`
+   - `pip install .\library\spinnaker_python-3.2.0.62-cp38-cp38-win_amd64.whl`
 
 5) **Jetson Only** and only once first time:
    - `conda install --channel=conda-forge ffmpeg=6.0.0`
