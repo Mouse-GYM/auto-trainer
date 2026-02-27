@@ -1,5 +1,6 @@
 import pickle
 import shutil
+import textwrap
 import threading
 import time
 from datetime import datetime
@@ -87,6 +88,7 @@ class MainWindow(QMainWindow):
         self._open_dialogs = []
         self._training_plan_index_by_plan_id: Dict[Optional[str], int] = {}
         self._diamond_triangle_calib_run = None
+        self._warned_invalid_dcs_config = False
 
         self._previous_intersession_analysis_rsp: Optional[Tuple[ProjectInfo, IntersessionResponse]] = None
 
@@ -172,6 +174,7 @@ class MainWindow(QMainWindow):
         self._app_model_status_combo.setEnabled(False)
         self.running_status_changed.emit(is_toggled)
         if is_toggled:
+            self._check_diamond_triangle_config()
             self._status_label.setText("Starting acquisition...")
             def exec_start_capture(prev_thread=self._start_capture_thread):
                 if prev_thread is not None:
@@ -188,7 +191,6 @@ class MainWindow(QMainWindow):
                 if started:
                     self._status_label.setText("")
                     self._acquisition_started = True
-                    self._check_diamond_triangle_config()
                 else:
                     self._status_label.setText("Startup failed")
                     self.running_status_changed.emit(False)
@@ -513,7 +515,6 @@ class MainWindow(QMainWindow):
 
     def on_activated(self):
         logger.success("main window activated")
-        self._check_diamond_triangle_config()
         self.main_content.on_activated()
         app_status = self._app_model.status
         if app_status == AppModelStatus.IDLE:
@@ -620,24 +621,20 @@ class MainWindow(QMainWindow):
         self._add_box_to_open_dialogs(box)
 
     def _check_diamond_triangle_config(self):
+        if self._warned_invalid_dcs_config:
+            return
         algo = self._app_model.behavior.algorithm
+        algo.reload_diamond_triangle_config()  # always force reload config
         dcs_cfg = algo.diamond_triangle_config
         if dcs_cfg is None or not dcs_cfg.fully_valid:
+            self._warned_invalid_dcs_config = True
             title = "Missing, or invalid, Diamond-Triangle config"
-            if self._app_model.inference.status == InferenceStatus.live:
-                text = (
-                    f"\n{algo.diamond_triangle_offset_config_path} is missing or not fully valid,\n\n"
-                    "Now that application is running:\n\n"
-                    "1) Using Hardware Control Set + Send buttons: move the triangle near the desired deliver position\n\n"
-                    "2) Then, execute a calibration via menu Tools -> Calibrate Coordinate System\n\n")
-                
-            else:
-                text = (
-                    f"\n{algo.diamond_triangle_offset_config_path} is either missing or needs update,\n\n"
-                    "Once application will be running:\n\n"
-                    "1) Using Hardware Control Set + Send buttons: move the triangle near the desired deliver position\n\n"
-                    "2) Execute a new coordinate calibration via menu Tools -> Calibrate Coordinate System\n\n")
-            #
+            text = textwrap.dedent("""
+                The coordinate system calibration data is out of date or missing.\n
+                Ensure the System Mode is set to Running and perform the following steps:\n
+                1) Use the Set and Send buttons in the Hardware Control Panel to move the pellet spoon to a typical delivery position.\n
+                2) Start the calibration using the Tools ->Calibrate Coordinate System menu item. You will be notified when the calibration is complete.\n
+                """)
             self._show_msg_box(title, text, QMessageBox.Icon.Warning)
 
     def _finish_close(self):
@@ -1159,6 +1156,7 @@ class MainWindow(QMainWindow):
                 self._app_model_status_combo.setCurrentIndex(combo_idx)
 
             if value is AppModelStatus.IDLE:
+                self._warned_invalid_dcs_config = False
                 for action in (
                     self.calib_diamond_triangle_action,
                     self.animal_in_device_action,
@@ -1317,8 +1315,6 @@ class MainWindow(QMainWindow):
         inference = self._app_model.inference
         if name == inference.STATUS:
             self.calib_diamond_triangle_action.setEnabled(value == InferenceStatus.live)
-            if value == InferenceStatus.live:
-                self._check_diamond_triangle_config()
 
     @invoke_method
     def _set_training_plans(self):
