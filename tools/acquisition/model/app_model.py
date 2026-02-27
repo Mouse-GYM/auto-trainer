@@ -96,6 +96,10 @@ class TrainingPlansFSEventHandler(PatternMatchingEventHandler):
             self._reload_app_model_plans()
 
 
+class InvalidTargetAppModelStatus(Exception):
+    """When trying to switch to invalid, or disabled, target app model status"""
+
+
 class AppModelStatus(str, enum.Enum):
     IDLE = "idle"  # nothing running
     ACQUIRING = "acquiring"  # camera + system running, but without animal-in-device
@@ -346,6 +350,25 @@ class AppModel(ObservableObject):
     def acquisition_started(self):
         return self._acquisition_started
 
+    def check_target_status_valid(self, target: AppModelStatus):
+        current_status = self._status
+        if target != current_status:
+            valid = current_status.is_target_status_valid(target)
+            if not valid:
+                raise InvalidTargetAppModelStatus(f"New status {target} not valid for current status {current_status}")
+        if target == AppModelStatus.ANIMAL_IN_TRAINING:
+            dcs_cfg = self._behavior.algorithm.diamond_triangle_config
+            valid_dcs = dcs_cfg is not None and dcs_cfg.fully_valid
+            if not valid_dcs:
+                raise InvalidTargetAppModelStatus("Cannot change to ANIMAL_IN_TRAINING without valid DCS")
+
+    def is_target_status_valid(self, target: AppModelStatus) -> bool:
+        try:
+            self.check_target_status_valid(target)
+        except InvalidTargetAppModelStatus:
+            return False
+        return True
+
     @property
     def status(self) -> AppModelStatus:
         return self._status
@@ -355,9 +378,7 @@ class AppModel(ObservableObject):
         prev = self._status
         if value == prev:
             return
-        valid = prev.is_target_status_valid(value)
-        if not valid:
-            raise ValueError(f"New status {value} not valid for current status {prev}")
+        self.check_target_status_valid(value)
         self._status = value
         algo_status = value.to_behavior_algo_status()
         if algo_status is not None:
@@ -844,7 +865,7 @@ class AppModel(ObservableObject):
                 logger.verbose("AppModelStatus already %s", cur_status)
                 return True
             if self._acquisition_started:
-                if cur_status.is_target_status_valid(target_status):
+                if self.is_target_status_valid(target_status):
                     self.status = target_status
                     return True
                 self.on_error("AppModelStatus change error",

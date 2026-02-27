@@ -133,6 +133,11 @@ class MainWindow(QMainWindow):
     def app_model(self) -> AppModel:
         return self._app_model
 
+    @property
+    def has_fully_valid_dcs(self) -> bool:
+        cfg = self._app_model.behavior.algorithm.diamond_triangle_config
+        return cfg is not None and cfg.fully_valid
+
     def _add_box_to_open_dialogs(self, box: QMessageBox):
         self._open_dialogs.append(box)
         def close_event(event, orig_close_event=box.closeEvent):
@@ -624,9 +629,7 @@ class MainWindow(QMainWindow):
         if self._warned_invalid_dcs_config:
             return
         algo = self._app_model.behavior.algorithm
-        algo.reload_diamond_triangle_config()  # always force reload config
-        dcs_cfg = algo.diamond_triangle_config
-        if dcs_cfg is None or not dcs_cfg.fully_valid:
+        if not self.has_fully_valid_dcs:
             self._warned_invalid_dcs_config = True
             title = "Missing, or invalid, Diamond-Triangle config"
             text = textwrap.dedent("""
@@ -822,6 +825,19 @@ class MainWindow(QMainWindow):
         combo.addItem("Animal in device", userData=AppModelStatus.ANIMAL_IN_DEVICE)
         combo.addItem("Animal in training", userData=AppModelStatus.ANIMAL_IN_TRAINING)
         combo.currentIndexChanged.connect(self._on_system_mode_combo_changed)
+        def show_app_model_status_combo(combo=combo, orig_show=combo.showPopup):
+            in_training_idx = combo.findData(AppModelStatus.ANIMAL_IN_TRAINING)
+            item = combo.model().item(in_training_idx)
+            prev_flags = item.flags()
+            try:
+                dcs_cfg = app_model.behavior.algorithm.load_diamond_triangle_config()
+            except Exception as err:
+                logger.verbose("Cannot load diamond-triangle config: %s", err)
+                dcs_cfg = None
+            item.setFlags((prev_flags | Qt.ItemFlag.ItemIsEnabled) if dcs_cfg is not None and dcs_cfg.fully_valid
+                          else (prev_flags & ~Qt.ItemFlag.ItemIsEnabled))
+            orig_show()
+        combo.showPopup = show_app_model_status_combo
         toolbar.addWidget(combo)
         # toolbar.addAction(self.run_action)
         # toolbar.addAction(self.animal_in_device_action)
@@ -1149,6 +1165,8 @@ class MainWindow(QMainWindow):
             logger.debug("got new app model status: %s", value)
 
             analysis_action = None
+            valid_dcs = self.has_fully_valid_dcs
+
             self.blockSignals(True)
 
             combo_idx = self._app_model_status_combo.findData(value)
@@ -1174,6 +1192,7 @@ class MainWindow(QMainWindow):
                     self._training_plan_combo,
                 ):
                     item.setEnabled(True)
+                self.animal_in_training_action.setEnabled(valid_dcs)
                 analysis_action = app_model.analysis.stop
 
             elif value is AppModelStatus.ACQUIRING:
@@ -1186,6 +1205,7 @@ class MainWindow(QMainWindow):
                     action.setChecked(False)
                 for item in (self._animal_dropdown_combo, self._training_mode_combo, self._training_plan_combo):
                     item.setEnabled(True)
+                self.animal_in_training_action.setEnabled(valid_dcs)
                 analysis_action = app_model.analysis.restart
 
             elif value in {AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS}:
@@ -1214,6 +1234,7 @@ class MainWindow(QMainWindow):
                     self.make_3d_calib_action,
                 ):
                     item.setEnabled(False)
+                self.animal_in_training_action.setEnabled(valid_dcs)
                 analysis_action = app_model.analysis.restart
 
             elif value is AppModelStatus.ANIMAL_IN_TRAINING:
