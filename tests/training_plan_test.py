@@ -53,7 +53,7 @@ class TestTrainingPlan(MockSystemMachine):
         system_config.save_default(trainer_config_dir)
 
     @pytest.fixture()
-    def app_model(self, machine, user_pref, fake_system_msg_handler, system_config, calib_dir, training_plans, sensor_analysis):
+    def app_model(self, machine, user_pref, fake_system_msg_handler, system_config, calib_dir, training_plans, sensor_analysis, diamond_triangle_config):
         machine._msg_handler = fake_system_msg_handler
         user_pref.save()
         msg_handler = machine._msg_handler
@@ -65,7 +65,6 @@ class TestTrainingPlan(MockSystemMachine):
             calib_dir=calib_dir,
             system_machine=machine,
         )
-        app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
         app_model.check_diamond_coord_enabled = False
         self._animal = app_model.add_animal("mouse1", select=True)
         try:
