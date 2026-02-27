@@ -890,10 +890,13 @@ class BehaviorAlgorithm(ObservableObject):
         prev, self._diamond_triangle_offset_config = self._diamond_triangle_offset_config, value
         self._on_property_changed(BehaviorAlgoProps.DIAMOND_TRIANGLE_CONFIG, value, prev)
 
-    def reload_diamond_triangle_config(self, path: Optional[Path] = None):
+    def load_diamond_triangle_config(self, path: Optional[Path] = None):
         if path is None:
             path = self._diamond_triangle_offset_config_path
-        self.diamond_triangle_config = DiamondTriangleOffsetConfig.load_config(path)
+        return DiamondTriangleOffsetConfig.load_config(path)
+
+    def reload_diamond_triangle_config(self, path: Optional[Path] = None):
+        self.diamond_triangle_config = self.load_diamond_triangle_config(path)
 
     @property
     def diamond_triangle_drift(self) -> Optional[Offset3DTuple]:
