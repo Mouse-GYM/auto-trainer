@@ -120,7 +120,6 @@ class HardwareControlContent(ContentWidget):
         form_layout.addRow("Head magnet intensity (%):", right_layout)
 
         self._tare_button = QPushButton("Tare")
-        self._tare_button.setEnabled(False)
         self._tare_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.tare_load_cell))
         form_layout.addRow(QLabel("Load cell:"), self._tare_button)
 
@@ -257,7 +256,7 @@ class HardwareControlContent(ContentWidget):
 
     @invoke_method
     def set_is_capture_active(self, is_active: bool):
-        self._tare_button.setEnabled(is_active)
+        self.setEnabled(is_active)
 
     @invoke_method
     def set_selected_animal(self, animal: Optional[AnimalSubject]):

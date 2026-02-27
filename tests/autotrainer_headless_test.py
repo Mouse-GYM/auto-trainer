@@ -111,8 +111,8 @@ def test_load_config(app_model, trainer_config_dir, animals_dir, calib_dir, syst
 def test_start_stop(app_model, settings_ini_path):
     assert not settings_ini_path.exists()
     assert app_model.load_configuration() is True
-    assert app_model.on_capture_start() is True
-    app_model.on_capture_stop()
+    assert app_model.capture_start() is True
+    app_model.capture_stop()
     assert not settings_ini_path.exists()  # still
     app_model.on_close()
     assert settings_ini_path.exists()  # but saved on close

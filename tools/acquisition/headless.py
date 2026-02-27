@@ -29,18 +29,18 @@ def _exec_main(args):
 
     get_console_handler().setLevel(preferences.log_level)
 
-    app_view_model = AppModel(preferences)
+    app_model = AppModel(preferences)
 
     try:
-        app_view_model.load_configuration(configuration)
+        app_model.load_configuration(configuration)
     except Exception as err:
         logger.exception("Could not load config: %s", err)
-        app_view_model.on_close()
+        app_model.on_close()
         return 1
 
-    app_view_model.on_activated()
+    app_model.on_activated()
 
-    if not app_view_model.on_capture_start():
+    if not app_model.capture_start():
         logger.error("failed to start capture")
         return 1
 
@@ -56,7 +56,7 @@ def _exec_main(args):
     except Exception as err:
         logger.exception("Fatal error: %s", err)
 
-    app_view_model.on_close()
+    app_model.on_close()
 
     return exit_rc
 
@@ -86,7 +86,7 @@ def main():
         logger.exception("Fatal error: %s", err)
         exit_code = 1
     finally:
-        from autotrainer.core.event import EventManager
+        from autotrainer.core.event.event_manager import EventManager
         from autotrainer.behavior import BehaviorAlgorithm
         BehaviorAlgorithm.close_algorithm_handler()
         EventManager.try_close_default()

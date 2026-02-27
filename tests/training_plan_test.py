@@ -71,7 +71,7 @@ class TestTrainingPlan(MockSystemMachine):
         try:
             yield app_model
         finally:
-            app_model.on_capture_stop()
+            app_model.capture_stop()
             app_model.on_close()
 
     def test_training_plan(self, app_model, user_pref, machine, caplog):
@@ -83,7 +83,7 @@ class TestTrainingPlan(MockSystemMachine):
             # when this test case fails for any reason. pytest seems to be stuck in some loop post-analysis code,
             # but before teardown, related to/with tmpdir fixture.. maybe the files we are possibly writing in it
             # are preventing pytest failure completion code to finish and put it in a kind of infinite loop state.
-            app_model.on_capture_stop()
+            app_model.capture_stop()
             app_model.on_close()
 
     def _test_training_plan(self, app_model, user_pref, machine, caplog):
@@ -103,7 +103,7 @@ class TestTrainingPlan(MockSystemMachine):
         # the loaded parameters/settings (from config file) will be reused/reset with training plan enter.
 
         app_model.training_mode = TrainingMode.AUTOMATIC
-        app_model.on_capture_start()
+        app_model.capture_start()
         app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
 
         self.mock_pellet_ack(until_none=True)  # for whole send-pellet/cover pellet sequence(s)

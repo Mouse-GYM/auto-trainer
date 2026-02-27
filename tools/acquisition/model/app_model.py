@@ -10,6 +10,7 @@ import pickle
 import queue
 import threading
 import time
+import warnings
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -103,6 +104,9 @@ class AppModelStatus(str, enum.Enum):
     CALIBRATION_3D = "calibration_3d"  # executing calib 3d
     CALIBRATION_DCS = "calibration_dcs"  # executing calib dcs
 
+    def is_target_status_valid(self, target: "AppModelStatus"):
+        return target in _app_model_status_valid_targets.get(self, ())
+
     def to_api_app_status(self) -> ApiAppStatus:
         if self is self.ANIMAL_IN_DEVICE and not hasattr(ApiAppStatus, self.name):
             return ApiAppStatus.ACQUIRING
@@ -112,6 +116,34 @@ class AppModelStatus(str, enum.Enum):
 
     def to_behavior_algo_status(self) -> Optional[BehaviorAlgoStatus]:
         return _to_behavior_algo_status.get(self, None)
+
+
+_app_model_status_valid_targets = {
+    AppModelStatus.IDLE: {
+        AppModelStatus.ACQUIRING,
+        AppModelStatus.CALIBRATION_3D,
+        AppModelStatus.ANIMAL_IN_DEVICE,
+        AppModelStatus.ANIMAL_IN_TRAINING,
+    },
+    AppModelStatus.ACQUIRING: {
+        AppModelStatus.IDLE,
+        AppModelStatus.CALIBRATION_DCS,
+        AppModelStatus.ANIMAL_IN_DEVICE,
+        AppModelStatus.ANIMAL_IN_TRAINING,
+    },
+    AppModelStatus.ANIMAL_IN_DEVICE: {
+        AppModelStatus.IDLE,
+        AppModelStatus.ACQUIRING,
+        AppModelStatus.ANIMAL_IN_TRAINING,
+    },
+    AppModelStatus.ANIMAL_IN_TRAINING: {
+        AppModelStatus.ANIMAL_IN_DEVICE,
+        AppModelStatus.ACQUIRING,
+        AppModelStatus.IDLE,
+    },
+    AppModelStatus.CALIBRATION_3D: {AppModelStatus.IDLE},
+    AppModelStatus.CALIBRATION_DCS: {AppModelStatus.ACQUIRING, AppModelStatus.IDLE},
+}
 
 
 _to_behavior_algo_status = {
@@ -192,6 +224,7 @@ class AppModel(ObservableObject):
         self._training_mode = TrainingMode.MANUAL
         self._training_plan: Optional[TrainingPlan] = None
         self._training_plan_animal: Optional[AnimalSubject] = None
+        self._acquisition_starting = False
         self._acquisition_started = False
         self._acquisition_stopping = False
         self._reload_plans_needed = False
@@ -322,40 +355,14 @@ class AppModel(ObservableObject):
         prev = self._status
         if value == prev:
             return
-        valid = False
-        if prev is AppModelStatus.IDLE:
-            valid = value in {
-                AppModelStatus.ACQUIRING,
-                AppModelStatus.CALIBRATION_3D,
-                AppModelStatus.ANIMAL_IN_DEVICE,
-                AppModelStatus.ANIMAL_IN_TRAINING,
-            }
-        elif prev is AppModelStatus.ACQUIRING:
-            valid = value in {
-                AppModelStatus.IDLE,
-                AppModelStatus.CALIBRATION_DCS,
-                AppModelStatus.ANIMAL_IN_DEVICE,
-                AppModelStatus.ANIMAL_IN_TRAINING,
-            }
-        elif prev is AppModelStatus.ANIMAL_IN_DEVICE:
-            valid = value in {
-                AppModelStatus.IDLE,
-                AppModelStatus.ACQUIRING,
-                AppModelStatus.ANIMAL_IN_TRAINING,
-            }
-        elif prev is AppModelStatus.ANIMAL_IN_TRAINING:
-            valid = value in {AppModelStatus.ANIMAL_IN_DEVICE, AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
-        elif prev is AppModelStatus.CALIBRATION_3D:
-            valid = value is AppModelStatus.IDLE
-        elif prev is AppModelStatus.CALIBRATION_DCS:
-            valid = value in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
+        valid = prev.is_target_status_valid(value)
         if not valid:
             raise ValueError(f"New status {value} not valid for current status {prev}")
         self._status = value
-        self._on_property_changed(self.Props.STATUS, value, prev)
         algo_status = value.to_behavior_algo_status()
         if algo_status is not None:
             self._behavior.algorithm.status = algo_status
+        self._on_property_changed(self.Props.STATUS, value, prev)
         if value is AppModelStatus.ANIMAL_IN_TRAINING:
             # NB: need to be after set of algo_status
             self._behavior.system_machine.pellet.send_pellet()
@@ -818,17 +825,35 @@ class AppModel(ObservableObject):
             # manager, to any of these already alive sub-processes, via a multiprocess.Queue().put() call/transfer.
         )
 
-    def on_capture_start(self) -> bool:
+    # keep previous name temporarily:
+    def on_capture_start(self, *args, **kwargs):
+        warnings.warn(f"{self.__class__.__name__}.on_capture_start is renamed to capture_start. please update",
+                      PendingDeprecationWarning, stacklevel=2)
+        return self.capture_start(**kwargs)
+
+    def on_capture_stop(self, *args, **kwargs):
+        warnings.warn(f"{self.__class__.__name__}.on_capture_stop is renamed to capture_stop. please update",
+                      PendingDeprecationWarning, stacklevel=2)
+        return self.capture_stop(**kwargs)
+
+    def capture_start(self, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING) -> bool:
         """Request to start the acquisition"""
         with self.app_lock:
+            cur_status = self._status
+            if target_status == cur_status:
+                logger.verbose("AppModelStatus already %s", cur_status)
+                return True
             if self._acquisition_started:
-                self.on_error("acquisition start", "acquisition already running")
+                if cur_status.is_target_status_valid(target_status):
+                    self.status = target_status
+                    return True
+                self.on_error("AppModelStatus change error",
+                              f"Target status {target_status} not valid for source status {self._status}")
                 return False
-            self._acquisition_started = True
-
-        self._event_manager.post_event_content(ApiEventKind.acquisitionStarted)
-        self.property_changed(self.Props.ACQUISITION_RUNNING, True, False)
-        self.status = AppModelStatus.ACQUIRING
+            if self._acquisition_starting:
+                logger.warning("Acquisition already starting")
+                return False
+            self._acquisition_starting = True
 
         analysis = self._analysis
 
@@ -946,7 +971,7 @@ class AppModel(ObservableObject):
 
         if not did_start:
             logger.error("failed to start all subprocesses")
-            self.on_capture_stop()
+            self.capture_stop()
             return False
 
         # once cameras successfully started:
@@ -954,7 +979,6 @@ class AppModel(ObservableObject):
 
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
-
         if self._inference.is_enabled:
             logger.info("Starting inference ..")
             self._inference.start(self._inference_queue)
@@ -982,10 +1006,15 @@ class AppModel(ObservableObject):
         if self._attached_animal is None and animal is not None:
             self._set_animal_base_positions_and_send_to_deliver(animal)
 
+        self._acquisition_started = True
+        self.status = target_status
+        self.property_changed(self.Props.ACQUISITION_RUNNING, True, False)
+        self._event_manager.post_event_content(ApiEventKind.acquisitionStarted)
+
         return True
 
-    def on_capture_stop(self):
-        logger.debug("AppModel.on_capture_stop")
+    def capture_stop(self):
+        logger.debug("AppModel.capture_stop")
         with self.app_lock:
             if not self._acquisition_started:
                 logger.verbose("acquisition not running")
@@ -999,11 +1028,13 @@ class AppModel(ObservableObject):
         finally:
             # always:
             self._is_recording_trigger = False
-            self._acquisition_started = False  # must be set before try reload training plans, given checked in it
+            # must be set before try reload training plans, given checked in it
+            self._acquisition_started = False
+            self._acquisition_stopping = False
+            self._acquisition_starting = False
             analysis = self._analysis
             analysis.project_info = None
             self.status = AppModelStatus.IDLE
-            self._acquisition_stopping = False
             if self._reload_plans_needed:
                 self._reload_plans_needed = False
                 self.reload_training_plans()
@@ -1177,7 +1208,7 @@ class AppModel(ObservableObject):
 
     def on_close(self):
         logger.debug("AppModel.on_close")
-        self.on_capture_stop()  # ensure
+        self.capture_stop()  # ensure
 
         self._preferences.save()
 
@@ -1603,10 +1634,10 @@ class AppModel(ObservableObject):
         cmd = request.command
         rsp = None  # let caller handle it
         if cmd == ApiCommand.START_ACQUISITION:
-            return self._handle_rpc_async_command(request, self.on_capture_start)
+            return self._handle_rpc_async_command(request, self.capture_start)
 
         elif cmd == ApiCommand.STOP_ACQUISITION:
-            return self._handle_rpc_async_command(request, self.on_capture_stop)
+            return self._handle_rpc_async_command(request, self.capture_stop)
 
         elif cmd == ApiCommand.EMERGENCY_STOP:
             return self._behavior.emergency_stop(source="RpcService")
