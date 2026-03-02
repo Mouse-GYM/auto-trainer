@@ -38,7 +38,10 @@ class SystemConfiguration:
     manage transitions and maintain a consistent interface to applications.
     """
 
+    DEFAULT_CONFIG_DIR: ClassVar[Path] = Path("~/Autotrainer")  # caller/user must expanduser() on it
     DEFAULT_NAME: ClassVar[str] = "system_configuration"
+
+    DEFAULT_PATH: ClassVar[Path] = DEFAULT_CONFIG_DIR.joinpath(f"{DEFAULT_NAME}.yaml")  # caller/user must expanduser() on it
 
     version: int = 22
     cameras: List[CameraConfiguration] = field(default_factory=list)

@@ -8,16 +8,14 @@ from PySide6.QtCore import QCoreApplication, QSettings
 
 from autotrainer.core import ObservableObject
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.configuration import SystemConfiguration
+
 
 logger = get_verbose_logger(__name__)
 
 
 def get_default_configuration_location() -> str:
-    return str(Path.home().joinpath("Autotrainer"))
-
-
-def get_default_data_location() -> str:
-    return str(Path.home().joinpath("Documents").joinpath("RawDataLocal"))
+    return SystemConfiguration.DEFAULT_CONFIG_DIR.expanduser().as_posix()
 
 
 class UserPreferences(ObservableObject):

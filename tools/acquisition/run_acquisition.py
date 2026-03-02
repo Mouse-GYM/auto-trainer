@@ -50,8 +50,6 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
     EnvironmentProvider.enable_can_emulation(allow_can_emulation)
 
     preferences = UserPreferences()
-    device = "unnamed" if not preferences.serial_number else preferences.serial_number
-    set_log_location(device)
 
     logging.info("Set log level to %s", preferences.log_level)
     get_console_handler().setLevel(preferences.log_level)
@@ -59,7 +57,13 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
     event_manager = EventManager.default()
     plugin = try_register_api_event_plugin()
 
-    window = MainWindow(app, preferences, configuration, is_dev)
+    try:
+        window = MainWindow(app, preferences, configuration, is_dev)
+    except:
+        event_manager.close()
+        BehaviorAlgorithm.close_algorithm_handler()
+        raise
+
     if plugin is not None:
         window.app_model.rpc_service = plugin.service
 
@@ -80,9 +84,14 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
     # window.showMaximized()
     window.move(QtGui.QGuiApplication.primaryScreen().availableGeometry().center() - window.rect().center())
 
-    window.on_activated()
+    try:
+        window.on_activated()
+    except:
+        event_manager.close()
+        BehaviorAlgorithm.close_algorithm_handler()
+        raise
 
-    EventManager.default().post_event_content(ApiEventKind.applicationLaunched)
+    event_manager.post_event_content(ApiEventKind.applicationLaunched)
 
     logger.info("Executing app now ..")
     try:
