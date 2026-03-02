@@ -1136,7 +1136,7 @@ class AppModel(ObservableObject):
             prj = self._project_info
             if prj is None:
                 prj = self.make_project_info()
-                location = prj.get_log_file_path()
+            location = prj.get_log_file_path()
         prev_loc = self._log_file_path
         if location == prev_loc:
             return
