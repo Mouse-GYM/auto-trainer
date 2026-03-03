@@ -114,9 +114,9 @@ class HardwareControlContent(ContentWidget):
         spinbox.setWrapping(False)
         button = self._head_magnet_move_button = QPushButton("Move")
         add_cmd_widget(button)
-        def clicked():
+        def head_magnet_intensity_updated():
             self._hardware_model.update_head_magnet_intensity(self._head_magnet_position_spinbox.value())
-        button.clicked.connect(clicked)
+        button.clicked.connect(lambda: log_hardware_cmd(head_magnet_intensity_updated))
 
         right_layout = QHBoxLayout()
         right_layout.setSpacing(4)
