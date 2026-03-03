@@ -524,7 +524,7 @@ class PelletMachine(StateMachine):
 
         dict(
             trigger=force_load_pellet,
-            source=[PelletState.loading, PelletState.monitoring, PelletState.covering, PelletState.retract],
+            source="*",
             dest=PelletState.loading,
             before=before_load_pellet,
             # conditions=can_load_pellet,  # contrary to load_pellet
