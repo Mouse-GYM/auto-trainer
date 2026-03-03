@@ -48,6 +48,9 @@ class HardwareControlContent(ContentWidget):
         self._app_model = app_model
         self._hardware_model = app_model.hardware
 
+        self._commands_widgets = []
+        add_cmd_widget = self._commands_widgets.append
+
         def log_hardware_cmd(cmd: Callable):
             logger.verbose("User-control: Executing %s", cmd)
             return cmd()
@@ -105,10 +108,12 @@ class HardwareControlContent(ContentWidget):
         form_layout.setVerticalSpacing(4)
 
         spinbox = self._head_magnet_position_spinbox = QSpinBox()
+        add_cmd_widget(spinbox)
         spinbox.setValue(0)
         spinbox.setMaximum(100)
         spinbox.setWrapping(False)
         button = self._head_magnet_move_button = QPushButton("Move")
+        add_cmd_widget(button)
         def clicked():
             self._hardware_model.update_head_magnet_intensity(self._head_magnet_position_spinbox.value())
         button.clicked.connect(clicked)
@@ -119,8 +124,9 @@ class HardwareControlContent(ContentWidget):
         right_layout.addWidget(self._head_magnet_move_button)
         form_layout.addRow("Head magnet intensity (%):", right_layout)
 
-        self._tare_button = QPushButton("Tare")
-        self._tare_button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.tare_load_cell))
+        button = self._tare_button = QPushButton("Tare")
+        add_cmd_widget(button)
+        button.clicked.connect(lambda: log_hardware_cmd(self._hardware_model.tare_load_cell))
         form_layout.addRow(QLabel("Load cell:"), self._tare_button)
 
         layout.addLayout(form_layout, 1, 0)
@@ -151,6 +157,7 @@ class HardwareControlContent(ContentWidget):
         def add_coord(coord: str):
             nonlocal row
             pos = QDoubleSpinBox()
+            add_cmd_widget(pos)
             pos.setValue(0)
             pos.setContentsMargins(0, 0, 0, 0)
             pos.setMinimumWidth(60)
@@ -159,6 +166,7 @@ class HardwareControlContent(ContentWidget):
             pos.setAlignment(Qt.AlignmentFlag.AlignRight)
             range_label = QLabel()
             set_button = QPushButton("Set")
+            add_cmd_widget(set_button)
             set_button.clicked.connect(partial(set_xyz, coord))
             sub_layout.addWidget(QLabel(f"{coord.upper()} :"), row, col)
             sub_layout.addWidget(pos, row, col + 1)
@@ -181,21 +189,31 @@ class HardwareControlContent(ContentWidget):
 
         button_layout = QVBoxLayout()
         button_layout.setSpacing(4)
-        self._home_button = QPushButton("Home")
-        self._home_button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.move_home))
-        button_layout.addWidget(self._home_button)
-        self._load_button = QPushButton("Load")
-        self._load_button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_load_pellet))
-        button_layout.addWidget(self._load_button)
-        self._send_button = QPushButton("Send")
+        #
+        button = self._home_button = QPushButton("Home")
+        add_cmd_widget(button)
+        button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.move_home))
+        button_layout.addWidget(button)
+        #
+        button = self._load_button = QPushButton("Load")
+        add_cmd_widget(button)
+        button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_load_pellet))
+        button_layout.addWidget(button)
+        #
+        button = self._send_button = QPushButton("Send")
+        add_cmd_widget(button)
         self._send_button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_send_pellet))
-        button_layout.addWidget(self._send_button)
-        self._release_button = QPushButton("Release")
-        self._release_button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_release_pellet))
-        button_layout.addWidget(self._release_button)
-        self._cover_button = QPushButton("Cover")
-        self._cover_button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_cover_pellet))
-        button_layout.addWidget(self._cover_button)
+        button_layout.addWidget(button)
+        #
+        button = self._release_button = QPushButton("Release")
+        add_cmd_widget(button)
+        button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_release_pellet))
+        button_layout.addWidget(button)
+        #
+        button = self._cover_button = QPushButton("Cover")
+        add_cmd_widget(button)
+        button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_cover_pellet))
+        button_layout.addWidget(button)
         layout.addLayout(button_layout, 1, 4)
 
         # central layout/widget
@@ -314,6 +332,10 @@ class HardwareControlContent(ContentWidget):
         else:
             self._card_widget.header.setTitle("Hardware Control")
 
+    def set_commands_enabled(self, enabled: bool = True):
+        for widget in self._commands_widgets:
+            widget.setEnabled(enabled)
+
     @invoke_method
     def _model_property_changed(self, property_name: str, value, _):
         if property_name == HardwareModel.TUNNEL_VERSION_PROPERTY:
@@ -331,15 +353,15 @@ class HardwareControlContent(ContentWidget):
             else:
                 self._pellet_version.setText("(unknown version)")
                 self.setEnabled(False)
-                self._command_label.setText("None")
+                self.command_changed.emit("None")
 
         elif property_name == HardwareModel.PENDING_COMMAND_PROPERTY:
-            if value:
-                self.command_changed.emit(value.name)
-                self.setEnabled(False)
+            if value is not None:
+                self.command_changed.emit(value)
+                self.set_commands_enabled(False)
             else:
                 self.command_changed.emit("None")
-                self.setEnabled(True)
+                self.set_commands_enabled(True)
 
     @invoke_method
     def _behavior_algo_property_changed(self, name, value, _):
