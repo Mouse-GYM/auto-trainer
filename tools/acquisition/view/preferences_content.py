@@ -1179,7 +1179,7 @@ class PreferencesContent(QWidget):
         # add_sep()
 
         grid_layout.addWidget(QLabel("<b>Use Global Animal Presence:</b>"), cur_row, cur_col)
-        toggle = self._use_global_animal_presence_toggle = QSwitch()
+        toggle = self._use_global_presence_toggle = QSwitch()
         toggle.setChecked(alarm_cfg.use_global_animal_presence)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
@@ -1195,7 +1195,7 @@ class PreferencesContent(QWidget):
         toggle.setEnabled(alarm_cfg.use_global_animal_presence)
         toggle.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        def use_global_animal_presence_toggle_changed(value, toggle_allow_resume=toggle):
+        def use_global_presence_toggle_changed(value, toggle_allow_resume=toggle):
             toggled = value != 0
             toggle_allow_resume.setEnabled(toggled)
             cfg = alarm_monitor.config
@@ -1205,7 +1205,7 @@ class PreferencesContent(QWidget):
                 alarm_monitor.post_alarm_event(
                     ApiAlarmKind.animalImmobile,
                     alarm_monitor.global_animal_presence_engaged, toggled)
-        self._use_global_animal_presence_toggle.stateChanged.connect(use_global_animal_presence_toggle_changed)
+        self._use_global_presence_toggle.stateChanged.connect(use_global_presence_toggle_changed)
         cur_row += 1
 
         tab = QWidget(None)
