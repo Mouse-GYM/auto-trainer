@@ -211,7 +211,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         if v is not None:
             if v[1]:
                 tot_audio_thrash_engaged += perf_now - v[0]
-        elif self._audio_monitor.is_thrashing_detected:
+        elif self._audio_monitor.thrashing_detected:
             tot_audio_thrash_engaged += cfg.audio_load_cell_thrash_aggregate_delay
         #
         pc_load_cell_thrash = 100 * tot_load_cell_thrash_engaged / cfg.audio_load_cell_thrash_aggregate_delay

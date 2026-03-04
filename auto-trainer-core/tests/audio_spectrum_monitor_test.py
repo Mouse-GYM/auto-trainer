@@ -9,7 +9,7 @@ def test_detect_thrashing():
     monitor = AudioSpectrumThrashMonitor(config=cfg)
     cfg = monitor._config  # in case of it's copied
 
-    assert monitor.is_thrashing_detected is False
+    assert monitor.thrashing_detected is False
 
     thrash_detected_list = [False]
 
@@ -36,7 +36,7 @@ def test_detect_thrashing():
     update_monitor(low_audio_db, t_now)
 
     # value is lower than threshold, so not engaged:
-    assert not monitor.is_thrashing_detected
+    assert not monitor.thrashing_detected
     assert thrash_detected_list == [False]
 
     # now set value to the desired threshold:
@@ -44,12 +44,12 @@ def test_detect_thrashing():
     t_now += cfg.time_window + 0.001
 
     update_monitor(high_audio_db, t_now)
-    assert not monitor.is_thrashing_detected  # not yet detected, must wait time_window
+    assert not monitor.thrashing_detected  # not yet detected, must wait time_window
 
     t_now += cfg.time_window + 0.001
     update_monitor(high_audio_db, t_now)
 
-    assert monitor.is_thrashing_detected
+    assert monitor.thrashing_detected
     assert thrash_detected_list == [False, True]
 
     # enqueue enough high_audio_db :
@@ -58,7 +58,7 @@ def test_detect_thrashing():
         update_monitor(high_audio_db, t_now)
 
     # obviously still:
-    assert monitor.is_thrashing_detected
+    assert monitor.thrashing_detected
     assert thrash_detected_list == [False, True]
 
     # now:
@@ -71,7 +71,7 @@ def test_detect_thrashing():
     t_now += cfg.time_window
 
     update_monitor(lower_audio_db, t_now)
-    assert monitor.is_thrashing_detected  # still
+    assert monitor.thrashing_detected  # still
 
     very_low_audio = [cfg.threshold_db - 1] * 64  # lower than threshold
 
@@ -80,5 +80,5 @@ def test_detect_thrashing():
     t_now += cfg.time_window / 2
     update_monitor(very_low_audio, t_now)
 
-    assert not monitor.is_thrashing_detected
+    assert not monitor.thrashing_detected
     assert thrash_detected_list == [False, True, False]  # False again

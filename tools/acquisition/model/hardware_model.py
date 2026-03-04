@@ -42,6 +42,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     SEND_Z = "send_z"
     SEND_XYZ = "send_xyz"
 
+    SET_X = "set_x"
+    SET_Y = "set_y"
+    SET_Z = "set_z"
+
     def __init__(
         self, message_handler: MessageHandler,
     ):
@@ -69,6 +73,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._front_door_open: bool = False
         self._slide_door_open: bool = False
 
+        self._device_ack_timeout_engaged = False
+
         self._lock = threading.RLock()  # **required** re-entrant lock !!
 
     @property
@@ -81,6 +87,15 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if any(map(math.isnan, value)):
             return None
         return value
+
+    @property
+    def device_ack_timeout_engaged(self):
+        return self._device_ack_timeout_engaged
+
+    @device_ack_timeout_engaged.setter
+    def device_ack_timeout_engaged(self, value):
+        prev, self._device_ack_timeout_engaged = self._device_ack_timeout_engaged, value
+        self._on_property_changed(self.DEVICE_ACK_TIMEOUT_ENGAGED, value, prev)
 
     @property
     def send_x(self):
@@ -108,6 +123,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def send_z(self, value):
         prev, self._motor_send_coordinates = self._motor_send_coordinates, self._motor_send_coordinates.replace(z=value)
         self._on_property_changed(self.SEND_Z, value, prev.z)
+
+    @property
+    def motor_send_coordinates(self) -> Offset3DTuple:
+        return self._motor_send_coordinates
 
     @property
     def front_door_open(self):
@@ -262,7 +281,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         # configured to generate messages as frequently as the real device.
         buffer_size = 10 if HAVE_CAN_DEVICE else 1
         can_device = CanDevice(buffer_size=buffer_size)
-        can_device.property_changed += self._device_property_changed
+        can_device.property_changed += self._can_device_property_changed
 
         device_conn = self._device = DeviceConnection(can_device, cmd_queue, name="can-device")
         device_conn.request_connect()
@@ -284,20 +303,21 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if dev is not None:
             dev.request_disconnect()
             dev.join()
+            can_dev = dev.device
+            can_dev.property_changed -= self._can_device_property_changed
             self._device = None
-
         self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, "", None)
         self._on_property_changed(self.PELLET_VERSION_PROPERTY, "", None)
 
-    def _device_property_changed(self, name: str, value, _):
+    def _can_device_property_changed(self, name: str, value, _):
         conn_dev = self._device
         if conn_dev is None:
             return
-        dev = conn_dev.device
-        if dev is None:
+        can_dev = conn_dev.device
+        if can_dev is None:
             return
-        if name == dev.UUID_ACK_TIMEOUT_ENGAGED:
-            self.property_changed(self.DEVICE_ACK_TIMEOUT_ENGAGED, value, _)
+        if name == can_dev.UUID_ACK_TIMEOUT_ENGAGED:
+            self.device_ack_timeout_engaged = value
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
