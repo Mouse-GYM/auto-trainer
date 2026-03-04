@@ -20,6 +20,8 @@ import verboselogs
 import coloredlogs
 from datetime import datetime
 
+from autotrainer.core.multiproc import get_mp_ctx
+
 logger = logging.getLogger(__name__)
 
 _LogLevelT = Union[str, int]
@@ -123,7 +125,7 @@ def make_console_handler(cfg: LogConfig):
 def listener_command(func):
     """Relay the given func to the log queue listener proc side"""
     @functools.wraps(func)
-    def wrapped(self, *args, **kwargs):
+    def wrapped(self: "LogQueueListenerProc", *args, **kwargs):
         self._send_command(func.__name__, (args, kwargs))
     return wrapped
 
@@ -137,13 +139,19 @@ class LogQueueListenerProc(Process):
     ):
         super().__init__(daemon=True)
         self._queue = log_queue
-        self._command_queue = multiprocessing.Queue()
+        mp_ctx = get_mp_ctx()
+        self._command_queue = mp_ctx.Queue()
+        self._command_executed = mp_ctx.Event()
         self._log_config = log_config
+        self._listener: Optional[WithThreadIdQueueListener] = None
         self._console_handler = None
-        self._listener = None
+        self._file_handler: Optional[logging.FileHandler] = None
 
     def _send_command(self, cmd, data):
+        self._command_executed.clear()
         self._command_queue.put((cmd, data))
+        if not self._command_executed.wait(5):
+            logger.warning("command %s timeout after 5s, skipping waiting")
 
     @listener_command
     def set_handler_level(self, name, level):
@@ -168,8 +176,8 @@ class LogQueueListenerProc(Process):
     def add_file_handler(self, path):
         """Add file handler to path"""
 
-    def _add_file_handler(self, path):
-        logger.info("Adding file handler ...")
+    def _add_file_handler(self, path: Path):
+        logger.info("Adding file handler to %s", path)
         file_handler = logging.FileHandler(path)
         file_handler.addFilter(thread_id_filter)
         file_handler.setFormatter(
@@ -181,8 +189,27 @@ class LogQueueListenerProc(Process):
         )
         file_handler.setLevel(verboselogs.SPAM + 1)  # writes everything up to DEBUG which reaches it
         self._listener.handlers += (file_handler,)
+        self._file_handler = file_handler
         logger.info("logging.root.handlers=%s ; listener_handlers=%s",
                     logging.root.handlers, self._listener.handlers)
+        return file_handler
+
+    @listener_command
+    def switch_file_handler(self, path: Path):
+        """Switch current, or set new, file handler to path"""
+
+    def _switch_file_handler(self, path: Path):
+        logger.info("Switching file handler to %s", path)
+        prev = self._file_handler
+        self._add_file_handler(path)
+        if prev is not None:
+            logger.verbose("removing previous handler %s", prev)
+            self._listener.handlers = tuple(
+                handler for handler in self._listener.handlers
+                if handler != prev
+            )
+            logger.debug("new handlers: %s", self._listener.handlers)
+            prev.close()
 
     #
 
@@ -218,6 +245,7 @@ class LogQueueListenerProc(Process):
         install_log_exception_hook()
 
         command_q = self._command_queue
+        command_executed = self._command_executed.set
         while True:
             try:
                 data = command_q.get()
@@ -230,11 +258,14 @@ class LogQueueListenerProc(Process):
             meth = getattr(self, f"_{cmd}", None)
             if meth is None:
                 logger.warning("unknown command: %sr", cmd)
+                command_executed()
                 continue
             try:
                 meth(*args, **kwargs)
             except Exception as err:
                 logger.error("Failed executing cmd %r: %s", cmd, err)
+            finally:
+                command_executed()
         # end while True
         listener.stop()
 
@@ -652,15 +683,15 @@ def get_log_file_location(*, log_base_dir: str = "", full_format: str):
     return log_location
 
 
-def set_log_location(device: str):
-    log_file = get_log_file_location(
-        full_format=f"{{log_location}}/{{date_stamp}}/{device}/{{date_stamp}}_{device}_{{idx:03d}}.log"
-    )
+_prev_file_handler: Optional[logging.FileHandler] = None
+
+def set_log_location(log_file: Path):
+    global _prev_file_handler
     logger.verbose("Setting log file to %s", log_file)
     #
     q_listener = get_log_queue_listener()
     if q_listener is not None:
-        q_listener.add_file_handler(log_file)
+        q_listener.switch_file_handler(log_file)
     else:
         file_handler = logging.FileHandler(log_file)
         file_handler.addFilter(thread_id_filter)
@@ -673,6 +704,9 @@ def set_log_location(device: str):
         )
         file_handler.setLevel(verboselogs.SPAM + 1)  # writes everything up to DEBUG which reaches it
         logging.root.addHandler(file_handler)
+        if _prev_file_handler is not None:
+            logging.root.removeHandler(_prev_file_handler)
+        _prev_file_handler = file_handler
 
 
 # finally:
