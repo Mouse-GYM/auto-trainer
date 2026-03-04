@@ -46,10 +46,7 @@ class AudioSpectrumThrashMonitor(BaseDetector):
         super().__init__()
         self._config = config
         self._values_history = deque()
-        self._cur_detected = False
         perf_now = get_perf_now()
-        self._last_engaged_perf_c: float = perf_now
-        self._last_disengaged_perf_c: float = perf_now
         self._when_start_detecting: Optional[float] = None
         self._t_perf_next_report: float = perf_now
         self._when_next_check: float = 0
@@ -63,29 +60,22 @@ class AudioSpectrumThrashMonitor(BaseDetector):
         self._config = value
 
     @property
-    def is_thrashing_detected(self):
-        return self._cur_detected
+    def thrashing_detected(self):  # synonym for is_engaged
+        return self.is_engaged
 
-    @is_thrashing_detected.setter
-    def is_thrashing_detected(self, value):
-        prev, self._cur_detected = self._cur_detected, value
+    @thrashing_detected.setter
+    def thrashing_detected(self, value):
+        self.is_engaged = value
+
+    @BaseDetector.is_engaged.setter
+    def is_engaged(self, value):
+        prev = self._is_engaged
+        # super().is_engaged = value  # use .fset on property for this:
+        BaseDetector.is_engaged.fset(self, value)
         if prev == value:
             return
-        perf_now = get_perf_now()
-        if value:
-            self._last_engaged_perf_c = perf_now
-        else:
-            self._last_disengaged_perf_c = perf_now
         self.property_changed(self.AUDIO_THRASHING_DETECTED_PROPERTY, value, prev)
         self.post_detector_event(ApiDetectorKind.audioThrash, value)
-
-    @property
-    def engaged_age(self):
-        return (get_perf_now() if self._cur_detected else self._last_disengaged_perf_c) - self._last_engaged_perf_c
-
-    @property
-    def disengaged_age(self):
-        return (get_perf_now() if not self._cur_detected else self._last_engaged_perf_c) - self._last_disengaged_perf_c
 
     def _update_history(self, values, when, index):
         hist = self._values_history
@@ -131,10 +121,10 @@ class AudioSpectrumThrashMonitor(BaseDetector):
         above_threshold = list(map(is_above_thresh, itertools.chain(*(v[0] for v in self._values_history))))
         percent = 100 * sum(map(int, above_threshold)) / len(above_threshold)
         detected = percent >= cfg.threshold_percent or avg_value >= cfg.threshold_db
-        if detected != self.is_thrashing_detected:
+        if detected != self.thrashing_detected:
             logger.verbose("Thrashing change detected: %s avg=%.1f above_pc=%.1f ; %s",
                            detected, avg_value, percent, values_history)
-            self.is_thrashing_detected = detected
+            self.thrashing_detected = detected
             if detected:
                 while len(values_history) > 1:
                     values_history.popleft()
