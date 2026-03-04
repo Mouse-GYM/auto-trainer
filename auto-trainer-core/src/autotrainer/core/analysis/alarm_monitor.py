@@ -165,9 +165,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.GLOBAL_ANIMAL_PRESENCE_ENGAGED, value, prev)
-        # ApiAlarmKind.animalImmobile
-        # self.post_alarm_event(ApiAlarmKind.animalImmobile, value, self._config.use_global_animal_presence)
-        self.post_detector_event(ApiDetectorKind.animalImmobile, value, self._config.use_global_animal_presence)
+        self.post_alarm_event(ApiAlarmKind.animalImmobile, value, self._config.use_global_animal_presence)
     #
     def _expire_audio_load_cell(self, perf_now):
         cfg = self._config
