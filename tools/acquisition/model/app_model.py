@@ -12,7 +12,7 @@ import threading
 import time
 import warnings
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Callable, Any, Union
 
@@ -33,6 +33,8 @@ from autotrainer.core.project import ProjectDependentProtol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, no_op_timer
+from autotrainer.core.logging import get_verbose_logger, set_log_location
+from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, DaemonTimer
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.project.project_info import DATE_FORMAT, DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
@@ -73,6 +75,7 @@ logger = get_verbose_logger(__name__)
 
 # allow be patched from tests
 _recording_age_enough_timer = make_daemon_timer
+_daily_timer = make_daemon_timer
 
 
 def _failed_camera_template(name: str, error: str):
@@ -201,10 +204,9 @@ class AppModel(ObservableObject):
         system_message_handler: Optional[SystemMessageHandler] = None,
         system_machine: Optional[SystemMachine] = None,
     ):
-        logger.notice("Creating app_model with version %s", app_version)
-
         super().__init__(('on_error', 'configuration_loaded_event'))
 
+        self._app_version = app_version
         # self._app_lock = threading.RLock()  using BehaviorAlgo lock
 
         def log_on_error(title, msg):
@@ -225,7 +227,20 @@ class AppModel(ObservableObject):
         self._loaded_configuration: Optional[SystemConfiguration] = None
         self._loaded_config_dir_path = Path()
 
-        self._app_version = app_version
+        self._output_location = PersistenceConfiguration.get_default_output_path().as_posix()
+        self._is_recording_trigger = False
+        self._project_info: Optional[ProjectInfo] = None
+        self._animal_name = ""
+        self._notes = ""
+        self._left_camera = self._right_camera = None
+
+        self._timer_daily: DaemonTimer = _daily_timer(0, self._on_daily_timer)
+        self._current_day: Optional[date] = None
+        self._log_file_path: Optional[Path] = None
+
+        self.set_log_location()
+
+        logger.notice("Creating app_model with version %s", app_version)
 
         self._training_mode = TrainingMode.MANUAL
         self._training_plan: Optional[TrainingPlan] = None
@@ -305,12 +320,6 @@ class AppModel(ObservableObject):
             system_machine=system_machine,
         )
 
-        self._output_location = ""
-        self._is_recording_trigger = False
-        self._project_info: Optional[ProjectInfo] = None
-        self._animal_name = ""
-        self._notes = ""
-
         self._models: List[ProjectDependentProtol] = [
             self._left_camera,
             self._right_camera,
@@ -352,6 +361,29 @@ class AppModel(ObservableObject):
             timer.start()
             logger.verbose("Scheduled send_system_status in %.1f seconds", delay)
         send_system_status_and_reschedule()
+
+    @BehaviorAlgorithm.relay_func(wait=False)
+    def _on_daily_timer(self):
+        logger.notice("Daily timer triggered")
+        self._timer_daily.cancel()  # in case of
+        prev_day = self._current_day
+        assert prev_day is not None
+        prj = self._project_info
+        assert prj is not None  # should never be None
+        # if prj is None:
+        #     prj = self.make_project_info()
+        new_day = prev_day + timedelta(days=1)
+        today_midnight = datetime.combine(new_day, datetime.min.time())
+        #
+        new_log_path = prj.get_log_file_path(today_midnight)
+        self.set_log_location(new_log_path)
+        #
+        self._current_day = new_day
+        delay = (today_midnight + timedelta(days=1) - datetime.now()).total_seconds()
+        # delay = 30  # uncomment for manual testing purpose
+        timer = self._timer_daily = _daily_timer(delay, self._on_daily_timer)
+        timer.start()
+        logger.verbose("Created new daily timer in %.1f seconds", delay)
 
     @property
     def app_lock(self) -> threading.RLock:
@@ -843,12 +875,14 @@ class AppModel(ObservableObject):
         return animal
 
     def make_project_info(self):
+        left = None if self._left_camera is None else self._left_camera.name
+        right = None if self._right_camera is None else self._right_camera.name
         return ProjectInfo(
             root=self.output_location,
             device_id=self._preferences.serial_number,
             ensure_exists=True,
-            camera_1=self._left_camera.name,
-            camera_2=self._right_camera.name,
+            camera_1=left,
+            camera_2=right,
             mp_manager=self._mp_manager,  # required,
             # so to have shared values that can be put to multiprocess queue.
             # The active ProjectInfo must effectively be shared across all processes/threads.
@@ -1111,6 +1145,21 @@ class AppModel(ObservableObject):
         plans_path = Path(self._preferences.configuration_location).joinpath("training/protocols")
         return plans_path
 
+    def set_log_location(self, location: Optional[Path] = None):
+        if location is None:
+            prj = self._project_info
+            if prj is None:
+                prj = self.make_project_info()
+            location = prj.get_log_file_path()
+        prev_loc = self._log_file_path
+        if location == prev_loc:
+            return
+        logger.info("switching to log location %s", location)
+        set_log_location(location)
+        self._log_file_path = location
+        if prev_loc is not None:
+            logger.success("Switched from %s to %s ; app_version=%s", prev_loc, location, self._app_version)
+
     def load_configuration(self, location: Optional[str] = None):
         if location is None:
             # Check to see if there is a file in the new default location.  If so, use it.
@@ -1137,12 +1186,24 @@ class AppModel(ObservableObject):
             configuration = SystemConfiguration.load_yaml_file(file_path)
 
         if configuration is None:
-            configuration = SystemConfiguration()
             logger.info("using default configuration")
+            configuration = SystemConfiguration()
             file_path = SystemConfiguration.make_default_yaml_config_path(
                 Path(get_default_configuration_location()))
         else:
             logger.info("using configuration from %r", file_path.as_posix())
+
+        assert isinstance(configuration, SystemConfiguration)
+
+        self.output_location = configuration.persistence.output_location
+
+        # must be after assign of self.output_location:
+        prev_prj = self._project_info
+        prj = self._project_info = self.make_project_info()
+        prev_log_path = None if prev_prj is None else prev_prj.get_log_file_path(auto_new=False)
+        log_path = prj.get_log_file_path(auto_new=False)
+        if log_path != prev_log_path:
+            self.set_log_location(log_path)
 
         prebuffer_duration = 0
 
@@ -1165,6 +1226,17 @@ class AppModel(ObservableObject):
         if (camera := configuration.get_camera(CameraId.Web)) is not None:
             self._top_camera.load_configuration(camera)
 
+        # re-create project-info after load of cams config
+        prev_prj = self._project_info
+        prj = self._project_info = self.make_project_info()
+        prev_log_path, log_path = log_path, prj.get_log_file_path(auto_new=False)
+        if log_path != prev_log_path:
+            self.set_log_location(log_path)
+
+        # Also ensure children models have also same one:
+        for model in self._models:
+            model.project = prj
+
         if prebuffer_duration > 0:
             prebuffer_scale = os.getenv("AUTOTRAINER_PREBUFFER_SCALE")
             if prebuffer_scale is not None:
@@ -1176,10 +1248,7 @@ class AppModel(ObservableObject):
         self._behavior.algorithm.record_prebuffer_duration = prebuffer_duration
 
         self.inference.load_configuration(configuration.inference)
-
         self.behavior.load_configuration(configuration.behavior)
-
-        self.output_location = configuration.persistence.output_location
 
         # only at the end:
         self._loaded_configuration = configuration
@@ -1201,8 +1270,6 @@ class AppModel(ObservableObject):
         plans_path.mkdir(parents=True, exist_ok=True)  # observer requires the path/dir to exists, otherwise exception
         observer.schedule(self._plans_files_event_handler, path=plans_path.resolve(), recursive=False)
         observer.start()
-
-        self._project_info = self.make_project_info()
 
         return True
 
@@ -1238,7 +1305,22 @@ class AppModel(ObservableObject):
         conf.save_default(loc)
 
     def on_activated(self):
-        pass
+        with self.app_lock:
+            self._on_activated()
+
+    def _on_activated(self):
+        now = datetime.now()
+        today = self._current_day = now.date()
+        delay = (
+            datetime.combine(today, datetime.min.time()) + timedelta(days=1, seconds=1)
+            - now
+        ).total_seconds()
+        prev = self._timer_daily
+        prev.cancel()
+        # delay = 45  # uncomment for manual testing
+        timer = self._timer_daily = _daily_timer(delay, self._on_daily_timer)
+        timer.start()
+        logger.notice("Created new daily timer in %.1f seconds", delay)
 
     def on_close(self):
         logger.debug("AppModel.on_close")
@@ -1246,7 +1328,9 @@ class AppModel(ObservableObject):
         for timer in (
             self._timer_send_status,
             self._timer_recording_age_enough,
+            self._timer_daily,
         ):
+            logger.debug("stopping timer %s", timer)
             timer.cancel()
 
         self.capture_stop()  # ensure
@@ -1573,17 +1657,14 @@ class AppModel(ObservableObject):
 
         configuration = self._create_configuration()
 
-        try:
-            with open(file_name + ".json", "w") as file:
-                out = info.copy()
-                out["configuration"] = asdict(configuration)
-                json.dump(out, file)
-            with open(file_name + ".yaml", "w") as file:
-                out = info.copy()
-                out["configuration"] = configuration
-                yaml.dump(out, file, Dumper=SystemConfigurationDumper, sort_keys=False)
-        except Exception as ex:
-            logger.error(ex)
+        out = info.copy()
+        out["configuration"] = asdict(configuration)
+        with open(file_name + ".json", "w") as file:
+            json.dump(out, file)
+        out = info.copy()
+        out["configuration"] = configuration
+        with open(file_name + ".yaml", "w") as file:
+            yaml.dump(out, file, Dumper=SystemConfigurationDumper, sort_keys=False)
 
     #
 
