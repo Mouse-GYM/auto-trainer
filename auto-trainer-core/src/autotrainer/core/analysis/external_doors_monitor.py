@@ -16,7 +16,7 @@ logger = get_verbose_logger(__name__)
 
 class DoorState(NamedTuple):
     open: Optional[bool]
-    perf_c: float  # perf_c when last state change
+    perf_c: float
 
 
 FrontDoor = SystemStatusMessageKind.FRONT_DOOR
