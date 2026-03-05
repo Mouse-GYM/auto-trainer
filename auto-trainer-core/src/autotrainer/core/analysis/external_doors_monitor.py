@@ -71,14 +71,12 @@ def _make_doors_state():
 
 class ExternalDoorsMonitor(BaseDetector):
 
+    CONFIG = "config"
+
     def __init__(self, config: ExternalDoorsMonitorConfig):
         super().__init__()
         self._config = config
         self._doors_state = _make_doors_state()
-
-    #
-
-    CONFIG = "config"
 
     @property
     def config(self) -> ExternalDoorsMonitorConfig:
