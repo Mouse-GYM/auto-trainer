@@ -167,7 +167,7 @@ class BaseDetector(ObservableObject):
             thread.join(3)
             self._logger.verbose("joined check thread %s", thread)
             if thread.is_alive():
-                logger.warning("check thread still alive, but continuing anyway")
+                self._logger.warning("check thread still alive, but continuing anyway")
             self._thread_queue = None
 
     def restart(self):

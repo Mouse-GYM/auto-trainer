@@ -1843,11 +1843,6 @@ class AppModel(ObservableObject):
                 is_active=audio_mon.thrashing_detected,
             ),
             ApiDetectorStatus(
-                detector_id=ApiDetectorKind.animalImmobile,
-                is_enabled=presence_mon.running,
-                is_active=presence_mon.is_engaged,
-            ),
-            ApiDetectorStatus(
                 detector_id=ApiDetectorKind.pelletMisplaced,
                 is_enabled=misplaced_mon.running,
                 is_active=misplaced_mon.is_engaged,
