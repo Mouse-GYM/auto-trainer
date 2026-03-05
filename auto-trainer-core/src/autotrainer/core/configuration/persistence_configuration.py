@@ -1,15 +1,22 @@
 from dataclasses import dataclass
+from typing import ClassVar
 
-import humps
 from typing_extensions import Self
-import yaml
+from pathlib import Path
 
 from autotrainer.core import make_camelize_representer, make_decamelize_constructor
 
 
 @dataclass
 class PersistenceConfiguration:
+
+    DEFAULT_OUTPUT_PATH: ClassVar[Path] = Path("~/Documents/RawDataLocal")
+
     output_location: str = ""
+
+    @classmethod
+    def get_default_output_path(cls) -> Path:
+        return cls.DEFAULT_OUTPUT_PATH.expanduser()
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
