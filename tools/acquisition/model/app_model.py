@@ -289,9 +289,12 @@ class AppModel(ObservableObject):
         #
         self._system_message_handler = SystemMessageHandler(self._system_message_queue,
                                                             sensor_analysis=sensor_analysis) if system_message_handler is None else system_message_handler
+        assert self._system_message_handler.analysis is sensor_analysis, \
+            "something very wrong: sensor_analysis different in system_message_handler"
         self._system_message_handler.start()
 
-        self._hardware = HardwareModel(self._system_message_handler)
+        self._hardware = HardwareModel(self._system_message_handler,
+                                       sensor_analysis=sensor_analysis)
 
         self._inference_queue = None
 

@@ -30,6 +30,7 @@ class EmergencyReason(str, enum.Enum):
     IN_CAGE_AFTER_EXIT_TUNNEL = "IN_CAGE_AFTER_EXIT_TUNNEL"
     DOORS_OPEN = "DOORS_OPEN"
     GLOBAL_ANIMAL_PRESENCE = "GLOBAL_ANIMAL_PRESENCE"
+    DEVICE_COMM_ERROR = "DEVICE_COMM_ERROR"
 
 
 @dataclasses.dataclass
@@ -49,6 +50,7 @@ class EmergencyAlarmMonitor(BaseDetector):
     AUDIO_LOAD_CELL_THRASHING_ENGAGED = "audio_load_cell_thrashing_engaged"
     EXT_DOORS_OPEN_ENGAGED = "ext_doors_open_engaged"
     GLOBAL_ANIMAL_PRESENCE_ENGAGED = "global_animal_presence_engaged"
+    DEVICE_COMM_ERROR_ENGAGED = "device_comm_error_engaged"
 
     use_daemon = True
 
@@ -77,6 +79,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         self._presence_in_cage_after_exit_tunnel_engaged = False
         self._ext_doors_open_engaged = False
         self._global_animal_presence_engaged = False
+        self._device_comm_error_engaged = False
         load_cell_monitor.property_changed += self._load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._audio_prop_changed
         def global_animal_presence_prop_changed(name, value, _):
@@ -168,6 +171,19 @@ class EmergencyAlarmMonitor(BaseDetector):
         # ApiAlarmKind.animalImmobile
         # self.post_alarm_event(ApiAlarmKind.animalImmobile, value, self._config.use_global_animal_presence)
         self.post_detector_event(ApiDetectorKind.animalImmobile, value, self._config.use_global_animal_presence)
+
+    @property
+    def device_comm_error_engaged(self):
+        return self._device_comm_error_engaged
+
+    @device_comm_error_engaged.setter
+    def device_comm_error_engaged(self, value):
+        # is set/unset from hardware model
+        prev, self._device_comm_error_engaged = self._device_comm_error_engaged, value
+        if value == prev:
+            return
+        self.property_changed(self.DEVICE_COMM_ERROR_ENGAGED, value, prev)
+
     #
     def _expire_audio_load_cell(self, perf_now):
         cfg = self._config
@@ -271,6 +287,9 @@ class EmergencyAlarmMonitor(BaseDetector):
         if self._global_animal_presence_engaged and cfg.use_global_animal_presence:
             reasons.add(EmergencyReason.GLOBAL_ANIMAL_PRESENCE)
         #
+        if self._device_comm_error_engaged and cfg.use_device_comm_error:
+            reasons.add(EmergencyReason.DEVICE_COMM_ERROR)
+        #
         is_emergency = len(reasons) > 0
         #
         if is_emergency and not self._is_engaged:
@@ -299,6 +318,7 @@ class EmergencyAlarmMonitor(BaseDetector):
                  or (prev_r == EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL and cfg.auto_resume_on_presence_seen_after_exit_tunnel)
                  or (prev_r == EmergencyReason.DOORS_OPEN and cfg.auto_resume_on_external_doors_close)
                  or (prev_r == EmergencyReason.GLOBAL_ANIMAL_PRESENCE and cfg.auto_resume_on_global_animal_presence)
+                 or (prev_r == EmergencyReason.DEVICE_COMM_ERROR and cfg.auto_resume_on_device_comm_error)
                 ):
                     check_reasons.remove(prev_r)
             #
@@ -322,6 +342,9 @@ class EmergencyAlarmMonitor(BaseDetector):
                 ) or (
                     prev_r == EmergencyReason.GLOBAL_ANIMAL_PRESENCE
                     and not cfg.auto_resume_on_global_animal_presence
+                ) or (
+                    prev_r == EmergencyReason.DEVICE_COMM_ERROR
+                    and not cfg.auto_resume_on_device_comm_error
                 )):
                     reasons.add(prev_r)
             if reasons != self._engaged_reasons:

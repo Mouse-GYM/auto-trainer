@@ -7,11 +7,11 @@ from uuid import UUID, uuid4
 from typing import Optional, Tuple, Dict, Union
 
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
-                              get_verbose_logger, Motor)
+                              get_verbose_logger, Motor, SensorAnalysis)
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
-                                StepperConfig, ServoConfig)
+                                StepperConfig, ServoConfig, Device)
 
 logger = get_verbose_logger(__name__)
 
@@ -36,6 +36,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     SLIDE_DOOR_PROPERTY = "slide_door"
 
     DEVICE_ACK_TIMEOUT_ENGAGED = "device_ack_timeout_engaged"
+    DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED = "device_pellet_status_timeout_engaged"
+    DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED = "device_tunnel_status_timeout_engaged"
 
     SEND_X = "send_x"
     SEND_Y = "send_y"
@@ -43,11 +45,18 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     SEND_XYZ = "send_xyz"
 
     def __init__(
-        self, message_handler: MessageHandler,
+        self,
+        message_handler: MessageHandler,
+        sensor_analysis: SensorAnalysis,
     ):
         super().__init__()
 
         self._device: Optional[DeviceConnectionProtocol] = None
+        self._can_device: Optional[CanDevice] = None
+        self._sensor_analysis = sensor_analysis
+        self._device_uuid_ack_timeout_engaged = False
+        self._device_pellet_status_timeout_engaged = False
+        self._device_tunnel_status_timeout_engaged = False
 
         self._pending_tokens: Dict[UUID, Tuple[SystemCommandKind, float]] = {}
 
@@ -261,7 +270,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
         # configured to generate messages as frequently as the real device.
         buffer_size = 10 if HAVE_CAN_DEVICE else 1
-        can_device = CanDevice(buffer_size=buffer_size)
+        #
+        can_device = self._can_device = CanDevice(buffer_size=buffer_size)
         can_device.property_changed += self._device_property_changed
 
         device_conn = self._device = DeviceConnection(can_device, cmd_queue, name="can-device")
@@ -280,6 +290,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def disconnect(self):
         logger.verbose("disconnecting ..")
+        can_dev = self._can_device
+        if can_dev is not None:
+            can_dev.property_changed -= self._device_property_changed
+            self._can_device = None
         dev = self._device
         if dev is not None:
             dev.request_disconnect()
@@ -289,15 +303,31 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, "", None)
         self._on_property_changed(self.PELLET_VERSION_PROPERTY, "", None)
 
-    def _device_property_changed(self, name: str, value, _):
-        conn_dev = self._device
-        if conn_dev is None:
-            return
-        dev = conn_dev.device
-        if dev is None:
-            return
-        if name == dev.UUID_ACK_TIMEOUT_ENGAGED:
-            self.property_changed(self.DEVICE_ACK_TIMEOUT_ENGAGED, value, _)
+    def _device_property_changed(self, name: str, value, prev_value):
+        logger.debug("_device_property_changed: %s : %s -> %s", name, prev_value, value)
+        props = Device
+        # only translate/relay what we want:
+        is_dev_comm_err_possible = False
+        if name == props.UUID_ACK_TIMEOUT_ENGAGED:
+            self._device_uuid_ack_timeout_engaged = value
+            self.property_changed(self.DEVICE_ACK_TIMEOUT_ENGAGED, value, prev_value)
+            is_dev_comm_err_possible = True
+        elif name == props.PELLET_STATUS_TIMEOUT_ENGAGED:
+            self._device_pellet_status_timeout_engaged = value
+            self.property_changed(self.DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED, value, prev_value)
+            is_dev_comm_err_possible = True
+        elif name == props.TUNNEL_STATUS_TIMEOUT_ENGAGED:
+            self._device_tunnel_status_timeout_engaged = value
+            self.property_changed(self.DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED, value, prev_value)
+            is_dev_comm_err_possible = True
+        if is_dev_comm_err_possible:
+            engaged = any((
+                self._device_uuid_ack_timeout_engaged,
+                self._device_tunnel_status_timeout_engaged,
+                self._device_pellet_status_timeout_engaged,
+            ))
+            self._sensor_analysis.emergency_alarm_monitor.device_comm_error_engaged = engaged
+            self._sensor_analysis.emergency_alarm_monitor.check_state()
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
