@@ -4,8 +4,6 @@ import threading
 import time
 from collections import namedtuple
 from typing import Dict, Tuple, Optional, NamedTuple
-from typing_extensions import TypeAlias
-
 
 from autotrainer.api.api_event_kind import ApiDetectorKind
 from autotrainer.core import ObservableObject, get_perf_now, EventManager, ApiEventKind
@@ -20,8 +18,6 @@ class DoorState(NamedTuple):
     open: Optional[bool]
     perf_c: float  # perf_c when last state change
 
-
-DoorsStateT: TypeAlias = Dict[SystemStatusMessageKind, DoorState]
 
 FrontDoor = SystemStatusMessageKind.FRONT_DOOR
 SlidingDoor = SystemStatusMessageKind.DRAWER_DOOR
