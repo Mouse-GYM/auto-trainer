@@ -29,7 +29,7 @@ ActiveDoors = {
 }
 
 
-_door_2_detector_kind = {
+_door_2_api_detector_kind = {
     FrontDoor: ApiDetectorKind.frontDoor,
     SlidingDoor: ApiDetectorKind.slidingDoor,
 }
@@ -40,22 +40,20 @@ class DoorsState:
     front: DoorState
     sliding: DoorState
 
-    def from_kind(self, kind: SystemStatusMessageKind) -> DoorState:
-        s = {
-            FrontDoor: self.front,
-            SlidingDoor: self.sliding
-        }.get(kind, None)
-        if s is None:
-            raise RuntimeError(f"Invalid door kind: {kind}")
-        return s
+    def get_door(self, kind: SystemStatusMessageKind) -> DoorState:
+        if kind == FrontDoor:
+            return self.front
+        elif kind == SlidingDoor:
+            return self.sliding
+        raise ValueError(f"Invalid door kind: {kind}")
 
-    def set_from_kind(self, kind: SystemStatusMessageKind, state: DoorState):
+    def set_door(self, kind: SystemStatusMessageKind, state: DoorState):
         if kind == FrontDoor:
             self.front = state
         elif kind == SlidingDoor:
             self.sliding = state
         else:
-            raise RuntimeError(f"Invalid door kind: {kind}")
+            raise ValueError(f"Invalid door kind: {kind}")
 
 
 def _make_doors_state():
@@ -100,7 +98,7 @@ class ExternalDoorsMonitor(BaseDetector):
         min_delay = math.inf
         new_engaged = False
         for door_kind in ActiveDoors:
-            door_open, door_last_perf_c = doors_state.from_kind(door_kind)
+            door_open, door_last_perf_c = doors_state.get_door(door_kind)
             if door_open:
                 r = cfg.trigger_open_delay - (perf_now - door_last_perf_c)
                 if r < 0:
@@ -118,11 +116,11 @@ class ExternalDoorsMonitor(BaseDetector):
             if door_kind not in ActiveDoors:
                 logger.warning("Got unexpected door message: %s", door_kind)
                 return
-        state = self._doors_state.from_kind(door_kind)
+        state = self._doors_state.get_door(door_kind)
         if is_open == state.open:
             return
         logger.notice("%s: is_open: %s -> %s", door_kind, state.open, is_open)
         new_perf_c = get_perf_now() if is_open else state.perf_c
-        self._doors_state.set_from_kind(door_kind, DoorState(is_open, new_perf_c))
+        self._doors_state.set_door(door_kind, DoorState(is_open, new_perf_c))
         self.check_state()
-        self.post_detector_event(_door_2_detector_kind[door_kind], is_open)
+        self.post_detector_event(_door_2_api_detector_kind[door_kind], is_open)
