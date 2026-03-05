@@ -493,11 +493,6 @@ class CanDevice(Device):
                 if not uuid_ack_timeout_engaged:
                     uuid_ack_timeout_engaged = True
                     self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, True, False)
-                    EventManager.default().post_event_content(ApiEventKind.detectorChanged, context={
-                        "detector_id": ApiDetectorKind.deviceAckTimeOut,
-                        "is_active": True,
-                        "is_enabled": True,
-                    })
                 logger.warning("timeout waiting ack previous command: %s ; context=%s ; pending_uuid=%s",
                                self._pending_kind, self._pending_context, pending_uuid)
                 pending_uuid = None

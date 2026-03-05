@@ -8,10 +8,12 @@ from typing import Optional, Tuple, Dict, Union
 
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor)
-from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.core.message import SystemDataArgsKwargs
+
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 StepperConfig, ServoConfig)
+
+from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 
 logger = get_verbose_logger(__name__)
 
@@ -95,7 +97,22 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     @device_ack_timeout_engaged.setter
     def device_ack_timeout_engaged(self, value):
         prev, self._device_ack_timeout_engaged = self._device_ack_timeout_engaged, value
-        self._on_property_changed(self.DEVICE_ACK_TIMEOUT_ENGAGED, value, prev)
+        if prev == value:
+            return
+        self.property_changed(self.DEVICE_ACK_TIMEOUT_ENGAGED, value, prev)
+        enabled = False
+        dev_conn = self._device
+        if dev_conn is not None:
+            dev = dev_conn.device
+            if dev is not None:
+                iface = dev.device_interface
+                enabled = iface is not None and iface.is_open
+        # could be in app_model or system_machine, in react property changed, but ok here too:
+        EventManager.default().post_event_content(ApiEventKind.detectorChanged, context={
+            "detector_id": ApiDetectorKind.deviceAckTimeOut,
+            "is_active": value,
+            "is_enabled": enabled,
+        })
 
     @property
     def send_x(self):
