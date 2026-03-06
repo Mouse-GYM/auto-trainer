@@ -1,7 +1,7 @@
 import importlib
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from unittest import mock
 
 import pytest
@@ -129,6 +129,25 @@ def test_fast_path(root):
     assert prj.session == 2  # still
     prj.calculate_next_session_index()
     assert prj.session == 4, "slow path taken"
+
+
+def test_new_day_if_output_dir_exists(root, monkeypatch):
+    now = datetime.now()
+    prj = ProjectInfo(root=root, when=now, session=100)
+    m = mock.MagicMock()
+    from autotrainer.core.project.project_info import _get_datetime_now
+    monkeypatch.setattr(f"{_get_datetime_now.__module__}."
+                        f"{_get_datetime_now.__qualname__}", m)
+    tomorrow = now + timedelta(days=1)
+    m.return_value = tomorrow
+    prj.calculate_next_session_index()
+    assert prj.when == tomorrow
+    assert prj.session == 1
+    # now retry again, should get 2:
+    prj = ProjectInfo(root=root, when=now, session=100)
+    prj.calculate_next_session_index()
+    assert prj.when == tomorrow
+    assert prj.session == 2
 
 
 def test_reach_event(project_info):

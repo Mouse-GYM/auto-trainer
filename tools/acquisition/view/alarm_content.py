@@ -37,6 +37,9 @@ class AlarmContent(ContentWidget):
     use_global_animal_presence = Signal(bool)
     global_animal_presence_changed = Signal(bool)
 
+    use_device_comm_error_changed = Signal(bool)
+    device_comm_error_status_changed = Signal(bool)
+
     #
 
     load_cell_thrashing_changed = Signal(bool, name="load_cell_thrashing_changed")
@@ -123,6 +126,14 @@ class AlarmContent(ContentWidget):
         self.use_external_door_changed.connect(icon.setInUse)
         self.use_external_door_changed.emit(emergency_alarm_cfg.use_external_doors_open)
         self.external_door_status_changed.connect(icon.setStatus)
+
+        icon = self._device_comm_error_status = make_alarm_icon("alarm-ext-doors")
+        label = self._device_comm_error_label = make_label("Device Comm. Error:")
+        self.use_device_comm_error_changed.connect(label.setEnabled)
+        self.use_device_comm_error_changed.connect(icon.setInUse)
+        self.use_device_comm_error_changed.emit(emergency_alarm_cfg.use_device_comm_error)
+        self.device_comm_error_status_changed.connect(icon.setStatus)
+        form_layout_alarms.addRow(label, icon)
 
         if GlobalAnimalPresenceMonitor.feature_enabled:
             icon = self._animal_missing_status = make_alarm_icon(name="animal-immobile")
@@ -233,6 +244,7 @@ class AlarmContent(ContentWidget):
             self.use_presence_in_cage_after_exit_tunnel_changed.emit(value.use_presence_missing_after_exit_tunnel)
             self.use_external_door_changed.emit(value.use_external_doors_open)
             self.use_global_animal_presence.emit(value.use_global_animal_presence)
+            self.use_device_comm_error_changed.emit(value.use_device_comm_error)
 
         elif name == p.IS_ENGAGED:
             if not value:
@@ -241,6 +253,7 @@ class AlarmContent(ContentWidget):
                 changed(p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED, mon.presence_in_cage_after_exit_tunnel_engaged, None)
                 changed(p.AUDIO_LOAD_CELL_THRASHING_ENGAGED, mon.audio_load_cell_thrashing_engaged, None)
                 changed(p.EXT_DOORS_OPEN_ENGAGED, mon.ext_doors_open_engaged, None)
+                changed(p.DEVICE_COMM_ERROR_ENGAGED, mon.device_comm_error_engaged, None)
 
         elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
             if not value and is_pause_emergency and not cfg.auto_resume_on_presence_seen_after_exit_tunnel:
@@ -256,6 +269,11 @@ class AlarmContent(ContentWidget):
             if not value and is_pause_emergency and not cfg.auto_resume_on_external_doors_close:
                 return
             self.external_door_status_changed.emit(value)
+
+        elif name == p.DEVICE_COMM_ERROR_ENGAGED:
+            if not value and is_pause_emergency and not cfg.auto_resume_on_device_comm_error:
+                return
+            self.device_comm_error_status_changed.emit(value)
 
     @invoke_method
     def _global_animal_presence_property_changed(self, name, value, _):
