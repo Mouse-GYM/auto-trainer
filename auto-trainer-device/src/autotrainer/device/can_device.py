@@ -71,7 +71,8 @@ from .device_interface import (
 )
 
 
-_similar_data_refresh_delay = os.getenv("AUTOTRAINER_DEVICE_SIMILAR_DATA_REFRESH_DELAY") or 5
+# this is used to reduce the rate of messages sent to "clients/listeners" to the property changed callback:
+_similar_data_refresh_delay = os.getenv("AUTOTRAINER_DEVICE_SIMILAR_DATA_REFRESH_DELAY") or 2.5
 _similar_data_refresh_delay = float(_similar_data_refresh_delay)
 
 # some sentinels object:
@@ -121,6 +122,8 @@ class CanDevice(Device):
     and elapsed time since last one is smaller than this delay: skip data update.
     """
 
+    default_device_status_timeout_delay: float = 3  # seconds
+
     _motor_to_status_kind = {
         Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_MOTOR_X,
         Motor.PELLET_Y_MOTOR: SystemStatusMessageKind.PELLET_MOTOR_Y,
@@ -156,6 +159,8 @@ class CanDevice(Device):
             CanInterface() if HAVE_CAN_DEVICE and not force_emulation else EmulationInterface()
 
         super().__init__(self._interface, api)
+
+        self._want_exit = threading.Event()
 
         self._measurement_buffer_count = buffer_size
         self._measurements: List[HeadFixMeasurement] = []
@@ -199,7 +204,9 @@ class CanDevice(Device):
 
         self._commands_queue = queue.Queue()
         self._commands_handler_thread: Optional[threading.Thread] = None
+        self._tunnel_pellet_status_check_thread: Optional[threading.Thread] = None
 
+        # internal data cache:
         self._previous_stepper_status_perf_c = {}  # (None, -math.inf)
         self._previous_servo_status_perf_c = {}  # (None, -math.inf)
 
@@ -444,6 +451,18 @@ class CanDevice(Device):
         self._prev_command_is_relative = True
         return self._interface.move_motor_y(self._retract_distance, relative=True)
 
+    def _check_tunnel_pellet_status_age(self):
+        logger.verbose("running")
+        while not self._want_exit.wait(1):  # no need check more often
+            p_now = get_perf_now()
+            pellet_age = p_now - self._interface.pellet_status_perf_c
+            tunnel_age = p_now - self._interface.tunnel_status_perf_c
+            if any(age > 1 for age in (pellet_age, tunnel_age)):
+                logger.verbose("pellet_status_age=%.1f tunnel_status_age=%.1f", pellet_age, tunnel_age)
+            self.pellet_status_timeout_engaged = pellet_age > self.default_device_status_timeout_delay
+            self.tunnel_status_timeout_engaged = tunnel_age > self.default_device_status_timeout_delay
+        logger.verbose("exiting")
+
     def _command_handler(self):
         cur_commands = []
         t_perf_last_command_with_uuid = None
@@ -630,16 +649,25 @@ class CanDevice(Device):
     def connect(self):
         # only start the command handler thread on connect,
         # which means we have already obtained the addr of desired devices.
+        self._want_exit.clear()
         if self._commands_handler_thread is not None and self._commands_handler_thread.is_alive():
             logger.verbose("CAN command Handler thread already alive")
-            return
-        logger.info("Starting CanCommandHandler thread handler")
-        thread = threading.Thread(
-            target=self._command_handler, name="CanCommandHandler", daemon=True)
-        thread.start()
-        self._commands_handler_thread = thread  # only assign after start
+        else:
+            logger.info("Starting CanCommandHandler thread handler")
+            thread = threading.Thread(
+                target=self._command_handler, name="CanCommandHandler", daemon=True)
+            thread.start()
+            self._commands_handler_thread = thread  # only assign after start
+        thread = self._tunnel_pellet_status_check_thread
+        if thread is not None and thread.is_alive():
+            logger.debug("TunnelPelletStatus check thread already alive")
+        else:
+            thread = threading.Thread(target=self._check_tunnel_pellet_status_age, name="CheckTunnelPelletStatus", daemon=True)
+            thread.start()
+            self._tunnel_pellet_status_check_thread = thread
 
     def disconnect(self):
+        self._want_exit.set()
         cmd_thread, cmd_queue = self._commands_handler_thread, self._commands_queue
         if cmd_thread is not None:
             if cmd_thread.is_alive():
@@ -649,6 +677,12 @@ class CanDevice(Device):
                 logger.warning("%s still alive", cmd_thread)
             self._commands_handler_thread = None
             # cmd_queue.join()  # not totally necessary here
+        thread = self._tunnel_pellet_status_check_thread
+        if thread is not None:
+            thread.join(3)
+            if thread.is_alive():
+                logger.warning("PelletTunnel check thread still alive")
+            self._tunnel_pellet_status_check_thread = None
 
     def _start_sequence(self, movements: MotorSteps) -> bool:
         """
@@ -764,7 +798,6 @@ class CanDevice(Device):
         self._compound_movement = None
         self._pending_kind = None
         self._pending_context = None  # last
-
 
     def _report_stepper_status(self, message: StepperStatus):
         """

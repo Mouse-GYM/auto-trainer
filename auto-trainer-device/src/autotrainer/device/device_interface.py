@@ -14,6 +14,7 @@ There is a main interface class (DeviceInterface) that defines the API for acces
 hardware.
 """
 import dataclasses
+import math
 import os
 import typing
 from dataclasses import dataclass
@@ -404,6 +405,10 @@ class DeviceInterface:
 
     float_precision: Optional[int] = _device_float_precision
 
+    _motors_prev_warn_error = {
+        m: (False, False) for m in list(Motor)
+    }
+
     def __init__(self):
         super().__init__()
         self._auto_correct_motor_drift = False
@@ -412,6 +417,8 @@ class DeviceInterface:
         self._max_motor_drift_error_threshold = 2  # mm
         self._motors_drift_error = [False, False, False]
         self._prev_send_pos = _zero_position
+        self._tunnel_status_perf_c = -math.inf
+        self._pellet_status_perf_c = -math.inf
 
     def round_float(self, value: float) -> float:
         return value if self.float_precision is None else round(value, self.float_precision)
@@ -523,3 +530,19 @@ class DeviceInterface:
 
     def set_tunnel_fan_off(self) -> bool:
         raise NotImplementedError
+
+    @property
+    def pellet_status_perf_c(self) -> float:
+        return self._pellet_status_perf_c
+
+    @pellet_status_perf_c.setter
+    def pellet_status_perf_c(self, value):
+        self._pellet_status_perf_c = value
+
+    @property
+    def tunnel_status_perf_c(self) -> float:
+        return self._tunnel_status_perf_c
+
+    @tunnel_status_perf_c.setter
+    def tunnel_status_perf_c(self, value):
+        self._tunnel_status_perf_c = value

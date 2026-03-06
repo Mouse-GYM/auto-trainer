@@ -1208,6 +1208,37 @@ class PreferencesContent(QWidget):
         self._use_global_presence_toggle.stateChanged.connect(use_global_presence_toggle_changed)
         cur_row += 1
 
+        # Device comm. error
+        grid_layout.addWidget(QLabel("<b>Use Device Comm. Error:</b>"), cur_row, cur_col)
+        toggle = self._use_device_comm_error_toggle = QSwitch()
+        toggle.setChecked(alarm_cfg.use_device_comm_error)
+        # toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
+        toggle = QSwitch()
+        toggle.setChecked(alarm_cfg.auto_resume_on_device_comm_error)
+
+        def toggle_changed(value):
+            toggled = value != 0
+            cfg = alarm_monitor.config
+            cfg.auto_resume_on_device_comm_error = toggled
+            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
+
+        toggle.setEnabled(alarm_cfg.use_device_comm_error)
+        toggle.stateChanged.connect(toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        def use_toggle_changed(value, toggle_use=toggle):
+            toggled = value != 0
+            toggle_use.setEnabled(toggled)
+            cfg = alarm_monitor.config
+            if toggled != cfg.use_device_comm_error:
+                cfg.use_device_comm_error = toggled
+                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
+        self._use_device_comm_error_toggle.stateChanged.connect(use_toggle_changed)
+        cur_row += 1
+
+        # finally
         tab = QWidget(None)
         tab.setLayout(main_layout)
         tab.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)

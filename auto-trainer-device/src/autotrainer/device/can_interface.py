@@ -15,11 +15,14 @@ a list of data sets that are then propagated to the rest of the application.
 
 import logging
 import inspect
+import math
 import time
 import warnings
 from enum import Enum, IntEnum
 from operator import attrgetter
+from pathlib import Path
 from typing import Type, Optional, Dict, Union, Any, Tuple
+
 
 try:
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
@@ -35,6 +38,7 @@ else:
         warnings.warn(f"expected pyjerrycan >= 1.2.0 ; got {jerry_v}", UserWarning)
 
 
+from autotrainer.core import get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 from .device_interface import (
     DeviceInterface,
@@ -67,6 +71,8 @@ from .stepper_motor import mm_to_turns, turns_to_mm
 
 
 logger = get_verbose_logger(__name__)
+
+_debug_path_fake_status_timeout = Path("/tmp/autotrainer_fake_device_timeout")
 
 
 class MissingDeviceAddressError(RuntimeError):
@@ -250,6 +256,20 @@ _tunnel_servos = {
     # Motor.TUNNEL_FAN_SERVO,  No: tunnel-fan is handled by pellet-device board
 }
 
+
+_pellet_motors = {
+    Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR,
+    Motor.PELLET_LOAD_SERVO, Motor.PELLET_COVER_SERVO,
+
+    Motor.TUNNEL_FAN_SERVO,  # NB: same remark than above: it's on pellet-device board
+}
+
+_tunnel_motors = {
+    Motor.TUNNEL_GATE_SERVO,
+    Motor.TUNNEL_MAGNET_SERVO,
+}
+
+
 def target_of_motor(motor: Motor,
                     *,
                     _tunnel_servos=_tunnel_servos,  # noqa
@@ -381,6 +401,18 @@ class CanInterface(DeviceInterface):
         self._cnt_none = 0
         self._is_open = False
 
+        self._next_status_log_perf_c = -math.inf
+        self._tunnel_last_status_perf_c = {
+            motor: -math.inf
+            for motor in Motor
+            if motor in _tunnel_motors
+        }
+        self._pellet_last_status_perf_c = {
+            motor: -math.inf
+            for motor in Motor
+            if motor in _pellet_motors
+        }
+
         self._pellet_addr: Optional[int] = None
         self._magnet_addr: Optional[int] = None
 
@@ -454,6 +486,60 @@ class CanInterface(DeviceInterface):
             JerryCANCmdType.GPIO_WRITE: no_op,
             JerryCANCmdType.DELAY: no_op,
         }
+
+    def __allow_fake_status_time(self, motor):
+        if _debug_path_fake_status_timeout.exists():
+            for line in _debug_path_fake_status_timeout.read_text().split("\n"):
+                m_idx, age = line.split("=")
+                age = float(age)
+                m = Motor(int(m_idx))
+                if m == motor:
+                    return age
+
+    def _handle_motor_status_age(self, motor: Motor):
+        p_now = motor_p_now = get_perf_now()
+        if p_now > self._next_status_log_perf_c:
+            self._next_status_log_perf_c = p_now + 15
+            for vals in (self._pellet_last_status_perf_c, self._tunnel_last_status_perf_c):
+                logger.verbose("motor status age: %s",
+                    ' '.join(f"{k.name}={p_now - v:.6f}s"
+                    for k, v in sorted(vals.items(), key=lambda i: i[1])))
+        if __debug__:
+            try:
+                fake_age = self.__allow_fake_status_time(motor)
+                if fake_age is not None:
+                    motor_p_now -= fake_age
+            except Exception:
+                logger.exception("__allow_fake_status_time")
+        if motor in _pellet_motors:
+            vals = self._pellet_last_status_perf_c
+            vals[motor] = motor_p_now
+            # use the oldest for the "global" pellet status perf_c
+            oldest = min(vals.values())
+            self.pellet_status_perf_c = oldest
+        elif motor in _tunnel_motors:
+            vals = self._tunnel_last_status_perf_c
+            vals[motor] = motor_p_now
+            # use the oldest for the "global" tunnel status perf_c
+            oldest = min(vals.values())
+            self.tunnel_status_perf_c = oldest
+        else:
+            return
+        for m, p in vals.items():
+            prev_warn, prev_err = self._motors_prev_warn_error[m]
+            age = p_now - p
+            if age > 1.5:
+                if not prev_err:
+                    prev_err = True
+                    logger.error("%s status age = %.3fs", m, age)
+            elif age > 0.5:
+                prev_err = False
+                if not prev_warn:
+                    prev_warn = True
+                    logger.warning("%s status age = %.3fs", m, age)
+            else:
+                prev_warn = prev_err = False
+            self._motors_prev_warn_error[m] = (prev_warn, prev_err)
 
     @property
     def magnet_config(self):
@@ -709,6 +795,12 @@ class CanInterface(DeviceInterface):
         logger.debug("Using %s and %s and %s", self._read_msgs, self._get_timestamp_ns, self._get_index)
 
         self._cnt_none = 0
+
+        p_now = get_perf_now()
+        for dct in (self._pellet_last_status_perf_c, self._tunnel_last_status_perf_c):
+            for m in dct:
+                dct[m] = p_now
+
         if self._is_open:
             tot_flushed = 0
             t_end = time.perf_counter() + 1.5
@@ -1846,10 +1938,9 @@ class CanInterface(DeviceInterface):
         """
         target = _addr2tgt(message.dst_id)
         motor = _id_to_motor(target, True, message.servo_status.motor_id)
-
         if motor == Motor.NONE:
             return None
-
+        self._handle_motor_status_age(motor)
         return ServoStatus(target, motor, self.round_float(message.servo_status.position))
 
     def _handle_stepper_status(self, message):
@@ -1876,6 +1967,7 @@ class CanInterface(DeviceInterface):
             logger.warning("_translate_stepper_status: target=%s motor=%s dst_id=%s motor_id=%s",
                            target, motor, message.dst_id, message.stepper_status.motor_id)
             return None
+        self._handle_motor_status_age(motor)
         motor_axis_idx = _motor_to_axis_idx(motor)
         motor_send_pos = turns_to_mm(message.stepper_status.send_position)
         if self._auto_correct_motor_drift:

@@ -16,6 +16,7 @@ from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet_shift import ShiftXYZBufferHandler
 from autotrainer.core import Offset3DTuple, EventManager
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
+from autotrainer.device import CanDevice
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.video import CaptureProcessStatus
@@ -39,7 +40,6 @@ def inference_model(pose_algo):
     inference.terminate()
 
 
-
 class BaseTrainingPlan(MockSystemMachine):
 
     @pytest.fixture(autouse=True)
@@ -57,14 +57,15 @@ class BaseTrainingPlan(MockSystemMachine):
             dst_dir.joinpath(p.name).write_bytes(p.read_bytes())
 
     @pytest.fixture(autouse=True)
-    def _set_shift_xyz_config(self, system_config, trainer_config_dir):
+    def _set_shift_xyz_config_and_others_non_default_config_settings(self, system_config, trainer_config_dir):
         cfg = system_config.behavior.shift_xyz_handler
         cfg.buffer.minimum_reach_fail = 2
+        system_config.behavior.emergency_alarm.use_device_comm_error = False
         system_config.save_default(trainer_config_dir)
 
     @pytest.fixture()
-    def app_model(self, machine, user_pref, fake_system_msg_handler, system_config, calib_dir, training_plans,
-                  sensor_analysis, diamond_triangle_config):
+    def app_model(self, machine, user_pref, fake_system_msg_handler,
+                  system_config, calib_dir, training_plans, sensor_analysis, diamond_triangle_config):
         machine._msg_handler = fake_system_msg_handler
         user_pref.save()
         msg_handler = machine._msg_handler
