@@ -201,6 +201,8 @@ class BehaviorAlgorithm(ObservableObject):
     ):
         super().__init__(event_names=tuple(attr for attr in dir(BehaviorAlgoEvents) if not attr.startswith('_')))
 
+        self._event_manager = EventManager.default()  # for posting events
+
         self._thread_lock = threading.RLock()
         self._project_info = None
         self._status = BehaviorAlgoStatus.IDLE
@@ -248,9 +250,10 @@ class BehaviorAlgorithm(ObservableObject):
 
         # self.max_pellets_per_headfix_session: int = 10  # unused
 
-        self._pellet_count_day = 0  # consumed
-        self._pellet_count_session = 0  # consumed
-        self._pellet_count_total = 0  # consumed
+        self._session_pellet_loaded_count = 0  # loaded
+
+        self._pellets_consumed_day = 0  # consumed
+        self._pellets_consumed_total = 0  # consumed
         self._pellets_presented_day: int = 0
         self._pellets_presented_total: int = 0
         self._reaches_day: int = 0
@@ -596,7 +599,7 @@ class BehaviorAlgorithm(ObservableObject):
     def baseline_intensity(self, value):
         prev, self._baseline_intensity = self._baseline_intensity, value
         if value != prev:
-            EventManager.default().post_event_content(BehaviorEventKind.headfixBaselineChanged, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.headfixBaselineChanged, context=value)
             self._on_property_changed(BehaviorAlgoProps.BASELINE_INTENSITY, value, prev)
 
     @property
@@ -616,7 +619,7 @@ class BehaviorAlgorithm(ObservableObject):
         if value != prev:
             # prop unused
             #     self._on_property_changed(BehaviorAlgoProps.AUTO_CLAMP_INTENSITY, value, prev)
-            EventManager.default().post_event_content(BehaviorEventKind.autoClampIntensityChanged, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.autoClampIntensityChanged, context=value)
 
     @property
     def auto_clamp_release_tone_freq(self):
@@ -630,7 +633,7 @@ class BehaviorAlgorithm(ObservableObject):
         if value != prev:
             # prop unused
             # self._on_property_changed("auto_clamp_release_tone_freq", value, prev)
-            EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseToneFreqChanged, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.autoClampReleaseToneFreqChanged, context=value)
 
     @property
     def auto_clamp_release_tone_delay(self):
@@ -643,7 +646,7 @@ class BehaviorAlgorithm(ObservableObject):
         if value != prev:
             # prop unused
             # self._on_property_changed("auto_clamp_release_tone_delay", value, prev)
-            EventManager.default().post_event_content(BehaviorEventKind.autoClampReleaseDelayChanged, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.autoClampReleaseDelayChanged, context=value)
 
     @property
     def auto_clamp_release_load_count(self):
@@ -752,46 +755,45 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def day_pellet_count(self) -> int:
-        return self._pellet_count_day
+        return self._pellets_consumed_day
 
     @day_pellet_count.setter
     def day_pellet_count(self, value: int):
-        prev_value, self._pellet_count_day = self._pellet_count_day, value
+        prev_value, self._pellets_consumed_day = self._pellets_consumed_day, value
         self._on_property_changed(BehaviorAlgoProps.DAY_PELLET_COUNT, value, prev_value)
         incr = value - prev_value
         if incr > 0:
-            EventManager.default().post_event_content(BehaviorEventKind.dayIncreasePellet, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.dayIncreasePellet, context=value)
         elif incr < 0:
-            EventManager.default().post_event_content(BehaviorEventKind.dayDecreasePellet, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.dayDecreasePellet, context=value)
 
     @property
     def total_pellet_count(self) -> int:
-        return self._pellet_count_total
+        return self._pellets_consumed_total
 
     @total_pellet_count.setter
     def total_pellet_count(self, value: int):
-        prev, self._pellet_count_total = self._pellet_count_total, value
+        prev, self._pellets_consumed_total = self._pellets_consumed_total, value
         self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_COUNT, value, prev)
 
     @property
-    def session_pellet_count(self) -> int:
-        return self._pellet_count_session
+    def session_pellet_loaded_count(self) -> int:
+        return self._session_pellet_loaded_count
 
-    @session_pellet_count.setter
-    def session_pellet_count(self, value):
-        prev, self._pellet_count_session = self._pellet_count_session, value
+    @session_pellet_loaded_count.setter
+    def session_pellet_loaded_count(self, value):
+        prev, self._session_pellet_loaded_count = self._session_pellet_loaded_count, value
         self._on_property_changed(BehaviorAlgoProps.SESSION_PELLET_COUNT, value, prev)  # property unused
         incr = value - prev
         if incr > 0:
-            EventManager.default().post_event_content(BehaviorEventKind.sessionPelletIncrease, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.sessionPelletIncrease, context=value)
         elif incr < 0:
-            EventManager.default().post_event_content(BehaviorEventKind.sessionPelletDecrease, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.sessionPelletDecrease, context=value)
         # if self._pellet_count_session > self.limits.max_pellets_per_session:
         #    self.end_session()
 
     def increase_pellets_consumed(self, quantity: int = 1):
         self.day_pellet_count += quantity
-        self.session_pellet_count += quantity
         self.total_pellet_count += quantity
         if quantity:
             self.pellets_consumed_evt(quantity)
@@ -814,7 +816,7 @@ class BehaviorAlgorithm(ObservableObject):
         prev, self._pellets_presented_total = self._pellets_presented_total, value
         if prev != value:
             self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_PRESENTED, value, prev)
-            EventManager.default().post_event_content(BehaviorEventKind.pelletPresented, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.pelletPresented, context=value)
 
     def increase_pellets_presented(self, quantity: int = 1):
         self.pellets_presented_day += quantity
@@ -858,7 +860,7 @@ class BehaviorAlgorithm(ObservableObject):
         prev, self._successful_reaches_total = self._successful_reaches_total, value
         if prev != value:
             self._on_property_changed(BehaviorAlgoProps.TOTAL_SUCCESSFUL_REACHES, value, prev)
-            EventManager.default().post_event_content(BehaviorEventKind.pelletSuccessfulReach, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.pelletSuccessfulReach, context=value)
 
     def increase_successful_reaches(self, quantity: int = 1):
         self.successful_reaches_day += quantity
@@ -946,7 +948,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         logger.success("%s: starting new session recording ...", reason)
         self._is_in_session = True
-        EventManager.default().post_event_content(BehaviorEventKind.sessionStarting)
+        self._event_manager.post_event_content(BehaviorEventKind.sessionStarting)
         self._session_started_perf_c = get_perf_now()
         self._start_session_reason = reason
         self.reset_session_pellet_count()
@@ -964,7 +966,7 @@ class BehaviorAlgorithm(ObservableObject):
         post_trigger_enable(self, True)
 
         self.session_starting()
-        EventManager.default().post_event_content(BehaviorEventKind.sessionStarted)
+        self._event_manager.post_event_content(BehaviorEventKind.sessionStarted)
 
         return True
 
@@ -982,11 +984,11 @@ class BehaviorAlgorithm(ObservableObject):
         self._is_in_session = False  # must be ~first, to ensure next actions/callbacks don't see it as True
         # but must be at least before self.session_ending() here after, given test_covered_load_cycle rely on that atm.
         self._stop_session_reason = reason
-        EventManager.default().post_event_content(BehaviorEventKind.sessionEnding)
+        self._event_manager.post_event_content(BehaviorEventKind.sessionEnding)
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self.session_capture_ending(reason)
-        EventManager.default().post_event_content(BehaviorEventKind.sessionEnded)
-        EventManager.default().flush()
+        self._event_manager.post_event_content(BehaviorEventKind.sessionEnded)
+        self._event_manager.flush()
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
         return True
 
@@ -995,7 +997,7 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_ending(result)
 
     def reset_session_pellet_count(self):
-        self.session_pellet_count = 0
+        self.session_pellet_loaded_count = 0
 
     @property
     def pellet_seen_age(self) -> float:
@@ -1093,19 +1095,19 @@ class BehaviorAlgorithm(ObservableObject):
     def update_triangle_seen(self, seen: bool = True):
         if self._triangle_seen != seen:
             self._triangle_seen = seen
-            EventManager.default().post_event_content(BehaviorEventKind.triangleSeen, context=seen)
+            self._event_manager.post_event_content(BehaviorEventKind.triangleSeen, context=seen)
         if seen:
             self._triangle_last_seen_perf_c = get_perf_now()
 
     def update_pellet_seen(self, seen: bool = True):
         if self._pellet_seen != seen:
             self._pellet_seen = seen
-            EventManager.default().post_event_content(BehaviorEventKind.pelletSeen, context=seen)
+            self._event_manager.post_event_content(BehaviorEventKind.pelletSeen, context=seen)
         if seen:
             self._pellet_last_seen_perf_c = get_perf_now()
 
     def pellet_loaded(self):
-        self.session_pellet_count += 1
+        self._session_pellet_loaded_count += 1
 
     def update_mouse_seen(self, seen: bool = True):
         if seen:
@@ -1117,7 +1119,7 @@ class BehaviorAlgorithm(ObservableObject):
             # property currently unused:
             self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, prev_seen)
             if not prev_seen:
-                EventManager.default().post_event_content(BehaviorEventKind.sessionMouseSeen)
+                self._event_manager.post_event_content(BehaviorEventKind.sessionMouseSeen)
 
     @property
     def mouse_seen_age(self) -> float:
@@ -1323,7 +1325,7 @@ class BehaviorAlgorithm(ObservableObject):
     def _check_date(self):
         today = datetime.now().date()
         if today != self._today:
-            EventManager.default().post_event_content(BehaviorEventKind.dayStarted)
+            self._event_manager.post_event_content(BehaviorEventKind.dayStarted)
             self._today = today
             self._start_day()
 

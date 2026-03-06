@@ -256,24 +256,34 @@ class BehaviorContent(ContentWidget):
         props = BehaviorAlgoProps
         if name == props.INTERSESSION_ENABLED:
             self._intersession_toggle.setChecked(value)
+
         elif name == props.BASELINE_INTENSITY:
             self._head_magnet_baseline_label.setText(f"{value:.1f}%")
+
         elif name == props.HEAD_FIXATION_ENABLED:
             self._head_fixation_toggle.setChecked(value)
+
         elif name == props.DAY_PELLET_COUNT:
             self._pellets_consumed_label.update_values(day=value)
+
         elif name == props.TOTAL_PELLET_COUNT:
             self._pellets_consumed_label.update_values(total=value)
+
         elif name == props.DAY_PELLET_PRESENTED:
             self._pellets_presented_label.update_values(day=value)
+
         elif name == props.TOTAL_PELLET_PRESENTED:
             self._pellets_presented_label.update_values(total=value)
+
         elif name == props.DAY_PELLET_REACHES:
             self._pellet_reaches_label.update_values(day=value)
+
         elif name == props.TOTAL_PELLET_REACHES:
             self._pellet_reaches_label.update_values(total=value)
+
         elif name == props.DAY_SUCCESSFUL_REACHES:
             self._successful_reaches_label.update_values(day=value)
+
         elif name == props.TOTAL_SUCCESSFUL_REACHES:
             self._successful_reaches_label.update_values(total=value)
 

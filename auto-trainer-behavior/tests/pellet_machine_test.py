@@ -53,11 +53,11 @@ def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enab
     mock_system.mock_pellet_ack()  # ack the send
     assert algo.can_cover_pellet() is (True if cover_enabled else False)
     assert algo.can_release_pellet() is (False if cover_enabled else True)
-    assert algo.session_pellet_count == 0
+    assert algo.session_pellet_loaded_count == 0
     mock_system.mock_pose_response(pellet_seen=True)
-    assert algo.session_pellet_count == 1
+    assert algo.session_pellet_loaded_count == 1
     mock_system.mock_pose_response(pellet_seen=True)
-    assert algo.session_pellet_count == 1  # still ofc, no new load-pellet
+    assert algo.session_pellet_loaded_count == 1  # still ofc, no new load-pellet
 
 
 @pytest.mark.parametrize("cover_enabled", [False, True])
@@ -78,7 +78,7 @@ def test_send_pellet_after_load_when_triangle_not_seen(mock_system, machine, cov
 
     # Send a pose response with pellet not seen which should trigger a load/cover cycle while out of tunnel.
     mock_system.mock_pose_response(pellet_seen=False, triangle_seen=True)
-    assert algo.session_pellet_count == 0
+    assert algo.session_pellet_loaded_count == 0
     assert pellet_m.state == PelletState.monitoring  # still
     assert algo.pellet_recently_seen  # still
     assert algo.triangle_recently_seen
@@ -100,7 +100,7 @@ def test_send_pellet_after_load_when_triangle_not_seen(mock_system, machine, cov
     #
     mock_system.mock_pellet_ack()  # ack the load
     assert not algo.triangle_recently_seen  # still ofc
-    assert algo.session_pellet_count == 0
+    assert algo.session_pellet_loaded_count == 0
     assert mock_system.pellet_state_trans == [
         PelletState.loading,
         PelletState.covering if cover_enabled else PelletState.releasing,
@@ -109,7 +109,7 @@ def test_send_pellet_after_load_when_triangle_not_seen(mock_system, machine, cov
     ]
     #
     mock_system.mock_pose_response(pellet_seen=True, triangle_seen=False)
-    assert algo.session_pellet_count == 1
+    assert algo.session_pellet_loaded_count == 1
     assert pellet_m.state == PelletState.monitoring
 
 
