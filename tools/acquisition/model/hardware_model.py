@@ -325,9 +325,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def disconnect(self):
         logger.verbose("disconnecting ..")
         can_dev = self._can_device
-        if can_dev is not None:
-            can_dev.property_changed -= self._device_property_changed
-            self._can_device = None
         dev = self._device
         if dev is not None:
             dev.request_disconnect()
