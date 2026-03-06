@@ -470,6 +470,7 @@ class CanDevice(Device):
         has_read_from_queue = False
         pending_uuid = None
         repeated_command_count = 0
+        uuid_ack_timeout_engaged = False
         while True:
             if has_read_from_queue:
                 q.task_done()
@@ -508,18 +509,15 @@ class CanDevice(Device):
                 if time.perf_counter() - t_perf_last_command_with_uuid < self.default_command_ack_timeout_duration:
                     # continue poll input queue for uuid ack
                     continue
-                self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, True, None)
-                EventManager.default().post_event_content(ApiEventKind.detectorChanged, context={
-                    "detector_id": ApiDetectorKind.deviceAckTimeOut,
-                    "is_active": True,
-                    "is_enabled": True,
-                })
+                if not uuid_ack_timeout_engaged:
+                    uuid_ack_timeout_engaged = True
+                    self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, True, False)
                 logger.warning("timeout waiting ack previous command: %s ; context=%s ; pending_uuid=%s",
                                self._pending_kind, self._pending_context, pending_uuid)
                 pending_uuid = None
                 repeated_command_count += 1
                 if repeated_command_count >= self.default_command_ack_timeout_repeat_count:
-                    raise RuntimeError("Reached default_command_ack_timeout_repeat_count")
+                    raise RuntimeError(f"Reached default_command_ack_timeout_repeat_count {repeated_command_count}")
                 assert self._prev_command is not None
                 if self._prev_command_is_relative:
                     raise RuntimeError(f"Command {self._prev_command} uuid ack timed out ; refusing retry given relative.")
@@ -553,6 +551,9 @@ class CanDevice(Device):
                     raise RuntimeError("too many failure trying _perform_next_compound_step")
             elif kind is _uuid_ack:
                 pending_uuid = None
+                if uuid_ack_timeout_engaged:
+                    uuid_ack_timeout_engaged = False
+                    self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, False, True)
                 repeated_command_count = 0
                 logger.debug("executing ack perform next compound")
                 for _ in range(self.default_command_write_failed_repeat_count):

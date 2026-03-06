@@ -7,7 +7,6 @@ from autotrainer.core import ObservableObject, get_perf_now
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
 

@@ -8,10 +8,10 @@ from typing import Optional, Tuple, Dict, Union
 
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor, SensorAnalysis)
-from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 StepperConfig, ServoConfig, Device)
+from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 
 logger = get_verbose_logger(__name__)
 
@@ -43,6 +43,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     SEND_Y = "send_y"
     SEND_Z = "send_z"
     SEND_XYZ = "send_xyz"
+
+    SET_X = "set_x"
+    SET_Y = "set_y"
+    SET_Z = "set_z"
 
     def __init__(
         self,
@@ -78,6 +82,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._front_door_open: bool = False
         self._slide_door_open: bool = False
 
+        self._device_ack_timeout_engaged = False
+
         self._lock = threading.RLock()  # **required** re-entrant lock !!
 
     @property
@@ -90,6 +96,30 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if any(map(math.isnan, value)):
             return None
         return value
+
+    @property
+    def device_ack_timeout_engaged(self):
+        return self._device_ack_timeout_engaged
+
+    @device_ack_timeout_engaged.setter
+    def device_ack_timeout_engaged(self, value):
+        prev, self._device_ack_timeout_engaged = self._device_ack_timeout_engaged, value
+        if prev == value:
+            return
+        self.property_changed(self.DEVICE_ACK_TIMEOUT_ENGAGED, value, prev)
+        enabled = False
+        dev_conn = self._device
+        if dev_conn is not None:
+            dev = dev_conn.device
+            if dev is not None:
+                iface = dev.device_interface
+                enabled = iface is not None and iface.is_open
+        # could be in app_model or system_machine, in react property changed, but ok here too:
+        EventManager.default().post_event_content(ApiEventKind.detectorChanged, context={
+            "detector_id": ApiDetectorKind.deviceAckTimeOut,
+            "is_active": value,
+            "is_enabled": enabled,
+        })
 
     @property
     def send_x(self):
@@ -117,6 +147,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def send_z(self, value):
         prev, self._motor_send_coordinates = self._motor_send_coordinates, self._motor_send_coordinates.replace(z=value)
         self._on_property_changed(self.SEND_Z, value, prev.z)
+
+    @property
+    def motor_send_coordinates(self) -> Offset3DTuple:
+        return self._motor_send_coordinates
 
     @property
     def front_door_open(self):
@@ -272,7 +306,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         buffer_size = 10 if HAVE_CAN_DEVICE else 1
         #
         can_device = self._can_device = CanDevice(buffer_size=buffer_size)
-        can_device.property_changed += self._device_property_changed
+        can_device.property_changed += self._can_device_property_changed
 
         device_conn = self._device = DeviceConnection(can_device, cmd_queue, name="can-device")
         device_conn.request_connect()
@@ -298,19 +332,19 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if dev is not None:
             dev.request_disconnect()
             dev.join()
+            can_dev = dev.device
+            can_dev.property_changed -= self._can_device_property_changed
             self._device = None
-
         self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, "", None)
         self._on_property_changed(self.PELLET_VERSION_PROPERTY, "", None)
 
-    def _device_property_changed(self, name: str, value, prev_value):
+    def _can_device_property_changed(self, name: str, value, prev_value):
         logger.debug("_device_property_changed: %s : %s -> %s", name, prev_value, value)
         props = Device
         # only translate/relay what we want:
         is_dev_comm_err_possible = False
         if name == props.UUID_ACK_TIMEOUT_ENGAGED:
-            self._device_uuid_ack_timeout_engaged = value
-            self.property_changed(self.DEVICE_ACK_TIMEOUT_ENGAGED, value, prev_value)
+            self.device_ack_timeout_engaged = value
             is_dev_comm_err_possible = True
         elif name == props.PELLET_STATUS_TIMEOUT_ENGAGED:
             self._device_pellet_status_timeout_engaged = value
@@ -320,14 +354,16 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             self._device_tunnel_status_timeout_engaged = value
             self.property_changed(self.DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED, value, prev_value)
             is_dev_comm_err_possible = True
+        #
         if is_dev_comm_err_possible:
             engaged = any((
                 self._device_uuid_ack_timeout_engaged,
                 self._device_tunnel_status_timeout_engaged,
                 self._device_pellet_status_timeout_engaged,
             ))
-            self._sensor_analysis.emergency_alarm_monitor.device_comm_error_engaged = engaged
-            self._sensor_analysis.emergency_alarm_monitor.check_state()
+            alarm_mon = self._sensor_analysis.emergency_alarm_monitor
+            alarm_mon.device_comm_error_engaged = engaged
+            alarm_mon.check_state()
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:

@@ -168,9 +168,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.GLOBAL_ANIMAL_PRESENCE_ENGAGED, value, prev)
-        # ApiAlarmKind.animalImmobile
-        # self.post_alarm_event(ApiAlarmKind.animalImmobile, value, self._config.use_global_animal_presence)
-        self.post_detector_event(ApiDetectorKind.animalImmobile, value, self._config.use_global_animal_presence)
+        self.post_alarm_event(ApiAlarmKind.animalImmobile, value, self._config.use_global_animal_presence)
 
     @property
     def device_comm_error_engaged(self):
@@ -227,7 +225,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         if v is not None:
             if v[1]:
                 tot_audio_thrash_engaged += perf_now - v[0]
-        elif self._audio_monitor.is_thrashing_detected:
+        elif self._audio_monitor.thrashing_detected:
             tot_audio_thrash_engaged += cfg.audio_load_cell_thrash_aggregate_delay
         #
         pc_load_cell_thrash = 100 * tot_load_cell_thrash_engaged / cfg.audio_load_cell_thrash_aggregate_delay

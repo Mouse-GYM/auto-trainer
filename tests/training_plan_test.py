@@ -14,7 +14,7 @@ from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgor
     IntersessionState
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet_shift import ShiftXYZBufferHandler
-from autotrainer.core import Offset3DTuple
+from autotrainer.core import Offset3DTuple, EventManager
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
 from autotrainer.device import CanDevice
 from autotrainer.inference import InferenceStatus
@@ -28,6 +28,9 @@ from top_fixtures import MockSystemMachine
 this_dir = Path(__file__).parent.resolve()
 
 
+logger = logging.getLogger(__name__)
+
+
 @pytest.fixture
 def inference_model(pose_algo):
     # unused atm
@@ -37,7 +40,13 @@ def inference_model(pose_algo):
     inference.terminate()
 
 
-class TestTrainingPlan(MockSystemMachine):
+class BaseTrainingPlan(MockSystemMachine):
+
+    @pytest.fixture(autouse=True)
+    def _event_manager(self, monkeypatch):
+        m_event_mgr = mock.create_autospec(EventManager)
+        monkeypatch.setattr(f"{EventManager.__module__}.{EventManager.__qualname__}", m_event_mgr)
+        monkeypatch.setattr(EventManager, "default", m_event_mgr.default)
 
     @pytest.fixture(autouse=True)
     def training_plans(self, trainer_config_dir):
@@ -60,7 +69,7 @@ class TestTrainingPlan(MockSystemMachine):
         machine._msg_handler = fake_system_msg_handler
         user_pref.save()
         msg_handler = machine._msg_handler
-        app_model = AppModel(
+        app_model = self._app_model = AppModel(
             user_pref,
             system_message_handler=msg_handler,
             sensor_analysis=sensor_analysis,
@@ -70,27 +79,6 @@ class TestTrainingPlan(MockSystemMachine):
         )
         app_model.check_diamond_coord_enabled = False
         self._animal = app_model.add_animal("mouse1", select=True)
-        try:
-            yield app_model
-        finally:
-            app_model.capture_stop()
-            app_model.on_close()
-
-    def test_training_plan(self, app_model, user_pref, machine, caplog):
-        try:
-            self._test_training_plan(app_model, user_pref, machine, caplog)
-        finally:
-            caplog.set_level(logging.CRITICAL)
-            # NB: for some reason the last finally: above in app_model() fixture isn't called
-            # when this test case fails for any reason. pytest seems to be stuck in some loop post-analysis code,
-            # but before teardown, related to/with tmpdir fixture.. maybe the files we are possibly writing in it
-            # are preventing pytest failure completion code to finish and put it in a kind of infinite loop state.
-            app_model.capture_stop()
-            app_model.on_close()
-
-    def _test_training_plan(self, app_model, user_pref, machine, caplog):
-        caplog.set_level(logging.DEBUG)  # REQUIRED to ensure we collect/see all the logs we want to assert on,
-        # see below
 
         algo = app_model.behavior.algorithm
 
@@ -104,17 +92,56 @@ class TestTrainingPlan(MockSystemMachine):
         # NB: do not try change some settings after config is loaded,
         # the loaded parameters/settings (from config file) will be reused/reset with training plan enter.
 
-        app_model.training_mode = TrainingMode.AUTOMATIC
-        app_model.capture_start()
-        app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
-
-        self.mock_pellet_ack(until_none=True)  # for whole send-pellet/cover pellet sequence(s)
-
+        algo = self.algo
         plan = app_model.get_training_plan_by_id(get_plan_id(app_model.training_plans[0]))
         animal = app_model.selected_animal
         animal.training.current_protocol = plan.plan_id
         app_model.training_plan = plan
 
+        app_model.training_mode = TrainingMode.AUTOMATIC
+        app_model.capture_start(target_status=AppModelStatus.ANIMAL_IN_TRAINING)
+        app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
+
+        algo.pellet_delivery_enabled = True
+
+        self.mock_pellet_ack(until_none=True)  # for whole send-pellet/cover pellet sequence(s)
+
+        try:
+            yield app_model
+        finally:
+            app_model.capture_stop()
+            app_model.on_close()
+
+    def ack_pending_tokens(self, wait_acked: bool=True):
+        tokens = list(self._app_model.hardware._pending_tokens)
+        logger.info("acking %s pending tokens", len(tokens))
+        for tok in tokens:
+            self.msg_handler.ack_received(tok)
+        if wait_acked:
+            for tok in tokens:
+                logger.debug("waiting tock %s", tok)
+                self._app_model.hardware.wait_pending_command_acked(tok)
+
+
+class TestTrainingPlan(BaseTrainingPlan):
+
+    def test_training_plan(self, app_model, user_pref, machine, caplog):
+    #     try:
+    #         self._test_training_plan(app_model, user_pref, machine, caplog)
+    #     finally:
+    #         caplog.set_level(logging.CRITICAL)
+    #         # NB: for some reason the last finally: above in app_model() fixture isn't called
+    #         # when this test case fails for any reason. pytest seems to be stuck in some loop post-analysis code,
+    #         # but before teardown, related to/with tmpdir fixture.. maybe the files we are possibly writing in it
+    #         # are preventing pytest failure completion code to finish and put it in a kind of infinite loop state.
+    #         app_model.capture_stop()
+    #         app_model.on_close()
+    #
+    # def _test_training_plan(self, app_model, user_pref, machine, caplog):
+        caplog.set_level(logging.DEBUG)  # REQUIRED to ensure we collect/see all the logs we want to assert on,
+        # see below
+        algo = self.algo
+        plan = app_model.training_plan
         plan_start_phase = plan.current_phase
 
         assert plan_start_phase.advance_predicate.evaluate(plan_start_phase, plan._system_context) is False
@@ -242,3 +269,47 @@ class TestTrainingPlan(MockSystemMachine):
         assert machine.state == SystemState.cage  # still ofc.
 
         self.increment_perf_now(1)
+
+
+@pytest.mark.xfail(True, reason="todo: smth blocking..")  # TODO
+class TestWithBatch(BaseTrainingPlan):
+
+    def test_plan_gets_batch_events(self, app_model, user_pref, machine, caplog):
+        algo = self.algo
+        algo.batch_session_recording_config.enabled = True
+        max_batch_size = algo.batch_session_recording_config.maximum_batch_size = 3
+        algo.update_pellet_seen(True)
+
+        self.ack_pending_tokens()
+
+        self.start_session_in_tunnel()
+
+        assert algo.is_in_session
+
+        def fake_mouse_eat_pellet():
+            logger.info("before pellet_seen=False")
+            self.mock_pose_response(pellet_seen=False, mouse_seen=True)
+            self.increment_perf_now(algo.pellet_missing_time)
+            self.mock_pose_response(pellet_seen=False, mouse_seen=True)
+            assert self.pellet.state == PelletState.loading
+            # self.mock_pellet_ack(until_none=True)
+            logger.info("acked pellet_seen=False")
+            self.mock_pose_response(pellet_seen=True, mouse_seen=True)
+            self.mock_pellet_ack(until_none=True)
+            self.ack_pending_tokens()
+            logger.info("after pellet_seen=True")
+
+        def conc(ix):
+            logger.info("concurrent %s", ix)
+
+        with contextlib.ExitStack() as stack:
+            for idx in range(max_batch_size):
+                assert machine.state == SystemState.tunnel
+                self.mock_pose_response(pellet_seen=True, mouse_seen=True)
+                assert algo.is_in_session
+                stack.enter_context(self.mock_intersession_analysis(
+                    concurrent_func=lambda i=idx: conc(i)
+                ))
+                fake_mouse_eat_pellet()
+            self.exit_tunnel()
+        logger.info("all done")

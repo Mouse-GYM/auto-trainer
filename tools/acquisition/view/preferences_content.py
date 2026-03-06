@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabe
                                QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QSpinBox, QGridLayout,
                                QLayout, QSizePolicy, QMessageBox)
 
+from autotrainer.api.api_event_kind import ApiAlarmKind
+
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration, PelletDeliveryConfiguration
 from autotrainer.core.logging import get_verbose_logger
@@ -1051,7 +1053,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        def toggle_changed(value):
+        def use_audio_load_cell_toggle_changed(value):
             toggled = value != 0
             for w in audio_load_cell_sub_widgets:
                 w.setEnabled(toggled)
@@ -1059,8 +1061,11 @@ class PreferencesContent(QWidget):
                 cfg = alarm_monitor.config
                 cfg.use_audio_load_cell_thrash = toggled
                 alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        self._use_audio_load_cell_thrashing_toggle.stateChanged.connect(toggle_changed)
-        toggle_changed(int(alarm_cfg.use_audio_load_cell_thrash))
+                alarm_monitor.post_alarm_event(
+                    ApiAlarmKind.thrashing,
+                    alarm_monitor.ext_doors_open_engaged, toggled)
+        self._use_audio_load_cell_thrashing_toggle.stateChanged.connect(use_audio_load_cell_toggle_changed)
+        use_audio_load_cell_toggle_changed(int(alarm_cfg.use_audio_load_cell_thrash))
 
         add_sep()
 
@@ -1103,7 +1108,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        def toggle_changed(value):
+        def use_animal_missing_toggle_changed(value):
             toggled = value != 0
             for w in animal_missing_sub_widgets:
                 w.setEnabled(toggled)
@@ -1111,8 +1116,11 @@ class PreferencesContent(QWidget):
             if toggled != cfg.use_presence_missing_after_exit_tunnel:
                 cfg.use_presence_missing_after_exit_tunnel = toggled
                 alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        self._use_animal_missing_toggle.stateChanged.connect(toggle_changed)
-        toggle_changed(int(alarm_cfg.use_presence_missing_after_exit_tunnel))
+                alarm_monitor.post_alarm_event(
+                    ApiAlarmKind.animalMissing,
+                    alarm_monitor.presence_in_cage_after_exit_tunnel_engaged, toggled)
+        self._use_animal_missing_toggle.stateChanged.connect(use_animal_missing_toggle_changed)
+        use_animal_missing_toggle_changed(int(alarm_cfg.use_presence_missing_after_exit_tunnel))
 
         # right side:
 
@@ -1153,7 +1161,7 @@ class PreferencesContent(QWidget):
             analysis.external_doors_monitor.check_state()
         spinbox.valueChanged.connect(value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
-        def toggle_changed(value):
+        def use_ext_doors_toggle_changed(value):
             toggled = value != 0
             for w in use_external_doors_sub_widgets:
                 w.setEnabled(toggled)
@@ -1161,14 +1169,17 @@ class PreferencesContent(QWidget):
             if toggled != cfg.use_external_doors_open:
                 cfg.use_external_doors_open = toggled
                 alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        self._use_external_doors_open_toggle.stateChanged.connect(toggle_changed)
-        toggle_changed(int(alarm_cfg.use_external_doors_open))
+                alarm_monitor.post_alarm_event(
+                    ApiAlarmKind.externalDoors,
+                    alarm_monitor.ext_doors_open_engaged, toggled)
+        self._use_external_doors_open_toggle.stateChanged.connect(use_ext_doors_toggle_changed)
+        use_ext_doors_toggle_changed(int(alarm_cfg.use_external_doors_open))
         cur_row += 1
 
         # add_sep()
 
         grid_layout.addWidget(QLabel("<b>Use Global Animal Presence:</b>"), cur_row, cur_col)
-        toggle = self._use_global_animal_presence_toggle = QSwitch()
+        toggle = self._use_global_presence_toggle = QSwitch()
         toggle.setChecked(alarm_cfg.use_global_animal_presence)
         toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
@@ -1184,14 +1195,17 @@ class PreferencesContent(QWidget):
         toggle.setEnabled(alarm_cfg.use_global_animal_presence)
         toggle.stateChanged.connect(toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        def use_toggle_changed(value, toggle_use=toggle):
+        def use_global_presence_toggle_changed(value, toggle_allow_resume=toggle):
             toggled = value != 0
-            toggle_use.setEnabled(toggled)
+            toggle_allow_resume.setEnabled(toggled)
             cfg = alarm_monitor.config
             if toggled != cfg.use_global_animal_presence:
                 cfg.use_global_animal_presence = toggled
                 alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        self._use_global_animal_presence_toggle.stateChanged.connect(use_toggle_changed)
+                alarm_monitor.post_alarm_event(
+                    ApiAlarmKind.animalImmobile,
+                    alarm_monitor.global_animal_presence_engaged, toggled)
+        self._use_global_presence_toggle.stateChanged.connect(use_global_presence_toggle_changed)
         cur_row += 1
 
         # Device comm. error
