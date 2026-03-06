@@ -15,7 +15,7 @@ dependencies = [
     # requesting exact version for sub-auto-trainer projects,
     # given API can be still unstable.
     'auto-trainer-training == 0.9.11',
-    'auto-trainer-api == 0.9.11',
+    'auto-trainer-api == 0.9.13',
 
     # CAN communication with pellet/tunnel boards:
     'pyjerrycan >= 1.2.5, < 2 ; platform_machine == "aarch64"',

@@ -2,7 +2,8 @@ import dataclasses
 import math
 from typing import Optional, Tuple, List
 
-from autotrainer.api.api_event_kind import ApiDetectorKind
+from autotrainer.api import ApiDetectorKind
+
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import get_perf_now, Offset3DTuple, calculate_std_dev_manual
 from autotrainer.core.logging import get_verbose_logger

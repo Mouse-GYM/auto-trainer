@@ -20,16 +20,16 @@ import yaml
 from watchdog.events import FileSystemEvent, PatternMatchingEventHandler
 from watchdog.observers import Observer
 
-from autotrainer.api.api_event_kind import ApiSystemStatus, ApiDetectorKind, PelletStatus, HeadFixStatus, \
-    ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus
+from autotrainer.api import ApiSystemStatus, ApiDetectorKind, \
+    ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus, ApiHeadFixStatus, ApiPelletStatus, ApiTrainingMode, \
+    ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind
+
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
                               NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis,
                               Offset3DTuple)
-from autotrainer.core import FixedArrayMultiQueue
-from autotrainer.core import ProjectInfo
-from autotrainer.core import AnimalSubject
-from autotrainer.core.project import ProjectDependentProtol
+from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
+from autotrainer.core.project import ProjectInfo, ProjectDependentProtol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, no_op_timer
@@ -51,15 +51,13 @@ from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingM
 
 from autotrainer.training import TrainingPlan, TrainingPhase
 
-from autotrainer.api.command.status_response import ApiAppStatus, ApiTrainingMode
-from autotrainer.api.rpc_service import ApiCommand, ApiCommandRequestErrorKind
 from autotrainer.api import (
     RpcService,
     ApiCommandRequest,
     ApiCommandRequestResponse,
-    ApiCommandReqeustResult,
+    ApiCommandRequestResult,
     ApiTopic,
-    ConfigurationResponse, StatusResponse, ApiEventKind,
+    ApiEventKind,
 )
 
 from tools.autotrainer_version import __version__ as app_version
@@ -116,16 +114,21 @@ class AppModelStatus(str, enum.Enum):
     def is_target_status_valid(self, target: "AppModelStatus"):
         return target in _app_model_status_valid_targets.get(self, ())
 
-    def to_api_app_status(self) -> ApiAppStatus:
-        if self is self.ANIMAL_IN_DEVICE and not hasattr(ApiAppStatus, self.name):
-            return ApiAppStatus.ACQUIRING
-        if self is self.ANIMAL_IN_TRAINING and not hasattr(ApiAppStatus, self.name):
-            return ApiAppStatus.ACQUIRING
-        return getattr(ApiAppStatus, self.name)
+    def to_api_app_mode(self) -> ApiApplicationMode:
+        return _app_model_status_2_api_app_mode[self]
 
     def to_behavior_algo_status(self) -> Optional[BehaviorAlgoStatus]:
         return _to_behavior_algo_status.get(self, None)
 
+
+_app_model_status_2_api_app_mode = {
+    AppModelStatus.IDLE: ApiApplicationMode.IDLE,
+    AppModelStatus.ACQUIRING: ApiApplicationMode.RUNNING,
+    AppModelStatus.CALIBRATION_3D: ApiApplicationMode.CALIBRATION_3D,
+    AppModelStatus.CALIBRATION_DCS: ApiApplicationMode.CALIBRATION_DCS,
+    AppModelStatus.ANIMAL_IN_DEVICE: ApiApplicationMode.IN_DEVICE,
+    AppModelStatus.ANIMAL_IN_TRAINING: ApiApplicationMode.IN_TRAINING,
+}
 
 _app_model_status_valid_targets = {
     AppModelStatus.IDLE: {
@@ -358,7 +361,7 @@ class AppModel(ObservableObject):
 
         self._timer_send_status = no_op_timer
         def send_system_status_and_reschedule():
-            self._send_system_status()
+            self._send_api_system_status()
             delay = 60
             timer = self._timer_send_status = make_daemon_timer(delay, send_system_status_and_reschedule)
             timer.start()
@@ -1681,23 +1684,23 @@ class AppModel(ObservableObject):
             rsp = self.__handle_rpc_service_command(request)
         except Exception as err:
             logger.exception("RPC command %s exception: %s", request.command, err)
-            result = ApiCommandReqeustResult.EXCEPTION
+            result = ApiCommandRequestResult.EXCEPTION
             error_code = ApiCommandRequestErrorKind.COMMAND_ERROR
             error_message = f"Exception executing {request.command}: {type(err)} -> {err}"
         else:
             if isinstance(rsp, ApiCommandRequestResponse):
                 return dataclasses.replace(rsp, command=request.command, nonce=request.nonce)
-            if isinstance(rsp, ApiCommandReqeustResult):
+            if isinstance(rsp, ApiCommandRequestResult):
                 result = rsp
             elif any(map(lambda x: rsp is x, (None, True, False))):  # to not have to create/return it for all possible request
                 if rsp is not False:
-                    result = ApiCommandReqeustResult.SUCCESS
+                    result = ApiCommandRequestResult.SUCCESS
                 else:
-                    result = ApiCommandReqeustResult.FAILED
+                    result = ApiCommandRequestResult.FAILED
                     error_code = ApiCommandRequestErrorKind.COMMAND_ERROR
                     error_message = f"Command request {request.command} failed"
             else:
-                result = ApiCommandReqeustResult.SUCCESS
+                result = ApiCommandRequestResult.SUCCESS
                 data = rsp
 
         return ApiCommandRequestResponse(
@@ -1709,7 +1712,7 @@ class AppModel(ObservableObject):
             error_message=error_message,
         )
 
-    def _handle_rpc_async_command(self, request: ApiCommandRequest, func):
+    def _handle_rpc_async_command(self, request: ApiCommandRequest, func) -> ApiCommandRequestResult:
         def execute():
             try:
                 res = func()
@@ -1724,18 +1727,18 @@ class AppModel(ObservableObject):
                 # service gone
                 return
             if has_err is not None:
-                result = ApiCommandReqeustResult.EXCEPTION
+                result = ApiCommandRequestResult.EXCEPTION
                 error_code = ApiCommandRequestErrorKind.SYSTEM_ERROR
                 error_message = f"{has_err}"
             else:
                 if res is None:
                     res = True
                 if res is True:
-                    result = ApiCommandReqeustResult.SUCCESS
+                    result = ApiCommandRequestResult.SUCCESS
                     error_code = ApiCommandRequestErrorKind.NONE
                     error_message = None
                 else:
-                    result = ApiCommandReqeustResult.FAILED
+                    result = ApiCommandRequestResult.FAILED
                     error_code = ApiCommandRequestErrorKind.COMMAND_ERROR
                     error_message = f"{request.command} failed (result=False)"
             #
@@ -1751,10 +1754,10 @@ class AppModel(ObservableObject):
         #
         th = threading.Thread(target=execute, daemon=True, name=f"Handle-{func}")
         th.start()
-        return ApiCommandReqeustResult.PENDING_WITH_NOTIFICATION
+        return ApiCommandRequestResult.PENDING_WITH_NOTIFICATION
 
     def __handle_rpc_service_command(self, request: ApiCommandRequest) -> Optional[
-        Union[bool, ApiCommandRequestResponse, ApiCommandReqeustResult, Any]]:
+        Union[bool, ApiCommandRequestResponse, ApiCommandRequestResult, Any]]:
         cmd = request.command
         rsp = None  # let caller handle it
         if cmd == ApiCommand.START_ACQUISITION:
@@ -1777,7 +1780,7 @@ class AppModel(ObservableObject):
             if project_info is None:
                 raise RuntimeError(f"No current project info")
             prefs = self._preferences
-            return ConfigurationResponse(
+            return ApiSystemConfiguration(
                 application_version=self._app_version,
                 device_id=project_info.device_id,
                 configuration_location=self._loaded_config_dir_path.as_posix(),
@@ -1788,19 +1791,14 @@ class AppModel(ObservableObject):
             )
 
         elif cmd == ApiCommand.GET_STATUS:
-            animal = self._selected_animal
-            return StatusResponse(
-                animal_id="" if animal is None else animal.id,
-                app_status=self._status.to_api_app_status(),
-                training_mode=training_mode_to_api_training_mode(self._training_mode),
-            )
+            return self._make_api_system_status_payload()
 
         elif cmd == ApiCommand.NONE:
             pass
 
         else:
             rsp = ApiCommandRequestResponse(
-                result=ApiCommandReqeustResult.UNRECOGNIZED,
+                result=ApiCommandRequestResult.UNRECOGNIZED,
                 nonce=request.nonce,
                 command=cmd,
                 error_code=ApiCommandRequestErrorKind.COMMAND_ERROR,
@@ -1808,7 +1806,14 @@ class AppModel(ObservableObject):
             )
         return rsp
 
-    def _send_system_status(self):
+    def _send_api_system_status(self):
+        system_status = self._make_api_system_status_payload()
+        self._event_manager.post_event_content(
+            kind=ApiEventKind.systemStatus,
+            context=dataclasses.asdict(system_status),
+        )
+
+    def _make_api_system_status_payload(self) -> ApiSystemStatus:
         hard = self._hardware
         algo = self._behavior.algorithm
         analysis = self._behavior.analysis
@@ -1877,24 +1882,25 @@ class AppModel(ObservableObject):
         else:
             send_xyz = Offset3DTuple.get_nan()
 
+        animal = self._selected_animal
+
         system_status = ApiSystemStatus(
+            application_mode=self._status.to_api_app_mode(),
+            training_mode=training_mode_to_api_training_mode(self._training_mode),
+            animal_id=None if animal is None else animal.id,
             detectors=detectors,
             alarms=alarms,
-            pellet=PelletStatus(
+            pellet=ApiPelletStatus(
                 send_x=send_xyz.x,
                 send_y=send_xyz.y,
                 send_z=send_xyz.z,
             ),
-            headfix=HeadFixStatus(
+            headfix=ApiHeadFixStatus(
                 currentMagnetIntensity=magnet_intensity,
                 baselineMagnetIntensity=algo.baseline_intensity,
             ),
         )
-
-        self._event_manager.post_event_content(
-            kind=ApiEventKind.systemStatus,
-            context=dataclasses.asdict(system_status),
-        )
+        return system_status
 
     #
 
@@ -1903,7 +1909,7 @@ class AppModel(ObservableObject):
         if rpc is None:
             return
         message = ApiCommandRequestResponse(
-            result=ApiCommandReqeustResult.SUCCESS,
+            result=ApiCommandRequestResult.SUCCESS,
             command=command,
             data=dict(reason=source),
         )

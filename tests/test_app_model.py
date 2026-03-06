@@ -3,15 +3,15 @@ import pytest
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 from tools.acquisition.model.app_model import AppModelStatus
 
-from autotrainer.api.command.status_response import ApiAppStatus
+from autotrainer.api import ApiApplicationMode
 
 
 class TestStatus:
 
     @pytest.mark.parametrize("app_model_status", list(AppModelStatus))
-    def test_it_can_translate_to_api_app_status(self, app_model_status: AppModelStatus) -> None:
-        api_app_status = app_model_status.to_api_app_status()
-        assert isinstance(api_app_status, ApiAppStatus)
+    def test_it_can_translate_to_api_app_mode(self, app_model_status: AppModelStatus) -> None:
+        api_app_mode = app_model_status.to_api_app_mode()
+        assert isinstance(api_app_mode, ApiApplicationMode)
 
     @pytest.mark.parametrize("app_model_status", list(AppModelStatus))
     def test_it_can_translate_to_behavior_status(self, app_model_status: AppModelStatus):

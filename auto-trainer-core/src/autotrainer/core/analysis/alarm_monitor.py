@@ -5,10 +5,9 @@ import threading
 import time
 from typing import Optional, List, Set, Callable
 
-from autotrainer.api.api_event_kind import ApiDetectorKind, ApiEventKind, ApiAlarmKind
-from autotrainer.api.api_event_kind import ApiDetectorKind
+from autotrainer.api import ApiDetectorKind, ApiEventKind, ApiAlarmKind
 
-from autotrainer.core import ObservableObject, get_perf_now, EventManager
+from autotrainer.core import get_perf_now, EventManager
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.analysis.external_doors_monitor import ExternalDoorsMonitor
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor

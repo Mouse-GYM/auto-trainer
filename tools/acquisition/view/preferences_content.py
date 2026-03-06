@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabe
                                QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QSpinBox, QGridLayout,
                                QLayout, QSizePolicy, QMessageBox)
 
-from autotrainer.api.api_event_kind import ApiAlarmKind
+from autotrainer.api import ApiAlarmKind
 
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration, PelletDeliveryConfiguration
