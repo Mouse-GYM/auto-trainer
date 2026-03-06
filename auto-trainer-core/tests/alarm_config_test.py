@@ -15,5 +15,5 @@ def test_can_load_previous_config():
 
 
 def test_raise_with_positional_arg():
-    with pytest.raises(TypeError, match="__init__\(\) takes 1 positional argument but 2 were given"):
+    with pytest.raises(TypeError, match=r"__init__\(\) takes 1 positional argument but 2 were given"):
         EmergencyAlarmConfiguration("anything")
