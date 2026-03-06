@@ -22,6 +22,7 @@
       },
       "sessionActions": [],
       "startingBaselineIntensity": 0,
+      "isPelletDeliveryEnabled": false,
       "isPelletCoverEnabled": false,
       "isAutoClampEnabled": false
     },
@@ -29,7 +30,18 @@
       "phaseId": "3a37f67e-12f1-47e3-ae9a-fd6d0edb9bad",
       "name": "Reach B",
       "description": "Automated pellet delivery (uncovered).",
-      "fallbackPredicate": null,
+      "fallbackPredicate":   {
+        "type": "NumberComparisonPredicate",
+        "module": "autotrainer.training.training_predicate",
+        "properties": {
+          "comparisonType": "GTE",
+          "path": [
+            "progress",
+            "pellets_presented"
+          ],
+          "value": 3
+        }
+      },
       "advancePredicate": {
         "type": "NumberComparisonPredicate",
         "module": "autotrainer.training.training_predicate",
@@ -44,6 +56,7 @@
       },
       "sessionActions": [],
       "startingBaselineIntensity": 0,
+      "isPelletDeliveryEnabled": true,
       "isPelletCoverEnabled": false,
       "isAutoClampEnabled": false
     },
@@ -76,6 +89,7 @@
         }
       ],
       "startingBaselineIntensity": 0,
+      "isPelletDeliveryEnabled": true,
       "isPelletCoverEnabled": true,
       "isAutoClampEnabled": false
     },
@@ -83,7 +97,18 @@
       "phaseId": "3a37f67e-12f1-47e3-ae9a-fd6d0edb9baf",
       "name": "Reach D",
       "description": "Stable automatic delivery (covered with reach distance).",
-      "fallbackPredicate": null,
+      "fallbackPredicate":    {
+        "type": "NumberComparisonPredicate",
+        "module": "autotrainer.training.training_predicate",
+        "properties": {
+          "comparisonType": "GTE",
+          "path": [
+            "progress",
+            "pellets_presented"
+          ],
+          "value": 3
+        }
+      },
       "advancePredicate": {
         "type": "NumberComparisonPredicate",
         "module": "autotrainer.training.training_predicate",
@@ -98,6 +123,7 @@
       },
       "sessionActions": [],
       "startingBaselineIntensity": 10,
+      "isPelletDeliveryEnabled": true,
       "isPelletCoverEnabled": true,
       "isAutoClampEnabled": false
     },
@@ -131,6 +157,7 @@
         }
       ],
       "startingBaselineIntensity": 0,
+      "isPelletDeliveryEnabled": true,
       "isPelletCoverEnabled": true,
       "isAutoClampEnabled": false
     },
@@ -153,6 +180,7 @@
       },
       "sessionActions": [],
       "startingBaselineIntensity": 90,
+      "isPelletDeliveryEnabled": true,
       "isPelletCoverEnabled": true,
       "isAutoClampEnabled": false
     },
@@ -175,6 +203,7 @@
       },
       "sessionActions": [],
       "startingBaselineIntensity": 90,
+      "isPelletDeliveryEnabled": true,
       "isPelletCoverEnabled": true,
       "isAutoClampEnabled": true
     },
@@ -183,20 +212,10 @@
       "name": "Head Fix D",
       "description": "Auto-clamp enabled until digital feed indicates release.",
       "fallbackPredicate": null,
-      "advancePredicate": {
-        "type": "NumberComparisonPredicate",
-        "module": "autotrainer.training.training_predicate",
-        "properties": {
-          "comparisonType": "GTE",
-          "path": [
-            "progress",
-            "pellets_consumed"
-          ],
-          "value": 3
-        }
-      },
+      "advancePredicate": null,
       "sessionActions": [],
       "startingBaselineIntensity": 90,
+      "isPelletDeliveryEnabled": true,
       "isPelletCoverEnabled": true,
       "isAutoClampEnabled": true
     }

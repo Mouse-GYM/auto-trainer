@@ -43,7 +43,7 @@ class StatusIcon(QLabel):
     def setStatus(self, status: bool):
         self._cur_status = status
         in_use = self._in_use
-        logger.debug("setStatus[%s]: status=%s in_use=%s", self._name, status, in_use)
+        # logger.debug("setStatus[%s]: status=%s in_use=%s", self._name, status, in_use)
         self.setPixmap(
             (self._on if in_use else self._on_disabled) if status
             else (self._off if in_use else self._off_disabled)

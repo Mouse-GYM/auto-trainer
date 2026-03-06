@@ -42,6 +42,10 @@ class BaseDetector(ObservableObject):
         })
 
     @property
+    def running(self):
+        return self._running
+
+    @property
     def is_engaged(self):
         return self._is_engaged
 
@@ -58,6 +62,14 @@ class BaseDetector(ObservableObject):
         self._logger.notice("is_engaged -> %s (age previous = %.1f)",
                             value, perf_now - (self._disengaged_perf_c if value else self._engaged_perf_c))
         self._on_property_changed(self.IS_ENGAGED, value, prev)
+
+    @property
+    def engaged_age(self):
+        return (get_perf_now() if self._is_engaged else self._disengaged_perf_c) - self._engaged_perf_c
+
+    @property
+    def disengaged_age(self):
+        return (get_perf_now() if not self._is_engaged else self._engaged_perf_c) - self._disengaged_perf_c
 
     def _make_new_timer(self, delay: float):
         self._cur_timer.cancel()  # safer
@@ -155,7 +167,7 @@ class BaseDetector(ObservableObject):
             thread.join(3)
             self._logger.verbose("joined check thread %s", thread)
             if thread.is_alive():
-                logger.warning("check thread still alive, but continuing anyway")
+                self._logger.warning("check thread still alive, but continuing anyway")
             self._thread_queue = None
 
     def restart(self):

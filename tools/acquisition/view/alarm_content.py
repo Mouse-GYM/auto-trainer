@@ -223,7 +223,7 @@ class AlarmContent(ContentWidget):
     @invoke_method
     def _alarm_monitor_property_changed(self, name, value, old_value):
         p = EmergencyAlarmMonitor
-        logger.debug("got %s -> %s (was %s)", name, value, old_value)
+        # logger.debug("got %s -> %s (was %s)", name, value, old_value)
         alarm_monitor = self._app_model.analysis.emergency_alarm_monitor
         is_pause_emergency = self._app_model.behavior.algorithm.algo_paused
         cfg = alarm_monitor.config

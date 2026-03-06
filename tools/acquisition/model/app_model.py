@@ -20,6 +20,8 @@ import yaml
 from watchdog.events import FileSystemEvent, PatternMatchingEventHandler
 from watchdog.observers import Observer
 
+from autotrainer.api.api_event_kind import ApiSystemStatus, ApiDetectorKind, PelletStatus, HeadFixStatus, \
+    ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
                               NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis,
@@ -29,6 +31,8 @@ from autotrainer.core import ProjectInfo
 from autotrainer.core import AnimalSubject
 from autotrainer.core.project import ProjectDependentProtol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
+from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, no_op_timer
 from autotrainer.core.logging import get_verbose_logger, set_log_location
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, DaemonTimer
 from autotrainer.core.pose_elements import SceneElement
@@ -349,6 +353,15 @@ class AppModel(ObservableObject):
         self._plans_files_observer = Observer()
         self._plans_files_observer.start()
 
+        self._timer_send_status = no_op_timer
+        def send_system_status_and_reschedule():
+            self._send_system_status()
+            delay = 60
+            timer = self._timer_send_status = make_daemon_timer(delay, send_system_status_and_reschedule)
+            timer.start()
+            logger.verbose("Scheduled send_system_status in %.1f seconds", delay)
+        send_system_status_and_reschedule()
+
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_daily_timer(self):
         logger.notice("Daily timer triggered")
@@ -371,7 +384,6 @@ class AppModel(ObservableObject):
         timer = self._timer_daily = _daily_timer(delay, self._on_daily_timer)
         timer.start()
         logger.verbose("Created new daily timer in %.1f seconds", delay)
-
 
     @property
     def app_lock(self) -> threading.RLock:
@@ -1039,6 +1051,8 @@ class AppModel(ObservableObject):
 
         logger.debug("connecting hardware ...")
         self._hardware.connect(self._system_message_handler.input_queue)
+
+
         self._hardware.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)
         logger.info("finished connecting hardware")
 
@@ -1312,6 +1326,7 @@ class AppModel(ObservableObject):
         logger.debug("AppModel.on_close")
 
         for timer in (
+            self._timer_send_status,
             self._timer_recording_age_enough,
             self._timer_daily,
         ):
@@ -1468,9 +1483,8 @@ class AppModel(ObservableObject):
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal
-        if animal is None:
-            return
-        if name in {'set_x', 'set_y', 'set_z'}:
+        hard = self._hardware
+        if animal is not None and name in {'set_x', 'set_y', 'set_z'}:
             # only when manual:
             if self._training_mode != TrainingMode.MANUAL:
                 return
@@ -1478,7 +1492,8 @@ class AppModel(ObservableObject):
             coord = name[-1]
             coord_idx = "xyz".index(coord)
             # prevent NaN if hardware has not yet reported any send_x :
-            t = [hardware.send_x, hardware.send_y, hardware.send_z]
+            pos = hardware.last_set_position or Offset3DTuple.get_nan()
+            t = list(pos)
             t[coord_idx] = value
             if any((math.isnan(v) or v is None) for v in t):
                 logger.verbose("hardware set_xyz has NaN/None still: %s", t)
@@ -1789,6 +1804,94 @@ class AppModel(ObservableObject):
                 error_message=f"Unknown/Unhandled request command: {cmd!r}"
             )
         return rsp
+
+    def _send_system_status(self):
+        hard = self._hardware
+        algo = self._behavior.algorithm
+        analysis = self._behavior.analysis
+        magnet_intensity = hard.head_magnet_intensity
+        if magnet_intensity is None:
+            magnet_intensity = math.nan
+        doors_mon = analysis.external_doors_monitor
+        doors_state = doors_mon.doors_state
+        alarm_mon = analysis.emergency_alarm_monitor
+        alarm_cfg = alarm_mon.config
+        load_cell = analysis.load_cell_monitor
+        audio_mon = analysis.audio_thrashing_monitor
+        presence_mon = analysis.global_animal_presence_monitor
+        misplaced_mon = analysis.pellet_misplaced_monitor
+
+        detectors = [
+            ApiDetectorStatus(
+                detector_id=ApiDetectorKind.frontDoor,
+                is_enabled=doors_mon.running,
+                is_active=doors_state.front.open,
+            ),
+            ApiDetectorStatus(
+                detector_id=ApiDetectorKind.slidingDoor,
+                is_enabled=doors_mon.running,
+                is_active=doors_state.sliding.open,
+            ),
+            ApiDetectorStatus(
+                detector_id=ApiDetectorKind.loadCellThrash,
+                is_enabled=load_cell.running,
+                is_active=load_cell.thrashing_detected,
+            ),
+            ApiDetectorStatus(
+                detector_id=ApiDetectorKind.audioThrash,
+                is_enabled=audio_mon.running,
+                is_active=audio_mon.thrashing_detected,
+            ),
+            ApiDetectorStatus(
+                detector_id=ApiDetectorKind.pelletMisplaced,
+                is_enabled=misplaced_mon.running,
+                is_active=misplaced_mon.is_engaged,
+            ),
+            ApiDetectorStatus(
+                detector_id=ApiDetectorKind.deviceAckTimeOut,
+                is_enabled=self._acquisition_started,
+                is_active=hard.device_ack_timeout_engaged,
+            ),
+        ]
+        alarms = [
+            ApiAlarmStatus(alarm_id=ApiAlarmKind.externalDoors,
+                           is_enabled=alarm_cfg.use_external_doors_open,
+                           is_active=alarm_mon.ext_doors_open_engaged),
+            ApiAlarmStatus(alarm_id=ApiAlarmKind.animalMissing,
+                           is_enabled=alarm_cfg.use_presence_missing_after_exit_tunnel,
+                           is_active=alarm_mon.presence_in_cage_after_exit_tunnel_engaged),
+            ApiAlarmStatus(alarm_id=ApiAlarmKind.animalImmobile,
+                           is_enabled=alarm_cfg.use_global_animal_presence,
+                           is_active=alarm_mon.global_animal_presence_engaged),
+            ApiAlarmStatus(alarm_id=ApiAlarmKind.thrashing,
+                           is_enabled=alarm_cfg.use_audio_load_cell_thrash,
+                           is_active=alarm_mon.audio_load_cell_thrashing_engaged),
+        ]
+
+        dcs_cfg = algo.diamond_triangle_config
+        if dcs_cfg is not None and dcs_cfg.fully_valid:
+            send_xyz = dcs_cfg.motor_to_diamond(hard.motor_send_coordinates)
+        else:
+            send_xyz = Offset3DTuple.get_nan()
+
+        system_status = ApiSystemStatus(
+            detectors=detectors,
+            alarms=alarms,
+            pellet=PelletStatus(
+                send_x=send_xyz.x,
+                send_y=send_xyz.y,
+                send_z=send_xyz.z,
+            ),
+            headfix=HeadFixStatus(
+                currentMagnetIntensity=magnet_intensity,
+                baselineMagnetIntensity=algo.baseline_intensity,
+            ),
+        )
+
+        self._event_manager.post_event_content(
+            kind=ApiEventKind.systemStatus,
+            context=dataclasses.asdict(system_status),
+        )
 
     #
 

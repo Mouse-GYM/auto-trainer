@@ -117,9 +117,9 @@ class LoadCellMonitor(BaseDetector):
     IS_THRASHING_DETECTED_PROPERTY = "is_thrashing_detected"
 
     def __init__(
-            self,
-            *,
-            config: Optional[LoadCellConfiguration] = None
+        self,
+        *,
+        config: Optional[LoadCellConfiguration] = None
     ):
         super().__init__()
         if config is None:
@@ -143,13 +143,15 @@ class LoadCellMonitor(BaseDetector):
             Tuple[float, float, int]
             # data, when, index
         ] = deque()
-        self._thread_lock = threading.RLock()  # might be required re-entrant lock !!
         self._context = LoadCellMonitorContext(
             last_engaged_perf_c=-math.inf,
             last_disengaged_perf_c=-math.inf,
             thrashing_last_engaged_perf_c=-math.inf,
             thrashing_last_disengaged_perf_c=-math.inf,
         )
+
+    def _check_state(self) -> Optional[float]:
+        return None
 
     @property
     def context(self) -> LoadCellMonitorContext:
@@ -175,7 +177,7 @@ class LoadCellMonitor(BaseDetector):
 
     @is_engaged.setter
     def is_engaged(self, value):
-        with self._thread_lock:
+        with self._lock:
             if value == self._context.is_engaged:
                 return
             new_context = dataclasses.replace(self._context, is_engaged=value)
@@ -197,7 +199,7 @@ class LoadCellMonitor(BaseDetector):
 
     @thrashing_detected.setter
     def thrashing_detected(self, value):
-        with self._thread_lock:
+        with self._lock:
             self._set_thrashing_detected(value)
 
     def _set_thrashing_detected(self, value):
@@ -370,7 +372,7 @@ class LoadCellMonitor(BaseDetector):
     def _ensure_active(self):
         # can be called directly from caller of update() thread or indirectly with a timer thread
         # not sure if we should not maybe better only handle the direct one..
-        with self._thread_lock:
+        with self._lock:
             self.__ensure_active()
 
     def __ensure_active(self):
@@ -384,7 +386,7 @@ class LoadCellMonitor(BaseDetector):
 
     def _ensure_inactive(self):
         # can be called directly from caller of update() thread or indirectly with a timer thread
-        with self._thread_lock:
+        with self._lock:
             self.__ensure_inactive()
 
     def __ensure_inactive(self):

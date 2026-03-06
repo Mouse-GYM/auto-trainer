@@ -69,7 +69,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtol):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _alarm_monitor_property_changed(self, name, value, old_value):
-        logger.debug("alarm-mon: %s : %s -> %s", name, old_value, value)
+        # logger.debug("alarm-mon: %s : %s -> %s", name, old_value, value)
         if name == EmergencyAlarmMonitor.IS_ENGAGED:
             alarm_mon = self._analysis.emergency_alarm_monitor
             algo_status = self._system_machine.algorithm.status
