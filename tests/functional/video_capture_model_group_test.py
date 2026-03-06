@@ -1,6 +1,7 @@
 import argparse
 import logging
 import time
+from typing import List
 
 import pytest
 
@@ -48,7 +49,7 @@ def output_location():
 def test_video_capture_model(camera_url_1: CaptureCameraAttrs, camera_url_2: CaptureCameraAttrs,
                              camera_url_3: CaptureCameraAttrs, iterations: int, duration: int,
                              output_location: str):
-    models = list()
+    models: List[VideoCaptureModel] = []
 
     if camera_url_1 != "":
         model_1 = VideoCaptureModel("1")

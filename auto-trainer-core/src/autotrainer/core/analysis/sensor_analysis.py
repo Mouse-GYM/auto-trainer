@@ -98,6 +98,7 @@ class SensorAnalysis(ObservableObject):
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_window=30)
 
         self._detectors = [
+            self._load_cell_monitor,
             self._external_doors_monitor,
             self._global_animal_presence_monitor,
             self._pellet_misplaced_monitor,

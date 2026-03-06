@@ -86,6 +86,8 @@ class PelletMachine(StateMachine):
             model_override=True,
         )
 
+        self._consecutive_failed_load = 0
+
         self._pellet_load_count = 0
         self._pellet_retract_count = 0
 
@@ -110,6 +112,8 @@ class PelletMachine(StateMachine):
         self._api_status_token = self._pellet_device.load_pellet()
         if self._api_status_token is None:
             raise PelletDeviceCommandFailed
+        if self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
+            self._consecutive_failed_load += 1
         self.events.pellet_loading()
         self._prev_pellet_load_perf_c = get_perf_now()
         self._covered_state = None
@@ -250,6 +254,7 @@ class PelletMachine(StateMachine):
         if self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
             self._prev_notify_loaded_perf_c = get_perf_now()
             logger.info("Notifying pellet loaded successfully")
+            self._consecutive_failed_load = 0
             self.events.pellet_loaded()
 
     @BehaviorAlgorithm.relay_func
@@ -292,7 +297,7 @@ class PelletMachine(StateMachine):
                 cur_state, caller, reason, is_from_inference,
                 algo.is_in_session, pellet_seen,
                 algo.pellet_recently_seen, algo.triangle_recently_seen,
-                algo.session_mouse_seen, algo.session_pellet_count, must_release,
+                algo.session_mouse_seen, algo.session_pellet_loaded_count, must_release,
                 algo.system_state, algo.intersession_state,
                 algo.pellet_seen_age, algo.hands_near_pellet_seen, self._covered_state,
             )
@@ -524,7 +529,7 @@ class PelletMachine(StateMachine):
 
         dict(
             trigger=force_load_pellet,
-            source=[PelletState.loading, PelletState.monitoring, PelletState.covering, PelletState.retract],
+            source="*",
             dest=PelletState.loading,
             before=before_load_pellet,
             # conditions=can_load_pellet,  # contrary to load_pellet

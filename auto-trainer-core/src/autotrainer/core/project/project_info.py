@@ -379,6 +379,7 @@ class ProjectInfo(_ProjectInfo):
         """Calculate the next session index & date and store it locally"""
         if when is None:
             when = _get_datetime_now()
+        prev_when = self.when
         location, _ = self.get_day_path(when=when)
         logger.debug(f"calculating next session index in %s", location)
         path = Path(location)
@@ -386,19 +387,35 @@ class ProjectInfo(_ProjectInfo):
         was_dir = path.is_dir()
         path.mkdir(parents=True, exist_ok=True)  # this ensures 2 consecutive won't get same
         if not existed or not was_dir:
-            with self:
-                self.session = 1
-                self.when = when
-            return
-        tentative_p, _, _ = self.get_session_path(session=self.session + 1, skip_ensure=True)
+            tentative_p, _, _ = self.get_session_path(session=1, when=when, skip_ensure=True)
+            try:
+                Path(tentative_p).mkdir(parents=True)
+            except FileExistsError:
+                pass
+            else:
+                with self:
+                    self.session = 1
+                    self.when = when
+                return
+        if prev_when.date() < when.date():
+            # actually the day directory could be already created from possible other writers to it,
+            # this ensures that we should get the correct new session nbr
+            new_session_nbr = 1
+        else:
+            new_session_nbr = self.session + 1
+        tentative_p, _, _ = self.get_session_path(session=new_session_nbr, when=when, skip_ensure=True)
         tentative_p = Path(tentative_p)
         if not tentative_p.exists():
-            logger.info("found fast next session: %s", tentative_p)
-            with self:
-                self.session += 1
-                self.when = when
-                tentative_p.mkdir(exist_ok=True, parents=True)
-            return
+            try:
+                Path(tentative_p).mkdir(parents=True)
+            except FileExistsError:
+                pass
+            else:
+                logger.info("found fast next session: %s", tentative_p)
+                with self:
+                    self.session = new_session_nbr
+                    self.when = when
+                return
 
         # slower code way
         session_dirs = [x.name[-3:] for x in path.iterdir() if x.is_dir() and "trial" in x.name]
@@ -423,6 +440,20 @@ class ProjectInfo(_ProjectInfo):
             with self:
                 self.session = greater_val + 1
                 self.when = when
+
+    def get_log_file_path(self, when: Optional[datetime] = None, *, auto_new: bool=True) -> Path:
+        when = self._get_when_or_now(when)
+        loc, today = self.get_day_path(when=when)
+        today = when.strftime(DATE_FORMAT)
+        dev_id = self.device_id
+        s_dev = f"_{dev_id}" if dev_id else ""
+        loc = Path(loc)
+        fmt = f"{today}{s_dev}_{{idx}}.log"
+        tot_prev_log_files = len(tuple(loc.glob(fmt.format(idx="*"))))
+        idx = tot_prev_log_files
+        if auto_new:
+            idx += 1
+        return Path(loc).joinpath(fmt.format(idx=f"{idx:03d}"))
 
     def to_local_value(self) -> Self:
         """Detach, if it was, from the possible shared memory values used for `when` & `session`.

@@ -81,10 +81,9 @@ class DiamondTriangleOffsetConfig:
             else:
                 logger.verbose("Loading diamond-triangle file %r", cfg_path.as_posix())
                 cfg = DiamondTriangleOffsetConfig.from_file(cfg_path)
-                if all(math.isfinite(c) for c in cfg.diamond_coord):
-                    return cfg
-                logger.warning("Diamond coordinate undefined or not finite in config %r",
-                               cfg_path.as_posix())
+                if not all(math.isfinite(c) for c in cfg.diamond_coord):
+                    logger.warning("Diamond coordinate undefined or not finite in config %r",
+                                   cfg_path.as_posix())
                 return cfg
         return None
 

@@ -7,12 +7,16 @@ import faulthandler
 from pathlib import Path
 from multiprocessing import set_start_method
 
+from autotrainer.core import PersistenceConfiguration
+
+
 # NB: do not put any imports of autotrainer* or any module not part from standard python lib.
 
 
 def _exec_main(args):
 
     from autotrainer.core.logging import get_verbose_logger, get_console_handler, set_log_location
+    from autotrainer.core.project import ProjectInfo
 
     from tools.acquisition.model.user_preferences import UserPreferences
     from tools.acquisition.model.app_model import AppModel
@@ -24,27 +28,26 @@ def _exec_main(args):
         return -1
 
     preferences = UserPreferences(settings_file_path=args.preferences_file)
-    device = "unnamed" if not preferences.serial_number else preferences.serial_number
-    set_log_location(device)
 
     get_console_handler().setLevel(preferences.log_level)
 
-    app_view_model = AppModel(preferences)
+    app_model = AppModel(preferences)
 
     try:
-        app_view_model.load_configuration(configuration)
+        app_model.load_configuration(configuration)
     except Exception as err:
         logger.exception("Could not load config: %s", err)
-        app_view_model.on_close()
+        app_model.on_close()
         return 1
 
-    app_view_model.on_activated()
-
-    if not app_view_model.on_capture_start():
+    if not app_model.capture_start():
         logger.error("failed to start capture")
+        app_model.on_close()
         return 1
 
     logger.success("App is now running")
+
+    app_model.on_activated()
 
     exit_rc = 1
     try:
@@ -56,7 +59,7 @@ def _exec_main(args):
     except Exception as err:
         logger.exception("Fatal error: %s", err)
 
-    app_view_model.on_close()
+    app_model.on_close()
 
     return exit_rc
 
@@ -86,7 +89,7 @@ def main():
         logger.exception("Fatal error: %s", err)
         exit_code = 1
     finally:
-        from autotrainer.core.event import EventManager
+        from autotrainer.core.event.event_manager import EventManager
         from autotrainer.behavior import BehaviorAlgorithm
         BehaviorAlgorithm.close_algorithm_handler()
         EventManager.try_close_default()

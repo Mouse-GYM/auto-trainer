@@ -330,7 +330,7 @@ class MockSystemMachine:
         assert self._machine.state == SystemState.cage
         self.sensor_analysis.load_cell_monitor.is_engaged = True
         self._machine.enter_tunnel(reason="manual")
-        algo.start_session()
+        algo.start_session(reason="manual")
         assert algo.is_in_session
         assert self._machine.state == SystemState.tunnel
 
@@ -338,8 +338,10 @@ class MockSystemMachine:
         assert self._machine.state != SystemState.cage
         load_cell = self.sensor_analysis.load_cell_monitor
         if load_cell.is_engaged:
+            logger.info("exiting tunnel with load-cell")
             load_cell.is_engaged = False
         else:
+            logger.info("exiting tunnel with manual")
             self._machine.exit_tunnel(reason="manual")
 
     @contextlib.contextmanager
@@ -365,14 +367,17 @@ class MockSystemMachine:
             results = IntersessionResponse()
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())
-            stack.enter_context(self.mock_perform_detection())
+            logger.info("prepared stack for mock_perform_segmentation")
             yield
+            stack.enter_context(self.mock_perform_detection())
+            logger.info("prepared stack for mock_perform_detection")
             if concurrent_func is not None:
                 concurrent_func()
             self.mock_complete_segmentation(segmentation_ok)
             if segmentation_ok:
                 self.mock_complete_detection(detection_ok)
             if detection_ok:
+                logger.info("sending detection_result_ready")
                 self.inference.detection_result_ready(self.inference.project, results)
 
     @contextlib.contextmanager
@@ -383,6 +388,7 @@ class MockSystemMachine:
 
     def mock_complete_segmentation(self, success: bool):
         seg_cfg = self._machine.intersession._segmentation_configuration
+        logger.info("calling segmentation complete")
         assert seg_cfg is not None
         seg_cfg.complete(seg_cfg.nonce, success)
 
@@ -473,8 +479,8 @@ def mock_system(machine) -> MockSystemMachine:
 
 
 @pytest.fixture
-def hardware_model(fake_system_msg_handler):
-    return HardwareModel(fake_system_msg_handler)
+def hardware_model(fake_system_msg_handler, sensor_analysis):
+    return HardwareModel(fake_system_msg_handler, sensor_analysis=sensor_analysis)
 
 
 @pytest.fixture
