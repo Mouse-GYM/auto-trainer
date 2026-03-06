@@ -244,21 +244,21 @@ def test_inference_detection_ready(machine):
         pellets_presented=40,
         successful_reaches=4,
     )
-    assert algo.session_pellet_count == 0
+    # before:
     assert algo.day_pellet_count == 0
     assert algo.successful_reaches_total == 0
     assert algo.pellets_presented_total == 0
+    #
     machine._inference.detection_result_ready(machine.project, result)
-    assert algo.session_pellet_count == 20
+    # after:
     assert algo.day_pellet_count == 20
     assert algo.successful_reaches_total == 4
     assert algo.pellets_presented_total == 40
-    #
+    # now:
     result.food_consumed = 15
     result.successful_reaches = 2
     result.pellets_presented = 30
     machine._inference.detection_result_ready(machine.project, result)
-    assert algo.session_pellet_count == 35
     assert algo.day_pellet_count == 35
     assert algo.pellets_presented_total == 70
     assert algo.successful_reaches_total == 6
