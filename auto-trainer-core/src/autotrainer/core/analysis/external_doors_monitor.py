@@ -1,12 +1,10 @@
 import dataclasses
 import math
-import threading
-import time
-from collections import namedtuple
 from typing import Dict, Tuple, Optional, NamedTuple
 
-from autotrainer.api.api_event_kind import ApiDetectorKind
-from autotrainer.core import ObservableObject, get_perf_now, EventManager, ApiEventKind
+from autotrainer.api import ApiDetectorKind
+
+from autotrainer.core import get_perf_now
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.configuration.external_doors_monitor_configuration import ExternalDoorsMonitorConfig

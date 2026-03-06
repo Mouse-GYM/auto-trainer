@@ -9,12 +9,10 @@ from collections import deque
 from functools import reduce, partial
 from typing import Optional, List
 
-from autotrainer.api.api_event_kind import ApiDetectorKind
-from autotrainer.core import ObservableObject, get_perf_now, EventManager
+from autotrainer.api import ApiDetectorKind
+from autotrainer.core import get_perf_now
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.logging import get_verbose_logger
-
-from autotrainer.core.event import ApiEventKind
 
 
 logger = get_verbose_logger(__name__)

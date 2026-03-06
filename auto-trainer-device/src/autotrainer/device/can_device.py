@@ -16,8 +16,7 @@ import time
 from functools import partial
 from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict
 
-from autotrainer.api import ApiEventKind
-from autotrainer.api.api_event_kind import ApiDetectorKind
+from autotrainer.api import ApiEventKind, ApiDetectorKind
 
 from autotrainer.core import Offset3DTuple, get_perf_now
 from autotrainer.core.logging import get_verbose_logger

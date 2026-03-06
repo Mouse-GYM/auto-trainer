@@ -14,14 +14,14 @@ from typing_extensions import Self
 
 import numpy
 
-from autotrainer.api.api_event_kind import ApiDetectorKind, ApiEventKind
+from autotrainer.api import ApiDetectorKind, ApiEventKind
 
 from autotrainer.core.logging import get_verbose_logger
+
 from .detector import BaseDetector
 
-from .. import build_kwargs_apply_mapping, make_camelize_representer, get_perf_now, EventManager
+from .. import build_kwargs_apply_mapping, get_perf_now, EventManager
 from ..multiproc import make_daemon_timer, no_op_timer
-from ..observable_object import ObservableObject
 
 logger = get_verbose_logger(__name__)
 
