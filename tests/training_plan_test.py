@@ -78,15 +78,14 @@ class BaseTrainingPlan(MockSystemMachine):
             system_machine=machine,
         )
         app_model.check_diamond_coord_enabled = False
-        self._animal = app_model.add_animal("mouse1", select=True)
+        self._animal = app_model.add_animal("mouse1", select=True)  # select=True: also makes 1st pellet_send
 
         algo = app_model.behavior.algorithm
 
         assert app_model.loaded_configuration is None
         # NB: load_config -> reload_training_plan require IDLE
-        prev, app_model.status = app_model.status, AppModelStatus.IDLE
         assert app_model.load_configuration() is True
-        app_model.status = prev
+        assert app_model.loaded_configuration is not None
 
         assert algo.intersession_enabled is True  # required
         # NB: do not try change some settings after config is loaded,
@@ -100,7 +99,6 @@ class BaseTrainingPlan(MockSystemMachine):
 
         app_model.training_mode = TrainingMode.AUTOMATIC
         app_model.capture_start(target_status=AppModelStatus.ANIMAL_IN_TRAINING)
-        app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
 
         algo.pellet_delivery_enabled = True
 
@@ -218,7 +216,6 @@ class TestTrainingPlan(BaseTrainingPlan):
         pellet_m = self._machine.pellet
         assert pellet_m.state == PelletState.monitoring
         #
-        # machine.enter_tunnel(reason="manual")
         algo.update_triangle_seen(True)
         algo.update_pellet_seen(True)
         #
@@ -262,10 +259,13 @@ class TestTrainingPlan(BaseTrainingPlan):
         # so that pellet-send will be allowed with ack of previous retract:
 
         self.mock_pellet_ack()  # for retract
-        assert self.pellet_state_trans[-2:] == [PelletState.sending, PelletState.monitoring]
+        assert pellet_m.state == PelletState.sending
         self.mock_pellet_ack()  # for send
+        assert pellet_m.state == PelletState.monitoring
+        assert pellet_m._api_status_token is None
+        # assert pellet_m.covered_state is False  # depends todo
 
-        algo.capture_status = CaptureProcessStatus.RUNNING
+        algo.capture_status = CaptureProcessStatus.RUNNING  # do not seem necessary
         assert machine.state == SystemState.cage  # still ofc.
 
         self.increment_perf_now(1)
