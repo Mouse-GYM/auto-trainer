@@ -58,7 +58,7 @@ class PerfMonitor:
         if cycles <= 0:
             return False
 
-        t_perf_now = time.time()
+        t_perf_now = time.perf_counter()
 
         if self._cycle_count is None:
             self._cycle_count = 0

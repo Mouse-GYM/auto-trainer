@@ -1,35 +1,39 @@
 import logging.config
+import queue
 import signal
 import threading
 import time
 from enum import IntEnum
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, synchronize
+from pathlib import Path
 from queue import Empty
-from typing import Optional, Callable, List, Dict
+from typing import Optional, Dict
 
 import numpy
 import numpy as np
 
-from autotrainer.core import FixedArrayMultiQueue, PerfMonitor
+from autotrainer.core import FixedArrayMultiQueue, PerfMonitor, get_perf_now
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, \
     setup_logging, install_log_exception_hook
 from autotrainer.core.frame_index import FrameIndexCategory
 from . import DlcPoseModel, MemoryPoseModel
 from .pose_model import PoseModel
-
+from .pose_offline_input import OfflineInputProcess
 
 logger = get_verbose_logger(__name__)
+
+_local_do_debug = True
 
 
 class InferenceCommandMessageKind(IntEnum):
     Start = 0
     Terminate = 1
     ProcessLive = 2  # nb: not anymore used as command message.
-    ProcessOffline = 3
-    ProcessLiveWhenReady = 4
-    SetLoggerLevel = 5
-    ForceProcessOffline = 6
-
+    ProcessOffline = 3  # used for immediate 1 session/trial offline trigger
+    ForceProcessOffline = 4  # used for *batch* session/trial(s) offline trigger
+    SetOfflineToLive = 5  # used either after end-of-recording, or at end of analysis, to switch back to live
+    ProcessLiveWhenReady = -1  # not anymore used
+    SetLoggerLevel = 20
 
 class InferenceStatusMessageKind(IntEnum):
     Created = 0
@@ -66,19 +70,21 @@ class PoseProcess(Process):
     def __init__(
         self,
         live_queue: FixedArrayMultiQueue,
-        offline_queue: Optional[FixedArrayMultiQueue],
-        data_queue: Queue,
-        cmd_queue: Queue,
-        msg_queue: Queue,
         *,
         model_location: str,
+        data_queue: Queue,
+        cmd_queue: Queue,
+        cmd_queue_ack: synchronize.Event,
+        msg_queue: Queue,
+        stop_recorded_event: synchronize.Event,
     ):
         """
         :param live_queue: a FixedArrayMultiQueue as the default source of input frames
-        :param offline_queue: an optional FixedArrayMultiQueue as a secondary source of input frames
+        :param model_location: The model directory to use
         :param data_queue: an output Queue for pose data passed as tuple of pose data and the mode (live or offline)
         :param cmd_queue: an input Queue for starting, terminating, and changing queues
         :param msg_queue: an output Queue for status and performance messages
+        :param stop_recorded_event: DataMonitorProc stop recorded
         """
         log_dict_config = make_log_dict_config()
         super().__init__(
@@ -92,10 +98,12 @@ class PoseProcess(Process):
         self._model_location = model_location
 
         self._live_input_queue = live_queue
-        self._offline_input_queue = offline_queue
+        self._offline_input: Optional[OfflineInputProcess] = None
         self._cmd_queue = cmd_queue
+        self._cmd_queue_ack = cmd_queue_ack
         self._msg_queue = msg_queue
         self._data_queue = data_queue
+        self._stop_recorded_event = stop_recorded_event
 
         self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_window=30,
                                          enable_log=False)
@@ -105,6 +113,7 @@ class PoseProcess(Process):
 
         self._process_live_when_ready = False
         self._is_running = True
+        #
 
     def _do_run(self, *, log_dict_config: Optional[Dict]):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -133,6 +142,7 @@ class PoseProcess(Process):
             model = DlcPoseModel(model_path, 1, 0, self._live_input_queue.batch_size)
 
         if not model.is_valid():
+            self._send_message(InferenceStatusMessageKind.Terminated)
             logger.critical("pellet not started because the model does not exist or is not valid"
                            " at the specified location: %s", model_path)
             raise RuntimeError(f"Model at {model_path} not valid")
@@ -146,8 +156,19 @@ class PoseProcess(Process):
         self._pose_model.load()
         logging.root.setLevel(prev_lvl)
 
+        self._send_message(InferenceStatusMessageKind.Initialized, self._pose_model.body_parts)
+
+        #
+        input_q = self._live_input_queue
+        offline_input = self._offline_input = OfflineInputProcess(
+            stop_recorded=self._stop_recorded_event,
+            frame_shape=input_q.shape,
+            frames_per_cam=input_q.frames_per_camera,
+            nr_cams=input_q.camera_count,
+            msg_queue=self._msg_queue,
+        )
+
         try:
-            self._send_message(InferenceStatusMessageKind.Initialized, self._pose_model.body_parts)
             should_process = self._wait_for_start()
             if should_process:
                 thread = threading.Thread(target=self._handle_cmd_queue, daemon=True, name="CmdQueueHandler")
@@ -157,15 +178,15 @@ class PoseProcess(Process):
         except Exception as err:
             logger.exception("Error during processing: %s", err)
         finally:
+            offline_input.set_live(True)  # ensure it's interrupted if was running
             self._send_message(InferenceStatusMessageKind.Terminated)
         logger.notice("exiting pose_predict")
 
     def _send_message(self, kind: InferenceStatusMessageKind, context=None):
-        if self._msg_queue:
-            self._msg_queue.put((kind, context))
+        self._msg_queue.put((kind, context))
 
-    def _set_process_live(self):
-        logger.notice("setting processing live")
+    def _set_process_live(self, *, reason: str="na"):
+        logger.notice("setting processing live: %s", reason)
         self._input_queue = self._live_input_queue
         self._mode = InferenceMode.Live
 
@@ -185,15 +206,16 @@ class PoseProcess(Process):
         while True:
             try:
                 cmd, context = self._cmd_queue.get_nowait()
+                self._cmd_queue_ack.set()
                 if cmd == InferenceCommandMessageKind.Terminate:
                     return False
                 elif cmd == InferenceCommandMessageKind.Start:
                     break
                 elif cmd == InferenceCommandMessageKind.ProcessLive:
-                    self._set_process_live()
+                    self._set_process_live(reason=str(cmd))
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:
+                    logger.warning("unexpected cmd %s while wait for start", cmd)
                     self._set_process_offline()
-                    self._input_queue = self._offline_input_queue
                 else:
                     logger.warning("Unhandled command: %s", cmd)
             except Empty:
@@ -213,22 +235,25 @@ class PoseProcess(Process):
                     self._is_running = False
                     return
                 elif cmd == InferenceCommandMessageKind.ProcessLive:
-                    # not anymore used from main process.
-                    # we rely on FrameIndexCategory
-                    # self._set_process_live()
-                    logger.verbose("Ignoring InferenceCommandMessageKind.ProcessLive")
-                elif cmd == InferenceCommandMessageKind.ProcessOffline:
+                    self._set_process_live(reason=str(cmd))
+                elif cmd == InferenceCommandMessageKind.SetOfflineToLive:
+                    self._offline_input.set_live(True)
+                elif cmd == InferenceCommandMessageKind.ProcessOffline:  # received from perform_segmentation
                     self._set_process_offline()
+                    self._offline_input.set_project_info(context)
                 elif cmd == InferenceCommandMessageKind.ForceProcessOffline:
                     self._set_process_offline()
-                    self._input_queue = self._offline_input_queue
+                    self._offline_input.set_project_info(context)
+                    self._input_queue = self._offline_input
                 elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
-                    # NB: not anymore used actually.
+                    # NB: not anymore used, actually.
                     self._process_live_when_ready = True
                 else:
                     logger.warning("Unhandled command: %s", cmd)
             except Exception as err:
                 logger.warning("Error processing %s: %s", cmd, err)
+            finally:
+                self._cmd_queue_ack.set()
 
     def _process(self):
         # import tensorflow as tf
@@ -236,13 +261,22 @@ class PoseProcess(Process):
         # for gpu in gpus:
         #     tf.config.experimental.set_memory_growth(gpu, True)
         sent_live = False  # on first processed capture
-        frame_buffer = numpy.ndarray(
-            (self._input_queue.batch_size,  # nbr cams * frames per cam (3 atm)
-             *self._input_queue.shape,  # W, H
+        #
+        input_q = self._live_input_queue
+        # use input_queue to know the "sizes"
+        frame_buffer1 = numpy.ndarray(
+            (input_q.batch_size,  # nbr cams * frames per cam (3 atm)
+             *input_q.shape,  # W, H
              3,  # current model takes RGB
              ))
-        frames_indices = numpy.ndarray(
-            (self._input_queue.camera_count, self._input_queue.frames_per_camera), dtype="int64")
+        frames_indices1 = numpy.ndarray(
+            (input_q.camera_count, input_q.frames_per_camera), dtype="int64")
+        #
+        frame_buffer = frame_buffer1
+        frames_indices = frames_indices1
+
+        empty_zero_pose = [np.asarray([0] * 3 * len(self._pose_model.body_parts))] * frames_indices.size
+
         # use a pre-allocated copy for outputting the frames indices:
         frames_indices_out = frames_indices.copy()
         prev_mode = None
@@ -251,45 +285,79 @@ class PoseProcess(Process):
         predict = self._pose_model.predict
         perf_add_c = self._perf_monitor.add_cycle
 
-        # always begin with input queue, which should be live_input
-        i_q: Optional[FixedArrayMultiQueue] = self._input_queue
+        live_input = self._live_input_queue
+        offline_input = self._offline_input
+
+        # always begin with live input:
+        i_q: Optional[FixedArrayMultiQueue] = live_input
+
+        def get_live_input():
+            res = live_input.get_output(frame_buffer1, frames_indices1)
+            if not res:
+                time.sleep(0.001)
+            return res
+
+        def get_offline_input():
+            nonlocal frame_buffer, frames_indices
+            try:
+                frame_buffer, frames_indices = offline_input.get_output(timeout=0.1)
+            except queue.Empty:
+                if offline_input.live_requested:
+                    self._set_process_live(reason="live-requested")
+                return False
+            if (frames_indices <= 0).any():
+                logger.verbose("get_output: out indices: %s ; frames==0: %s",
+                               frames_indices.tolist(),
+                               [(frame_buffer[idx] == 0).all()
+                                for idx in range(live_input.camera_count * live_input.frames_per_camera)])
+            return True
+
+        cur_get_output = get_live_input
+        cur_release_output = lambda: None
 
         def reset_locals():
-            nonlocal i_q
+            nonlocal i_q, cur_get_output, cur_release_output
+            nonlocal frame_buffer, frames_indices
             prev_iq = i_q
             i_q = self._input_queue
             if prev_iq is not i_q:
-                if i_q is self._live_input_queue:
+                if i_q is live_input:
+                    cur_get_output = get_live_input
+                    cur_release_output = lambda: None
                     logger.notice("Switched to online/live queue: %s", frames_indices.tolist())
+                    frame_buffer = frame_buffer1
+                    frames_indices = frames_indices1
                     self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Live)
-                elif i_q is self._offline_input_queue:
+                else:
+                    cur_get_output = get_offline_input
+                    cur_release_output = offline_input.release_output
                     logger.notice("Switched to offline queue: %s", frames_indices.tolist())
                     self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
 
-        p_last_data = time.perf_counter()
+        p_last_data = get_perf_now()
 
         while self._is_running:
-            p_now = time.perf_counter()
+            p_now = get_perf_now()
 
             if prev_mode != self._mode:
-                logger.notice("Detected change of mode: %s", self._mode)
+                logger.verbose("Detected change of mode: %s", self._mode)
                 prev_mode = self._mode
 
             if i_q is not self._input_queue:
                 reset_locals()  # always, so we get eventual change from command handler
 
             # should be removed once more confident
-            if i_q is self._offline_input_queue and p_now > p_last_data + 15:
+            if i_q is offline_input and p_now > p_last_data + 15:
                 logger.warning("timeout waiting offline data ; auto-switching to online")
-                self._set_process_live()
+                self._set_process_live(reason="timeout-offline")
                 reset_locals()
 
-            if not i_q.get_output(frame_buffer, frames_indices):
-                time.sleep(0.001)
+            if not cur_get_output():
                 continue
+            mode_used = InferenceMode.Live if i_q is live_input else InferenceMode.Offline
+            actual_release_output = cur_release_output
 
             p_last_data = p_now
-            mode_used = InferenceMode.Live if i_q is self._live_input_queue else InferenceMode.Offline
 
             if (frames_indices[:, -1] < 0).any():
                 # live or "signaling" (frameIndexCategory)
@@ -298,27 +366,24 @@ class PoseProcess(Process):
                         logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices.tolist())
 
                 if (
-                    i_q is self._offline_input_queue
+                    i_q is offline_input
                     and numpy.isin(frames_indices[:, -1], [ # noqa
                         FrameIndexCategory.ONLINE_NO_RECORDING,
                         FrameIndexCategory.SWITCH_TO_ONLINE]
                     ).any()
                 ):
-                    dirty_offline = self._offline_input_queue.get_dirty_buckets()
-                    if any(any(v) for v in dirty_offline):
-                        logger.warning("Detected unexpected non-empty offline queue: %s ; indices=%s",
-                                       dirty_offline, self._offline_input_queue.get_frame_indices())
-                    self._set_process_live()
-                    reset_locals()
+                    self._set_process_live(reason=frames_indices[:, -1].tolist())
+                    # reset_locals()  # no need given done before next get_output
                 # elif required, given _set_process_live called in previous if block:
                 elif (
                     i_q is self._live_input_queue
                     and (frames_indices[:, -1] == FrameIndexCategory.EOF_RECORDING).any()
                 ):
-                    self._input_queue = self._offline_input_queue
-                    self._mode = InferenceMode.Offline
-                    # always get new ref:
-                    reset_locals()
+                    logger.notice("Got EOF_RECORDING, switching immediately to offline input")
+                    self._set_process_offline()
+                    self._input_queue = offline_input
+                    # # always get new ref:
+                    # reset_locals()  # no need given done before next get_output
 
             # only predict for not fully incomplete frames buffer:
             if (frames_indices >= FrameIndexCategory.ONLINE_NO_RECORDING).any():
@@ -326,8 +391,7 @@ class PoseProcess(Process):
             else:
                 logger.debug("indices=%s skipped inference", frames_indices.tolist())
                 # otherwise gives a full "0" result:
-                # * 3 : for X, Y and confidence
-                pose = [np.asarray([0] * 3 * len(self._pose_model.body_parts))] * frames_indices.size
+                pose = empty_zero_pose
                 # that will anyway be skipped in the consumer when needed
 
             frames_indices_out[:] = frames_indices
@@ -335,6 +399,9 @@ class PoseProcess(Process):
             # It could be eventually explained if the serialization
             # of the frames_indices numpy array happens after the return of the queue put()..
             # which is not totally impossible.
+
+            # better after copy frames_indices, but before put to output data queue
+            actual_release_output()
 
             # NB:
             # the data queue reader/consumer takes care of deciding what to do with the result data:
@@ -350,6 +417,7 @@ class PoseProcess(Process):
             if perf_add_c():
                 self._send_message(InferenceStatusMessageKind.Performance, self._perf_monitor.cps)
 
+            # could only check the frame index, given is only emitted from offline mode:
             if mode_used == InferenceMode.Offline and (
                 frames_indices[:, -1] == FrameIndexCategory.EOF_OFFLINE_PROCESSING
             ).any():

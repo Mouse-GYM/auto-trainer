@@ -28,8 +28,12 @@ class IntersessionMachine(StateMachine):
 
     states = list(IntersessionState)
 
-    def __init__(self, algorithm: BehaviorAlgorithm, project_info: ProjectInfo = None,
-                 inference: InferenceProtocol = None):
+    def __init__(
+        self,
+        algorithm: BehaviorAlgorithm,
+        project_info: ProjectInfo = None,
+        inference: InferenceProtocol = None,
+    ):
 
         initial_state = IntersessionState.idle
 
