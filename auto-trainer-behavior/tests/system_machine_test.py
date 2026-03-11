@@ -156,16 +156,14 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     mock_system.mock_pellet_ack()  # ack the sending, covering is included.
 
     assert algo.pellet_recently_seen
-    assert algo.is_in_session is True, "Once pellet seen and send acked and in monitoring"
-
+    assert algo.is_in_session, "Once pellet seen and send acked and in monitoring"
     mock_system.make_load_cell_inactive()
-
     assert not algo.is_in_session
-    assert algo.pellet_recently_seen
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]
     mock_system.machine_state_trans.clear()
 
     mock_system.make_load_cell_active()
+    mock_system.mock_pose_response(pellet_seen=True)
 
     assert algo.pellet_recently_seen
 

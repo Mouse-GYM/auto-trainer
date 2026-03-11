@@ -60,7 +60,7 @@ class PelletMisplacedDetector(BaseDetector):
         prev_data = self._prev_data
         engaged = False
         p_now = get_perf_now()
-        if p_now - self._t_started < cfg.aggregate_duration:
+        if p_now - self._p_started < cfg.aggregate_duration:
             # wait at least 1 window before consider
             return None
         idx = 0

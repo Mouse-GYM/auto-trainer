@@ -6,10 +6,11 @@ import pytest
 
 
 from autotrainer.core import LoadCellMonitor
+from top_fixtures import simulate_get_perf_now, get_current_simulate_perf_now, increase_simulate_perf_now
 
 
 @pytest.fixture
-def load_cell_monitor():
+def load_cell_monitor(mock_get_perf_now):
     instance = LoadCellMonitor()
     yield instance
 
@@ -55,19 +56,15 @@ def test_detect_load_cell_animal_thrashing(
 
     load_cell_monitor.property_changed += handle_thrashing_detected
 
-    t_now = 0
-
-    idx = 0
-    def update_monitor(v, t):
-        nonlocal idx
-        load_cell_monitor.update(v, t, idx)
-        idx += 1
+    def update_monitor(v):
+        p = get_current_simulate_perf_now()
+        load_cell_monitor.update(v, time.time(), int(p * 1e9))
 
     value = 0
-    update_monitor(value, t_now)
+    update_monitor(value)
 
-    t_now += cfg.threshold_duration
-    update_monitor(value, t_now)
+    increase_simulate_perf_now(cfg.threshold_duration)
+    update_monitor(value)
 
     # value is lower than threshold, so not engaged:
     assert not load_cell_monitor.is_engaged
@@ -85,7 +82,7 @@ def test_detect_load_cell_animal_thrashing(
 
     # now set value a bit more than engaged threshold:
     value = cfg.weight_active_threshold + 0.0001
-    t_now += cfg.min_event_duration
+    increase_simulate_perf_now(cfg.min_event_duration)
 
     batch_count = load_cell_monitor._engaged_batch_count
 
@@ -93,16 +90,16 @@ def test_detect_load_cell_animal_thrashing(
         for loop_idx in range(3 * batch_count):
             # this for range loop can be necessary if/when using mean() in monitor update function,
             # to get "current" avg value
-            update_monitor(value, t_now)
-            t_now += cfg.threshold_duration / batch_count + 0.001
+            update_monitor(value)
+            increase_simulate_perf_now(cfg.threshold_duration / batch_count + 0.001)
 
     assert patched_timer_call_count == (1 if load_cell_monitor.use_timer else 0)
-    assert load_cell_monitor._t_start_was_active is not None
+    assert load_cell_monitor._p_start_active is not None
     assert load_cell_monitor.is_engaged
     assert not load_cell_monitor.thrashing_detected
 
     # check for thrashing:
-    t_now += 0.1
+    increase_simulate_perf_now(0.1)
     pushed_weight = cfg.weight_active_threshold + cfg.thrashing_var_weight_threshold_min + 0.1
     # not detected atm :
     assert load_cell_monitor.thrashing_detected is False
@@ -114,23 +111,23 @@ def test_detect_load_cell_animal_thrashing(
             # this allows to effectively, and normally for any of these values,
             # get the live ptp change count to reach the desired config value,
             # so to trigger the thrashing_detected property/flag.
-            t_now += cfg.thrashing_var_min_delay / 4
-            update_monitor(cfg.weight_active_threshold, t_now)
+            increase_simulate_perf_now(cfg.thrashing_var_min_delay / 4)
+            update_monitor(cfg.weight_active_threshold)
             if outer_loop_idx <= 1:
                 # NB: this depends on min_ptp_change_count too, and actually on the delays as well
                 assert not load_cell_monitor.thrashing_detected
             #
-            t_now += cfg.thrashing_var_min_delay / 4
-            update_monitor(min(cfg.weight_active_threshold / 2, cfg.thrashing_var_weight_threshold_min / 2), t_now)
+            increase_simulate_perf_now(cfg.thrashing_var_min_delay / 4)
+            update_monitor(min(cfg.weight_active_threshold / 2, cfg.thrashing_var_weight_threshold_min / 2))
             #
-            t_now += cfg.thrashing_var_min_delay / 4
-            update_monitor(1.5 * pushed_weight, t_now)
+            increase_simulate_perf_now(cfg.thrashing_var_min_delay / 4)
+            update_monitor(1.5 * pushed_weight)
             if outer_loop_idx < cfg.thrashing_min_ptp_change_count - 1:
                 # NB: this depends on min_ptp_change_count too, and actually on the delays as well
                 assert not load_cell_monitor.thrashing_detected
             #
-            t_now += cfg.thrashing_var_min_delay / 4
-            update_monitor(pushed_weight, t_now)
+            increase_simulate_perf_now(cfg.thrashing_var_min_delay / 4)
+            update_monitor(pushed_weight)
             if outer_loop_idx == 0:
                 # NB: this depends on min_ptp_change_count too, and actually on the delays as well
                 assert not load_cell_monitor.thrashing_detected
@@ -140,11 +137,11 @@ def test_detect_load_cell_animal_thrashing(
     assert thrash_detected_list == [True]
 
     # now, with enough time passed, put back 2 near values :
-    t_now += cfg.thrashing_var_max_delay
-    update_monitor(cfg.weight_active_threshold + 0.1, t_now)
+    increase_simulate_perf_now(cfg.thrashing_var_max_delay)
+    update_monitor(cfg.weight_active_threshold + 0.1)
     #
-    t_now += cfg.thrashing_var_min_delay
-    update_monitor(cfg.weight_active_threshold + 0.2, t_now)
+    increase_simulate_perf_now(cfg.thrashing_var_min_delay)
+    update_monitor(cfg.weight_active_threshold + 0.2)
 
     assert load_cell_monitor.thrashing_detected is False
     assert thrash_detected_list == [True, False]
