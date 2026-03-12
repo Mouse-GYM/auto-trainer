@@ -1015,30 +1015,43 @@ class BehaviorAlgorithm(ObservableObject):
             return False
         return self._active_config.pellet_delivery.is_enabled and not self._algo_paused
 
-    def can_load_pellet(self, pellet_state: PelletState = PelletState.monitoring) -> bool:
+    def would_load_pellet(
+        self,
+        *,
+        delivery_cfg: Optional[PelletDeliveryConfiguration] = None,
+        pellet_state: PelletState = PelletState.monitoring,
+    ) -> bool:
+        """Say wether a load-pellet is needed or not, basically if pellet is missing confirmed"""
+        pellet_missing = (
+            not self.pellet_recently_seen
+            and (self.triangle_recently_seen
+                 or (self.star_recently_seen and pellet_state == PelletState.monitoring))
+        )
+        if pellet_missing:
+            # logger.verbose("BehaviorAlgo.can_load_pellet: pellet missing")
+            return True
+        # NB: todo: pellet_too_far should probably not immediatelly trigger a load-pellet...
+        # first a tunnel FAN can be executed..
+        # then maybe normal pellet-load (with pellet fully mussing) will be triggered
+        pellet_too_far = (
+            (delivery_cfg is None or delivery_cfg.use_triangle_pellet_distance_too_far)
+             and pellet_state == PelletState.monitoring
+             and self.is_triangle_pellet_distance_too_far()
+        )
+        if pellet_too_far:
+            # logger.verbose("BehaviorAlgo.can_load_pellet: pellet too far")
+            return True
+        return False
+
+    def can_load_pellet(self, *, pellet_state: PelletState = PelletState.monitoring) -> bool:
+        """Say if a pellet can and must be loaded"""
         # is more has_to_load_pellet()
         if self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
             return False
         cfg = self._active_config.pellet_delivery
         if not cfg.is_enabled or self._algo_paused:
             return False
-        pellet_missing = (
-            not self.pellet_recently_seen
-            and (self.triangle_recently_seen
-                or (self.star_recently_seen and pellet_state == PelletState.monitoring))
-        )
-        if pellet_missing:
-            logger.verbose("BehaviorAlgo.can_load_pellet: pellet_missing")
-            return True
-        pellet_too_far = (
-            (cfg.use_triangle_pellet_distance_too_far
-             and pellet_state == PelletState.monitoring
-             and self.is_triangle_pellet_distance_too_far())
-        )
-        if pellet_too_far:
-            logger.verbose("BehaviorAlgo.can_load_pellet: triangle/pellet too far")
-            return True
-        return False
+        return self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state)
 
     def can_cover_pellet(self) -> bool:
         """Say if cover-pellet is enabled"""
@@ -1056,7 +1069,6 @@ class BehaviorAlgorithm(ObservableObject):
             return False
 
         cfg = self._active_config.pellet_delivery
-
         if self.can_cover_pellet():
             if self._is_in_session:
                 return (
