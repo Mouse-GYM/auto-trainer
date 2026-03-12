@@ -781,6 +781,7 @@ class SystemMachine(StateMachine):
             return
         load_cell_mon = self._analysis.load_cell_monitor.context
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
+        topcam_pres = topcam_pres.to_local_value()  # get local value to ensure consistency lookups
         perf_now = get_perf_now()
         if (
             not load_cell_mon.is_engaged

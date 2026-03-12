@@ -242,12 +242,14 @@ class EmergencyAlarmMonitor(BaseDetector):
 
     def _check_pres_after_exit_tunnel_missing(self, perf_now):
         topcam_attrs = self._topcam_presence_attrs
+        if topcam_attrs is None:
+            return False
         load_cell = self._load_cell_monitor.context
         cfg = self._config
+        topcam_attrs = topcam_attrs.to_local_value()  # to ensure consistent lookups
         return (
-            topcam_attrs is not None
-            and not load_cell.is_engaged
-            and load_cell.last_disengaged_perf_c > self._t_started
+            not load_cell.is_engaged
+            and load_cell.last_disengaged_perf_c > self._p_started
             and load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
             and (
                 # last presence must be before the current load cell disengaged:

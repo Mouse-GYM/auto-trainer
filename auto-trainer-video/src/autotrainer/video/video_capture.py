@@ -338,13 +338,13 @@ class VideoCapture(Process):
         vid_detection = self._video_detection
 
         frames_prebuffer_list: List[Tuple[numpy.ndarray, float, float]] = []
-        #                              frame, when, perf_now/index
+        #                           frame, when, perf_now
         def update_frames_prebuffer(f, w, p):
             idx = 0
             while True:
                 if (
                     idx >= len(frames_prebuffer_list)
-                    or (perf_now_ns - frames_prebuffer_list[idx][2]) / 1e9 < self._attrs.record_prebuffer_duration
+                    or frame_perf_now - frames_prebuffer_list[idx][2] < self._attrs.record_prebuffer_duration
                 ):
                     break
                 idx += 1
@@ -388,22 +388,23 @@ class VideoCapture(Process):
                     logger.error("Failed to capture a frame (frame = None) ; frame_idx=%s", cur_frame_idx)
                     fault_count += 1
                     continue
-
-                perf_now_ns = time.perf_counter_ns()
+                # NB: the frame 'when' can be in different clock than what we can assume,
+                # using perf_counter :
+                frame_perf_now_ns = time.perf_counter_ns()
+                frame_perf_now = frame_perf_now_ns / 1e9
                 cur_frame_idx += 1
 
                 if cur_frame_idx < 300:
                     when_secs = when / 1e9
-                    perf_now = perf_now_ns / 1e9
                     if cur_frame_idx == 0:
-                        logger.success("captured first frame ; cam_when=%.4f perf_now=%.4f", when_secs, perf_now)
+                        logger.success("captured first frame ; cam_when=%.4f perf_now=%.4f", when_secs, frame_perf_now)
                     elif net_q is not None and (
                         (cur_frame_idx < 300 and cur_frame_idx % 64 == 0)
                         or (cur_frame_idx < 64 and cur_frame_idx % 16 == 0)
                         or (cur_frame_idx < 32 and cur_frame_idx % 4 == 0)
                         or cur_frame_idx < 4
                     ):
-                        logger.debug("got frame %s cam_when=%.4f perf_now=%.4f", cur_frame_idx, when_secs, perf_now)
+                        logger.debug("got frame %s cam_when=%.4f perf_now=%.4f", cur_frame_idx, when_secs, frame_perf_now)
 
                 if img_q is not None:
                     # image queue goes to GUI video reader frame, currently FixedArrayQueue
@@ -420,7 +421,7 @@ class VideoCapture(Process):
                     if primary_acquire():
                         record_start_frame_idx = cur_frame_idx - len(frames_prebuffer_list)
                         first_frame_when = when if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][1]
-                        first_frame_perf_now = (perf_now_ns if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][2]) / 1e9
+                        first_frame_perf_now = (frame_perf_now_ns if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][2]) / 1e9
                         logger.notice("Starting record with frame %s cam_when=%.4f perf_now=%.4f ; prebuffer_cnt=%s",
                                       record_start_frame_idx, first_frame_when / 1e9, first_frame_perf_now,
                                       len(frames_prebuffer_list))
@@ -430,7 +431,7 @@ class VideoCapture(Process):
                         if len(frames_prebuffer_list) > 0:
                             record_q.put(frames_prebuffer_list)
                             frames_prebuffer_list = []  # reminder: don't use .clear(): record_q is thread queue
-                        record_q.put([(frame, when, perf_now_ns)])  # thread queue
+                        record_q.put([(frame, when, frame_perf_now_ns)])  # thread queue
                         record_q_list = self._record_queue_list = []  # ensure we (re)start clean
                         #
                         primary_release()
@@ -452,7 +453,7 @@ class VideoCapture(Process):
                     record_q_list = self._record_queue_list
                     if not primary_acquire():
                         # continue, all sync cams have not yet received their stop recording message
-                        record_q_list.append((frame, when, perf_now_ns))
+                        record_q_list.append((frame, when, frame_perf_now_ns))
                     else:
                         # end of record/save-to-disk session/mode
                         primary_release()
@@ -473,7 +474,7 @@ class VideoCapture(Process):
                             logger.info(
                                 "sending EOF_RECORDING batch frame indices to signify eof recording. "
                                 "last frame index: %s when=%.4f perf=%.4f",
-                                cur_frame_idx, when / 1e9, perf_now_ns / 1e9)
+                                cur_frame_idx, when / 1e9, frame_perf_now)
                             net_q.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_RECORDING,
                                                            cam_idx=net_q_idx, timeout=1)
 
@@ -485,7 +486,7 @@ class VideoCapture(Process):
 
                 elif self._is_record_active and record_start_frame_idx is not None:
                     # normal recording case
-                    record_q_list.append((frame, when, perf_now_ns))
+                    record_q_list.append((frame, when, frame_perf_now_ns))
                     if len(record_q_list) >= self._record_batch_size:
                         record_q.put(record_q_list)
                         record_q_list = self._record_queue_list = []
@@ -500,10 +501,10 @@ class VideoCapture(Process):
                         cnt_net_q_put += 1
 
                 if vid_detection is not None:
-                    vid_detection.update_frame(when, frame)
+                    vid_detection.update_frame(when, frame, frame_perf_now)
 
                 if not (self._is_record_active and record_start_frame_idx is not None) and self._attrs.record_prebuffer_duration > 0:
-                    update_frames_prebuffer(frame, when, perf_now_ns)
+                    update_frames_prebuffer(frame, when, frame_perf_now)
 
             except Exception as err:
                 logger.exception("Error during capture loop: %s", err)

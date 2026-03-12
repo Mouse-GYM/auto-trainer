@@ -15,13 +15,13 @@ from typing import Deque, Tuple, List
 import cv2
 import numpy
 import numpy as np
+from typing_extensions import Self
 
-from autotrainer.core import ValueHolderDescriptor
+from autotrainer.core import ValueHolderDescriptor, get_perf_now, RawValueHolder
 from autotrainer.core.configuration.presence_detection_configuration import PresenceDetectionConfig
 from autotrainer.core.project.project_info import ProjectInfo
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.multiproc import get_mp_ctx
-
+from autotrainer.core.multiproc import get_mp_ctx, EmptyWithContext
 
 logger = get_verbose_logger(__name__)
 
@@ -65,24 +65,63 @@ class PresenceDetectionAttrs:
 
     def __post_init__(self):
         ctx = get_mp_ctx()
+        lock = ctx.RLock()
+        used = False
         if  self._pc_threshold is None:
-            self._pc_threshold = ctx.Value(ctypes.c_double, PresenceDetectionConfig.pc_threshold)
+            used = True
+            self._pc_threshold = ctx.Value(ctypes.c_double, PresenceDetectionConfig.pc_threshold, lock=lock)
         if self._pc_high_exclude_threshold is None:
-            self._pc_high_exclude_threshold = ctx.Value(ctypes.c_double, PresenceDetectionConfig.pc_high_exclude_threshold)
+            used = True
+            self._pc_high_exclude_threshold = ctx.Value(ctypes.c_double, PresenceDetectionConfig.pc_high_exclude_threshold, lock=lock)
         if self._mask_lower_zero is None:
-            self._mask_lower_zero = ctx.Value(ctypes.c_double, PresenceDetectionConfig.mask_lower_zero)
+            used = True
+            self._mask_lower_zero = ctx.Value(ctypes.c_double, PresenceDetectionConfig.mask_lower_zero, lock=lock)
         if self._max_delay_skip_threshold is None:
-            self._max_delay_skip_threshold = ctx.Value(ctypes.c_double, PresenceDetectionConfig.max_delay_skip_threshold)
+            used = True
+            self._max_delay_skip_threshold = ctx.Value(ctypes.c_double, PresenceDetectionConfig.max_delay_skip_threshold, lock=lock)
         if self._last_absence_start_perf_c is None:
-            self._last_absence_start_perf_c = ctx.Value(ctypes.c_double, -math.inf)
+            used = True
+            self._last_absence_start_perf_c = ctx.Value(ctypes.c_double, -math.inf, lock=lock)
         if self._last_presence_start_perf_c is None:
-            self._last_presence_start_perf_c = ctx.Value(ctypes.c_double, -math.inf)
+            used = True
+            self._last_presence_start_perf_c = ctx.Value(ctypes.c_double, -math.inf, lock=lock)
         if self._presence_detected is None:
-            self._presence_detected = ctx.Value(ctypes.c_bool, False)
+            used = True
+            self._presence_detected = ctx.Value(ctypes.c_bool, False, lock=lock)
         if self._movement_detected is None:
-            self._movement_detected = ctx.Value(ctypes.c_bool, False)
+            used = True
+            self._movement_detected = ctx.Value(ctypes.c_bool, False, lock=lock)
         if self._pc_sum is None:
-            self._pc_sum = ctx.Value(ctypes.c_double, 0)
+            used = True
+            self._pc_sum = ctx.Value(ctypes.c_double, 0, lock=lock)
+        if not used:
+            lock = EmptyWithContext()
+        self._lock = lock
+
+    def _loop_over_value_holder_desc(self):
+        cls = self.__class__
+        return (
+            a
+            for a in (getattr(cls, k) for k in dir(cls))
+            if isinstance(a, ValueHolderDescriptor)
+        )
+
+    def __eq__(self, other):
+        return all(getattr(self, a.name) == getattr(other, a.name)
+                   for a in self._loop_over_value_holder_desc())
+
+    @property
+    def lock(self):
+        return self._lock
+
+    def to_local_value(self) -> Self:
+        """Detach from the shared values"""
+        with self._lock:
+            dct = {
+                f"_{a.name}": RawValueHolder(getattr(self, a.name))
+                for a in self._loop_over_value_holder_desc()
+            }
+        return self.__class__(**dct)
 
     def to_config(self) -> PresenceDetectionConfig:
         return PresenceDetectionConfig(**{
@@ -101,9 +140,9 @@ class VideoDetection(threading.Thread):
         self._project_info = project_info
         self._attrs = detection_attrs
         self._stop_requested = False
-        # using a dequeue with 8 entries,
+        # using a deque with 8 entries,
         # NB: is thread-safe for append/popleft. see (c)python doc.
-        self._next_frames: Deque[Tuple[float, numpy.ndarray]] = collections.deque(maxlen=10)
+        self._next_frames: Deque[Tuple[float, numpy.ndarray, float]] = collections.deque(maxlen=10)
         # not sure using a simple thread queue.Queue is not as good, possibly better (can wait on it)
         self._prev_frame = None
         self._prev_when = None
@@ -117,14 +156,14 @@ class VideoDetection(threading.Thread):
     def cancel(self):
         self._stop_requested = True
 
-    def update_frame(self, when: float, frame: numpy.ndarray):
+    def update_frame(self, when: float, frame: numpy.ndarray, perf_c: float):
         if not self._got_first_frame:
             self._got_first_frame = True
-            perf_now = time.perf_counter()
+            perf_now = get_perf_now()
             self._attrs.last_absence_start_perf_c = perf_now
             self._attrs.last_presence_start_perf_c = perf_now
             # this allows to get good measurement from monitors using the detection result(s)
-        self._next_frames.append((when, frame))
+        self._next_frames.append((when, frame, perf_c))
 
     def _check_path(self):
         csv_file_info = self._project_info.get_webcam_presence_file(when=datetime.now())
@@ -157,7 +196,7 @@ class VideoDetection(threading.Thread):
     def _run(self):
         attrs = self._attrs
         prev_pc_threshold = attrs.pc_threshold
-        prev_gray_frame = prev_when = None
+        prev_gray_frame = prev_frame_perf_c = None
         prev_detected = None  # attrs.presence_detected.value
         prev_pc_sum = None
         row_dict = dict.fromkeys(self._csv_header)
@@ -197,7 +236,7 @@ class VideoDetection(threading.Thread):
                 prev_pc_values.clear()
                 processed_times.clear()
             try:
-                when_nanos, frame = self._next_frames.popleft()
+                when_nanos, frame, frame_perf_c = self._next_frames.popleft()
             except IndexError:
                 time.sleep(0.003)  # current producer is 30 fps. let's use very smallish sleep
                 continue
@@ -211,14 +250,14 @@ class VideoDetection(threading.Thread):
             # given we divide by fg_mask.size below to calculate a % value,
             # it does not really matter to rescale to any size:
             # gray_frame = cv2.resize(gray_frame, (256, 256), interpolation=cv2.INTER_LINEAR)
-            save_prev_when = prev_when
+            save_prev_perf_c = prev_frame_perf_c
             save_prev_gray_frame = prev_gray_frame
-            prev_when = when
+            prev_frame_perf_c = when
             prev_gray_frame = gray_frame
             if save_prev_gray_frame is None:
                 # (re)init frame
                 continue
-            if when - save_prev_when >= attrs.max_delay_skip_threshold:
+            if frame_perf_c - save_prev_perf_c >= attrs.max_delay_skip_threshold:
                 expired_count += 1
                 continue
             # work on frame
@@ -257,7 +296,7 @@ class VideoDetection(threading.Thread):
             if csv_writer is not None:
                 row_dict.update(
                     Time=when,
-                    Index=when_nanos,
+                    Index=int(frame_perf_c * 1e9),  # to be consistent with others csv data files using Time/Index
                     PercentSum=pc_normalized,
                     Motion=int(is_detected),
                 )
@@ -274,11 +313,12 @@ class VideoDetection(threading.Thread):
                 logger.debug("presence detected: %.1f - %.1f ; hist=%s",
                                pc_normalized, pc_unnormalized, [(d1, d2, d3) for d1, _, d2, d3 in hist_values])
                 prev_detected = is_detected
-                attrs.presence_detected = is_detected
-                if is_detected:
-                    attrs.last_presence_start_perf_c = perf_now
-                else:
-                    attrs.last_absence_start_perf_c = perf_now
+                with attrs.lock:  # use lock to really ensure consistency
+                    attrs.presence_detected = is_detected
+                    if is_detected:
+                        attrs.last_presence_start_perf_c = frame_perf_c
+                    else:
+                        attrs.last_absence_start_perf_c = frame_perf_c
                 prev_gray_frame = None  # this will make us to get the following necessary next frames for next check
             if show_report:
                 prev_pc_values.append((pc_normalized, pc_unnormalized))

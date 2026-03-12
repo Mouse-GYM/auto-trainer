@@ -4,8 +4,8 @@ from typing import List
 
 @dataclasses.dataclass
 class HeadFixMeasurement:
-    when: float = 0  # this is the "UNIX" realtime second (float) "timestamp"
-    timestamp: int = 0  # this is an "index" integer "timestamp" (or only (always-increasing) "index" say).
+    when: float = 0   # realtime timestamp, i.e: "UNIX" timestamp, in float seconds as normally.
+    timestamp: int = 0  # perf counter timestamp, in integer nanoseconds
     weight: float = 0
     switch: float = 0
     pressure: float = 0

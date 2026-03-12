@@ -23,7 +23,7 @@ class BaseDetector(ObservableObject):
     def __init__(self):
         super().__init__()
         self._running = False
-        self._t_started = -math.inf
+        self._p_started = -math.inf
         self._is_engaged = False
         self._engaged_perf_c = -math.inf
         self._disengaged_perf_c = -math.inf
@@ -107,7 +107,7 @@ class BaseDetector(ObservableObject):
             self._logger.verbose("%s: starting monitor", self.__class__.__name__)
             self._running = True
             self.is_engaged = False  # force reset "engaged" to False
-            self._t_started = get_perf_now()
+            self._p_started = get_perf_now()
             self._start()
             if self.use_daemon:
                 cmd_queue = queue.Queue()
