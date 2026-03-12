@@ -213,6 +213,8 @@ class SensorAnalysis(ObservableObject):
             if needs_update:
                 self._update_record_file()
 
+        load_cell_mon = self._load_cell_monitor
+
         for m in measurements:
             weights.append(m.weight)
             switch.append(m.switch)
@@ -224,7 +226,7 @@ class SensorAnalysis(ObservableObject):
                 try:
                     self._record_file.write(
                         f"{m.when}, {m.timestamp}, {m.weight}, {m.switch}, {m.pressure}, "
-                        f"{m.temperature}, {m.humidity}\n")
+                        f"{m.temperature}, {m.humidity}, {int(load_cell_mon.is_engaged)}\n")
                 except Exception as err:
                     # This could be too much if something major is wrong.  Just output once per file rotation.
                     if not self._had_write_error:
@@ -293,19 +295,14 @@ class SensorAnalysis(ObservableObject):
 
         if self._project_info is not None:
             interval_file_info = self._project_info.get_monitor_file(interval=self._interval, when=datetime.now())
-
             if interval_file_info is None:
                 logger.error("<sensor-analysis>: unable to write to expected monitor file location")
                 return None
-
             try:
                 file_existed = os.path.exists(interval_file_info.file)
-
                 location = open(interval_file_info.file, "a")
-
                 if not file_existed:
-                    location.write("Time, Index, Weight, Switch, Pressure, Temperature, Humidity\n")
-
+                    location.write("Time, Index, Weight, Switch, Pressure, Temperature, Humidity, LoadCellEngaged\n")
                 self._current_record_interval = interval_file_info.current_interval
                 self._record_file = location
                 logger.info(f"<sensor-analysis>: saving to {interval_file_info.file}")
