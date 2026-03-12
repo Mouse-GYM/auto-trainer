@@ -7,19 +7,16 @@ import faulthandler
 from pathlib import Path
 from multiprocessing import set_start_method
 
-from autotrainer.core import PersistenceConfiguration
-
-
 # NB: do not put any imports of autotrainer* or any module not part from standard python lib.
 
 
 def _exec_main(args):
 
-    from autotrainer.core.logging import get_verbose_logger, get_console_handler, set_log_location
-    from autotrainer.core.project import ProjectInfo
+    from autotrainer.core.logging import get_verbose_logger, get_console_handler
+    from autotrainer.core.event import try_register_api_event_plugin
 
+    from tools.acquisition.model.app_model import AppModel, AppModelStatus
     from tools.acquisition.model.user_preferences import UserPreferences
-    from tools.acquisition.model.app_model import AppModel
 
     logger = get_verbose_logger("autotrainer.headless")
 
@@ -33,6 +30,9 @@ def _exec_main(args):
 
     app_model = AppModel(preferences)
 
+    plugin = try_register_api_event_plugin()
+    app_model.rpc_service = plugin.service
+
     try:
         app_model.load_configuration(configuration)
     except Exception as err:
@@ -40,7 +40,8 @@ def _exec_main(args):
         app_model.on_close()
         return 1
 
-    if not app_model.capture_start():
+    target_status = AppModelStatus.ACQUIRING  # current mode
+    if not app_model.capture_start(target_status=target_status):
         logger.error("failed to start capture")
         app_model.on_close()
         return 1
