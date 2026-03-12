@@ -155,6 +155,7 @@ class SystemMachine(StateMachine):
         pellet_machine.events.pellet_loading += self._pellet_loading
         pellet_machine.events.pellet_loaded += self._pellet_loaded
         pellet_machine.events.pellet_sent += self._pellet_sent
+        pellet_machine.events.load_failed += self._pellet_load_failed
 
         intersession_machine = self._intersession = IntersessionMachine(algo, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._intersession_analysis_ended
@@ -882,6 +883,10 @@ class SystemMachine(StateMachine):
 
     def _pellet_loaded(self):
         self._algorithm.pellet_loaded()
+
+    def _pellet_load_failed(self, *, consecutive):
+        logger.info("Pellet load failed consecutive count: %s", consecutive)
+        # could use to trigger alarm condition if consecutive failed load is too great
 
     def _pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)

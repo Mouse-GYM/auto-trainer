@@ -23,6 +23,7 @@ class IntersessionMachineEvents(StateMachineEvents):
 
 
 class IntersessionMachine(StateMachine):
+
     _events_class = IntersessionMachineEvents
 
     states = list(IntersessionState)
@@ -32,7 +33,7 @@ class IntersessionMachine(StateMachine):
 
         initial_state = IntersessionState.idle
 
-        super().__init__(initial_state=initial_state, event_names=tuple(get_type_hints(IntersessionMachineEvents)))
+        super().__init__(initial_state=initial_state)
 
         self._machine = Machine(model=[self], states=IntersessionMachine.states,
                                 transitions=IntersessionMachine.transitions, auto_transitions=False,

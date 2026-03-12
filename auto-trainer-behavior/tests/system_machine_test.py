@@ -109,16 +109,15 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     assert pellet_m._api_status_token is not None
     # pellet must be seen after loading to go to sending
     mock_system.mock_pose_response(pellet_seen=True)
-    mock_system.mock_pellet_ack()  # ack the loading
+    mock_system.mock_pellet_ack(until_none=True)  # ack everything
     assert mock_system.pellet_state_trans == [
         PelletState.covering,
         PelletState.sending,
         PelletState.monitoring,
     ]
     mock_system.pellet_state_trans.clear()
-    mock_system.mock_pellet_ack()  # ack the sending, covering is included.
-    assert pellet_m._api_status_token is None
 
+    assert pellet_m._api_status_token is None
     assert mock_system.machine_state_trans == []
 
     mock_system.mock_pose_response(pellet_seen=False)
@@ -145,6 +144,8 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     assert algo.is_in_session is False
     assert algo.pellet_recently_seen
 
+    mock_system.mock_pellet_ack(until_none=True)  # ack the loading AFTER put pellet_seen
+
     assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [
         PelletState.loading,
@@ -153,10 +154,9 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
         PelletState.monitoring,
     ]
 
-    mock_system.mock_pellet_ack()  # ack the sending, covering is included.
-
     assert algo.pellet_recently_seen
     assert algo.is_in_session, "Once pellet seen and send acked and in monitoring"
+    mock_system.mock_pellet_ack()  # ack the sending, covering is included.
     mock_system.make_load_cell_inactive()
     assert not algo.is_in_session
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]

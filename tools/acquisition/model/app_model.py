@@ -1057,9 +1057,7 @@ class AppModel(ObservableObject):
 
         logger.debug("connecting hardware ...")
         self._hardware.connect(self._system_message_handler.input_queue)
-
-
-        self._hardware.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)
+        self._hardware.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # todo: should remove
         logger.info("finished connecting hardware")
 
         if not algo.algo_paused:
@@ -1077,7 +1075,7 @@ class AppModel(ObservableObject):
         else:
             self.training_plan = plan
 
-        if self._attached_animal is None and animal is not None:
+        if animal is not None:
             self._set_animal_base_positions_and_send_to_deliver(animal)
 
         self._acquisition_started = True
@@ -1451,18 +1449,13 @@ class AppModel(ObservableObject):
                 animal.is_pellet_dcs = True
                 self._save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
         hardware = self._hardware
-        hardware.delay(0.5)
         hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
         hardware.set_x(xyz.x)
         hardware.set_y(xyz.y)
         hardware.set_z(xyz.z)
         pellet_m = self.behavior.system_machine.pellet
-        if algo.can_cover_pellet():
-            pellet_m.cover_pellet()
-        elif algo.can_release_pellet():
-            pellet_m.release_pellet()
         if algo.can_send_pellet():
-            pellet_m.send_pellet()
+            pellet_m.force_send_pellet()
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
         if name == UserPreferences.SELECTED_ANIMAL:

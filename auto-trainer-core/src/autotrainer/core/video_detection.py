@@ -146,7 +146,7 @@ class VideoDetection(threading.Thread):
         # not sure using a simple thread queue.Queue is not as good, possibly better (can wait on it)
         self._prev_frame = None
         self._prev_when = None
-        self._csv_header = ["Time", "Index", "PercentSum", "Presence", "Motion"]
+        self._csv_header = ["Time", "Index", "PercentSum", "Motion"]
         self._file_info = None
         self._csv_writer = None
         self._csv_writer_fh = None
@@ -298,8 +298,7 @@ class VideoDetection(threading.Thread):
                     Time=when,
                     Index=int(frame_perf_c * 1e9),  # to be consistent with others csv data files using Time/Index
                     PercentSum=pc_normalized,
-                    Presence=int(is_detected),
-                    Motion=0,  # TODO
+                    Motion=int(is_detected),
                 )
                 csv_writer.writerow(row_dict)
             # now use everything available in hist_values:
