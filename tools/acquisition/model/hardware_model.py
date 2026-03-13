@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 from typing import Optional, Tuple, Dict, Union
 
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
-                              get_verbose_logger, Motor, SensorAnalysis)
+                              get_verbose_logger, Motor, SensorAnalysis, EventManager)                              
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
