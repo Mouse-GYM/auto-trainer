@@ -1471,14 +1471,16 @@ class AppModel(ObservableObject):
     def _on_behavior_algo_property_changed(self, name: str, value, _):
         props = BehaviorAlgoProps
         #
-        animal = self._selected_animal
-        if animal is None:
-            return
-        #
         if name == props.BASELINE_INTENSITY:
+            animal = self._selected_animal
+            if animal is None:
+                return
             prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
             if value != prev:
                 self._save_animal_metadata(animal, sender="baseline_magnet_intensity")
+
+        elif name == props.DIAMOND_TRIANGLE_CONFIG:
+            self._hardware.set_diamond_triangle_config(value)
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal

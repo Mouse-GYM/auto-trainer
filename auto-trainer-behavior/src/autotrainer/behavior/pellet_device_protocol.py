@@ -21,6 +21,14 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     def last_position(self) -> Optional[Offset3DTuple]:
         """Given the last actual position"""
 
+    @property
+    def last_dcs_set_position(self) -> Optional[Offset3DTuple]:
+        """Give the last SET position, in DCS, (deliver position), used with SEND_PELLET command"""
+
+    @property
+    def last_dcs_position(self) -> Optional[Offset3DTuple]:
+        """Given the last actual, in DCS, triangle position"""
+
     def set_x(self, value: float, *, absolute: bool = True, sender: str = "NA") -> Optional[UUID]:
         """
         Change the X stepper location and set it as the X-axis pellet release location.
@@ -38,6 +46,27 @@ class PelletDeviceProtocol(ObservableObjectProtocol, Protocol):
     def set_z(self, value: float, *, absolute: bool = True, sender: str = "NA") -> Optional[UUID]:
         """
         Change the Z stepper location and set it as the Z-axis pellet release location.
+
+        :return: A token to expect from the device message handler when the request is complete.
+        """
+
+    def set_dcs_x(self, value: float, *, absolute: bool = True, sender: str = "NA") -> Optional[UUID]:
+        """
+        Change the DCS-X stepper location and set it as the X-axis pellet release location.
+
+        :return: A token to expect from the device message handler when the request is complete.
+        """
+
+    def set_dcs_y(self, value: float, *, absolute: bool = True, sender: str = "NA") -> Optional[UUID]:
+        """
+        Change the DCS-Y stepper location and set it as the Y-axis pellet release location.
+
+        :return: A token to expect from the device message handler when the request is complete.
+        """
+
+    def set_dcs_z(self, value: float, *, absolute: bool = True, sender: str = "NA") -> Optional[UUID]:
+        """
+        Change the DCS-Z stepper location and set it as the Z-axis pellet release location.
 
         :return: A token to expect from the device message handler when the request is complete.
         """

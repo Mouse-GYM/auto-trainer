@@ -8,6 +8,7 @@ from typing import Optional, Tuple, Dict, Union
 
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor, SensorAnalysis)
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 StepperConfig, ServoConfig, Device)
@@ -69,6 +70,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._head_magnet_position: Optional[float] = None
 
+        self._dcs_config: Optional[DiamondTriangleOffsetConfig] = None
         # Support for relative x, y, z movements and whether they are persistent as the Send position various between
         # hardware implementations. One the Alogus hardware is used exclusively, it should be possible to remove these
         # and rely on SET_X/Y/Z commands with the extra arguments that support relative and/or movements that should
@@ -77,7 +79,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         # what the motors report they've been SET (with possible drift corrected):
         self._motor_send_coordinates = _nans_offset3dTuple
         # What we've SET as coordinates:
-        self._last_requested_set_coordinates = _nans_offset3dTuple
+        self._last_requested_set_coordinates: Offset3DTuple = _nans_offset3dTuple
 
         self._front_door_open: bool = False
         self._slide_door_open: bool = False
@@ -86,9 +88,23 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._lock = threading.RLock()  # **required** re-entrant lock !!
 
+    def _check_dcs_cfg(self):
+        cfg = self._dcs_config
+        if cfg is None or not cfg.fully_valid:
+            raise RuntimeError(f"DCS config not defined or not fully valid")
+        return cfg
+
+    def set_diamond_triangle_config(self, config: Optional[DiamondTriangleOffsetConfig]):
+        self._dcs_config = config
+
     @property
     def last_position(self) -> Optional[Offset3DTuple]:
         return self._last_motor_coordinates
+
+    @property
+    def last_dcs_position(self) -> Optional[Offset3DTuple]:
+        cfg = self._check_dcs_cfg()
+        return cfg.motor_to_diamond(self._last_motor_coordinates)
 
     @property
     def last_set_position(self) -> Optional[Offset3DTuple]:
@@ -96,6 +112,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if any(map(math.isnan, value)):
             return None
         return value
+
+    @property
+    def last_dcs_set_position(self) -> Optional[Offset3DTuple]:
+        value = self._last_requested_set_coordinates
+        if any(map(math.isnan, value)):
+            return None
+        cfg = self._check_dcs_cfg()
+        return cfg.motor_to_diamond(value)
 
     @property
     def device_ack_timeout_engaged(self):
@@ -218,7 +242,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if new_value < 0:
             value = 0 if absolute else -prev_value
             new_value = 0
-            logger.debug("Axis-%s: limited move to 0 ; value=%.3f absolute=%s",
+            logger.verbose("Axis-%s: limited move to 0 ; value=%.3f absolute=%s",
                          "XYZ"[coord_idx], value, absolute)
         res = self._send_with_token(self._device, system_set_cmd,
                                      SystemDataArgsKwargs(value, relative=not absolute))
@@ -235,6 +259,23 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def set_z(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
         return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Z, coord_idx=2, sender=sender)
+
+    def set_dcs_x(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
+        cfg = self._check_dcs_cfg()
+        value = cfg.diamond_to_motor(Offset3DTuple(value, 0, 0)).x
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_X, coord_idx=0, sender=sender)
+
+    def set_dcs_y(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
+        cfg = self._check_dcs_cfg()
+        value = cfg.diamond_to_motor(Offset3DTuple(0, value, 0)).y
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Y, coord_idx=1, sender=sender)
+
+    def set_dcs_z(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
+        cfg = self._check_dcs_cfg()
+        value = cfg.diamond_to_motor(Offset3DTuple(0, 0, value)).z
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Z, coord_idx=2, sender=sender)
+
+    #
 
     def _move_axis(self, value: float, *, absolute: bool = True,
                    system_move_cmd: SystemCommandKind, coord_idx: int) -> Optional[UUID]:
