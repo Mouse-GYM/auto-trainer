@@ -231,10 +231,16 @@ class SystemMachine(StateMachine):
         if algo.is_in_session:
             algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
         else:
-            if self._intersession.state == IntersessionState.idle and len(self._batch_project_sessions_list) > 0:
-                prj = self._batch_project_sessions_list[0]
-                self._inference.send_message(InferenceCommandMessageKind.ForceProcessOffline, prj)
-                self.enter_intersession(reason="exit-tunnel-with-sessions-batch-list")
+            batch_projects = self._batch_project_sessions_list
+            if len(batch_projects) > 0:
+                if self._intersession.state != IntersessionState.idle:
+                    logger.warning(
+                        "Unexpected intersession state with non-empty batch session list: %s, projects=%s",
+                        self._intersession.state, batch_projects)
+                else:
+                    prj = batch_projects[0]
+                    self._inference.send_message(InferenceCommandMessageKind.ForceProcessOffline, prj)
+                    self.enter_intersession(reason="exit-tunnel-with-sessions-batch-list")
 
     def after_enter_intersession(self, *, reason="NA"):
         logger.verbose("enter_intersession: reason=%s", reason)
@@ -247,7 +253,6 @@ class SystemMachine(StateMachine):
             cur_prj = batch_list[0]
             intersession.project = cur_prj
             inference.project = cur_prj
-            # inference.send_message(InferenceCommandMessageKind.ProcessOffline, cur_prj)
             inference.put_to_data_handler(InferenceMonitorDataMsg.START_NEW_INTERSESSION_BATCH_ITEM)
             # todo: START_NEW_INTERSESSION_BATCH_ITEM only set the stop_recorded event,
             #  could set it here instead of relaying to data proc handler.

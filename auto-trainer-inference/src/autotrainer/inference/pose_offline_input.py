@@ -56,8 +56,11 @@ class OfflineInputProcess:
         self._frames_per_batch = frames_per_cam * nr_cams
         self._msg_queue = msg_queue
         self._stop_recorded = stop_recorded
+        # NB: using 3 entire different frame buffers,
+        # to allow the consumer/reader (pose itself) to process 1 such buffer,
+        # while this writer has at least 1 other free buffer to write into at will.
         self._buffer1 = numpy.ndarray(
-            (self._frames_per_batch,  # nbr cams * frames per cam (3 atm)
+            (self._frames_per_batch,  # nbr cams (2) * frames per cam (3 atm)
              *frame_shape,  # W, H
              3,  # current model takes RGB
              ))
