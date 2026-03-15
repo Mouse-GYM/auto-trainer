@@ -239,23 +239,26 @@ class SystemMachine(StateMachine):
                         self._intersession.state, batch_projects)
                 else:
                     prj = batch_projects[0]
-                    self._inference.send_message(InferenceCommandMessageKind.ForceProcessOffline, prj)
-                    self.enter_intersession(reason="exit-tunnel-with-sessions-batch-list")
+                    # self._inference.send_message(InferenceCommandMessageKind.ForceProcessOffline, prj)
+                    self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
 
-    def after_enter_intersession(self, *, reason="NA"):
-        logger.verbose("enter_intersession: reason=%s", reason)
+    def after_enter_intersession(self, project_info: ProjectInfo, *, reason="NA"):
         algo = self._algorithm
         intersession = self._intersession
         inference = self._inference
         batch_list = self._batch_project_sessions_list
+        logger.verbose("enter_intersession: reason=%s, n_batch=%s, in-session=%s",
+                       reason, len(batch_list), algo.is_in_session)
         if len(batch_list) > 0:
             # set intersession and inference current project to the one from the batch:
             cur_prj = batch_list[0]
             intersession.project = cur_prj
             inference.project = cur_prj
-            inference.put_to_data_handler(InferenceMonitorDataMsg.START_NEW_INTERSESSION_BATCH_ITEM)
-            # todo: START_NEW_INTERSESSION_BATCH_ITEM only set the stop_recorded event,
+            # inference.put_to_data_handler(InferenceMonitorDataMsg.START_NEW_INTERSESSION_BATCH_ITEM)
+            # could be ~t-o-d-o~ done: START_NEW_INTERSESSION_BATCH_ITEM only set the stop_recorded event,
             #  could set it here instead of relaying to data proc handler.
+            inference.stop_recorded_event.set()
+            #
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
                 self._batch_failed_count = 0
@@ -269,8 +272,15 @@ class SystemMachine(StateMachine):
 
         logger.info("processing session project %s", cur_prj)
         algo.session_processing_starting()
-
-        intersession.perform_segmentation()
+        intersession.perform_segmentation(project_info)
+        kind = (
+            # notable distinction:
+            # ProcessOffline: prepare offline in inference process but do not switch to it, wait end recording.
+            # Force: same but also directly switch to it.
+            InferenceCommandMessageKind.ProcessOffline if len(batch_list) == 0
+            else InferenceCommandMessageKind.ForceProcessOffline
+        )
+        self._inference.send_message(kind, cur_prj)
         self._consider_close_gate_during_intersession()
 
     def after_exit_intersession(self):
@@ -360,7 +370,7 @@ class SystemMachine(StateMachine):
         can_perform_analysis = (
             cur_project is not None
             and algo.can_perform_intersession_analysis()
-            and self._intersession.can_perform_segmentation()
+            and self._intersession.can_perform_segmentation(cur_project)
         )
         real_can_perform_analysis = can_perform_analysis
         can_batch_session = False
@@ -411,7 +421,8 @@ class SystemMachine(StateMachine):
                 # no need if it's the latest/current project-session-info already.
                 cur_sessions_batch.clear()
                 # it will be handled normally anyway
-            self.enter_intersession(reason="capture-ended-and-can-perform-analysis")
+            prj = self._project_info.to_local_value() if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
+            self.enter_intersession(prj, reason="capture-ended-and-can-perform-analysis")
         else:
             # at the end of live recording pose-process automatically goes to offline mode,
             # so we ask it to switch back to live:
@@ -429,7 +440,7 @@ class SystemMachine(StateMachine):
                 self._batch_failed_count += 1
             if len(cur_batch) > 0:  #  and not self._algorithm.algo_paused:
                 # continue remaining session(s) in batch in all cases
-                self.reenter_intersession(reason="reenter-batch-session")
+                self.reenter_intersession(cur_batch[0], reason="reenter-batch-session")
                 return
             self._batch_processing_in_progress = False
             self._batch_sessions_total_duration = 0
@@ -1059,13 +1070,13 @@ class SystemMachine(StateMachine):
     def may_exit_tunnel(self):
         """Exit tunnel"""
 
-    def enter_intersession(self, *, reason: str="NA"):
+    def enter_intersession(self, project_info: ProjectInfo, *, reason: str="NA"):
         """Enter intersession"""
 
     def may_enter_intersession(self):
         """May Enter intersession"""
 
-    def reenter_intersession(self, *, reason: str="NA"):
+    def reenter_intersession(self, project_info: ProjectInfo, *, reason: str="NA"):
         """ReEnter intersession (from previous intersession)"""
 
     def may_reenter_intersession(self):

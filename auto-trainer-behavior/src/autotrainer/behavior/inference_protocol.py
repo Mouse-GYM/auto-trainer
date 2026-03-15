@@ -1,3 +1,4 @@
+from multiprocessing import synchronize
 from typing import Protocol, Callable, Tuple, Optional, Any
 
 from autotrainer.core import Offset3DTuple, ObservableObject, FrameIndexCategory
@@ -59,11 +60,12 @@ class _InferenceProtocol(Protocol):
     def send_message(self, kind: "InferenceCommandMessageKind", context: Any = None):
         """Send an InferenceCommandMessageKind to the inference process"""
 
-    def put_to_offline_queue(self, frame_index: FrameIndexCategory, *, reason: str="na"):
-        """Put given frame index batch to offline queue"""
-
     def put_to_data_handler(self, msg: InferenceMonitorDataMsg):
-        """Put msg to data handler"""
+        """Put msg to data handler process"""
+
+    @property
+    def stop_recorded_event(self) -> synchronize.Event:
+        """The multiprocess event associated with h5 live files, must be set for readers"""
 
 
 class InferenceProtocol(ObservableObject, _InferenceProtocol, ProjectDependentProtol):

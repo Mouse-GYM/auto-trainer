@@ -7,6 +7,7 @@ import threading
 import time
 from functools import partial
 from itertools import chain
+from multiprocessing import synchronize
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any
 from threading import Thread
@@ -97,6 +98,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
             },
         }
         self._process_pool: Optional[multiprocessing.Pool] = None
+
+    @property
+    def stop_recorded_event(self) -> synchronize.Event:
+        return self._data_monitor_proc.stop_recorded
 
     @property
     def project(self) -> ProjectInfo:
@@ -212,11 +217,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtol):
         project_info.when = configuration.session_when
         project_info.session = configuration.session_index
         self._intersession_block = IntersessionBlock(configuration=configuration)
-        self._send_message(InferenceCommandMessageKind.ProcessOffline, project_info)
-        # ProcessOffline is not anymore used.
-        # the trigger for pose process to switch to offline queue processing is now delivered by
-        # camera capture itself, which send an EOF_RECORDING when a video/session record finishes.
-        # See also the **ForceProcessOffline** kind, which is used for batch processing
+        # self._send_message(InferenceCommandMessageKind.ProcessOffline, project_info)
+        # Set pose_process prepared for processing offline for project info
         return configuration
 
     def perform_detection(self, configuration: DetectionConfiguration) -> Optional[DetectionConfiguration]:

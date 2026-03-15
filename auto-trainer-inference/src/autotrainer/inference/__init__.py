@@ -24,7 +24,7 @@ class InferenceMonitorDataMsg(str, Enum):
     SET_POSE_ALGO = "set_pose_algo"
     POSE_RESULT_READY = "pose_result_ready"
     INTERSESSION_SEGMENTATION_FINISHED = "intersession_segmentation_finished"
-    START_NEW_INTERSESSION_BATCH_ITEM = "start_new_intersession_batch_item"
+    START_NEW_INTERSESSION_BATCH_ITEM = "start_new_intersession_batch_item"  # not anymore used
 
 
 #

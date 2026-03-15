@@ -68,8 +68,8 @@ class IntersessionMachine(StateMachine):
         self._segmentation_configuration = None
         self.state = IntersessionState.idle
 
-    def after_enter_segmentation(self):
-        prj = self._project_info
+    def after_enter_segmentation(self, project_info: Optional[ProjectInfo]):
+        prj = project_info
         segment_config = SegmentationConfiguration(
             nonce=secrets.token_hex(),
             session_index=prj.session,
@@ -107,8 +107,8 @@ class IntersessionMachine(StateMachine):
         self._algorithm.end_session(result)
         self.events.on_analysis_ended(result)
 
-    def can_perform_segmentation(self):
-        p = self._project_info is not None
+    def can_perform_segmentation(self, project_info: Optional[ProjectInfo] = None):
+        p = project_info is not None
         i = self._inference is not None
         s = self._segmentation_configuration is not None
         self.post_event_content(
@@ -187,7 +187,7 @@ class IntersessionMachine(StateMachine):
     def may_trigger(self):
         """Main trigger"""
 
-    def perform_segmentation(self):
+    def perform_segmentation(self, project_info: Optional[ProjectInfo]):
         """Perform segmentation"""
 
     def may_perform_segmentation(self):

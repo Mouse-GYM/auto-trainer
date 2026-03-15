@@ -92,6 +92,10 @@ class OfflineInputProcess:
     def live_requested(self) -> bool:
         return self._live_requested
 
+    def has_project_waiting(self):
+        cur_th = self._cur_thread
+        return cur_th is not None and cur_th.is_alive() and self._project is not None
+
     def set_project_info(self, project_info: ProjectInfo):
         cur_th = self._cur_thread
         prev_prj = self._cur_project_info

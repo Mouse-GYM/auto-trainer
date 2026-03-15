@@ -244,7 +244,7 @@ class PoseProcess(Process):
                 elif cmd == InferenceCommandMessageKind.ForceProcessOffline:
                     self._set_process_offline()
                     self._offline_input.set_project_info(context)
-                    self._input_queue = self._offline_input
+                    # self._input_queue = self._offline_input
                 elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
                     # NB: not anymore used, actually.
                     self._process_live_when_ready = True
@@ -335,6 +335,7 @@ class PoseProcess(Process):
                     self._send_message(InferenceStatusMessageKind.Running, InferenceMode.Offline)
 
         p_last_data = get_perf_now()
+        recording_in_progress = False
 
         while self._is_running:
             p_now = get_perf_now()
@@ -365,25 +366,31 @@ class PoseProcess(Process):
                     if not (frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all():
                         logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices.tolist())
 
-                if (
-                    i_q is offline_input
-                    and numpy.isin(frames_indices[:, -1], [ # noqa
-                        FrameIndexCategory.ONLINE_NO_RECORDING,
-                        FrameIndexCategory.SWITCH_TO_ONLINE]
-                    ).any()
-                ):
-                    self._set_process_live(reason=frames_indices[:, -1].tolist())
-                    # reset_locals()  # no need given done before next get_output
-                # elif required, given _set_process_live called in previous if block:
-                elif (
-                    i_q is self._live_input_queue
-                    and (frames_indices[:, -1] == FrameIndexCategory.EOF_RECORDING).any()
-                ):
-                    logger.notice("Got EOF_RECORDING, switching immediately to offline input")
-                    self._set_process_offline()
-                    self._input_queue = offline_input
-                    # # always get new ref:
-                    # reset_locals()  # no need given done before next get_output
+                # if (
+                #     i_q is offline_input
+                #     and numpy.isin(frames_indices[:, -1], [ # noqa
+                #         FrameIndexCategory.ONLINE_NO_RECORDING,
+                #         FrameIndexCategory.SWITCH_TO_ONLINE]
+                #     ).any()
+                # ):
+                #     self._set_process_live(reason=frames_indices[:, -1].tolist())
+                #     # reset_locals()  # no need given done before next get_output
+                # # elif required, given _set_process_live called in previous if block:
+                # elif
+            if (
+                i_q is live_input
+                and (frames_indices[:, -1] == FrameIndexCategory.EOF_RECORDING).any()
+            ):
+                logger.notice("Got EOF_RECORDING, switching immediately to offline input")
+                self._set_process_offline()
+                self._input_queue = offline_input
+                # # always get new ref:
+                # reset_locals()  # no need given done before next get_output
+                recording_in_progress = False
+            elif i_q is offline_input:
+                recording_in_progress = False
+            elif i_q is live_input and (frames_indices[:, -1] >= 0).any():
+                recording_in_progress = True
 
             # only predict for not fully incomplete frames buffer:
             if (frames_indices >= FrameIndexCategory.ONLINE_NO_RECORDING).any():
@@ -426,5 +433,11 @@ class PoseProcess(Process):
                 # the swap to live queue will be requested explicitly by main app,
                 # there can be many/multiple offline sessions analyzed one after the other,
                 # without going back to live at all in-between them.
+
+            if i_q is live_input and not recording_in_progress and offline_input.has_project_waiting():
+                # we have to wait that there is no more recording in progress before switching to offline
+                logger.notice("Switching to offline input given project waiting")
+                self._set_process_offline()
+                self._input_queue = offline_input
 
         # end while True
