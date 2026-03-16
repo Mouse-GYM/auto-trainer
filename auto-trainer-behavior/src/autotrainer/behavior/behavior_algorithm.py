@@ -165,9 +165,12 @@ class BehaviorAlgoEvents:
 
     cover_servo_status_changed = Callable[[CoverServoStatus], None]
 
+    # NB:
+    # these events receive as single param/arg the **increment** applied to the previous value (whatever it was):
     pellets_presented_evt = Callable[[int], None]
     pellets_consumed_evt = Callable[[int], None]
     successful_reaches_evt = Callable[[int], None]
+    total_reaches_evt = Callable[[int], None]
 
 
 class BehaviorAlgorithm(ObservableObject):
@@ -183,9 +186,12 @@ class BehaviorAlgorithm(ObservableObject):
 
     cover_servo_status_changed: BehaviorAlgoEvents.cover_servo_status_changed  # unused
 
+    # NB:
+    # these events receive as single param/arg the **increment** applied to the previous value (whatever it was):
     pellets_presented_evt: BehaviorAlgoEvents.pellets_presented_evt
     pellets_consumed_evt: BehaviorAlgoEvents.pellets_consumed_evt
     successful_reaches_evt: BehaviorAlgoEvents.successful_reaches_evt
+    total_reaches_evt: BehaviorAlgoEvents.total_reaches_evt
 
     #
 
@@ -818,11 +824,11 @@ class BehaviorAlgorithm(ObservableObject):
             self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_PRESENTED, value, prev)
             self._event_manager.post_event_content(BehaviorEventKind.pelletPresented, context=value)
 
-    def increase_pellets_presented(self, quantity: int = 1):
-        self.pellets_presented_day += quantity
-        self.pellets_presented_total += quantity
-        if quantity:
-            self.pellets_presented_evt(quantity)
+    def increase_pellets_presented(self, increment: int = 1):
+        self.pellets_presented_day += increment
+        self.pellets_presented_total += increment
+        if increment:
+            self.pellets_presented_evt(increment)
 
     @property
     def pellet_reaches_day(self):
@@ -841,6 +847,12 @@ class BehaviorAlgorithm(ObservableObject):
     def pellet_reaches_total(self, value):
         prev, self._reaches_total = self._reaches_total, value
         self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_REACHES, value, prev)
+
+    def increase_pellet_total_reaches(self, increment: int = 1):
+        self.pellet_reaches_day += increment
+        self.pellet_reaches_total += increment
+        if increment:
+            self.total_reaches_evt(increment)
 
     @property
     def successful_reaches_day(self):
@@ -862,11 +874,11 @@ class BehaviorAlgorithm(ObservableObject):
             self._on_property_changed(BehaviorAlgoProps.TOTAL_SUCCESSFUL_REACHES, value, prev)
             self._event_manager.post_event_content(BehaviorEventKind.pelletSuccessfulReach, context=value)
 
-    def increase_successful_reaches(self, quantity: int = 1):
-        self.successful_reaches_day += quantity
-        self.successful_reaches_total += quantity
-        if quantity:
-            self.successful_reaches_evt(quantity)
+    def increase_successful_reaches(self, increment: int = 1):
+        self.successful_reaches_day += increment
+        self.successful_reaches_total += increment
+        if increment:
+            self.successful_reaches_evt(increment)
 
     #
 

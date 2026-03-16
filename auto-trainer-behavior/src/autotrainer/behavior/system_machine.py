@@ -999,8 +999,8 @@ class SystemMachine(StateMachine):
             algo.increase_successful_reaches(res.successful_reaches)
         if res.pellets_presented > 0:
             algo.increase_pellets_presented(res.pellets_presented)
-        algo.pellet_reaches_day += res.total_reaches
-        algo.pellet_reaches_total += res.total_reaches
+        if res.total_reaches > 0:
+            algo.increase_pellet_total_reaches(res.total_reaches)
         #
         algo.shift_xyz_handler.put_intersession_response(res)
 
