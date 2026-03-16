@@ -257,6 +257,7 @@ class SystemMachine(StateMachine):
             # inference.put_to_data_handler(InferenceMonitorDataMsg.START_NEW_INTERSESSION_BATCH_ITEM)
             # could be ~t-o-d-o~ done: START_NEW_INTERSESSION_BATCH_ITEM only set the stop_recorded event,
             #  could set it here instead of relaying to data proc handler.
+            logger.verbose("setting stop_recorded event")
             inference.stop_recorded_event.set()
             #
             if not self._batch_processing_in_progress:
@@ -273,7 +274,8 @@ class SystemMachine(StateMachine):
         logger.info("processing session project %s", cur_prj)
         algo.session_processing_starting()
         intersession.perform_segmentation(project_info)
-        kind = (
+        kind = InferenceCommandMessageKind.ProcessOffline
+        (
             # notable distinction:
             # ProcessOffline: prepare offline in inference process but do not switch to it, wait end recording.
             # Force: same but also directly switch to it.

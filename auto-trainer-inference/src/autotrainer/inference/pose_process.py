@@ -241,10 +241,9 @@ class PoseProcess(Process):
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:  # received from perform_segmentation
                     self._set_process_offline()
                     self._offline_input.set_project_info(context)
-                elif cmd == InferenceCommandMessageKind.ForceProcessOffline:
-                    self._set_process_offline()
-                    self._offline_input.set_project_info(context)
-                    # self._input_queue = self._offline_input
+                # elif cmd == InferenceCommandMessageKind.ForceProcessOffline:
+                #     self._set_process_offline()
+                #     self._offline_input.set_project_info(context)
                 elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
                     # NB: not anymore used, actually.
                     self._process_live_when_ready = True
