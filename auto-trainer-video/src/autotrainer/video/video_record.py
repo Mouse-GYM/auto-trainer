@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import threading
 import time
@@ -50,6 +51,8 @@ class VideoRecordProperties:
             self.project_info is not None
             and (self.video_rotate_interval >= 0 or self.image_interval > 0)
         )
+        logger.debug("should_record: vri=%s ii=%s any_active=%s is_from_start=%s",
+                     self.video_rotate_interval, self.image_interval, any_active, is_from_start)
         if is_from_start:
             return any_active and self.record_mode == VideoRecordMode.START_CONTINUOUS
         if self.record_mode == VideoRecordMode.CONTINUOUS:
@@ -69,7 +72,7 @@ class VideoRecord(Thread):
         self._fps = properties.fps
         self._record_mode = properties.record_mode
         self._video_rotate_interval = properties.video_rotate_interval
-        self._image_interval = properties.image_interval * 1e9
+        self._image_interval = properties.image_interval
 
         self._input_queue: Queue = input_queue
 
@@ -81,11 +84,20 @@ class VideoRecord(Thread):
         self._video_timestamp_file = None
 
         self._image_location: Optional[str] = None
-        self._last_image_timestamp = time.perf_counter()
+        self._last_image_perf_now = time.perf_counter()
 
         self._interval_mode = ProjectInterval.NONE
         self._interval_reference = -1
-        self._first_frame_when = time.time()
+        self._first_frame_when = math.inf
+        self._first_frame_time = math.inf
+
+    @property
+    def first_frame_time(self):
+        return self._first_frame_time
+
+    @first_frame_time.setter
+    def first_frame_time(self, value):
+        self._first_frame_time = value
 
     @property
     def first_frame_when(self):
@@ -108,11 +120,13 @@ class VideoRecord(Thread):
             logger.error("video recording and image capture can not proceed without value project information")
             return
 
-        if self._record_mode == VideoRecordMode.START_CONTINUOUS:
+        if self._record_mode in {VideoRecordMode.START_CONTINUOUS, VideoRecordMode.CONTINUOUS}:
+            logger.verbose("Forcing interval HOUR")
             self._interval_mode = ProjectInterval.HOUR
-            self._prepare_writers()
+            if self._record_mode == VideoRecordMode.START_CONTINUOUS:
+                self._prepare_writers()
 
-        last_when = 0
+        prev_perf_now = prev_frame_when = None
         check_count = 0
         tot_written = 0
 
@@ -128,17 +142,22 @@ class VideoRecord(Thread):
                 if len(queue_list) == 0:
                     # Indicator for trigger disabled
                     self._close_writers()
-                    logger.info("Closed video file: tot frames written: %s ; last_when=%s",
-                                tot_written, last_when)
+                    logger.info("Closed video file: tot frames written: %s ; last_perf_now=%s",
+                                tot_written, prev_perf_now)
                     tot_written = 0
                     continue
 
-                for frame, when, other_when in queue_list:
-                    when -= self._first_frame_when
+                for frame, frame_when, frame_perf_now in queue_list:
+                    # NB: reminder: frame_when is really camera clock, which vary from camera to camera,
+                    # reconstructing frame_time (based on first frame start ~time):
+                    # we assume camera clock is in nanoseconds precision, so using it:
+                    zero_based_frame_when = (frame_when - self._first_frame_when) / 1e9
+                    frame_time = self._first_frame_time + zero_based_frame_when
 
                     if self._is_video_enabled:
                         if self._video_writer is None:
                             # If triggered, may not be configured yet for this batch
+                            prev_perf_now = prev_frame_when = None
                             self._prepare_writers()
 
                         if len(numpy.shape(frame)) < 3 or numpy.shape(frame)[2] == 1:
@@ -148,17 +167,38 @@ class VideoRecord(Thread):
                         tot_written += 1
 
                         if self._video_timestamp_file is not None:
-                            d = when - last_when
-                            self._video_timestamp_file.write(f"{when}, {1e9 / d if d != 0 else 0}, {other_when}\n")
-                            last_when = when
+                            # NB: Using camera frame_when, which is the most precise, to measure FPS:
+                            # if last_perf_now is None:
+                            #     d = 0
+                            # else:
+                            #     d = frame_perf_now - last_perf_now
+                            #     if d:
+                            #         d = 1 / d
+                            #     else:
+                            #         d = math.nan
+                            if prev_frame_when is None:
+                                d2 = 0
+                            else:
+                                # NB: we know that Spinnaker cameras give their timestamp in nanosecond unit,
+                                d2 = (frame_when - prev_frame_when) / 1e9  # so / 1e9 here.
+                                if d2:
+                                    d2 = 1 / d2
+                                else:
+                                    d2 = math.nan
+                            self._video_timestamp_file.write(f"{frame_time}, {d2}, {frame_when}, {frame_perf_now}\n")
+                            prev_perf_now = frame_perf_now
+                            prev_frame_when = frame_when
 
-                    if 0 < self._image_interval <= when - self._last_image_timestamp:
+                    if 0 < self._image_interval <= frame_perf_now - self._last_image_perf_now:
                         if self._image_location is None:
                             self._prepare_writers()
-                        self._last_image_timestamp = when
-                        when_str = datetime.fromtimestamp(when / 1e9).strftime("%Y%m%d_%H%M%S_%f")[:-3]
-                        assert isinstance(self._image_location, str)
-                        cv2.imwrite(os.path.join(self._image_location, self._image_name.format(when=when_str)), frame)
+                        img_loc = self._image_location
+                        if img_loc is not None:
+                            self._last_image_perf_now = frame_perf_now
+                            when_str = datetime.fromtimestamp(frame_time).strftime("%Y%m%d_%H%M%S_%f")
+                            when_str = when_str[:-3]  # only keep 3 digits precision (milliseconds)
+                            assert isinstance(self._image_location, str)
+                            cv2.imwrite(os.path.join(self._image_location, self._image_name.format(when=when_str)), frame)
 
                     check_count += 1
 
@@ -193,18 +233,19 @@ class VideoRecord(Thread):
                 self._prepare_writers()
 
     def _prepare_writers(self):
-        logger.debug("%s: preparing writers...", self)
+        logger.debug("preparing writers...")
         now = datetime.now()
         self._interval_reference = self._project_info.get_interval(self._interval_mode, when=now)
         self._prepare_video_writer()
         self._prepare_image_capture()
 
     def _close_writers(self):
-        logger.spam("%s: closing writers...", self)
+        logger.spam("closing writers...")
         self._close_image_writer()
         self._close_video_writer()
 
     def _prepare_image_capture(self):
+        logger.debug("preparing image capture")
         self._close_image_writer()
         if self._image_interval > 0:
             self._image_location, self._image_name = (

@@ -433,12 +433,11 @@ class AppModel(ObservableObject):
         if algo_status is not None:
             self._behavior.algorithm.status = algo_status
         self._on_property_changed(self.Props.STATUS, value, prev)
-        if value in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}:
-            for cam in self._cameras:
-                cam.on_trigger_recording(False, is_from_start=True)
-        else:
-            for cam in self._cameras:
-                cam.on_trigger_recording(False)
+        is_from_start = value in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
+        for cam in self._cameras:
+            cam.on_trigger_recording(False, is_from_start=is_from_start)
+            # kind of strangely, this can actually start the recording on the camera,
+            # if it's continous mode and is_from_start is not True.
         if value is AppModelStatus.ANIMAL_IN_TRAINING:
             # NB: need to be after set of algo_status
             self._behavior.system_machine.pellet.send_pellet()
