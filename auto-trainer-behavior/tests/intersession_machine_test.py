@@ -36,7 +36,7 @@ def test_intersession(
     machine.state = SystemState.intersession
 
     with mock_system.mock_perform_segmentation() as m_perf_segm:
-        intersession.perform_segmentation()
+        intersession.perform_segmentation(intersession.project)
 
     segment_cfg = intersession._segmentation_configuration
 

@@ -14,12 +14,12 @@ from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from tools.acquisition.model.hardware_model import HardwareModel
 
-from autotrainer.core.project import ProjectDependentProtol
+from autotrainer.core.project import ProjectDependentProtocol
 
 logger = get_verbose_logger(__name__)
 
 
-class BehaviorModel(ObservableObject, ProjectDependentProtol):
+class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     """
     Encapsulation of the Behavior Module (autotrainer-behavior) for the application layer.  This model class manages
     aspects of the behavior system that are specific to the application.  General behavior functionality should be

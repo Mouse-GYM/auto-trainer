@@ -3,6 +3,7 @@ import logging
 import queue
 import threading
 import time
+from multiprocessing import synchronize
 
 from pathlib import Path
 from functools import partial
@@ -152,9 +153,22 @@ def pose_algo():
     return PoseAlgorithm()
 
 
+class VoidInference(InferenceProtocol):
+
+    def __init__(self):
+        super().__init__()
+        self._stop_recorded_event = threading.Event()  # noqa
+
+    @property
+    def stop_recorded_event(self) -> synchronize.Event:
+        # still required,
+        # could maye be added to InferenceProtocol, which is more actually InferenceBase class...
+        return self._stop_recorded_event
+
+
 @pytest.fixture
 def inference():
-    inference = InferenceProtocol()
+    inference = VoidInference()
     inference.status = InferenceStatus.live
     yield inference
     # inference.terminate()

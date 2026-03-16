@@ -237,12 +237,12 @@ class FixedArrayMultiQueue:
         if not self.is_frame_ready(read_idx_value * self._frames_per_camera + self._frames_per_camera - 1):
             return False
         buffer = self._buffers[read_idx_value]
-        for idx, cdx in enumerate(self._camera_indexing):
+        for idx, cdx in enumerate(self._camera_indexing):  # cdx: 0 1 0 1 0 1 0 1
             v = numpy.frombuffer(
                 buffer[cdx][self._frame_indexing[idx]], "uint8", self._byte_count
             ).reshape(self.shape)
             # NB: current predict model expects an RGB frame,
-            # we have so to copy 3 times the current grey image/frame into the 3 planes:
+            # we have so to copy 3 times the current gray image/frame into the 3 planes:
             # for fn in range(3):
             #     output[idx, :, :, fn] = v
             # we do that after setting dirty back to 0

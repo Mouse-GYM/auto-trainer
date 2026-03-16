@@ -235,7 +235,7 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
         vid_name_raw = os.path.splitext(vid_name_raw)[0]
         h5_file_path = os.path.join(vid_dir, vid_name_raw + dlc_seg + '.h5')
         if not os.path.isfile(h5_file_path):
-            print('h5 path does not exist')
+            logger.error('h5 path does not exist: %s', h5_file_path)
             return dataframe_RL, bodyparts
 
         df = pd.read_hdf(h5_file_path)

@@ -231,22 +231,33 @@ class SystemMachine(StateMachine):
         if algo.is_in_session:
             algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
         else:
-            if self._intersession.state == IntersessionState.idle and len(self._batch_project_sessions_list) > 0:
-                self._inference.send_message(InferenceCommandMessageKind.ForceProcessOffline)
-                self.enter_intersession(reason="exit-tunnel-with-sessions-batch-list")
+            batch_projects = self._batch_project_sessions_list
+            if len(batch_projects) > 0:
+                if self._intersession.state != IntersessionState.idle:
+                    logger.warning(
+                        "Unexpected intersession state with non-empty batch session list: %s, projects=%s",
+                        self._intersession.state, batch_projects)
+                else:
+                    prj = batch_projects[0]
+                    # self._inference.send_message(InferenceCommandMessageKind.ForceProcessOffline, prj)
+                    self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
 
-    def after_enter_intersession(self, *, reason="NA"):
-        logger.verbose("enter_intersession: reason=%s", reason)
+    def after_enter_intersession(self, project_info: ProjectInfo, *, reason="NA"):
         algo = self._algorithm
         intersession = self._intersession
         inference = self._inference
         batch_list = self._batch_project_sessions_list
+        logger.verbose("enter_intersession: reason=%s, n_batch=%s, in-session=%s",
+                       reason, len(batch_list), algo.is_in_session)
         if len(batch_list) > 0:
             # set intersession and inference current project to the one from the batch:
             cur_prj = batch_list[0]
             intersession.project = cur_prj
             inference.project = cur_prj
-            inference.put_to_data_handler(InferenceMonitorDataMsg.START_NEW_INTERSESSION_BATCH_ITEM)
+            logger.verbose("setting stop_recorded event")
+            inference.stop_recorded_event.set()
+            # todo: actually not needed if pose-process offline input knows it does not have to wait for this case...
+            #
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
                 self._batch_failed_count = 0
@@ -260,8 +271,11 @@ class SystemMachine(StateMachine):
 
         logger.info("processing session project %s", cur_prj)
         algo.session_processing_starting()
-
-        intersession.perform_segmentation()
+        intersession.perform_segmentation(project_info)
+        kind = InferenceCommandMessageKind.ProcessOffline
+        # todo: use a different kind so that pose-process offline input knows it possibly does not have to wait
+        #  for the stop_recorded event, see above previous comment.
+        self._inference.send_message(kind, cur_prj)
         self._consider_close_gate_during_intersession()
 
     def after_exit_intersession(self):
@@ -351,7 +365,7 @@ class SystemMachine(StateMachine):
         can_perform_analysis = (
             cur_project is not None
             and algo.can_perform_intersession_analysis()
-            and self._intersession.can_perform_segmentation()
+            and self._intersession.can_perform_segmentation(cur_project)
         )
         real_can_perform_analysis = can_perform_analysis
         can_batch_session = False
@@ -402,9 +416,12 @@ class SystemMachine(StateMachine):
                 # no need if it's the latest/current project-session-info already.
                 cur_sessions_batch.clear()
                 # it will be handled normally anyway
-            self.enter_intersession(reason="capture-ended-and-can-perform-analysis")
+            prj = self._project_info.to_local_value() if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
+            self.enter_intersession(prj, reason="capture-ended-and-can-perform-analysis")
         else:
-            self._inference.put_to_offline_queue(FrameIndexCategory.SWITCH_TO_ONLINE, reason='session_capture_ended')
+            # at the end of live recording pose-process automatically goes to offline mode,
+            # so we ask it to switch back to live:
+            self._inference.send_message(InferenceCommandMessageKind.SetOfflineToLive)
             algo.end_session(CaptureAnalysisResult.ANALYSIS_DELAYED if real_can_perform_analysis
                              else CaptureAnalysisResult.CAPTURE_ONLY)
 
@@ -418,7 +435,7 @@ class SystemMachine(StateMachine):
                 self._batch_failed_count += 1
             if len(cur_batch) > 0:  #  and not self._algorithm.algo_paused:
                 # continue remaining session(s) in batch in all cases
-                self.reenter_intersession(reason="reenter-batch-session")
+                self.reenter_intersession(cur_batch[0], reason="reenter-batch-session")
                 return
             self._batch_processing_in_progress = False
             self._batch_sessions_total_duration = 0
@@ -437,14 +454,13 @@ class SystemMachine(StateMachine):
                            prev_value, new_value, self.state)
             self._consider_enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
 
-    def _inference_segmentation_finished(self, success):
-        logger.verbose("got inference segmentation finished: %s", success)
+    def _inference_segmentation_finished(self, project: ProjectInfo, success: bool):
+        logger.verbose("got inference segmentation finished: %s ; prj=%s", success, project)
         inference = self._inference
-        inference.put_to_offline_queue(FrameIndexCategory.EOF_OFFLINE_PROCESSING, reason='segmentation_finished')
         cur_batch_list = self._batch_project_sessions_list
-        logger.debug("cur_batch_list=%s", cur_batch_list)
+        logger.debug("remaining batch trials list size: %s", len(cur_batch_list))
         if len(cur_batch_list) <= 1:
-            inference.put_to_offline_queue(FrameIndexCategory.SWITCH_TO_ONLINE, reason='segmentation_finished')
+            inference.send_message(InferenceCommandMessageKind.SetOfflineToLive)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _headbar_pressure_monitor_property_changed(self, name: str, value, _):
@@ -777,7 +793,7 @@ class SystemMachine(StateMachine):
             return
         duration = self._batch_sessions_total_duration
         if duration < close_cfg.session_min_duration:
-            logger.debug("session duration too short, skipping auto-close-gate")
+            logger.debug("session duration too short, skipping auto-close-gate ; duration=%.1fs", duration)
             return
         load_cell_mon = self._analysis.load_cell_monitor.context
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
@@ -1049,13 +1065,13 @@ class SystemMachine(StateMachine):
     def may_exit_tunnel(self):
         """Exit tunnel"""
 
-    def enter_intersession(self, *, reason: str="NA"):
+    def enter_intersession(self, project_info: ProjectInfo, *, reason: str="NA"):
         """Enter intersession"""
 
     def may_enter_intersession(self):
         """May Enter intersession"""
 
-    def reenter_intersession(self, *, reason: str="NA"):
+    def reenter_intersession(self, project_info: ProjectInfo, *, reason: str="NA"):
         """ReEnter intersession (from previous intersession)"""
 
     def may_reenter_intersession(self):

@@ -29,7 +29,7 @@ from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandl
                               NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis,
                               Offset3DTuple)
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
-from autotrainer.core.project import ProjectInfo, ProjectDependentProtol
+from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, no_op_timer
@@ -326,7 +326,7 @@ class AppModel(ObservableObject):
             system_machine=system_machine,
         )
 
-        self._models: List[ProjectDependentProtol] = [
+        self._models: List[ProjectDependentProtocol] = [
             self._left_camera,
             self._right_camera,
             self._top_camera,

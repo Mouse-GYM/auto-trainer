@@ -16,7 +16,7 @@ from numpy import ndarray
 from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, ObservableObject, \
     CameraConfiguration, CameraId, NotificationCenter, TriggerNotification, Notification, get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx
-from autotrainer.core.project import ProjectInfo, ProjectDependentProtol
+from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
@@ -45,7 +45,7 @@ def create_camera_list():
     return cameras
 
 
-class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
+class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
 
     CAMERA_PROP = "camera"
     CAMERA_LIST_PROP = "camera_list"

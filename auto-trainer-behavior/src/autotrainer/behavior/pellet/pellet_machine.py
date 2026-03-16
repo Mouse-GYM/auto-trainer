@@ -332,7 +332,7 @@ class PelletMachine(StateMachine):
         cur_state = self._state
 
         if algo.system_state == SystemState.intersession:
-            if algo.intersession_state == IntersessionState.segmentation and not is_from_inference:
+            if algo.intersession_state == IntersessionState.segmentation:
                 # waiting inference is back, nothing we can do
                 return
 

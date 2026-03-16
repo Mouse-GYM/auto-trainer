@@ -157,11 +157,14 @@ class BehaviorAlgoEvents:
             """When a session batch analysis starts"""
 
     session_processing_starting = Callable[[], None]
-    session_ending = Callable[[CaptureAnalysisResult], None]
 
     class batch_analysis_ending:  # noqa
         def __call__(self, *, failed_count: int):
             """When a session batch analysis is finished"""
+
+    session_ending = Callable[[CaptureAnalysisResult], None]
+
+    #
 
     cover_servo_status_changed = Callable[[CoverServoStatus], None]
 

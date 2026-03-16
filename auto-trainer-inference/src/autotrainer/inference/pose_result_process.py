@@ -116,7 +116,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._process_pool: Optional[multiprocessing.pool.Pool] = None
 
     @property
-    def stop_recorded(self) -> multiprocessing.Event:  # noqa
+    def stop_recorded(self) -> synchronize.Event:
         return self._stop_recorded
 
     def _do_run(self, *, project):
@@ -207,7 +207,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         pose_algo,
         range_cams, ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss,
     ):
-        logger.notice("Processing intersession offline post-process ..")
+        logger.notice("Processing intersession offline post-process on %s", project_info)
         fill_live_end = True
         for cdx, pdl, cur_h5_idx, cur_h5_dss in zip(
             range_cams, ib_pose_data_list, cams_read_h5_idx, cams_read_h5_dss
@@ -277,7 +277,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             logger.exception("Error during intersession_inference: %s", err)
             success = False
 
-        self._send_msg(self.Msg.INTERSESSION_SEGMENTATION_FINISHED, project_info.session, success)
+        self._send_msg(self.Msg.INTERSESSION_SEGMENTATION_FINISHED, project_info, success)
 
     def _monitor_data_queue(self, project: ProjectInfo):
         pose_data: Optional[List[numpy.ndarray]]
@@ -455,7 +455,36 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 prev_pose_algo = pose_algo
             pool = self._process_pool  # after init process pool
 
-            if recording_in_progress and frames_indices is not None:
+            if (
+                not recording_in_progress
+                and pose_data is not None
+                and mode == InferenceMode.Live
+                and frames_indices is not None
+                and (frames_indices[:, 0] >= 0).any()
+            ):
+                tot_written_to_live = 0
+                recording_in_progress = True
+                cur_local_prj = self._project.to_local_value()
+                logger.notice("Detected new record in progress ; session=%s ; mode=%s frames indices: %s",
+                              cur_local_prj.session, mode, frames_indices.tolist())
+                self._stop_recorded.clear()
+                logger.debug("cleared stop_recorded")
+                cams_frame_idx_fhs = []
+                pose_paths = []
+                cur_h5_live_batch = [[] for _ in range_cams]  # safer
+                cur_cams_indices = [[] for _ in range_cams]  # safer
+                ib_pose_data_list = [[] for _ in range_cams]
+                ib_pose_data_dict = []
+                if __debug__:
+                    ib_pose_data_dict = [{} for _ in range_cams]
+                for cam in cams:
+                    _, _, p_indices = cur_local_prj.get_video_path(cam, allow_overwrite=True)
+                    cams_frame_idx_fhs.append(Path(p_indices).open("w"))
+                    pose_path = Path(
+                        cur_local_prj.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live"))
+                    pose_paths.append(pose_path)
+
+            elif recording_in_progress and frames_indices is not None:
                 # thx to camera capture which send a full EOF_RECORDING batch frames indices,
                 # this condition allows to know when to close/stopping writing to live files,
                 # and reopen for offline mode
@@ -476,33 +505,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             cnt_data_received += 1
 
             try:
-                if (
-                    not recording_in_progress
-                    and pose_data is not None
-                    and mode == InferenceMode.Live
-                    and frames_indices is not None
-                    and (frames_indices[:, 0] >= 0).any()
-                ):
-                    tot_written_to_live = 0
-                    recording_in_progress = True
-                    cur_local_prj = self._project.to_local_value()
-                    logger.notice("Detected new record in progress ; session=%s ; mode=%s frames indices: %s",
-                                   cur_local_prj.session, mode, frames_indices.tolist())
-                    self._stop_recorded.clear()
-                    logger.debug("cleared stop_recorded")
-                    cams_frame_idx_fhs = []
-                    pose_paths = []
-                    cur_h5_live_batch = [[] for _ in range_cams]  # safer
-                    cur_cams_indices = [[] for _ in range_cams]  # safer
-                    ib_pose_data_list = [[] for _ in range_cams]
-                    ib_pose_data_dict = []
-                    if __debug__:
-                        ib_pose_data_dict = [{} for _ in range_cams]
-                    for cam in cams:
-                        _, _, p_indices = cur_local_prj.get_video_path(cam, allow_overwrite=True)
-                        cams_frame_idx_fhs.append(Path(p_indices).open("w"))
-                        pose_path = Path(cur_local_prj.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live"))
-                        pose_paths.append(pose_path)
 
                 if mode == InferenceMode.Live:
 
@@ -563,6 +565,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         # with random cam there might be no frame to replay, so we get immediately all < 0
                     ):
                         _close_fhs(cams_frame_idx_fhs)  # just to be sure
+                        # logger.debug("setting stop recorded")
+                        # self._stop_recorded.set()  # this is for the feeder thread to know when it can open the data files
                         cams_frame_idx_fhs = None
                         perf_c_start_offline = time.perf_counter()
                         logger.notice("Opening live files for offline processing ; prev_mode=%s frames=%s",
@@ -583,20 +587,16 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         if __debug__:
                             ib_pose_data_dict = [{} for _ in range_cams]
                         tot_skipped = 0
-                        logger.debug("setting stop recorded")
-                        self._stop_recorded.set()  # this is for the feeder thread to know when it can open the data files
-
-                    # after check for event start/restart of offline processing:
 
                     if pose_data is None:
-                        # end of intersession replay
+                        # end of intersession/offline replay
                         cur_local_prj = self._project.to_local_value()
-                        logger.verbose("detected end of inference offline processing ; project=%s",
+                        logger.info("detected end of inference offline processing ; project=%s",
                                        cur_local_prj)
                         # we can reset the offline queue here, it's safe :
                         # the pose process has switched to its online queue at this point
-                        self._stop_recorded.clear()
-                        logger.debug("cleared stop_recorded")
+                        # self._stop_recorded.clear()
+                        # logger.debug("cleared stop_recorded")
                         _close_fhs(cams_frame_idx_fhs)  # defensive as supposed to be close already
                         cams_frame_idx_fhs = None
                         if thread_post_process is not None:
