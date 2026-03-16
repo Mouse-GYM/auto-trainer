@@ -254,11 +254,9 @@ class SystemMachine(StateMachine):
             cur_prj = batch_list[0]
             intersession.project = cur_prj
             inference.project = cur_prj
-            # inference.put_to_data_handler(InferenceMonitorDataMsg.START_NEW_INTERSESSION_BATCH_ITEM)
-            # could be ~t-o-d-o~ done: START_NEW_INTERSESSION_BATCH_ITEM only set the stop_recorded event,
-            #  could set it here instead of relaying to data proc handler.
             logger.verbose("setting stop_recorded event")
             inference.stop_recorded_event.set()
+            # todo: actually not needed if pose-process offline input knows it does not have to wait for this case...
             #
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
@@ -275,13 +273,8 @@ class SystemMachine(StateMachine):
         algo.session_processing_starting()
         intersession.perform_segmentation(project_info)
         kind = InferenceCommandMessageKind.ProcessOffline
-        (
-            # notable distinction:
-            # ProcessOffline: prepare offline in inference process but do not switch to it, wait end recording.
-            # Force: same but also directly switch to it.
-            InferenceCommandMessageKind.ProcessOffline if len(batch_list) == 0
-            else InferenceCommandMessageKind.ForceProcessOffline
-        )
+        # todo: use a different kind so that pose-process offline input knows it possibly does not have to wait
+        #  for the stop_recorded event, see above previous comment.
         self._inference.send_message(kind, cur_prj)
         self._consider_close_gate_during_intersession()
 
