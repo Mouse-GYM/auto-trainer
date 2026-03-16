@@ -472,11 +472,11 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             time.sleep(0.001)
         return True
 
-    def on_trigger_recording(self, record: bool):
+    def on_trigger_recording(self, record: bool, *, is_from_start: bool=False):
         if record:
-            self._send_command(CaptureCommandKind.ENABLE_RECORDING)
+            self._send_command(CaptureCommandKind.ENABLE_RECORDING, is_from_start=is_from_start)
         else:
-            self._send_command(CaptureCommandKind.DISABLE_RECORDING)
+            self._send_command(CaptureCommandKind.DISABLE_RECORDING, is_from_start=is_from_start)
 
     def _on_trigger(self, notification: Notification):
         if self._video_capture is not None:
@@ -491,7 +491,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
         value = cam.url
 
-        if "&name" not in value:
+        if "&name=" not in value:
             if "?" in value:
                 value = value + f"&name={self._name}"
             else:
@@ -534,9 +534,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             logger.debug("%s: joined video_reader", self._name)
             self._video_reader = None
 
-    def _send_command(self, cmd: CaptureCommandKind, context: object = None):
+    def _send_command(self, cmd: CaptureCommandKind, *args, **kwargs):
         if self._video_command_queue is not None:
-            self._video_command_queue.put((cmd, context))
+            self._video_command_queue.put((cmd, (args, kwargs)))
         else:
             logger.warning("%s: _send_command: %s but video command queue is None", self._name, cmd)
 

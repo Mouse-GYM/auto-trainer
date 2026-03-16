@@ -15,10 +15,11 @@ from enum import IntEnum
 from multiprocessing import Process, Value, Array, synchronize
 from multiprocessing.sharedctypes import Synchronized, SynchronizedArray, SynchronizedBase
 from threading import BrokenBarrierError
-from typing import Callable, Dict, Union, Optional, List, Tuple
+from typing import Callable, Dict, Union, Optional, List, Tuple, Any
 
 import numpy
 import verboselogs
+from typing_extensions import Any
 
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo, SystemStatusMessageKind
 from autotrainer.core.logging import get_verbose_logger, set_logger_level, get_multiprocess_log_queue, \
@@ -198,7 +199,7 @@ class VideoCapture(Process):
 
         if record_properties is not None:
             self._record_properties = record_properties
-            self._is_record_active = record_properties.should_record(False)
+            self._is_record_active = record_properties.should_record(False, is_from_start=True)
             self._record_batch_size = record_properties.queue_batch_size
         else:
             self._record_properties = VideoRecordProperties(record_mode=VideoRecordMode.NONE)
@@ -216,7 +217,7 @@ class VideoCapture(Process):
         self._detection_attrs = attrs.presence_detection_attrs
         self._video_detection: Optional[VideoDetection] = None
 
-        self.command_handler: Dict[CaptureCommandKind, Callable[[object], None]] = {
+        self._command_handlers: Dict[CaptureCommandKind, Callable[[Any], ...]] = {
             CaptureCommandKind.TERMINATE: self._user_terminate,
             CaptureCommandKind.ENABLE_CAPTURE: self._begin_capture,
             CaptureCommandKind.DISABLE_CAPTURE: self._end_capture,
@@ -371,8 +372,8 @@ class VideoCapture(Process):
             if fault_count > 5:
                 logger.critical("Too many capture loop processing errors ; giving up")
                 self._set_error(RuntimeError("too many capture failure"))
-                self._end_capture(None)
-                self._user_terminate(None)
+                self._end_capture()
+                self._user_terminate()
                 break
 
             t_perf_now = time.perf_counter()
@@ -545,26 +546,27 @@ class VideoCapture(Process):
 
     def _handle_command(self, cmd: CaptureCommandKind, context: object):
         logger.info(f"<%s> executing %s", self._name, cmd)
-        handler = self.command_handler.get(cmd)
+        handler = self._command_handlers.get(cmd)
         if handler is None:
             logger.warning("No handler for command %s", cmd)
         else:
-            handler(context)
+            args, kwargs = context
+            handler(*args, **kwargs)
             logger.debug("status: capturing=%s recording=%s", self._is_capturing, self._is_record_active)
 
-    def _user_terminate(self, _: object):
+    def _user_terminate(self):
         self._is_running = False
 
-    def _begin_capture(self, _: object):
+    def _begin_capture(self):
         self._is_capturing = True
 
-    def _end_capture(self, _: object):
+    def _end_capture(self):
         self._is_capturing = False
 
-    def _enable_record(self, _: object):
-        self._is_record_active = self._record_properties.should_record(True)
+    def _enable_record(self, *, is_from_start: bool=False):
+        self._is_record_active = self._record_properties.should_record(True, is_from_start=is_from_start)
         logger.verbose("%s: is_record_active=%s", self, self._is_record_active)
 
-    def _disable_record(self, _: object):
-        self._is_record_active = self._record_properties.should_record(False)
+    def _disable_record(self, *, is_from_start: bool=False):
+        self._is_record_active = self._record_properties.should_record(False, is_from_start=is_from_start)
         logger.verbose("%s: recording disabled. is_record_active=%s", self, self._is_record_active)

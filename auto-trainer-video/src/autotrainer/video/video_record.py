@@ -23,6 +23,7 @@ class VideoRecordMode(IntEnum):
     NONE = -1
     CONTINUOUS = 0
     TRIGGER = 1
+    START_CONTINUOUS = 2
 
 
 @dataclass
@@ -44,14 +45,17 @@ class VideoRecordProperties:
     queue_batch_size = 60
     """Number of frames to batch for passing between capture and record queues."""
 
-    def should_record(self, is_triggered: bool) -> bool:
-        any_active = self.project_info is not None and (self.video_rotate_interval >= 0 or self.image_interval > 0)
-
+    def should_record(self, is_triggered: bool, *, is_from_start: bool = False) -> bool:
+        any_active = (
+            self.project_info is not None
+            and (self.video_rotate_interval >= 0 or self.image_interval > 0)
+        )
+        if is_from_start:
+            return any_active and self.record_mode == VideoRecordMode.START_CONTINUOUS
         if self.record_mode == VideoRecordMode.CONTINUOUS:
             return any_active
-        elif self.record_mode == VideoRecordMode.TRIGGER:
+        if self.record_mode == VideoRecordMode.TRIGGER:
             return is_triggered and any_active
-
         return False
 
 
@@ -104,7 +108,7 @@ class VideoRecord(Thread):
             logger.error("video recording and image capture can not proceed without value project information")
             return
 
-        if self._record_mode == VideoRecordMode.CONTINUOUS:
+        if self._record_mode == VideoRecordMode.START_CONTINUOUS:
             self._interval_mode = ProjectInterval.HOUR
             self._prepare_writers()
 
@@ -215,7 +219,7 @@ class VideoRecord(Thread):
         self._close_video_writer()
 
         if not self._is_video_enabled:
-            logger.warning("_prepare_video_writer but _is_video_enabled False")
+            logger.verbose("_prepare_video_writer but _is_video_enabled False")
             return
 
         video_file, timestamp_file, _ = self._project_info.get_video_path(
