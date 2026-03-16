@@ -2,7 +2,7 @@ from multiprocessing import synchronize
 from typing import Protocol, Callable, Tuple, Optional, Any
 
 from autotrainer.core import Offset3DTuple, ObservableObject, FrameIndexCategory
-from autotrainer.core.project import ProjectDependentProtol, ProjectInfo
+from autotrainer.core.project import ProjectDependentProtocol, ProjectInfo
 from autotrainer.core.configuration.inference_configuration import InferenceConfiguration
 
 import autotrainer.inference.analysis
@@ -68,7 +68,7 @@ class _InferenceProtocol(Protocol):
         """The multiprocess event associated with h5 live files, must be set for readers"""
 
 
-class InferenceProtocol(ObservableObject, _InferenceProtocol, ProjectDependentProtol):
+class InferenceProtocol(ObservableObject, _InferenceProtocol, ProjectDependentProtocol):
 
     STATUS = "status"
 

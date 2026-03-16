@@ -30,7 +30,7 @@ from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
 from autotrainer.inference.analysis import intersession_process
 
-from autotrainer.core.project import ProjectDependentProtol
+from autotrainer.core.project import ProjectDependentProtocol
 
 logger = get_verbose_logger(__name__)
 
@@ -40,7 +40,7 @@ logger = get_verbose_logger(__name__)
 _local_do_debug = False
 
 
-class InferenceModel(InferenceProtocol, ProjectDependentProtol):
+class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
     def __init__(self,
         pose_algorithm: PoseAlgorithm,
