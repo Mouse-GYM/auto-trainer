@@ -568,8 +568,12 @@ class VideoCapture(Process):
 
     def _enable_record(self, *, is_from_start: bool=False):
         self._is_record_active = self._record_properties.should_record(True, is_from_start=is_from_start)
-        logger.verbose("%s: is_record_active=%s", self, self._is_record_active)
+        logger.verbose("_enable_record: is_record_active=%s", self._is_record_active)
 
-    def _disable_record(self, *, is_from_start: bool=False):
-        self._is_record_active = self._record_properties.should_record(False, is_from_start=is_from_start)
-        logger.verbose("%s: recording disabled. is_record_active=%s", self, self._is_record_active)
+    def _disable_record(self, *, is_triggered: Optional[bool]=False, is_from_start: bool=False):
+        entry_is_triggered = is_triggered
+        if is_triggered is None:
+            is_triggered = self._is_record_active
+        self._is_record_active = self._record_properties.should_record(is_triggered, is_from_start=is_from_start)
+        logger.verbose("_disable_record(is_triggered=%s, is_from_start=%s): is_record_active=%s",
+                       entry_is_triggered, is_from_start, self._is_record_active)

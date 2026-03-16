@@ -435,9 +435,14 @@ class AppModel(ObservableObject):
         self._on_property_changed(self.Props.STATUS, value, prev)
         is_from_start = value in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
         for cam in self._cameras:
-            cam.on_trigger_recording(False, is_from_start=is_from_start)
+            if value == AppModelStatus.ANIMAL_IN_DEVICE:
+                is_from_start = cam != self._top_camera
+            record = False
+            # NB: using is_triggered=None to ensure same state is kept in process side,
+            # see: VideoRecord._disable_record()
+            cam.on_trigger_recording(False, is_triggered=None, is_from_start=is_from_start)
             # kind of strangely, this can actually start the recording on the camera,
-            # if it's continous mode and is_from_start is not True.
+            # if it's continous mode and is_from_start is not True, or else it was already recording.
         if value is AppModelStatus.ANIMAL_IN_TRAINING:
             # NB: need to be after set of algo_status
             self._behavior.system_machine.pellet.send_pellet()
