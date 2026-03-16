@@ -125,7 +125,7 @@ def process_capture(src_dir):
 def make_3d_calib(
     app_model: AppModel,
     cam_params: Optional[Dict[str, Any]] = None,
-    record_mode: VideoRecordMode = VideoRecordMode.CONTINUOUS,
+    record_mode: VideoRecordMode = VideoRecordMode.START_CONTINUOUS,
 ) -> Path:
     if cam_params is None:
         cam_params = default_params
@@ -233,7 +233,7 @@ def make_3d_calib(
                 cam.on_capture_start()
 
         if record_mode == VideoRecordMode.TRIGGER:
-            logger.info("Trigering recording")
+            logger.info("Triggering recording")
             for cam in cameras:
                 cam.on_trigger_recording(True)
 
