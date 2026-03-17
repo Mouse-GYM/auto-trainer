@@ -28,7 +28,8 @@ def _start_spincam_lib_instance():
 
 def _stop_spincam_lib_instance(cls: Type["SpinCam"]):
     global sSystem
-    for key, spincam in cls._cameras.items():
+    for key, spincam in list(cls._cameras.items()):  # loop over list copy of items,
+        # given _release_spincam() will modify `cls._cameras` dict
         _release_spincam(spincam)
     cls._cameras.clear()
     if sSystem is not None:
