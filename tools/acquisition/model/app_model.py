@@ -921,9 +921,9 @@ class AppModel(ObservableObject):
     def capture_start(self, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING) -> bool:
         """Request to start the acquisition"""
         with self.app_lock:
-            cur_status = self._status
-            if target_status == cur_status:
-                logger.verbose("AppModelStatus already %s", cur_status)
+            on_start_status = self._status
+            if target_status == on_start_status:
+                logger.verbose("AppModelStatus already %s", on_start_status)
                 return True
             if self._acquisition_started:
                 if self.is_target_status_valid(target_status):
@@ -936,6 +936,10 @@ class AppModel(ObservableObject):
                 logger.warning("Acquisition already starting")
                 return False
             self._acquisition_starting = True
+            # we first set the current one to ACQUIRING,
+            # but privately only:
+            self._status = AppModelStatus.ACQUIRING
+            # this will be set to target or IDLE (if error) after/below.
 
         analysis = self._analysis
 
@@ -1089,6 +1093,7 @@ class AppModel(ObservableObject):
             self._set_animal_base_positions_and_send_to_deliver(animal)
 
         self._acquisition_started = True
+        self._status = on_start_status  # set back to start status before switch to target:
         self.status = target_status
         self.property_changed(self.Props.ACQUISITION_RUNNING, True, False)
         self._event_manager.post_event_content(ApiEventKind.acquisitionStarted)
@@ -1105,6 +1110,7 @@ class AppModel(ObservableObject):
                 logger.verbose("acquisition already stopping")
                 return
             self._acquisition_stopping = True
+            before_status = self._status
         try:
             self._capture_stop()
         finally:
@@ -1117,6 +1123,9 @@ class AppModel(ObservableObject):
             analysis = self._analysis
             analysis.project_info = None
             self.status = AppModelStatus.IDLE
+            if before_status is AppModelStatus.IDLE:
+                # force:
+                self.property_changed(self.Props.STATUS, AppModelStatus.IDLE, None)
             if self._reload_plans_needed:
                 self._reload_plans_needed = False
                 self.reload_training_plans()
