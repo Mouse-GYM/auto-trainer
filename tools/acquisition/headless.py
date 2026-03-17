@@ -33,8 +33,9 @@ def _exec_main(args):
     plugin = try_register_api_event_plugin()
     app_model.rpc_service = plugin.service
 
+    config_file = app_model.get_config_location(configuration)
     try:
-        app_model.load_configuration(configuration)
+        app_model.load_configuration(config_file)
     except Exception as err:
         logger.exception("Could not load config: %s", err)
         app_model.on_close()
