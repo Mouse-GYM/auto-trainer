@@ -189,7 +189,7 @@ class MainWindow(QMainWindow):
                 try:
                     started = app_model.capture_start(target_status=target_status)
                 except Exception as err:
-                    logger.exception("app_model.on_capture_start failed: %s", err)
+                    logger.exception("app_model.capture_start failed: %s", err)
                     started = False
                 self._start_capture_thread = None
                 # following should normally be executed in main UI thread:
@@ -197,6 +197,7 @@ class MainWindow(QMainWindow):
                     self._status_label.setText("")
                     self._acquisition_started = True
                 else:
+                    logger.verbose("capture_start failed: %s", app_model.status)
                     self._status_label.setText("Startup failed")
                     self.running_status_changed.emit(False)
                 self.run_action.setEnabled(True)
