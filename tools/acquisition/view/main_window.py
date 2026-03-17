@@ -1165,7 +1165,6 @@ class MainWindow(QMainWindow):
         elif name == props.STATUS:
             logger.debug("got new app model status: %s", value)
 
-            analysis_action = None
             valid_dcs = self.has_fully_valid_dcs
 
             self.blockSignals(True)
@@ -1194,7 +1193,6 @@ class MainWindow(QMainWindow):
                 ):
                     item.setEnabled(True)
                 self.animal_in_training_action.setEnabled(valid_dcs)
-                analysis_action = app_model.analysis.stop
 
             elif value is AppModelStatus.ACQUIRING:
                 for action in (
@@ -1207,7 +1205,6 @@ class MainWindow(QMainWindow):
                 for item in (self._animal_dropdown_combo, self._training_mode_combo, self._training_plan_combo):
                     item.setEnabled(True)
                 self.animal_in_training_action.setEnabled(valid_dcs)
-                analysis_action = app_model.analysis.restart
 
             elif value in {AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS}:
                 for item in (
@@ -1219,7 +1216,6 @@ class MainWindow(QMainWindow):
                     self.animal_in_training_action,
                 ):
                     item.setEnabled(False)
-                analysis_action = app_model.analysis.stop
 
             elif value is AppModelStatus.ANIMAL_IN_DEVICE:
                 self.animal_in_device_action.setChecked(True)
@@ -1236,7 +1232,6 @@ class MainWindow(QMainWindow):
                 ):
                     item.setEnabled(False)
                 self.animal_in_training_action.setEnabled(valid_dcs)
-                analysis_action = app_model.analysis.restart
 
             elif value is AppModelStatus.ANIMAL_IN_TRAINING:
                 for action in (self.animal_in_device_action, self.animal_in_training_action):
@@ -1249,15 +1244,11 @@ class MainWindow(QMainWindow):
                     self.make_3d_calib_action,
                 ):
                     item.setEnabled(False)
-                analysis_action = app_model.analysis.restart
 
             else:
                 logger.warning("unhandled app model status: %s", value)
 
             self.blockSignals(False)
-
-            if analysis_action is not None:
-                analysis_action()
 
         elif name == props.ANIMALS:
             self._reload_animals(value)
