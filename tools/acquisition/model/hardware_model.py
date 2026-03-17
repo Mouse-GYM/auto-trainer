@@ -40,6 +40,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED = "device_pellet_status_timeout_engaged"
     DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED = "device_tunnel_status_timeout_engaged"
 
+    # POS_X = "pos_x"
+    # POS_Y = "pos_y"
+    # POS_Z = "pos_z"
+    POS_XYZ = "pos_xyz"
+
     SEND_X = "send_x"
     SEND_Y = "send_y"
     SEND_Z = "send_z"
@@ -48,6 +53,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     SET_X = "set_x"
     SET_Y = "set_y"
     SET_Z = "set_z"
+
+    HEAD_MAGNET_INTENSITY = "head_magnet_intensity"
 
     def __init__(
         self,
@@ -88,9 +95,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._lock = threading.RLock()  # **required** re-entrant lock !!
 
-    def _check_dcs_cfg(self):
+    def _check_dcs_cfg(self, *, return_none: bool=False):
         cfg = self._dcs_config
         if cfg is None or not cfg.fully_valid:
+            if return_none:
+                return None
             raise RuntimeError(f"DCS config not defined or not fully valid")
         return cfg
 
@@ -103,7 +112,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @property
     def last_dcs_position(self) -> Optional[Offset3DTuple]:
-        cfg = self._check_dcs_cfg()
+        cfg = self._check_dcs_cfg(return_none=True)
+        if cfg is None:
+            return None
         return cfg.motor_to_diamond(self._last_motor_coordinates)
 
     @property
@@ -115,10 +126,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @property
     def last_dcs_set_position(self) -> Optional[Offset3DTuple]:
-        value = self._last_requested_set_coordinates
+        value = self._motor_send_coordinates
         if any(map(math.isnan, value)):
             return None
-        cfg = self._check_dcs_cfg()
+        cfg = self._check_dcs_cfg(return_none=True)
+        if cfg is None:
+            return None
         return cfg.motor_to_diamond(value)
 
     @property
@@ -406,16 +419,25 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def _message_handler_property_changed(self, name: str, value, old_value):
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
             prev, self._head_magnet_position = self._head_magnet_position, value
-            self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value, prev)
+            self._on_property_changed(self.HEAD_MAGNET_INTENSITY, value, prev)
         elif name == MessageHandler.STEPPER_X_PROPERTY:
-            self._last_motor_coordinates = self._last_motor_coordinates.replace(x=value.position)
+            prev = self._last_motor_coordinates
+            new = prev.replace(x=value.position)
+            self._last_motor_coordinates = new
             self.send_x = value.send_position
+            self._on_property_changed(self.POS_XYZ, new, prev)
         elif name == MessageHandler.STEPPER_Y_PROPERTY:
-            self._last_motor_coordinates = self._last_motor_coordinates.replace(y=value.position)
+            prev = self._last_motor_coordinates
+            new = prev.replace(y=value.position)
+            self._last_motor_coordinates = new
             self.send_y = value.send_position
+            self._on_property_changed(self.POS_XYZ, new, prev)
         elif name == MessageHandler.STEPPER_Z_PROPERTY:
-            self._last_motor_coordinates = self._last_motor_coordinates.replace(z=value.position)
+            prev = self._last_motor_coordinates
+            new = prev.replace(z=value.position)
+            self._last_motor_coordinates = new
             self.send_z = value.send_position
+            self._on_property_changed(self.POS_XYZ, new, prev)
         elif name == MessageHandler.FRONT_DOOR_PROPERTY:
             self.front_door_open = value
         elif name == MessageHandler.DRAWER_DOOR_PROPERTY:

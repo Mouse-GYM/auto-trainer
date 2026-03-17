@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
-                               QSpinBox, QDoubleSpinBox)
+                               QSpinBox, QDoubleSpinBox, QFrame)
 import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
@@ -35,6 +35,7 @@ from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 
 from autotrainer.training import TrainingPlan
 
+from autotrainer.pyside.xyz_label import XYZQLabel
 from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.app_model import AppModel, AppModelStatus
 from tools.acquisition.model.handle_3d_calibration import make_3d_calib
@@ -51,6 +52,13 @@ DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION = 3  # duration of calibration data acqu
 DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT = 30  # maximum time before automated stop of calibration
 # if not enough data is captured after that time the calib is automatically finished/stopped (and ask for retry)
 DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is considered noisy, and a retry proposed
+
+
+def _make_separator():
+    sep = QFrame()
+    sep.setFrameShape(QFrame.Shape.VLine)
+    sep.setFrameShadow(QFrame.Shadow.Sunken)  # Optional: adds a slight sunken effect
+    return sep
 
 
 class MainWindow(QMainWindow):
@@ -101,8 +109,8 @@ class MainWindow(QMainWindow):
 
             self._create_actions()
             self._configure_menubar()
-            self._configure_toolbar()
             self._configure_statusbar()
+            self._configure_toolbar()
 
             self.setCentralWidget(self.main_content)
             self.centralWidget().layout().setContentsMargins(0, 0, 0, 0)
@@ -121,6 +129,7 @@ class MainWindow(QMainWindow):
         app_model.property_changed += self._on_app_model_property_changed
         app_model.on_error += self._show_message
         app_model.inference.property_changed += self._on_inference_property_changed
+        app_model.hardware.property_changed += self._on_hardware_property_changed
 
         user_preferences.property_changed += self._on_preferences_property_changed
         self.running_status_changed.connect(self._set_start_or_stop)
@@ -910,9 +919,11 @@ class MainWindow(QMainWindow):
 
         combo.currentIndexChanged.connect(training_plan_index_changed)
 
-        def update_training_mode(training_mode):
+        def update_training_mode(training_mode: TrainingMode):
             logger.debug("Updating training_mode to %s", training_mode)
-            self._widget_training_plan_action.setVisible(training_mode != TrainingMode.MANUAL)
+            is_non_manual = training_mode != TrainingMode.MANUAL
+            self._widget_training_plan_action.setVisible(is_non_manual)
+            self._status_training_widget.setVisible(is_non_manual)
             animal = app_model.selected_animal
             plan_id = None if animal is None else animal.training.current_protocol
             training_plan_idx = self._training_plan_index_by_plan_id.get(plan_id, -1)
@@ -1027,11 +1038,24 @@ class MainWindow(QMainWindow):
 
     def _configure_statusbar(self):
         self._status_label = QLabel("")
-        self._status_bar = QStatusBar(self)
-        self._status_bar.addWidget(self._status_label)
-        self.setStatusBar(self._status_bar)
-
-        self._status_bar.setSizeGripEnabled(False)
+        bar = self._status_bar = QStatusBar(self)
+        bar.addWidget(self._status_label)
+        bar.setSizeGripEnabled(False)
+        widget = self._status_training_widget = QWidget()
+        widget.setVisible(False)
+        hbox = QHBoxLayout()
+        hbox.setContentsMargins(0, 0, 0, 0)
+        widget.setLayout(hbox)
+        lbl = self._status_label_pos = XYZQLabel(prefix="Position: ", sep=", ", tail=" mm")
+        hbox.addWidget(lbl)
+        hbox.addWidget(_make_separator())
+        lbl = self._status_label_send_pos = XYZQLabel(prefix="Send: ", sep=", ", tail=" mm")
+        hbox.addWidget(lbl)
+        hbox.addWidget(_make_separator())
+        lbl = self._status_label_magnet_intensity = QLabel("Magnet: N/A")
+        hbox.addWidget(lbl)
+        bar.addPermanentWidget(widget)
+        self.setStatusBar(bar)
 
     def _toggle_diagnostics_view(self):
         self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
@@ -1336,6 +1360,17 @@ class MainWindow(QMainWindow):
         inference = self._app_model.inference
         if name == inference.STATUS:
             self.calib_diamond_triangle_action.setEnabled(value == InferenceStatus.live)
+
+    @invoke_method
+    def _on_hardware_property_changed(self, property_name: str, value, _):
+        hard = self._app_model.hardware
+        if property_name == hard.HEAD_MAGNET_INTENSITY:
+            if value is None:
+                value = math.nan
+            self._status_label_magnet_intensity.setText(f"Magnet: {value:.1f}%")
+        elif property_name in {hard.POS_XYZ, hard.SEND_X, hard.SEND_Y, hard.SEND_Z}:
+            self._status_label_pos.update_coordinate(hard.last_dcs_position)
+            self._status_label_send_pos.update_coordinate(hard.last_dcs_set_position)
 
     @invoke_method
     def _set_training_plans(self):
