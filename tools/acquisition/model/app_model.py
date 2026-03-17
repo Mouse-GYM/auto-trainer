@@ -432,7 +432,7 @@ class AppModel(ObservableObject):
         algo_status = value.to_behavior_algo_status()
         if algo_status is not None:
             self._behavior.algorithm.status = algo_status
-        self._on_property_changed(self.Props.STATUS, value, prev)
+        self.property_changed(self.Props.STATUS, value, prev)
         is_from_start = value in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
         for cam in self._cameras:
             if value == AppModelStatus.ANIMAL_IN_DEVICE:
