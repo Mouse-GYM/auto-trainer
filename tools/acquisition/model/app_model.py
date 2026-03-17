@@ -925,25 +925,21 @@ class AppModel(ObservableObject):
     def capture_start(self, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING) -> bool:
         """Request to start the acquisition"""
         with self.app_lock:
-            on_start_status = self._status
-            if target_status == on_start_status:
-                logger.verbose("AppModelStatus already %s", on_start_status)
+            before_status = self._status
+            if target_status == before_status:
+                logger.verbose("AppModelStatus already %s", before_status)
                 return True
             if self._acquisition_started:
                 if self.is_target_status_valid(target_status):
                     self.status = target_status
                     return True
                 self.on_error("AppModelStatus change error",
-                              f"Target status {target_status} not valid for source status {self._status}")
+                              f"Target status {target_status} not valid for source status {before_status}")
                 return False
             if self._acquisition_starting:
                 logger.warning("Acquisition already starting")
                 return False
             self._acquisition_starting = True
-            # we first set the current one to ACQUIRING,
-            # but privately only:
-            self._status = AppModelStatus.ACQUIRING
-            # this will be set to target or IDLE (if error) after/below.
 
         analysis = self._analysis
 
@@ -1097,7 +1093,6 @@ class AppModel(ObservableObject):
             self._set_animal_base_positions_and_send_to_deliver(animal)
 
         self._acquisition_started = True
-        self._status = on_start_status  # set back to start status before switch to target:
         self.status = target_status
         self.property_changed(self.Props.ACQUISITION_RUNNING, True, False)
         self._event_manager.post_event_content(ApiEventKind.acquisitionStarted)
