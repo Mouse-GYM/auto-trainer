@@ -1053,7 +1053,7 @@ class AppModel(ObservableObject):
 
         if not did_start:
             logger.error("failed to start all subprocesses")
-            self.capture_stop()
+            self.capture_stop(force=True)
             return False
 
         # once cameras successfully started:
@@ -1095,10 +1095,10 @@ class AppModel(ObservableObject):
 
         return True
 
-    def capture_stop(self):
+    def capture_stop(self, force: bool=False):
         logger.debug("AppModel.capture_stop")
         with self.app_lock:
-            if not self._acquisition_started:
+            if not self._acquisition_started and not force:
                 logger.verbose("acquisition not running")
                 return
             if self._acquisition_stopping:
