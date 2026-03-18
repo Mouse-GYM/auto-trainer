@@ -28,20 +28,17 @@ def _start_spincam_lib_instance():
 
 def _stop_spincam_lib_instance(cls: Type["SpinCam"]):
     global sSystem
-    for key, spincam in cls._cameras.items():
-        _release_spincam(spincam)
+    for key, spincam in list(cls._cameras.items()):  # loop over list copy of items,
+        # given _release_spincam() will modify `cls._cameras` dict
+        try:
+            spincam.end_capture()
+        except Exception as err:
+            logger.exception("Error ending capture on %s: %s", spincam.name, err)
     cls._cameras.clear()
     if sSystem is not None:
         logger.info("releasing SpinCam lib")
         sSystem.ReleaseInstance()
         sSystem = None
-
-
-def _release_spincam(spincam: "SpinCam"):
-    cam = spincam._camera
-    if cam is not None:
-        cam.DeInit()
-        spincam._cameras.pop(spincam._serial_number, None)
 
 
 class AcquisitionMode(IntEnum):
@@ -115,7 +112,7 @@ class SpinCam(CameraBase):
         # self._image_processor.SetColorProcessing(PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR)
 
     def __del__(self):
-        _release_spincam(self)
+        self.end_capture()
 
     @property
     def fps(self) -> float:
@@ -271,7 +268,9 @@ class SpinCam(CameraBase):
             spincam.LineInverter.SetValue(True)
         elif self._is_secondary:
             spincam.TriggerMode.SetValue(PySpin.TriggerMode_Off)
-        _release_spincam(self)
+        spincam.DeInit()
+        self._cameras.pop(self._serial_number, None)
+        logger.debug("released spincam for %s (%s)", self._name, self._serial_number)
         self._camera = None
 
     def capture(self) -> Tuple[numpy.ndarray, int]:

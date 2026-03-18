@@ -432,7 +432,7 @@ class AppModel(ObservableObject):
         algo_status = value.to_behavior_algo_status()
         if algo_status is not None:
             self._behavior.algorithm.status = algo_status
-        self._on_property_changed(self.Props.STATUS, value, prev)
+        self.property_changed(self.Props.STATUS, value, prev)
         is_from_start = value in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
         for cam in self._cameras:
             if value == AppModelStatus.ANIMAL_IN_DEVICE:
@@ -443,6 +443,10 @@ class AppModel(ObservableObject):
             cam.on_trigger_recording(False, is_triggered=None, is_from_start=is_from_start)
             # kind of strangely, this can actually start the recording on the camera,
             # if it's continous mode and is_from_start is not True, or else it was already recording.
+        if value in {AppModelStatus.IDLE, AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS}:
+            self._analysis.stop()
+        else:
+            self._analysis.restart()
         if value is AppModelStatus.ANIMAL_IN_TRAINING:
             # NB: need to be after set of algo_status
             self._behavior.system_machine.pellet.send_pellet()
@@ -921,16 +925,16 @@ class AppModel(ObservableObject):
     def capture_start(self, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING) -> bool:
         """Request to start the acquisition"""
         with self.app_lock:
-            cur_status = self._status
-            if target_status == cur_status:
-                logger.verbose("AppModelStatus already %s", cur_status)
+            before_status = self._status
+            if target_status == before_status:
+                logger.verbose("AppModelStatus already %s", before_status)
                 return True
             if self._acquisition_started:
                 if self.is_target_status_valid(target_status):
                     self.status = target_status
                     return True
                 self.on_error("AppModelStatus change error",
-                              f"Target status {target_status} not valid for source status {self._status}")
+                              f"Target status {target_status} not valid for source status {before_status}")
                 return False
             if self._acquisition_starting:
                 logger.warning("Acquisition already starting")
@@ -1053,7 +1057,7 @@ class AppModel(ObservableObject):
 
         if not did_start:
             logger.error("failed to start all subprocesses")
-            self.capture_stop()
+            self.capture_stop(force=True)
             return False
 
         # once cameras successfully started:
@@ -1095,16 +1099,17 @@ class AppModel(ObservableObject):
 
         return True
 
-    def capture_stop(self):
+    def capture_stop(self, force: bool=False):
         logger.debug("AppModel.capture_stop")
         with self.app_lock:
-            if not self._acquisition_started:
+            if not self._acquisition_started and not force:
                 logger.verbose("acquisition not running")
                 return
             if self._acquisition_stopping:
                 logger.verbose("acquisition already stopping")
                 return
             self._acquisition_stopping = True
+            before_status = self._status
         try:
             self._capture_stop()
         finally:
@@ -1117,6 +1122,9 @@ class AppModel(ObservableObject):
             analysis = self._analysis
             analysis.project_info = None
             self.status = AppModelStatus.IDLE
+            if before_status is AppModelStatus.IDLE:
+                # force:
+                self.property_changed(self.Props.STATUS, AppModelStatus.IDLE, None)
             if self._reload_plans_needed:
                 self._reload_plans_needed = False
                 self.reload_training_plans()
