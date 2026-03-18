@@ -272,6 +272,7 @@ class PreferencesContent(QWidget):
         #
         grid_layout.addWidget(QLabel("Y DCS (mm) :"), cur_row, cur_col)
         spinbox = self._uncover_delay_spinbox = QDoubleSpinBox()
+        spinbox.setToolTip("Min Y DCS for all hand parts")
         add_enabled_state(lambda s=spinbox, t=self._pellet_cover_toggle:
             s.setEnabled(t.isChecked())
         )
@@ -286,8 +287,9 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
-        grid_layout.addWidget(QLabel("delay (sec.) :"), cur_row, cur_col)
+        grid_layout.addWidget(QLabel("duration (sec.) :"), cur_row, cur_col)
         spinbox = self._uncover_delay_spinbox = QDoubleSpinBox()
+        spinbox.setToolTip("Duration with min Y DCS valid before trigger uncover")
         add_enabled_state(lambda s=spinbox, t=self._pellet_cover_toggle:
                           s.setEnabled(t.isChecked())
                           )
