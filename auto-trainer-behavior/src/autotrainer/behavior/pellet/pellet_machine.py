@@ -64,7 +64,6 @@ class PelletMachine(StateMachine):
         self._algorithm = algorithm
         # algorithm.session_starting += self._session_started
         # algorithm.session_capture_ending += self._session_capture_ended
-        algorithm.relay_transitions(self)
 
         self._message_handler = msg_handler
         if msg_handler is not None:
@@ -94,6 +93,9 @@ class PelletMachine(StateMachine):
             model_override=True,
         )
 
+        # NB: must be done AFTER creation of previous `self.machine` instance
+        algorithm.relay_transitions(self)
+
     @property
     def events(self) -> PelletMachineEvents:
         return self._events
@@ -112,6 +114,7 @@ class PelletMachine(StateMachine):
         self.post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
 
     def _before_load_pellet(self):
+        logger.verbose("before_load_pellet")
         self._api_status_token = self._pellet_device.load_pellet()
         if self._api_status_token is None:
             raise PelletDeviceCommandFailed

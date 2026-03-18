@@ -121,7 +121,8 @@ class SystemMachine(StateMachine):
         algo.session_starting += self._session_capture_started
         algo.session_capture_ending += self._session_capture_ended
         algo.property_changed += self._algorithm_property_changed
-        algo.relay_transitions(self)
+        algo.relay_transitions(self)  # NB: must be done AFTER creation of previous `self.machine` instance
+
         # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
         algo.shift_xyz_handler.set_processed_handler(self._handle_processed_shift_xyz)
 
@@ -161,7 +162,6 @@ class SystemMachine(StateMachine):
         intersession_machine = self._intersession = IntersessionMachine(algo, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._intersession_analysis_ended
         intersession_machine.events.state_changed += self._intersession_state_changed
-        algo.relay_transitions(intersession_machine)
 
     def cancel_timers(self):
         for timer in (
