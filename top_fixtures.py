@@ -271,7 +271,7 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
     cfg = algo.pellet_delivery_config
     cfg.is_enabled = True
     cfg.is_pellet_cover_enabled = True
-    cfg.pellet_hand_uncover_distance = None  # disabled
+    # cfg.pellet_hand_uncover_distance = None  # disabled
     # might be needed to reset:
     algo.capture_status = CaptureProcessStatus.RUNNING
     algo.status = BehaviorAlgoStatus.ANIMAL_IN_TRAINING
