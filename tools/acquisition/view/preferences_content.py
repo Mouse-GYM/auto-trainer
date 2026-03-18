@@ -276,8 +276,8 @@ class PreferencesContent(QWidget):
             s.setEnabled(t.isChecked())
         )
         spinbox.setValue(algo.pellet_uncover_y_dcs)
-        spinbox.setMinimum(-15)
-        spinbox.setMaximum(15)
+        spinbox.setMinimum(-30)
+        spinbox.setMaximum(30)
         spinbox.setDecimals(1)
         spinbox.setSingleStep(0.5)
         def pellet_uncover_y_dcs_changed(value):
