@@ -676,7 +676,7 @@ class SystemMachine(StateMachine):
             valid = False
             prev_valid = ctx.y_dcs_valid
         if valid or prev_valid:
-            if ctx.can_uncover(perf_now, uncov_cfg):
+            if pellet_m.state == PelletState.monitoring and pellet_m.can_release_pellet():
                 diff = perf_now - ctx.start_y_dcs_valid_perf_c
                 logger.success("releasing pellet start_min_y=%.1f cur_min_y=%.1f delay=%.1f",
                                ctx.start_min_y, min_y, diff)
