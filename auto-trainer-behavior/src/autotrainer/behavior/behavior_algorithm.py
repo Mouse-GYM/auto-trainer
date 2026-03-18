@@ -1140,10 +1140,9 @@ class BehaviorAlgorithm(ObservableObject):
             if self._is_in_session:
                 p_now = get_perf_now()
                 return (
-                    # self._capture_status == CaptureProcessStatus.RECORDING
+                    self._capture_status == CaptureProcessStatus.RECORDING
                     # and (p_now - self._last_capture_status_change_perf_c) >= self._recording_age_release_pellet_threshold
-                    # and
-                    ctx.can_uncover(p_now, uncov_cfg)
+                    and ctx.can_uncover(p_now, uncov_cfg)
                 )
             return False
 
