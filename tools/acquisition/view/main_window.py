@@ -3,6 +3,7 @@ import shutil
 import textwrap
 import threading
 import time
+import traceback
 from datetime import datetime
 from functools import partial
 from itertools import chain
@@ -119,15 +120,21 @@ class MainWindow(QMainWindow):
             app_model.on_close()
             raise RuntimeError(f"Error setting up UI: {err}") from err
 
+        app_model.on_error += self._show_message
         app_model.configuration_loaded_event += self._on_app_model_configuration_loaded
+
+        config_file = app_model.get_config_location(configuration)
         try:
-            app_model.load_configuration(configuration)
+            app_model.load_configuration(config_file)
         except Exception as err:
-            app_model.on_close()
-            raise RuntimeError(f"Could not load config: {err}") from err
+            tb = traceback.format_exc()
+            app_model.on_error(f"Failed load configuration",
+                               f"\nConfiguration file {config_file.as_posix()!r} has issue,\n\n"
+                               f"please check and fix following error:\n\n{err}\n\n{tb}")
+            # app_model.on_close()
+            # raise RuntimeError(f"Could not load config: {err}") from err
 
         app_model.property_changed += self._on_app_model_property_changed
-        app_model.on_error += self._show_message
         app_model.inference.property_changed += self._on_inference_property_changed
         app_model.hardware.property_changed += self._on_hardware_property_changed
 
@@ -532,10 +539,14 @@ class MainWindow(QMainWindow):
         logger.success("main window activated")
         self.main_content.on_activated()
         app_status = self._app_model.status
-        if app_status == AppModelStatus.IDLE:
-            self._on_capture_start_stop(True)
+        loaded_cfg = self._app_model.loaded_configuration
+        if loaded_cfg is None:
+            logger.verbose("No loaded valid config, skipping auto-start")
         else:
-            logger.verbose("AppModelStatus not idle, not starting acquisition", app_status)
+            if app_status == AppModelStatus.IDLE:
+                self._on_capture_start_stop(True)
+            else:
+                logger.verbose("AppModelStatus not idle, not starting acquisition", app_status)
 
     def on_calibrate_diamond_triangle(self, is_toggled):
         if is_toggled and self._diamond_triangle_calib_run is None:

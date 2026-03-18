@@ -558,12 +558,19 @@ class AppModel(ObservableObject):
         return self._preferences
 
     @property
-    def loaded_configuration(self):
+    def loaded_configuration(self) -> Optional[SystemConfiguration]:
         return self._loaded_configuration
 
     @property
     def project(self) -> Optional[ProjectInfo]:
         return self._project_info
+
+    @project.setter
+    def project(self, value):
+        self._project_info = value
+        for model in self._models:
+            model.project = value
+        self._analysis.project_info = value
 
     @property
     def left_camera(self):
@@ -722,11 +729,16 @@ class AppModel(ObservableObject):
 
     @output_location.setter
     def output_location(self, value: str):
-        if self._output_location == value:
+        if self._output_location == value and self._project_info is not None:
             return
         old_value = self._output_location
         self._output_location = value
         self.property_changed(self.Props.OUTPUT_LOCATION, value, old_value)
+        new_prj = self.make_project_info()
+        self.project = new_prj
+        logger.success("Set new project to %s", dataclasses.asdict(new_prj))
+        log_path = new_prj.get_log_file_path(auto_new=False)
+        self.set_log_location(log_path)
 
     @property
     def animal_name(self) -> str:
@@ -894,7 +906,7 @@ class AppModel(ObservableObject):
             self.selected_animal = animal
         return animal
 
-    def make_project_info(self):
+    def make_project_info(self) -> ProjectInfo:
         left = None if self._left_camera is None else self._left_camera.name
         right = None if self._right_camera is None else self._right_camera.name
         return ProjectInfo(
@@ -949,13 +961,7 @@ class AppModel(ObservableObject):
         # and left behind their context.
 
         # also:
-        self._project_info = self.make_project_info()
-
-        # Now put the new project info to all "models" :
-        for model in self._models:
-            model.project = self._project_info
-
-        analysis.project_info = self._project_info
+        self.project_info = self.make_project_info()
 
         algo = self._behavior.algorithm
         algo.reload_diamond_triangle_config()
@@ -1182,50 +1188,34 @@ class AppModel(ObservableObject):
         if prev_loc is not None:
             logger.success("Switched from %s to %s ; app_version=%s", prev_loc, location, self._app_version)
 
-    def load_configuration(self, location: Optional[str] = None):
+    def get_config_location(self, location: Optional[str] = None) -> Path:
         if location is None:
             # Check to see if there is a file in the new default location.  If so, use it.
             location = Path(self._preferences.configuration_location)
-            location.mkdir(parents=True, exist_ok=True)
             logger.info("did not receive explicit configuration file, trying default p_location=%s", location)
-            configuration = SystemConfiguration.load_default(location)
-            # Fallback to the old last configuration preference if this device has not converted.
-            # TODO - remove this once all devices have migrated.
-            if configuration is not None:
-                file_path = SystemConfiguration.make_default_yaml_config_path(location)
-            else:
-                logger.info("default not yet in use, trying last configuration")
-                file_path = Path(self._preferences.last_configuration)
-                if file_path.is_file():
-                    configuration = SystemConfiguration.load_yaml_file(file_path)
-                    if configuration is not None:
-                        # Migrate to new default location.
-                        configuration.save_default(self._preferences.configuration_location)
-        else:
-            # Always allow for a custom configuration file if provided.
-            logger.info("using explicit configuration %s", location)
-            file_path = Path(location)
-            configuration = SystemConfiguration.load_yaml_file(file_path)
+            default_path = SystemConfiguration.make_default_yaml_config_path(location)
+            if default_path.is_file():
+                return default_path
+            file_path = Path(self._preferences.last_configuration)
+            if file_path.is_file():
+                return file_path
+            default_path = SystemConfiguration.make_default_yaml_config_path(Path(get_default_configuration_location()))
+            return default_path
+        path = Path(location)
+        if path.is_dir():
+            return SystemConfiguration.make_default_yaml_config_path(path)
+        return path
 
-        if configuration is None:
+    def load_configuration(self, location: Optional[Path] = None):
+        if location is None:
+            location = self.get_config_location()
+        if location.exists():
+            logger.info("using configuration from %r", location.as_posix())
+            configuration = SystemConfiguration.load_yaml_file(location)
+        else:
             logger.info("using default configuration")
             configuration = SystemConfiguration()
-            file_path = SystemConfiguration.make_default_yaml_config_path(
-                Path(get_default_configuration_location()))
-        else:
-            logger.info("using configuration from %r", file_path.as_posix())
-
-        assert isinstance(configuration, SystemConfiguration)
-
-        self.output_location = configuration.persistence.output_location
-
-        # must be after assign of self.output_location:
-        prev_prj = self._project_info
-        prj = self._project_info = self.make_project_info()
-        prev_log_path = None if prev_prj is None else prev_prj.get_log_file_path(auto_new=False)
-        log_path = prj.get_log_file_path(auto_new=False)
-        if log_path != prev_log_path:
-            self.set_log_location(log_path)
+            configuration.save_file(location, as_yaml=True)
 
         prebuffer_duration = 0
 
@@ -1248,17 +1238,6 @@ class AppModel(ObservableObject):
         if (camera := configuration.get_camera(CameraId.Web)) is not None:
             self._top_camera.load_configuration(camera)
 
-        # re-create project-info after load of cams config
-        prev_prj = self._project_info
-        prj = self._project_info = self.make_project_info()
-        prev_log_path, log_path = log_path, prj.get_log_file_path(auto_new=False)
-        if log_path != prev_log_path:
-            self.set_log_location(log_path)
-
-        # Also ensure children models have also same one:
-        for model in self._models:
-            model.project = prj
-
         if prebuffer_duration > 0:
             prebuffer_scale = os.getenv("AUTOTRAINER_PREBUFFER_SCALE")
             if prebuffer_scale is not None:
@@ -1272,9 +1251,11 @@ class AppModel(ObservableObject):
         self.inference.load_configuration(configuration.inference)
         self.behavior.load_configuration(configuration.behavior)
 
-        # only at the end:
         self._loaded_configuration = configuration
-        self._loaded_config_dir_path = file_path.parent.resolve()
+        self._loaded_config_dir_path = location.parent.resolve()
+
+        # only at the end:
+        self.output_location = configuration.persistence.output_location
 
         plans_path = self._get_plans_dir()
         self.reload_training_plans(plans_path, reraise_on_error=True)
