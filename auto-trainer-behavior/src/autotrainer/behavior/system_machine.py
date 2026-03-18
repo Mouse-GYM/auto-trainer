@@ -670,10 +670,12 @@ class SystemMachine(StateMachine):
             valid = min_y >= uncov_cfg.min_y_dcs
             prev_valid = ctx.y_dcs_valid
             if not prev_valid and valid:
+                logger.debug("setting pellet-uncover valid ; min_dist=%.1f", min_y)
                 ctx.start_y_dcs_valid_perf_c = perf_now
                 ctx.start_min_y = min_y
                 ctx.y_dcs_valid = True
             elif not valid and prev_valid:
+                logger.debug("unsetting pellet-uncover valid ; min_dist=%.1f", min_y)
                 ctx.y_dcs_valid = False
         else:
             valid = False
