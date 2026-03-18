@@ -192,27 +192,32 @@ class HardwareControlContent(ContentWidget):
         #
         button = self._home_button = QPushButton("Home")
         add_cmd_widget(button)
-        button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.move_home))
+        button.clicked.connect(
+            lambda: log_hardware_cmd(partial(pellet_machine.move_home, force=True)))
         button_layout.addWidget(button)
         #
         button = self._load_button = QPushButton("Load")
         add_cmd_widget(button)
-        button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_load_pellet))
+        button.clicked.connect(
+            lambda: log_hardware_cmd(partial(pellet_machine.load_pellet, force=True)))
         button_layout.addWidget(button)
         #
         button = self._send_button = QPushButton("Send")
         add_cmd_widget(button)
-        self._send_button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_send_pellet))
+        self._send_button.clicked.connect(
+            lambda: log_hardware_cmd(partial(pellet_machine.send_pellet, force=True)))
         button_layout.addWidget(button)
         #
         button = self._release_button = QPushButton("Release")
         add_cmd_widget(button)
-        button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_release_pellet))
+        button.clicked.connect(
+            lambda: log_hardware_cmd(partial(pellet_machine.release_pellet, force=True)))
         button_layout.addWidget(button)
         #
         button = self._cover_button = QPushButton("Cover")
         add_cmd_widget(button)
-        button.clicked.connect(lambda: log_hardware_cmd(pellet_machine.force_cover_pellet))
+        button.clicked.connect(
+            lambda: log_hardware_cmd(partial(pellet_machine.cover_pellet, force=True)))
         button_layout.addWidget(button)
         layout.addLayout(button_layout, 1, 4)
 

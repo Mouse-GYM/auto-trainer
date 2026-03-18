@@ -868,13 +868,11 @@ class SystemMachine(StateMachine):
                         algo.end_capture_session(reason=RecordingEndingReason.ALGO_PAUSED)
                 tunnel_dev.open_tunnel_gate()
                 self._update_magnet_position(0)
-                # self._pellet_machine.move_home()  # pellet_machine is disabled once algo_paused is set.
-                # so directly call the device command:
-                pellet_dev.send_home()
+                self._pellet_machine.move_home(force=True)
             else:
                 tunnel_dev.open_tunnel_gate()
                 self._update_magnet_position(algo.baseline_intensity)
-                pellet_dev.send_pellet()
+                # pellet_dev.send_pellet()
                 #
                 # trigger load cell property changed check, so that new session will be started if mouse still in tunnel
                 self._load_cell_monitor_property_changed(

@@ -143,7 +143,7 @@ class TestEnabled(_AutoClampTestCase):
                 for load_attempt in range(algo.auto_clamp_release_load_count):
                     assert release_clamp_timer.call_count == 0
                     with caplog.at_level(logging.INFO):
-                        self.pellet.force_load_pellet()
+                        self.pellet.load_pellet(force=True)
 
         assert "auto-clamp: starting disengage procedure.." in caplog.text
 
@@ -228,7 +228,7 @@ class TestEnabled(_AutoClampTestCase):
         assert "auto-clamp setting position to" in caplog.text
         caplog.clear()
         with caplog.at_level(logging.INFO):
-            self.pellet.force_load_pellet()
+            self.pellet.load_pellet(force=True)
         assert "auto-clamp: starting disengage procedure.." in caplog.text
         caplog.clear()
         self.tunnel_dev.reset_mock()  # ensure cleared
@@ -250,7 +250,7 @@ class TestEnabled(_AutoClampTestCase):
         self.headbar_pressure.is_engaged = False
         caplog.clear()
         with caplog.at_level(logging.INFO):
-            pellet.force_load_pellet()
+            pellet.load_pellet(force=True)
         assert "auto-clamp: starting disengage procedure.." in caplog.text
         assert "Disengaging auto-clamp to intensity" in caplog.text
         algo.update_pellet_seen(True)

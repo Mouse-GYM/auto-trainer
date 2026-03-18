@@ -1464,8 +1464,7 @@ class AppModel(ObservableObject):
         hardware.set_y(xyz.y)
         hardware.set_z(xyz.z)
         pellet_m = self.behavior.system_machine.pellet
-        if algo.can_send_pellet():
-            pellet_m.force_send_pellet()
+        pellet_m.send_pellet(force=True)
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
         if name == UserPreferences.SELECTED_ANIMAL:
