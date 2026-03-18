@@ -129,11 +129,15 @@ def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_
     while isinstance(func, partial):
         func = func.func
 
+    base_func = func.__func__ if inspect.ismethod(func) else func
+
     # handle bound method vs normal function:
-    @functools.wraps(func.__func__ if inspect.ismethod(func) else func)
+    @functools.wraps(base_func)
     def wrapped(*args, **kwargs):
         BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
-
+    #
+    wrapped._orig_func_qualname = getattr(orig_func, "__qualname__", str(orig_func))  # used by log in hardware-control
+    #
     return wrapped
 
 #
@@ -394,7 +398,11 @@ class BehaviorAlgorithm(ObservableObject):
                 if callable(trig):
                     trig = trig.__name__
                 meth = getattr(machine_transitions, trig)
-                setattr(machine_transitions, trig, cls.relay_func(meth))
+                wrapped = cls.relay_func(meth)
+                # replace with raw static function:
+                wrapped._orig_func_qualname = getattr(meth.args[0].__class__, trig).__qualname__
+                logger.spam("relaying transition %s -> %s", trig, wrapped)
+                setattr(machine_transitions, trig, wrapped)
 
     @classmethod
     def put_func_call(
