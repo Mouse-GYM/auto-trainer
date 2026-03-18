@@ -860,10 +860,6 @@ class SystemMachine(StateMachine):
         elif name == props.AUTO_CORRECT_MOTOR_DRIFT:
             pellet_dev.set_auto_correct_motor_drift(new_value)
 
-        # elif name == props.HANDS_NEAR_PELLET_SEEN:
-        #     if new_value:  # not interrested when reset to False
-        #         self._pellet_machine.environment_changed(must_release=new_value)
-
         elif name == props.ALGO_PAUSED:
             algo = self._algorithm
             tunnel_dev = self._tunnel_device

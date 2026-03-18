@@ -128,8 +128,6 @@ class BehaviorAlgoProps(str, enum.Enum):
     # TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"  # unused
     # PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'  # unused
 
-    # HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'  # used !
-
     DIAMOND_TRIANGLE_CONFIG = 'diamond_triangle_config'
 
 
@@ -274,8 +272,6 @@ class BehaviorAlgorithm(ObservableObject):
         self._star_last_seen_perf_c = -math.inf
 
         self._uncover_ctx = PelletUncoverContext()
-        # self._pellet_hands_min_distance: float = math.inf
-        # self._hands_near_pellet_seen = False
 
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
@@ -1141,7 +1137,6 @@ class BehaviorAlgorithm(ObservableObject):
                 p_now = get_perf_now()
                 return (
                     self._capture_status == CaptureProcessStatus.RECORDING
-                    # and (p_now - self._last_capture_status_change_perf_c) >= self._recording_age_release_pellet_threshold
                     and ctx.can_uncover(p_now, uncov_cfg)
                 )
             return False
@@ -1221,29 +1216,7 @@ class BehaviorAlgorithm(ObservableObject):
     def pellet_delivery_config(self) -> PelletDeliveryConfiguration:
         return self._active_config.pellet_delivery
 
-    # @property
-    # def pellet_hands_min_distance(self) -> float:
-    #     return self._pellet_hands_min_distance
-
-    # @pellet_hands_min_distance.setter
-    # def pellet_hands_min_distance(self, value: float):
-    #     pellet_hand_uncover_dist = self._active_config.pellet_delivery.pellet_hand_uncover_distance
-    #     if pellet_hand_uncover_dist is not None and value <= pellet_hand_uncover_dist:
-    #         if not self._hands_near_pellet_seen:
-    #             logger.verbose("Hand(s) near pellet seen ; distance = %.2f mm", value)
-    #             self._hands_near_pellet_seen = True  # must be set BEFORE doing the on_property_changed
-    #             self._on_property_changed(
-    #                 BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN, True, False)
-        # self._pellet_hands_min_distance = self._on_property_changed(  # property unused
-        #     BehaviorAlgoProps.PELLET_HANDS_DISTANCE, value, self._pellet_hands_min_distance)
-
-    # @property
-    # def pellet_hand_uncover_distance(self) -> Optional[float]:
-    #     return self._active_config.pellet_delivery.pellet_hand_uncover_distance
     #
-    # @pellet_hand_uncover_distance.setter
-    # def pellet_hand_uncover_distance(self, value):
-    #     self._active_config.pellet_delivery.pellet_hand_uncover_distance = value
 
     def reset_configuration(self):
         """Reset current config to the previous loaded config (via load_configuration)"""

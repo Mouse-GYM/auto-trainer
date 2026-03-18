@@ -1108,14 +1108,6 @@ class MainWindow(QMainWindow):
         ctx.start_y_dcs_valid_perf_c = get_perf_now()
         ctx.start_min_y = cfg.min_y_dcs + 5
 
-        # uncover_dist = algo.pellet_hand_uncover_distance
-        # if uncover_dist is not None:
-        #     new_val = uncover_dist / 2
-        # else:
-        #     new_val = 0.001  # that is on it
-        # logger.debug("set pellet_hands_min_distance to %s", new_val)
-        # algo.pellet_hands_min_distance = new_val
-
     def _internal_detection_result_toggle(self):
         inference = self._app_model.inference
         is_checked = self.analysis_results_action.isChecked()
