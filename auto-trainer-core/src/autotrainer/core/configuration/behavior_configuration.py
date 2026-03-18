@@ -77,8 +77,8 @@ class HomeOnExcessiveDriftDistanceConfiguration:
 
 @dataclass
 class PelletUncoverConfiguration:
-    min_y_dcs: float = 0  # mm
-    delay: float = 1  # seconds
+    min_y_dcs: float = 0  # mm,  minimum Y dcs for all hand parts to be "valid" for uncover
+    trigger_delay: float = 1  # seconds, duration before real active/trigger to uncover when it's "valid"
 
 
 @dataclass

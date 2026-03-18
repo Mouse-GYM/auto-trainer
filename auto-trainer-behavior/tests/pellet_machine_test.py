@@ -121,7 +121,7 @@ def test_uncover_when_record_aged_enough_with_no_pellet_hand_uncover_distance(mo
     uncov_cfg = algo.active_config.pellet_uncover
     # algo.pellet_hand_uncover_distance = None
     uncov_cfg.min_y_dcs = -math.inf
-    uncov_cfg.delay = 0
+    uncov_cfg.trigger_delay = 0
     pellet_m._covered_state = True  # fake already covered to simplify test
     #
     algo.update_pellet_seen(True)
@@ -154,7 +154,7 @@ def test_uncover_when_hands_near_pellet_after_recording_aged_enough(mock_system,
     algo.pellet_cover_enabled = True
     uncov_cfg = algo.active_config.pellet_uncover
     uncov_cfg.min_y_dcs = 5
-    uncov_cfg.delay = 2.5
+    uncov_cfg.trigger_delay = 2.5
     load_cell = machine._analysis.load_cell_monitor
     algo.update_pellet_seen(True)
     algo.update_triangle_seen(True)
@@ -175,7 +175,7 @@ def test_uncover_when_hands_near_pellet_after_recording_aged_enough(mock_system,
     #
     assert mock_system.pellet_state_trans == []  # not yet
     #
-    increase_simulate_perf_now(uncov_cfg.delay)
+    increase_simulate_perf_now(uncov_cfg.trigger_delay)
     pellet_m.environment_changed()
     # and :
     assert pellet_m.state == PelletState.monitoring

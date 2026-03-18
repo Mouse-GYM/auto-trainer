@@ -53,7 +53,7 @@ class PelletUncoverContext:
         self.start_y_dcs_valid_perf_c = math.nan
 
     def can_uncover(self, perf_now, cfg: PelletUncoverConfiguration):
-        return self.y_dcs_valid and perf_now - self.start_y_dcs_valid_perf_c >= cfg.delay
+        return self.y_dcs_valid and perf_now - self.start_y_dcs_valid_perf_c >= cfg.trigger_delay
 
 
 class CoverServoStatus(int, enum.Enum):
@@ -585,12 +585,12 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def pellet_uncover_delay(self) -> float:
-        return self._active_config.pellet_uncover.delay
+        return self._active_config.pellet_uncover.trigger_delay
 
     @pellet_uncover_delay.setter
     def pellet_uncover_delay(self, value: float):
         cfg = self._active_config.pellet_uncover
-        prev, cfg.delay = cfg.delay, value
+        prev, cfg.trigger_delay = cfg.trigger_delay, value
         self._on_property_changed(BehaviorAlgoProps.PELLET_UNCOVER_DELAY, value, prev)
 
     @property
