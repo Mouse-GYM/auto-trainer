@@ -663,30 +663,21 @@ class SystemMachine(StateMachine):
                     min_y = part_3d.y
                 if part_3d.y > max_y:
                     max_y = part_3d.y
-        ctx = self._algorithm.uncover_context
-        perf_now = get_perf_now()
         has_at_leat_one = not math.isinf(min_y)
-        if has_at_leat_one:
-            valid = min_y >= uncov_cfg.min_y_dcs
-            prev_valid = ctx.y_dcs_valid
-            if not prev_valid and valid:
-                logger.debug("setting pellet-uncover valid ; min_dist=%.1f", min_y)
-                ctx.start_y_dcs_valid_perf_c = perf_now
-                ctx.start_min_y = min_y
-                ctx.y_dcs_valid = True
-            elif not valid and prev_valid:
-                logger.debug("unsetting pellet-uncover valid ; min_dist=%.1f", min_y)
-                ctx.y_dcs_valid = False
-        else:
-            valid = False
-            prev_valid = ctx.y_dcs_valid
-        if valid or prev_valid:
-            if pellet_m.state == PelletState.monitoring and pellet_m.can_release_pellet():
-                diff = perf_now - ctx.start_y_dcs_valid_perf_c
-                logger.success("releasing pellet start_min_y=%.1f cur_min_y=%.1f delay=%.1f",
-                               ctx.start_min_y, min_y, diff)
-                pellet_m.force_release_pellet()
-                pellet_m.monitor_pellet()  # directly
+        if not has_at_leat_one:
+            return
+        perf_now = get_perf_now()
+        valid = min_y >= uncov_cfg.min_y_dcs
+        ctx = self._algorithm.uncover_context
+        prev_valid = ctx.y_dcs_valid
+        if not prev_valid and valid:
+            logger.verbose("setting pellet-uncover valid ; min_dist=%.1f", min_y)
+            ctx.start_y_dcs_valid_perf_c = perf_now
+            ctx.start_min_y = min_y
+            ctx.y_dcs_valid = True
+        elif not valid and prev_valid:
+            logger.verbose("unsetting pellet-uncover valid ; min_dist=%.1f", min_y)
+            ctx.y_dcs_valid = False
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pose_changed(self, response: PoseResponse):
