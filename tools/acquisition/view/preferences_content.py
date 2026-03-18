@@ -294,8 +294,8 @@ class PreferencesContent(QWidget):
         spinbox.setValue(algo.pellet_uncover_delay)
         spinbox.setMinimum(0)
         spinbox.setMaximum(5)
-        spinbox.setDecimals(1)
-        spinbox.setSingleStep(0.5)
+        spinbox.setDecimals(2)
+        spinbox.setSingleStep(0.1)
         def pellet_uncover_delay_changed(value):
             algo.pellet_uncover_delay = value
         spinbox.valueChanged.connect(pellet_uncover_delay_changed)
