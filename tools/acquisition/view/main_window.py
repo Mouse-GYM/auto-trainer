@@ -1104,9 +1104,9 @@ class MainWindow(QMainWindow):
         algo = self._app_model.behavior.algorithm
         ctx = algo.uncover_context
         cfg = algo.active_config.pellet_uncover
-        ctx.y_dcs_valid = True
         ctx.start_y_dcs_valid_perf_c = get_perf_now()
         ctx.start_min_y = cfg.min_y_dcs + 5
+        ctx.y_dcs_valid = True
 
     def _internal_detection_result_toggle(self):
         inference = self._app_model.inference

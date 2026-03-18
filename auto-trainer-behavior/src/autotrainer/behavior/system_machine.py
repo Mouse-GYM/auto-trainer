@@ -668,10 +668,13 @@ class SystemMachine(StateMachine):
         has_at_leat_one = not math.isinf(min_y)
         if has_at_leat_one:
             valid = min_y >= uncov_cfg.min_y_dcs
-            prev_valid, ctx.y_dcs_valid = ctx.y_dcs_valid, valid
+            prev_valid = ctx.y_dcs_valid
             if not prev_valid and valid:
                 ctx.start_y_dcs_valid_perf_c = perf_now
                 ctx.start_min_y = min_y
+                ctx.y_dcs_valid = True
+            elif not valid and prev_valid:
+                ctx.y_dcs_valid = False
         else:
             valid = False
             prev_valid = ctx.y_dcs_valid
