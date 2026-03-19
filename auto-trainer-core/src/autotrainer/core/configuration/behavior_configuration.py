@@ -13,7 +13,7 @@ from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decam
 
 from ..analysis import LoadCellAutoTareConfiguration
 from ..analysis import HeadbarPressureConfiguration
-from ..analysis import LoadCellConfiguration
+from .load_cell_config import LoadCellConfiguration
 from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from .alarm_configuration import EmergencyAlarmConfiguration
 from ..analysis.auto_tunnel_fan_monitor import AutoTunnelSweepConfiguration

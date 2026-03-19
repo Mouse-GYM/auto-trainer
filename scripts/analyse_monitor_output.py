@@ -8,8 +8,7 @@ from unittest import mock
 
 import autotrainer.core.logging
 from autotrainer.core import LoadCellMonitor
-from autotrainer.core.analysis import LoadCellConfiguration
-
+from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration
 
 
 def process_path(

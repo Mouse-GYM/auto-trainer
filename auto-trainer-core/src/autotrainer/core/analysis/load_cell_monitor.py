@@ -1,16 +1,11 @@
 import itertools
 import math
-import time
-import threading
 
 import dataclasses
-import warnings
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Tuple, Deque, Optional, Union, Any, Dict
-
-from typing_extensions import Self
+from typing import Tuple, Deque, Optional, Union
 
 import numpy
 
@@ -20,48 +15,14 @@ from autotrainer.core.logging import get_verbose_logger
 
 from .detector import BaseDetector
 
-from .. import build_kwargs_apply_mapping, get_perf_now, EventManager
+from .. import get_perf_now, EventManager
+from ..configuration.load_cell_config import LoadCellConfiguration
 from ..multiproc import make_daemon_timer, no_op_timer
 
 logger = get_verbose_logger(__name__)
 
 # to allow to be patched from tests:
 _timer_load_cell_engaged = make_daemon_timer
-
-
-@dataclass
-class LoadCellConfiguration:
-    # NB: this is the current/previous value used on agx001:
-    weight_active_threshold: float = 2  # grams ; if above then will become engaged if above for threshold_duration
-    weight_inactive_threshold: float = 2  # grams ;
-    # if below then will become disengaged if below for more than
-
-    threshold_duration: float = 0.25
-    # duration threshold for engaged or thrashing_detected, must remain during that delay to make the change
-
-    min_event_duration: float = 5.0
-    min_post_event_hold_duration: float = 2.0
-    # delay before inactive if was engaged/active for more than min_event_duration
-
-    thrashing_var_weight_threshold_min: float = 20  # grams
-    thrashing_var_weight_threshold_max: float = 30  # grams
-    thrashing_var_min_delay: float = 0.05  # seconds
-    thrashing_var_max_delay: float = 0.2  # seconds
-    thrashing_min_ptp_change_count: int = 3  # nbr of "ptp" change needed in a row during var_max_delay
-
-    @classmethod
-    def from_version_zero(cls, content: Dict[str, Any]) -> Self:
-        return cls(**build_kwargs_apply_mapping(content, (
-            ('weight_active_threshold', 'load_trigger'),
-            ('threshold_duration', 'min_load_on_duration'),
-            ('min_post_event_hold_duration', 'min_load_off_duration'),
-        )))
-
-    @classmethod
-    def from_version_one(cls, content: Dict[str, Any]) -> Self:
-        return cls(**build_kwargs_apply_mapping(content, (
-            ('weight_active_threshold', 'threshold'),
-        )))
 
 
 @dataclass
@@ -130,6 +91,7 @@ class LoadCellMonitor(BaseDetector):
         self._p_start_inactive = None  # get_perf_now()
         self._cur_ptp_count = 0
         self._p_last_ptp_check = 0
+        self._filtering_out_started = False
         self._active_debounce = no_op_timer
         self._inactive_debounce = no_op_timer
         self._index = 0  # used to pass with event when engaged is changed
@@ -310,12 +272,20 @@ class LoadCellMonitor(BaseDetector):
         when: realtime UNIX timestamp
         index: nanosecond perf counter
         """
+        cfg = self._config
+        if not (cfg.weight_min_filter < value < cfg.weight_max_filter):
+            if not self._filtering_out_started:
+                self._filtering_out_started = True
+                logger.notice("starting filter value outside accepted range: %s", value)
+            return
+        if self._filtering_out_started:
+            logger.notice("finished filter value outside accepted range: %s", value)
+            self._filtering_out_started = False
         if self._force_engaged:
             # debug code
             value = self._config.weight_active_threshold + 0.1
         perf_c = index / 1e9
         self._update_history(value, when, perf_c)
-        cfg = self._config
         p_start = self._p_start_active
         ctx = self._context
         cur_engaged = ctx.is_engaged
