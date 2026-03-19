@@ -1264,6 +1264,7 @@ class MainWindow(QMainWindow):
                     self._animal_dropdown_combo,
                     self.calib_diamond_triangle_action,
                     self.make_3d_calib_action,
+                    self.calib_diamond_triangle_action,
                 ):
                     item.setEnabled(False)
                 self.animal_in_training_action.setEnabled(valid_dcs)
@@ -1277,6 +1278,7 @@ class MainWindow(QMainWindow):
                     self._animal_dropdown_combo,
                     self.calib_diamond_triangle_action,
                     self.make_3d_calib_action,
+                    self.calib_diamond_triangle_action,
                 ):
                     item.setEnabled(False)
 
