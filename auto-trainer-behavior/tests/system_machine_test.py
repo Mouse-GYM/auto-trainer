@@ -423,7 +423,7 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
         return r
     #
     def pose_changed():
-        machine._pose_changed(make_rsp())
+        machine._on_pose_changed(make_rsp())
     #
     assert algo.get_diamond_triangle_drifts() is None
     pose_changed()
