@@ -31,12 +31,11 @@ from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandl
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
-from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, no_op_timer
+from autotrainer.core.multiproc import no_op_timer
 from autotrainer.core.logging import get_verbose_logger, set_log_location
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, DaemonTimer
 from autotrainer.core.pose_elements import SceneElement
-from autotrainer.core.project.project_info import DATE_FORMAT, DATE_TIME_FORMAT
+from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.inference import PoseAlgorithm, InferenceStatus, PoseResponse, calibration_FLIR
@@ -59,6 +58,7 @@ from autotrainer.api import (
     ApiTopic,
     ApiEventKind,
 )
+from tools.acquisition.model.app_model_status import AppModelStatus
 
 from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -103,22 +103,17 @@ class InvalidTargetAppModelStatus(Exception):
     """When trying to switch to invalid, or disabled, target app model status"""
 
 
-class AppModelStatus(str, enum.Enum):
-    IDLE = "idle"  # nothing running
-    ACQUIRING = "acquiring"  # camera + system running, but without animal-in-device
-    ANIMAL_IN_DEVICE = "animal_in_device"  # this is ACQUIRING with animal-in-device
-    ANIMAL_IN_TRAINING = "animal_in_training"  # this is ANIMAL_IN_DEVICE with training behavior algo **enabled**
-    CALIBRATION_3D = "calibration_3d"  # executing calib 3d
-    CALIBRATION_DCS = "calibration_dcs"  # executing calib dcs
+def app_status_is_target_status_valid(self: AppModelStatus, target: AppModelStatus):
+    return target in _app_model_status_valid_targets.get(self, ())
 
-    def is_target_status_valid(self, target: "AppModelStatus"):
-        return target in _app_model_status_valid_targets.get(self, ())
 
-    def to_api_app_mode(self) -> ApiApplicationMode:
-        return _app_model_status_2_api_app_mode[self]
+def app_status_to_api_app_mode(self: AppModelStatus) -> ApiApplicationMode:
+    return _app_model_status_2_api_app_mode[self]
 
-    def to_behavior_algo_status(self) -> Optional[BehaviorAlgoStatus]:
-        return _to_behavior_algo_status.get(self, None)
+
+def app_status_to_behavior_algo_status(self: AppModelStatus) -> Optional[BehaviorAlgoStatus]:
+    return _to_behavior_algo_status.get(self, None)
+
 
 
 _app_model_status_2_api_app_mode = {
@@ -402,7 +397,7 @@ class AppModel(ObservableObject):
     def check_target_status_valid(self, target: AppModelStatus):
         current_status = self._status
         if target != current_status:
-            valid = current_status.is_target_status_valid(target)
+            valid = app_status_is_target_status_valid(current_status, target)
             if not valid:
                 raise InvalidTargetAppModelStatus(f"New status {target} not valid for current status {current_status}")
         if target == AppModelStatus.ANIMAL_IN_TRAINING:
@@ -429,7 +424,7 @@ class AppModel(ObservableObject):
             return
         self.check_target_status_valid(value)
         self._status = value
-        algo_status = value.to_behavior_algo_status()
+        algo_status = app_status_to_behavior_algo_status(value)
         if algo_status is not None:
             self._behavior.algorithm.status = algo_status
         self.property_changed(self.Props.STATUS, value, prev)
@@ -1879,7 +1874,7 @@ class AppModel(ObservableObject):
         animal = self._selected_animal
 
         system_status = ApiSystemStatus(
-            application_mode=self._status.to_api_app_mode(),
+            application_mode=app_status_to_api_app_mode(self._status),
             training_mode=training_mode_to_api_training_mode(self._training_mode),
             animal_id=None if animal is None else animal.id,
             detectors=detectors,
