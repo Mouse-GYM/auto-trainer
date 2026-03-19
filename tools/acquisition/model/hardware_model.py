@@ -6,6 +6,7 @@ from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional, Tuple, Dict, Union
 
+from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor, SensorAnalysis, EventManager)                              
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
