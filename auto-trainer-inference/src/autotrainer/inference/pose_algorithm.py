@@ -1,5 +1,6 @@
 import dataclasses
 import itertools
+import math
 import operator
 from typing import List, Dict, Optional, Tuple, Literal
 from collections import namedtuple, defaultdict
@@ -8,7 +9,7 @@ from dataclasses import dataclass
 import numpy
 import pandas
 
-from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple
+from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple, get_perf_now
 from autotrainer.inference.calibration import triangulate_3d_with_params
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference.config import StereoParams
@@ -39,6 +40,9 @@ class PoseResponse:
 
     sequence: int = 0
     """Simple index to track responses"""
+
+    perf_c: float = dataclasses.field(default_factory=get_perf_now)
+    """Perf counter when this response applies"""
 
     parts_flags: Tuple[
         Dict[str, bool],
