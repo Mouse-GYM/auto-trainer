@@ -1,9 +1,13 @@
 
+import dataclasses
+import math
 from enum import Enum
 from typing import Dict
 
+
 _cache_scene_elements: Dict[str, "_BaseSceneElement"] = {}
 _cache_scene_elements_str: Dict[str, str] = {}
+
 
 class _BaseSceneElement(str):  # , Enum):
     """Dedicated str subclass for scene elements,
@@ -41,12 +45,12 @@ class SceneElement(_BaseSceneElement):
 
     Pellet: "SceneElement" = 'Pellet'
 
-    R_Hand: "SceneElement" = 'R_Hand'
+    R_Hand: "SceneElement" = 'R_Hand'  # composite element part
     RH_flat: "SceneElement" = 'RH_flat'
     RH_spread: "SceneElement" = 'RH_spread'
     RH_grab: "SceneElement" = 'RH_grab'
 
-    L_Hand: "SceneElement" = 'L_Hand'
+    L_Hand: "SceneElement" = 'L_Hand'  # composite element part
     LH_flat: "SceneElement" = 'LH_flat'
     LH_spread: "SceneElement" = 'LH_spread'
     LH_grab: "SceneElement" = 'LH_grab'
@@ -60,8 +64,52 @@ class SceneElement(_BaseSceneElement):
     Diamond: "SceneElement" = 'Diamond'
     Triangle: "SceneElement" = 'Triangle'
 
+    AnyAnimalPart: "SceneElement" = 'AnyAnimalPart'
+
 
 AllHandsParts = (
     SceneElement.RH_flat, SceneElement.RH_spread, SceneElement.RH_grab,
     SceneElement.LH_flat, SceneElement.LH_spread, SceneElement.LH_grab,
 )
+
+
+AllAnimalParts = (
+    SceneElement.Nose,
+    SceneElement.Mouth,
+    SceneElement.Tongue_tip,
+    SceneElement.Tongue_mid,
+) + AllHandsParts
+
+
+AllNonAnimalParts = (
+    SceneElement.Pellet,
+    SceneElement.Diamond,
+    SceneElement.Triangle,
+    SceneElement.Star,
+)
+
+
+AllSceneParts = AllAnimalParts + AllNonAnimalParts
+
+
+@dataclasses.dataclass
+class ScenePartsContext:
+
+    parts_present_last_perf_c: Dict[str, float]  # last presence change perf counter
+    parts_missing_last_perf_c: Dict[str, float]  # last absence change perf counter
+
+    def get_part_presence_age(self, part: str, perf_now: float) -> float:
+        presence_p = self.parts_present_last_perf_c.get(part, None)
+        absence_p = self.parts_missing_last_perf_c.get(part, None)
+        if presence_p is None or (absence_p is not None and absence_p > presence_p):
+            return 0
+        return perf_now - presence_p
+
+    def get_part_absence_age(self, part: str, perf_now: float) -> float:
+        presence_p = self.parts_present_last_perf_c.get(part, None)
+        absence_p = self.parts_missing_last_perf_c.get(part, None)
+        if absence_p is None:
+            return math.inf
+        if presence_p is not None and presence_p > absence_p:
+            return 0
+        return perf_now - absence_p

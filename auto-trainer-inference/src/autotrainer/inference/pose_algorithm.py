@@ -13,7 +13,7 @@ from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple, ge
 from autotrainer.inference.calibration import triangulate_3d_with_params
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference.config import StereoParams
-from autotrainer.core.pose_elements import SceneElement, AllHandsParts
+from autotrainer.core.pose_elements import SceneElement, AllHandsParts, ScenePartsContext, AllSceneParts
 
 from autotrainer.inference.analysis.prepare_jetson_data import process_hand_data, reorient_and_center_step1
 
@@ -462,3 +462,22 @@ class PoseAlgorithm:
                 if pose[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PLOT_THRESHOLD:
                     locations[part] = PoseLocation(idx, pose[idx, 0], pose[idx, 1])
         return locations
+
+
+def update_scene_elements_context_from_pose(context: ScenePartsContext, response: PoseResponse) -> ScenePartsContext:
+    rsp = response
+    ctx = context
+
+    changes_seen = {}
+    changes_miss = {}
+
+    for part in AllSceneParts:
+        seen = rsp.parts_flags[0].get(part, False) or rsp.parts_flags[1].get(part, False)
+        prev_seen = ctx.parts_present_last_perf_c.get(part)
+        prev_miss = ctx.parts_missing_last_perf_c.get(part)
+        if seen:
+            if prev_miss is not None and prev_miss > prev_seen:
+                changes_seen[part] = seen
+        else:
+            if prev_seen is not None and prev_seen:
+                pass
