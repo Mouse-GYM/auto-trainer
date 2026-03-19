@@ -1111,34 +1111,34 @@ class BehaviorAlgorithm(ObservableObject):
 
     #
 
-    def update_diamond_seen(self, seen: bool):
+    def update_diamond_seen(self, seen: bool, *, perf_now: Optional[float] = None):
         if seen:
-            self._diamond_last_seen_perf_c = get_perf_now()
+            self._diamond_last_seen_perf_c = get_perf_now() if perf_now is None else perf_now
 
-    def update_star_seen(self, seen: bool):
+    def update_star_seen(self, seen: bool, *, perf_now: Optional[float] = None):
         if seen:
-            self._star_last_seen_perf_c = get_perf_now()
+            self._star_last_seen_perf_c = get_perf_now() if perf_now is None else perf_now
 
-    def update_triangle_seen(self, seen: bool = True):
+    def update_triangle_seen(self, seen: bool = True, *, perf_now: Optional[float] = None):
         if self._triangle_seen != seen:
             self._triangle_seen = seen
             self._event_manager.post_event_content(BehaviorEventKind.triangleSeen, context=seen)
         if seen:
-            self._triangle_last_seen_perf_c = get_perf_now()
+            self._triangle_last_seen_perf_c = get_perf_now() if perf_now is None else perf_now
 
-    def update_pellet_seen(self, seen: bool = True):
+    def update_pellet_seen(self, seen: bool = True, *, perf_now: Optional[float] = None):
         if self._pellet_seen != seen:
             self._pellet_seen = seen
             self._event_manager.post_event_content(BehaviorEventKind.pelletSeen, context=seen)
         if seen:
-            self._pellet_last_seen_perf_c = get_perf_now()
+            self._pellet_last_seen_perf_c = get_perf_now() if perf_now is None else perf_now
 
     def pellet_loaded(self):
         self._session_pellet_loaded_count += 1
 
-    def update_mouse_seen(self, seen: bool = True):
+    def update_mouse_seen(self, seen: bool = True, *, perf_now: Optional[float] = None):
         if seen:
-            self._mouse_seen_last_perf_c = get_perf_now()
+            self._mouse_seen_last_perf_c = get_perf_now() if perf_now is None else perf_now
         if self._is_in_session and seen:
             prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
             if not prev_seen:
