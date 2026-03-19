@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from math import floor
 from datetime import datetime
+from typing import List
 from typing_extensions import Self
 
 import numpy
@@ -102,7 +103,7 @@ class HeadbarPressureMonitor(ObservableObject):
     def save_configuration(self) -> HeadbarPressureConfiguration:
         return HeadbarPressureConfiguration(threshold=self._load_cell_engaged_threshold, duration=self._duration)
 
-    def update(self, values: list, when: float = 0.0, index: int = 0) -> bool:
+    def update(self, values: List[float], when: float = 0.0, index: int = 0) -> bool:
         self._values = numpy.append(self._values, values)
         self._values = self._values[-self._retain_count:]
 
