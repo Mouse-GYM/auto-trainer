@@ -143,11 +143,15 @@ class HeadClampConfiguration:
 
 @dataclasses.dataclass
 class AutoEndSessionConfiguration:
+    # enabled: bool = True
+
+    animal_tunnel_no_activity_delay: float = 10  # seconds
+    """Delay without tunnel animal activity (== any animal part seen *and* low load-cell variance)
+     which triggers auto-end session"""
 
     no_activity_delay_minutes: int = 1
-    """How many minutes without animal activity to wait before auto end a running capture session.
-    If animal seen in between: timeout is reset. Up until animal not seen for the given duration, then auto end session.
-    """
+    """This is only for the Nose part. If it's not seen that much duration consecutively, 
+     then also auto-end session"""
 
 
 @dataclasses.dataclass

@@ -1,11 +1,12 @@
+import math
 from dataclasses import dataclass
 from typing import Callable, Optional, List
 
 from typing_extensions import Self
 
 import numpy
-import yaml
 
+from autotrainer.core import get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 
 logger = get_verbose_logger(__name__)
@@ -36,6 +37,10 @@ class LoadCellTareMonitor:
     """
 
     def __init__(self):
+        self._low_variance_engaged = True
+        self._low_variance_engaged_perf_c = -math.inf
+        self._low_variance_disengaged_perf_c = -math.inf
+
         self._threshold: float = 0.1
         self._range_threshold: float = 0.5
         self._duration: float = 2.0
@@ -49,6 +54,14 @@ class LoadCellTareMonitor:
         self._tare_callback: TareCallbackT = None
 
         self._reset()
+
+    @property
+    def low_variance_engaged(self):
+        return self._low_variance_engaged
+
+    @property
+    def low_variance_age(self):
+        return get_perf_now() - self._low_variance_engaged_perf_c
 
     @property
     def threshold(self) -> float:
@@ -117,23 +130,29 @@ class LoadCellTareMonitor:
 
         increase = len(values)
 
-        self._values[self._index:(self._index + increase)] = numpy.array(values)
+        self._values[self._index:self._index + increase] = numpy.array(values)
 
         self._index += increase
 
         if self._index >= self._buffer_len:
             self._index = 0
 
+        p_now = get_perf_now()
         if (
             numpy.all(numpy.abs(self._values - self._baseline) > self._threshold)
             and numpy.ptp(self._values) <= self._range_threshold
         ):
+            if not self._low_variance_engaged:
+                self._low_variance_engaged = True
+                self._low_variance_engaged_perf_c = p_now
             if self._tare_callback():
                 self.reset_baseline()
             else:
                 self.update_baseline()
             return True
-
+        if self._low_variance_engaged:
+            self._low_variance_engaged = False
+            self._low_variance_disengaged_perf_c = p_now
         return False
 
     def update_baseline(self):

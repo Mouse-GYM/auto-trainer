@@ -1,6 +1,7 @@
 # process pool usage for live inference 3d-triangulation
 
 import functools
+import multiprocessing
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import pool_init
@@ -10,7 +11,7 @@ from autotrainer.inference import PoseAlgorithm, InferenceMonitorDataMsg
 logger = get_verbose_logger(__name__)
 
 
-_output_data_queue = None
+_output_data_queue: Optional[multiprocessing.Queue] = None
 _pose_algo_process = None
 
 
@@ -24,7 +25,7 @@ def pool_init_process_pose_data(pose_algo: PoseAlgorithm, output_data_queue, mon
 
 def pool_process_pose_data(pose_data):
     # logger.debug("received workload %s", type(pose_data))
-    # assert isinstance(_output_data_queue, multiprocessing.Queue)
+    assert isinstance(_output_data_queue, multiprocessing.Queue)
     rsp = _pose_algo_process(pose_data)  # noqa
     # (cmd, (args, kwargs)) :
     _output_data_queue.put((InferenceMonitorDataMsg.POSE_RESULT_READY, ((rsp,), None)))

@@ -89,6 +89,7 @@ class SensorAnalysis(ObservableObject):
         self._alarm_monitor = EmergencyAlarmMonitor(
             config=EmergencyAlarmConfiguration(),
             load_cell_monitor=self._load_cell_monitor,
+            load_cell_tare_monitor=self._tare_detector,
             audio_monitor=self._audio_thrashing_monitor,
             external_doors_monitor=self._external_doors_monitor,
             global_animal_presence_monitor=self._global_animal_presence_monitor,

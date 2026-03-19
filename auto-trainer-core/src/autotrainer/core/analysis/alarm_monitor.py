@@ -8,11 +8,13 @@ from typing import Optional, List, Set, Callable
 from autotrainer.api import ApiDetectorKind, ApiEventKind, ApiAlarmKind
 
 from autotrainer.core import get_perf_now, EventManager
+from autotrainer.core.analysis import LoadCellTareMonitor
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.analysis.external_doors_monitor import ExternalDoorsMonitor
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
+from autotrainer.core.pose_elements import ScenePartsPresenceContext
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
@@ -58,14 +60,17 @@ class EmergencyAlarmMonitor(BaseDetector):
         *,
         config: EmergencyAlarmConfiguration,
         load_cell_monitor: LoadCellMonitor,
+        load_cell_tare_monitor: LoadCellTareMonitor,
         audio_monitor: AudioSpectrumThrashMonitor,
         external_doors_monitor: ExternalDoorsMonitor,
         global_animal_presence_monitor: GlobalAnimalPresenceMonitor,
         topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__()
+        self._scene_parts_ctx = ScenePartsPresenceContext()
         self._config = config
         self._load_cell_monitor = load_cell_monitor
+        self._load_cell_tare_monitor = load_cell_tare_monitor
         self._audio_monitor = audio_monitor
         self._external_doors_monitor = external_doors_monitor
         self._global_animal_presence_monitor = global_animal_presence_monitor
@@ -89,6 +94,9 @@ class EmergencyAlarmMonitor(BaseDetector):
             if name == GlobalAnimalPresenceMonitor.IS_ENGAGED:
                 self.check_state()
         global_animal_presence_monitor.property_changed += global_animal_presence_prop_changed
+
+    def update_parts_context(self, context: ScenePartsPresenceContext):
+        self._scene_parts_ctx = context
 
     def add_alarm_condition(self, name, check):
         ...  # TODO
@@ -246,6 +254,7 @@ class EmergencyAlarmMonitor(BaseDetector):
             return False
         load_cell = self._load_cell_monitor.context
         cfg = self._config
+        # pres_ctx = self._scene_parts_ctx
         topcam_attrs = topcam_attrs.to_local_value()  # to ensure consistent lookups
         return (
             not load_cell.is_engaged

@@ -1,3 +1,4 @@
+import copy
 import dataclasses
 import itertools
 import math
@@ -13,7 +14,7 @@ from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple, ge
 from autotrainer.inference.calibration import triangulate_3d_with_params
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference.config import StereoParams
-from autotrainer.core.pose_elements import SceneElement, AllHandsParts, ScenePartsContext, AllSceneParts
+from autotrainer.core.pose_elements import SceneElement, AllHandsParts, ScenePartsPresenceContext, AllSceneParts
 
 from autotrainer.inference.analysis.prepare_jetson_data import process_hand_data, reorient_and_center_step1
 
@@ -464,20 +465,28 @@ class PoseAlgorithm:
         return locations
 
 
-def update_scene_elements_context_from_pose(context: ScenePartsContext, response: PoseResponse) -> ScenePartsContext:
-    rsp = response
-    ctx = context
-
-    changes_seen = {}
-    changes_miss = {}
-
-    for part in AllSceneParts:
-        seen = rsp.parts_flags[0].get(part, False) or rsp.parts_flags[1].get(part, False)
-        prev_seen = ctx.parts_present_last_perf_c.get(part)
-        prev_miss = ctx.parts_missing_last_perf_c.get(part)
+def update_scene_elements_context_from_pose(context: ScenePartsPresenceContext, pose_response: PoseResponse):
+    """Update in-place the given context based on the given response"""
+    changes_seen = set()
+    changes_miss = set()
+    p1, p2 = pose_response.parts_flags[:2]
+    p_miss = context.missing_last_perf_c
+    p_pres = context.present_last_perf_c
+    prev_parts = set(p_miss) | set(p_pres)
+    all_seen_parts = set(p1) | set(p2)
+    for part in all_seen_parts | prev_parts:
+        seen = p1.get(part, False) or p2.get(part, False)
+        prev_miss = p_miss.get(part)
+        prev_seen = p_pres.get(part)
         if seen:
-            if prev_miss is not None and prev_miss > prev_seen:
-                changes_seen[part] = seen
+            if prev_seen is None or (prev_miss is not None and prev_miss > prev_seen):
+                changes_seen.add(part)
         else:
-            if prev_seen is not None and prev_seen:
-                pass
+            if prev_miss is None or (prev_seen is not None and prev_seen > prev_miss):
+                changes_miss.add(part)
+    #
+    context.last_perf_c = perf_c = pose_response.perf_c
+    for part in changes_seen:
+        p_pres[part] = perf_c
+    for part in changes_miss:
+        p_miss[part] = perf_c

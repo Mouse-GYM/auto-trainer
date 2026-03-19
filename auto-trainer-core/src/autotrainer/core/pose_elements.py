@@ -2,8 +2,9 @@
 import dataclasses
 import math
 from enum import Enum
-from typing import Dict
+from typing import Dict, Optional
 
+from autotrainer.core import get_perf_now
 
 _cache_scene_elements: Dict[str, "_BaseSceneElement"] = {}
 _cache_scene_elements_str: Dict[str, str] = {}
@@ -93,23 +94,92 @@ AllSceneParts = AllAnimalParts + AllNonAnimalParts
 
 
 @dataclasses.dataclass
-class ScenePartsContext:
+class ScenePartsPresenceContext:
+    """Maintain a context of presence/absence status & age of parts/elements"""
 
-    parts_present_last_perf_c: Dict[str, float]  # last presence change perf counter
-    parts_missing_last_perf_c: Dict[str, float]  # last absence change perf counter
+    # TODO: for now only considering presence in either of the 2 possible cameras,
+    #  but we could handle 3 cases of presence/absence:
+    #   1) on any of the possible cams
+    #       > can be/is used for checking pellet presence at the end of load sequence
+    #   2) on all of the possible cams simultaneously
+    #       > should be used to report pellet successfully loaded (more reliably)
+    #   3) on all of the possible cams non-simultaneously
+    #       > not entirely sure could be useful if we have already 1 + 2
 
-    def get_part_presence_age(self, part: str, perf_now: float) -> float:
-        presence_p = self.parts_present_last_perf_c.get(part, None)
-        absence_p = self.parts_missing_last_perf_c.get(part, None)
+    last_perf_c: float = -math.inf
+    present_last_perf_c: Dict[str, float] = dataclasses.field(default_factory=dict)
+    missing_last_perf_c: Dict[str, float] = dataclasses.field(default_factory=dict)
+
+    def get_part_seen(self, part: str) -> bool:
+        """Say if the part was seen on last update"""
+        p_present = self.present_last_perf_c.get(part, -math.inf)
+        p_missing = self.missing_last_perf_c.get(part, -math.inf)
+        if math.isinf(p_present):
+            return p_present > 0
+        return p_present > p_missing
+
+    def get_presence_age(self, part: str, *, perf_now: Optional[float] = None) -> float:
+        """Returns the "presence age" of the part if it's currently present, otherwise -math.inf"""
+        if perf_now is None:
+            perf_now = self.last_perf_c
+        presence_p = self.present_last_perf_c.get(part, None)
+        absence_p = self.missing_last_perf_c.get(part, None)
         if presence_p is None or (absence_p is not None and absence_p > presence_p):
-            return 0
+            return -math.inf
         return perf_now - presence_p
 
-    def get_part_absence_age(self, part: str, perf_now: float) -> float:
-        presence_p = self.parts_present_last_perf_c.get(part, None)
-        absence_p = self.parts_missing_last_perf_c.get(part, None)
+    def get_absence_age(self, part: str, *, perf_now: Optional[float] = None) -> float:
+        """Returns the "absence age" of the part if it's currently absent, otherwise -math.inf.
+        Age can also be math.inf if never seen"""
+        if perf_now is None:
+            perf_now = self.last_perf_c
+        presence_p = self.present_last_perf_c.get(part, None)
+        absence_p = self.missing_last_perf_c.get(part, None)
         if absence_p is None:
-            return math.inf
+            return math.inf if presence_p is None else -math.inf
         if presence_p is not None and presence_p > absence_p:
-            return 0
+            return -math.inf
         return perf_now - absence_p
+
+    def get_recently_seen(self, part: str, missing_delay: float, *, perf_now: Optional[float] = None) -> bool:
+        """Returns if part was seen before missing_delay, relatively to perf_now, or self.last_perf_c"""
+        if perf_now is None:
+            perf_now = self.last_perf_c
+        prev_miss = self.missing_last_perf_c.get(part, -math.inf)
+        prev_pres = self.present_last_perf_c.get(part, -math.inf)
+        return not math.isinf(prev_pres) and (
+            prev_pres > prev_miss or (perf_now - prev_miss < missing_delay))
+
+    def update_part_seen(self, part: str, seen: bool, *, perf_now: Optional[float] = None):
+        if perf_now is None:
+            perf_now = get_perf_now()
+        if seen:
+            self.present_last_perf_c[part] = perf_now
+            self.missing_last_perf_c.setdefault(part, -math.inf)
+        else:
+            self.missing_last_perf_c[part] = perf_now
+            self.present_last_perf_c.setdefault(part, -math.inf)
+        if perf_now > self.last_perf_c:
+            self.last_perf_c = perf_now
+
+    def get_animal_absence_age(self, *, perf_now: Optional[float] = None):
+        if perf_now is None:
+            perf_now = get_perf_now()
+        min_age = math.inf
+        parts = set(self.missing_last_perf_c) | set(self.present_last_perf_c)
+        for part in parts:
+            if part in AllAnimalParts:
+                age = self.get_absence_age(part, perf_now=perf_now)
+                if age < min_age:
+                    min_age = age
+        return 0 if math.isinf(min_age) else min_age
+
+    def get_animal_presence_age(self, *, perf_now: Optional[float] = None):
+        if perf_now is None:
+            perf_now = get_perf_now()
+        max_age = -math.inf
+        for part in AllAnimalParts:
+            age = self.get_presence_age(part, perf_now=perf_now)
+            if age > max_age:
+                max_age = age
+        return 0 if math.isinf(max_age) else max_age

@@ -322,25 +322,41 @@ class SystemMachine(StateMachine):
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_auto_end_session(self):
         self._timer_consider_auto_end_session.cancel()  # required
+        analysis = self._analysis
+        load_cell_tare = analysis.load_cell_tare_monitor
         algo = self._algorithm
         cfg = algo.auto_end_session_config
-        if not algo.is_in_session or cfg is None or cfg.no_activity_delay_minutes <= 0:
+        if not algo.is_in_session or cfg is None:  #  or cfg.no_activity_delay_minutes <= 0:
             return
-        mouse_seen_age = algo.mouse_seen_age  # reminder: this is the nose part which is accounted for mouse_seen
-        in_session_age = algo.is_in_session_age
-        if math.isinf(mouse_seen_age):
-            last_activity_age = in_session_age
+        perf_now = get_perf_now()
+        if cfg.no_activity_delay_minutes > 0:
+            mouse_seen_age = algo.mouse_seen_age  # reminder: this is the nose part which is accounted for mouse_seen
+            in_session_age = algo.is_in_session_age
+            if math.isinf(mouse_seen_age):
+                last_activity_age = in_session_age
+            else:
+                last_activity_age = min(mouse_seen_age, in_session_age)
+            remains1 = 60 * cfg.no_activity_delay_minutes - last_activity_age
         else:
-            last_activity_age = min(mouse_seen_age, in_session_age)
-        remains = 60 * cfg.no_activity_delay_minutes - last_activity_age
-        if remains <= 0:
+            remains1 = math.inf
+        #
+        if remains1 > 0 and cfg.animal_tunnel_no_activity_delay > 0 and load_cell_tare.low_variance_engaged:
+            load_cell_low_var_age = load_cell_tare.low_variance_age
+            animal_missing_age = self._algorithm.scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
+            min_age = min(animal_missing_age, load_cell_low_var_age)
+            remains2 = cfg.animal_tunnel_no_activity_delay - min_age
+        else:
+            remains2 = math.inf
+        #
+        min_remain = min(remains1, remains2)
+        if min_remain <= 0:
             algo.end_capture_session(reason=RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT)
-        else:
-            logger.info("started new timer for consider_auto_end_session in %.1fs", remains)
-            timer = self._timer_consider_auto_end_session = _consider_auto_end_session_timer(
-                remains, self._consider_auto_end_session
-            )
-            timer.start()
+            return
+        logger.info("started new timer for consider_auto_end_session in %.1fs", min_remain)
+        timer = self._timer_consider_auto_end_session = _consider_auto_end_session_timer(
+            min_remain, self._consider_auto_end_session
+        )
+        timer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_session_capture_started(self):
@@ -667,6 +683,10 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_pose_changed(self, response: PoseResponse):
+        analysis = self._analysis
+        algo = self._algorithm
+        if algo.is_in_session and not algo.session_mouse_seen and response.mouse_seen:
+            logger.success("session first mouse_seen: parts=%s locations=%s", response.parts_flags, response.locations)
         if __debug__:
             t_last = getattr(self, "_last_pose_changed_logged", 0)
             p_now = get_perf_now()
@@ -675,8 +695,7 @@ class SystemMachine(StateMachine):
                 self._last_pose_changed_logged = p_now
         #
         pellet_3d = response.locations_3d.get(SceneElement.Pellet)
-        self._analysis.pellet_misplaced_monitor.update(pellet_3d)
-
+        analysis.pellet_misplaced_monitor.update(pellet_3d)
         #
         self._handle_diamond_triangle_offset_changed(
             response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle))
@@ -687,17 +706,11 @@ class SystemMachine(StateMachine):
         self._handle_triangle_pellet_offset_changed(
             response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
         #
-        algo = self._algorithm
-        if algo.is_in_session and not algo.session_mouse_seen and response.mouse_seen:
-            logger.success("session first mouse_seen: parts=%s locations=%s", response.parts_flags, response.locations)
-        #
         prev_pellet_seen = algo.pellet_recently_seen
         #
-        algo.update_triangle_seen(response.triangle_seen)
-        algo.update_diamond_seen(response.diamond_seen)
-        algo.update_star_seen(response.star_seen)
-        algo.update_pellet_seen(response.pellet_seen)
-        algo.update_mouse_seen(response.mouse_seen)
+        algo.update_parts_seen(response)  # new.. replace many previous update_xxx_seen()
+        # refresh analysis with the parts presence context:
+        analysis.emergency_alarm_monitor.update_parts_context(algo.scene_parts_presence_context)
         #
         if not prev_pellet_seen and response.pellet_seen and (
             self._state == SystemState.tunnel
@@ -843,7 +856,7 @@ class SystemMachine(StateMachine):
             pellet_dev.set_auto_correct_motor_drift(new_value)
 
         elif name == props.HANDS_NEAR_PELLET_SEEN:
-            if new_value:  # not interrested when reset to False
+            if new_value:  # not interested when reset to False
                 self._pellet_machine.environment_changed(must_release=new_value)
 
         elif name == props.ALGO_PAUSED:
@@ -934,7 +947,7 @@ class SystemMachine(StateMachine):
         if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
             return
         perf_now = get_perf_now()
-        pellet_seen_age = algo.pellet_seen_age
+        pellet_seen_age = algo.pellet_presence_age
         pellet_machine = self._pellet_machine
         send_begin_age = pellet_machine.get_pellet_send_begin_age(perf_now)
         send_end_age = pellet_machine.get_pellet_send_end_age(perf_now)
@@ -1039,7 +1052,7 @@ class SystemMachine(StateMachine):
                 logger.debug("applying %s with shift: %.1f", kind, val)
                 token = meth(val, absolute=False, sender="processed_shift_xyz")
                 if token is None:
-                    logger.error("Could not apply %s ; command not successfull", kind)
+                    logger.error("Could not apply %s ; command not successfully sent", kind)
                 EventManager.default().post_event_content(kind, context=val)
             else:
                 logger.debug("%s == 0 ; skip", kind)

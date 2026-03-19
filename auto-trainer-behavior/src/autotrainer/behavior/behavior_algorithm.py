@@ -18,15 +18,16 @@ from typing import Callable
 
 from typing_extensions import Self
 
-from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
     AnimalSubject, get_perf_now, calculate_std_dev_manual
+from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
     BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, ShiftXYZHandlerConfig
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from autotrainer.core.pose_elements import ScenePartsPresenceContext, SceneElement
 
 from autotrainer.video import CaptureProcessStatus
 
@@ -36,6 +37,9 @@ from .pellet import PelletState
 from .pellet_shift import ShiftXYZBufferHandler, ShiftXYZHandler
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
+
+from autotrainer.inference import PoseResponse
+from autotrainer.inference.pose_algorithm import update_scene_elements_context_from_pose
 
 logger = get_verbose_logger(__name__)
 
@@ -93,6 +97,7 @@ class BehaviorAlgoProps(str, enum.Enum):
 
     SESSION_PELLET_COUNT = 'session_pellet_count'
     SESSION_MOUSE_SEEN = 'session_mouse_seen'
+    # NB: only updated/set once per session, once set it's kept until end of session
 
     AUTO_CORRECT_MOTOR_DRIFT = 'auto_correct_motor_drift'
     # PELLET_MOTOR_DRIFT = 'pellet_motor_drift'  # unused
@@ -222,6 +227,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._head_fixation_enabled = False  # NB: not saved in config
         self._clean_raw_data_on_inactive_session = False
 
+        self._parts_pres_ctx = ScenePartsPresenceContext()
+
         # now using self._active_config.head_clamp mainly,
         # and also:
         self._baseline_intensity = self._active_config.head_clamp.min_baseline_intensity
@@ -240,17 +247,11 @@ class BehaviorAlgorithm(ObservableObject):
         self._stop_session_reason = RecordingEndingReason.NA
 
         self._session_mouse_seen = False
-        self._pellet_seen = False
-        self._pellet_last_seen_perf_c = -math.inf
         self._pellet_hands_min_distance: float = math.inf
         self._hands_near_pellet_seen = False
         self._mouse_seen_last_perf_c = -math.inf
-        self._triangle_seen = False
-        self._triangle_last_seen_perf_c = -math.inf
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
-        self._diamond_last_seen_perf_c = -math.inf
         self._next_diamond_triangle_log_report = -math.inf
-        self._star_last_seen_perf_c = -math.inf
 
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
@@ -694,20 +695,32 @@ class BehaviorAlgorithm(ObservableObject):
     #
 
     @property
-    def triangle_last_seen(self) -> float:
-        return self._triangle_last_seen_perf_c
+    def triangle_last_seen(self) -> float:  # only used by test atm
+        return self._parts_pres_ctx.present_last_perf_c.get(SceneElement.Triangle, -math.inf)
 
     @property
     def star_recently_seen(self) -> bool:
-        return get_perf_now() - self._star_last_seen_perf_c < self.limits.triangle_missing_time
+        return self._parts_pres_ctx.get_recently_seen(
+            SceneElement.Star,
+            self.limits.triangle_missing_time,
+            perf_now=get_perf_now(),
+        )
 
     @property
     def triangle_recently_seen(self) -> bool:
-        return get_perf_now() - self._triangle_last_seen_perf_c < self.limits.triangle_missing_time
+        return self._parts_pres_ctx.get_recently_seen(
+            SceneElement.Triangle,
+            self.limits.triangle_missing_time,
+            perf_now=get_perf_now(),
+        )
 
     @property
     def diamond_recently_seen(self) -> bool:
-        return get_perf_now() - self._diamond_last_seen_perf_c < self.limits.triangle_missing_time
+        return self._parts_pres_ctx.get_recently_seen(
+            SceneElement.Diamond,
+            self.limits.triangle_missing_time,
+            perf_now=get_perf_now(),
+        )
 
     @property
     def triangle_pellet_offset(self) -> Offset3DTuple:  # not used
@@ -742,7 +755,7 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def triangle_pellet_diff_too_far_threshold(self) -> float:
         """Diff threshold above which pellet is considered "too-far" from triangle.
-        That is if abs(current_distance - expected_dictance) >= diff_threshold -> too far
+        That is if abs(current_distance - expected_distance) >= diff_threshold -> too far
         """
         return self._active_config.pellet_delivery.triangle_pellet_diff_too_far_threshold
 
@@ -947,6 +960,14 @@ class BehaviorAlgorithm(ObservableObject):
     def shift_xyz_handler(self) -> ShiftXYZHandler:
         return self._shift_xyz_handler
 
+    @property
+    def scene_parts_presence_context(self) -> ScenePartsPresenceContext:
+        return self._parts_pres_ctx
+
+    @scene_parts_presence_context.setter
+    def scene_parts_presence_context(self, value: ScenePartsPresenceContext):
+        self._parts_pres_ctx = value
+
     #
 
     def start_session(self, *, reason: str = "NA"):
@@ -973,7 +994,6 @@ class BehaviorAlgorithm(ObservableObject):
 
         # ensure we look at their state on start:
         self._session_mouse_seen = False
-        self._pellet_seen = False
         self._hands_near_pellet_seen = False
 
         # this is what send the trigger the enable recording at camera level,
@@ -1015,13 +1035,16 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_pellet_loaded_count = 0
 
     @property
-    def pellet_seen_age(self) -> float:
-        """In nbr of seconds"""
-        return get_perf_now() - self._pellet_last_seen_perf_c
+    def pellet_presence_age(self) -> float:
+        """Return value in seconds unit"""
+        return self._parts_pres_ctx.get_presence_age(SceneElement.Pellet)
 
     @property
     def pellet_recently_seen(self):
-        return get_perf_now() - self._pellet_last_seen_perf_c < self.limits.pellet_missing_time
+        return self._parts_pres_ctx.get_recently_seen(
+            SceneElement.Pellet, self.limits.pellet_missing_time,
+            perf_now=get_perf_now(),
+        )
 
     #
 
@@ -1036,7 +1059,7 @@ class BehaviorAlgorithm(ObservableObject):
         delivery_cfg: Optional[PelletDeliveryConfiguration] = None,
         pellet_state: PelletState = PelletState.monitoring,
     ) -> bool:
-        """Say wether a load-pellet is needed or not, basically if pellet is missing confirmed"""
+        """Say whether a load-pellet is needed or not, basically if pellet is missing confirmed"""
         pellet_missing = (
             not self.pellet_recently_seen
             and (self.triangle_recently_seen
@@ -1045,7 +1068,7 @@ class BehaviorAlgorithm(ObservableObject):
         if pellet_missing:
             # logger.verbose("BehaviorAlgo.can_load_pellet: pellet missing")
             return True
-        # NB: todo: pellet_too_far should probably not immediatelly trigger a load-pellet...
+        # NB: todo: pellet_too_far should probably not immediately trigger a load-pellet...
         # first a tunnel FAN can be executed..
         # then maybe normal pellet-load (with pellet fully mussing) will be triggered
         pellet_too_far = (
@@ -1111,41 +1134,51 @@ class BehaviorAlgorithm(ObservableObject):
 
     #
 
-    def update_diamond_seen(self, seen: bool, *, perf_now: Optional[float] = None):
-        if seen:
-            self._diamond_last_seen_perf_c = get_perf_now() if perf_now is None else perf_now
+    def update_parts_seen(self, pose_rsp: PoseResponse):
+        ctx = self._parts_pres_ctx
+        need_api_post = (
+            [SceneElement.Triangle, BehaviorEventKind.triangleSeen, False],
+            [SceneElement.Pellet, BehaviorEventKind.pelletSeen, False],
+        )
+        for sub_l in need_api_post:
+            if ctx.get_part_seen(sub_l[0]):
+                sub_l[-1] = True
+        #
+        update_scene_elements_context_from_pose(ctx, pose_rsp)
+        self.update_mouse_seen(pose_rsp.mouse_seen, perf_now=pose_rsp.perf_c)
+        #
+        post = self._event_manager.post_event_content
+        for part, evt, prev_seen in need_api_post:
+            if prev_seen != (seen := ctx.get_part_seen(part)):
+                post(evt, context=seen)
 
-    def update_star_seen(self, seen: bool, *, perf_now: Optional[float] = None):
-        if seen:
-            self._star_last_seen_perf_c = get_perf_now() if perf_now is None else perf_now
+    def update_pellet_seen(self, seen: bool = True):
+        self.update_part_seen(SceneElement.Pellet, seen, perf_now=get_perf_now())
 
-    def update_triangle_seen(self, seen: bool = True, *, perf_now: Optional[float] = None):
-        if self._triangle_seen != seen:
-            self._triangle_seen = seen
-            self._event_manager.post_event_content(BehaviorEventKind.triangleSeen, context=seen)
-        if seen:
-            self._triangle_last_seen_perf_c = get_perf_now() if perf_now is None else perf_now
-
-    def update_pellet_seen(self, seen: bool = True, *, perf_now: Optional[float] = None):
-        if self._pellet_seen != seen:
-            self._pellet_seen = seen
-            self._event_manager.post_event_content(BehaviorEventKind.pelletSeen, context=seen)
-        if seen:
-            self._pellet_last_seen_perf_c = get_perf_now() if perf_now is None else perf_now
+    def update_part_seen(self, part, seen: bool, *, perf_now: Optional[float] = None):
+        self._parts_pres_ctx.update_part_seen(part, seen, perf_now=perf_now)
 
     def pellet_loaded(self):
         self._session_pellet_loaded_count += 1
 
+    def update_triangle_seen(self, seen: bool):
+        self.update_part_seen(
+            SceneElement.Triangle, seen,
+            perf_now=get_perf_now(),
+        )
+
     def update_mouse_seen(self, seen: bool = True, *, perf_now: Optional[float] = None):
+        # NB: "mouse" == SceneElement.Nose
         if seen:
-            self._mouse_seen_last_perf_c = get_perf_now() if perf_now is None else perf_now
+            if perf_now is None:
+                perf_now = get_perf_now()
+            self._mouse_seen_last_perf_c = perf_now
         if self._is_in_session and seen:
             prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
             if not prev_seen:
                 logger.verbose("Session mouse seen")
-            # property currently unused:
-            self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, prev_seen)
-            if not prev_seen:
+                # property currently unused:
+                self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, False)
                 self._event_manager.post_event_content(BehaviorEventKind.sessionMouseSeen)
 
     @property

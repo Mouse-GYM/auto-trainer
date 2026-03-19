@@ -436,16 +436,17 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     assert algo.get_diamond_triangle_drifts() is None
     #
     presents.pop(se.Pellet)
-    self.increment_perf_now(algo.pellet_missing_time)
     pose_changed()
+    self.increment_perf_now(algo.pellet_missing_time)
     assert algo.get_diamond_triangle_drifts(reset=True) is not None
     pose_changed()
-    assert algo.get_diamond_triangle_drifts() is None  # given in loading now
+    assert pellet_m.state == PelletState.loading
+    assert algo.get_diamond_triangle_drifts() is not None   #
     presents[se.Pellet] = True
     pose_changed()
+    # assert algo.get_diamond_triangle_drifts() is None  # given in sending now
     self.mock_pellet_ack()  # ack load
     pose_changed()
-    assert algo.get_diamond_triangle_drifts() is None  # given in sending now
     assert pellet_m.state == PelletState.monitoring  # even if already monitoring
     assert not pellet_m.can_use_pellet_command()  # sending not finished
     self.mock_pellet_ack()  # ack send
