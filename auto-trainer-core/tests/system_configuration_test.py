@@ -8,7 +8,8 @@ import yaml
 
 from autotrainer.core import SystemConfiguration, CameraId, HardwareConfiguration, InferenceConfiguration, \
     PersistenceConfiguration, CameraConfiguration
-from autotrainer.core.analysis import LoadCellConfiguration, HeadbarPressureConfiguration, LoadCellAutoTareConfiguration
+from autotrainer.core.analysis import HeadbarPressureConfiguration, LoadCellAutoTareConfiguration
+from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from autotrainer.core.configuration import SystemConfigurationSafeLoader
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
@@ -106,7 +107,10 @@ v0_expected_result_config = {'version': SystemConfiguration.version,
    'thrashing_var_weight_threshold_max': 30,
    'thrashing_var_min_delay': 0.05,
    'thrashing_var_max_delay': 0.2,
-   'thrashing_min_ptp_change_count': 3},
+   'thrashing_min_ptp_change_count': 3,
+   'weight_min_filter': LoadCellConfiguration.weight_min_filter,
+   'weight_max_filter': LoadCellConfiguration.weight_max_filter,
+   },
   'headbar_pressure': {'threshold': 10, 'duration': 1.5},
   'auto_tare': {'threshold': 1.1, 'range_threshold': 1.75, 'duration': 1.0},
   },
@@ -153,18 +157,21 @@ def test_load_version_1():
     path = fixtures_path.joinpath("v1_config.yaml")
     with path.open() as fh:
         config = SystemConfiguration.load_yaml(fh)
+    exp_load_cell = copy.deepcopy(v0_expected_result_config['behavior']['load_cell'])
+    exp_load_cell.update({
+        'min_event_duration': 3.0,
+            'min_post_event_hold_duration': 6.0,
+            'thrashing_min_ptp_change_count': 3,
+            'thrashing_var_max_delay': 0.2,
+            'thrashing_var_min_delay': 0.05,
+            'thrashing_var_weight_threshold_max': 30,
+            'thrashing_var_weight_threshold_min': 20,
+            'threshold_duration': 0.25,
+            'weight_active_threshold': 15.0,
+            'weight_inactive_threshold': 2,
+    })
     expected_behavior = {
-            'load_cell': {
-                'min_event_duration': 3.0,
-                'min_post_event_hold_duration': 6.0,
-                'thrashing_min_ptp_change_count': 3,
-                'thrashing_var_max_delay': 0.2,
-                'thrashing_var_min_delay': 0.05,
-                'thrashing_var_weight_threshold_max': 30,
-                'thrashing_var_weight_threshold_min': 20,
-                'threshold_duration': 0.25,
-                'weight_active_threshold': 15.0,
-                'weight_inactive_threshold': 2},
+            'load_cell': exp_load_cell,
             'pellet_delivery': {
                 'is_enabled': False,
                 'is_intersession_analysis_enabled': True,
