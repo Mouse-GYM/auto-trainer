@@ -398,11 +398,7 @@ class BehaviorAlgorithm(ObservableObject):
                 if callable(trig):
                     trig = trig.__name__
                 meth = getattr(machine_transitions, trig)
-                wrapped = cls.relay_func(meth)
-                # replace with raw static function:
-                wrapped._orig_func_qualname = getattr(meth.args[0].__class__, trig).__qualname__
-                logger.spam("relaying transition %s -> %s", trig, wrapped)
-                setattr(machine_transitions, trig, wrapped)
+                setattr(machine_transitions, trig, cls.relay_func(meth))
 
     @classmethod
     def put_func_call(
