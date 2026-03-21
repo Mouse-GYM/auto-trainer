@@ -329,22 +329,26 @@ class SystemMachine(StateMachine):
         if not algo.is_in_session or cfg is None:  #  or cfg.no_activity_delay_minutes <= 0:
             return
         perf_now = get_perf_now()
+        # first possibility:
         if cfg.no_activity_delay_minutes > 0:
-            mouse_seen_age = algo.mouse_seen_age  # reminder: this is the nose part which is accounted for mouse_seen
+            mouse_last_seen_age = algo.mouse_last_seen_age  # reminder: this is the nose part which is accounted for mouse_seen
             in_session_age = algo.is_in_session_age
-            if math.isinf(mouse_seen_age):
+            if math.isinf(mouse_last_seen_age):
                 last_activity_age = in_session_age
             else:
-                last_activity_age = min(mouse_seen_age, in_session_age)
+                last_activity_age = min(mouse_last_seen_age, in_session_age)
             remains1 = 60 * cfg.no_activity_delay_minutes - last_activity_age
         else:
             remains1 = math.inf
-        #
-        if remains1 > 0 and cfg.animal_tunnel_no_activity_delay > 0 and load_cell_tare.low_variance_engaged:
-            load_cell_low_var_age = load_cell_tare.low_variance_age
-            animal_missing_age = self._algorithm.scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
-            min_age = min(animal_missing_age, load_cell_low_var_age)
-            remains2 = cfg.animal_tunnel_no_activity_delay - min_age
+        # second possibility:
+        if remains1 > 0 and cfg.animal_tunnel_no_activity_delay > 0:
+            if load_cell_tare.low_variance_engaged:
+                load_cell_low_var_age = load_cell_tare.low_variance_age
+                animal_missing_age = self._algorithm.scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
+                min_age = min(animal_missing_age, load_cell_low_var_age)
+                remains2 = cfg.animal_tunnel_no_activity_delay - min_age
+            else:
+                remains2 = cfg.animal_tunnel_no_activity_delay
         else:
             remains2 = math.inf
         #

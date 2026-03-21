@@ -1182,7 +1182,7 @@ class BehaviorAlgorithm(ObservableObject):
                 self._event_manager.post_event_content(BehaviorEventKind.sessionMouseSeen)
 
     @property
-    def mouse_seen_age(self) -> float:
+    def mouse_last_seen_age(self) -> float:
         return get_perf_now() - self._mouse_seen_last_perf_c
 
     @property
