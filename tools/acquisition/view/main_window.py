@@ -9,13 +9,13 @@ from datetime import datetime
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Dict, Tuple, Callable
+from typing import List, Optional, Dict, Tuple, Callable, Union
 
 from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize, QKeyCombination
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
-                               QSpinBox, QDoubleSpinBox, QFrame)
+                               QSpinBox, QDoubleSpinBox, QFrame, QDialog)
 import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
@@ -47,6 +47,7 @@ from tools.acquisition.model.training_plan import get_plan_id
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
 from tools.acquisition.view.preferences_dialog import PreferencesDialog
+from tools.acquisition.view.debug_content import DebugView
 
 logger = get_verbose_logger(__name__)
 
@@ -173,16 +174,16 @@ class MainWindow(QMainWindow):
         cfg = self._app_model.behavior.algorithm.diamond_triangle_config
         return cfg is not None and cfg.fully_valid
 
-    def _add_box_to_open_dialogs(self, box: QMessageBox):
-        self._open_dialogs.append(box)
-        def close_event(event, orig_close_event=box.closeEvent):
+    def _add_box_to_open_dialogs(self, item: Union[QMessageBox, QDialog]):
+        self._open_dialogs.append(item)
+        def close_event(event, orig_close_event=item.closeEvent):
             try:
-                self._open_dialogs.remove(box)
+                self._open_dialogs.remove(item)
             except ValueError:
                 pass
             orig_close_event(event)
             event.accept()
-        box.closeEvent = close_event
+        item.closeEvent = close_event
 
     def _set_start_or_stop(self, started: bool):
         self.main_content.set_is_capture_active(started)
@@ -811,7 +812,11 @@ class MainWindow(QMainWindow):
         action.setToolTip("Show or hide diagnostics panel")
         action.setCheckable(True)
         action.setChecked(self.main_content.is_diagnostics_visible)
-        action.triggered.connect(lambda: self._toggle_diagnostics_view())
+        action.triggered.connect(self._toggle_diagnostics_view)
+
+        action = self.debug_action = QAction("Debug", self)
+        action.setCheckable(True)
+        action.toggled.connect(self._toggle_debug_view)
 
         action = self.load_cell_trigger_action = QAction("Load Cell", self)
         action.setCheckable(True)
@@ -867,6 +872,7 @@ class MainWindow(QMainWindow):
         if self._is_dev:
             view_menu = menu_bar.addMenu("View")
             view_menu.addAction(self.view_diagnostics_action)
+            view_menu.addAction(self.debug_action)
 
     def _configure_toolbar(self):
 
@@ -1116,6 +1122,12 @@ class MainWindow(QMainWindow):
     def _toggle_diagnostics_view(self):
         self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
+
+    def _toggle_debug_view(self, toggled):
+        if toggled:
+            v = DebugView(self)
+            v.show()
+            self._add_box_to_open_dialogs(v)
 
     def _show_message(self, title: str, message: str):
         @invoke_method
