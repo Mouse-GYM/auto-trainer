@@ -326,7 +326,7 @@ class SystemMachine(StateMachine):
         load_cell_tare = analysis.load_cell_tare_monitor
         algo = self._algorithm
         cfg = algo.auto_end_session_config
-        if not algo.is_in_session or cfg is None:  #  or cfg.no_activity_delay_minutes <= 0:
+        if not algo.is_in_session or cfg is None:
             return
         perf_now = get_perf_now()
         # first possibility:

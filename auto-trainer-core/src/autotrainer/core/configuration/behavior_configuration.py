@@ -145,13 +145,13 @@ class HeadClampConfiguration:
 class AutoEndSessionConfiguration:
     # enabled: bool = True
 
-    animal_tunnel_no_activity_delay: float = 10  # seconds
-    """Delay without tunnel animal activity (== any animal part seen *and* low load-cell variance)
-     which triggers auto-end session"""
-
     no_activity_delay_minutes: int = 1
     """This is only for the Nose part. If it's not seen that much duration consecutively, 
      then also auto-end session"""
+
+    animal_tunnel_no_activity_delay: float = 10  # seconds
+    """Delay without tunnel animal activity (== any animal part seen *and* low load-cell variance)
+     which triggers auto-end session"""
 
 
 @dataclasses.dataclass
