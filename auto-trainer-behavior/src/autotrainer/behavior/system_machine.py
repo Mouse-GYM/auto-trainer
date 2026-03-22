@@ -715,7 +715,7 @@ class SystemMachine(StateMachine):
         #
         prev_pellet_seen = algo.pellet_recently_seen
         #
-        algo.update_parts_seen(response)  # new.. replace many previous update_xxx_seen()
+        algo.update_parts_seen(response)  # replace many previous update_xxx_seen()
         # refresh analysis with the parts presence context:
         analysis.emergency_alarm_monitor.update_parts_context(algo.scene_parts_presence_context)
         #
