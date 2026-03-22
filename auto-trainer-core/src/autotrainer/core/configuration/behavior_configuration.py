@@ -11,9 +11,8 @@ from .external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 from .presence_detection_configuration import PresenceDetectionConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor, Offset3DTuple
 
-from ..analysis import LoadCellAutoTareConfiguration
 from ..analysis import HeadbarPressureConfiguration
-from .load_cell_config import LoadCellConfiguration
+from .load_cell_config import LoadCellConfiguration, LoadCellAutoTareConfiguration
 from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from .alarm_configuration import EmergencyAlarmConfiguration
 from ..analysis.auto_tunnel_fan_monitor import AutoTunnelSweepConfiguration

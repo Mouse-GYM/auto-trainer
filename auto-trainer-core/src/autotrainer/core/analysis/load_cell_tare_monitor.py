@@ -1,15 +1,13 @@
 import copy
 import dataclasses
 import math
-from dataclasses import dataclass
 from typing import Callable, Optional, List
-
-from typing_extensions import Self
 
 import numpy
 
 from autotrainer.core import get_perf_now
 from autotrainer.core.analysis.detector import BaseDetector
+from autotrainer.core.configuration.load_cell_config import LoadCellAutoTareConfiguration
 from autotrainer.core.logging import get_verbose_logger
 
 logger = get_verbose_logger(__name__)
@@ -17,20 +15,6 @@ logger = get_verbose_logger(__name__)
 
 TareCallbackT = Optional[Callable[[], bool]]
 
-
-@dataclass
-class LoadCellAutoTareConfiguration:
-    threshold: float = 0.1
-    range_threshold: float = 0.75
-    duration: float = 2.0
-
-    @classmethod
-    def from_version_zero(cls, content: dict) -> Self:
-        return cls(
-            threshold=content.get("threshold", 0.1),
-            range_threshold=content.get("range_threshold", 0.75),
-            duration=content.get("duration", 2.0)
-        )
 
 
 @dataclasses.dataclass

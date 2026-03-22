@@ -2,6 +2,7 @@
 
 import functools
 import multiprocessing
+from typing import Optional
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import pool_init

@@ -8,7 +8,6 @@ from typing import Optional, List, Set, Callable
 from autotrainer.api import ApiDetectorKind, ApiEventKind, ApiAlarmKind
 
 from autotrainer.core import get_perf_now, EventManager
-from autotrainer.core.analysis import LoadCellTareMonitor
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.analysis.external_doors_monitor import ExternalDoorsMonitor
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
@@ -19,6 +18,7 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
+from autotrainer.core.analysis.load_cell_tare_monitor import LoadCellTareMonitor
 
 logger = get_verbose_logger(__name__)
 

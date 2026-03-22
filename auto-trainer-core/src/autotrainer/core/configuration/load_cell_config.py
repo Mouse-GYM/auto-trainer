@@ -42,3 +42,18 @@ class LoadCellConfiguration:
         return cls(**build_kwargs_apply_mapping(content, (
             ('weight_active_threshold', 'threshold'),
         )))
+
+
+@dataclass
+class LoadCellAutoTareConfiguration:
+    threshold: float = 0.1
+    range_threshold: float = 0.75
+    duration: float = 2.0
+
+    @classmethod
+    def from_version_zero(cls, content: dict) -> Self:
+        return cls(
+            threshold=content.get("threshold", 0.1),
+            range_threshold=content.get("range_threshold", 0.75),
+            duration=content.get("duration", 2.0)
+        )

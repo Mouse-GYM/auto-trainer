@@ -1,7 +1,7 @@
 import numpy
 import pytest
 
-from autotrainer.core.analysis import LoadCellTareMonitor
+from autotrainer.core.analysis.load_cell_tare_monitor import LoadCellTareMonitor
 
 
 @pytest.mark.parametrize("threshold, range_threshold", [

@@ -8,8 +8,8 @@ import yaml
 
 from autotrainer.core import SystemConfiguration, CameraId, HardwareConfiguration, InferenceConfiguration, \
     PersistenceConfiguration, CameraConfiguration
-from autotrainer.core.analysis import HeadbarPressureConfiguration, LoadCellAutoTareConfiguration
-from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration
+from autotrainer.core.analysis import HeadbarPressureConfiguration
+from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration, LoadCellAutoTareConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from autotrainer.core.configuration import SystemConfigurationSafeLoader
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
