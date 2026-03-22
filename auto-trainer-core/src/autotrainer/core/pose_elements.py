@@ -131,7 +131,7 @@ class ScenePartsPresenceContext:
 
     def get_absence_age(self, part: str, *, perf_now: Optional[float] = None) -> float:
         """Returns the "absence age" of the part if it's currently absent, otherwise -math.inf.
-        Age can also be math.inf if never seen"""
+        Age can also be math.inf if never seen yet"""
         if perf_now is None:
             perf_now = self.last_perf_c
         presence_p = self.present_last_perf_c.get(part, None)
@@ -148,8 +148,10 @@ class ScenePartsPresenceContext:
             perf_now = self.last_perf_c
         prev_miss = self.missing_last_perf_c.get(part, -math.inf)
         prev_pres = self.present_last_perf_c.get(part, -math.inf)
-        return not math.isinf(prev_pres) and (
-            prev_pres > prev_miss or (perf_now - prev_miss < missing_delay))
+        return (
+            not math.isinf(prev_pres)
+            and (prev_pres > prev_miss or perf_now - prev_miss < missing_delay)
+        )
 
     def update_part_seen(self, part: str, seen: bool, *, perf_now: Optional[float] = None):
         if perf_now is None:
@@ -164,6 +166,7 @@ class ScenePartsPresenceContext:
             self.last_perf_c = perf_now
 
     def get_animal_absence_age(self, *, perf_now: Optional[float] = None):
+        """Returns the animal "absence" age, or -math.inf if not absent"""
         if perf_now is None:
             perf_now = get_perf_now()
         min_age = math.inf
@@ -171,16 +174,19 @@ class ScenePartsPresenceContext:
         for part in parts:
             if part in AllAnimalParts:
                 age = self.get_absence_age(part, perf_now=perf_now)
-                if age < min_age:
+                if 0 <= age < min_age:
                     min_age = age
-        return 0 if math.isinf(min_age) else min_age
+        return -math.inf if math.isinf(min_age) else min_age
 
     def get_animal_presence_age(self, *, perf_now: Optional[float] = None):
+        """Returns the animal "presence" age, or -math.inf if not present"""
         if perf_now is None:
             perf_now = get_perf_now()
-        max_age = -math.inf
-        for part in AllAnimalParts:
-            age = self.get_presence_age(part, perf_now=perf_now)
-            if age > max_age:
-                max_age = age
-        return 0 if math.isinf(max_age) else max_age
+        min_age = math.inf
+        parts = set(self.missing_last_perf_c) | set(self.present_last_perf_c)
+        for part in parts:
+            if part in AllAnimalParts:
+                age = self.get_presence_age(part, perf_now=perf_now)
+                if 0 <= age < min_age:
+                    min_age = age
+        return -math.inf if math.isinf(min_age) else min_age
