@@ -20,6 +20,7 @@ class TestConsiderAutoEndSession(MockSystemMachine):
 
     def _init(self, machine: SystemMachine):
         super()._init(machine)
+        self.algo.active_config.auto_end_session.animal_tunnel_no_activity_delay = 0  # disable this one
         self.algo.session_capture_ending += self.capture_ended
 
     def patch_timer(self):  # noqa
