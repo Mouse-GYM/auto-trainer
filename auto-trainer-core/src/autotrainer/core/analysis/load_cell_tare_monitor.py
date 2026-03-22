@@ -129,23 +129,26 @@ class LoadCellTareMonitor(BaseDetector):
 
         ctx = self._context
         p_now = get_perf_now()
+        ptp = numpy.ptp(self._values)
         if (
             numpy.all(numpy.abs(self._values - self._baseline) > self._threshold)
-            and numpy.ptp(self._values) <= self._range_threshold
+            and ptp <= self._range_threshold
         ):
             if not ctx.low_variance_engaged:
+                self._logger.verbose("low_variance engaged ; ptp=%.1f", ptp)
                 with self._lock:
                     ctx.low_variance_engaged = True
                     ctx.low_variance_engaged_perf_c = p_now
-            cb = self._tare_callback
-            if cb is None:
+            tare_cb = self._tare_callback
+            if tare_cb is None:
                 return False
-            if cb():
+            if tare_cb():
                 self.reset_baseline()
             else:
                 self.update_baseline()
             return True
         if ctx.low_variance_engaged:
+            self._logger.verbose("low_variance disengaged ; ptp=%.1f", ptp)
             with self._lock:
                 ctx.low_variance_engaged = False
                 ctx.low_variance_disengaged_perf_c = p_now
