@@ -342,9 +342,10 @@ class SystemMachine(StateMachine):
             remains1 = math.inf
         # second possibility:
         if remains1 > 0 and cfg.animal_tunnel_no_activity_delay > 0:
-            if load_cell_tare.low_variance_engaged:
-                load_cell_low_var_age = load_cell_tare.low_variance_age
-                animal_missing_age = self._algorithm.scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
+            ctx = load_cell_tare.get_context()
+            if ctx.low_variance_engaged:
+                load_cell_low_var_age = perf_now - ctx.low_variance_engaged_perf_c
+                animal_missing_age = algo.scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
                 min_age = min(animal_missing_age, load_cell_low_var_age)
                 remains2 = cfg.animal_tunnel_no_activity_delay - min_age
             else:
@@ -355,6 +356,8 @@ class SystemMachine(StateMachine):
         min_remain = min(remains1, remains2)
         if min_remain <= 0:
             algo.end_capture_session(reason=RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT)
+            return
+        if math.isinf(min_remain):  # both disabled
             return
         logger.info("started new timer for consider_auto_end_session in %.1fs", min_remain)
         timer = self._timer_consider_auto_end_session = _consider_auto_end_session_timer(

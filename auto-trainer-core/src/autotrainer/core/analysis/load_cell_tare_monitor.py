@@ -1,3 +1,5 @@
+import copy
+import dataclasses
 import math
 from dataclasses import dataclass
 from typing import Callable, Optional, List
@@ -7,6 +9,7 @@ from typing_extensions import Self
 import numpy
 
 from autotrainer.core import get_perf_now
+from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.logging import get_verbose_logger
 
 logger = get_verbose_logger(__name__)
@@ -30,16 +33,23 @@ class LoadCellAutoTareConfiguration:
         )
 
 
-class LoadCellTareMonitor:
+@dataclasses.dataclass
+class LoadCellAutoTareContext:
+    low_variance_engaged: bool = True
+    low_variance_engaged_perf_c: float = -math.inf
+    low_variance_disengaged_perf_c: float = -math.inf
+
+
+class LoadCellTareMonitor(BaseDetector):
     """
     Monitor the load cell data stream and whether zeroing is required.  The decision to actually zero or not is not
     performed here.  It simply reports whether the conditions meet the requirements where zeroing is applicable.
     """
 
     def __init__(self):
-        self._low_variance_engaged = True
-        self._low_variance_engaged_perf_c = -math.inf
-        self._low_variance_disengaged_perf_c = -math.inf
+        super().__init__()
+
+        self._context = LoadCellAutoTareContext()
 
         self._threshold: float = 0.1
         self._range_threshold: float = 0.5
@@ -51,17 +61,17 @@ class LoadCellTareMonitor:
         self._values = None
         self._index = 0
 
-        self._tare_callback: TareCallbackT = None
+        self._tare_callback: Optional[TareCallbackT] = None
 
         self._reset()
 
     @property
-    def low_variance_engaged(self):
-        return self._low_variance_engaged
+    def context(self) -> LoadCellAutoTareContext:
+        return self._context
 
-    @property
-    def low_variance_age(self):
-        return get_perf_now() - self._low_variance_engaged_perf_c
+    def get_context(self) -> LoadCellAutoTareContext:
+        with self._lock:
+            return copy.deepcopy(self._context)
 
     @property
     def threshold(self) -> float:
@@ -125,34 +135,36 @@ class LoadCellTareMonitor:
 
     def update(self, values: List[float]) -> bool:
         # Currently there is no state management or other reason to perform the calculation if there is no callback.
-        if self._tare_callback is None:
-            return False
-
         increase = len(values)
 
         self._values[self._index:self._index + increase] = numpy.array(values)
 
         self._index += increase
-
         if self._index >= self._buffer_len:
             self._index = 0
 
+        ctx = self._context
         p_now = get_perf_now()
         if (
             numpy.all(numpy.abs(self._values - self._baseline) > self._threshold)
             and numpy.ptp(self._values) <= self._range_threshold
         ):
-            if not self._low_variance_engaged:
-                self._low_variance_engaged = True
-                self._low_variance_engaged_perf_c = p_now
-            if self._tare_callback():
+            if not ctx.low_variance_engaged:
+                with self._lock:
+                    ctx.low_variance_engaged = True
+                    ctx.low_variance_engaged_perf_c = p_now
+            cb = self._tare_callback
+            if cb is None:
+                return False
+            if cb():
                 self.reset_baseline()
             else:
                 self.update_baseline()
             return True
-        if self._low_variance_engaged:
-            self._low_variance_engaged = False
-            self._low_variance_disengaged_perf_c = p_now
+        if ctx.low_variance_engaged:
+            with self._lock:
+                ctx.low_variance_engaged = False
+                ctx.low_variance_disengaged_perf_c = p_now
         return False
 
     def update_baseline(self):
