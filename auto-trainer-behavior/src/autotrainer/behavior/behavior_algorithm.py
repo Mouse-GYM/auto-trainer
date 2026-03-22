@@ -1136,20 +1136,18 @@ class BehaviorAlgorithm(ObservableObject):
 
     def update_parts_seen(self, pose_rsp: PoseResponse):
         ctx = self._parts_pres_ctx
+        get_seen = ctx.get_part_seen
         need_api_post = (
-            [SceneElement.Triangle, BehaviorEventKind.triangleSeen, False],
-            [SceneElement.Pellet, BehaviorEventKind.pelletSeen, False],
+            [SceneElement.Triangle, BehaviorEventKind.triangleSeen, get_seen(SceneElement.Triangle)],
+            [SceneElement.Pellet, BehaviorEventKind.pelletSeen, get_seen(SceneElement.Pellet)],
         )
-        for sub_l in need_api_post:
-            if ctx.get_part_seen(sub_l[0]):
-                sub_l[-1] = True
         #
         update_scene_elements_context_from_pose(ctx, pose_rsp)
         self.update_mouse_seen(pose_rsp.mouse_seen, perf_now=pose_rsp.perf_c)
         #
         post = self._event_manager.post_event_content
         for part, evt, prev_seen in need_api_post:
-            if prev_seen != (seen := ctx.get_part_seen(part)):
+            if prev_seen != (seen := get_seen(part)):
                 post(evt, context=seen)
 
     def update_pellet_seen(self, seen: bool = True):
