@@ -106,7 +106,8 @@ class ScenePartsPresenceContext:
     #   3) on all of the possible cams non-simultaneously
     #       > not entirely sure could be useful if we have already 1 + 2
 
-    last_perf_c: float = -math.inf
+    last_perf_c: float = -math.inf  # last perf counter received, basically the "freshness" of the data
+
     present_last_perf_c: Dict[str, float] = dataclasses.field(default_factory=dict)
     missing_last_perf_c: Dict[str, float] = dataclasses.field(default_factory=dict)
 
