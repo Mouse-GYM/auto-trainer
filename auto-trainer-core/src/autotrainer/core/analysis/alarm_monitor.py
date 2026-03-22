@@ -254,12 +254,13 @@ class EmergencyAlarmMonitor(BaseDetector):
             return False
         load_cell = self._load_cell_monitor.context
         cfg = self._config
-        # pres_ctx = self._scene_parts_ctx
+        pres_ctx = self._scene_parts_ctx
         topcam_attrs = topcam_attrs.to_local_value()  # to ensure consistent lookups
         return (
             not load_cell.is_engaged
             and load_cell.last_disengaged_perf_c > self._p_started
-            and load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
+            and perf_now - load_cell.last_disengaged_perf_c > cfg.tunnel_to_cage_presence_missing_delay
+            and perf_now - pres_ctx.get_animal_presence_age(perf_now=perf_now) > load_cell.last_engaged_perf_c
             and (
                 # last presence must be before the current load cell disengaged:
                 topcam_attrs.last_presence_start_perf_c < load_cell.last_disengaged_perf_c
