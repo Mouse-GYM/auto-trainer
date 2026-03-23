@@ -156,17 +156,22 @@ class ScenePartsPresenceContext:
     def update_part_seen(self, part: str, seen: bool, *, perf_now: Optional[float] = None):
         if perf_now is None:
             perf_now = get_perf_now()
+        prev_seen = self.present_last_perf_c.get(part, -math.inf)
+        prev_miss = self.missing_last_perf_c.get(part, -math.inf)
         if seen:
-            self.present_last_perf_c[part] = perf_now
-            self.missing_last_perf_c.setdefault(part, -math.inf)
+            if prev_seen < prev_miss or math.isinf(prev_seen):
+                self.present_last_perf_c[part] = perf_now
+                self.missing_last_perf_c.setdefault(part, -math.inf)
         else:
-            self.missing_last_perf_c[part] = perf_now
-            self.present_last_perf_c.setdefault(part, -math.inf)
+            if prev_miss < prev_seen or math.isinf(prev_miss):
+                self.missing_last_perf_c[part] = perf_now
+                self.present_last_perf_c.setdefault(part, -math.inf)
         if perf_now > self.last_perf_c:
             self.last_perf_c = perf_now
 
     def get_animal_absence_age(self, *, perf_now: Optional[float] = None):
-        """Returns the animal "absence" age, or -math.inf if not absent"""
+        """Returns the animal "absence" age, how old/elapsed time since last absence started,
+        can be math.inf if never been absent"""
         if perf_now is None:
             perf_now = get_perf_now()
         max_perf_c = -math.inf
@@ -176,12 +181,10 @@ class ScenePartsPresenceContext:
                 perf_c = self.missing_last_perf_c.get(part, -math.inf)
                 if perf_c > max_perf_c:
                     max_perf_c = perf_c
-        missing_age = perf_now - max_perf_c
-        presence_age = self.get_animal_presence_age(perf_now=perf_now)
-        return -math.inf if presence_age < missing_age else missing_age
+        return perf_now - max_perf_c
 
     def get_animal_presence_age(self, *, perf_now: Optional[float] = None):
-        """Returns the animal most recent "presence" age. ie: how old since it has been seen"""
+        """Returns the animal most recent "presence" age. ie: how old since it has been seen last time"""
         if perf_now is None:
             perf_now = get_perf_now()
         max_perf_c = -math.inf

@@ -341,10 +341,10 @@ class SystemMachine(StateMachine):
         # second possibility:
         ctx = load_cell_tare.get_context()
         load_cell_low_var_age = perf_now - ctx.low_variance_engaged_perf_c
-        animal_missing_age = algo.scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
+        tun_missing_age = algo.scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
         if remains1 > 0 and cfg.animal_tunnel_no_activity_delay > 0:
             if ctx.low_variance_engaged:
-                min_age = min(animal_missing_age, load_cell_low_var_age)
+                min_age = min(tun_missing_age, load_cell_low_var_age)
                 last_activity_age2 = min(min_age, in_session_age)
                 remains2 = cfg.animal_tunnel_no_activity_delay - last_activity_age2
                 if math.isinf(remains2):
@@ -362,7 +362,7 @@ class SystemMachine(StateMachine):
             return
         logger.info("started new timer for consider_auto_end_session in %.1fs ; variance=%s age=%s ; missing_age=%s "
                     "r1=%s r2=%s",
-                    min_remain, ctx.low_variance_engaged, load_cell_low_var_age, animal_missing_age,
+                    min_remain, ctx.low_variance_engaged, load_cell_low_var_age, tun_missing_age,
                     remains1, remains2)
         timer = self._timer_consider_auto_end_session = _consider_auto_end_session_timer(
             min_remain, self._consider_auto_end_session
