@@ -143,8 +143,10 @@ class LoadCellTareMonitor(BaseDetector):
             if tare_cb is None:
                 return False
             if tare_cb():
+                self._logger.verbose("tare_cb=True -> reset_baseline")
                 self.reset_baseline()
             else:
+                self._logger.verbose("tare_cb=False -> update_baseline")
                 self.update_baseline()
             return True
         if ctx.low_variance_engaged:

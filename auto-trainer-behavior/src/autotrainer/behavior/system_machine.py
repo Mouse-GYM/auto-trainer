@@ -329,25 +329,23 @@ class SystemMachine(StateMachine):
         if not algo.is_in_session or cfg is None:
             return
         perf_now = get_perf_now()
+        in_session_age = algo.is_in_session_age
         # first possibility:
         if cfg.no_activity_delay_minutes > 0:
             mouse_last_seen_age = algo.mouse_last_seen_age  # reminder: this is the nose part which is accounted for mouse_seen
-            in_session_age = algo.is_in_session_age
-            if math.isinf(mouse_last_seen_age):
-                last_activity_age = in_session_age
-            else:
-                last_activity_age = min(mouse_last_seen_age, in_session_age)
-            remains1 = 60 * cfg.no_activity_delay_minutes - last_activity_age
+            last_activity_age1 = min(mouse_last_seen_age, in_session_age)
+            remains1 = 60 * cfg.no_activity_delay_minutes - last_activity_age1
         else:
             remains1 = math.inf
         # second possibility:
+        ctx = load_cell_tare.get_context()
+        load_cell_low_var_age = perf_now - ctx.low_variance_engaged_perf_c
+        animal_missing_age = algo.scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
         if remains1 > 0 and cfg.animal_tunnel_no_activity_delay > 0:
-            ctx = load_cell_tare.get_context()
             if ctx.low_variance_engaged:
-                load_cell_low_var_age = perf_now - ctx.low_variance_engaged_perf_c
-                animal_missing_age = algo.scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
                 min_age = min(animal_missing_age, load_cell_low_var_age)
-                remains2 = cfg.animal_tunnel_no_activity_delay - min_age
+                last_activity_age2 = min(min_age, in_session_age)
+                remains2 = cfg.animal_tunnel_no_activity_delay - last_activity_age2
                 if math.isinf(remains2):
                     remains2 = cfg.animal_tunnel_no_activity_delay
             else:
@@ -361,7 +359,10 @@ class SystemMachine(StateMachine):
             return
         if math.isinf(min_remain):  # both disabled
             return
-        logger.info("started new timer for consider_auto_end_session in %.1fs", min_remain)
+        logger.info("started new timer for consider_auto_end_session in %.1fs ; variance=%s age=%s ; missing_age=%s "
+                    "r1=%s r2=%s",
+                    min_remain, ctx.low_variance_engaged, load_cell_low_var_age, animal_missing_age,
+                    remains1, remains2)
         timer = self._timer_consider_auto_end_session = _consider_auto_end_session_timer(
             min_remain, self._consider_auto_end_session
         )

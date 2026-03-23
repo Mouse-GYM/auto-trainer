@@ -68,29 +68,29 @@ class SceneElement(_BaseSceneElement):
     AnyAnimalPart: "SceneElement" = 'AnyAnimalPart'
 
 
-AllHandsParts = (
+AllHandsParts = {
     SceneElement.RH_flat, SceneElement.RH_spread, SceneElement.RH_grab,
     SceneElement.LH_flat, SceneElement.LH_spread, SceneElement.LH_grab,
-)
+}
 
 
-AllAnimalParts = (
+AllAnimalParts = {
     SceneElement.Nose,
     SceneElement.Mouth,
     SceneElement.Tongue_tip,
     SceneElement.Tongue_mid,
-) + AllHandsParts
+} | AllHandsParts
 
 
-AllNonAnimalParts = (
+AllNonAnimalParts = {
     SceneElement.Pellet,
     SceneElement.Diamond,
     SceneElement.Triangle,
     SceneElement.Star,
-)
+}
 
 
-AllSceneParts = AllAnimalParts + AllNonAnimalParts
+AllSceneParts = AllAnimalParts | AllNonAnimalParts
 
 
 @dataclasses.dataclass
@@ -176,7 +176,7 @@ class ScenePartsPresenceContext:
                 age = self.get_absence_age(part, perf_now=perf_now)
                 if 0 <= age < min_age:
                     min_age = age
-        return -math.inf if math.isinf(min_age) else min_age
+        return min_age  # -math.inf if math.isinf(min_age) else min_age
 
     def get_animal_presence_age(self, *, perf_now: Optional[float] = None):
         """Returns the animal "presence" age, or -math.inf if not present"""
