@@ -120,25 +120,30 @@ class LoadCellTareMonitor(BaseDetector):
     def update(self, values: List[float]) -> bool:
         # Currently there is no state management or other reason to perform the calculation if there is no callback.
         increase = len(values)
-
         self._values[self._index:self._index + increase] = numpy.array(values)
-
         self._index += increase
         if self._index >= self._buffer_len:
             self._index = 0
-
+        #
         ctx = self._context
         p_now = get_perf_now()
         ptp = numpy.ptp(self._values)
+        low_ptp = ptp <= self._range_threshold
+        if not ctx.low_variance_engaged and low_ptp:
+            self._logger.verbose("low_variance engaged ; ptp=%.1f", ptp)
+            with self._lock:
+                ctx.low_variance_engaged = True
+                ctx.low_variance_engaged_perf_c = p_now
+        elif ctx.low_variance_engaged and not low_ptp:
+            self._logger.verbose("low_variance disengaged ; ptp=%.1f", ptp)
+            with self._lock:
+                ctx.low_variance_engaged = False
+                ctx.low_variance_disengaged_perf_c = p_now
+
         if (
             numpy.all(numpy.abs(self._values - self._baseline) > self._threshold)
-            and ptp <= self._range_threshold
+            and low_ptp
         ):
-            if not ctx.low_variance_engaged:
-                self._logger.verbose("low_variance engaged ; ptp=%.1f", ptp)
-                with self._lock:
-                    ctx.low_variance_engaged = True
-                    ctx.low_variance_engaged_perf_c = p_now
             tare_cb = self._tare_callback
             if tare_cb is None:
                 return False
@@ -149,11 +154,6 @@ class LoadCellTareMonitor(BaseDetector):
                 self._logger.verbose("tare_cb=False -> update_baseline")
                 self.update_baseline()
             return True
-        if ctx.low_variance_engaged:
-            self._logger.verbose("low_variance disengaged ; ptp=%.1f", ptp)
-            with self._lock:
-                ctx.low_variance_engaged = False
-                ctx.low_variance_disengaged_perf_c = p_now
         return False
 
     def update_baseline(self):
