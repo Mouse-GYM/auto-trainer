@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import math
 import queue
 import threading
 import time
@@ -271,7 +272,8 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
     cfg = algo.pellet_delivery_config
     cfg.is_enabled = True
     cfg.is_pellet_cover_enabled = True
-    cfg.pellet_hand_uncover_distance = None  # disabled
+    algo.pellet_uncover_delay = 0
+    algo.pellet_uncover_y_dcs = -math.inf
     # might be needed to reset:
     algo.capture_status = CaptureProcessStatus.RUNNING
     algo.status = BehaviorAlgoStatus.ANIMAL_IN_TRAINING

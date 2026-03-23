@@ -24,7 +24,8 @@ from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
-    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, ShiftXYZHandlerConfig
+    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, ShiftXYZHandlerConfig, \
+    PelletUncoverConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.pose_elements import ScenePartsPresenceContext, SceneElement
@@ -42,6 +43,21 @@ from autotrainer.inference import PoseResponse
 from autotrainer.inference.pose_algorithm import update_scene_elements_context_from_pose
 
 logger = get_verbose_logger(__name__)
+
+
+@dataclasses.dataclass
+class PelletUncoverContext:
+    y_dcs_valid: bool = False
+    start_min_y: float = math.nan  # mm
+    start_y_dcs_valid_perf_c: float = math.nan  # second
+
+    def reset(self):
+        self.y_dcs_valid = False
+        self.start_min_y = math.nan
+        self.start_y_dcs_valid_perf_c = math.nan
+
+    def can_uncover(self, perf_now, cfg: PelletUncoverConfiguration):
+        return self.y_dcs_valid and perf_now - self.start_y_dcs_valid_perf_c >= cfg.trigger_delay
 
 
 class CoverServoStatus(int, enum.Enum):
@@ -79,7 +95,7 @@ class BehaviorAlgoProps(str, enum.Enum):
     BASELINE_INTENSITY = 'baseline_intensity'
     HEAD_FIXATION_ENABLED = 'head_fixation_enabled'  # this is head-clamp
 
-    # global:
+    # runtime context:
     DAY_PELLET_COUNT = 'day_pellet_count'  # consumed
     TOTAL_PELLET_COUNT = 'total_pellet_count'  # consumed
     DAY_PELLET_PRESENTED = 'day_pellet_presented'
@@ -89,32 +105,37 @@ class BehaviorAlgoProps(str, enum.Enum):
     DAY_SUCCESSFUL_REACHES = 'day_successful_reaches'
     TOTAL_SUCCESSFUL_REACHES = 'total_successful_reaches'
 
-    INTERSESSION_ENABLED = 'intersession_enabled'
+    INTERSESSION_ENABLED = 'intersession_enabled'  # config
     # INTERSESSION_PELLET_SHIFT_ENABLED = 'intersession_pellet_shift_enabled'
 
     # PELLET_DELIVERY_ENABLED = 'pellet_delivery_enabled'
     # PELLET_COVER_ENABLED = 'pellet_cover_enabled'
 
+    # run ctx
     SESSION_PELLET_COUNT = 'session_pellet_count'
     SESSION_MOUSE_SEEN = 'session_mouse_seen'
     # NB: only updated/set once per session, once set it's kept until end of session
 
     AUTO_CORRECT_MOTOR_DRIFT = 'auto_correct_motor_drift'
     # PELLET_MOTOR_DRIFT = 'pellet_motor_drift'  # unused
-    COVER_SERVO_STATUS = 'cover_servo_status'
-    COVER_PELLET_DISTANCE = "cover_pellet_distance"
-    RELEASE_PELLET_DISTANCE = "release_pellet_distance"
+
+    PELLET_UNCOVER_DELAY = 'pellet_uncover_delay'
+    PELLET_UNCOVER_Y_DCS = 'pellet_uncover_y_dcs'
+
+    COVER_SERVO_STATUS = 'cover_servo_status'  # ctx
+    COVER_PELLET_DISTANCE = "cover_pellet_distance"  # cfg
+    RELEASE_PELLET_DISTANCE = "release_pellet_distance"  # cfg
 
     # IS_IN_SESSION = 'is_in_session'  # property unused
     # INTERSESSION_STATE = 'intersession_state'  # unused
-    CAPTURE_STATUS = 'capture_status'
+    # CAPTURE_STATUS = 'capture_status'  # unused
 
     # TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"  # unused
     # PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'  # unused
 
-    HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'  # used !
-
     DIAMOND_TRIANGLE_CONFIG = 'diamond_triangle_config'
+
+
 
 #
 
@@ -134,11 +155,15 @@ def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_
     while isinstance(func, partial):
         func = func.func
 
+    base_func = func.__func__ if inspect.ismethod(func) else func
+
     # handle bound method vs normal function:
-    @functools.wraps(func.__func__ if inspect.ismethod(func) else func)
+    @functools.wraps(base_func)
     def wrapped(*args, **kwargs):
         BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
-
+    #
+    wrapped._orig_func_qualname = getattr(orig_func, "__qualname__", str(orig_func))  # used by log in hardware-control
+    #
     return wrapped
 
 #
@@ -248,10 +273,11 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._session_mouse_seen = False
         self._pellet_hands_min_distance: float = math.inf
-        self._hands_near_pellet_seen = False
         self._mouse_seen_last_perf_c = -math.inf
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
         self._next_diamond_triangle_log_report = -math.inf
+
+        self._uncover_ctx = PelletUncoverContext()
 
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
@@ -395,7 +421,9 @@ class BehaviorAlgorithm(ObservableObject):
                 if callable(trig):
                     trig = trig.__name__
                 meth = getattr(machine_transitions, trig)
-                setattr(machine_transitions, trig, cls.relay_func(meth))
+                wrapped = cls.relay_func(meth)
+                logger.spam("relaying transition %s -> %s", trig, wrapped)
+                setattr(machine_transitions, trig, wrapped)
 
     @classmethod
     def put_func_call(
@@ -500,7 +528,7 @@ class BehaviorAlgorithm(ObservableObject):
     def capture_status(self, value: CaptureProcessStatus):
         prev, self._capture_status = self._capture_status, value
         self._last_capture_status_change_perf_c = get_perf_now()
-        self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, prev)  # property changed event unused atm
+        # self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, prev)  # property changed event unused atm
 
     @property
     def capture_status_age(self) -> float:
@@ -546,6 +574,30 @@ class BehaviorAlgorithm(ObservableObject):
         self._active_config.pellet_delivery.is_pellet_cover_enabled = value
         # prev, cfg.is_pellet_cover_enabled = cfg.is_pellet_cover_enabled, value
         # self._on_property_changed(BehaviorAlgoProps.PELLET_COVER_ENABLED, value, prev)
+
+    @property
+    def uncover_context(self) -> PelletUncoverContext:
+        return self._uncover_ctx
+
+    @property
+    def pellet_uncover_y_dcs(self) -> float:
+        return self._active_config.pellet_uncover.min_y_dcs
+
+    @pellet_uncover_y_dcs.setter
+    def pellet_uncover_y_dcs(self, value: float):
+        cfg = self._active_config.pellet_uncover
+        prev, cfg.min_y_dcs = cfg.min_y_dcs, value
+        self._on_property_changed(BehaviorAlgoProps.PELLET_UNCOVER_Y_DCS, value, prev)
+
+    @property
+    def pellet_uncover_delay(self) -> float:
+        return self._active_config.pellet_uncover.trigger_delay
+
+    @pellet_uncover_delay.setter
+    def pellet_uncover_delay(self, value: float):
+        cfg = self._active_config.pellet_uncover
+        prev, cfg.trigger_delay = cfg.trigger_delay, value
+        self._on_property_changed(BehaviorAlgoProps.PELLET_UNCOVER_DELAY, value, prev)
 
     @property
     def pellet_missing_time(self) -> float:
@@ -994,7 +1046,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         # ensure we look at their state on start:
         self._session_mouse_seen = False
-        self._hands_near_pellet_seen = False
+        self._uncover_ctx.reset()  # always
 
         # this is what send the trigger the enable recording at camera level,
         # but must be done after calculate next session index !!
@@ -1105,14 +1157,15 @@ class BehaviorAlgorithm(ObservableObject):
             return False
         if self._algo_paused:
             return False
-
         cfg = self._active_config.pellet_delivery
+        uncov_cfg = self._active_config.pellet_uncover
+        ctx = self._uncover_ctx
         if self.can_cover_pellet():
             if self._is_in_session:
+                p_now = get_perf_now()
                 return (
                     self._capture_status == CaptureProcessStatus.RECORDING
-                    and self.capture_status_age >= self._recording_age_release_pellet_threshold
-                    and (cfg.pellet_hand_uncover_distance is None or self._hands_near_pellet_seen)
+                    and ctx.can_uncover(p_now, uncov_cfg)
                 )
             return False
 
@@ -1188,10 +1241,6 @@ class BehaviorAlgorithm(ObservableObject):
         return self._session_mouse_seen
 
     @property
-    def hands_near_pellet_seen(self):
-        return self._hands_near_pellet_seen
-
-    @property
     def active_config(self) -> BehaviorConfiguration:
         return self._active_config
 
@@ -1203,29 +1252,7 @@ class BehaviorAlgorithm(ObservableObject):
     def pellet_delivery_config(self) -> PelletDeliveryConfiguration:
         return self._active_config.pellet_delivery
 
-    @property
-    def pellet_hands_min_distance(self) -> float:
-        return self._pellet_hands_min_distance
-
-    @pellet_hands_min_distance.setter
-    def pellet_hands_min_distance(self, value: float):
-        pellet_hand_uncover_dist = self._active_config.pellet_delivery.pellet_hand_uncover_distance
-        if pellet_hand_uncover_dist is not None and value <= pellet_hand_uncover_dist:
-            if not self._hands_near_pellet_seen:
-                logger.verbose("Hand(s) near pellet seen ; distance = %.2f mm", value)
-                self._hands_near_pellet_seen = True  # must be set BEFORE doing the on_property_changed
-                self._on_property_changed(
-                    BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN, True, False)
-        # self._pellet_hands_min_distance = self._on_property_changed(  # property unused
-        #     BehaviorAlgoProps.PELLET_HANDS_DISTANCE, value, self._pellet_hands_min_distance)
-
-    @property
-    def pellet_hand_uncover_distance(self) -> Optional[float]:
-        return self._active_config.pellet_delivery.pellet_hand_uncover_distance
-
-    @pellet_hand_uncover_distance.setter
-    def pellet_hand_uncover_distance(self, value):
-        self._active_config.pellet_delivery.pellet_hand_uncover_distance = value
+    #
 
     def reset_configuration(self):
         """Reset current config to the previous loaded config (via load_configuration)"""
