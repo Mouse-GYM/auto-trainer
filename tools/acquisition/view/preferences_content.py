@@ -25,6 +25,9 @@ from tools.acquisition.view.analysis_content import AVAILABLE_GRAPHS
 logger = get_verbose_logger(__name__)
 
 
+_DELAY_OR_DURATION_MAX_VALUE = 999_999  # in seconds, ~277 hours, ~= 11.5 days
+
+
 class PreferencesContent(QWidget):
 
     def __init__(self, preferences: UserPreferences, app_model: AppModel):
@@ -435,7 +438,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("delay after cage enter to close (sec.):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 60)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(auto_close_gate_cfg.delay_after_cage_enter)
         def spinbox_value_changed(value):
@@ -485,7 +488,7 @@ class PreferencesContent(QWidget):
         spinbox = pre_release_dur_spinbox = QDoubleSpinBox(None)
         spinbox.setToolTip(tooltip)
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 100)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setSingleStep(1)
         spinbox.setValue(algo.head_clamp_config.prerelease_duration)
@@ -512,7 +515,7 @@ class PreferencesContent(QWidget):
         spinbox = QSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setMinimum(0)
-        spinbox.setMaximum(100_000)
+        spinbox.setMaximum(_DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setValue(algo.auto_clamp_release_tone_freq)
         def auto_clamp_release_tone_freq_changed(value):
             algo.auto_clamp_release_tone_freq = value
@@ -562,7 +565,7 @@ class PreferencesContent(QWidget):
         spinbox = QDoubleSpinBox()
         spinbox.setToolTip(tooltip)
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 600)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(algo.auto_clamp_before_reengage_delay)
         def auto_clamp_before_reengage_delay_changed(value):
@@ -591,7 +594,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Pellet Misplaced Trigger Delay (sec.)"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 60)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(analysis.auto_tunnel_sweep_monitor.config.misplaced_trigger_delay)
         def value_changed(value):
@@ -603,7 +606,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Rate Limit Delay (sec.)"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 10_000)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(0)
         spinbox.setValue(analysis.auto_tunnel_sweep_monitor.config.rate_limit_delay)
         def value_changed(value):
@@ -614,7 +617,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Tunnel FAN ON duration (sec.)"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 60)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(analysis.auto_tunnel_sweep_monitor.config.tunnel_fan_on_duration)
         def value_changed(value):
@@ -988,7 +991,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Thrash aggregate delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         audio_load_cell_sub_widgets.append(spinbox)
-        spinbox.setRange(0, 60)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(alarm_cfg.audio_load_cell_thrash_aggregate_delay)
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -1091,7 +1094,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Missing delay after exit tunnel (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         animal_missing_sub_widgets.append(spinbox)
-        spinbox.setRange(0, 120)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(alarm_cfg.tunnel_to_cage_presence_missing_delay)
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -1145,7 +1148,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Trigger Open delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         use_external_doors_sub_widgets.append(spinbox)
-        spinbox.setRange(0, 3600)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(analysis.external_doors_monitor.config.trigger_open_delay)
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
