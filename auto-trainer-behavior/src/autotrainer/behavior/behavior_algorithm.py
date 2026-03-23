@@ -1196,6 +1196,7 @@ class BehaviorAlgorithm(ObservableObject):
         )
         #
         update_scene_elements_context_from_pose(ctx, pose_rsp)
+        # little special case for mouse:
         self.update_mouse_seen(pose_rsp.mouse_seen, perf_now=pose_rsp.perf_c)
         #
         post = self._event_manager.post_event_content
@@ -1220,6 +1221,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     def update_mouse_seen(self, seen: bool = True, *, perf_now: Optional[float] = None):
         # NB: "mouse" == SceneElement.Nose
+        self.update_part_seen(SceneElement.Nose, seen, perf_now=perf_now)  # ensure presence_context gets updated
         if seen:
             if perf_now is None:
                 perf_now = get_perf_now()

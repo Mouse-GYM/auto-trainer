@@ -269,6 +269,9 @@ class EmergencyAlarmMonitor(BaseDetector):
             and (
                 # last top-cam presence must be before the current load cell disengaged:
                 topcam.last_presence_start_perf_c < load_cell.last_disengaged_perf_c
+                and topcam.last_absence_start_perf_c < load_cell.last_disengaged_perf_c
+                    # the previous presence detection in topcam could be right before the exit tunnel,
+                    # this check ensures the topcam last absence is before last disengage
                 and (
                     topcam.last_presence_start_perf_c
                     < topcam.last_absence_start_perf_c  # currently absent from topcam
