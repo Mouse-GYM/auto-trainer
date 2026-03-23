@@ -442,9 +442,12 @@ class AppModel(ObservableObject):
             self._analysis.stop()
         else:
             self._analysis.restart()
-        if value is AppModelStatus.ANIMAL_IN_TRAINING:
+        if value == AppModelStatus.ANIMAL_IN_TRAINING:
             # NB: need to be after set of algo_status
             self._behavior.system_machine.pellet.send_pellet()
+            self._hardware.open_tunnel_gate()
+        else:
+            self._hardware.close_tunnel_gate()
 
     def reload_calib(self, calib_dir: Optional[Path]):
         calib_src_dir = (
