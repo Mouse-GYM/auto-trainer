@@ -39,7 +39,8 @@ from autotrainer.training import TrainingPlan
 
 from autotrainer.pyside.xyz_label import XYZQLabel
 from tools.autotrainer_version import __version__ as app_version
-from tools.acquisition.model.app_model import AppModel, AppModelStatus
+from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.handle_3d_calibration import make_3d_calib
 from tools.acquisition.model.training_plan import get_plan_id
 from tools.acquisition.model.user_preferences import UserPreferences
