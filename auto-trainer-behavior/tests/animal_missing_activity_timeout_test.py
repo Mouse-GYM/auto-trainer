@@ -104,7 +104,7 @@ class TestWithAnimalTunnelMissingActivity(BaseAutoEndSession):
         cfg = algo.active_config.auto_end_session
         with self.patch_timer() as m_timer:
             self.start_session_in_tunnel()
-        delay = cfg.animal_tunnel_no_activity_delay
+        delay = AlmostEqualFloat(cfg.animal_tunnel_no_activity_delay)
         assert m_timer.call_args_list == [
             mock.call(delay, machine._consider_auto_end_session)
         ]
