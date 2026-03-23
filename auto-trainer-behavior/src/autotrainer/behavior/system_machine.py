@@ -348,6 +348,8 @@ class SystemMachine(StateMachine):
                 animal_missing_age = algo.scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
                 min_age = min(animal_missing_age, load_cell_low_var_age)
                 remains2 = cfg.animal_tunnel_no_activity_delay - min_age
+                if math.isinf(remains2):
+                    remains2 = cfg.animal_tunnel_no_activity_delay
             else:
                 remains2 = cfg.animal_tunnel_no_activity_delay
         else:

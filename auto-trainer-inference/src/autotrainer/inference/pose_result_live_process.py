@@ -26,7 +26,6 @@ def pool_init_process_pose_data(pose_algo: PoseAlgorithm, output_data_queue, mon
 
 def pool_process_pose_data(pose_data):
     # logger.debug("received workload %s", type(pose_data))
-    assert isinstance(_output_data_queue, multiprocessing.Queue)
     rsp = _pose_algo_process(pose_data)  # noqa
     # (cmd, (args, kwargs)) :
     _output_data_queue.put((InferenceMonitorDataMsg.POSE_RESULT_READY, ((rsp,), None)))
