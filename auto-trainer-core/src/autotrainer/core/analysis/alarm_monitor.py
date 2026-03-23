@@ -256,13 +256,14 @@ class EmergencyAlarmMonitor(BaseDetector):
         cfg = self._config
         pres_ctx = self._scene_parts_ctx
         topcam_attrs = topcam_attrs.to_local_value()  # to ensure consistent lookups
-        tunnel_animal_pres_age = pres_ctx.get_animal_presence_age(perf_now=perf_now)
-        return (
+        tunnel_animal_age = pres_ctx.get_animal_presence_age(perf_now=perf_now)
+        engaged = (
             not load_cell.is_engaged  # ~= not in tunnel
             and load_cell.last_disengaged_perf_c > self._p_started
             and perf_now - load_cell.last_disengaged_perf_c > cfg.tunnel_to_cage_presence_missing_delay
                 # tunnel exited at least since missing delay threshold
-            and perf_now - tunnel_animal_pres_age > load_cell.last_engaged_perf_c
+            and tunnel_animal_age >= 0
+            and perf_now - tunnel_animal_age > load_cell.last_engaged_perf_c
                 # animal was seen in tunnel in last tunnel activity/session
             and (
                 # last top-cam presence must be before the current load cell disengaged:
@@ -275,6 +276,13 @@ class EmergencyAlarmMonitor(BaseDetector):
                 )
             )
         )
+        prev = self._presence_in_cage_after_exit_tunnel_engaged
+        if engaged and not prev:
+            logger.warning("Presence-in-cage missing: %s", )
+        elif not engaged and prev:
+            logger.success("Presence-in-cage: disengage")
+        return engaged
+
 
     def _check_state(self):
         topcam_attrs = self._topcam_presence_attrs
