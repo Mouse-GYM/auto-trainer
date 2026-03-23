@@ -150,11 +150,15 @@ def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_
     while isinstance(func, partial):
         func = func.func
 
+    base_func = func.__func__ if inspect.ismethod(func) else func
+
     # handle bound method vs normal function:
-    @functools.wraps(func.__func__ if inspect.ismethod(func) else func)
+    @functools.wraps(base_func)
     def wrapped(*args, **kwargs):
         BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
-
+    #
+    wrapped._orig_func_qualname = getattr(orig_func, "__qualname__", str(orig_func))  # used by log in hardware-control
+    #
     return wrapped
 
 #
