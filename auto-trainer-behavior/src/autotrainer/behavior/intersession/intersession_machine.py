@@ -44,6 +44,8 @@ class IntersessionMachine(StateMachine):
                                 transitions=IntersessionMachine.transitions, auto_transitions=False,
                                 initial=initial_state, model_override=True)
 
+        algorithm.relay_transitions(self)  # NB: must be done AFTER creation of previous machine instance
+
         self._project_info = project_info
         self._algorithm = algorithm
         self._inference = inference

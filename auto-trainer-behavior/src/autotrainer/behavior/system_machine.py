@@ -1,5 +1,6 @@
 import math
 import time
+import dataclasses
 from datetime import datetime
 from functools import partial
 from itertools import chain
@@ -120,7 +121,8 @@ class SystemMachine(StateMachine):
         algo.session_starting += self._session_capture_started
         algo.session_capture_ending += self._session_capture_ended
         algo.property_changed += self._algorithm_property_changed
-        algo.relay_transitions(self)
+        algo.relay_transitions(self)  # NB: must be done AFTER creation of previous `self.machine` instance
+
         # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
         algo.shift_xyz_handler.set_processed_handler(self._handle_processed_shift_xyz)
 
@@ -160,7 +162,6 @@ class SystemMachine(StateMachine):
         intersession_machine = self._intersession = IntersessionMachine(algo, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._intersession_analysis_ended
         intersession_machine.events.state_changed += self._intersession_state_changed
-        algo.relay_transitions(intersession_machine)
 
     def cancel_timers(self):
         for timer in (
@@ -345,6 +346,7 @@ class SystemMachine(StateMachine):
         self._session_started_perf_c = get_perf_now()
         # ensure inference has the correct project info,
         # this is required for session batch processing.
+        #  EDIT: maybe not anymore since we added project_info as argument to intersession state trigger functions..
         self._inference.project = self._project_info
         self._intersession.project = self._project_info  # same for intersession
         self._consider_auto_end_session()  # this will postpone the auto-end of the needed delay
@@ -643,25 +645,39 @@ class SystemMachine(StateMachine):
         if check_release_distance:
             algo.handle_release_pellet_offset(offset)
 
-    def _handle_pellet_hands_offsets(self, response: PoseResponse):
+    def _handle_pellet_uncover(self, response: PoseResponse):
         algo = self._algorithm
-        min_dist = math.inf
-        for part in (SceneElement.L_Hand, SceneElement.R_Hand):
-            offset = response.get_parts_3d_offset(SceneElement.Pellet, part)
-            if offset is not None:
-                dist = offset.distance
-                if dist < min_dist:
-                    min_dist = dist
-        algo.pellet_hands_min_distance = min_dist
-        if __debug__:
-            prev_dist = getattr(self, "_prev_pellet_hands_dist", math.inf)
-            if f"{prev_dist:.0f}" != f"{prev_dist:.0f}":
-                logger.spam("pellet_hands min distance: %.3f -> %.3f", prev_dist, min_dist)
-            self._prev_pellet_hands_dist = min_dist
-        #
-        # already handled by _algorithm_property_changed with HANDS_NEAR_PELLET_SEEN
-        # if algo.hands_near_pellet_seen and not prev_hands_seen_near_pellet:
-        #     self._pellet_machine.environment_changed(caller="hands_seen_near_pellet")
+        active_cfg = self._algorithm.active_config
+        if not (algo.is_in_session and active_cfg.pellet_delivery.is_pellet_cover_enabled):
+            return
+        pellet_m = self._pellet_machine
+        if pellet_m.covered_state is False:  # already uncovered/released
+            return
+        uncov_cfg = active_cfg.pellet_uncover
+        min_y = math.inf
+        max_y = -math.inf
+        for part in AllHandsParts:
+            part_3d = response.locations_3d.get(part, None)
+            if part_3d is not None:
+                if part_3d.y < min_y:
+                    min_y = part_3d.y
+                if part_3d.y > max_y:
+                    max_y = part_3d.y
+        has_at_leat_one = not math.isinf(min_y)
+        if not has_at_leat_one:
+            return
+        perf_now = get_perf_now()
+        valid = min_y >= uncov_cfg.min_y_dcs
+        ctx = self._algorithm.uncover_context
+        prev_valid = ctx.y_dcs_valid
+        if not prev_valid and valid:
+            logger.verbose("setting pellet-uncover valid ; min_dist=%.1f", min_y)
+            ctx.start_y_dcs_valid_perf_c = perf_now
+            ctx.start_min_y = min_y
+            ctx.y_dcs_valid = True
+        elif not valid and prev_valid:
+            logger.verbose("unsetting pellet-uncover valid ; min_dist=%.1f", min_y)
+            ctx.y_dcs_valid = False
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pose_changed(self, response: PoseResponse):
@@ -707,7 +723,7 @@ class SystemMachine(StateMachine):
             # if load-cell is engaged before inference is live then we need this case/if.
             self._consider_start_session(reason="first-pellet-seen")
         #
-        self._handle_pellet_hands_offsets(response)
+        self._handle_pellet_uncover(response)
         self._pellet_machine.pellet_seen(response.pellet_seen)
 
     # AUTO-CLAMP / HEAD-BAR
@@ -839,10 +855,6 @@ class SystemMachine(StateMachine):
 
         elif name == props.AUTO_CORRECT_MOTOR_DRIFT:
             pellet_dev.set_auto_correct_motor_drift(new_value)
-
-        elif name == props.HANDS_NEAR_PELLET_SEEN:
-            if new_value:  # not interrested when reset to False
-                self._pellet_machine.environment_changed(must_release=new_value)
 
         elif name == props.ALGO_PAUSED:
             algo = self._algorithm

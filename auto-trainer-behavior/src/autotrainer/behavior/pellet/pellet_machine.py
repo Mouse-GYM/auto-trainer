@@ -64,7 +64,6 @@ class PelletMachine(StateMachine):
         self._algorithm = algorithm
         # algorithm.session_starting += self._session_started
         # algorithm.session_capture_ending += self._session_capture_ended
-        algorithm.relay_transitions(self)
 
         self._message_handler = msg_handler
         if msg_handler is not None:
@@ -78,6 +77,10 @@ class PelletMachine(StateMachine):
         self._api_status_token_pellet_send = None
         self._covered_state: Optional[bool] = None  # False == released ; True == covered ; None == unknown/none
         self._prev_can_cover: Optional[bool] = None
+        self._prev_can_release: Optional[bool] = None
+        self._prev_can_load: Optional[bool] = None
+        self._prev_can_send: Optional[bool] = None
+        self._prev_can_home: Optional[bool] = None
         self._prev_covered_state = None
         self._send_begin_perf_c = -math.inf
         self._send_end_perf_c = -math.inf
@@ -93,6 +96,9 @@ class PelletMachine(StateMachine):
             initial=initial_state,
             model_override=True,
         )
+
+        # NB: must be done AFTER creation of previous `self.machine` instance
+        algorithm.relay_transitions(self)
 
     @property
     def events(self) -> PelletMachineEvents:
@@ -112,6 +118,7 @@ class PelletMachine(StateMachine):
         self.post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
 
     def _before_load_pellet(self):
+        logger.verbose("before_load_pellet")
         self._api_status_token = self._pellet_device.load_pellet()
         if self._api_status_token is None:
             raise PelletDeviceCommandFailed
@@ -166,7 +173,9 @@ class PelletMachine(StateMachine):
 
     def can_move_home(self):
         can = self.can_use_pellet_command()
-        self.post_event_content(BehaviorEventKind.pelletHomeCan, context=can)
+        if can != self._prev_can_home:
+            self._prev_can_home = can
+            self.post_event_content(BehaviorEventKind.pelletHomeCan, context=can)
         return can
 
     def can_load_pellet(self):
@@ -175,22 +184,30 @@ class PelletMachine(StateMachine):
         if can_use and algo_would_load:
             self._check_pellet_load_failed()
         can = can_use and self._algorithm.can_load_pellet(pellet_state=self._state)
-        self.post_event_content(BehaviorEventKind.pelletLoadCan, context=can)
+        if can != self._prev_can_load:
+            self._prev_can_load = can
+            self.post_event_content(BehaviorEventKind.pelletLoadCan, context=can)
         return can
 
     def can_send_pellet(self):
         can = self.can_use_pellet_command() and self._algorithm.can_send_pellet()
-        self.post_event_content(BehaviorEventKind.pelletSendCan, context=can)
+        if can != self._prev_can_send:
+            self._prev_can_send = can
+            self.post_event_content(BehaviorEventKind.pelletSendCan, context=can)
         return can
 
     def can_cover_pellet(self):
         can = self.can_use_pellet_command() and self._algorithm.can_cover_pellet()
-        self.post_event_content(BehaviorEventKind.pelletCoverCan, context=can)
+        if can != self._prev_can_cover:
+            self._prev_can_cover = can
+            self.post_event_content(BehaviorEventKind.pelletCoverCan, context=can)
         return can
 
     def can_release_pellet(self):
         can = self.can_use_pellet_command() and self._algorithm.can_release_pellet()
-        self.post_event_content(BehaviorEventKind.pelletReleaseCan, context=can)
+        if can != self._prev_can_release:
+            self._prev_can_release = can
+            self.post_event_content(BehaviorEventKind.pelletReleaseCan, context=can)
         return can
 
     def can_use_pellet_command(self):
@@ -309,13 +326,13 @@ class PelletMachine(StateMachine):
                 "try_next_state cur=%s from %s: %s -> from_inference=%s in_session=%s pellet_seen=%s recently=%s triangle_recently_seen=%s "
                 "session_mouse_seen=%s session_pellet_count=%s must_release=%s "
                 "algo_system_state=%s intersession_state=%s "
-                "pellet_seen_age=%.1f" "sec hands_near_pellet_seen=%s covered_state=%s",
+                "pellet_seen_age=%.1fsec covered_state=%s",
                 cur_state, caller, reason, is_from_inference,
                 algo.is_in_session, pellet_seen,
                 algo.pellet_recently_seen, algo.triangle_recently_seen,
                 algo.session_mouse_seen, algo.session_pellet_loaded_count, must_release,
                 algo.system_state, algo.intersession_state,
-                algo.pellet_seen_age, algo.hands_near_pellet_seen, self._covered_state,
+                algo.pellet_seen_age, self._covered_state,
             )
 
         def log_could_retry_shortly():
@@ -410,10 +427,6 @@ class PelletMachine(StateMachine):
             # given algo.can_release_pellet()/both depends on conditions
             can_cover = algo.can_cover_pellet()
             can_release = algo.can_release_pellet()
-            if self._prev_can_cover is not can_cover:
-                logger.debug("can_cover: %s -> %s ; can_release=%s", self._prev_can_cover, can_cover,
-                             can_release)
-                self._prev_can_cover = can_cover
 
             release_or_cover_action = None
             if can_release:

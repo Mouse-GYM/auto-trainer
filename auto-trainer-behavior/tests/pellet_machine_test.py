@@ -1,4 +1,5 @@
 import logging
+import math
 from unittest import mock
 
 import pytest
@@ -9,8 +10,7 @@ from autotrainer.behavior import SystemState, PelletDeviceProtocol, BehaviorAlgo
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet.pellet_machine import PelletDeviceCommandFailed
 
-from top_fixtures import MockSystemMachine, mock_system
-
+from top_fixtures import MockSystemMachine, mock_system, get_current_simulate_perf_now, increase_simulate_perf_now
 
 
 @pytest.mark.parametrize("cover_enabled", [False, True])
@@ -118,7 +118,10 @@ def test_uncover_when_record_aged_enough_with_no_pellet_hand_uncover_distance(mo
     load_cell = machine._analysis.load_cell_monitor
     algo = machine.algorithm
     algo.pellet_cover_enabled = True
-    algo.pellet_hand_uncover_distance = None
+    uncov_cfg = algo.active_config.pellet_uncover
+    # algo.pellet_hand_uncover_distance = None
+    uncov_cfg.min_y_dcs = -math.inf
+    uncov_cfg.trigger_delay = 0
     pellet_m._covered_state = True  # fake already covered to simplify test
     #
     algo.update_pellet_seen(True)
@@ -128,11 +131,16 @@ def test_uncover_when_record_aged_enough_with_no_pellet_hand_uncover_distance(mo
 
     load_cell.is_engaged = True
     assert algo.is_in_session
-    assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == []
-    # now:
+
     mock_system.make_recording_aged_enough()
+
+    algo.uncover_context.y_dcs_valid = True
+    algo.uncover_context.start_y_dcs_valid_perf_c = get_current_simulate_perf_now()
     pellet_m.environment_changed()
+
+    assert pellet_m.state == PelletState.monitoring
+    # now:
     assert mock_system.pellet_state_trans == [
         PelletState.releasing,
         PelletState.monitoring,
@@ -144,7 +152,9 @@ def test_uncover_when_hands_near_pellet_after_recording_aged_enough(mock_system,
     pellet_m = machine.pellet
     algo = machine.algorithm
     algo.pellet_cover_enabled = True
-    algo.pellet_hand_uncover_distance = 5
+    uncov_cfg = algo.active_config.pellet_uncover
+    uncov_cfg.min_y_dcs = 5
+    uncov_cfg.trigger_delay = 2.5
     load_cell = machine._analysis.load_cell_monitor
     algo.update_pellet_seen(True)
     algo.update_triangle_seen(True)
@@ -158,7 +168,15 @@ def test_uncover_when_hands_near_pellet_after_recording_aged_enough(mock_system,
     assert mock_system.pellet_state_trans == [], "contrary to test_uncover_when_record_aged_enough"
     #
     # now make pellet-hands-min distance trigger:
-    algo.pellet_hands_min_distance = algo.pellet_hand_uncover_distance / 2
+    algo.pellet_hands_min_distance = algo.pellet_uncover_y_dcs / 2
+    algo.uncover_context.y_dcs_valid = True
+    algo.uncover_context.start_y_dcs_valid_perf_c = get_current_simulate_perf_now()
+    pellet_m.environment_changed()
+    #
+    assert mock_system.pellet_state_trans == []  # not yet
+    #
+    increase_simulate_perf_now(uncov_cfg.trigger_delay)
+    pellet_m.environment_changed()
     # and :
     assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [

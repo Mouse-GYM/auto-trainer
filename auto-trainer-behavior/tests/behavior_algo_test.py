@@ -120,10 +120,11 @@ def test_default_diamond_triangle_offset_config_path(algo):
     assert algo.diamond_triangle_offset_config_path == DiamondTriangleOffsetConfig.DEFAULT_CONFIG_PATH
 
 
-def test_pellet_hands_min_distance(algo):
-    prev = algo.pellet_hands_min_distance
-    algo.pellet_hands_min_distance += 5
-    assert prev + 5 == algo.pellet_hands_min_distance
+def test_pellet_uncover_y_dcs(algo):
+    prev = algo.pellet_uncover_y_dcs
+    assert prev == algo.active_config.pellet_uncover.min_y_dcs
+    algo.pellet_uncover_y_dcs += 5
+    assert prev + 5 == algo.pellet_uncover_y_dcs == algo.active_config.pellet_uncover.min_y_dcs
 
 
 def test_use_triangle_pellet_distance_too_far(algo):

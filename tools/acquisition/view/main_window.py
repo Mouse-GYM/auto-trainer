@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessa
 import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
-    calculate_std_dev_manual, ProjectInfo
+    calculate_std_dev_manual, ProjectInfo, get_perf_now
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
@@ -791,7 +791,7 @@ class MainWindow(QMainWindow):
         action = self.mouse_seen_action = QAction("Mouse Seen", self)
         action.triggered.connect(self._internal_set_mouse_seen)
 
-        action = self.mouse_near_pellet_action = QAction("Hands near pellet", self)
+        action = self.mouse_near_pellet_action = QAction("Hands min-Y DCS", self)
         action.triggered.connect(self._internal_mouse_near_pellet)
 
         action = self.analysis_results_action = QAction("Analysis-Result", self)
@@ -1138,15 +1138,12 @@ class MainWindow(QMainWindow):
         self._app_model.behavior.algorithm.update_mouse_seen(True)
 
     def _internal_mouse_near_pellet(self):
-        behavior = self._app_model.behavior
-        algo = behavior.algorithm
-        uncover_dist = algo.pellet_hand_uncover_distance
-        if uncover_dist is not None:
-            new_val = uncover_dist / 2
-        else:
-            new_val = 0.001  # that is on it
-        logger.debug("set pellet_hands_min_distance to %s", new_val)
-        algo.pellet_hands_min_distance = new_val
+        algo = self._app_model.behavior.algorithm
+        ctx = algo.uncover_context
+        cfg = algo.active_config.pellet_uncover
+        ctx.start_y_dcs_valid_perf_c = get_perf_now()
+        ctx.start_min_y = cfg.min_y_dcs + 5
+        ctx.y_dcs_valid = True
 
     def _internal_detection_result_toggle(self):
         inference = self._app_model.inference

@@ -76,6 +76,12 @@ class HomeOnExcessiveDriftDistanceConfiguration:
 
 
 @dataclass
+class PelletUncoverConfiguration:
+    min_y_dcs: float = 0  # mm,  minimum Y dcs for all hand parts to be "valid" for uncover
+    trigger_delay: float = 1  # seconds, duration before real active/trigger to uncover when it's "valid"
+
+
+@dataclass
 class PelletDeliveryConfiguration:
     """
     Behavior model options related to pellet delivery.
@@ -96,7 +102,6 @@ class PelletDeliveryConfiguration:
     max_pellet_missing_seconds: float = 1.0  # how long to wait before load pellet when pellet missing/not seen
     # this help ensure we don't execute a load pellet if we get an incorrect pose_result with pellet seen == False,
     # which can happen eventually (missed inference detection basically).
-    pellet_hand_uncover_distance: Optional[float] = 5  # mm ; None means disabled.
 
     auto_correct_motors_drift: bool = False  # attempt "live" motor drift correction -- DISABLED in code
 
@@ -162,6 +167,7 @@ class BatchSessionRecordingConfiguration:
 @dataclass
 class _BehaviorConfiguration:
     pellet_delivery: PelletDeliveryConfiguration = field(default_factory=PelletDeliveryConfiguration)
+    pellet_uncover: PelletUncoverConfiguration = field(default_factory=PelletUncoverConfiguration)
     shift_xyz_handler: ShiftXYZHandlerConfig = field(default_factory=ShiftXYZHandlerConfig)
     head_clamp: HeadClampConfiguration = field(default_factory=HeadClampConfiguration)
     load_cell: LoadCellConfiguration = field(default_factory=LoadCellConfiguration)
@@ -226,6 +232,7 @@ class BehaviorConfiguration(_BehaviorConfiguration):
 
 _cls_2_tag = {
     PelletDeliveryConfiguration: "PelletDeliveryConfiguration",
+    PelletUncoverConfiguration: "PelletUncoverConfiguration",
     LoadCellConfiguration: "LoadCellConfiguration",
     HeadClampConfiguration: "HeadClampConfiguration",
     HeadbarPressureConfiguration: "HeadbarPressureConfiguration",

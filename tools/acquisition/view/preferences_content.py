@@ -255,8 +255,8 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("<b>Cover Pellets:</b>"), cur_row, cur_col)
         toggle = self._pellet_cover_toggle = QSwitch()
         toggle.setToolTip(
-            "Covers the pellet when the mouse is not in the tunnel.  Release then generates a tone when the tunnel is "
-            "entered.")
+            "Covers the pellet when the mouse is not in the tunnel. "
+            "Release then generates a tone when the tunnel is entered.")
         add_enabled_state(lambda: self._pellet_cover_toggle.setEnabled(
             self._deliver_pellet_toggle.isEnabled() and self._deliver_pellet_toggle.isChecked()
         ))
@@ -270,44 +270,37 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         #
-        # pelletDelivery:pelletHandUncoverDistance [1]
-        grid_layout.addWidget(QLabel("Pellet-hand minimum distance:"), cur_row, cur_col)
-        toggle = self._pellet_hand_uncover_distance_toggle = QSwitch()
-        toggle.setToolTip("Pellet-hand distance below which cover is released")
-        add_enabled_state(lambda: self._pellet_hand_uncover_distance_toggle.setEnabled(
-            self._deliver_pellet_toggle.isEnabled()
-            and self._deliver_pellet_toggle.isChecked()
-            and self._pellet_cover_toggle.isChecked()
-        ))
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        toggle.setChecked(algo.pellet_hand_uncover_distance is not None)
-        def toggle_pellet_hand_uncover_distance_changed(value: int):
-            enabled = value != 0
-            if enabled:
-                value = PelletDeliveryConfiguration.pellet_hand_uncover_distance or 10
-                self._pellet_hand_uncover_distance_spinbox.setValue(value)
-            else:
-                algo.pellet_hand_uncover_distance = None
-            refresh_enabled_states()
-        toggle.stateChanged.connect(toggle_pellet_hand_uncover_distance_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
-
-        pellet_hand_uncover_label = QLabel("Pellet-hand uncover distance (mm) :")
-        grid_layout.addWidget(pellet_hand_uncover_label, cur_row, cur_col)
-        spinbox = self._pellet_hand_uncover_distance_spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda s=spinbox, t=self._pellet_hand_uncover_distance_toggle:
-            s.setEnabled(t.isEnabled() and t.isChecked())
+        grid_layout.addWidget(QLabel("Y DCS (mm) :"), cur_row, cur_col)
+        spinbox = self._uncover_delay_spinbox = QDoubleSpinBox()
+        spinbox.setToolTip("Min Y DCS for all hand parts")
+        add_enabled_state(lambda s=spinbox, t=self._pellet_cover_toggle:
+            s.setEnabled(t.isChecked())
         )
-        if algo.pellet_hand_uncover_distance is not None:
-            spinbox.setValue(algo.pellet_hand_uncover_distance)
-        spinbox.setMinimum(0)
-        spinbox.setMaximum(100)
+        spinbox.setValue(algo.pellet_uncover_y_dcs)
+        spinbox.setMinimum(-30)
+        spinbox.setMaximum(30)
         spinbox.setDecimals(1)
         spinbox.setSingleStep(0.5)
-        def pellet_hand_uncover_distance_changed(value):
-            algo.pellet_hand_uncover_distance = value
-        spinbox.valueChanged.connect(pellet_hand_uncover_distance_changed)
+        def pellet_uncover_y_dcs_changed(value):
+            algo.pellet_uncover_y_dcs = value
+        spinbox.valueChanged.connect(pellet_uncover_y_dcs_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+        #
+        grid_layout.addWidget(QLabel("duration (sec.) :"), cur_row, cur_col)
+        spinbox = self._uncover_delay_spinbox = QDoubleSpinBox()
+        spinbox.setToolTip("Duration with min Y DCS valid before trigger uncover")
+        add_enabled_state(lambda s=spinbox, t=self._pellet_cover_toggle:
+                          s.setEnabled(t.isChecked())
+                          )
+        spinbox.setValue(algo.pellet_uncover_delay)
+        spinbox.setMinimum(0)
+        spinbox.setMaximum(5)
+        spinbox.setDecimals(2)
+        spinbox.setSingleStep(0.1)
+        def pellet_uncover_delay_changed(value):
+            algo.pellet_uncover_delay = value
+        spinbox.valueChanged.connect(pellet_uncover_delay_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
