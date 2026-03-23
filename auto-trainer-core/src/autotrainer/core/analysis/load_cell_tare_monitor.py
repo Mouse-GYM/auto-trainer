@@ -129,16 +129,15 @@ class LoadCellTareMonitor(BaseDetector):
         p_now = get_perf_now()
         ptp = numpy.ptp(self._values)
         low_ptp = ptp <= self._range_threshold
-        if not ctx.low_variance_engaged and low_ptp:
-            self._logger.verbose("low_variance engaged ; ptp=%.1f", ptp)
+        if (not ctx.low_variance_engaged and low_ptp) or (ctx.low_variance_engaged and not low_ptp):
+            self._logger.notice("low_variance %sengaged ; ptp=%.1f ; values=%s",
+                                "" if low_ptp else "dis", ptp, self._values)
             with self._lock:
-                ctx.low_variance_engaged = True
-                ctx.low_variance_engaged_perf_c = p_now
-        elif ctx.low_variance_engaged and not low_ptp:
-            self._logger.verbose("low_variance disengaged ; ptp=%.1f", ptp)
-            with self._lock:
-                ctx.low_variance_engaged = False
-                ctx.low_variance_disengaged_perf_c = p_now
+                ctx.low_variance_engaged = low_ptp
+                if low_ptp:
+                    ctx.low_variance_engaged_perf_c = p_now
+                else:
+                    ctx.low_variance_disengaged_perf_c = p_now
 
         if (
             numpy.all(numpy.abs(self._values - self._baseline) > self._threshold)
