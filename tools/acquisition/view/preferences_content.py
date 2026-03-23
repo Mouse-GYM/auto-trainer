@@ -538,6 +538,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("No-activity release delay (sec.) :"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setValue(algo.auto_clamp_no_activity_release_delay)
         def auto_clamp_no_activity_release_delay_changed(value):
             algo.auto_clamp_no_activity_release_delay = value
