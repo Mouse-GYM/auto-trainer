@@ -86,7 +86,13 @@ _next_compound = object()
 _retry_compound = object()
 _retry_full = object()
 
-_lambda_no_op = lambda: True
+
+def _no_op():
+    return True
+
+
+def _no_op_handler(_):
+    return True
 
 
 def _to_tuple(value: Union[str, Any]):
@@ -211,11 +217,9 @@ class CanDevice(Device):
 
     def _init_handlers(self):
 
-        no_op_handler = lambda _: True
-
         def inject_steps(steps):
             # replace current _internal_func with one doing nothing;
-            self._compound_movement[0] = {"_internal_func": _lambda_no_op}
+            self._compound_movement[0] = {"_internal_func": _no_op}
             # so that the inner steps are not re-injected on eventual write retry:
             self._compound_movement[1:1] = steps
             return True
@@ -357,8 +361,8 @@ class CanDevice(Device):
             SystemCommandKind.SERVO_DETACH: self._interface.servo_detach,
 
             # No-op handlers
-            SystemCommandKind.STREAM_START: no_op_handler,
-            SystemCommandKind.STREAM_STOP: no_op_handler,
+            SystemCommandKind.STREAM_START: _no_op_handler,
+            SystemCommandKind.STREAM_STOP: _no_op_handler,
         }
 
         # Initialize data / response handlers lookup table
@@ -404,10 +408,10 @@ class CanDevice(Device):
                 send_msg(SystemStatusMessageKind.EXT_BUTTON, m.ext_button != 0)
 
         self._data_handlers = {
-            Status: no_op_handler,  # No-op for Status messages
-            Tone: no_op_handler,
-            ColorLed: no_op_handler,
-            AnalogOutput: no_op_handler,
+            Status: _no_op_handler,  # No-op for Status messages
+            Tone: _no_op_handler,
+            ColorLed: _no_op_handler,
+            AnalogOutput: _no_op_handler,
 
             LoadCellReading: self._handle_load_cell_reading,
             PressureReading: set_current_pressure,
@@ -872,7 +876,7 @@ class CanDevice(Device):
         # replace current compound move by this new list of steps:
         # the [0] = : replace whatever previous step leaded to this _handle_servo_move_compound,
         # by one doing nothing now:
-        compound_movements[0] = {"_internal_func": _lambda_no_op}  # noqa
+        compound_movements[0] = {"_internal_func": _no_op}  # noqa
         compound_movements[1:1] = steps
         return True
 
@@ -881,7 +885,7 @@ class CanDevice(Device):
         # replace current compound move by this new list of steps:
         # the [0] = : replace whatever previous step leaded to this _handle_servo_iface_cmd_compound,
         # by one doing nothing now:
-        compound_movements[0] = {"_internal_func": _lambda_no_op}  # noqa
+        compound_movements[0] = {"_internal_func": _no_op}  # noqa
         compound_movements[1:1] = steps
         return True
 
@@ -942,10 +946,7 @@ class CanDevice(Device):
             cfg = self._motor_configs.get(motor)
             if cfg is None:
                 raise RuntimeError(f"Missing motor {motor} config. Config must be written by current connection/interface instance.")
-            value = cfg.maximum_position
-            success = self._interface.move_servo_motor(motor, value)
-            if success:  # for log below/at end of func:
-                step = {motor: value}
+            success = self._interface.move_servo_motor(motor, cfg.maximum_position)
 
         elif "_servo_min_pos" in step:
             motor: Motor = step["_servo_min_pos"]  # noqa
@@ -953,10 +954,7 @@ class CanDevice(Device):
             cfg = self._motor_configs.get(motor)
             if cfg is None:
                 raise RuntimeError(f"Missing motor {motor} config. Config must be written by current connection/interface instance.")
-            value = cfg.minimum_position
-            success = self._interface.move_servo_motor(motor, value)
-            if success:
-                step = {motor: value}
+            success = self._interface.move_servo_motor(motor, cfg.minimum_position)
 
         elif "delay" in step:
             duration = step["delay"]
