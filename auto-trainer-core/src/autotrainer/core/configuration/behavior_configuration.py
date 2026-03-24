@@ -11,9 +11,8 @@ from .external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 from .presence_detection_configuration import PresenceDetectionConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor, Offset3DTuple
 
-from ..analysis import LoadCellAutoTareConfiguration
 from ..analysis import HeadbarPressureConfiguration
-from .load_cell_config import LoadCellConfiguration
+from .load_cell_config import LoadCellConfiguration, LoadCellAutoTareConfiguration
 from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from .alarm_configuration import EmergencyAlarmConfiguration
 from ..analysis.auto_tunnel_fan_monitor import AutoTunnelSweepConfiguration
@@ -148,11 +147,15 @@ class HeadClampConfiguration:
 
 @dataclasses.dataclass
 class AutoEndSessionConfiguration:
+    # enabled: bool = True
 
     no_activity_delay_minutes: int = 1
-    """How many minutes without animal activity to wait before auto end a running capture session.
-    If animal seen in between: timeout is reset. Up until animal not seen for the given duration, then auto end session.
-    """
+    """This is only for the Nose part. If it's not seen that much duration consecutively, 
+     then also auto-end session"""
+
+    animal_tunnel_no_activity_delay: float = 10  # seconds
+    """Delay without tunnel animal activity (== any animal part seen *and* low load-cell variance)
+     which triggers auto-end session"""
 
 
 @dataclasses.dataclass

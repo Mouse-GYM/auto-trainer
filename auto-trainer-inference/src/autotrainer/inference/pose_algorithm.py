@@ -1,5 +1,7 @@
+import copy
 import dataclasses
 import itertools
+import math
 import operator
 from typing import List, Dict, Optional, Tuple, Literal
 from collections import namedtuple, defaultdict
@@ -8,11 +10,11 @@ from dataclasses import dataclass
 import numpy
 import pandas
 
-from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple
+from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple, get_perf_now
 from autotrainer.inference.calibration import triangulate_3d_with_params
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference.config import StereoParams
-from autotrainer.core.pose_elements import SceneElement, AllHandsParts
+from autotrainer.core.pose_elements import SceneElement, AllHandsParts, ScenePartsPresenceContext, AllSceneParts
 
 from autotrainer.inference.analysis.prepare_jetson_data import process_hand_data, reorient_and_center_step1
 
@@ -39,6 +41,9 @@ class PoseResponse:
 
     sequence: int = 0
     """Simple index to track responses"""
+
+    perf_c: float = dataclasses.field(default_factory=get_perf_now)
+    """Perf counter when this response applies"""
 
     parts_flags: Tuple[
         Dict[str, bool],
@@ -458,3 +463,30 @@ class PoseAlgorithm:
                 if pose[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PLOT_THRESHOLD:
                     locations[part] = PoseLocation(idx, pose[idx, 0], pose[idx, 1])
         return locations
+
+
+def update_scene_elements_context_from_pose(context: ScenePartsPresenceContext, pose_response: PoseResponse):
+    """Update in-place the given context based on the given response"""
+    changes_seen = set()
+    changes_miss = set()
+    p1, p2 = pose_response.parts_flags[:2]
+    p_miss = context.missing_last_perf_c
+    p_pres = context.present_last_perf_c
+    prev_parts = set(p_miss) | set(p_pres)
+    all_seen_parts = set(p1) | set(p2)
+    for part in all_seen_parts | prev_parts:
+        seen = p1.get(part, False) or p2.get(part, False)
+        prev_miss = p_miss.get(part)
+        prev_seen = p_pres.get(part)
+        if seen:
+            if prev_seen is None or (prev_miss is not None and prev_miss > prev_seen):
+                changes_seen.add(part)
+        else:
+            if prev_miss is None or (prev_seen is not None and prev_seen > prev_miss):
+                changes_miss.add(part)
+    #
+    context.last_perf_c = perf_c = pose_response.perf_c
+    for part in changes_seen:
+        p_pres[part] = perf_c
+    for part in changes_miss:
+        p_miss[part] = perf_c

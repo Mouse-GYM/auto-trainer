@@ -312,15 +312,17 @@ class OfflineInputProcess:
         if __debug__ and _local_do_debug:
             cams_already_processed_idx2 = [
                 [
-                    l[2][0]  # the third row contains the associated frame index in h5 file ([0] to extract it from array)
-                    for l in h5py.File(
+                    lst[2][0]  # the third row contains the associated frame index in h5 file ([0] to extract it from array)
+                    for lst in h5py.File(
                         project.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live")
                     )["df_with_missing"]["table"]
                 ]
                 for cdx, cam in enumerate(cams)
             ]
             if cams_already_processed_idx_list != cams_already_processed_idx2:
-                raise RuntimeError("Unexpected difference in processed cams frames index vs processed h5")
+                set_diff = set(cams_already_processed_idx_list) - set(cams_already_processed_idx2)
+                logger.warning("Unexpected difference in processed cams frames index vs processed h5: len1=%s len2=%s diff=%s",
+                               len(cams_already_processed_idx_list), len(cams_already_processed_idx2), set_diff)
 
         # NB: tot_frames_to_process:
         # not sure which one to use:

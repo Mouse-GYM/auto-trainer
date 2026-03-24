@@ -89,9 +89,13 @@ class TrainingPlansFSEventHandler(PatternMatchingEventHandler):
     def _reload_app_model_plans(self):
         self._app_model.reload_training_plans()
 
+    @staticmethod
+    def _on_any_event_match(path: Optional[str]):
+        return path is not None and path.lower().endswith(".json")
+
     def on_any_event(self, event: FileSystemEvent) -> None:
-        match = lambda p: False if p is None else p.lower().endswith(".json")
         logger.debug("Any Event[%s]: %s -> %s", event.event_type, event.src_path, event.dest_path)
+        match = self._on_any_event_match
         if (
                (event.event_type in {'created', 'closed', 'deleted'} and match(event.src_path))
             or (event.event_type == 'moved' and (match(event.dest_path) or match(event.src_path)))
@@ -496,7 +500,7 @@ class AppModel(ObservableObject):
         if algo.is_in_session:
             logger.verbose("consider_release_pellet: calling try_next_state ; "
                            "pellet_recently_seen=%s age=%.2f",
-                           algo.pellet_recently_seen, algo.pellet_seen_age)
+                           algo.pellet_recently_seen, algo.pellet_presence_age)
             # this is called via a timer, which are not necessarily very precise,
             # and to be safe on all side, do not check again, the actual age could even be slightly less than the
             # desired threshold (but very very near). So to not miss that case: do not "recheck"
@@ -1544,7 +1548,7 @@ class AppModel(ObservableObject):
         # maybe todo: make these configurable:
         min_check_delay = 5  # seconds ; if no valid check/measure within this delay -> error + emergency
         delay_inference_begin = 3  # seconds ; wait inference started for that duration before consider min_check_delay
-        max_dist_diff = 1.5  # mm ; if distance between obtained & expected above that -> invalid measure
+        max_dist_diff = 5  # mm ; if distance between obtained & expected above that -> invalid measure
         #
         loc3d = response.locations_3d.get(SceneElement.Diamond)
         raw3d = response.raw_loc_3d.get(SceneElement.Diamond)

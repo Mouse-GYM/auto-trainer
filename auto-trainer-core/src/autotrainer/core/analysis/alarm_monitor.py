@@ -13,10 +13,12 @@ from autotrainer.core.analysis.external_doors_monitor import ExternalDoorsMonito
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
+from autotrainer.core.pose_elements import ScenePartsPresenceContext
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
+from autotrainer.core.analysis.load_cell_tare_monitor import LoadCellTareMonitor
 
 logger = get_verbose_logger(__name__)
 
@@ -58,14 +60,17 @@ class EmergencyAlarmMonitor(BaseDetector):
         *,
         config: EmergencyAlarmConfiguration,
         load_cell_monitor: LoadCellMonitor,
+        load_cell_tare_monitor: LoadCellTareMonitor,
         audio_monitor: AudioSpectrumThrashMonitor,
         external_doors_monitor: ExternalDoorsMonitor,
         global_animal_presence_monitor: GlobalAnimalPresenceMonitor,
         topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__()
+        self._scene_parts_ctx = ScenePartsPresenceContext()
         self._config = config
         self._load_cell_monitor = load_cell_monitor
+        self._load_cell_tare_monitor = load_cell_tare_monitor
         self._audio_monitor = audio_monitor
         self._external_doors_monitor = external_doors_monitor
         self._global_animal_presence_monitor = global_animal_presence_monitor
@@ -89,6 +94,9 @@ class EmergencyAlarmMonitor(BaseDetector):
             if name == GlobalAnimalPresenceMonitor.IS_ENGAGED:
                 self.check_state()
         global_animal_presence_monitor.property_changed += global_animal_presence_prop_changed
+
+    def update_parts_context(self, context: ScenePartsPresenceContext):
+        self._scene_parts_ctx = context
 
     def add_alarm_condition(self, name, check):
         ...  # TODO
@@ -241,26 +249,54 @@ class EmergencyAlarmMonitor(BaseDetector):
         )
 
     def _check_pres_after_exit_tunnel_missing(self, perf_now):
-        topcam_attrs = self._topcam_presence_attrs
-        if topcam_attrs is None:
+        topcam = self._topcam_presence_attrs
+        if topcam is None:
             return False
+        topcam = topcam.to_local_value()  # to ensure consistent lookups
         load_cell = self._load_cell_monitor.context
         cfg = self._config
-        topcam_attrs = topcam_attrs.to_local_value()  # to ensure consistent lookups
-        return (
-            not load_cell.is_engaged
+        pres_ctx = self._scene_parts_ctx
+        tun_pres_age = pres_ctx.get_animal_presence_age(perf_now=perf_now)
+        tun_miss_age = pres_ctx.get_animal_absence_age(perf_now=perf_now)
+        engaged = (
+            not load_cell.is_engaged  # ~= not in tunnel
             and load_cell.last_disengaged_perf_c > self._p_started
-            and load_cell.disengaged_age > cfg.tunnel_to_cage_presence_missing_delay
+            and perf_now - load_cell.last_disengaged_perf_c > cfg.tunnel_to_cage_presence_missing_delay
+                # tunnel exited at least since missing delay threshold
+            and tun_pres_age >= 0
+            and perf_now - tun_pres_age > load_cell.last_engaged_perf_c
+                # animal was seen in tunnel in last tunnel activity/session
             and (
-                # last presence must be before the current load cell disengaged:
-                topcam_attrs.last_presence_start_perf_c < perf_now - load_cell.disengaged_age
+                # last top-cam presence must be before the current load cell disengaged:
+                topcam.last_presence_start_perf_c < load_cell.last_disengaged_perf_c
+                and topcam.last_absence_start_perf_c < load_cell.last_disengaged_perf_c
+                    # the previous presence detection in topcam could be right before the exit tunnel,
+                    # this check ensures the topcam last absence is before last disengage
                 and (
-                    topcam_attrs.last_presence_start_perf_c
-                    < topcam_attrs.last_absence_start_perf_c
+                    topcam.last_presence_start_perf_c
+                    < topcam.last_absence_start_perf_c  # currently absent from topcam
                     < perf_now - cfg.tunnel_to_cage_presence_missing_delay
+                    # and that absence duration is greater than the missing delay threshold
                 )
             )
         )
+        prev = self._presence_in_cage_after_exit_tunnel_engaged
+        if engaged and not prev:
+            meth = logger.notice
+        elif not engaged and prev:
+            meth = logger.success
+        else:
+            meth = None
+        if meth is not None:
+            meth(
+                "Presence-in-cage %s. lc=%s lc.last_eng=%s lc.last_dis=%s "
+                "tun_pres_age=%s tun_miss_age=%s "
+                "top.last_pres=%s top.last_abs=%s",
+                "engaged" if engaged else "disengaged",
+                load_cell.is_engaged, load_cell.last_engaged_perf_c, load_cell.last_disengaged_perf_c,
+                tun_pres_age, tun_miss_age,
+                topcam.last_presence_start_perf_c, topcam.last_absence_start_perf_c)
+        return engaged
 
     def _check_state(self):
         topcam_attrs = self._topcam_presence_attrs

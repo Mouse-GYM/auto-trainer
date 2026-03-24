@@ -331,8 +331,7 @@ class PelletMachine(StateMachine):
                 algo.is_in_session, pellet_seen,
                 algo.pellet_recently_seen, algo.triangle_recently_seen,
                 algo.session_mouse_seen, algo.session_pellet_loaded_count, must_release,
-                algo.system_state, algo.intersession_state,
-                algo.pellet_seen_age, self._covered_state,
+                algo.system_state, algo.intersession_state, algo.pellet_presence_age, self._covered_state,
             )
 
         def log_could_retry_shortly():
