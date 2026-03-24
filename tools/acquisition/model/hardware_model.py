@@ -8,7 +8,7 @@ from typing import Optional, Tuple, Dict, Union
 
 from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
-                              get_verbose_logger, Motor, SensorAnalysis, EventManager)                              
+                              get_verbose_logger, Motor, SensorAnalysis, EventManager, HardwareConfiguration)
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
@@ -64,6 +64,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     ):
         super().__init__()
 
+        self._device_ack_timeout_delay: Optional[float] = None
         self._device: Optional[DeviceConnectionProtocol] = None
         self._can_device: Optional[CanDevice] = None
         self._sensor_analysis = sensor_analysis
@@ -101,7 +102,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if cfg is None or not cfg.fully_valid:
             if return_none:
                 return None
-            raise RuntimeError(f"DCS config not defined or not fully valid")
+            raise RuntimeError(f"DCS config not defined or not fully valid: {None if cfg is None else cfg.__dict__}")
         return cfg
 
     def set_diamond_triangle_config(self, config: Optional[DiamondTriangleOffsetConfig]):
@@ -351,6 +352,17 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def set_tunnel_fan_off(self) -> Optional[UUID]:
         return self._send_with_token(self._device, SystemCommandKind.TUNNEL_FAN_OFF)
 
+    def set_device_ack_timeout(self, delay: Optional[float]):
+        self._device_ack_timeout_delay = delay
+        can_dev = self._can_device
+        if can_dev is not None:
+            if delay is None:
+                delay = CanDevice.default_command_ack_timeout_duration
+            else:
+                delay = max(CanDevice.default_command_ack_timeout_duration, delay)
+            can_dev.default_command_ack_timeout_duration = delay
+            logger.notice("Using %s for device ack timeout delay", delay)
+
     def connect(self, cmd_queue: Queue):
         self._last_motor_coordinates = \
         self._last_requested_set_coordinates = \
@@ -361,6 +373,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         buffer_size = 10 if HAVE_CAN_DEVICE else 1
         #
         can_device = self._can_device = CanDevice(buffer_size=buffer_size)
+        self.set_device_ack_timeout(self._device_ack_timeout_delay)  # ensure it's used
         can_device.property_changed += self._can_device_property_changed
 
         device_conn = self._device = DeviceConnection(can_device, cmd_queue, name="can-device")
