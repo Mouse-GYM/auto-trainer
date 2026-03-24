@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 
-import humps
+from typing import Optional
 from typing_extensions import Self
 
-import yaml
 
 from autotrainer.core import make_camelize_representer, make_decamelize_constructor
 
@@ -12,6 +11,8 @@ from autotrainer.core import make_camelize_representer, make_decamelize_construc
 class HardwareConfiguration:
     tunnel_identifier: str = ""
     pellet_identifier: str = ""
+
+    min_ack_timeout: Optional[float] = None  # min device-ack-timeout
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:

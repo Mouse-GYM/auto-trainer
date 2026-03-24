@@ -1078,8 +1078,9 @@ class AppModel(ObservableObject):
             self._inference.start(self._inference_queue)
 
         logger.debug("connecting hardware ...")
-        self._hardware.connect(self._system_message_handler.input_queue)
-        self._hardware.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # todo: should remove
+        hard = self._hardware
+        hard.connect(self._system_message_handler.input_queue)
+        hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # todo: should remove
         logger.info("finished connecting hardware")
 
         if not algo.algo_paused:
@@ -1266,6 +1267,8 @@ class AppModel(ObservableObject):
         self._load_animals()
 
         self.configuration_loaded_event(configuration)
+        dev_ack_timeout = configuration.hardware.min_ack_timeout
+        self._hardware.set_device_ack_timeout(dev_ack_timeout)
 
         observer = self._plans_files_observer
         observer.stop()
