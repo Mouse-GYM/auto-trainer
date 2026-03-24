@@ -119,7 +119,9 @@ def apply_system_command_with_data_args(func, data):
 class CanDevice(Device):
 
     default_command_write_failed_repeat_count: int = 3
-    default_command_ack_timeout_duration: float = 5  # seconds
+    default_command_ack_timeout_duration: float = 8  # seconds
+    # TODO: handle different timeout per command kind
+
     default_command_ack_timeout_repeat_count: int = 3
 
     same_data_refresh_delay: float = _similar_data_refresh_delay
