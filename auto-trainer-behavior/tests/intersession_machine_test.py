@@ -85,7 +85,7 @@ def test_intersession_increase_algo_counts(mock_system):
         mock_system.exit_tunnel()
     assert algo.pellets_presented_day == algo.pellets_presented_total == 4
     assert algo.pellet_reaches_day == algo.pellet_reaches_total == 3
-    assert algo.day_pellet_count == algo.total_pellet_count == 2
+    assert algo.pellet_consumed_day == algo.pellet_consumed_total == 2
     assert algo.successful_reaches_day == algo.successful_reaches_total == 1
 
 

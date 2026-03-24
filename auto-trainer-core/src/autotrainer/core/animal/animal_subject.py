@@ -1,4 +1,5 @@
 import dataclasses
+import datetime
 import json
 import logging
 import os
@@ -12,6 +13,9 @@ from typing_extensions import Self
 from autotrainer.core import Offset3DTuple
 
 logger = logging.getLogger(__name__)
+
+
+_date_format = "%Y%m%d"
 
 
 def _load_old_format(data: Dict[str, Any]):
@@ -57,6 +61,14 @@ class AnimalTraining:
 
 
 @dataclass
+class AnimalPelletCounts:
+    presented: int = 0   # == successfully loaded
+    reaches: int = 0
+    success_reaches: int = 0
+    consumed: int = 0
+
+
+@dataclass
 class AnimalSubject:
     """A subject in an animal experiment."""
 
@@ -72,6 +84,10 @@ class AnimalSubject:
 
     training: AnimalTraining = dataclasses.field(default_factory=AnimalTraining)
 
+    pellet_counts_day_date: datetime.date = dataclasses.field(default_factory=datetime.date.today)
+    pellet_counts_day: AnimalPelletCounts = dataclasses.field(default_factory=AnimalPelletCounts)
+    pellet_counts_total: AnimalPelletCounts = dataclasses.field(default_factory=AnimalPelletCounts)
+
     def __post_init__(self):
         if self.id is None:
             self.id = str(uuid.uuid4())
@@ -79,7 +95,7 @@ class AnimalSubject:
             self.name = f"Mouse-{self.id}"
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(name={self.name})"
+        return f"{self.__class__.__name__}(name={self.name!r}, id={self.id!r})"
 
     @classmethod
     def from_file(cls, file_path: Path) -> Optional[Self]:
@@ -101,6 +117,13 @@ class AnimalSubject:
                         src = pellet_dcs
                     pellet_x, pellet_y, pellet_z = src['x'], src['y'], src['z']
                     training = data.pop('training')
+                    pellet_counts_day_dct = data.pop("pelletCountsDay", {})
+                    pellet_counts_total_dct = data.pop("pelletCountsTotal", {})
+                    count_day_date_str = data.pop('pelletCountsDayDate', None)
+                    if count_day_date_str is None:
+                        pellet_counts_day_date = datetime.date.today()
+                    else:
+                        pellet_counts_day_date = datetime.datetime.strptime(count_day_date_str, _date_format).date()
                     animal = AnimalSubject(
                         id=data.pop('id'),
                         name=data.pop('name'),
@@ -112,7 +135,10 @@ class AnimalSubject:
                         training=AnimalTraining(
                             current_protocol=training.pop('currentProtocol'),
                             protocols=training.pop('protocols'),
-                        )
+                        ),
+                        pellet_counts_day_date=pellet_counts_day_date,
+                        pellet_counts_day=AnimalPelletCounts(**pellet_counts_day_dct),
+                        pellet_counts_total=AnimalPelletCounts(**pellet_counts_total_dct),
                     )
             except Exception as err:
                 logger.error("Error loading animal subject from %s: %s", file_path, err)
@@ -122,6 +148,8 @@ class AnimalSubject:
                      animal.id, animal.name,
                      (animal.pellet_x, animal.pellet_y, animal.pellet_z), animal.is_pellet_dcs,
                      animal.training.current_protocol)
+
+        animal.check_today_date()
 
         return animal
 
@@ -143,6 +171,9 @@ class AnimalSubject:
                 'currentProtocol': self.training.current_protocol,
                 'protocols': self.training.protocols,
             },
+            "pelletCountsDayDate": self.pellet_counts_day_date.strftime(_date_format),
+            "pelletCountsDay": dataclasses.asdict(self.pellet_counts_day),
+            "pelletCountsTotal": dataclasses.asdict(self.pellet_counts_total),
         }
         xyz = Offset3DTuple(self.pellet_x, self.pellet_y, self.pellet_z)
         logger.debug("Saving %s to %s ; xyz=%s", self.name, file_path.as_posix(), xyz.humanize())
@@ -150,3 +181,15 @@ class AnimalSubject:
         with NamedTemporaryFile("w", delete=False, dir=file_path.parent) as fh:
             json.dump(data, fh, indent=4)
         os.replace(fh.name, file_path)
+
+    def check_today_date(self) -> bool:
+        """Return True if changed"""
+        today = datetime.date.today()
+        prev = self.pellet_counts_day_date
+        if prev != today:
+            logger.debug("today (%s) != animal prev day date (%s), resetting day counts to 0",
+                         today, prev)
+            self.pellet_counts_day_date = today
+            self.pellet_counts_day = AnimalPelletCounts()
+            return True
+        return False

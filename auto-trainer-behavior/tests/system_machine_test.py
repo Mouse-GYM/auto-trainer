@@ -243,13 +243,13 @@ def test_inference_detection_ready(machine):
         successful_reaches=4,
     )
     # before:
-    assert algo.day_pellet_count == 0
+    assert algo.pellet_consumed_day == 0
     assert algo.successful_reaches_total == 0
     assert algo.pellets_presented_total == 0
     #
     machine._inference.detection_result_ready(machine.project, result)
     # after:
-    assert algo.day_pellet_count == 20
+    assert algo.pellet_consumed_day == 20
     assert algo.successful_reaches_total == 4
     assert algo.pellets_presented_total == 40
     # now:
@@ -257,7 +257,7 @@ def test_inference_detection_ready(machine):
     result.successful_reaches = 2
     result.pellets_presented = 30
     machine._inference.detection_result_ready(machine.project, result)
-    assert algo.day_pellet_count == 35
+    assert algo.pellet_consumed_day == 35
     assert algo.pellets_presented_total == 70
     assert algo.successful_reaches_total == 6
 

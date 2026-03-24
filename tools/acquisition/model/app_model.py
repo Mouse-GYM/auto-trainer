@@ -29,6 +29,7 @@ from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandl
                               NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis,
                               Offset3DTuple)
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
+from autotrainer.core.animal.animal_subject import AnimalPelletCounts
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.multiproc import no_op_timer
@@ -39,6 +40,7 @@ from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.inference import PoseAlgorithm, InferenceStatus, PoseResponse, calibration_FLIR
+from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.inference.config import load_calib_stereo_params
 from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
 
@@ -46,7 +48,7 @@ from autotrainer.video import CaptureProcessStatus
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
-    IntersessionMachine
+    IntersessionMachine, CaptureAnalysisResult
 
 from autotrainer.training import TrainingPlan, TrainingPhase
 
@@ -218,8 +220,9 @@ class AppModel(ObservableObject):
 
         # using a shared process manager,
         # this allows to put shared values, created via the manager, to any multiprocess shared queue, notably.
-        self._mp_manager = multiprocessing.get_context("spawn").Manager()
         mp_ctx = get_mp_ctx()
+        self._mp_manager = mp_ctx.Manager()
+
         # otherwise (new) shared values can only be inherited from newly spawned sub-process(es) and not from already
         # existing sub-process(es).
 
@@ -305,14 +308,13 @@ class AppModel(ObservableObject):
         self._inference_queue = None
 
         self._pose_algorithm: PoseAlgorithm = None
-        self._inference: InferenceModel = None  # noqa
-
+        self._inference: Optional[InferenceModel] = None  # needed before reload_calib
         self.reload_calib(calib_dir)
-        self._inference = InferenceModel(self._pose_algorithm,
+        #
+        inference = self._inference = InferenceModel(self._pose_algorithm,
                                          calib_dir=calib_dir,
                                          mp_manager=self._mp_manager,
                                          ) if inference_model is None else inference_model
-
         #
 
         self._training_plans: List[Dict] = []
@@ -324,6 +326,7 @@ class AppModel(ObservableObject):
             topcam_presence=self._top_camera_presence_detection,
             system_machine=system_machine,
         )
+        system_machine = behavior_model.system_machine  # ensure same
 
         self._models: List[ProjectDependentProtocol] = [
             self._left_camera,
@@ -346,13 +349,19 @@ class AppModel(ObservableObject):
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
         self._hardware.property_changed += self._on_hardware_property_changed
-        self._inference.property_changed += self._on_inference_property_changed
-        self._inference.pose_response_ready += self._on_pose_response_ready
+        inference.property_changed += self._on_inference_property_changed
+        inference.pose_response_ready += self._on_pose_response_ready
+        inference.detection_result_ready += self._on_detection_result_ready
         preferences.property_changed += self._on_preferences_property_changed
         behavior_model.algorithm.property_changed += self._on_behavior_algo_property_changed
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
-        behavior_model.system_machine.intersession.events.property_changed += self._on_intersession_property_changed
+
+        intersession = system_machine.intersession
+        intersession.events.property_changed += self._on_intersession_property_changed
+
+        pellet_m = system_machine.pellet
+        pellet_m.events.pellet_loaded += self._on_pellet_loaded
 
         self._plans_files_event_handler = TrainingPlansFSEventHandler(self)
         self._plans_files_observer = Observer()
@@ -894,7 +903,7 @@ class AppModel(ObservableObject):
         if len(matching_animals) == 0:
             logger.info("Adding new animal name=%s", name)
             animal = AnimalSubject(name=name)
-            self._save_animal_metadata(animal)
+            self._save_animal_metadata(animal, sender="add_animal")
 
             # Ensure property change events for listeners
             animals = self._animals
@@ -1393,11 +1402,28 @@ class AppModel(ObservableObject):
                 return
 
         animals = []
-        path = Path(self._preferences.animal_location)
-        if path.exists() and path.is_dir():
-            files = [x.name for x in path.glob("*.json")]
-            loaded = [AnimalSubject.from_file(path.joinpath(x)) for x in files]
-            animals = sorted((x for x in loaded if x is not None), key=lambda a: a.name)
+        animals_dir_path = Path(self._preferences.animal_location)
+
+        if animals_dir_path.is_dir():
+            files = list(animals_dir_path.glob("*.json"))
+            animals: Dict[Path, AnimalSubject] = {
+                path: animal
+                for path, animal in (
+                    (path, AnimalSubject.from_file(path))
+                    for path in files
+                )
+                if animal is not None
+            }
+
+            for path, animal in animals.items():
+                prev_day_date = animal.pellet_counts_day_date
+                prev_counts = animal.pellet_counts_day
+                animal.check_today_date()
+                if animal.pellet_counts_day_date != prev_day_date:
+                    logger.info("Reset animal day count to 0 given saved before today: %s ; prev counts=%s",
+                                prev_day_date, prev_counts)
+                    animal.to_file(path)
+            animals = sorted(animals.values(), key=lambda a: a.name)
 
         pref_animal = self._preferences.selected_animal
         for animal in animals:
@@ -1474,9 +1500,9 @@ class AppModel(ObservableObject):
 
     def _on_behavior_algo_property_changed(self, name: str, value, _):
         props = BehaviorAlgoProps
+        animal = self._selected_animal
         #
         if name == props.BASELINE_INTENSITY:
-            animal = self._selected_animal
             if animal is None:
                 return
             prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
@@ -1488,7 +1514,6 @@ class AppModel(ObservableObject):
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal
-        hard = self._hardware
         if animal is not None and name in {'set_x', 'set_y', 'set_z'}:
             # only when manual:
             if self._training_mode != TrainingMode.MANUAL:
@@ -1588,6 +1613,23 @@ class AppModel(ObservableObject):
                                  diff.distance,
                                  loc3d.humanize(), cfg.diamond_coord.humanize())
 
+    def _on_detection_result_ready(self, project: ProjectInfo, result: IntersessionResponse):
+        selected = self._selected_animal
+        if selected is None:
+            return
+        day_changed = selected.check_today_date()  # 1st
+        day_counts = selected.pellet_counts_day
+        total_counts = selected.pellet_counts_total
+        #
+        day_counts.success_reaches += result.successful_reaches
+        total_counts.success_reaches += result.successful_reaches
+        day_counts.consumed += result.food_consumed
+        total_counts.consumed += result.food_consumed
+        day_counts.reaches += result.total_reaches
+        total_counts.reaches += result.total_reaches
+        if day_changed or result.successful_reaches or result.food_consumed or result.total_reaches:
+            self._save_animal_metadata(selected, sender="detection_result_ready")
+
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("plan prop: %s -> %s", name, value)
         if name == "current_phase":
@@ -1618,12 +1660,12 @@ class AppModel(ObservableObject):
         for idx, prev_animal in enumerate(prev_animals):
             if prev_animal.id == animal.id:
                 prev_animals[idx] = animal
+        animal.check_today_date()  # in case of
         dst = Path(self._preferences.animal_location).joinpath(f"{animal.name}.json")
         logger.verbose("Saving %s to %s ; sender=%s", animal, dst, sender)
-        if backup_previous:
-            if dst.exists():
-                now = datetime.now()
-                dst.with_suffix(f'.bak-{now.strftime(DATE_TIME_FORMAT)}').write_bytes(dst.read_bytes())
+        if backup_previous and dst.exists():
+            now = datetime.now()
+            dst.with_suffix(f'.bak-{now.strftime(DATE_TIME_FORMAT)}').write_bytes(dst.read_bytes())
         animal.to_file(dst)
 
     def _create_configuration(self) -> SystemConfiguration:
@@ -1924,3 +1966,19 @@ class AppModel(ObservableObject):
     def _on_emergency_resumed(self, source):
         self._right_camera.set_text_overlay(None)
         self._on_emergency_handle(source, ApiCommand.EMERGENCY_RESUME)
+
+    # pellet machine events
+
+    def _on_pellet_loaded(self):
+        prefs = self._preferences
+        prefs.pellet_load_count_total += 1
+        prefs.pellet_load_count_day += 1
+        prefs.save()  # always
+        #
+        selected = self._selected_animal
+        if selected is None:
+            return
+        selected.check_today_date()
+        selected.pellet_counts_day.presented += 1
+        selected.pellet_counts_total.presented += 1
+        self._save_animal_metadata(selected, sender="on_pellet_loaded")

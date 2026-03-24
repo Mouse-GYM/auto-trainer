@@ -176,7 +176,7 @@ class TestTrainingPlan(BaseTrainingPlan):
         assert "Received processed shift xyz: (0, 3.0, -1.2)" in caplog.text, \
             "should be the some avg/mean of the 2 previous sessions, with limits applied"
 
-        assert algo.total_pellet_count == sum(r.food_consumed for r in results)
+        assert algo.pellet_consumed_total == sum(r.food_consumed for r in results)
         assert algo.successful_reaches_total == sum(r.successful_reaches for r in results)
         assert algo.pellets_presented_total == sum(r.pellets_presented for r in results)
 

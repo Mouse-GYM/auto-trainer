@@ -78,6 +78,7 @@ class SystemMachine(StateMachine):
             model_override=True,
         )
 
+        self._global_loaded_count = 0
         self._project_info: Optional[ProjectInfo] = project_info
         self._batch_project_sessions_list: List[ProjectInfo] = []
         self._batch_processing_in_progress: bool = False
@@ -1047,8 +1048,9 @@ class SystemMachine(StateMachine):
             algo.increase_pellets_consumed(res.food_consumed)
         if res.successful_reaches > 0:
             algo.increase_successful_reaches(res.successful_reaches)
-        if res.pellets_presented > 0:
-            algo.increase_pellets_presented(res.pellets_presented)
+        # NB: now using pellet-loaded event to count presented.
+        # if res.pellets_presented > 0:
+        #     algo.increase_pellets_presented(res.pellets_presented)
         if res.total_reaches > 0:
             algo.increase_pellet_total_reaches(res.total_reaches)
         #

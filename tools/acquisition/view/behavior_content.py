@@ -147,7 +147,7 @@ class BehaviorContent(ContentWidget):
         right_cur_row += 1
 
         right_layout.addWidget(QLabel("Consumed:"), right_cur_row, 0)
-        self._pellets_consumed_label = DailyAndTotalCountsLabel(day=algo.day_pellet_count, total=algo.total_pellet_count)
+        self._pellets_consumed_label = DailyAndTotalCountsLabel(day=algo.pellet_consumed_day, total=algo.pellet_consumed_total)
         right_layout.addWidget(self._pellets_consumed_label, right_cur_row, 1)
         right_cur_row += 1
 
