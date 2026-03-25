@@ -234,8 +234,8 @@ class UserPreferences(ObservableObject):
     def pellet_load_count_day(self) -> int:
         today = datetime.date.today()
         if today != self._cur_day:
-            self._pellet_load_count_day = 0
             self._cur_day = today
+            self.pellet_load_count_day = 0
             self._settings.setValue("system/pellet_load_count_day_date", today.strftime(_date_format))
         return self._pellet_load_count_day
 
