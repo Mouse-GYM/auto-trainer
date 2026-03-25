@@ -62,7 +62,7 @@ class AnimalTraining:
 
 @dataclass
 class AnimalPelletCounts:
-    presented: int = 0   # == successfully loaded
+    presented: int = 0   # == successfully sent/delivered to the animal
     reaches: int = 0
     success_reaches: int = 0
     consumed: int = 0

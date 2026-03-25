@@ -9,7 +9,7 @@ import math
 import queue
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, date
 from functools import partial
 from pathlib import Path
 from typing import Optional, Tuple, ClassVar, Any, Dict, Deque
@@ -291,7 +291,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._pellets_consumed_day = 0  # consumed
         self._pellets_consumed_total = 0  # consumed
         self._pellets_presented_day: int = 0
-        self._pellets_presented_day_date = datetime.today().date()
+        self._pellets_presented_day_date = date.today()
         self._pellets_presented_total: int = 0
         self._reaches_day: int = 0
         self._reaches_total: int = 0
@@ -876,7 +876,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def pellets_presented_day(self):
-        today = datetime.today().date()
+        today = date.today()
         if today != self._pellets_presented_day_date:
             logger.debug("pellets_presented_day: new day, resetting to 0")
             self._pellets_presented_day_date = today
@@ -1421,7 +1421,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     # unused atm...
     def _check_date(self):
-        today = datetime.now().date()
+        today = date.today()
         if today != self._today:
             self._event_manager.post_event_content(BehaviorEventKind.dayStarted)
             self._today = today

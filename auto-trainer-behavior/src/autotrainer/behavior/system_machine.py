@@ -1048,7 +1048,7 @@ class SystemMachine(StateMachine):
             algo.increase_pellets_consumed(res.food_consumed)
         if res.successful_reaches > 0:
             algo.increase_successful_reaches(res.successful_reaches)
-        # NB: now using pellet-loaded event to count presented.
+        # NB: now using pellet-sent event to count presented.
         # if res.pellets_presented > 0:
         #     algo.increase_pellets_presented(res.pellets_presented)
         if res.total_reaches > 0:
