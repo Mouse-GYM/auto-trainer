@@ -251,15 +251,15 @@ def test_inference_detection_ready(machine):
     # after:
     assert algo.pellet_consumed_day == 20
     assert algo.successful_reaches_total == 4
-    assert algo.pellets_presented_total == 40
+    assert algo.pellets_presented_total == 0   # NB: this now accounts for pellet-sent
     # now:
     result.food_consumed = 15
     result.successful_reaches = 2
     result.pellets_presented = 30
     machine._inference.detection_result_ready(machine.project, result)
     assert algo.pellet_consumed_day == 35
-    assert algo.pellets_presented_total == 70
     assert algo.successful_reaches_total == 6
+    assert algo.pellets_presented_total == 0  # NB: this now accounts for pellet-sent
 
 
 @pytest.mark.parametrize("feature_enabled", [False, True])

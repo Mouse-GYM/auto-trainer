@@ -160,7 +160,8 @@ class TestTrainingPlan(BaseTrainingPlan):
             ),
         ]
 
-        for session_idx in range(2):
+        nb_session = 2
+        for session_idx in range(nb_session):
             self.increment_perf_now()
             assert "Received processed shift xyz: " not in caplog.text
             assert plan.current_phase == plan_start_phase
@@ -178,7 +179,7 @@ class TestTrainingPlan(BaseTrainingPlan):
 
         assert algo.pellet_consumed_total == sum(r.food_consumed for r in results)
         assert algo.successful_reaches_total == sum(r.successful_reaches for r in results)
-        assert algo.pellets_presented_total == sum(r.pellets_presented for r in results)
+        assert algo.pellets_presented_total == nb_session
 
         prev_phase = plan.current_phase
         #
