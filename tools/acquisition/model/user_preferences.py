@@ -81,11 +81,11 @@ class UserPreferences(ObservableObject):
         today_str = today.strftime(_date_format)
         prev_pellet_day = settings.value("system/pellet_load_count_day_date", "", str)
         if today_str != prev_pellet_day:
-            logger.verbose("auto-setting pellet_load_count_day to 0 given previous day != today: %r", prev_pellet_day)
+            logger.verbose("auto-setting pellet_load_count_day to 0 given previous day != today: %r",
+                           prev_pellet_day)
             self._pellet_load_count_day = 0
             settings.setValue("system/pellet_load_count_day", 0)
             settings.setValue("system/pellet_load_count_day_date", today_str)
-            self.save()  # do not forget.
 
         self._live_feed_refresh_rate: int = settings.value("display/refresh_rate", 15, int)  # noqa
         self._measurement_graph: str = settings.value("ui/measurement_graph", "")  # noqa
@@ -229,26 +229,22 @@ class UserPreferences(ObservableObject):
         prev, self._pellet_load_count_total = self._pellet_load_count_total, value
         self._settings.setValue("system/pellet_load_count_total", value)
         self._on_property_changed(self.PELLET_LOAD_COUNT_TOTAL, value, prev)
-        if value != prev:
-            self.save()
 
     @property
     def pellet_load_count_day(self) -> int:
         today = datetime.date.today()
         if today != self._cur_day:
             self._pellet_load_count_day = 0
+            self._cur_day = today
+            self._settings.setValue("system/pellet_load_count_day_date", today.strftime(_date_format))
         return self._pellet_load_count_day
 
     @pellet_load_count_day.setter
     def pellet_load_count_day(self, value: int):
         today = datetime.date.today()
-        prev_cur_day = self._cur_day
         if today != self._cur_day:
             self._cur_day = today
             self._settings.setValue("system/pellet_load_count_day_date", today.strftime(_date_format))
-            value = 0
         prev, self._pellet_load_count_day = self._pellet_load_count_day, value
         self._settings.setValue("system/pellet_load_count_day", value)
         self._on_property_changed(self.PELLET_LOAD_COUNT_DAY, value, prev)
-        if value != prev or today != prev_cur_day:
-            self.save()

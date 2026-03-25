@@ -149,8 +149,6 @@ class AnimalSubject:
                      (animal.pellet_x, animal.pellet_y, animal.pellet_z), animal.is_pellet_dcs,
                      animal.training.current_protocol)
 
-        animal.check_today_date()
-
         return animal
 
     def to_file(self, file_path: Path):
