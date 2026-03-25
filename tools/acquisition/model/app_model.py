@@ -362,6 +362,7 @@ class AppModel(ObservableObject):
 
         pellet_m = system_machine.pellet
         pellet_m.events.pellet_loaded += self._on_pellet_loaded
+        pellet_m.events.pellet_sent += self._on_pellet_sent
 
         self._plans_files_event_handler = TrainingPlansFSEventHandler(self)
         self._plans_files_observer = Observer()
@@ -1974,11 +1975,21 @@ class AppModel(ObservableObject):
         prefs.pellet_load_count_total += 1
         prefs.pellet_load_count_day += 1
         prefs.save()  # always
-        #
+
+    def _on_pellet_sent(self):
         selected = self._selected_animal
-        if selected is None:
-            return
-        selected.check_today_date()
-        selected.pellet_counts_day.presented += 1
-        selected.pellet_counts_total.presented += 1
-        self._save_animal_metadata(selected, sender="on_pellet_loaded")
+        status = self._status
+        recent = self._behavior.algorithm.pellet_recently_seen
+        algo = self._behavior.algorithm
+        logger.debug("on_pellet_sent: status=%s pellet_recently_seen=%s sel=%s",
+                     status, recent, selected)
+        if (
+                selected is not None
+            and recent
+            and status == AppModelStatus.ANIMAL_IN_TRAINING
+        ):
+            algo.increase_pellets_presented(1)
+            # now recopy the values from algo:
+            selected.pellet_counts_day.presented = algo.pellets_presented_day
+            selected.pellet_counts_total.presented = algo.pellets_presented_total
+            self._save_animal_metadata(selected, sender="on_pellet_sent")  # always

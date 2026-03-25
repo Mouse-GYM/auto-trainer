@@ -291,6 +291,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._pellets_consumed_day = 0  # consumed
         self._pellets_consumed_total = 0  # consumed
         self._pellets_presented_day: int = 0
+        self._pellets_presented_day_date = datetime.today().date()
         self._pellets_presented_total: int = 0
         self._reaches_day: int = 0
         self._reaches_total: int = 0
@@ -875,6 +876,11 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def pellets_presented_day(self):
+        today = datetime.today().date()
+        if today != self._pellets_presented_day_date:
+            logger.debug("pellets_presented_day: new day, resetting to 0")
+            self._pellets_presented_day_date = today
+            self.pellets_presented_day = 0  # better use the setter
         return self._pellets_presented_day
 
     @pellets_presented_day.setter
@@ -1213,8 +1219,6 @@ class BehaviorAlgorithm(ObservableObject):
 
     def pellet_loaded(self):
         self.session_pellet_loaded_count += 1
-        self.pellets_presented_day += 1
-        self.pellets_presented_total += 1
 
     def update_triangle_seen(self, seen: bool):
         self.update_part_seen(
