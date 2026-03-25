@@ -1618,10 +1618,14 @@ class AppModel(ObservableObject):
         selected = self._selected_animal
         if selected is None:
             return
+        # NB: instead of reacting to inference.detection_result_ready event,
+        # we could eventually sub-depend on system_machine._on_detection_result_ready cb handler,
+        # and simply assign from the behavior algo instance pellets counts .. to be sure to be in sync with it.
         day_changed = selected.check_today_date()  # 1st
         day_counts = selected.pellet_counts_day
         total_counts = selected.pellet_counts_total
         #
+        # NB2: presented count is handled via pellet-sent event.
         day_counts.success_reaches += result.successful_reaches
         total_counts.success_reaches += result.successful_reaches
         day_counts.consumed += result.food_consumed

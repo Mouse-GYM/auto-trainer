@@ -288,10 +288,10 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._session_pellet_loaded_count = 0  # loaded
 
+        self._pellet_counts_day_date = date.today()
         self._pellets_consumed_day = 0  # consumed
         self._pellets_consumed_total = 0  # consumed
         self._pellets_presented_day: int = 0
-        self._pellets_presented_day_date = date.today()
         self._pellets_presented_total: int = 0
         self._reaches_day: int = 0
         self._reaches_total: int = 0
@@ -829,8 +829,19 @@ class BehaviorAlgorithm(ObservableObject):
 
     # counts
 
+    def _check_pellet_counts_day_date(self):
+        today = date.today()
+        if today != self._pellet_counts_day_date:
+            logger.verbose("resetting pellet day counts to 0")
+            self._pellet_counts_day_date = today
+            self.pellets_presented_day = 0
+            self.pellet_reaches_day = 0
+            self.pellet_consumed_day = 0
+            self.successful_reaches_day = 0
+
     @property
     def pellet_consumed_day(self) -> int:
+        self._check_pellet_counts_day_date()
         return self._pellets_consumed_day
 
     @pellet_consumed_day.setter
@@ -876,11 +887,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def pellets_presented_day(self):
-        today = date.today()
-        if today != self._pellets_presented_day_date:
-            logger.debug("pellets_presented_day: new day, resetting to 0")
-            self._pellets_presented_day_date = today
-            self.pellets_presented_day = 0  # better use the setter
+        self._check_pellet_counts_day_date()
         return self._pellets_presented_day
 
     @pellets_presented_day.setter
@@ -907,6 +914,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def pellet_reaches_day(self):
+        self._check_pellet_counts_day_date()
         return self._reaches_day
 
     @pellet_reaches_day.setter
@@ -931,6 +939,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def successful_reaches_day(self):
+        self._check_pellet_counts_day_date()
         return self._successful_reaches_day
 
     @successful_reaches_day.setter
