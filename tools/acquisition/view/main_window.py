@@ -20,6 +20,7 @@ import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
     calculate_std_dev_manual, ProjectInfo, get_perf_now
+from autotrainer.core.animal.animal_subject import AnimalPelletCounts
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
@@ -1448,3 +1449,10 @@ class MainWindow(QMainWindow):
         algo.successful_reaches_day = algo.successful_reaches_total = 0
         algo.pellet_reaches_day = algo.pellet_reaches_total = 0
         algo.pellet_consumed_day = algo.pellet_consumed_total = 0
+        # but animal isn't synced with that, so:
+        selected = self._app_model.selected_animal
+        if selected is not None:
+            selected.pellet_counts_day = AnimalPelletCounts()
+            selected.pellet_counts_total = AnimalPelletCounts()
+            self._app_model._save_animal_metadata(selected, sender="reset_animal_counts",
+                                                  backup_previous=True)

@@ -1665,6 +1665,7 @@ class AppModel(ObservableObject):
         for idx, prev_animal in enumerate(prev_animals):
             if prev_animal.id == animal.id:
                 prev_animals[idx] = animal
+                break
         animal.check_today_date()  # in case of
         dst = Path(self._preferences.animal_location).joinpath(f"{animal.name}.json")
         logger.verbose("Saving %s to %s ; sender=%s", animal, dst, sender)
