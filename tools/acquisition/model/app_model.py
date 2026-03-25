@@ -656,6 +656,7 @@ class AppModel(ObservableObject):
         algo.shift_xyz_handler.reset()
         if animal is None:
             self.training_plan = None
+            algo.reset_selected_animal_counts(None)
         else:
             logger.debug("animal pellet=%s is_dcs=%s",
                          (animal.pellet_x, animal.pellet_y, animal.pellet_z), animal.is_pellet_dcs)

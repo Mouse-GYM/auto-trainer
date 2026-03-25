@@ -1408,8 +1408,18 @@ class BehaviorAlgorithm(ObservableObject):
                                ctx.expected_distance, ctx.error_distance_threshold)
                 ctx.warned_bad_distance = True
 
-    def reset_selected_animal_counts(self, animal: AnimalSubject):
+    def reset_selected_animal_counts(self, animal: Optional[AnimalSubject]):
         logger.verbose("Resetting counts for animal change to %s", animal)
+        if animal is None:
+            self.pellets_presented_day = \
+            self.pellet_reaches_day = \
+            self.pellet_consumed_day = \
+            self.successful_reaches_day = 0
+            self.pellets_presented_total = \
+            self.pellet_reaches_total = \
+            self.pellet_consumed_total = \
+            self.successful_reaches_total = 0
+            return
         day_counts = animal.pellet_counts_day
         self.pellets_presented_day = day_counts.presented
         self.pellet_consumed_day = day_counts.consumed
