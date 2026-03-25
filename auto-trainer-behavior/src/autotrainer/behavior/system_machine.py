@@ -78,7 +78,6 @@ class SystemMachine(StateMachine):
             model_override=True,
         )
 
-        self._global_loaded_count = 0
         self._project_info: Optional[ProjectInfo] = project_info
         self._batch_project_sessions_list: List[ProjectInfo] = []
         self._batch_processing_in_progress: bool = False
