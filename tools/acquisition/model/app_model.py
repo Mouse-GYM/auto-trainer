@@ -1672,7 +1672,7 @@ class AppModel(ObservableObject):
         logger.verbose("Saving %s to %s ; sender=%s", animal, dst, sender)
         if backup_previous and dst.exists():
             now = datetime.now()
-            dst.with_suffix(f'.bak.{now.strftime(DATE_TIME_FORMAT)}.json.bak').write_bytes(dst.read_bytes())
+            dst.with_suffix(f'.{now.strftime(DATE_TIME_FORMAT)}.json.bak').write_bytes(dst.read_bytes())
         animal.to_file(dst)
 
     def _create_configuration(self) -> SystemConfiguration:
