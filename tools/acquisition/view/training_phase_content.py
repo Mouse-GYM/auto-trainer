@@ -122,7 +122,7 @@ class TrainingPhaseCard(CardWidget):
 
         grid.addWidget(QLabel("Magnet Starting Intensity"), r, c)
         hbox = QHBoxLayout()
-        hbox.addWidget(QLabel(str(phase.starting_baseline_intensity)))
+        hbox.addWidget(QLabel(str(phase.magnet_intensity)))
         hbox.addWidget(self._make_unit_label("%"))
         hbox.setStretch(0, 1)
         grid.addLayout(hbox, r, c + 1, 1, 1, alignment=Qt.AlignmentFlag.AlignLeft)

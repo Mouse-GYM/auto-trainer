@@ -35,7 +35,7 @@ from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 
-from autotrainer.training import TrainingPlan
+from autotrainer.training import TrainingPlan, PlanInfo
 
 from autotrainer.pyside.xyz_label import XYZQLabel
 from tools.autotrainer_version import __version__ as app_version
@@ -68,6 +68,7 @@ class MainWindow(QMainWindow):
 
     training_mode_changed = Signal(TrainingMode)
     running_status_changed = Signal(bool)  # True == running/acquiring
+    # todo: integrate within on_app_model_status_changed event handling
 
     def __init__(
         self,
@@ -171,7 +172,6 @@ class MainWindow(QMainWindow):
         self.main_content.set_is_capture_active(started)
         #
         stopped = not started
-        self._training_plan_combo.setEnabled(stopped)
         self.edit_camera_settings_action.setEnabled(stopped)
         self.make_3d_calib_action.setEnabled(stopped)
         #
@@ -1322,7 +1322,7 @@ class MainWindow(QMainWindow):
             self._refresh_prev_next_phases()
 
         elif name == props.TRAINING_PLANS:
-            self._set_training_plans()
+            self._set_training_plans(value)
 
         elif name == props.TRAINING_PHASE:
             self._refresh_prev_next_phases()
@@ -1377,12 +1377,11 @@ class MainWindow(QMainWindow):
             self._status_label_send_pos.update_coordinate(hard.last_dcs_set_position)
 
     @invoke_method
-    def _set_training_plans(self):
+    def _set_training_plans(self, plans: List[PlanInfo]):
         app_model = self._app_model
         combo = self._training_plan_combo
         combo.blockSignals(True)
         combo.clear()
-        plans = app_model.training_plans
         has_some = len(plans) > 0
         empty_txt = "" if has_some else " " * 64
         tooltip_txt = (
@@ -1391,13 +1390,12 @@ class MainWindow(QMainWindow):
         )
         combo_indices_map: Dict[Optional[str], int]
         combo_indices_map = self._training_plan_index_by_plan_id = {
-            get_plan_id(plan): idx
+            plan.plan_id: idx
             for idx, plan in enumerate(plans)
         }
         for plan_index, plan in enumerate(plans):
-            # plan = TrainingPlan.from_dict(plan, no_transition=True)
-            combo.addItem(plan['name'], userData=get_plan_id(plan))
-            combo.setItemData(plan_index, plan['description'], Qt.ToolTipRole)
+            combo.addItem(plan.name, userData=plan.plan_id)
+            combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
         combo.addItem(empty_txt, userData=None)  # put it last
         combo_indices_map[None] = len(plans)
         combo.setItemData(len(plans), tooltip_txt, Qt.ToolTipRole)
@@ -1423,7 +1421,7 @@ class MainWindow(QMainWindow):
 
     @invoke_method
     def _on_app_model_configuration_loaded(self, config):
-        self._set_training_plans()
+        self._set_training_plans(self._app_model.training_plans)
 
     @invoke_method
     def _on_inference_analysis_result_ready(self, prj: ProjectInfo, rsp: IntersessionResponse):
